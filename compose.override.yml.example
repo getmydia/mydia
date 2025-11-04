@@ -38,6 +38,11 @@
 #       # Override database path
 #       # DATABASE_PATH: /app/mydia_custom.db
 #
+#       # Enable runtime configuration loading in development
+#       # REQUIRED: This allows the download client and indexer environment variables
+#       # below to be loaded and used by the application in development mode
+#       LOAD_RUNTIME_CONFIG: "true"
+#
 #       # -------------------------------------------------------------------------
 #       # AUTOMATIC SERVICE CONFIGURATION
 #       # -------------------------------------------------------------------------
@@ -74,17 +79,36 @@
 #       INDEXER_1_BASE_URL: "http://prowlarr:9696"
 #       INDEXER_1_API_KEY: "YOUR_PROWLARR_API_KEY"
 #
+#       # -------------------------------------------------------------------------
+#       # LIBRARY PATHS
+#       # -------------------------------------------------------------------------
+#       # Configure where media files are stored. These paths correspond to the
+#       # volume mounts below. The defaults match the Docker volume mounts.
+#       MOVIES_PATH: "/media/movies"
+#       TV_PATH: "/media/tv"
+#
 #     # Override port mappings
-#     ports:
-#       - "5000:5000"  # Use different host port
+#     # ports:
+#     #   - "5000:5000"  # Use different host port
 #
-#     # Add additional volumes
+#     # Add additional volumes for media libraries
 #     volumes:
-#       # Mount a local media library directory
-#       - /path/to/your/media:/media:ro  # Read-only mount
+#       # Share downloads directory with Transmission
+#       # This allows Mydia to import completed downloads
+#       - transmission_downloads:/downloads
 #
-#       # Mount a downloads directory
-#       - /path/to/downloads:/downloads
+#       # Mount local media library directories
+#       # Replace the paths on the left with your actual local directories
+#       # Examples:
+#       #   Linux:   - /home/user/media/movies:/media/movies
+#       #   macOS:   - /Users/user/Movies:/media/movies
+#       #   Windows: - C:/Users/user/Videos/Movies:/media/movies
+#
+#       # Movies library - where movie files are stored
+#       - /path/to/your/movies:/media/movies
+#
+#       # TV Shows library - where TV show files are stored
+#       - /path/to/your/tv:/media/tv
 
 # ==============================================================================
 # TORRENT CLIENTS
@@ -117,9 +141,9 @@ services:
       # Optional: Watch directory for .torrent files
       - transmission_watch:/watch
     restart: unless-stopped
-    #HealthCheck
+    # Health check with authentication
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091"]
+      test: ["CMD", "curl", "-u", "admin:admin", "-f", "http://localhost:9091/transmission/web/"]
       interval: 30s
       timeout: 3s
       retries: 3

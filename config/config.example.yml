@@ -1,0 +1,227 @@
+# Mydia Configuration File (YAML)
+# =================================
+# Copy this file to config.yml and customize for your environment.
+#
+# Configuration Precedence:
+#   1. Environment variables (highest priority)
+#   2. This YAML file
+#   3. Application defaults (lowest priority)
+#
+# Note: Environment variables will override any values set in this file.
+# See .env.example for the corresponding environment variable names.
+
+# Server Configuration
+# --------------------
+server:
+  # Port the web server listens on
+  port: 4000
+
+  # Host interface to bind to (0.0.0.0 for all interfaces)
+  host: "0.0.0.0"
+
+  # URL scheme for generated URLs (http or https)
+  url_scheme: "https"
+
+  # Public hostname for the application
+  url_host: "mydia.example.com"
+
+  # Secret key base for signing cookies and sessions
+  # Generate with: mix phx.gen.secret
+  # In production, use environment variable SECRET_KEY_BASE instead
+  secret_key_base: "CHANGE_ME_IN_PRODUCTION"
+
+  # Guardian JWT secret key for API authentication
+  # Generate with: mix guardian.gen.secret
+  # In production, use environment variable GUARDIAN_SECRET_KEY instead
+  guardian_secret_key: "CHANGE_ME_IN_PRODUCTION"
+
+# Database Configuration
+# ----------------------
+database:
+  # Path to SQLite database file
+  path: "/data/mydia.db"
+
+  # Database connection pool size
+  pool_size: 5
+
+  # Query timeout in milliseconds
+  timeout: 5000
+
+  # SQLite cache size in KB (negative means KB, positive means pages)
+  cache_size: -64000
+
+  # SQLite busy timeout in milliseconds
+  busy_timeout: 5000
+
+  # SQLite journal mode (delete, truncate, persist, memory, wal)
+  # WAL (Write-Ahead Logging) is recommended for better concurrency
+  journal_mode: "wal"
+
+  # SQLite synchronous mode (off, normal, full, extra)
+  # 'normal' provides good balance of safety and performance
+  synchronous: "normal"
+
+# Authentication Configuration
+# ----------------------------
+auth:
+  # Enable local username/password authentication
+  local_enabled: true
+
+  # Enable OIDC (OpenID Connect) authentication
+  oidc_enabled: false
+
+  # OIDC issuer URL (e.g., https://auth.example.com/realms/myrealm)
+  # Either oidc_issuer or oidc_discovery_document_uri must be set if OIDC is enabled
+  oidc_issuer: "https://auth.example.com/realms/myrealm"
+
+  # OIDC discovery document URI (alternative to oidc_issuer)
+  # oidc_discovery_document_uri: "https://auth.example.com/.well-known/openid-configuration"
+
+  # OIDC client ID
+  oidc_client_id: "mydia"
+
+  # OIDC client secret
+  oidc_client_secret: "your-oidc-client-secret"
+
+  # OIDC redirect URI (defaults to {url_scheme}://{url_host}/auth/oidc/callback)
+  # oidc_redirect_uri: "https://mydia.example.com/auth/oidc/callback"
+
+  # OIDC scopes to request
+  oidc_scopes: "openid profile email"
+
+  # JWT token time-to-live in days
+  jwt_ttl_days: 30
+
+  # JWT allowed clock drift in milliseconds
+  jwt_allowed_drift: 2000
+
+# Media Library Configuration
+# ---------------------------
+media:
+  # Path to movies library
+  movies_path: "/media/movies"
+
+  # Path to TV shows library
+  tv_path: "/media/tv"
+
+  # How often to scan the media library (in hours)
+  scan_interval_hours: 1
+
+# Download Configuration
+# ----------------------
+downloads:
+  # How often to monitor downloads for completion (in minutes)
+  monitor_interval_minutes: 2
+
+# Logging Configuration
+# ---------------------
+logging:
+  # Log level (debug, info, warning, error)
+  level: "info"
+
+  # Log format string (uses Elixir Logger format)
+  # format: "[$level] $message\n"
+
+# Oban (Background Jobs) Configuration
+# -------------------------------------
+oban:
+  # How often to poll for jobs (in milliseconds)
+  poll_interval: 1000
+
+  # How long to keep completed jobs (in days)
+  max_age_days: 7
+
+# Download Clients Configuration
+# -------------------------------
+# Configure one or more download clients for automated media acquisition.
+# Multiple clients can be configured and prioritized for failover.
+download_clients:
+  # qBittorrent example
+  - name: "qBittorrent"
+    type: "qbittorrent"
+    enabled: true
+    priority: 1
+    host: "localhost"
+    port: 8080
+    use_ssl: false
+    # Optional: URL base path (e.g., "/qbittorrent" if behind reverse proxy)
+    url_base: ""
+    username: "admin"
+    # In production, use environment variable: DOWNLOAD_CLIENT_1_PASSWORD
+    password: "adminpass"
+    # Optional: Default category for downloads
+    category: "mydia"
+    # Optional: Download directory path
+    download_directory: "/downloads/complete"
+
+  # Transmission example (commented out)
+  # - name: "Transmission"
+  #   type: "transmission"
+  #   enabled: true
+  #   priority: 2
+  #   host: "localhost"
+  #   port: 9091
+  #   use_ssl: false
+  #   url_base: "/transmission"
+  #   username: "transmission"
+  #   password: "transmission"
+  #   download_directory: "/downloads"
+
+  # HTTP download client example (commented out)
+  # - name: "HTTP Downloader"
+  #   type: "http"
+  #   enabled: true
+  #   priority: 3
+  #   host: "localhost"
+  #   port: 8081
+  #   use_ssl: false
+  #   # API key for authentication (if required)
+  #   api_key: "your-api-key-here"
+  #   download_directory: "/downloads/http"
+
+# Indexer Configuration
+# ----------------------
+# Configure torrent indexers and search providers for media discovery.
+# Supports Prowlarr (aggregator), Jackett (proxy), and direct public indexers.
+indexers:
+  # Prowlarr example - Indexer aggregator (recommended)
+  # Prowlarr provides access to hundreds of indexers through a single API
+  - name: "Prowlarr"
+    type: "prowlarr"
+    enabled: true
+    priority: 1
+    base_url: "http://localhost:9696"
+    # In production, use environment variable: INDEXER_1_API_KEY
+    api_key: "your-prowlarr-api-key"
+    # Optional: Specific indexer IDs to search (empty = all enabled)
+    indexer_ids: []
+    # Optional: Category IDs to search (empty = all categories)
+    # Common categories: 2000 (Movies), 5000 (TV), 8000 (Other)
+    categories: []
+    # Optional: Rate limit in requests per minute (default: 60)
+    rate_limit: 60
+    # Optional: Request timeout in milliseconds (default: 30000)
+    timeout: 30000
+
+  # Jackett example (commented out)
+  # - name: "Jackett"
+  #   type: "jackett"
+  #   enabled: true
+  #   priority: 2
+  #   base_url: "http://localhost:9117"
+  #   api_key: "your-jackett-api-key"
+  #   indexer_ids: []
+  #   categories: []
+  #   rate_limit: 60
+  #   timeout: 30000
+
+  # Public indexer example (commented out)
+  # - name: "Public Indexer"
+  #   type: "public"
+  #   enabled: true
+  #   priority: 3
+  #   base_url: "https://example-indexer.com"
+  #   # API key may not be required for public indexers
+  #   categories: []
+  #   rate_limit: 30
+  #   timeout: 30000

@@ -97,7 +97,8 @@ defmodule MydiaWeb.AuthController do
       "admin" in roles or "administrators" in groups -> "admin"
       "user" in roles or "users" in groups -> "user"
       "readonly" in roles or "readers" in groups -> "readonly"
-      true -> "user"  # Default role
+      # Default role
+      true -> "user"
     end
   end
 

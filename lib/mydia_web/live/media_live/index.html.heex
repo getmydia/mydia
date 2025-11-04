@@ -1,0 +1,247 @@
+<Layouts.app flash={@flash}>
+  <div class="flex flex-col h-full">
+    <%!-- Header with title and view controls --%>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-3xl font-bold">{@page_title}</h1>
+        <p class="text-base-content/70 mt-1">
+          Browse and manage your media library
+        </p>
+      </div>
+
+      <%!-- Actions and view controls --%>
+      <div class="flex items-center gap-2">
+        <%!-- Add button for movies or TV shows --%>
+        <%= if @filter_type == "movie" do %>
+          <.link navigate={~p"/add/movie"} class="btn btn-primary btn-sm">
+            <.icon name="hero-plus" class="w-5 h-5" />
+            <span class="hidden sm:inline ml-1">Add Movie</span>
+          </.link>
+        <% end %>
+        <%= if @filter_type == "tv_show" do %>
+          <.link navigate={~p"/add/series"} class="btn btn-primary btn-sm">
+            <.icon name="hero-plus" class="w-5 h-5" />
+            <span class="hidden sm:inline ml-1">Add Series</span>
+          </.link>
+        <% end %>
+
+        <%!-- View mode toggle --%>
+        <div class="btn-group">
+          <button
+            type="button"
+            class={[
+              "btn btn-sm",
+              @view_mode == :grid && "btn-primary",
+              @view_mode != :grid && "btn-ghost"
+            ]}
+            phx-click="toggle_view"
+            phx-value-mode="grid"
+          >
+            <.icon name="hero-squares-2x2" class="w-5 h-5" />
+            <span class="hidden sm:inline ml-1">Grid</span>
+          </button>
+          <button
+            type="button"
+            class={[
+              "btn btn-sm",
+              @view_mode == :list && "btn-primary",
+              @view_mode != :list && "btn-ghost"
+            ]}
+            phx-click="toggle_view"
+            phx-value-mode="list"
+          >
+            <.icon name="hero-list-bullet" class="w-5 h-5" />
+            <span class="hidden sm:inline ml-1">List</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <%!-- Search and Filters --%>
+    <div class="flex flex-col md:flex-row gap-4 mb-6">
+      <%!-- Search input --%>
+      <div class="flex-1">
+        <.input
+          type="text"
+          name="search"
+          value={@search_query}
+          placeholder="Search media..."
+          phx-change="search"
+          phx-debounce="300"
+          class="input input-bordered w-full"
+        />
+      </div>
+
+      <%!-- Filters --%>
+      <div class="flex gap-2">
+        <select
+          name="monitored"
+          phx-change="filter"
+          class="select select-bordered"
+        >
+          <option value="all" selected={is_nil(@filter_monitored)}>All Status</option>
+          <option value="true" selected={@filter_monitored == true}>Monitored</option>
+          <option value="false" selected={@filter_monitored == false}>Unmonitored</option>
+        </select>
+
+        <select
+          name="quality"
+          phx-change="filter"
+          class="select select-bordered"
+        >
+          <option value="" selected={is_nil(@filter_quality)}>All Quality</option>
+          <option value="720p" selected={@filter_quality == "720p"}>720p</option>
+          <option value="1080p" selected={@filter_quality == "1080p"}>1080p</option>
+          <option value="2160p" selected={@filter_quality == "2160p"}>4K</option>
+        </select>
+      </div>
+    </div>
+
+    <%!-- Empty state (shown when no items) --%>
+    <%= if @media_items_empty? do %>
+      <div class="flex flex-col items-center justify-center py-16">
+        <.icon name="hero-film" class="w-16 h-16 text-base-content/30 mb-4" />
+        <h3 class="text-xl font-semibold text-base-content/70 mb-2">No media found</h3>
+        <p class="text-base-content/50">
+          <%= if @search_query != "" do %>
+            Try adjusting your search or filters
+          <% else %>
+            Add some media to get started
+          <% end %>
+        </p>
+      </div>
+    <% end %>
+
+    <%!-- Media Grid View --%>
+    <div
+      id="media-items-grid"
+      phx-update="stream"
+      phx-viewport-bottom="load_more"
+      class={[
+        "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8",
+        @view_mode != :grid && "hidden"
+      ]}
+    >
+      <%!-- Media cards --%>
+      <.link
+        :for={{id, item} <- @streams.media_items}
+        navigate={~p"/media/#{item.id}"}
+        id={"#{id}-grid"}
+        class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 cursor-pointer group"
+      >
+        <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
+          <img
+            src={get_poster_url(item)}
+            alt={item.title}
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+          <%!-- Quality badge --%>
+          <%= if quality = get_quality_badge(item) do %>
+            <div class="badge badge-primary badge-sm absolute top-2 right-2">
+              {quality}
+            </div>
+          <% end %>
+          <%!-- Monitored indicator --%>
+          <%= if item.monitored do %>
+            <div class="absolute top-2 left-2">
+              <.icon name="hero-bookmark-solid" class="w-5 h-5 text-primary" />
+            </div>
+          <% end %>
+        </figure>
+        <div class="card-body p-3">
+          <h3 class="card-title text-sm line-clamp-2" title={item.title}>
+            {item.title}
+          </h3>
+          <div class="flex items-center justify-between text-xs text-base-content/70">
+            <span>{format_year(item.year)}</span>
+            <span class="badge badge-ghost badge-sm">
+              {if item.type == "movie", do: "Movie", else: "TV"}
+            </span>
+          </div>
+        </div>
+      </.link>
+    </div>
+
+    <%!-- Media List View --%>
+    <div
+      class={["overflow-x-auto", @view_mode != :list && "hidden"]}
+      phx-viewport-bottom="load_more"
+    >
+      <table class="table table-zebra w-full">
+        <thead>
+          <tr>
+            <th class="w-12"></th>
+            <th>Title</th>
+            <th class="hidden md:table-cell">Type</th>
+            <th class="hidden md:table-cell">Year</th>
+            <th class="hidden lg:table-cell">Status</th>
+            <th class="hidden lg:table-cell">Quality</th>
+            <th class="hidden xl:table-cell">Size</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="media-items-list" phx-update="stream">
+          <tr :for={{id, item} <- @streams.media_items} id={"#{id}-list"} class="hover">
+            <td>
+              <div class="avatar">
+                <div class="w-12 rounded">
+                  <img src={get_poster_url(item)} alt={item.title} loading="lazy" />
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="font-semibold">{item.title}</div>
+              <%= if item.original_title && item.original_title != item.title do %>
+                <div class="text-sm text-base-content/70">{item.original_title}</div>
+              <% end %>
+            </td>
+            <td class="hidden md:table-cell">
+              <span class="badge badge-ghost">
+                {if item.type == "movie", do: "Movie", else: "TV Show"}
+              </span>
+            </td>
+            <td class="hidden md:table-cell">{format_year(item.year)}</td>
+            <td class="hidden lg:table-cell">
+              <%= if item.monitored do %>
+                <span class="badge badge-primary badge-sm">
+                  <.icon name="hero-bookmark-solid" class="w-3 h-3 mr-1" /> Monitored
+                </span>
+              <% else %>
+                <span class="badge badge-ghost badge-sm">Unmonitored</span>
+              <% end %>
+            </td>
+            <td class="hidden lg:table-cell">
+              <%= if quality = get_quality_badge(item) do %>
+                <span class="badge badge-primary badge-sm">{quality}</span>
+              <% else %>
+                <span class="text-base-content/50">—</span>
+              <% end %>
+            </td>
+            <td class="hidden xl:table-cell">
+              {format_file_size(total_file_size(item))}
+            </td>
+            <td>
+              <div class="flex gap-2">
+                <.link
+                  navigate={~p"/media/#{item.id}"}
+                  class="btn btn-ghost btn-sm"
+                  title="View details"
+                >
+                  <.icon name="hero-eye" class="w-4 h-4" />
+                </.link>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <%!-- Loading indicator for infinite scroll --%>
+    <%= if @has_more do %>
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+      </div>
+    <% end %>
+  </div>
+</Layouts.app>

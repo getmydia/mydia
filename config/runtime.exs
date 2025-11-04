@@ -34,7 +34,8 @@ if config_env() == :prod do
     # SQLite-specific optimizations for production
     timeout: 5000,
     journal_mode: :wal,
-    cache_size: -64000,  # 64MB cache
+    # 64MB cache
+    cache_size: -64000,
     temp_store: :memory,
     synchronous: :normal,
     foreign_keys: :on,
@@ -109,8 +110,7 @@ if config_env() == :prod do
       You can generate one by calling: mix guardian.gen.secret
       """
 
-  config :mydia, Mydia.Auth.Guardian,
-    secret_key: guardian_secret_key
+  config :mydia, Mydia.Auth.Guardian, secret_key: guardian_secret_key
 
   # Ueberauth OIDC configuration
   oidc_discovery_document_uri =

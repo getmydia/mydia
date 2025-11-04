@@ -74,8 +74,14 @@ config :mydia, Oban,
   plugins: [
     # Keep completed jobs for 7 days
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
-    # Cron jobs will be configured later
-    # {Oban.Plugins.Cron, crontab: []}
+    # Scheduled jobs
+    {Oban.Plugins.Cron,
+     crontab: [
+       # Scan library every hour
+       {"0 * * * *", Mydia.Jobs.LibraryScanner},
+       # Monitor downloads every 2 minutes
+       {"*/2 * * * *", Mydia.Jobs.DownloadMonitor}
+     ]}
   ]
 
 # Import environment specific config. This must remain at the bottom

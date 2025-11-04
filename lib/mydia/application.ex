@@ -25,6 +25,7 @@ defmodule Mydia.Application do
         Mydia.Indexers.Adapter.Registry,
         Mydia.Metadata.Provider.Registry
       ] ++
+        client_health_children() ++
         oban_children() ++
         [
           # Start a worker by calling: Mydia.Worker.start_link(arg)
@@ -42,6 +43,11 @@ defmodule Mydia.Application do
       Mydia.Indexers.register_adapters()
       # Register metadata provider adapters
       Mydia.Metadata.register_providers()
+      # Ensure default quality profiles exist (skip in test environment)
+      if Mix.env() != :test do
+        ensure_default_quality_profiles()
+      end
+
       {:ok, pid}
     end
   end
@@ -52,6 +58,15 @@ defmodule Mydia.Application do
   def config_change(changed, _new, removed) do
     MydiaWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  defp client_health_children do
+    # Don't start ClientHealth in test environment to avoid SQL Sandbox conflicts
+    if Mix.env() == :test do
+      []
+    else
+      [Mydia.Downloads.ClientHealth]
+    end
   end
 
   defp oban_children do
@@ -80,6 +95,20 @@ defmodule Mydia.Application do
     else
       # In dev/test, use schema defaults to avoid interfering with Mix config
       Mydia.Config.Schema.defaults()
+    end
+  end
+
+  defp ensure_default_quality_profiles do
+    case Mydia.Settings.ensure_default_quality_profiles() do
+      {:ok, count} when count > 0 ->
+        IO.puts("✓ Created #{count} default quality profile(s)")
+
+      {:ok, 0} ->
+        :ok
+
+      {:error, _reason} ->
+        # Database not ready yet, profiles will be created on next startup
+        :ok
     end
   end
 end

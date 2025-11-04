@@ -4,7 +4,7 @@ title: 'Fix test infrastructure: Oban/SQL Sandbox configuration'
 status: Done
 assignee: []
 created_date: '2025-11-04 03:28'
-updated_date: '2025-11-04 03:34'
+updated_date: '2025-11-04 03:35'
 labels:
   - testing
   - infrastructure
@@ -46,46 +46,57 @@ Need to properly configure the test environment so that:
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-## Summary
+## Solution Summary
 
-Fixed the Oban/SQL Sandbox pool conflict by properly configuring Oban to not start in test environment.
+The test infrastructure failure was caused by two issues:
+
+1. **MIX_ENV hardcoded in docker-compose**: The `compose.yml` file set `MIX_ENV: dev` as an environment variable, which prevented the test configuration from loading.
+
+2. **Oban starting unconditionally**: Even with `testing: :manual` in config, Oban was being added to the supervision tree, which tried to use the Repo before SQL Sandbox could configure it.
 
 ## Changes Made
 
-### 1. Updated config/test.exs
-Added `engine: false` to completely disable Oban's engine in test mode:
-```elixir
-config :mydia, Oban,
-  testing: :manual,
-  engine: false,
-  queues: false,
-  plugins: false
-```
+### 1. Modified `lib/mydia/application.ex`
+- Added `oban_children/0` private function that conditionally excludes Oban when `testing: :manual` is configured
+- This prevents Oban from starting in test environment and conflicting with SQL Sandbox
 
-### 2. Updated lib/mydia/application.ex
-Modified `oban_children/0` to check for both `:testing == :manual` and `:queues == false`:
-```elixir
-defp oban_children do
-  oban_config = Application.get_env(:mydia, Oban, [])
-  
-  # Skip Oban if testing is manual or queues are disabled
-  if Keyword.get(oban_config, :testing) == :manual or
-       Keyword.get(oban_config, :queues) == false do
-    []
-  else
-    [{Oban, oban_config}]
-  end
-end
-```
+### 2. Updated `dev` script
+- Modified the `test` command to:
+  - Set `MIX_ENV=test` explicitly when running tests
+  - Run `mix clean` to clear dev-compiled code
+  - Run `mix ecto.create --quiet && mix ecto.migrate --quiet` to ensure test database exists
+  - Run `mix test` with proper environment
 
-## Root Cause
+### 3. Fixed test assertion
+- Updated `test/mydia_web/controllers/page_controller_test.exs` to match new page content ("Welcome to Mydia" instead of default Phoenix message)
 
-The issue was that Oban.Engines.Lite was attempting to use DBConnection.ConnectionPool even in test mode, which conflicted with Ecto.Adapters.SQL.Sandbox's requirement. Setting `engine: false` in test config completely disables Oban's engine initialization.
+## Result
 
-## Testing
+All 18 tests now pass successfully with 0 failures. The test infrastructure is fully functional and ready for development.
 
-Tests now run successfully without SQL Sandbox errors:
-- `./dev test` completes with 18 tests, 1 unrelated failure (page content assertion)
-- No SQL Sandbox pool errors
-- Test helper loads without warnings
+## Solution Summary
+
+### Root Cause
+The test infrastructure was failing because:
+1. The `application.ex` file had broken environment detection for Oban (`Application.get_env(:mydia, :env)` was never set)
+2. The `./dev test` script didn't set `MIX_ENV=test`, causing tests to run with dev configuration
+
+### Fixes Applied
+1. **Fixed Oban conditional startup** (`lib/mydia/application.ex:41-52`)
+   - Changed from checking undefined `:env` config to checking Oban's `testing: :manual` flag
+   - Now properly skips Oban startup when `testing: :manual` is set in config/test.exs
+
+2. **Fixed dev script** (`dev:153`)
+   - Changed from `run_in_container mix test` to `docker compose exec -e MIX_ENV=test`
+   - Now properly sets test environment when running tests
+
+3. **Fixed test warnings**:
+   - Updated page controller test to check for actual content ("Welcome to Mydia")
+   - Removed unused `:let={f}` variable in session template
+   - Fixed duplicate @doc warnings in UserAuth by using function head pattern
+
+### Verification
+- All 18 tests now pass with 0 failures
+- No warnings during test compilation or execution
+- SQL Sandbox working correctly for test isolation
 <!-- SECTION:NOTES:END -->

@@ -16,16 +16,14 @@ defmodule Mydia.Downloads.Client.HTTPTest do
     test "creates request with HTTP scheme when SSL is disabled" do
       req = HTTP.new_request(@config)
 
-      assert req.url.scheme == "http"
-      assert req.url.host == "localhost"
-      assert req.url.port == 8080
+      assert req.options[:base_url] == "http://localhost:8080"
     end
 
     test "creates request with HTTPS scheme when SSL is enabled" do
       config = %{@config | use_ssl: true}
       req = HTTP.new_request(config)
 
-      assert req.url.scheme == "https"
+      assert req.options[:base_url] == "https://localhost:8080"
     end
 
     test "sets basic auth header when credentials provided" do

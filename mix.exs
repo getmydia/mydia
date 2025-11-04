@@ -62,13 +62,16 @@ defmodule Mydia.MixProject do
 
       # Background Jobs
       {:oban, "~> 2.17"},
+      {:crontab, "~> 1.1"},
 
       # Authentication (will be configured in task-5)
       {:ueberauth, "~> 0.10"},
       {:ueberauth_oidcc, "~> 0.4"},
       {:guardian, "~> 2.3"},
-      {:bcrypt_elixir, "~> 3.0"},  # Password hashing for users
-      {:argon2_elixir, "~> 4.0"},  # Password hashing for API keys
+      # Password hashing for users
+      {:bcrypt_elixir, "~> 3.0"},
+      # Password hashing for API keys
+      {:argon2_elixir, "~> 4.0"},
 
       # HTTP Clients
       {:finch, "~> 0.16"},
@@ -77,6 +80,7 @@ defmodule Mydia.MixProject do
       # Utilities
       {:uuid, "~> 1.1"},
       {:timex, "~> 3.7"},
+      {:yaml_elixir, "~> 2.9"},
 
       # Telemetry & Monitoring
       {:telemetry_metrics, "~> 1.0"},

@@ -53,12 +53,16 @@ defmodule Mydia.Auth.ErrorHandler do
   # Determine request format from accept header or path extension
   defp get_format(conn) do
     case conn.path_info do
-      ["api" | _] -> "json"
+      ["api" | _] ->
+        "json"
+
       _ ->
         case get_req_header(conn, "accept") do
           [accept | _] ->
             if String.contains?(accept, "application/json"), do: "json", else: "html"
-          _ -> "html"
+
+          _ ->
+            "html"
         end
     end
   end

@@ -20,6 +20,7 @@ defmodule Mydia.Media.MediaItem do
     field :metadata, :map
     field :monitored, :boolean, default: true
 
+    belongs_to :quality_profile, Mydia.Settings.QualityProfile
     has_many :episodes, Mydia.Media.Episode
     has_many :media_files, Mydia.Library.MediaFile
     has_many :downloads, Mydia.Downloads.Download
@@ -40,12 +41,14 @@ defmodule Mydia.Media.MediaItem do
       :tmdb_id,
       :imdb_id,
       :metadata,
-      :monitored
+      :monitored,
+      :quality_profile_id
     ])
     |> validate_required([:type, :title])
     |> validate_inclusion(:type, @type_values)
     |> validate_number(:year, greater_than: 1800, less_than: 2200)
     |> unique_constraint(:tmdb_id)
+    |> foreign_key_constraint(:quality_profile_id)
   end
 
   @doc """

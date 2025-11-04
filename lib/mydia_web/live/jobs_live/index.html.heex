@@ -1,0 +1,324 @@
+<Layouts.app flash={@flash}>
+  <div class="container mx-auto px-4 py-8">
+    <%!-- Header --%>
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">Background Jobs</h1>
+      <button class="btn btn-sm btn-ghost" phx-click="refresh">
+        <.icon name="hero-arrow-path" class="w-4 h-4" /> Refresh
+      </button>
+    </div>
+
+    <%!-- Scheduled Cron Jobs --%>
+    <div class="mb-12">
+      <h2 class="text-2xl font-semibold mb-4">Scheduled Jobs</h2>
+      <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Schedule</th>
+              <th>Last Run</th>
+              <th>Next Run</th>
+              <th>Status</th>
+              <th>Stats</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <%= for job <- @cron_jobs do %>
+              <tr>
+                <td>
+                  <div class="font-medium">{job.worker_name}</div>
+                  <div class="text-xs text-gray-500">{inspect(job.worker)}</div>
+                </td>
+                <td>
+                  <code class="text-xs bg-base-300 px-2 py-1 rounded">{job.schedule}</code>
+                </td>
+                <td>
+                  <%= if job.latest_job do %>
+                    <div>{format_relative_time(job.latest_job.attempted_at)}</div>
+                    <div class="text-xs text-gray-500">
+                      {format_datetime(job.latest_job.attempted_at)}
+                    </div>
+                  <% else %>
+                    <span class="text-gray-400">Never</span>
+                  <% end %>
+                </td>
+                <td>
+                  <%= if job.next_run do %>
+                    <div>{format_relative_time(job.next_run)}</div>
+                    <div class="text-xs text-gray-500">{format_datetime(job.next_run)}</div>
+                  <% else %>
+                    <span class="text-gray-400">N/A</span>
+                  <% end %>
+                </td>
+                <td>
+                  <%= if job.latest_job do %>
+                    <span class={["badge badge-sm", state_badge_class(job.latest_job.state)]}>
+                      {job.latest_job.state}
+                    </span>
+                  <% else %>
+                    <span class="badge badge-sm badge-ghost">pending</span>
+                  <% end %>
+                </td>
+                <td>
+                  <div class="text-sm">
+                    <div>Success: {job.stats.success_rate}%</div>
+                    <div class="text-xs text-gray-500">
+                      {job.stats.completed_count} / {job.stats.total_executions} runs
+                    </div>
+                    <div class="text-xs text-gray-500">
+                      Avg: {format_duration_ms(job.stats.avg_duration_ms)}
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div class="flex gap-2">
+                    <button
+                      class="btn btn-xs btn-primary"
+                      phx-click="show_trigger_confirmation"
+                      phx-value-worker={inspect(job.worker)}
+                    >
+                      <.icon name="hero-play" class="w-3 h-3" /> Trigger
+                    </button>
+                    <%= if route = get_route_for_job(job.worker) do %>
+                      <.link navigate={route} class="btn btn-xs btn-ghost">
+                        <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" /> View
+                      </.link>
+                    <% end %>
+                  </div>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <%!-- Job History --%>
+    <div>
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-semibold">Job History</h2>
+      </div>
+
+      <%!-- Filters --%>
+      <div class="card bg-base-100 mb-4">
+        <div class="card-body p-4">
+          <form phx-change="filter">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="label">
+                  <span class="label-text">Filter by Job</span>
+                </label>
+                <select name="worker" class="select select-bordered w-full">
+                  <option value="">All Jobs</option>
+                  <%= for job <- @cron_jobs do %>
+                    <option value={inspect(job.worker)} selected={@filter_worker == job.worker}>
+                      {job.worker_name}
+                    </option>
+                  <% end %>
+                </select>
+              </div>
+              <div>
+                <label class="label">
+                  <span class="label-text">Filter by Status</span>
+                </label>
+                <select name="state" class="select select-bordered w-full">
+                  <option value="">All States</option>
+                  <option value="completed" selected={@filter_state == "completed"}>
+                    Completed
+                  </option>
+                  <option value="failed" selected={@filter_state == "failed"}>Failed</option>
+                  <option value="discarded" selected={@filter_state == "discarded"}>
+                    Discarded
+                  </option>
+                  <option value="retryable" selected={@filter_state == "retryable"}>
+                    Retryable
+                  </option>
+                  <option value="executing" selected={@filter_state == "executing"}>
+                    Executing
+                  </option>
+                </select>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <%!-- History Table --%>
+      <div class="overflow-x-auto">
+        <%= if @job_history_empty? do %>
+          <div class="alert alert-info">
+            <.icon name="hero-information-circle" class="w-5 h-5" />
+            <span>No job history found</span>
+          </div>
+        <% else %>
+          <table class="table table-zebra w-full">
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Attempted At</th>
+                <th>Completed At</th>
+                <th>Duration</th>
+                <th>State</th>
+                <th>Attempt</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <%= for {dom_id, job} <- @job_history do %>
+                <tr id={dom_id}>
+                  <td>
+                    <div class="font-medium">
+                      {job.worker |> String.split(".") |> List.last()}
+                    </div>
+                    <div class="text-xs text-gray-500">{job.worker}</div>
+                  </td>
+                  <td>
+                    <div>{format_relative_time(job.attempted_at)}</div>
+                    <div class="text-xs text-gray-500">{format_datetime(job.attempted_at)}</div>
+                  </td>
+                  <td>
+                    <%= if job.completed_at do %>
+                      <div>{format_relative_time(job.completed_at)}</div>
+                      <div class="text-xs text-gray-500">{format_datetime(job.completed_at)}</div>
+                    <% else %>
+                      <span class="text-gray-400">-</span>
+                    <% end %>
+                  </td>
+                  <td>{format_duration(job.attempted_at, job.completed_at)}</td>
+                  <td>
+                    <span class={["badge badge-sm", state_badge_class(job.state)]}>
+                      {job.state}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="text-sm">
+                      {job.attempt} / {job.max_attempts}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      class="btn btn-xs btn-ghost"
+                      phx-click="show_job_details"
+                      phx-value-id={job.id}
+                    >
+                      <.icon name="hero-eye" class="w-3 h-3" /> Details
+                    </button>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+
+          <%!-- Load More --%>
+          <%= if @has_more do %>
+            <div class="flex justify-center mt-4">
+              <button class="btn btn-outline" phx-click="load_more">
+                Load More
+              </button>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <%!-- Job Details Modal --%>
+  <%= if @selected_job do %>
+    <div class="modal modal-open">
+      <div class="modal-box max-w-3xl">
+        <h3 class="font-bold text-lg mb-4">Job Details</h3>
+
+        <div class="space-y-4">
+          <div>
+            <div class="text-sm font-semibold text-gray-500">Worker</div>
+            <div>{@selected_job.worker}</div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-sm font-semibold text-gray-500">State</div>
+              <span class={["badge", state_badge_class(@selected_job.state)]}>
+                {@selected_job.state}
+              </span>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-gray-500">Attempt</div>
+              <div>{@selected_job.attempt} / {@selected_job.max_attempts}</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-sm font-semibold text-gray-500">Scheduled At</div>
+              <div>{format_datetime(@selected_job.scheduled_at)}</div>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-gray-500">Attempted At</div>
+              <div>{format_datetime(@selected_job.attempted_at)}</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-sm font-semibold text-gray-500">Completed At</div>
+              <div>{format_datetime(@selected_job.completed_at)}</div>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-gray-500">Duration</div>
+              <div>{format_duration(@selected_job.attempted_at, @selected_job.completed_at)}</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="text-sm font-semibold text-gray-500">Arguments</div>
+            <pre class="bg-base-300 p-3 rounded text-xs overflow-x-auto">{inspect(@selected_job.args, pretty: true)}</pre>
+          </div>
+
+          <%= if @selected_job.errors && @selected_job.errors != [] do %>
+            <div>
+              <div class="text-sm font-semibold text-gray-500 mb-2">Errors</div>
+              <%= for error <- @selected_job.errors do %>
+                <div class="alert alert-error mb-2">
+                  <pre class="text-xs overflow-x-auto whitespace-pre-wrap">{inspect(error, pretty: true)}</pre>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+
+        <div class="modal-action">
+          <button class="btn" phx-click="close_job_details">Close</button>
+        </div>
+      </div>
+      <div class="modal-backdrop" phx-click="close_job_details"></div>
+    </div>
+  <% end %>
+
+  <%!-- Trigger Confirmation Modal --%>
+  <%= if @trigger_confirmation do %>
+    <div class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Trigger Job</h3>
+        <p class="mb-4">
+          Are you sure you want to manually trigger this job?
+        </p>
+        <div class="bg-base-300 p-3 rounded mb-4">
+          <div class="text-sm font-semibold">Job: {inspect(@trigger_confirmation)}</div>
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-ghost" phx-click="close_trigger_confirmation">Cancel</button>
+          <button
+            class="btn btn-primary"
+            phx-click="trigger_job"
+            phx-value-worker={inspect(@trigger_confirmation)}
+          >
+            Trigger Now
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" phx-click="close_trigger_confirmation"></div>
+    </div>
+  <% end %>
+</Layouts.app>

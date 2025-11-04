@@ -1,0 +1,294 @@
+<Layouts.app flash={@flash}>
+  <div class="container mx-auto px-4 py-8">
+    <div class="mb-8">
+      <h1 class="text-4xl font-bold mb-2">System Status</h1>
+      <p class="text-base-content/70">Monitor your Mydia installation health and configuration</p>
+    </div>
+
+    <%!-- System Information --%>
+    <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">System Information</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="stat">
+            <div class="stat-title">Elixir Version</div>
+            <div class="stat-value text-2xl">{@system_info.elixir_version}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">OTP Version</div>
+            <div class="stat-value text-2xl">{@system_info.otp_version}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Uptime</div>
+            <div class="stat-value text-2xl">{@system_info.uptime}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <%!-- Database Information --%>
+    <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+          Database
+          <span class={"badge #{health_badge(@database_info.health)}"}>
+            {if @database_info.health == :healthy, do: "Healthy", else: "Unhealthy"}
+          </span>
+        </h2>
+        <div class="space-y-3">
+          <div class="flex justify-between items-center">
+            <span class="font-medium">Location:</span>
+            <code class="text-sm bg-base-300 px-2 py-1 rounded">{@database_info.path}</code>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-medium">Size:</span>
+            <span>{@database_info.size}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-medium">Exists:</span>
+            <span class={
+              if @database_info.exists, do: "badge badge-success", else: "badge badge-error"
+            }>
+              {if @database_info.exists, do: "Yes", else: "No"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <%!-- Configuration Settings --%>
+    <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">Configuration Settings</h2>
+        <p class="text-sm text-base-content/70 mb-4">
+          Settings are loaded with the following precedence: ENV > Database > YAML File > Defaults
+        </p>
+
+        <%= for {category, settings} <- @config_settings do %>
+          <div class="collapse collapse-arrow bg-base-300 mb-2">
+            <input type="checkbox" checked={category == "Server"} />
+            <div class="collapse-title text-lg font-medium">
+              {category}
+              <span class="badge badge-sm ml-2">{length(settings)} settings</span>
+            </div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                  <thead>
+                    <tr>
+                      <th>Setting</th>
+                      <th>Value</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for setting <- settings do %>
+                      <tr>
+                        <td class="font-mono text-sm">{setting.key}</td>
+                        <td>
+                          <%= cond do %>
+                            <% is_boolean(setting.value) -> %>
+                              <span class={
+                                if setting.value,
+                                  do: "badge badge-success",
+                                  else: "badge badge-ghost"
+                              }>
+                                {if setting.value, do: "Enabled", else: "Disabled"}
+                              </span>
+                            <% is_binary(setting.value) and String.contains?(setting.key, "secret") -> %>
+                              <code class="text-xs">••••••••</code>
+                            <% true -> %>
+                              <code class="text-sm">{inspect(setting.value)}</code>
+                          <% end %>
+                        </td>
+                        <td>
+                          <span class={"badge #{source_badge_class(setting.source)}"}>
+                            {source_label(setting.source)}
+                          </span>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <%!-- Library Paths --%>
+    <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+          Library Paths <span class="badge badge-sm">{length(@library_paths)}</span>
+        </h2>
+
+        <%= if @library_paths == [] do %>
+          <div class="alert alert-info">
+            <.icon name="hero-information-circle" class="w-6 h-6" />
+            <span>No library paths configured yet</span>
+          </div>
+        <% else %>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full">
+              <thead>
+                <tr>
+                  <th>Path</th>
+                  <th>Type</th>
+                  <th>Monitored</th>
+                  <th>Last Scan</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <%= for path <- @library_paths do %>
+                  <tr>
+                    <td class="font-mono text-sm">{path.path}</td>
+                    <td><span class="badge badge-sm">{path.type}</span></td>
+                    <td>
+                      <span class={"badge #{enabled_badge(path.monitored)}"}>
+                        {if path.monitored, do: "Yes", else: "No"}
+                      </span>
+                    </td>
+                    <td class="text-sm text-base-content/70">
+                      {if path.last_scan_at,
+                        do: Calendar.strftime(path.last_scan_at, "%Y-%m-%d %H:%M"),
+                        else: "Never"}
+                    </td>
+                    <td>
+                      <%= if path.last_scan_status do %>
+                        <span class={"badge badge-sm #{if path.last_scan_status == :success, do: "badge-success", else: "badge-error"}"}>
+                          {path.last_scan_status}
+                        </span>
+                      <% else %>
+                        <span class="badge badge-sm badge-ghost">-</span>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <%!-- Download Clients --%>
+    <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+          Download Clients <span class="badge badge-sm">{length(@download_clients)}</span>
+        </h2>
+
+        <%= if @download_clients == [] do %>
+          <div class="alert alert-info">
+            <.icon name="hero-information-circle" class="w-6 h-6" />
+            <span>No download clients configured yet</span>
+          </div>
+        <% else %>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Host</th>
+                  <th>Enabled</th>
+                  <th>Priority</th>
+                </tr>
+              </thead>
+              <tbody>
+                <%= for client <- @download_clients do %>
+                  <tr>
+                    <td class="font-medium">{client.name}</td>
+                    <td><span class="badge badge-sm">{client.type}</span></td>
+                    <td class="font-mono text-sm">
+                      {if client.use_ssl, do: "https://", else: "http://"}{client.host}:{client.port}
+                    </td>
+                    <td>
+                      <span class={"badge #{enabled_badge(client.enabled)}"}>
+                        {if client.enabled, do: "Yes", else: "No"}
+                      </span>
+                    </td>
+                    <td>{client.priority}</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <%!-- Indexers --%>
+    <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">
+          Indexers <span class="badge badge-sm">{length(@indexers)}</span>
+        </h2>
+
+        <%= if @indexers == [] do %>
+          <div class="alert alert-info">
+            <.icon name="hero-information-circle" class="w-6 h-6" />
+            <span>No indexers configured yet</span>
+          </div>
+        <% else %>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Base URL</th>
+                  <th>Enabled</th>
+                  <th>Priority</th>
+                </tr>
+              </thead>
+              <tbody>
+                <%= for indexer <- @indexers do %>
+                  <tr>
+                    <td class="font-medium">{indexer.name}</td>
+                    <td><span class="badge badge-sm">{indexer.type}</span></td>
+                    <td class="font-mono text-sm">{indexer.base_url}</td>
+                    <td>
+                      <span class={"badge #{enabled_badge(indexer.enabled)}"}>
+                        {if indexer.enabled, do: "Yes", else: "No"}
+                      </span>
+                    </td>
+                    <td>{indexer.priority}</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <%!-- Background Jobs (Oban) --%>
+    <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card-body">
+        <h2 class="card-title text-2xl mb-4">Background Jobs</h2>
+
+        <%= if Map.has_key?(@oban_stats, :error) do %>
+          <div class="alert alert-warning">
+            <.icon name="hero-exclamation-triangle" class="w-6 h-6" />
+            <span>{@oban_stats.error}</span>
+          </div>
+        <% else %>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="stat bg-base-300 rounded-lg">
+              <div class="stat-title">Running Jobs</div>
+              <div class="stat-value">{@oban_stats.running_jobs}</div>
+            </div>
+            <div class="stat bg-base-300 rounded-lg">
+              <div class="stat-title">Queued Jobs</div>
+              <div class="stat-value">{@oban_stats.queued_jobs}</div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</Layouts.app>

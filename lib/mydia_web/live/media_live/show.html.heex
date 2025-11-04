@@ -1,0 +1,512 @@
+<Layouts.app flash={@flash}>
+  <%!-- Hero Section with Backdrop --%>
+  <div class="relative -mx-4 -mt-4 mb-4">
+    <%= if backdrop_url = get_backdrop_url(@media_item) do %>
+      <%!-- Backdrop image --%>
+      <div class="absolute inset-0 overflow-hidden">
+        <img
+          src={backdrop_url}
+          alt={@media_item.title}
+          class="w-full h-full object-cover opacity-30"
+        />
+      </div>
+      <%!-- Gradient overlay --%>
+      <div class="absolute inset-0 bg-gradient-to-b from-transparent via-base-100/80 to-base-100">
+      </div>
+    <% end %>
+    <%!-- Content container with relative positioning --%>
+    <div class="relative pt-16 pb-8 px-4">
+      <div class="flex flex-col lg:flex-row gap-6">
+        <%!-- Left Column: Poster and Quick Actions --%>
+        <div class="lg:w-80 flex-shrink-0">
+          <%!-- Poster --%>
+          <div class="card bg-base-100 shadow-xl mb-4">
+            <figure class="aspect-[2/3] bg-base-300">
+              <img
+                src={get_poster_url(@media_item)}
+                alt={@media_item.title}
+                class="w-full h-full object-cover"
+              />
+            </figure>
+          </div>
+
+          <%!-- Quick Actions --%>
+          <div class="flex flex-col gap-2">
+            <button
+              type="button"
+              phx-click="manual_search"
+              class="btn btn-primary btn-block"
+            >
+              <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Manual Search
+            </button>
+
+            <button
+              type="button"
+              phx-click="toggle_monitored"
+              class={[
+                "btn btn-block",
+                @media_item.monitored && "btn-success",
+                !@media_item.monitored && "btn-ghost"
+              ]}
+            >
+              <.icon
+                name={if @media_item.monitored, do: "hero-bookmark-solid", else: "hero-bookmark"}
+                class="w-5 h-5"
+              />
+              {if @media_item.monitored, do: "Monitored", else: "Not Monitored"}
+            </button>
+
+            <div class="divider my-2"></div>
+
+            <%!-- Quality Profile Display --%>
+            <div class="stat bg-base-200 rounded-box p-3">
+              <div class="stat-title text-xs">Quality Profile</div>
+              <div class="stat-value text-sm">
+                <%= if @media_item.quality_profile do %>
+                  {@media_item.quality_profile.name}
+                <% else %>
+                  <span class="text-base-content/50">Not Set</span>
+                <% end %>
+              </div>
+            </div>
+
+            <div class="divider my-2"></div>
+
+            <button
+              type="button"
+              phx-click="show_edit_modal"
+              class="btn btn-ghost btn-block justify-start"
+            >
+              <.icon name="hero-pencil" class="w-5 h-5" /> Edit Settings
+            </button>
+
+            <button
+              type="button"
+              phx-click="show_delete_confirm"
+              class="btn btn-error btn-ghost btn-block justify-start"
+            >
+              <.icon name="hero-trash" class="w-5 h-5" /> Delete
+            </button>
+          </div>
+        </div>
+
+        <%!-- Right Column: Details and Information --%>
+        <div class="flex-1 min-w-0">
+          <%!-- Title and Basic Info --%>
+          <div class="mb-6">
+            <div class="flex items-start justify-between gap-4 mb-2">
+              <h1 class="text-4xl font-bold">{@media_item.title}</h1>
+              <.link navigate={~p"/media"} class="btn btn-ghost btn-sm">
+                <.icon name="hero-x-mark" class="w-5 h-5" />
+              </.link>
+            </div>
+
+            <%= if @media_item.original_title && @media_item.original_title != @media_item.title do %>
+              <p class="text-lg text-base-content/70 mb-2">{@media_item.original_title}</p>
+            <% end %>
+
+            <div class="flex flex-wrap items-center gap-3 text-base-content/70">
+              <%= if @media_item.year do %>
+                <span class="font-semibold">{@media_item.year}</span>
+              <% end %>
+
+              <%= if rating = get_rating(@media_item) do %>
+                <span class="flex items-center gap-1">
+                  <.icon name="hero-star-solid" class="w-4 h-4 text-warning" />
+                  {rating}/10
+                </span>
+              <% end %>
+
+              <%= if runtime = get_runtime(@media_item) do %>
+                <span>{runtime}</span>
+              <% end %>
+
+              <span class="badge badge-ghost">
+                {if @media_item.type == "movie", do: "Movie", else: "TV Show"}
+              </span>
+            </div>
+
+            <%!-- Genres --%>
+            <%= if genres = get_genres(@media_item) do %>
+              <div class="flex flex-wrap gap-2 mt-3">
+                <span :for={genre <- genres} class="badge badge-outline">{genre}</span>
+              </div>
+            <% end %>
+          </div>
+
+          <%!-- Active Download Status --%>
+          <%= if download = get_download_status(@media_item) do %>
+            <div class="alert alert-info mb-6">
+              <.icon name="hero-arrow-down-tray" class="w-6 h-6" />
+              <div class="flex-1">
+                <h3 class="font-bold">Downloading</h3>
+                <div class="text-sm">
+                  {format_download_status(download.status)}
+                  <%= if download.progress do %>
+                    - {download.progress}%
+                  <% end %>
+                </div>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Overview --%>
+          <div class="card bg-base-200 shadow-lg mb-6">
+            <div class="card-body">
+              <h2 class="card-title">Overview</h2>
+              <p class="text-base-content/80 leading-relaxed">{get_overview(@media_item)}</p>
+            </div>
+          </div>
+
+          <%!-- Cast and Crew --%>
+          <% cast = get_cast(@media_item)
+          crew = get_crew(@media_item) %>
+          <%= if cast != [] or crew != [] do %>
+            <div class="card bg-base-200 shadow-lg mb-6">
+              <div class="card-body">
+                <h2 class="card-title mb-4">Cast & Crew</h2>
+
+                <%= if crew != [] do %>
+                  <div class="mb-6">
+                    <h3 class="text-sm font-semibold text-base-content/70 mb-3">Key Crew</h3>
+                    <div class="flex flex-wrap gap-3">
+                      <div
+                        :for={member <- crew}
+                        class="badge badge-lg badge-outline gap-2"
+                      >
+                        <span class="font-medium">{member.name}</span>
+                        <span class="text-base-content/60">• {member.job}</span>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+
+                <%= if cast != [] do %>
+                  <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 mb-3">Cast</h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      <div :for={actor <- cast} class="flex flex-col items-center text-center">
+                        <div class="avatar mb-2">
+                          <div class="w-20 h-20 rounded-full bg-base-300">
+                            <%= if get_profile_image_url(actor.profile_path) do %>
+                              <img
+                                src={get_profile_image_url(actor.profile_path)}
+                                alt={actor.name}
+                                class="object-cover"
+                              />
+                            <% else %>
+                              <div class="flex items-center justify-center h-full">
+                                <.icon name="hero-user" class="w-10 h-10 text-base-content/30" />
+                              </div>
+                            <% end %>
+                          </div>
+                        </div>
+                        <div class="text-sm font-medium line-clamp-2">{actor.name}</div>
+                        <div class="text-xs text-base-content/60 line-clamp-2">
+                          {actor.character}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Episodes (TV Shows Only) --%>
+          <%= if @media_item.type == "tv_show" && length(@media_item.episodes) > 0 do %>
+            <div class="card bg-base-200 shadow-lg mb-6">
+              <div class="card-body">
+                <h2 class="card-title mb-4">Episodes</h2>
+
+                <%= for {season_num, episodes} <- group_episodes_by_season(@media_item.episodes) do %>
+                  <div class="collapse collapse-arrow bg-base-100 mb-2">
+                    <input type="checkbox" checked={season_num == 1} />
+                    <div class="collapse-title text-lg font-medium">
+                      Season {season_num}
+                      <span class="badge badge-ghost badge-sm ml-2">
+                        {length(episodes)} episodes
+                      </span>
+                    </div>
+                    <div class="collapse-content">
+                      <div class="overflow-x-auto">
+                        <table class="table table-sm">
+                          <thead>
+                            <tr>
+                              <th class="w-16">#</th>
+                              <th>Title</th>
+                              <th class="hidden md:table-cell">Air Date</th>
+                              <th class="hidden lg:table-cell">Quality</th>
+                              <th>Status</th>
+                              <th class="w-24">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr :for={episode <- Enum.sort_by(episodes, & &1.episode_number)}>
+                              <td class="font-mono text-base-content/70">
+                                {episode.episode_number}
+                              </td>
+                              <td>
+                                <div class="font-medium">{episode.title || "TBA"}</div>
+                              </td>
+                              <td class="hidden md:table-cell text-sm">
+                                {format_date(episode.air_date)}
+                              </td>
+                              <td class="hidden lg:table-cell">
+                                <%= if quality = get_episode_quality_badge(episode) do %>
+                                  <span class="badge badge-primary badge-sm">{quality}</span>
+                                <% else %>
+                                  <span class="text-base-content/50">—</span>
+                                <% end %>
+                              </td>
+                              <td>
+                                <%= if episode.monitored do %>
+                                  <span title="Monitored">
+                                    <.icon
+                                      name="hero-bookmark-solid"
+                                      class="w-4 h-4 text-primary"
+                                    />
+                                  </span>
+                                <% else %>
+                                  <span title="Not monitored">
+                                    <.icon
+                                      name="hero-bookmark"
+                                      class="w-4 h-4 text-base-content/30"
+                                    />
+                                  </span>
+                                <% end %>
+                              </td>
+                              <td>
+                                <div class="flex gap-1">
+                                  <button
+                                    type="button"
+                                    phx-click="toggle_episode_monitored"
+                                    phx-value-episode-id={episode.id}
+                                    class="btn btn-ghost btn-xs"
+                                    title={
+                                      if episode.monitored,
+                                        do: "Stop monitoring",
+                                        else: "Start monitoring"
+                                    }
+                                  >
+                                    <.icon
+                                      name={
+                                        if episode.monitored,
+                                          do: "hero-bookmark-solid",
+                                          else: "hero-bookmark"
+                                      }
+                                      class="w-4 h-4"
+                                    />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    phx-click="search_episode"
+                                    phx-value-episode-id={episode.id}
+                                    class="btn btn-ghost btn-xs"
+                                    title="Search for episode"
+                                  >
+                                    <.icon name="hero-magnifying-glass" class="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Media Files --%>
+          <%= if length(@media_item.media_files) > 0 do %>
+            <div class="card bg-base-200 shadow-lg mb-6">
+              <div class="card-body">
+                <h2 class="card-title mb-4">Media Files</h2>
+                <div class="overflow-x-auto">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Quality</th>
+                        <th class="hidden md:table-cell">Codec</th>
+                        <th class="hidden lg:table-cell">Audio</th>
+                        <th>Size</th>
+                        <th class="hidden xl:table-cell">Path</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr :for={file <- @media_item.media_files}>
+                        <td>
+                          <span class="badge badge-primary">
+                            {file.resolution || "Unknown"}
+                          </span>
+                        </td>
+                        <td class="hidden md:table-cell">
+                          {file.codec || "—"}
+                        </td>
+                        <td class="hidden lg:table-cell">
+                          {file.audio_codec || "—"}
+                        </td>
+                        <td class="font-mono text-sm">
+                          {format_file_size(file.size)}
+                        </td>
+                        <td class="hidden xl:table-cell text-xs text-base-content/70 font-mono truncate max-w-xs">
+                          {file.path}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Download History --%>
+          <%= if length(@media_item.downloads) > 0 do %>
+            <div class="card bg-base-200 shadow-lg mb-6">
+              <div class="card-body">
+                <h2 class="card-title mb-4">Download History</h2>
+                <div class="overflow-x-auto">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Title</th>
+                        <th class="hidden md:table-cell">Quality</th>
+                        <th>Status</th>
+                        <th class="hidden lg:table-cell">Progress</th>
+                        <th class="hidden xl:table-cell">Added</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr :for={
+                        download <- Enum.sort_by(@media_item.downloads, & &1.inserted_at, :desc)
+                      }>
+                        <td class="font-medium">{download.title}</td>
+                        <td class="hidden md:table-cell">
+                          <%= if download.quality do %>
+                            <span class="badge badge-sm">{download.quality}</span>
+                          <% else %>
+                            —
+                          <% end %>
+                        </td>
+                        <td>
+                          <span class={[
+                            "badge badge-sm",
+                            download.status == "completed" && "badge-success",
+                            download.status == "failed" && "badge-error",
+                            download.status == "downloading" && "badge-info",
+                            download.status == "pending" && "badge-warning"
+                          ]}>
+                            {format_download_status(download.status)}
+                          </span>
+                        </td>
+                        <td class="hidden lg:table-cell">
+                          <%= if download.progress do %>
+                            <progress
+                              class="progress progress-primary w-20"
+                              value={download.progress}
+                              max="100"
+                            >
+                            </progress>
+                            <span class="text-xs ml-2">{download.progress}%</span>
+                          <% else %>
+                            —
+                          <% end %>
+                        </td>
+                        <td class="hidden xl:table-cell text-sm text-base-content/70">
+                          {Calendar.strftime(download.inserted_at, "%b %d, %Y")}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <%!-- Delete Confirmation Modal --%>
+  <%= if @show_delete_confirm do %>
+    <div class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Delete {@media_item.title}?</h3>
+        <p class="py-4">
+          Are you sure you want to delete this {@media_item.type}? This will remove all associated data including episodes, files, and download history.
+        </p>
+        <p class="text-warning text-sm mb-4">
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" />
+          This action cannot be undone.
+        </p>
+        <div class="modal-action">
+          <button type="button" phx-click="hide_delete_confirm" class="btn btn-ghost">
+            Cancel
+          </button>
+          <button type="button" phx-click="delete_media" class="btn btn-error">
+            Delete
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" phx-click="hide_delete_confirm"></div>
+    </div>
+  <% end %>
+  <%!-- Edit Modal --%>
+  <%= if @show_edit_modal && @edit_form do %>
+    <div class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Edit {@media_item.title}</h3>
+
+        <.form
+          for={@edit_form}
+          id="edit-media-form"
+          phx-change="validate_edit"
+          phx-submit="save_edit"
+        >
+          <%!-- Quality Profile Selection --%>
+          <div class="form-control mb-4">
+            <label class="label">
+              <span class="label-text font-medium">Quality Profile</span>
+            </label>
+            <.input
+              field={@edit_form[:quality_profile_id]}
+              type="select"
+              options={[{"No Profile", nil}] ++ Enum.map(@quality_profiles, &{&1.name, &1.id})}
+              prompt="Select a quality profile"
+            />
+            <label class="label">
+              <span class="label-text-alt">
+                Controls which video qualities are preferred for downloads
+              </span>
+            </label>
+          </div>
+
+          <%!-- Monitored Toggle --%>
+          <div class="form-control mb-6">
+            <label class="label cursor-pointer justify-start gap-4">
+              <.input field={@edit_form[:monitored]} type="checkbox" class="checkbox" />
+              <div>
+                <span class="label-text font-medium">Monitored</span>
+                <p class="label-text-alt mt-1">
+                  Automatically search for and download new content
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <div class="modal-action">
+            <button type="button" phx-click="hide_edit_modal" class="btn btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Save Changes
+            </button>
+          </div>
+        </.form>
+      </div>
+      <div class="modal-backdrop" phx-click="hide_edit_modal"></div>
+    </div>
+  <% end %>
+</Layouts.app>

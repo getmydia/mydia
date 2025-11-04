@@ -150,7 +150,7 @@ case "$COMMAND" in
             sleep 2
         fi
         echo -e "${GREEN}Running tests...${NC}"
-        run_in_container mix test "$@"
+        docker compose exec -e MIX_ENV=test "$SERVICE_NAME" sh -c 'mix clean && mix ecto.create --quiet && mix ecto.migrate --quiet && mix test '"$*"
         ;;
 
     format)

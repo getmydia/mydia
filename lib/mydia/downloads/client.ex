@@ -280,4 +280,55 @@ defmodule Mydia.Downloads.Client do
       :ok
   """
   @callback resume_torrent(config(), client_id :: String.t()) :: :ok | {:error, Error.t()}
+
+  ## Convenience Functions
+
+  @doc """
+  Tests connection to a download client using the specified adapter.
+  """
+  def test_connection(adapter, config) when is_atom(adapter) do
+    adapter.test_connection(config)
+  end
+
+  @doc """
+  Adds a torrent using the specified adapter.
+  """
+  def add_torrent(adapter, config, torrent, opts \\ []) when is_atom(adapter) do
+    adapter.add_torrent(config, torrent, opts)
+  end
+
+  @doc """
+  Gets torrent status using the specified adapter.
+  """
+  def get_status(adapter, config, client_id) when is_atom(adapter) do
+    adapter.get_status(config, client_id)
+  end
+
+  @doc """
+  Lists all torrents using the specified adapter.
+  """
+  def list_torrents(adapter, config, opts \\ []) when is_atom(adapter) do
+    adapter.list_torrents(config, opts)
+  end
+
+  @doc """
+  Removes a torrent/download using the specified adapter.
+  """
+  def remove_download(adapter, config, client_id, opts \\ []) when is_atom(adapter) do
+    adapter.remove_torrent(config, client_id, opts)
+  end
+
+  @doc """
+  Pauses a torrent using the specified adapter.
+  """
+  def pause_torrent(adapter, config, client_id) when is_atom(adapter) do
+    adapter.pause_torrent(config, client_id)
+  end
+
+  @doc """
+  Resumes a torrent using the specified adapter.
+  """
+  def resume_torrent(adapter, config, client_id) when is_atom(adapter) do
+    adapter.resume_torrent(config, client_id)
+  end
 end

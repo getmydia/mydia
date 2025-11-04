@@ -6,7 +6,7 @@
         This is a development-only login. Use your local username and password.
       </p>
 
-      <.form :let={f} for={@changeset} action={~p"/auth/local/login"} id="login-form">
+      <.form for={@changeset} action={~p"/auth/local/login"} id="login-form">
         <div class="form-control">
           <label class="label" for="user_username">
             <span class="label-text">Username</span>

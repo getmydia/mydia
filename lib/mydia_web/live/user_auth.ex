@@ -12,11 +12,20 @@ defmodule MydiaWeb.Live.UserAuth do
   alias Mydia.Auth.Guardian
 
   @doc """
-  Loads the current user from the session if authenticated.
+  LiveView mount hook for authentication and authorization.
+
+  Supports multiple modes:
+  - `:ensure_authenticated` - Requires user to be logged in
+  - `:maybe_authenticated` - Loads user if present, but doesn't require it
+  - `{:ensure_role, role}` - Requires user to have a specific role
 
   Usage in LiveView:
       on_mount {MydiaWeb.Live.UserAuth, :ensure_authenticated}
+      on_mount {MydiaWeb.Live.UserAuth, :maybe_authenticated}
+      on_mount {MydiaWeb.Live.UserAuth, {:ensure_role, :admin}}
   """
+  def on_mount(mode, params, session, socket)
+
   def on_mount(:ensure_authenticated, _params, session, socket) do
     socket = mount_current_user(socket, session)
 
@@ -32,22 +41,10 @@ defmodule MydiaWeb.Live.UserAuth do
     end
   end
 
-  @doc """
-  Loads the current user from the session without requiring authentication.
-
-  Usage in LiveView:
-      on_mount {MydiaWeb.Live.UserAuth, :maybe_authenticated}
-  """
   def on_mount(:maybe_authenticated, _params, session, socket) do
     {:cont, mount_current_user(socket, session)}
   end
 
-  @doc """
-  Requires the user to have a specific role.
-
-  Usage in LiveView:
-      on_mount {MydiaWeb.Live.UserAuth, {:ensure_role, :admin}}
-  """
   def on_mount({:ensure_role, required_role}, _params, session, socket) do
     socket = mount_current_user(socket, session)
 

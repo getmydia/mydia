@@ -1,67 +1,61 @@
 <Layouts.app flash={@flash}>
-  <div class="p-6">
-    <div class="mb-6">
-      <h1 class="text-3xl font-bold mb-2">Welcome to Mydia</h1>
-      <p class="text-base-content/70">Your personal media management system</p>
-    </div>
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold mb-2">Welcome to Mydia</h1>
+    <p class="text-base-content/70">Your personal media management system</p>
+  </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <!-- Movies Card -->
-      <div class="card bg-base-200 shadow-sm">
-        <div class="card-body">
-          <h2 class="card-title">
-            <.icon name="hero-film" class="w-6 h-6 text-primary" />
-            Movies
-          </h2>
-          <p class="text-3xl font-bold">0</p>
-          <p class="text-sm text-base-content/60">Total movies</p>
-        </div>
-      </div>
-
-      <!-- TV Shows Card -->
-      <div class="card bg-base-200 shadow-sm">
-        <div class="card-body">
-          <h2 class="card-title">
-            <.icon name="hero-tv" class="w-6 h-6 text-primary" />
-            TV Shows
-          </h2>
-          <p class="text-3xl font-bold">0</p>
-          <p class="text-sm text-base-content/60">Total series</p>
-        </div>
-      </div>
-
-      <!-- Downloads Card -->
-      <div class="card bg-base-200 shadow-sm">
-        <div class="card-body">
-          <h2 class="card-title">
-            <.icon name="hero-arrow-down-tray" class="w-6 h-6 text-primary" />
-            Downloads
-          </h2>
-          <p class="text-3xl font-bold">0</p>
-          <p class="text-sm text-base-content/60">Active downloads</p>
-        </div>
-      </div>
-
-      <!-- Storage Card -->
-      <div class="card bg-base-200 shadow-sm">
-        <div class="card-body">
-          <h2 class="card-title">
-            <.icon name="hero-circle-stack" class="w-6 h-6 text-primary" />
-            Storage
-          </h2>
-          <p class="text-3xl font-bold">0 GB</p>
-          <p class="text-sm text-base-content/60">Total storage used</p>
-        </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- Movies Card -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">
+          <.icon name="hero-film" class="w-6 h-6 text-primary" /> Movies
+        </h2>
+        <p class="text-3xl font-bold">0</p>
+        <p class="text-sm text-base-content/60">Total movies</p>
       </div>
     </div>
+    
+<!-- TV Shows Card -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">
+          <.icon name="hero-tv" class="w-6 h-6 text-primary" /> TV Shows
+        </h2>
+        <p class="text-3xl font-bold">0</p>
+        <p class="text-sm text-base-content/60">Total series</p>
+      </div>
+    </div>
+    
+<!-- Downloads Card -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">
+          <.icon name="hero-arrow-down-tray" class="w-6 h-6 text-primary" /> Downloads
+        </h2>
+        <p class="text-3xl font-bold">0</p>
+        <p class="text-sm text-base-content/60">Active downloads</p>
+      </div>
+    </div>
+    
+<!-- Storage Card -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">
+          <.icon name="hero-circle-stack" class="w-6 h-6 text-primary" /> Storage
+        </h2>
+        <p class="text-3xl font-bold">0 GB</p>
+        <p class="text-sm text-base-content/60">Total storage used</p>
+      </div>
+    </div>
+  </div>
 
-    <div class="mt-8">
-      <div class="alert alert-info">
-        <.icon name="hero-information-circle" class="w-5 h-5" />
-        <div>
-          <p class="font-semibold">Getting Started</p>
-          <p class="text-sm">Your media library is empty. Start by adding movies or TV shows!</p>
-        </div>
+  <div class="mt-8">
+    <div class="alert alert-info">
+      <.icon name="hero-information-circle" class="w-5 h-5" />
+      <div>
+        <p class="font-semibold">Getting Started</p>
+        <p class="text-sm">Your media library is empty. Start by adding movies or TV shows!</p>
       </div>
     </div>
   </div>

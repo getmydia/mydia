@@ -108,10 +108,11 @@ defmodule Mydia.Downloads.Client.HTTP do
   """
   @spec get(request(), String.t(), keyword()) :: {:ok, response()} | {:error, Error.t()}
   def get(req, path, opts \\ []) do
+    full_url = build_full_url(req, path)
+
     req
-    |> Req.Request.append_request_steps(url: &append_path(&1, path))
-    |> Req.Request.merge_options(opts)
-    |> Req.request()
+    |> Req.merge(url: full_url)
+    |> Req.get(opts)
     |> handle_response()
   end
 
@@ -126,11 +127,22 @@ defmodule Mydia.Downloads.Client.HTTP do
   """
   @spec post(request(), String.t(), keyword()) :: {:ok, response()} | {:error, Error.t()}
   def post(req, path, opts \\ []) do
+    # Build full URL from base_url and path
+    full_url = build_full_url(req, path)
+
     req
-    |> Req.Request.append_request_steps(url: &append_path(&1, path))
-    |> Req.Request.merge_options([method: :post] ++ opts)
-    |> Req.request()
+    |> Req.merge(url: full_url)
+    |> Req.post(opts)
     |> handle_response()
+  end
+
+  defp build_full_url(req, path) do
+    # Extract base_url from request options
+    base_url = req.options[:base_url] || "http://localhost"
+    # Ensure path starts with /
+    path = if String.starts_with?(path, "/"), do: path, else: "/#{path}"
+    # Combine base_url and path
+    "#{base_url}#{path}"
   end
 
   @doc """
@@ -144,10 +156,11 @@ defmodule Mydia.Downloads.Client.HTTP do
   """
   @spec put(request(), String.t(), keyword()) :: {:ok, response()} | {:error, Error.t()}
   def put(req, path, opts \\ []) do
+    full_url = build_full_url(req, path)
+
     req
-    |> Req.Request.append_request_steps(url: &append_path(&1, path))
-    |> Req.Request.merge_options([method: :put] ++ opts)
-    |> Req.request()
+    |> Req.merge(url: full_url)
+    |> Req.put(opts)
     |> handle_response()
   end
 
@@ -162,10 +175,11 @@ defmodule Mydia.Downloads.Client.HTTP do
   """
   @spec delete(request(), String.t(), keyword()) :: {:ok, response()} | {:error, Error.t()}
   def delete(req, path, opts \\ []) do
+    full_url = build_full_url(req, path)
+
     req
-    |> Req.Request.append_request_steps(url: &append_path(&1, path))
-    |> Req.Request.merge_options([method: :delete] ++ opts)
-    |> Req.request()
+    |> Req.merge(url: full_url)
+    |> Req.delete(opts)
     |> handle_response()
   end
 
@@ -199,7 +213,9 @@ defmodule Mydia.Downloads.Client.HTTP do
   @spec form_body(map()) :: String.t()
   def form_body(params) when is_map(params) do
     params
-    |> Enum.map(fn {key, value} -> "#{URI.encode_www_form(to_string(key))}=#{URI.encode_www_form(to_string(value))}" end)
+    |> Enum.map(fn {key, value} ->
+      "#{URI.encode_www_form(to_string(key))}=#{URI.encode_www_form(to_string(value))}"
+    end)
     |> Enum.join("&")
   end
 
@@ -217,16 +233,6 @@ defmodule Mydia.Downloads.Client.HTTP do
     credentials = "#{config.username}:#{config.password}"
     encoded = Base.encode64(credentials)
     "Basic #{encoded}"
-  end
-
-  defp append_path(request, path) do
-    # Ensure path starts with /
-    path = if String.starts_with?(path, "/"), do: path, else: "/#{path}"
-
-    current_url = request.url
-    new_url = %{current_url | path: path}
-
-    %{request | url: new_url}
   end
 
   defp handle_response({:ok, %Req.Response{} = response}) do

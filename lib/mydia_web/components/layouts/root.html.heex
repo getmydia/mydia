@@ -12,25 +12,43 @@
     </script>
     <script>
       (() => {
+        const getSystemTheme = () => {
+          return window.matchMedia("(prefers-color-scheme: dark)").matches ? "frappe" : "latte";
+        };
+
         const setTheme = (theme) => {
           if (theme === "system") {
-            localStorage.removeItem("phx:theme");
-            document.documentElement.removeAttribute("data-theme");
+            localStorage.setItem("phx:theme", "system");
+            const systemTheme = getSystemTheme();
+            document.documentElement.setAttribute("data-theme", systemTheme);
           } else {
             localStorage.setItem("phx:theme", theme);
             document.documentElement.setAttribute("data-theme", theme);
           }
         };
-        if (!document.documentElement.hasAttribute("data-theme")) {
-          setTheme(localStorage.getItem("phx:theme") || "system");
-        }
-        window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
-        
+
+        // Initialize theme on page load
+        const savedTheme = localStorage.getItem("phx:theme") || "latte";
+        setTheme(savedTheme);
+
+        // Watch for system theme changes when in system mode
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+          if (localStorage.getItem("phx:theme") === "system") {
+            setTheme("system");
+          }
+        });
+
+        window.addEventListener("storage", (e) => {
+          if (e.key === "phx:theme") {
+            setTheme(e.newValue || "light");
+          }
+        });
+
         window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
       })();
     </script>
   </head>
-  <body>
+  <body class="bg-base-200 text-base-content">
     {@inner_content}
   </body>
 </html>

@@ -59,10 +59,48 @@ defmodule MydiaWeb.Router do
     get "/", PageController, :home
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", MydiaWeb do
-  #   pipe_through :api
-  # end
+  # Authenticated LiveView routes
+  scope "/", MydiaWeb do
+    pipe_through [:browser, :auth, :require_authenticated]
+
+    live_session :authenticated,
+      on_mount: [{MydiaWeb.Live.UserAuth, :ensure_authenticated}] do
+      live "/media", MediaLive.Index, :index
+      live "/media/:id", MediaLive.Show, :show
+      live "/movies", MediaLive.Index, :movies
+      live "/movies/:id", MediaLive.Show, :show
+      live "/tv", MediaLive.Index, :tv_shows
+      live "/tv/:id", MediaLive.Show, :show
+      live "/add/movie", AddMediaLive.Index, :add_movie
+      live "/add/series", AddMediaLive.Index, :add_series
+      live "/search", SearchLive.Index, :index
+      live "/downloads", DownloadsLive.Index, :index
+    end
+  end
+
+  # Admin LiveView routes
+  scope "/admin", MydiaWeb do
+    pipe_through [:browser, :auth, :require_authenticated, :require_admin]
+
+    live_session :admin,
+      on_mount: [{MydiaWeb.Live.UserAuth, :ensure_authenticated}] do
+      live "/", AdminStatusLive.Index, :index
+      live "/status", AdminStatusLive.Index, :index
+      live "/config", AdminConfigLive.Index, :index
+      live "/jobs", JobsLive.Index, :index
+    end
+  end
+
+  # API routes - authenticated with JWT or API key
+  scope "/api/v1", MydiaWeb.Api do
+    pipe_through [:api, :api_auth, :require_authenticated]
+
+    # Download clients
+    get "/downloads/clients", DownloadClientController, :index
+    get "/downloads/clients/:id", DownloadClientController, :show
+    post "/downloads/clients/:id/test", DownloadClientController, :test
+    post "/downloads/clients/refresh", DownloadClientController, :refresh
+  end
 
   # Enable LiveDashboard in development
   if Application.compile_env(:mydia, :dev_routes) do

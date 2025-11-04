@@ -1,9 +1,11 @@
 ---
 id: task-8
 title: Set up Oban for background job processing
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@assistant'
 created_date: '2025-11-04 01:52'
+updated_date: '2025-11-04 03:42'
 labels:
   - background-jobs
   - oban
@@ -21,12 +23,12 @@ Configure Oban with SQLite-compatible engine for background jobs. Create job mod
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Oban dependency added and configured
-- [ ] #2 Oban.Engines.Basic set up for SQLite
-- [ ] #3 Queue configuration (critical, default, media, search, notifications)
-- [ ] #4 LibraryScanner job created
-- [ ] #5 DownloadMonitor job created
-- [ ] #6 Cron plugins configured for scheduled jobs
-- [ ] #7 Oban migrations run successfully
-- [ ] #8 Jobs can be enqueued and processed
+- [x] #1 Oban dependency added and configured
+- [x] #2 Oban.Engines.Basic set up for SQLite
+- [x] #3 Queue configuration (critical, default, media, search, notifications)
+- [x] #4 LibraryScanner job created
+- [x] #5 DownloadMonitor job created
+- [x] #6 Cron plugins configured for scheduled jobs
+- [x] #7 Oban migrations run successfully
+- [x] #8 Jobs can be enqueued and processed
 <!-- AC:END -->

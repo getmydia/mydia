@@ -127,15 +127,14 @@ defmodule Mydia.Metadata.Provider.HTTP do
   """
   @spec get(request(), String.t(), keyword()) :: {:ok, response()} | {:error, Error.t()}
   def get(req, path, opts \\ []) do
-    # Extract params and merge with existing request params
+    # Extract params
     params = Keyword.get(opts, :params, [])
     opts = Keyword.delete(opts, :params)
 
-    req
-    |> Req.Request.append_request_steps(url: &append_path(&1, path))
-    |> maybe_add_params(params)
-    |> Req.Request.merge_options(opts)
-    |> Req.request()
+    # Use Req.request/2 with options - this properly handles base_url + path
+    opts = [url: path, params: params] ++ opts
+
+    Req.request(req, opts)
     |> handle_response()
   end
 
@@ -160,11 +159,10 @@ defmodule Mydia.Metadata.Provider.HTTP do
     params = Keyword.get(opts, :params, [])
     opts = Keyword.delete(opts, :params)
 
-    req
-    |> Req.Request.append_request_steps(url: &append_path(&1, path))
-    |> maybe_add_params(params)
-    |> Req.Request.merge_options([method: :post] ++ opts)
-    |> Req.request()
+    # Use Req.request/2 with options - this properly handles base_url + path
+    opts = [method: :post, url: path, params: params] ++ opts
+
+    Req.request(req, opts)
     |> handle_response()
   end
 

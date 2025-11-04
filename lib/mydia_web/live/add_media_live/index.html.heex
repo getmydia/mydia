@@ -1,0 +1,400 @@
+<Layouts.app flash={@flash}>
+  <div class="max-w-7xl mx-auto">
+    <%!-- Header --%>
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-3xl font-bold">{@page_title}</h1>
+        <p class="text-base-content/70 mt-1">
+          Search and add {(@media_type == :movie && "movies") || "TV shows"} to your library
+        </p>
+      </div>
+      <button type="button" phx-click="cancel" class="btn btn-ghost btn-sm">
+        <.icon name="hero-x-mark" class="w-5 h-5" /> Cancel
+      </button>
+    </div>
+
+    <%!-- Configuration Toolbar --%>
+    <div class="bg-base-100 rounded-lg p-4 mb-6 shadow-lg">
+      <h3 class="text-sm font-semibold mb-3 text-base-content/70">Quick Add Settings</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <%!-- Root Folder --%>
+        <div class="form-control">
+          <label class="label py-1">
+            <span class="label-text text-xs">Root Folder</span>
+          </label>
+          <%= if @library_paths == [] do %>
+            <div class="text-xs text-error">No library paths configured</div>
+          <% else %>
+            <select
+              class="select select-bordered select-sm"
+              phx-change="update_toolbar"
+              phx-value-field="toolbar_library_path_id"
+            >
+              <%= for path <- @library_paths do %>
+                <option value={path.id} selected={@toolbar_library_path_id == path.id}>
+                  {path.path}
+                </option>
+              <% end %>
+            </select>
+          <% end %>
+        </div>
+        <%!-- Quality Profile --%>
+        <div class="form-control">
+          <label class="label py-1">
+            <span class="label-text text-xs">Quality Profile</span>
+          </label>
+          <select
+            class="select select-bordered select-sm"
+            phx-change="update_toolbar"
+            phx-value-field="toolbar_quality_profile_id"
+          >
+            <option value="" selected={@toolbar_quality_profile_id == nil}>Any Quality</option>
+            <%= for profile <- @quality_profiles do %>
+              <option value={profile.id} selected={@toolbar_quality_profile_id == profile.id}>
+                {profile.name}
+              </option>
+            <% end %>
+          </select>
+        </div>
+        <%!-- Monitor Toggle --%>
+        <div class="form-control">
+          <label class="label py-1">
+            <span class="label-text text-xs">Monitor</span>
+          </label>
+          <div class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="toggle toggle-primary toggle-sm"
+              checked={@toolbar_monitored}
+              phx-click="update_toolbar"
+              phx-value-field="toolbar_monitored"
+              phx-value-value={to_string(!@toolbar_monitored)}
+            />
+            <span class="text-xs">
+              {(@toolbar_monitored && "Monitored") || "Unmonitored"}
+            </span>
+          </div>
+        </div>
+        <%!-- Search on Add --%>
+        <div class="form-control">
+          <label class="label py-1">
+            <span class="label-text text-xs">Search on Add</span>
+          </label>
+          <div class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="toggle toggle-primary toggle-sm"
+              checked={@toolbar_search_on_add}
+              phx-click="update_toolbar"
+              phx-value-field="toolbar_search_on_add"
+              phx-value-value={to_string(!@toolbar_search_on_add)}
+            />
+            <span class="text-xs">
+              {(@toolbar_search_on_add && "Enabled") || "Disabled"}
+            </span>
+          </div>
+        </div>
+      </div>
+      <%!-- Season Monitoring for TV Shows --%>
+      <%= if @media_type == :tv_show do %>
+        <div class="form-control mt-4 max-w-xs">
+          <label class="label py-1">
+            <span class="label-text text-xs">Season Monitoring</span>
+          </label>
+          <select
+            class="select select-bordered select-sm"
+            phx-change="update_toolbar"
+            phx-value-field="toolbar_season_monitoring"
+          >
+            <option value="all" selected={@toolbar_season_monitoring == "all"}>
+              Monitor All Seasons
+            </option>
+            <option value="first" selected={@toolbar_season_monitoring == "first"}>
+              Monitor First Season Only
+            </option>
+            <option value="future" selected={@toolbar_season_monitoring == "future"}>
+              Monitor Future Seasons
+            </option>
+            <option value="none" selected={@toolbar_season_monitoring == "none"}>
+              Don't Monitor Any Seasons
+            </option>
+          </select>
+        </div>
+      <% end %>
+    </div>
+
+    <%!-- Search Bar --%>
+    <div class="bg-base-100 rounded-lg p-6 mb-6 shadow-xl">
+      <.form for={%{}} phx-submit="search" id="search-form">
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <.input
+              type="text"
+              name="search"
+              value={@search_query}
+              placeholder={"Search for " <> if(@media_type == :movie, do: "movies...", else: "TV shows...")}
+              class="input input-bordered input-lg w-full"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            class="btn btn-primary btn-lg whitespace-nowrap"
+            disabled={@searching}
+          >
+            <%= if @searching do %>
+              <span class="loading loading-spinner"></span> Searching...
+            <% else %>
+              <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search
+            <% end %>
+          </button>
+        </div>
+      </.form>
+    </div>
+
+    <%!-- No Results Message --%>
+    <%= if @search_results == [] and @search_query != "" and not @searching do %>
+      <div class="alert alert-info">
+        <.icon name="hero-information-circle" class="w-6 h-6" />
+        <span>No results found for "{@search_query}". Try a different search term.</span>
+      </div>
+    <% end %>
+
+    <%!-- Results Grid --%>
+    <%= if @search_results != [] do %>
+      <div>
+        <h2 class="text-xl font-bold mb-4">
+          Search Results ({length(@search_results)})
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <%= for {result, index} <- Enum.with_index(@search_results) do %>
+            <% is_added = MapSet.member?(@added_items, result[:id]) %>
+            <% is_adding = @adding_index == index %>
+            <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow">
+              <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
+                <img
+                  src={get_poster_url(result)}
+                  alt={result[:title] || result[:name]}
+                  class="w-full h-full object-cover"
+                  loading="lazy"
+                />
+                <%= if result[:vote_average] do %>
+                  <div class="badge badge-primary badge-sm absolute top-2 right-2">
+                    <.icon name="hero-star-solid" class="w-3 h-3 mr-1" />
+                    {format_rating(result[:vote_average])}
+                  </div>
+                <% end %>
+                <%= if is_added do %>
+                  <div class="absolute inset-0 bg-success/20 flex items-center justify-center">
+                    <div class="badge badge-success gap-1">
+                      <.icon name="hero-check" class="w-4 h-4" /> Added
+                    </div>
+                  </div>
+                <% end %>
+              </figure>
+              <div class="card-body p-3">
+                <h3 class="card-title text-sm line-clamp-2 h-10">
+                  {result[:title] || result[:name]}
+                </h3>
+                <p class="text-xs text-base-content/70">{format_year(result)}</p>
+                <%= if result[:overview] do %>
+                  <p class="text-xs text-base-content/60 line-clamp-2 mt-1">
+                    {result[:overview]}
+                  </p>
+                <% end %>
+                <div class="card-actions mt-2">
+                  <%= if is_added do %>
+                    <button class="btn btn-success btn-sm btn-block" disabled>
+                      <.icon name="hero-check" class="w-4 h-4" /> Added
+                    </button>
+                  <% else %>
+                    <%= if is_adding do %>
+                      <button class="btn btn-primary btn-sm btn-block" disabled>
+                        <span class="loading loading-spinner loading-xs"></span> Adding...
+                      </button>
+                    <% else %>
+                      <button
+                        class="btn btn-primary btn-sm flex-1"
+                        phx-click="quick_add"
+                        phx-value-index={index}
+                        disabled={@library_paths == []}
+                      >
+                        <.icon name="hero-plus" class="w-4 h-4" /> Add
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-sm"
+                        phx-click="open_config_modal"
+                        phx-value-index={index}
+                        title="Configure before adding"
+                      >
+                        <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
+                      </button>
+                    <% end %>
+                  <% end %>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+
+    <%!-- Configuration Modal --%>
+    <%= if @show_config_modal and @config_modal_result do %>
+      <div class="modal modal-open">
+        <div class="modal-box max-w-2xl">
+          <h3 class="font-bold text-lg mb-4">Configure Before Adding</h3>
+          <%!-- Media Preview --%>
+          <div class="flex gap-4 mb-6 bg-base-300 p-4 rounded-lg">
+            <div class="w-20 flex-shrink-0">
+              <img
+                src={get_poster_url(@config_modal_result)}
+                alt={@config_modal_result[:title] || @config_modal_result[:name]}
+                class="w-full rounded"
+              />
+            </div>
+            <div class="flex-1 min-w-0">
+              <h4 class="font-bold text-base">
+                {@config_modal_result[:title] || @config_modal_result[:name]}
+              </h4>
+              <p class="text-sm text-base-content/70">{format_year(@config_modal_result)}</p>
+              <%= if @config_modal_result[:overview] do %>
+                <p class="text-xs text-base-content/60 mt-2 line-clamp-3">
+                  {@config_modal_result[:overview]}
+                </p>
+              <% end %>
+            </div>
+          </div>
+          <%!-- Configuration Form --%>
+          <.form
+            for={@config_form}
+            phx-change="validate_config"
+            phx-submit="submit_config_modal"
+            id="config-modal-form"
+          >
+            <%!-- Library Path --%>
+            <div class="form-control mb-4">
+              <label class="label">
+                <span class="label-text font-semibold">Root Folder</span>
+                <span class="label-text-alt text-error">*</span>
+              </label>
+              <%= if @library_paths == [] do %>
+                <div class="alert alert-warning">
+                  <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+                  <span>No library paths configured. Please configure a library path first.</span>
+                </div>
+              <% else %>
+                <select name="config[library_path_id]" class="select select-bordered" required>
+                  <option value="">Select a folder...</option>
+                  <%= for path <- @library_paths do %>
+                    <option
+                      value={path.id}
+                      selected={@config_form[:library_path_id].value == path.id}
+                    >
+                      {path.path} ({path.type})
+                    </option>
+                  <% end %>
+                </select>
+              <% end %>
+            </div>
+            <%!-- Quality Profile --%>
+            <div class="form-control mb-4">
+              <label class="label">
+                <span class="label-text font-semibold">Quality Profile</span>
+              </label>
+              <select name="config[quality_profile_id]" class="select select-bordered">
+                <option value="">Any Quality</option>
+                <%= for profile <- @quality_profiles do %>
+                  <option
+                    value={profile.id}
+                    selected={@config_form[:quality_profile_id].value == profile.id}
+                  >
+                    {profile.name}
+                  </option>
+                <% end %>
+              </select>
+            </div>
+            <%!-- Monitoring --%>
+            <div class="form-control mb-4">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  name="config[monitored]"
+                  class="toggle toggle-primary"
+                  checked={@config_form[:monitored].value}
+                />
+                <div>
+                  <span class="label-text font-semibold">
+                    Monitor this {(@media_type == :movie && "movie") || "series"}
+                  </span>
+                  <p class="text-xs text-base-content/60">
+                    Automatically search for and download new releases
+                  </p>
+                </div>
+              </label>
+            </div>
+            <%!-- Season Monitoring for TV --%>
+            <%= if @media_type == :tv_show do %>
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Season Monitoring</span>
+                </label>
+                <select name="config[season_monitoring]" class="select select-bordered">
+                  <option value="all" selected={@config_form[:season_monitoring].value == "all"}>
+                    Monitor All Seasons
+                  </option>
+                  <option
+                    value="first"
+                    selected={@config_form[:season_monitoring].value == "first"}
+                  >
+                    Monitor First Season Only
+                  </option>
+                  <option
+                    value="future"
+                    selected={@config_form[:season_monitoring].value == "future"}
+                  >
+                    Monitor Future Seasons
+                  </option>
+                  <option value="none" selected={@config_form[:season_monitoring].value == "none"}>
+                    Don't Monitor Any Seasons
+                  </option>
+                </select>
+              </div>
+            <% end %>
+            <%!-- Search on Add --%>
+            <div class="form-control mb-6">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input
+                  type="checkbox"
+                  name="config[search_on_add]"
+                  class="toggle toggle-primary"
+                  checked={@config_form[:search_on_add].value}
+                />
+                <div>
+                  <span class="label-text font-semibold">Search on Add</span>
+                  <p class="text-xs text-base-content/60">
+                    Trigger an immediate search for this media after adding
+                  </p>
+                </div>
+              </label>
+            </div>
+            <%!-- Modal Actions --%>
+            <div class="modal-action">
+              <button
+                type="button"
+                class="btn btn-ghost"
+                phx-click="close_config_modal"
+              >
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary" disabled={@library_paths == []}>
+                <.icon name="hero-plus" class="w-5 h-5" /> Add to Library
+              </button>
+            </div>
+          </.form>
+        </div>
+        <div class="modal-backdrop" phx-click="close_config_modal"></div>
+      </div>
+    <% end %>
+  </div>
+</Layouts.app>

@@ -49,7 +49,10 @@ defmodule MydiaWeb.Plugs.EnsureRole do
       "json" ->
         conn
         |> put_status(403)
-        |> json(%{error: "Forbidden", message: "You do not have permission to access this resource"})
+        |> json(%{
+          error: "Forbidden",
+          message: "You do not have permission to access this resource"
+        })
         |> halt()
 
       _ ->
@@ -62,12 +65,16 @@ defmodule MydiaWeb.Plugs.EnsureRole do
 
   defp get_format(conn) do
     case conn.path_info do
-      ["api" | _] -> "json"
+      ["api" | _] ->
+        "json"
+
       _ ->
         case get_req_header(conn, "accept") do
           [accept | _] ->
             if String.contains?(accept, "application/json"), do: "json", else: "html"
-          _ -> "html"
+
+          _ ->
+            "html"
         end
     end
   end

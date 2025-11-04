@@ -1,0 +1,281 @@
+<Layouts.app flash={@flash}>
+  <div class="flex flex-col h-full p-6">
+    <%!-- Header --%>
+    <div class="mb-6">
+      <h1 class="text-3xl font-bold">{@page_title}</h1>
+      <p class="text-base-content/70 mt-1">
+        Search for movies and TV shows across your configured indexers
+      </p>
+    </div>
+
+    <%!-- Search Bar --%>
+    <div class="card bg-base-100 shadow-lg mb-6">
+      <div class="card-body">
+        <form phx-submit="search" phx-change="search" class="flex gap-4">
+          <div class="flex-1 relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <.icon name="hero-magnifying-glass" class="w-6 h-6 text-base-content/50" />
+            </div>
+            <.input
+              type="text"
+              name="search"
+              value={@search_query}
+              placeholder="Search for movies, TV shows, or specific releases..."
+              phx-debounce="500"
+              class="input input-bordered input-lg w-full pl-12"
+            />
+          </div>
+        </form>
+
+        <%!-- Quick help text --%>
+        <%= if @search_query == "" && !@searching do %>
+          <div class="text-sm text-base-content/60 mt-2">
+            <.icon name="hero-information-circle" class="w-4 h-4 inline" />
+            Try searching for "Breaking Bad", "The Matrix", or specific release names
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <%!-- Filters and Sort --%>
+    <%= if @search_query != "" || @searching do %>
+      <div class="flex flex-col lg:flex-row gap-4 mb-6">
+        <%!-- Filters --%>
+        <div class="card bg-base-100 shadow flex-1">
+          <div class="card-body p-4">
+            <h3 class="font-semibold mb-3 flex items-center gap-2">
+              <.icon name="hero-funnel" class="w-5 h-5" /> Filters
+            </h3>
+            <form phx-change="filter" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <%!-- Quality filter --%>
+              <div class="form-control">
+                <label class="label label-text text-xs">Quality</label>
+                <select name="quality" class="select select-bordered select-sm">
+                  <option value="" selected={is_nil(@quality_filter)}>All</option>
+                  <option value="720p" selected={@quality_filter == "720p"}>720p</option>
+                  <option value="1080p" selected={@quality_filter == "1080p"}>1080p</option>
+                  <option value="2160p" selected={@quality_filter in ["2160p", "4k"]}>
+                    4K (2160p)
+                  </option>
+                </select>
+              </div>
+              <%!-- Min seeders filter --%>
+              <div class="form-control">
+                <label class="label label-text text-xs">Min Seeders</label>
+                <input
+                  type="number"
+                  name="min_seeders"
+                  value={@min_seeders}
+                  min="0"
+                  class="input input-bordered input-sm"
+                  placeholder="0"
+                />
+              </div>
+              <%!-- Min size filter --%>
+              <div class="form-control">
+                <label class="label label-text text-xs">Min Size (GB)</label>
+                <input
+                  type="number"
+                  name="min_size"
+                  value={@min_size_gb}
+                  min="0"
+                  step="0.1"
+                  class="input input-bordered input-sm"
+                  placeholder="Any"
+                />
+              </div>
+              <%!-- Max size filter --%>
+              <div class="form-control">
+                <label class="label label-text text-xs">Max Size (GB)</label>
+                <input
+                  type="number"
+                  name="max_size"
+                  value={@max_size_gb}
+                  min="0"
+                  step="0.1"
+                  class="input input-bordered input-sm"
+                  placeholder="Any"
+                />
+              </div>
+            </form>
+          </div>
+        </div>
+        <%!-- Sort options --%>
+        <div class="card bg-base-100 shadow lg:w-64">
+          <div class="card-body p-4">
+            <h3 class="font-semibold mb-3 flex items-center gap-2">
+              <.icon name="hero-arrows-up-down" class="w-5 h-5" /> Sort By
+            </h3>
+            <form phx-change="sort">
+              <select name="sort_by" class="select select-bordered select-sm w-full">
+                <option value="quality" selected={@sort_by == :quality}>
+                  Quality (Best First)
+                </option>
+                <option value="seeders" selected={@sort_by == :seeders}>
+                  Seeders (Most First)
+                </option>
+                <option value="size" selected={@sort_by == :size}>Size (Largest First)</option>
+                <option value="date" selected={@sort_by == :date}>Date (Newest First)</option>
+              </select>
+            </form>
+          </div>
+        </div>
+      </div>
+    <% end %>
+    <%!-- Loading State --%>
+    <%= if @searching do %>
+      <div class="flex flex-col items-center justify-center py-16">
+        <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+        <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+          Searching across indexers...
+        </h3>
+        <p class="text-base-content/50">
+          This may take a few seconds
+        </p>
+      </div>
+    <% end %>
+    <%!-- Empty State (no search yet) --%>
+    <%= if @search_query == "" && !@searching do %>
+      <div class="flex flex-col items-center justify-center py-16 text-center">
+        <.icon name="hero-magnifying-glass" class="w-24 h-24 text-base-content/20 mb-6" />
+        <h3 class="text-2xl font-semibold text-base-content/70 mb-3">
+          Search for Media
+        </h3>
+        <p class="text-base-content/50 max-w-md">
+          Enter a movie or TV show name in the search bar above to find available releases from your configured indexers
+        </p>
+      </div>
+    <% end %>
+    <%!-- Empty State (no results) --%>
+    <%= if @results_empty? && @search_query != "" && !@searching do %>
+      <div class="flex flex-col items-center justify-center py-16 text-center">
+        <.icon name="hero-exclamation-circle" class="w-20 h-20 text-base-content/20 mb-6" />
+        <h3 class="text-2xl font-semibold text-base-content/70 mb-3">
+          No Results Found
+        </h3>
+        <p class="text-base-content/50 max-w-md mb-4">
+          We couldn't find any releases matching "<span class="font-semibold">{@search_query}</span>"
+        </p>
+        <div class="text-sm text-base-content/60">
+          <p>Try:</p>
+          <ul class="list-disc list-inside mt-2 space-y-1">
+            <li>Using different keywords or spelling</li>
+            <li>Removing or adjusting filters</li>
+            <li>Checking that your indexers are configured and enabled</li>
+          </ul>
+        </div>
+      </div>
+    <% end %>
+    <%!-- Results Table --%>
+    <%= if @search_query != "" && !@searching && !@results_empty? do %>
+      <div class="overflow-x-auto">
+        <table
+          id="search-results"
+          phx-update="stream"
+          class="table table-zebra w-full bg-base-100 shadow-lg"
+        >
+          <thead>
+            <tr class="bg-base-300">
+              <th class="w-2/5">Release Title</th>
+              <th class="w-1/6">Quality & Size</th>
+              <th class="w-1/6 hidden md:table-cell">Health</th>
+              <th class="w-1/6 hidden lg:table-cell">Source</th>
+              <th class="w-32">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              :for={{id, result} <- @streams.search_results}
+              id={id}
+              class="hover cursor-pointer"
+            >
+              <%!-- Title Column --%>
+              <td>
+                <div class="flex flex-col">
+                  <div class="font-semibold text-sm line-clamp-2" title={result.title}>
+                    {result.title}
+                  </div>
+                  <%!-- Mobile-only compact info --%>
+                  <div class="flex gap-2 mt-2 md:hidden flex-wrap">
+                    <span class="badge badge-ghost badge-sm">
+                      <.icon name="hero-arrow-up" class="w-3 h-3 mr-1" /> {result.seeders}
+                      <span class="mx-1 text-base-content/30">/</span>
+                      <.icon name="hero-arrow-down" class="w-3 h-3 mr-1" /> {result.leechers}
+                    </span>
+                    <span class="badge badge-outline badge-sm">{result.indexer}</span>
+                  </div>
+                </div>
+              </td>
+              <%!-- Quality & Size Column --%>
+              <td>
+                <div class="flex flex-col gap-1">
+                  <span class="badge badge-primary badge-sm">
+                    {get_quality_badge(result)}
+                  </span>
+                  <span class="text-xs font-mono text-base-content/70">
+                    {format_size(result)}
+                  </span>
+                </div>
+              </td>
+              <%!-- Health Column (Seeders/Peers with indicator) --%>
+              <td class="hidden md:table-cell">
+                <div class="flex items-center gap-3">
+                  <%!-- Health indicator --%>
+                  <div
+                    class="radial-progress text-xs"
+                    style={"--value:#{trunc(health_score(result) * 100)}; --size:2.5rem;"}
+                    role="progressbar"
+                  >
+                    {trunc(health_score(result) * 100)}%
+                  </div>
+                  <%!-- Seeders/Peers --%>
+                  <div class="flex flex-col text-xs">
+                    <div class="flex items-center gap-1">
+                      <.icon name="hero-arrow-up" class="w-3 h-3 text-success" />
+                      <span class="font-semibold text-success">{result.seeders}</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <.icon name="hero-arrow-down" class="w-3 h-3 text-info" />
+                      <span class="text-base-content/70">{result.leechers}</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <%!-- Source Column (Indexer + Date) --%>
+              <td class="hidden lg:table-cell">
+                <div class="flex flex-col gap-1">
+                  <span class="badge badge-outline badge-sm">{result.indexer}</span>
+                  <span class="text-xs text-base-content/60">
+                    {format_date(result.published_at)}
+                  </span>
+                </div>
+              </td>
+              <%!-- Actions Column --%>
+              <td>
+                <div class="flex gap-1">
+                  <button
+                    class="btn btn-primary btn-sm"
+                    phx-click="download"
+                    phx-value-url={result.download_url}
+                    phx-value-title={result.title}
+                    title="Download this release"
+                  >
+                    <.icon name="hero-arrow-down-tray" class="w-4 h-4" />
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    phx-click="add_to_library"
+                    phx-value-title={result.title}
+                    title="Add to library for monitoring"
+                  >
+                    <.icon name="hero-bookmark" class="w-4 h-4" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+  </div>
+</Layouts.app>

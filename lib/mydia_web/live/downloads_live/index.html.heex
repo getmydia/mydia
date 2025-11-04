@@ -1,0 +1,261 @@
+<Layouts.app flash={@flash}>
+  <div class="flex flex-col h-full">
+    <%!-- Header --%>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-3xl font-bold">{@page_title}</h1>
+        <p class="text-base-content/70 mt-1">
+          Monitor active downloads and troubleshoot issues
+        </p>
+      </div>
+
+      <%!-- Utility actions --%>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost"
+          phx-click="clear_completed"
+          data-confirm="Clear all completed downloads from history?"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" />
+          <span class="hidden sm:inline ml-1">Clear Completed</span>
+        </button>
+      </div>
+    </div>
+
+    <%!-- Tabs --%>
+    <div role="tablist" class="tabs tabs-boxed mb-6">
+      <button
+        role="tab"
+        class={["tab", @active_tab == :queue && "tab-active"]}
+        phx-click="switch_tab"
+        phx-value-tab="queue"
+      >
+        <.icon name="hero-arrow-down-tray" class="w-4 h-4 mr-1" /> Queue
+      </button>
+      <button
+        role="tab"
+        class={["tab", @active_tab == :issues && "tab-active"]}
+        phx-click="switch_tab"
+        phx-value-tab="issues"
+      >
+        <.icon name="hero-exclamation-triangle" class="w-4 h-4 mr-1" /> Issues
+      </button>
+    </div>
+
+    <%!-- Batch action bar --%>
+    <%= if MapSet.size(@selected_ids) > 0 do %>
+      <div class="alert mb-4 shadow-lg">
+        <div class="flex-1">
+          <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
+        </div>
+        <div class="flex gap-2">
+          <%= if @active_tab == :issues do %>
+            <button type="button" class="btn btn-sm btn-primary" phx-click="batch_retry">
+              <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
+            </button>
+          <% end %>
+          <button
+            type="button"
+            class="btn btn-sm btn-error"
+            phx-click="batch_delete"
+            data-confirm="Delete selected downloads?"
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> Delete
+          </button>
+          <button type="button" class="btn btn-sm btn-ghost" phx-click="toggle_select_all">
+            Clear
+          </button>
+        </div>
+      </div>
+    <% end %>
+
+    <%!-- Downloads list --%>
+    <div class="space-y-3">
+      <%!-- Empty state --%>
+      <%= if @downloads_empty? do %>
+        <div class="card bg-base-100 shadow-lg">
+          <div class="card-body flex flex-col items-center justify-center py-16">
+            <%= cond do %>
+              <% @active_tab == :queue -> %>
+                <.icon name="hero-arrow-down-tray" class="w-16 h-16 text-base-content/30 mb-4" />
+                <h3 class="text-xl font-semibold text-base-content/70 mb-2">Queue is empty</h3>
+                <p class="text-base-content/50">No downloads currently in progress</p>
+              <% @active_tab == :issues -> %>
+                <.icon
+                  name="hero-check-circle"
+                  class="w-16 h-16 text-base-content/30 mb-4"
+                />
+                <h3 class="text-xl font-semibold text-base-content/70 mb-2">No issues</h3>
+                <p class="text-base-content/50">All downloads completed successfully</p>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%!-- Download items --%>
+      <div id="downloads-list" phx-update="stream" phx-viewport-bottom="load_more">
+        <div
+          :for={{id, download} <- @streams.downloads}
+          id={id}
+          class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow"
+        >
+          <div class="card-body p-4">
+            <div class="flex gap-4">
+              <%!-- Selection checkbox --%>
+              <div class="flex items-start pt-1">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary"
+                  checked={is_selected?(assigns, download.id)}
+                  phx-click="toggle_select"
+                  phx-value-id={download.id}
+                />
+              </div>
+
+              <%!-- Poster --%>
+              <div class="flex-shrink-0">
+                <figure class="w-16 md:w-20 aspect-[2/3] rounded overflow-hidden bg-base-300">
+                  <img
+                    src={get_poster_url(download)}
+                    alt={get_display_title(download)}
+                    class="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </figure>
+              </div>
+
+              <%!-- Content --%>
+              <div class="flex-1 min-w-0">
+                <%!-- Title and metadata --%>
+                <div class="mb-3">
+                  <h3 class="text-lg font-semibold mb-1 truncate">
+                    {get_display_title(download)}
+                  </h3>
+                  <div class="flex flex-wrap items-center gap-2 text-sm">
+                    <span class={"badge #{status_badge_class(download.status)}"}>
+                      {String.capitalize(download.status)}
+                    </span>
+                    <%= if download.indexer do %>
+                      <span class="badge badge-ghost badge-sm">{download.indexer}</span>
+                    <% end %>
+                    <%= if download.download_client do %>
+                      <span class="badge badge-ghost badge-sm">{download.download_client}</span>
+                    <% end %>
+                  </div>
+                </div>
+
+                <%!-- Queue tab: Progress and stats --%>
+                <%= if @active_tab == :queue do %>
+                  <%!-- Progress bar --%>
+                  <div class="mb-3">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span class="text-base-content/70">Progress</span>
+                      <span class="font-semibold">{format_progress(download.progress)}%</span>
+                    </div>
+                    <progress
+                      class="progress progress-primary w-full"
+                      value={format_progress(download.progress)}
+                      max="100"
+                    >
+                    </progress>
+                  </div>
+
+                  <%!-- Download stats grid --%>
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                    <div class="flex flex-col">
+                      <span class="text-base-content/60 text-xs">Speed</span>
+                      <span class="font-semibold">
+                        {format_speed(get_metadata_value(download, "download_speed"))}
+                      </span>
+                    </div>
+                    <div class="flex flex-col">
+                      <span class="text-base-content/60 text-xs">Size</span>
+                      <span class="font-semibold">
+                        {format_size(get_metadata_value(download, "size"))}
+                      </span>
+                    </div>
+                    <div class="flex flex-col">
+                      <span class="text-base-content/60 text-xs">ETA</span>
+                      <span class="font-semibold">
+                        {format_eta(download.estimated_completion)}
+                      </span>
+                    </div>
+                    <div class="flex flex-col">
+                      <span class="text-base-content/60 text-xs">Seeds</span>
+                      <span class="font-semibold">
+                        {get_metadata_value(download, "seeders") || "—"}
+                      </span>
+                    </div>
+                  </div>
+                <% end %>
+
+                <%!-- Issues tab: Error message --%>
+                <%= if @active_tab == :issues && download.error_message do %>
+                  <div class="alert alert-error mb-3 py-2 px-3">
+                    <.icon name="hero-exclamation-triangle" class="w-4 h-4 flex-shrink-0" />
+                    <span class="text-sm">{download.error_message}</span>
+                  </div>
+                <% end %>
+
+                <%!-- Action buttons --%>
+                <div class="flex gap-2">
+                  <%= cond do %>
+                    <% @active_tab == :queue -> %>
+                      <button
+                        type="button"
+                        class="btn btn-error btn-xs"
+                        phx-click="cancel_download"
+                        phx-value-id={download.id}
+                        data-confirm="Cancel this download?"
+                      >
+                        <.icon name="hero-x-mark" class="w-3 h-3" /> Cancel
+                      </button>
+                    <% @active_tab == :issues -> %>
+                      <button
+                        type="button"
+                        class="btn btn-primary btn-xs"
+                        phx-click="retry_download"
+                        phx-value-id={download.id}
+                      >
+                        <.icon name="hero-arrow-path" class="w-3 h-3" /> Retry
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        phx-click="delete_download"
+                        phx-value-id={download.id}
+                        data-confirm="Remove this download?"
+                      >
+                        <.icon name="hero-trash" class="w-3 h-3" /> Remove
+                      </button>
+                  <% end %>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <%!-- Select all button at top when there are downloads --%>
+    <%= if not @downloads_empty? do %>
+      <div class="fixed bottom-8 left-1/2 -translate-x-1/2 z-10">
+        <button type="button" class="btn btn-primary shadow-lg" phx-click="toggle_select_all">
+          <%= if MapSet.size(@selected_ids) > 0 do %>
+            <.icon name="hero-x-mark" class="w-4 h-4" /> Clear Selection
+          <% else %>
+            <.icon name="hero-check" class="w-4 h-4" /> Select All
+          <% end %>
+        </button>
+      </div>
+    <% end %>
+
+    <%!-- Loading indicator for infinite scroll --%>
+    <%= if @has_more do %>
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+      </div>
+    <% end %>
+  </div>
+</Layouts.app>

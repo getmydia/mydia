@@ -6,6 +6,7 @@ defmodule Mydia.Downloads do
   import Ecto.Query, warn: false
   alias Mydia.Repo
   alias Mydia.Downloads.Download
+  alias Phoenix.PubSub
 
   @doc """
   Returns the list of downloads.
@@ -42,18 +43,38 @@ defmodule Mydia.Downloads do
   Creates a download.
   """
   def create_download(attrs \\ %{}) do
-    %Download{}
-    |> Download.changeset(attrs)
-    |> Repo.insert()
+    result =
+      %Download{}
+      |> Download.changeset(attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, download} ->
+        broadcast_download_update(download.id)
+        {:ok, download}
+
+      error ->
+        error
+    end
   end
 
   @doc """
   Updates a download.
   """
   def update_download(%Download{} = download, attrs) do
-    download
-    |> Download.changeset(attrs)
-    |> Repo.update()
+    result =
+      download
+      |> Download.changeset(attrs)
+      |> Repo.update()
+
+    case result do
+      {:ok, updated_download} ->
+        broadcast_download_update(updated_download.id)
+        {:ok, updated_download}
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -142,4 +163,11 @@ defmodule Mydia.Downloads do
   defp maybe_preload(query, nil), do: query
   defp maybe_preload(query, []), do: query
   defp maybe_preload(query, preloads), do: preload(query, ^preloads)
+
+  @doc """
+  Broadcasts a download update to all subscribed LiveViews.
+  """
+  def broadcast_download_update(download_id) do
+    PubSub.broadcast(Mydia.PubSub, "downloads", {:download_updated, download_id})
+  end
 end

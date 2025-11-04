@@ -27,7 +27,10 @@ defmodule MydiaWeb.Plugs.EnsureAuthenticated do
       "json" ->
         conn
         |> put_status(401)
-        |> json(%{error: "Unauthorized", message: "You must be logged in to access this resource"})
+        |> json(%{
+          error: "Unauthorized",
+          message: "You must be logged in to access this resource"
+        })
         |> halt()
 
       _ ->
@@ -40,12 +43,16 @@ defmodule MydiaWeb.Plugs.EnsureAuthenticated do
 
   defp get_format(conn) do
     case conn.path_info do
-      ["api" | _] -> "json"
+      ["api" | _] ->
+        "json"
+
       _ ->
         case get_req_header(conn, "accept") do
           [accept | _] ->
             if String.contains?(accept, "application/json"), do: "json", else: "html"
-          _ -> "html"
+
+          _ ->
+            "html"
         end
     end
   end

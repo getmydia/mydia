@@ -95,7 +95,7 @@ defmodule Mydia.Media do
     |> where([e], e.media_item_id == ^media_item_id)
     |> apply_episode_filters(opts)
     |> maybe_preload(opts[:preload])
-    |> order_by([e], [asc: e.season_number, asc: e.episode_number])
+    |> order_by([e], asc: e.season_number, asc: e.episode_number)
     |> Repo.all()
   end
 

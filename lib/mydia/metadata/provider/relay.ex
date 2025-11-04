@@ -16,7 +16,7 @@ defmodule Mydia.Metadata.Provider.Relay do
 
       config = %{
         type: :metadata_relay,
-        base_url: "https://metadata-relay.dorninger.co/tmdb",  # or /tvdb
+        base_url: "https://metadata-relay.dorninger.co",
         options: %{
           language: "en-US",
           include_adult: false,
@@ -40,15 +40,14 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   ## Relay Endpoints
 
-  The relay uses TMDB-compatible endpoints:
-    * `/search/multi` - Search across movies and TV shows
-    * `/search/movie` - Search movies only
-    * `/search/tv` - Search TV shows only
-    * `/movie/{id}` - Get movie details
-    * `/tv/{id}` - Get TV show details
-    * `/movie/{id}/images` - Get movie images
-    * `/tv/{id}/images` - Get TV show images
-    * `/tv/{id}/season/{season_number}` - Get TV season details
+  The relay provides endpoints for both TMDB and TVDB:
+    * `/tmdb/movies/search` - Search movies via TMDB
+    * `/tmdb/tv/search` - Search TV shows via TMDB
+    * `/tmdb/movies/{id}` - Get movie details from TMDB
+    * `/tmdb/tv/shows/{id}` - Get TV show details from TMDB
+    * `/tmdb/movies/{id}/images` - Get movie images from TMDB
+    * `/tmdb/tv/shows/{id}/images` - Get TV show images from TMDB
+    * `/tmdb/tv/shows/{id}/{season_number}` - Get TV season details from TMDB
 
   ## Image URLs
 
@@ -185,7 +184,7 @@ defmodule Mydia.Metadata.Provider.Relay do
   def fetch_season(config, provider_id, season_number, opts \\ []) do
     language = Keyword.get(opts, :language, @default_language)
 
-    endpoint = "/tv/#{provider_id}/season/#{season_number}"
+    endpoint = "/tmdb/tv/shows/#{provider_id}/#{season_number}"
     params = [language: language]
 
     req = HTTP.new_request(config)
@@ -216,15 +215,15 @@ defmodule Mydia.Metadata.Provider.Relay do
     {:error, Error.invalid_request("Query must be a non-empty string")}
   end
 
-  defp search_endpoint(nil), do: "/search/multi"
-  defp search_endpoint(:movie), do: "/search/movie"
-  defp search_endpoint(:tv_show), do: "/search/tv"
+  defp search_endpoint(nil), do: "/tmdb/movies/search"
+  defp search_endpoint(:movie), do: "/tmdb/movies/search"
+  defp search_endpoint(:tv_show), do: "/tmdb/tv/search"
 
-  defp build_details_endpoint(:movie, id), do: "/movie/#{id}"
-  defp build_details_endpoint(:tv_show, id), do: "/tv/#{id}"
+  defp build_details_endpoint(:movie, id), do: "/tmdb/movies/#{id}"
+  defp build_details_endpoint(:tv_show, id), do: "/tmdb/tv/shows/#{id}"
 
-  defp build_images_endpoint(:movie, id), do: "/movie/#{id}/images"
-  defp build_images_endpoint(:tv_show, id), do: "/tv/#{id}/images"
+  defp build_images_endpoint(:movie, id), do: "/tmdb/movies/#{id}/images"
+  defp build_images_endpoint(:tv_show, id), do: "/tmdb/tv/shows/#{id}/images"
 
   defp maybe_add_year(params, nil, _media_type), do: params
   defp maybe_add_year(params, year, :movie), do: params ++ [year: year]

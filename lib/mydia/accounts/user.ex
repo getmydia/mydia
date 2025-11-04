@@ -59,7 +59,7 @@ defmodule Mydia.Accounts.User do
   Changeset for updating last login timestamp.
   """
   def login_changeset(user) do
-    change(user, last_login_at: DateTime.utc_now())
+    change(user, last_login_at: DateTime.utc_now() |> DateTime.truncate(:second))
   end
 
   @doc """

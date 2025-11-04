@@ -8,7 +8,8 @@ RUN apt-get update -qq && \
       inotify-tools \
       curl \
       sqlite3 \
-      libsqlite3-dev && \
+      libsqlite3-dev \
+      watchman && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && \

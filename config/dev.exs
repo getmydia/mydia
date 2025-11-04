@@ -9,7 +9,8 @@ config :mydia, Mydia.Repo,
   # SQLite-specific optimizations
   timeout: 5000,
   journal_mode: :wal,
-  cache_size: -64000,  # 64MB cache
+  # 64MB cache
+  cache_size: -64000,
   temp_store: :memory,
   synchronous: :normal,
   foreign_keys: :on,
@@ -103,7 +104,8 @@ if oidc_issuer && oidc_client_id && oidc_client_secret do
     issuer: oidc_issuer,
     client_id: oidc_client_id,
     client_secret: oidc_client_secret,
-    redirect_uri: System.get_env("OIDC_REDIRECT_URI") || "http://localhost:4000/auth/oidc/callback",
+    redirect_uri:
+      System.get_env("OIDC_REDIRECT_URI") || "http://localhost:4000/auth/oidc/callback",
     scopes: System.get_env("OIDC_SCOPES") || "openid profile email"
 
   config :ueberauth, Ueberauth,

@@ -195,14 +195,14 @@ defmodule Mydia.Metadata do
       iex> Mydia.Metadata.default_relay_config()
       %{
         type: :metadata_relay,
-        base_url: "https://metadata-relay.dorninger.co/tmdb",
+        base_url: "https://metadata-relay.dorninger.co",
         options: %{language: "en-US", include_adult: false}
       }
   """
   def default_relay_config do
     %{
       type: :metadata_relay,
-      base_url: "https://metadata-relay.dorninger.co/tmdb",
+      base_url: "https://metadata-relay.dorninger.co",
       options: %{
         language: "en-US",
         include_adult: false,
@@ -219,14 +219,14 @@ defmodule Mydia.Metadata do
       iex> Mydia.Metadata.default_tvdb_relay_config()
       %{
         type: :metadata_relay,
-        base_url: "https://metadata-relay.dorninger.co/tvdb",
+        base_url: "https://metadata-relay.dorninger.co",
         options: %{language: "en-US"}
       }
   """
   def default_tvdb_relay_config do
     %{
       type: :metadata_relay,
-      base_url: "https://metadata-relay.dorninger.co/tvdb",
+      base_url: "https://metadata-relay.dorninger.co",
       options: %{
         language: "en-US",
         timeout: 30_000
