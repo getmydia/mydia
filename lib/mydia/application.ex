@@ -40,6 +40,8 @@ defmodule Mydia.Application do
     with {:ok, pid} <- Supervisor.start_link(children, opts) do
       # Register indexer adapters after supervisor has started
       Mydia.Indexers.register_adapters()
+      # Register metadata provider adapters
+      Mydia.Metadata.register_providers()
       {:ok, pid}
     end
   end
