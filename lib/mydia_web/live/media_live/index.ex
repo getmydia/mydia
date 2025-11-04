@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Media
+  alias Mydia.Media.EpisodeStatus
+  alias Mydia.Settings
 
   @items_per_page 50
   @items_per_scroll 25
@@ -15,6 +17,12 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:filter_quality, nil)
      |> assign(:page, 0)
      |> assign(:has_more, true)
+     |> assign(:selection_mode, false)
+     |> assign(:selected_ids, MapSet.new())
+     |> assign(:show_delete_modal, false)
+     |> assign(:show_batch_edit_modal, false)
+     |> assign(:quality_profiles, [])
+     |> assign(:batch_edit_form, to_form(%{}, as: :batch_edit))
      |> stream(:media_items, [])}
   end
 
@@ -55,6 +63,7 @@ defmodule MydiaWeb.MediaLive.Index do
      socket
      |> assign(:search_query, query)
      |> assign(:page, 0)
+     |> assign(:selected_ids, MapSet.new())
      |> load_media_items(reset: true)}
   end
 
@@ -79,6 +88,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:filter_monitored, monitored)
      |> assign(:filter_quality, quality)
      |> assign(:page, 0)
+     |> assign(:selected_ids, MapSet.new())
      |> load_media_items(reset: true)}
   end
 
@@ -90,6 +100,184 @@ defmodule MydiaWeb.MediaLive.Index do
        |> load_media_items(reset: false)}
     else
       {:noreply, socket}
+    end
+  end
+
+  def handle_event("toggle_select", %{"id" => id}, socket) do
+    selected_ids = socket.assigns.selected_ids
+
+    updated_ids =
+      if MapSet.member?(selected_ids, id) do
+        MapSet.delete(selected_ids, id)
+      else
+        MapSet.put(selected_ids, id)
+      end
+
+    {:noreply, assign(socket, :selected_ids, updated_ids)}
+  end
+
+  def handle_event("select_all", _params, socket) do
+    # Get all visible item IDs from the current stream
+    # Note: We need to collect all currently loaded items
+    query_opts = build_query_opts(socket.assigns)
+    items = Media.list_media_items(query_opts)
+    items = apply_search_filter(items, socket.assigns.search_query)
+    items = apply_quality_filter(items, socket.assigns.filter_quality)
+
+    all_ids = MapSet.new(items, & &1.id)
+
+    {:noreply, assign(socket, :selected_ids, all_ids)}
+  end
+
+  def handle_event("clear_selection", _params, socket) do
+    {:noreply, assign(socket, :selected_ids, MapSet.new())}
+  end
+
+  def handle_event("toggle_selection_mode", _params, socket) do
+    selection_mode = !socket.assigns.selection_mode
+
+    socket =
+      if !selection_mode do
+        # Exiting selection mode - clear selection
+        assign(socket, :selected_ids, MapSet.new())
+      else
+        socket
+      end
+
+    {:noreply, assign(socket, :selection_mode, selection_mode)}
+  end
+
+  def handle_event("keydown", %{"key" => "Escape"}, socket) do
+    {:noreply,
+     socket
+     |> assign(:selection_mode, false)
+     |> assign(:selected_ids, MapSet.new())}
+  end
+
+  def handle_event("keydown", %{"key" => "a", "ctrlKey" => true}, socket) do
+    # Ctrl+A - select all
+    query_opts = build_query_opts(socket.assigns)
+    items = Media.list_media_items(query_opts)
+    items = apply_search_filter(items, socket.assigns.search_query)
+    items = apply_quality_filter(items, socket.assigns.filter_quality)
+
+    all_ids = MapSet.new(items, & &1.id)
+
+    {:noreply, assign(socket, :selected_ids, all_ids)}
+  end
+
+  def handle_event("keydown", _params, socket) do
+    # Ignore other key events
+    {:noreply, socket}
+  end
+
+  def handle_event("batch_monitor", _params, socket) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+
+    case Media.update_media_items_monitored(selected_ids, true) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{count} #{pluralize_items(count)} set to monitored")
+         |> assign(:selection_mode, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> load_media_items(reset: true)}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update items")}
+    end
+  end
+
+  def handle_event("batch_unmonitor", _params, socket) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+
+    case Media.update_media_items_monitored(selected_ids, false) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{count} #{pluralize_items(count)} set to unmonitored")
+         |> assign(:selection_mode, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> load_media_items(reset: true)}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update items")}
+    end
+  end
+
+  def handle_event("batch_download", _params, socket) do
+    # TODO: Implement download functionality
+    # For now, just show a placeholder message
+    {:noreply, put_flash(socket, :info, "Download functionality coming soon")}
+  end
+
+  def handle_event("show_delete_confirmation", _params, socket) do
+    {:noreply, assign(socket, :show_delete_modal, true)}
+  end
+
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, :show_delete_modal, false)}
+  end
+
+  def handle_event("batch_delete_confirmed", _params, socket) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+
+    case Media.delete_media_items(selected_ids) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{count} #{pluralize_items(count)} deleted successfully")
+         |> assign(:selection_mode, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> assign(:show_delete_modal, false)
+         |> load_media_items(reset: true)}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to delete items")
+         |> assign(:show_delete_modal, false)}
+    end
+  end
+
+  def handle_event("show_batch_edit", _params, socket) do
+    quality_profiles = Settings.list_quality_profiles()
+
+    {:noreply,
+     socket
+     |> assign(:quality_profiles, quality_profiles)
+     |> assign(:show_batch_edit_modal, true)
+     |> assign(:batch_edit_form, to_form(%{}, as: :batch_edit))}
+  end
+
+  def handle_event("cancel_batch_edit", _params, socket) do
+    {:noreply, assign(socket, :show_batch_edit_modal, false)}
+  end
+
+  def handle_event("batch_edit_submit", %{"batch_edit" => params}, socket) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+
+    # Build attrs map with only non-empty values
+    attrs =
+      %{}
+      |> maybe_add_attr(:quality_profile_id, params["quality_profile_id"])
+      |> maybe_add_attr(:monitored, params["monitored"])
+
+    case Media.update_media_items_batch(selected_ids, attrs) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{count} #{pluralize_items(count)} updated successfully")
+         |> assign(:selection_mode, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> assign(:show_batch_edit_modal, false)
+         |> load_media_items(reset: true)}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to update items")
+         |> assign(:show_batch_edit_modal, false)}
     end
   end
 
@@ -122,7 +310,7 @@ defmodule MydiaWeb.MediaLive.Index do
     []
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
-    |> Keyword.put(:preload, [:media_files])
+    |> Keyword.put(:preload, [:media_files, :downloads, episodes: [:media_files, :downloads]])
   end
 
   defp maybe_add_filter(opts, _key, nil), do: opts
@@ -194,5 +382,43 @@ defmodule MydiaWeb.MediaLive.Index do
     |> Enum.map(& &1.size)
     |> Enum.reject(&is_nil/1)
     |> Enum.sum()
+  end
+
+  defp item_selected?(selected_ids, item_id) do
+    MapSet.member?(selected_ids, item_id)
+  end
+
+  defp pluralize_items(1), do: "item"
+  defp pluralize_items(_), do: "items"
+
+  defp maybe_add_attr(attrs, _key, nil), do: attrs
+  defp maybe_add_attr(attrs, _key, ""), do: attrs
+  defp maybe_add_attr(attrs, _key, "no_change"), do: attrs
+
+  defp maybe_add_attr(attrs, key, value) do
+    Map.put(attrs, key, value)
+  end
+
+  # Media status helpers
+  defp get_media_item_status(media_item) do
+    Media.get_media_status(media_item)
+  end
+
+  defp media_status_color(status) do
+    EpisodeStatus.status_color(status)
+  end
+
+  defp media_status_icon(status) do
+    EpisodeStatus.status_icon(status)
+  end
+
+  defp media_status_label(status) do
+    EpisodeStatus.status_label(status)
+  end
+
+  defp format_episode_count(nil), do: nil
+
+  defp format_episode_count(%{downloaded: downloaded, total: total}) do
+    "#{downloaded}/#{total} episodes"
   end
 end

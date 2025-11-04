@@ -1,5 +1,5 @@
 <Layouts.app flash={@flash}>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col h-full" phx-window-keydown="keydown">
     <%!-- Header with title and view controls --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
@@ -11,6 +11,59 @@
 
       <%!-- Actions and view controls --%>
       <div class="flex items-center gap-2">
+        <%!-- Selection controls --%>
+        <%= if @selection_mode do %>
+          <%= if MapSet.size(@selected_ids) > 0 do %>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-base-content/70">
+                {MapSet.size(@selected_ids)} selected
+              </span>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                phx-click="clear_selection"
+                title="Clear selection"
+              >
+                <.icon name="hero-x-mark" class="w-4 h-4" />
+              </button>
+            </div>
+            <div class="divider divider-horizontal mx-0"></div>
+          <% end %>
+
+          <%!-- Select all button --%>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            phx-click="select_all"
+            title="Select all (Ctrl+A)"
+          >
+            <.icon name="hero-check-circle" class="w-4 h-4" />
+            <span class="hidden sm:inline ml-1">Select All</span>
+          </button>
+
+          <%!-- Cancel selection mode button --%>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            phx-click="toggle_selection_mode"
+            title="Exit selection mode (Esc)"
+          >
+            <.icon name="hero-x-circle" class="w-4 h-4" />
+            <span class="hidden sm:inline ml-1">Cancel</span>
+          </button>
+        <% else %>
+          <%!-- Enter selection mode button --%>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            phx-click="toggle_selection_mode"
+            title="Enter selection mode"
+          >
+            <.icon name="hero-check-circle" class="w-4 h-4" />
+            <span class="hidden sm:inline ml-1">Select</span>
+          </button>
+        <% end %>
+
         <%!-- Add button for movies or TV shows --%>
         <%= if @filter_type == "movie" do %>
           <.link navigate={~p"/add/movie"} class="btn btn-primary btn-sm">
@@ -123,44 +176,72 @@
       ]}
     >
       <%!-- Media cards --%>
-      <.link
-        :for={{id, item} <- @streams.media_items}
-        navigate={~p"/media/#{item.id}"}
-        id={"#{id}-grid"}
-        class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 cursor-pointer group"
-      >
-        <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
-          <img
-            src={get_poster_url(item)}
-            alt={item.title}
-            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-          />
-          <%!-- Quality badge --%>
-          <%= if quality = get_quality_badge(item) do %>
-            <div class="badge badge-primary badge-sm absolute top-2 right-2">
-              {quality}
-            </div>
-          <% end %>
-          <%!-- Monitored indicator --%>
-          <%= if item.monitored do %>
-            <div class="absolute top-2 left-2">
-              <.icon name="hero-bookmark-solid" class="w-5 h-5 text-primary" />
-            </div>
-          <% end %>
-        </figure>
-        <div class="card-body p-3">
-          <h3 class="card-title text-sm line-clamp-2" title={item.title}>
-            {item.title}
-          </h3>
-          <div class="flex items-center justify-between text-xs text-base-content/70">
-            <span>{format_year(item.year)}</span>
-            <span class="badge badge-ghost badge-sm">
-              {if item.type == "movie", do: "Movie", else: "TV"}
-            </span>
+      <div :for={{id, item} <- @streams.media_items} id={"#{id}-grid"} class="relative group">
+        <%!-- Selection checkbox --%>
+        <%= if @selection_mode do %>
+          <div class="absolute top-2 left-2 z-10">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-primary checkbox-sm"
+              checked={item_selected?(@selected_ids, item.id)}
+              phx-click="toggle_select"
+              phx-value-id={item.id}
+              onclick="event.stopPropagation()"
+            />
           </div>
-        </div>
-      </.link>
+        <% end %>
+
+        <.link
+          navigate={~p"/media/#{item.id}"}
+          class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 cursor-pointer block"
+        >
+          <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
+            <img
+              src={get_poster_url(item)}
+              alt={item.title}
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              loading="lazy"
+            />
+            <%!-- Quality badge --%>
+            <%= if quality = get_quality_badge(item) do %>
+              <div class="badge badge-primary badge-sm absolute top-2 right-2">
+                {quality}
+              </div>
+            <% end %>
+            <%!-- Monitored indicator --%>
+            <%= if item.monitored do %>
+              <div class="absolute top-12 left-2">
+                <.icon name="hero-bookmark-solid" class="w-5 h-5 text-primary" />
+              </div>
+            <% end %>
+          </figure>
+          <div class="card-body p-3">
+            <h3 class="card-title text-sm line-clamp-2" title={item.title}>
+              {item.title}
+            </h3>
+            <div class="flex flex-col gap-2">
+              <%!-- Status badge --%>
+              <% {status, counts} = get_media_item_status(item) %>
+              <div class="flex items-center gap-1">
+                <span class={["badge badge-xs gap-1", media_status_color(status)]}>
+                  <.icon name={media_status_icon(status)} class="w-3 h-3" />
+                  <span>{media_status_label(status)}</span>
+                </span>
+                <%= if episode_count = format_episode_count(counts) do %>
+                  <span class="text-xs text-base-content/70">{episode_count}</span>
+                <% end %>
+              </div>
+              <%!-- Type and year --%>
+              <div class="flex items-center justify-between text-xs text-base-content/70">
+                <span>{format_year(item.year)}</span>
+                <span class="badge badge-ghost badge-sm">
+                  {if item.type == "movie", do: "Movie", else: "TV"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </.link>
+      </div>
     </div>
 
     <%!-- Media List View --%>
@@ -171,6 +252,9 @@
       <table class="table table-zebra w-full">
         <thead>
           <tr>
+            <th class="w-10">
+              <%!-- Checkbox column header --%>
+            </th>
             <th class="w-12"></th>
             <th>Title</th>
             <th class="hidden md:table-cell">Type</th>
@@ -183,6 +267,17 @@
         </thead>
         <tbody id="media-items-list" phx-update="stream">
           <tr :for={{id, item} <- @streams.media_items} id={"#{id}-list"} class="hover">
+            <td>
+              <%= if @selection_mode do %>
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary checkbox-sm"
+                  checked={item_selected?(@selected_ids, item.id)}
+                  phx-click="toggle_select"
+                  phx-value-id={item.id}
+                />
+              <% end %>
+            </td>
             <td>
               <div class="avatar">
                 <div class="w-12 rounded">
@@ -203,13 +298,16 @@
             </td>
             <td class="hidden md:table-cell">{format_year(item.year)}</td>
             <td class="hidden lg:table-cell">
-              <%= if item.monitored do %>
-                <span class="badge badge-primary badge-sm">
-                  <.icon name="hero-bookmark-solid" class="w-3 h-3 mr-1" /> Monitored
+              <% {status, counts} = get_media_item_status(item) %>
+              <div class="flex flex-col gap-1">
+                <span class={["badge badge-sm gap-1", media_status_color(status)]}>
+                  <.icon name={media_status_icon(status)} class="w-3 h-3" />
+                  {media_status_label(status)}
                 </span>
-              <% else %>
-                <span class="badge badge-ghost badge-sm">Unmonitored</span>
-              <% end %>
+                <%= if episode_count = format_episode_count(counts) do %>
+                  <span class="text-xs text-base-content/70">{episode_count}</span>
+                <% end %>
+              </div>
             </td>
             <td class="hidden lg:table-cell">
               <%= if quality = get_quality_badge(item) do %>
@@ -243,5 +341,185 @@
         <span class="loading loading-spinner loading-md text-primary"></span>
       </div>
     <% end %>
+
+    <%!-- Floating Action Toolbar (shown when items selected) --%>
+    <%= if MapSet.size(@selected_ids) > 0 do %>
+      <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom duration-300">
+        <div class="bg-base-100 shadow-2xl rounded-box border border-base-300 p-4">
+          <div class="flex flex-col sm:flex-row items-center gap-4">
+            <%!-- Selection count --%>
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-lg">
+                {MapSet.size(@selected_ids)}
+              </span>
+              <span class="text-sm text-base-content/70">
+                {if MapSet.size(@selected_ids) == 1, do: "item selected", else: "items selected"}
+              </span>
+            </div>
+
+            <div class="divider divider-horizontal hidden sm:flex mx-0"></div>
+
+            <%!-- Action buttons --%>
+            <div class="flex flex-wrap items-center gap-2 justify-center">
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost gap-2"
+                phx-click="batch_monitor"
+                title="Monitor selected items"
+              >
+                <.icon name="hero-bookmark" class="w-4 h-4" />
+                <span>Monitor</span>
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost gap-2"
+                phx-click="batch_unmonitor"
+                title="Unmonitor selected items"
+              >
+                <.icon name="hero-bookmark-slash" class="w-4 h-4" />
+                <span>Unmonitor</span>
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost gap-2"
+                phx-click="batch_download"
+                title="Download selected items"
+              >
+                <.icon name="hero-arrow-down-tray" class="w-4 h-4" />
+                <span>Download</span>
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-primary gap-2"
+                phx-click="show_batch_edit"
+                title="Batch edit selected items"
+              >
+                <.icon name="hero-pencil-square" class="w-4 h-4" />
+                <span>Batch Edit</span>
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-error gap-2"
+                phx-click="show_delete_confirmation"
+                title="Delete selected items"
+              >
+                <.icon name="hero-trash" class="w-4 h-4" />
+                <span>Delete</span>
+              </button>
+            </div>
+
+            <div class="divider divider-horizontal hidden sm:flex mx-0"></div>
+
+            <%!-- Close button --%>
+            <button
+              type="button"
+              class="btn btn-sm btn-circle btn-ghost"
+              phx-click="clear_selection"
+              title="Clear selection (Esc)"
+            >
+              <.icon name="hero-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
+    <%!-- Delete Confirmation Modal --%>
+    <.modal id="delete-confirmation-modal" show={@show_delete_modal} on_cancel="cancel_delete">
+      <:title>Delete Selected Items?</:title>
+
+      <div class="space-y-4">
+        <div class="alert alert-warning">
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <span>
+            This action cannot be undone. You are about to delete
+            <strong>{MapSet.size(@selected_ids)}</strong>
+            {if MapSet.size(@selected_ids) == 1, do: "item", else: "items"}.
+          </span>
+        </div>
+
+        <p class="text-sm text-base-content/70">
+          All associated files, metadata, and download history will be permanently removed.
+        </p>
+      </div>
+
+      <:actions>
+        <button type="button" class="btn btn-ghost" phx-click="cancel_delete">
+          Cancel
+        </button>
+        <button type="button" class="btn btn-error" phx-click="batch_delete_confirmed">
+          <.icon name="hero-trash" class="w-4 h-4" />
+          Delete {MapSet.size(@selected_ids)} {if MapSet.size(@selected_ids) == 1,
+            do: "Item",
+            else: "Items"}
+        </button>
+      </:actions>
+    </.modal>
+
+    <%!-- Batch Edit Modal --%>
+    <.modal id="batch-edit-modal" show={@show_batch_edit_modal} on_cancel="cancel_batch_edit">
+      <:title>Batch Edit</:title>
+
+      <div class="space-y-4">
+        <div class="alert alert-info">
+          <.icon name="hero-information-circle" class="w-5 h-5" />
+          <span>
+            Editing <strong>{MapSet.size(@selected_ids)}</strong>
+            {if MapSet.size(@selected_ids) == 1, do: "item", else: "items"}.
+            Only fields you change will be updated.
+          </span>
+        </div>
+
+        <.form
+          for={@batch_edit_form}
+          id="batch-edit-form"
+          phx-submit="batch_edit_submit"
+          class="space-y-4"
+        >
+          <%!-- Quality Profile --%>
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Quality Profile</span>
+            </label>
+            <select name="batch_edit[quality_profile_id]" class="select select-bordered w-full">
+              <option value="no_change">— No change —</option>
+              <option value="">None</option>
+              <%= for profile <- @quality_profiles do %>
+                <option value={profile.id}>{profile.name}</option>
+              <% end %>
+            </select>
+          </div>
+
+          <%!-- Monitored Status --%>
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Monitored Status</span>
+            </label>
+            <select name="batch_edit[monitored]" class="select select-bordered w-full">
+              <option value="no_change">— No change —</option>
+              <option value="true">Monitored</option>
+              <option value="false">Unmonitored</option>
+            </select>
+          </div>
+        </.form>
+      </div>
+
+      <:actions>
+        <button type="button" class="btn btn-ghost" phx-click="cancel_batch_edit">
+          Cancel
+        </button>
+        <button
+          type="submit"
+          form="batch-edit-form"
+          class="btn btn-primary"
+        >
+          <.icon name="hero-check" class="w-4 h-4" /> Apply Changes
+        </button>
+      </:actions>
+    </.modal>
   </div>
 </Layouts.app>

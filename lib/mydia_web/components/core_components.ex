@@ -443,6 +443,65 @@ defmodule MydiaWeb.CoreComponents do
   end
 
   @doc """
+  Renders a modal dialog using DaisyUI.
+
+  ## Examples
+
+      <.modal id="confirm-modal">
+        <:title>Delete Item?</:title>
+        <p>Are you sure you want to delete this item?</p>
+        <:actions>
+          <.button phx-click="cancel">Cancel</.button>
+          <.button variant="primary" phx-click="confirm">Confirm</.button>
+        </:actions>
+      </.modal>
+  """
+  attr :id, :string, required: true
+  attr :show, :boolean, default: false
+  attr :on_cancel, :any, default: nil
+
+  slot :title
+  slot :inner_block, required: true
+  slot :actions
+
+  def modal(assigns) do
+    ~H"""
+    <dialog id={@id} class="modal" open={@show}>
+      <div class="modal-box">
+        <h3 :if={@title != []} class="font-bold text-lg mb-4">
+          {render_slot(@title)}
+        </h3>
+
+        <div class="py-4">
+          {render_slot(@inner_block)}
+        </div>
+
+        <div :if={@actions != []} class="modal-action">
+          {render_slot(@actions)}
+        </div>
+
+        <%!-- Close button in top right --%>
+        <form method="dialog">
+          <button
+            :if={@on_cancel}
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+            phx-click={@on_cancel}
+          >
+            <.icon name="hero-x-mark" class="w-5 h-5" />
+          </button>
+        </form>
+      </div>
+
+      <%!-- Backdrop --%>
+      <form method="dialog" class="modal-backdrop">
+        <button :if={@on_cancel} type="button" phx-click={@on_cancel}>close</button>
+      </form>
+    </dialog>
+    """
+  end
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do

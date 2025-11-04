@@ -34,6 +34,12 @@ defmodule MydiaWeb.Layouts do
   slot :inner_block, required: true
 
   def app(assigns) do
+    # Fetch counts if not provided
+    assigns =
+      assigns
+      |> Map.put_new(:movie_count, Mydia.Media.count_movies())
+      |> Map.put_new(:tv_show_count, Mydia.Media.count_tv_shows())
+
     ~H"""
     <div class="drawer lg:drawer-open">
       <input id="main-drawer" type="checkbox" class="drawer-toggle" />
@@ -87,13 +93,13 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <a href="/movies">
                   <.icon name="hero-film" class="w-5 h-5" /> Movies
-                  <span class="badge badge-sm">0</span>
+                  <span class="badge badge-sm">{@movie_count}</span>
                 </a>
               </li>
               <li>
                 <a href="/tv">
                   <.icon name="hero-tv" class="w-5 h-5" /> TV Shows
-                  <span class="badge badge-sm">0</span>
+                  <span class="badge badge-sm">{@tv_show_count}</span>
                 </a>
               </li>
 
@@ -306,19 +312,19 @@ defmodule MydiaWeb.Layouts do
           </.link>
 
           <.link
+            navigate="/calendar"
+            class="flex flex-col items-center justify-center min-w-[60px] min-h-[60px] rounded-lg hover:bg-base-300 transition-colors"
+          >
+            <.icon name="hero-calendar" class="w-6 h-6" />
+            <span class="text-xs mt-1">Calendar</span>
+          </.link>
+
+          <.link
             navigate="/search"
             class="flex flex-col items-center justify-center min-w-[60px] min-h-[60px] rounded-lg hover:bg-base-300 transition-colors"
           >
             <.icon name="hero-magnifying-glass" class="w-6 h-6" />
             <span class="text-xs mt-1">Search</span>
-          </.link>
-
-          <.link
-            navigate="/admin"
-            class="flex flex-col items-center justify-center min-w-[60px] min-h-[60px] rounded-lg hover:bg-base-300 transition-colors"
-          >
-            <.icon name="hero-cog-6-tooth" class="w-6 h-6" />
-            <span class="text-xs mt-1">Admin</span>
           </.link>
         </div>
       </div>
