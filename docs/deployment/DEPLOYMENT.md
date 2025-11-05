@@ -42,6 +42,11 @@ While the README shows inline configuration, you can optionally use a `.env` fil
 1. Create a `.env.prod` file with your configuration:
 
 ```bash
+# Container configuration (LinuxServer.io standards)
+PUID=1000
+PGID=1000
+TZ=America/New_York
+
 # Required secrets (generate with: openssl rand -base64 48)
 SECRET_KEY_BASE=your-secret-key-base-here
 GUARDIAN_SECRET_KEY=your-guardian-secret-key-here
@@ -49,7 +54,7 @@ GUARDIAN_SECRET_KEY=your-guardian-secret-key-here
 # Server configuration
 PHX_HOST=mydia.example.com
 PORT=4000
-DATABASE_PATH=/data/mydia.db
+DATABASE_PATH=/config/mydia.db
 
 # Media paths
 MOVIES_PATH=/media/movies
@@ -77,7 +82,7 @@ Or with Docker Run:
 docker run -d \
   --name mydia \
   --env-file .env.prod \
-  -v mydia_data:/data \
+  -v /path/to/mydia/config:/config \
   -v /path/to/movies:/media/movies \
   -v /path/to/tv:/media/tv \
   ghcr.io/arsfeld/mydia:latest

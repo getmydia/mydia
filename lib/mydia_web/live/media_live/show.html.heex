@@ -274,6 +274,30 @@
                         </button>
                         <button
                           type="button"
+                          phx-click="manual_search_season"
+                          phx-value-season-number={season_num}
+                          class="btn btn-sm btn-outline"
+                          title="Manually search and select releases for this season"
+                        >
+                          <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Manual Search
+                        </button>
+                        <button
+                          type="button"
+                          phx-click="rescan_season_files"
+                          phx-value-season-number={season_num}
+                          class="btn btn-sm btn-ghost"
+                          disabled={@rescanning_season == season_num}
+                          title="Re-scan all file metadata for this season"
+                        >
+                          <%= if @rescanning_season == season_num do %>
+                            <span class="loading loading-spinner loading-xs"></span>
+                            Re-scanning...
+                          <% else %>
+                            <.icon name="hero-arrow-path" class="w-4 h-4" /> Re-scan Files
+                          <% end %>
+                        </button>
+                        <button
+                          type="button"
                           phx-click="monitor_season"
                           phx-value-season-number={season_num}
                           class="btn btn-sm btn-ghost"
@@ -1007,6 +1031,10 @@
                 <%= case @manual_search_context.type do %>
                   <% :episode -> %>
                     <span class="text-base text-base-content/70">for Episode</span>
+                  <% :season -> %>
+                    <span class="text-base text-base-content/70">
+                      for {@media_item.title} - Season {@manual_search_context.season_number}
+                    </span>
                   <% :media_item -> %>
                     <span class="text-base text-base-content/70">
                       for {@media_item.title}

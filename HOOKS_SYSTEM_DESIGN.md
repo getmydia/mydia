@@ -288,7 +288,7 @@ hooks/
 The hooks directory is configured in `config.yaml`:
 ```yaml
 database:
-  path: "/data/mydia.db"  # Or "mydia_dev.db" in development
+  path: "/config/mydia.db"  # Or "mydia_dev.db" in development
 
 hooks:
   enabled: true
@@ -300,7 +300,7 @@ hooks:
 **Path Resolution:**
 - Relative paths (like `"hooks"`) are resolved relative to the database directory
   - Development: `mydia_dev.db` + `hooks` = `./hooks`
-  - Production: `/data/mydia.db` + `hooks` = `/data/hooks`
+  - Production: `/config/mydia.db` + `hooks` = `/data/hooks`
 - Absolute paths (like `"/config/hooks"`) are used as-is
 
 **Docker Deployment:**

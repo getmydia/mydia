@@ -244,29 +244,37 @@ defmodule MydiaWeb.Layouts do
   """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=latte]_&]:left-1/3 [[data-theme=frappe]_&]:left-2/3 transition-[left]" />
+    <div
+      id="theme-toggle"
+      class="relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full"
+      phx-hook="ThemeToggle"
+    >
+      <div
+        id="theme-indicator"
+        class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 transition-[left] duration-200"
+        style="left: 0"
+      />
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
+        class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
+        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.SYSTEM)"
+        title="System theme"
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="latte"
+        class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
+        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.LIGHT)"
+        title="Light theme"
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="frappe"
+        class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
+        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.DARK)"
+        title="Dark theme"
       >
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>

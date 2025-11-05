@@ -60,6 +60,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:auto_searching_episode, nil)
      # File metadata refresh state
      |> assign(:refreshing_file_metadata, false)
+     |> assign(:rescanning_season, nil)
      |> stream_configure(:search_results, dom_id: &generate_result_id/1)
      |> stream(:search_results, [])}
   end
@@ -224,6 +225,26 @@ defmodule MydiaWeb.MediaLive.Show do
     end
   end
 
+  def handle_event("rescan_season_files", %{"season-number" => season_number_str}, socket) do
+    media_item = socket.assigns.media_item
+    season_num = String.to_integer(season_number_str)
+
+    # Get all media files for episodes in this season
+    season_media_files = get_season_media_files(media_item, season_num)
+
+    if Enum.empty?(season_media_files) do
+      {:noreply, put_flash(socket, :info, "No media files to refresh for season #{season_num}")}
+    else
+      # Start async task to refresh season file metadata
+      {:noreply,
+       socket
+       |> assign(:rescanning_season, season_num)
+       |> start_async(:rescan_season_files, fn ->
+         {season_num, refresh_files(season_media_files)}
+       end)}
+    end
+  end
+
   def handle_event("show_edit_modal", _params, socket) do
     media_item = socket.assigns.media_item
     changeset = Media.change_media_item(media_item)
@@ -361,6 +382,29 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_manual_search_modal, true)
      |> assign(:manual_search_query, search_query)
      |> assign(:manual_search_context, %{type: :episode, episode_id: episode_id})
+     |> assign(:searching, true)
+     |> assign(:results_empty?, false)
+     |> stream(:search_results, [], reset: true)
+     |> start_async(:search, fn -> perform_search(search_query, min_seeders) end)}
+  end
+
+  def handle_event("manual_search_season", %{"season-number" => season_number_str}, socket) do
+    media_item = socket.assigns.media_item
+    season_num = String.to_integer(season_number_str)
+
+    # Build search query for the season
+    # Format: "Show Title S01"
+    search_query =
+      "#{media_item.title} S#{String.pad_leading(to_string(season_num), 2, "0")}"
+
+    # Open modal and start search
+    min_seeders = socket.assigns.min_seeders
+
+    {:noreply,
+     socket
+     |> assign(:show_manual_search_modal, true)
+     |> assign(:manual_search_query, search_query)
+     |> assign(:manual_search_context, %{type: :season, season_number: season_num})
      |> assign(:searching, true)
      |> assign(:results_empty?, false)
      |> stream(:search_results, [], reset: true)
@@ -684,6 +728,10 @@ defmodule MydiaWeb.MediaLive.Show do
         %{type: :episode, episode_id: ep_id} ->
           {media_item.id, ep_id}
 
+        %{type: :season, season_number: _season_num} ->
+          # Season pack - associate with media item, not specific episode
+          {media_item.id, nil}
+
         _ ->
           {media_item.id, nil}
       end
@@ -919,6 +967,43 @@ defmodule MydiaWeb.MediaLive.Show do
      socket
      |> assign(:refreshing_file_metadata, false)
      |> put_flash(:error, "Metadata refresh failed unexpectedly")}
+  end
+
+  def handle_async(
+        :rescan_season_files,
+        {:ok, {season_num, {:ok, success_count, error_count}}},
+        socket
+      ) do
+    message =
+      if error_count > 0 do
+        "Re-scanned #{success_count} file(s) in Season #{season_num}, #{error_count} failed"
+      else
+        "Successfully re-scanned #{success_count} file(s) in Season #{season_num}"
+      end
+
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> put_flash(:info, message)}
+  end
+
+  def handle_async(:rescan_season_files, {:ok, {season_num, {:error, reason}}}, socket) do
+    Logger.error("Season file metadata refresh failed: #{inspect(reason)}")
+
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> put_flash(:error, "Failed to refresh Season #{season_num} files: #{inspect(reason)}")}
+  end
+
+  def handle_async(:rescan_season_files, {:exit, reason}, socket) do
+    Logger.error("Season file metadata refresh task crashed: #{inspect(reason)}")
+
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> put_flash(:error, "Season metadata refresh failed unexpectedly")}
   end
 
   defp load_media_item(id) do
@@ -1479,6 +1564,13 @@ defmodule MydiaWeb.MediaLive.Show do
   end
 
   defp format_download_quality(_), do: "Unknown"
+
+  # Helper to get all media files for episodes in a specific season
+  defp get_season_media_files(media_item, season_number) do
+    media_item.episodes
+    |> Enum.filter(&(&1.season_number == season_number))
+    |> Enum.flat_map(& &1.media_files)
+  end
 
   # File metadata refresh helper
   defp refresh_files(media_files) do

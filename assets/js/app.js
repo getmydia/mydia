@@ -25,11 +25,53 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/mydia"
 import topbar from "../vendor/topbar"
 
+// Theme toggle hook
+const ThemeToggle = {
+  mounted() {
+    // Update indicator position based on current theme
+    const updateIndicator = () => {
+      const preference = window.mydiaTheme.getTheme()
+      const indicator = this.el.querySelector('#theme-indicator')
+
+      if (!indicator) return
+
+      // Calculate position based on preference
+      let position = '0%' // system (left)
+      if (preference === window.mydiaTheme.THEMES.LIGHT) {
+        position = '33.333%' // light (middle)
+      } else if (preference === window.mydiaTheme.THEMES.DARK) {
+        position = '66.666%' // dark (right)
+      }
+
+      indicator.style.left = position
+    }
+
+    // Update on mount
+    updateIndicator()
+
+    // Watch for theme changes
+    const observer = new MutationObserver(updateIndicator)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    })
+
+    // Store observer to disconnect on unmount
+    this.observer = observer
+  },
+
+  destroyed() {
+    if (this.observer) {
+      this.observer.disconnect()
+    }
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, ThemeToggle},
 })
 
 // Show progress bar on live navigation and form submits

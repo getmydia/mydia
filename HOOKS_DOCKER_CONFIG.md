@@ -8,7 +8,7 @@ The Mydia hooks system uses a configurable directory for user-defined hooks. The
 
 - **Relative paths**: Resolved relative to the database directory
   - Development: `database.path: "mydia_dev.db"` + `hooks.directory: "hooks"` = `./hooks`
-  - Production: `database.path: "/data/mydia.db"` + `hooks.directory: "hooks"` = `/data/hooks`
+  - Production: `database.path: "/config/mydia.db"` + `hooks.directory: "hooks"` = `/data/hooks`
 
 - **Absolute paths**: Used as-is (for advanced configurations)
 
@@ -25,7 +25,7 @@ The hooks directory is configurable via `config.yaml`:
 
 ```yaml
 database:
-  path: "/data/mydia.db"  # Or "mydia_dev.db" in development
+  path: "/config/mydia.db"  # Or "mydia_dev.db" in development
 
 hooks:
   # Enable or disable the hooks system
@@ -68,7 +68,7 @@ services:
       - LOAD_RUNTIME_CONFIG=true
 ```
 
-With `database.path: "/data/mydia.db"` and `hooks.directory: "hooks"`, hooks will be located at `/data/hooks` inside the container.
+With `database.path: "/config/mydia.db"` and `hooks.directory: "hooks"`, hooks will be located at `/data/hooks` inside the container.
 
 ## Directory Structure
 

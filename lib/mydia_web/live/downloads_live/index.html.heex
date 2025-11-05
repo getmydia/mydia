@@ -168,11 +168,11 @@
               <span>•</span>
               <span>{format_progress(download.progress)}%</span>
               <span>•</span>
-              <span>{format_speed(get_metadata_value(download, "download_speed"))}</span>
+              <span>Speed: {format_speed(download.download_speed)}</span>
               <span>•</span>
-              <span>{format_size(get_metadata_value(download, "size"))}</span>
+              <span>{format_size(download.size)}</span>
               <span>•</span>
-              <span>{format_eta(download.eta)}</span>
+              <span>ETA: {format_eta(download.eta)}</span>
               <%= if get_metadata_value(download, "seeders") do %>
                 <span>•</span>
                 <span>{get_metadata_value(download, "seeders")} seeds</span>

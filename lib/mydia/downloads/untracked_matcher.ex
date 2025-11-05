@@ -4,6 +4,16 @@ defmodule Mydia.Downloads.UntrackedMatcher do
 
   This module enables automatic tracking and import of torrents that users
   add directly to their download clients (bypassing Mydia's search interface).
+
+  ## Duplicate Prevention
+
+  To prevent creating duplicate download records, torrents are matched against
+  existing downloads using two criteria:
+  - Client ID pair (client_name, client_id)
+  - Torrent title (case-insensitive)
+
+  This dual-matching prevents issues when download clients reuse numeric IDs
+  after torrents are removed from the client.
   """
 
   require Logger
@@ -77,15 +87,22 @@ defmodule Mydia.Downloads.UntrackedMatcher do
   end
 
   defp find_untracked_torrents(client_torrents, tracked_downloads) do
-    # Build a set of tracked (client_name, client_id) pairs
-    tracked_set =
+    # Build sets for both (client_name, client_id) pairs and titles
+    # This prevents duplicates when client IDs are reused after torrents are removed
+    tracked_by_id =
       tracked_downloads
       |> Enum.map(fn d -> {d.download_client, d.download_client_id} end)
       |> MapSet.new()
 
-    # Filter out torrents that are already tracked
+    tracked_by_title =
+      tracked_downloads
+      |> Enum.map(fn d -> String.downcase(d.title) end)
+      |> MapSet.new()
+
+    # Filter out torrents that are already tracked by either ID or title
     Enum.reject(client_torrents, fn torrent ->
-      MapSet.member?(tracked_set, {torrent.client_name, torrent.id})
+      MapSet.member?(tracked_by_id, {torrent.client_name, torrent.id}) or
+        MapSet.member?(tracked_by_title, String.downcase(torrent.name))
     end)
   end
 
@@ -142,7 +159,7 @@ defmodule Mydia.Downloads.UntrackedMatcher do
         quality: parsed_info[:quality],
         source: parsed_info[:source],
         codec: parsed_info[:codec],
-        auto_matched: true,
+        matched_from_client: true,
         match_confidence: match.confidence,
         match_reason: match.match_reason
       }

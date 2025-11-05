@@ -12,39 +12,66 @@
     </script>
     <script>
       (() => {
-        const getSystemTheme = () => {
-          return window.matchMedia("(prefers-color-scheme: dark)").matches ? "frappe" : "latte";
+        // Theme switcher with support for dark, light, and system preferences
+        const THEME_KEY = 'mydia-theme-preference';
+        const THEMES = {
+          DARK: 'mydia-dark',
+          LIGHT: 'mydia-light',
+          SYSTEM: 'system'
         };
 
-        const setTheme = (theme) => {
-          if (theme === "system") {
-            localStorage.setItem("phx:theme", "system");
-            const systemTheme = getSystemTheme();
-            document.documentElement.setAttribute("data-theme", systemTheme);
-          } else {
-            localStorage.setItem("phx:theme", theme);
-            document.documentElement.setAttribute("data-theme", theme);
+        // Get system theme preference
+        function getSystemTheme() {
+          return window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? THEMES.DARK
+            : THEMES.LIGHT;
+        }
+
+        // Get current theme preference from localStorage or default to system
+        function getThemePreference() {
+          try {
+            return localStorage.getItem(THEME_KEY) || THEMES.SYSTEM;
+          } catch (e) {
+            return THEMES.SYSTEM;
           }
-        };
+        }
+
+        // Apply theme to document
+        function applyTheme(theme) {
+          const actualTheme = theme === THEMES.SYSTEM ? getSystemTheme() : theme;
+          document.documentElement.setAttribute('data-theme', actualTheme);
+        }
+
+        // Set theme preference and apply it
+        function setTheme(preference) {
+          try {
+            localStorage.setItem(THEME_KEY, preference);
+          } catch (e) {
+            console.warn('Could not save theme preference:', e);
+          }
+          applyTheme(preference);
+        }
 
         // Initialize theme on page load
-        const savedTheme = localStorage.getItem("phx:theme") || "latte";
-        setTheme(savedTheme);
+        const currentPreference = getThemePreference();
+        applyTheme(currentPreference);
 
         // Watch for system theme changes when in system mode
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-          if (localStorage.getItem("phx:theme") === "system") {
-            setTheme("system");
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        mediaQuery.addEventListener('change', () => {
+          const preference = getThemePreference();
+          if (preference === THEMES.SYSTEM) {
+            applyTheme(THEMES.SYSTEM);
           }
         });
 
-        window.addEventListener("storage", (e) => {
-          if (e.key === "phx:theme") {
-            setTheme(e.newValue || "light");
-          }
-        });
-
-        window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
+        // Expose theme switching function globally for UI components
+        window.mydiaTheme = {
+          setTheme,
+          getTheme: getThemePreference,
+          getCurrentTheme: () => document.documentElement.getAttribute('data-theme'),
+          THEMES
+        };
       })();
     </script>
   </head>

@@ -284,7 +284,7 @@ CREATE INDEX idx_api_keys_key_hash ON api_keys(key_hash);
 ```elixir
 # config/runtime.exs
 config :mydia, Mydia.Repo,
-  database: System.get_env("DATABASE_PATH", "/data/mydia.db"),
+  database: System.get_env("DATABASE_PATH", "/config/mydia.db"),
   pool_size: String.to_integer(System.get_env("POOL_SIZE", "5")),
 
   # SQLite-specific settings
@@ -322,7 +322,7 @@ server:
 
 database:
   # SQLite database file path (relative to /data volume)
-  path: "${DATABASE_PATH:-/data/mydia.db}"
+  path: "${DATABASE_PATH:-/config/mydia.db}"
 
   # WAL mode for better concurrency
   wal_mode: true
@@ -591,7 +591,7 @@ services:
       SECRET_KEY_BASE: "${SECRET_KEY_BASE}"
 
       # Database (SQLite - stored in /data volume)
-      DATABASE_PATH: "/data/mydia.db"
+      DATABASE_PATH: "/config/mydia.db"
 
       # OIDC Authentication
       OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
@@ -654,13 +654,13 @@ Since SQLite uses a single file, backups are simple:
 
 ```bash
 # Backup
-docker exec mydia sqlite3 /data/mydia.db ".backup /data/backup.db"
+docker exec mydia sqlite3 /config/mydia.db ".backup /data/backup.db"
 docker cp mydia:/data/backup.db ./mydia-backup-$(date +%Y%m%d).db
 
 # Restore
 docker cp ./mydia-backup-20250101.db mydia:/data/restore.db
-docker exec mydia mv /data/mydia.db /data/mydia.db.old
-docker exec mydia mv /data/restore.db /data/mydia.db
+docker exec mydia mv /config/mydia.db /config/mydia.db.old
+docker exec mydia mv /data/restore.db /config/mydia.db
 docker restart mydia
 ```
 
@@ -881,19 +881,19 @@ The application supports both databases via configuration. To migrate from SQLit
 
 ```bash
 # Analyze query performance
-docker exec -it mydia sqlite3 /data/mydia.db "ANALYZE;"
+docker exec -it mydia sqlite3 /config/mydia.db "ANALYZE;"
 
 # Check database integrity
-docker exec -it mydia sqlite3 /data/mydia.db "PRAGMA integrity_check;"
+docker exec -it mydia sqlite3 /config/mydia.db "PRAGMA integrity_check;"
 
 # Optimize (VACUUM) - reclaim space after deletes
-docker exec -it mydia sqlite3 /data/mydia.db "VACUUM;"
+docker exec -it mydia sqlite3 /config/mydia.db "VACUUM;"
 
 # View database size
-docker exec -it mydia sqlite3 /data/mydia.db "SELECT page_count * page_size / 1024 / 1024 AS size_mb FROM pragma_page_count(), pragma_page_size();"
+docker exec -it mydia sqlite3 /config/mydia.db "SELECT page_count * page_size / 1024 / 1024 AS size_mb FROM pragma_page_count(), pragma_page_size();"
 
 # WAL checkpoint (consolidate WAL file into main database)
-docker exec -it mydia sqlite3 /data/mydia.db "PRAGMA wal_checkpoint(FULL);"
+docker exec -it mydia sqlite3 /config/mydia.db "PRAGMA wal_checkpoint(FULL);"
 ```
 
 ### Automated Maintenance

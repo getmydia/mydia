@@ -39,7 +39,7 @@ server:
 # ----------------------
 database:
   # Path to SQLite database file
-  path: "/data/mydia.db"
+  path: "/config/mydia.db"
 
   # Database connection pool size
   pool_size: 5

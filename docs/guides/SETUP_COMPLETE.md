@@ -178,7 +178,7 @@ mix phx.server
 
 Key environment variables to set (see `.env.example`):
 
-- `DATABASE_PATH` - SQLite database path (default: `/data/mydia.db`)
+- `DATABASE_PATH` - SQLite database path (default: `/config/mydia.db`)
 - `SECRET_KEY_BASE` - Phoenix secret (generate with `mix phx.gen.secret`)
 - `OIDC_CLIENT_ID` - OIDC client ID
 - `OIDC_CLIENT_SECRET` - OIDC client secret

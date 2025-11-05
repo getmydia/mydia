@@ -13,7 +13,7 @@ server:
 
 # Database configuration
 database:
-  path: "/data/mydia.db"
+  path: "/config/mydia.db"
   pool_size: 5
 
 # Authentication
@@ -38,7 +38,7 @@ hooks:
   # Directory where hook scripts are located
   # Relative paths are resolved relative to the database directory
   # In development: "hooks" -> ./hooks (relative to project root)
-  # In production with database at /data/mydia.db: "hooks" -> /data/hooks
+  # In production with database at /config/mydia.db: "hooks" -> /data/hooks
   directory: "hooks"
   # Default timeout for hook execution in milliseconds
   default_timeout_ms: 5000

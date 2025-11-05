@@ -208,9 +208,9 @@
                 {quality}
               </div>
             <% end %>
-            <%!-- Monitored indicator --%>
-            <%= if item.monitored do %>
-              <div class="absolute top-12 left-2">
+            <%!-- Monitored indicator (hidden in selection mode) --%>
+            <%= if item.monitored and not @selection_mode do %>
+              <div class="absolute top-2 left-2">
                 <.icon name="hero-bookmark-solid" class="w-5 h-5 text-primary" />
               </div>
             <% end %>

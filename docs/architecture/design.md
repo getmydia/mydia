@@ -36,7 +36,11 @@ Mydia's interface is designed for **power users** managing **large media librari
 
 ## Color System
 
+**See [colors.md](colors.md) for the complete color scheme documentation including rationale, accessibility standards, and usage guidelines.**
+
 ### Theme Configuration
+
+The Mydia color scheme is designed for power users managing large media libraries, with a dark theme that reduces eye strain and makes media content visually prominent.
 
 ```javascript
 // tailwind.config.js
@@ -45,37 +49,43 @@ module.exports = {
     themes: [
       {
         mydia: {
-          // Primary: Used for main actions, links, active states
-          "primary": "#3b82f6",      // Blue-500
+          // Primary - Main actions (Blue)
+          "primary": "#3b82f6",
+          "primary-focus": "#2563eb",
           "primary-content": "#ffffff",
 
-          // Secondary: Used for less prominent actions
-          "secondary": "#8b5cf6",    // Violet-500
+          // Secondary - Premium features (Purple)
+          "secondary": "#8b5cf6",
+          "secondary-focus": "#7c3aed",
           "secondary-content": "#ffffff",
 
-          // Accent: Used for highlights, notifications
-          "accent": "#06b6d4",       // Cyan-500
+          // Accent - Quality badges (Cyan)
+          "accent": "#06b6d4",
+          "accent-focus": "#0891b2",
           "accent-content": "#ffffff",
 
-          // Neutral: Background colors, borders
-          "neutral": "#1f2937",      // Gray-800
-          "neutral-content": "#f9fafb", // Gray-50
+          // Neutral - Subtle elements (Gray)
+          "neutral": "#1f2937",
+          "neutral-focus": "#111827",
+          "neutral-content": "#f9fafb",
 
-          // Base colors
+          // Base - Backgrounds & text (Slate)
           "base-100": "#0f172a",     // Slate-900 (main bg)
           "base-200": "#1e293b",     // Slate-800 (card bg)
           "base-300": "#334155",     // Slate-700 (hover)
           "base-content": "#f1f5f9",  // Slate-100 (text)
 
           // Semantic colors
-          "info": "#3b82f6",         // Blue
-          "success": "#10b981",      // Green
-          "warning": "#f59e0b",      // Amber
-          "error": "#ef4444",        // Red
+          "info": "#3b82f6",
+          "info-content": "#ffffff",
+          "success": "#10b981",
+          "success-content": "#ffffff",
+          "warning": "#f59e0b",
+          "warning-content": "#000000",
+          "error": "#ef4444",
+          "error-content": "#ffffff",
         },
       },
-      "light",  // Default light theme
-      "dark",   // Default dark theme
     ],
   },
 }
@@ -85,13 +95,19 @@ module.exports = {
 
 | Color | Usage | Example |
 |-------|-------|---------|
-| Primary | Main actions, selected items, links | "Download" button, selected checkbox |
-| Secondary | Secondary actions, tabs | "More info" button, inactive tabs |
-| Accent | Badges, status indicators | Quality badges (4K, HDR) |
-| Success | Completed states, available | Download complete, file exists |
-| Warning | Warnings, monitored status | Missing file, upgrade available |
-| Error | Errors, failed states | Download failed, file missing |
-| Info | Informational messages | Tips, help text |
+| Primary (Blue) | Main actions, selected items, links | "Download" button, selected checkbox |
+| Secondary (Purple) | Premium features, secondary actions | HDR badges, "More info" button |
+| Accent (Cyan) | Quality badges, highlights | 4K badges, resolution indicators |
+| Success (Green) | Completed states, available | Download complete, file exists |
+| Warning (Amber) | Warnings, monitored status | Missing file, upgrade available |
+| Error (Red) | Errors, failed states | Download failed, file missing |
+| Info (Blue) | Informational messages | Tips, help text |
+
+**Key Principles:**
+- Dark theme optimized for extended use and media presentation
+- Strategic color use for visual hierarchy and meaning
+- WCAG AA compliant contrast ratios throughout
+- Color never used alone to convey information (paired with icons/text)
 
 ## Typography
 

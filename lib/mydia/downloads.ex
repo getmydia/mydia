@@ -284,7 +284,8 @@ defmodule Mydia.Downloads do
       {:ok, %Download{}}
   """
   def initiate_download(%SearchResult{} = search_result, opts \\ []) do
-    with {:ok, client_config} <- select_download_client(opts),
+    with :ok <- check_for_duplicate_download(search_result, opts),
+         {:ok, client_config} <- select_download_client(opts),
          {:ok, adapter} <- get_adapter_for_client(client_config),
          {:ok, client_id} <- add_torrent_to_client(adapter, client_config, search_result, opts),
          {:ok, download} <- create_download_record(search_result, client_config, client_id, opts) do
@@ -323,6 +324,63 @@ defmodule Mydia.Downloads do
   end
 
   ## Private Functions - Download Initiation
+
+  defp check_for_duplicate_download(search_result, opts) do
+    media_item_id = Keyword.get(opts, :media_item_id)
+    episode_id = Keyword.get(opts, :episode_id)
+
+    # Query for active downloads (not completed and not failed)
+    base_query =
+      Download
+      |> where([d], is_nil(d.completed_at) and is_nil(d.error_message))
+
+    # Add filters based on what we're downloading
+    query =
+      cond do
+        # For episodes, check if there's an active download for this episode
+        episode_id ->
+          where(base_query, [d], d.episode_id == ^episode_id)
+
+        # For season packs, check if there's an active download for same media_item and season
+        media_item_id && match?(%{season_pack: true, season_number: _}, search_result.metadata) ->
+          season_number = search_result.metadata.season_number
+
+          base_query
+          |> where([d], d.media_item_id == ^media_item_id)
+          |> where(
+            [d],
+            fragment("json_extract(?, '$.season_pack') = 'true'", d.metadata) and
+              fragment("json_extract(?, '$.season_number') = ?", d.metadata, ^season_number)
+          )
+
+        # For movies or other media, check if there's an active download for this media_item
+        media_item_id ->
+          where(base_query, [d], d.media_item_id == ^media_item_id)
+
+        # No media association, can't check for duplicates
+        true ->
+          base_query
+      end
+
+    case Repo.exists?(query) do
+      true ->
+        season_info =
+          case search_result.metadata do
+            %{season_pack: true, season_number: sn} -> " (season #{sn})"
+            _ -> ""
+          end
+
+        Logger.info("Skipping download - active download already exists#{season_info}",
+          media_item_id: media_item_id,
+          episode_id: episode_id
+        )
+
+        {:error, :duplicate_download}
+
+      false ->
+        :ok
+    end
+  end
 
   defp select_download_client(opts) do
     client_name = Keyword.get(opts, :client_name)
@@ -389,6 +447,24 @@ defmodule Mydia.Downloads do
   end
 
   defp create_download_record(search_result, client_config, client_id, opts) do
+    # Base metadata from search result
+    base_metadata = %{
+      size: search_result.size,
+      seeders: search_result.seeders,
+      leechers: search_result.leechers,
+      quality: search_result.quality
+    }
+
+    # Merge with season pack metadata if present
+    metadata =
+      case search_result.metadata do
+        %{season_pack: true} = season_metadata ->
+          Map.merge(base_metadata, season_metadata)
+
+        _ ->
+          base_metadata
+      end
+
     attrs = %{
       indexer: search_result.indexer,
       title: search_result.title,
@@ -397,12 +473,7 @@ defmodule Mydia.Downloads do
       download_client_id: client_id,
       media_item_id: Keyword.get(opts, :media_item_id),
       episode_id: Keyword.get(opts, :episode_id),
-      metadata: %{
-        size: search_result.size,
-        seeders: search_result.seeders,
-        leechers: search_result.leechers,
-        quality: search_result.quality
-      }
+      metadata: metadata
     }
 
     create_download(attrs)

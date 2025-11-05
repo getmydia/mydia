@@ -15,11 +15,8 @@
    Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
 @plugin "daisyui";
 
-/* Catppuccin Latte (light) theme */
-@plugin "./catppuccinTheme.latte.ts";
-
-/* Catppuccin Frappé (dark) theme */
-@plugin "./catppuccinTheme.frappe.ts";
+/* Mydia custom theme */
+@plugin "./mydiaTheme.ts";
 
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);

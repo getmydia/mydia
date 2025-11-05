@@ -18,6 +18,7 @@ defmodule Mydia.Indexers.SearchResult do
     * `:category` - Category ID from the indexer
     * `:published_at` - When the torrent was published (optional)
     * `:quality` - Parsed quality information (resolution, codec, etc.)
+    * `:metadata` - Additional metadata (e.g., season pack info) (optional)
 
   ## Quality Information
 
@@ -68,7 +69,8 @@ defmodule Mydia.Indexers.SearchResult do
           indexer: String.t(),
           category: integer() | nil,
           published_at: DateTime.t() | nil,
-          quality: quality_info() | nil
+          quality: quality_info() | nil,
+          metadata: map() | nil
         }
 
   @enforce_keys [:title, :size, :seeders, :leechers, :download_url, :indexer]
@@ -82,7 +84,8 @@ defmodule Mydia.Indexers.SearchResult do
     :indexer,
     :category,
     :published_at,
-    :quality
+    :quality,
+    :metadata
   ]
 
   @doc """

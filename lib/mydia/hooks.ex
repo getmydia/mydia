@@ -19,7 +19,7 @@ defmodule Mydia.Hooks do
 
   The hooks directory is resolved relative to the database directory:
   - Development: `mydia_dev.db` + `hooks` = `./hooks`
-  - Production: `/data/mydia.db` + `hooks` = `/data/hooks`
+  - Production: `/config/mydia.db` + `hooks` = `/data/hooks`
 
   This means hooks live alongside your data, making backups and Docker
   deployments simpler.

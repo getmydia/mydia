@@ -9,7 +9,8 @@ RUN apt-get update -qq && \
       curl \
       sqlite3 \
       libsqlite3-dev \
-      watchman && \
+      watchman \
+      ffmpeg && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && \
