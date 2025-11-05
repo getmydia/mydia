@@ -5,7 +5,8 @@
   "repository": {},
   "license": "MIT",
   "scripts": {
-    "deploy": "cd .. && mix assets.deploy && rm -f _build/esbuild*"
+    "deploy": "cd .. && mix assets.deploy && rm -f _build/esbuild*",
+    "screenshots": "node screenshots.js"
   },
   "dependencies": {
     "phoenix": "file:../deps/phoenix",
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "@catppuccin/daisyui": "^2.1.1",
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/forms": "^0.5.7",
     "autoprefixer": "^10.4.16",
     "daisyui": "^5.4.3",

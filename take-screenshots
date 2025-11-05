@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# Screenshot helper script for Mydia
+# Captures automated screenshots using Playwright
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo -e "${GREEN}📸 Mydia Screenshot Tool${NC}\n"
+
+# Check if service is running
+if ! docker compose ps --services --filter "status=running" | grep -q "^app$"; then
+    echo -e "${YELLOW}Starting services...${NC}"
+    ./dev up -d
+    sleep 3
+fi
+
+# Run screenshots
+echo -e "${GREEN}Capturing screenshots...${NC}\n"
+./dev exec app sh -c "cd assets && npm run screenshots"
+
+echo ""
+echo -e "${GREEN}✅ Done! Screenshots saved to screenshots/${NC}"
