@@ -42,3 +42,10 @@ npm-debug.log
 # Docker Compose override files (personal dev environment customization)
 compose.override.yml
 
+# Environment files with secrets
+.env
+.env.prod
+
+# Generated screenshots
+/screenshots/
+

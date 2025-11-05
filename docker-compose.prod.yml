@@ -1,0 +1,55 @@
+services:
+  mydia:
+    image: mydia:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mydia
+    restart: unless-stopped
+
+    ports:
+      - "4000:4000"
+
+    environment:
+      # Phoenix configuration
+      PHX_HOST: ${PHX_HOST:-localhost}
+      PORT: ${PORT:-4000}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+
+      # Database configuration (SQLite)
+      DATABASE_PATH: ${DATABASE_PATH:-/data/mydia.db}
+      POOL_SIZE: ${POOL_SIZE:-5}
+
+      # Guardian JWT secret
+      GUARDIAN_SECRET_KEY: ${GUARDIAN_SECRET_KEY}
+
+      # Optional: OIDC authentication
+      OIDC_DISCOVERY_DOCUMENT_URI: ${OIDC_DISCOVERY_DOCUMENT_URI:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+
+      # Application settings
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+
+    volumes:
+      # Database and application data
+      - mydia_data:/data
+
+      # Media directories - customize these paths as needed
+      - ${MEDIA_PATH_MOVIES:-./media/movies}:/media/movies
+      - ${MEDIA_PATH_TV:-./media/tv}:/media/tv
+      - ${MEDIA_PATH_DOWNLOADS:-./media/downloads}:/media/downloads
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 40s
+      retries: 3
+
+volumes:
+  mydia_data:
+    driver: local

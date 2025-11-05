@@ -44,7 +44,10 @@ defmodule Mydia.Application do
       # Register metadata provider adapters
       Mydia.Metadata.register_providers()
       # Ensure default quality profiles exist (skip in test environment)
-      if Mix.env() != :test do
+      # In releases, Mix is not available, so we check for MIX_ENV
+      env = System.get_env("MIX_ENV", "prod")
+
+      if env != "test" do
         ensure_default_quality_profiles()
       end
 
@@ -62,7 +65,10 @@ defmodule Mydia.Application do
 
   defp client_health_children do
     # Don't start ClientHealth in test environment to avoid SQL Sandbox conflicts
-    if Mix.env() == :test do
+    # In releases, Mix is not available, so we check for MIX_ENV
+    env = System.get_env("MIX_ENV", "prod")
+
+    if env == "test" do
       []
     else
       [Mydia.Downloads.ClientHealth]
@@ -90,7 +96,10 @@ defmodule Mydia.Application do
   defp load_config! do
     # Only load runtime config in non-dev/test environments
     # or if explicitly enabled via environment variable
-    if Mix.env() in [:prod, :staging] or System.get_env("LOAD_RUNTIME_CONFIG") == "true" do
+    # In releases, Mix is not available, so we check for RELEASE_NAME
+    env = if Code.ensure_loaded?(Mix), do: Mix.env(), else: :prod
+
+    if env in [:prod, :staging] or System.get_env("LOAD_RUNTIME_CONFIG") == "true" do
       Mydia.Config.Loader.load!()
     else
       # In dev/test, use schema defaults to avoid interfering with Mix config

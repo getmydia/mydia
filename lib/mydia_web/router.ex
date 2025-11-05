@@ -35,6 +35,13 @@ defmodule MydiaWeb.Router do
     plug MydiaWeb.Plugs.ApiAuth
   end
 
+  # Health check endpoint (no authentication required)
+  scope "/", MydiaWeb do
+    pipe_through :api
+
+    get "/health", HealthController, :check
+  end
+
   # Authentication routes
   scope "/auth", MydiaWeb do
     pipe_through :browser
