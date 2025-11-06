@@ -53,7 +53,7 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   import Ecto.Query, warn: false
 
-  alias Mydia.{Repo, Media, Indexers, Downloads, Events}
+  alias Mydia.{Repo, Media, Indexers, Downloads}
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Media.{MediaItem, Episode}
 
@@ -84,26 +84,27 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     case result do
       :ok ->
-        Events.job_executed("tv_show_search_specific", %{
-          "duration_ms" => duration,
-          "episode_id" => episode_id
-        })
+        Logger.info("Episode search completed",
+          duration_ms: duration,
+          episode_id: episode_id
+        )
 
         :ok
 
       :no_results ->
-        Events.job_executed("tv_show_search_specific", %{
-          "duration_ms" => duration,
-          "episode_id" => episode_id,
-          "no_results" => true
-        })
+        Logger.info("Episode search completed with no results",
+          duration_ms: duration,
+          episode_id: episode_id
+        )
 
         :no_results
 
       {:error, reason} ->
-        Events.job_failed("tv_show_search_specific", inspect(reason), %{
-          "episode_id" => episode_id
-        })
+        Logger.error("Episode search failed",
+          error: inspect(reason),
+          duration_ms: duration,
+          episode_id: episode_id
+        )
 
         {:error, reason}
     end
@@ -163,29 +164,30 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     case result do
       :ok ->
-        Events.job_executed("tv_show_search_season", %{
-          "duration_ms" => duration,
-          "media_item_id" => media_item_id,
-          "season_number" => season_number
-        })
+        Logger.info("Season search completed",
+          duration_ms: duration,
+          media_item_id: media_item_id,
+          season_number: season_number
+        )
 
         :ok
 
       :no_results ->
-        Events.job_executed("tv_show_search_season", %{
-          "duration_ms" => duration,
-          "media_item_id" => media_item_id,
-          "season_number" => season_number,
-          "no_results" => true
-        })
+        Logger.info("Season search completed with no results",
+          duration_ms: duration,
+          media_item_id: media_item_id,
+          season_number: season_number
+        )
 
         :no_results
 
       {:error, reason} ->
-        Events.job_failed("tv_show_search_season", inspect(reason), %{
-          "media_item_id" => media_item_id,
-          "season_number" => season_number
-        })
+        Logger.error("Season search failed",
+          error: inspect(reason),
+          duration_ms: duration,
+          media_item_id: media_item_id,
+          season_number: season_number
+        )
 
         {:error, reason}
     end
@@ -233,17 +235,19 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     case result do
       :ok ->
-        Events.job_executed("tv_show_search_show", %{
-          "duration_ms" => duration,
-          "media_item_id" => media_item_id
-        })
+        Logger.info("Show search completed",
+          duration_ms: duration,
+          media_item_id: media_item_id
+        )
 
         :ok
 
       {:error, reason} ->
-        Events.job_failed("tv_show_search_show", inspect(reason), %{
-          "media_item_id" => media_item_id
-        })
+        Logger.error("Show search failed",
+          error: inspect(reason),
+          duration_ms: duration,
+          media_item_id: media_item_id
+        )
 
         {:error, reason}
     end
@@ -260,13 +264,9 @@ defmodule Mydia.Jobs.TVShowSearch do
     Logger.info("Found #{total_count} monitored episodes without files")
 
     if total_count == 0 do
-      Logger.info("No episodes to search")
       duration = System.monotonic_time(:millisecond) - start_time
 
-      Events.job_executed("tv_show_search", %{
-        "duration_ms" => duration,
-        "items_processed" => 0
-      })
+      Logger.info("No episodes to search", duration_ms: duration)
 
       :ok
     else
@@ -294,15 +294,10 @@ defmodule Mydia.Jobs.TVShowSearch do
       duration = System.monotonic_time(:millisecond) - start_time
 
       Logger.info("Automatic episode search completed",
+        duration_ms: duration,
         total_episodes: total_count,
         shows_processed: show_count
       )
-
-      Events.job_executed("tv_show_search", %{
-        "duration_ms" => duration,
-        "items_processed" => total_count,
-        "shows_processed" => show_count
-      })
 
       :ok
     end

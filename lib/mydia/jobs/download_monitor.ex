@@ -70,15 +70,13 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     duration = System.monotonic_time(:millisecond) - start_time
 
-    Logger.info("Download monitoring completed")
-
-    Events.job_executed("download_monitor", %{
-      "duration_ms" => duration,
-      "completed_count" => length(completed),
-      "failed_count" => length(failed),
-      "missing_count" => length(missing),
-      "untracked_matched" => length(untracked_downloads)
-    })
+    Logger.info("Download monitoring completed",
+      duration_ms: duration,
+      completed_count: length(completed),
+      failed_count: length(failed),
+      missing_count: length(missing),
+      untracked_matched: length(untracked_downloads)
+    )
 
     :ok
   end

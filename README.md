@@ -34,28 +34,6 @@ A modern, self-hosted media management platform for tracking, organizing, and mo
 - 🐳 **Docker Ready** – Pre-built images for amd64 and arm64 platforms
 - 🔐 **Local Authentication** – Built-in user management (OIDC support coming soon)
 
-## 🗺️ Roadmap
-
-Mydia is actively developed with a clear vision for the future. See [docs/product/product.md](docs/product/product.md) for the complete product vision.
-
-### Current Phase: Automation (v0.5)
-- ✅ Quality profiles system
-- 🚧 Automatic upgrade detection
-- 🚧 Smart quality comparison
-
-### Planned: Advanced Features (v1.0)
-- 📦 **Multi-Version Support** – Store and manage multiple versions of the same media (4K, 1080p, HDR variants)
-- 🔄 **Smart Upgrading** – Automatically upgrade to better quality when available, with "upgrade until cutoff" rules
-- 📝 **Subtitle Management** – Integrated subtitle search and download
-- ⚙️ **Custom Rules Engine** – Complex logic like "keep 1080p until 4K HDR10+ available"
-- 🔌 **Lua Scripting** – Lua scripting support is included but currently non-functional
-
-### Future: Enhanced UX (v1.5+)
-- 📱 Mobile app
-- 🎥 Streaming preview
-- 📚 Collection management
-- 📊 Advanced statistics and insights
-
 ## 📸 Screenshots
 
 <table>

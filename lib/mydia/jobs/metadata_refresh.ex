@@ -14,7 +14,7 @@ defmodule Mydia.Jobs.MetadataRefresh do
     max_attempts: 3
 
   require Logger
-  alias Mydia.{Media, Metadata, Repo, Events}
+  alias Mydia.{Media, Metadata}
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"media_item_id" => media_item_id} = args}) do
@@ -38,28 +38,25 @@ defmodule Mydia.Jobs.MetadataRefresh do
 
     case result do
       :ok ->
-        Events.job_executed("metadata_refresh", %{
-          "duration_ms" => duration,
-          "media_item_id" => media_item_id
-        })
+        Logger.info("Metadata refresh completed",
+          duration_ms: duration,
+          media_item_id: media_item_id
+        )
 
         :ok
 
       {:error, reason} ->
-        Events.job_failed("metadata_refresh", inspect(reason), %{
-          "media_item_id" => media_item_id
-        })
+        Logger.error("Metadata refresh failed",
+          error: inspect(reason),
+          duration_ms: duration,
+          media_item_id: media_item_id
+        )
 
         {:error, reason}
     end
   rescue
     e in Ecto.NoResultsError ->
       Logger.error("Media item not found", media_item_id: media_item_id)
-
-      Events.job_failed("metadata_refresh", "Media item not found", %{
-        "media_item_id" => media_item_id
-      })
-
       {:error, :not_found}
   end
 
@@ -73,19 +70,23 @@ defmodule Mydia.Jobs.MetadataRefresh do
 
     case result do
       {:ok, count} ->
-        Events.job_executed("metadata_refresh_all", %{
-          "duration_ms" => duration,
-          "items_processed" => count
-        })
+        Logger.info("Metadata refresh all completed",
+          duration_ms: duration,
+          items_processed: count
+        )
 
         :ok
 
       :ok ->
-        Events.job_executed("metadata_refresh_all", %{"duration_ms" => duration})
+        Logger.info("Metadata refresh all completed", duration_ms: duration)
         :ok
 
       {:error, reason} ->
-        Events.job_failed("metadata_refresh_all", inspect(reason))
+        Logger.error("Metadata refresh all failed",
+          error: inspect(reason),
+          duration_ms: duration
+        )
+
         {:error, reason}
     end
   end

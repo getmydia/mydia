@@ -33,7 +33,7 @@ defmodule Mydia.Jobs.MovieSearch do
 
   import Ecto.Query, warn: false
 
-  alias Mydia.{Repo, Media, Indexers, Downloads, Events}
+  alias Mydia.{Repo, Media, Indexers, Downloads}
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Media.MediaItem
 
@@ -48,13 +48,9 @@ defmodule Mydia.Jobs.MovieSearch do
     Logger.info("Found #{total_count} monitored movies without files")
 
     if total_count == 0 do
-      Logger.info("No movies to search")
       duration = System.monotonic_time(:millisecond) - start_time
 
-      Events.job_executed("movie_search", %{
-        "duration_ms" => duration,
-        "items_processed" => 0
-      })
+      Logger.info("No movies to search", duration_ms: duration)
 
       :ok
     else
@@ -66,19 +62,12 @@ defmodule Mydia.Jobs.MovieSearch do
       duration = System.monotonic_time(:millisecond) - start_time
 
       Logger.info("Automatic movie search completed",
+        duration_ms: duration,
         total: total_count,
         successful: successful,
         failed: failed,
         no_results: no_results
       )
-
-      Events.job_executed("movie_search", %{
-        "duration_ms" => duration,
-        "items_processed" => total_count,
-        "downloads_initiated" => successful,
-        "failed" => failed,
-        "no_results" => no_results
-      })
 
       :ok
     end
@@ -115,26 +104,27 @@ defmodule Mydia.Jobs.MovieSearch do
 
     case result do
       :ok ->
-        Events.job_executed("movie_search_specific", %{
-          "duration_ms" => duration,
-          "media_item_id" => media_item_id
-        })
+        Logger.info("Movie search completed",
+          duration_ms: duration,
+          media_item_id: media_item_id
+        )
 
         :ok
 
       :no_results ->
-        Events.job_executed("movie_search_specific", %{
-          "duration_ms" => duration,
-          "media_item_id" => media_item_id,
-          "no_results" => true
-        })
+        Logger.info("Movie search completed with no results",
+          duration_ms: duration,
+          media_item_id: media_item_id
+        )
 
         :no_results
 
       {:error, reason} ->
-        Events.job_failed("movie_search_specific", inspect(reason), %{
-          "media_item_id" => media_item_id
-        })
+        Logger.error("Movie search failed",
+          error: inspect(reason),
+          duration_ms: duration,
+          media_item_id: media_item_id
+        )
 
         {:error, reason}
     end
