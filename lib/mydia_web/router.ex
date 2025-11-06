@@ -111,6 +111,10 @@ defmodule MydiaWeb.Router do
     post "/indexers/:id/test", IndexerController, :test
     post "/indexers/:id/reset-failures", IndexerController, :reset_failures
     post "/indexers/refresh", IndexerController, :refresh
+
+    # Media items
+    get "/media/:id", MediaController, :show
+    post "/media/:id/match", MediaController, :match
   end
 
   # Enable LiveDashboard in development
