@@ -104,6 +104,13 @@ defmodule MydiaWeb.Router do
     get "/downloads/clients/:id", DownloadClientController, :show
     post "/downloads/clients/:id/test", DownloadClientController, :test
     post "/downloads/clients/refresh", DownloadClientController, :refresh
+
+    # Indexers
+    get "/indexers", IndexerController, :index
+    get "/indexers/:id", IndexerController, :show
+    post "/indexers/:id/test", IndexerController, :test
+    post "/indexers/:id/reset-failures", IndexerController, :reset_failures
+    post "/indexers/refresh", IndexerController, :refresh
   end
 
   # Enable LiveDashboard in development

@@ -23,12 +23,14 @@ defmodule Mydia.Application do
         {Phoenix.PubSub, name: Mydia.PubSub},
         Mydia.Downloads.Client.Registry,
         Mydia.Indexers.Adapter.Registry,
+        Mydia.Indexers.RateLimiter,
         Mydia.Metadata.Provider.Registry,
         Mydia.Metadata.Cache,
         {Task.Supervisor, name: Mydia.TaskSupervisor},
         Mydia.Hooks.Manager
       ] ++
         client_health_children() ++
+        indexer_health_children() ++
         oban_children() ++
         [
           # Start a worker by calling: Mydia.Worker.start_link(arg)
@@ -49,11 +51,9 @@ defmodule Mydia.Application do
       # Register metadata provider adapters
       Mydia.Metadata.register_providers()
       # Ensure default quality profiles exist (skip in test environment)
-      # In releases, Mix is not available, so we check for MIX_ENV
-      env = System.get_env("MIX_ENV", "prod")
-
-      if env != "test" do
+      if Application.get_env(:mydia, :start_health_monitors, true) do
         ensure_default_quality_profiles()
+        validate_library_paths()
       end
 
       {:ok, pid}
@@ -70,13 +70,19 @@ defmodule Mydia.Application do
 
   defp client_health_children do
     # Don't start ClientHealth in test environment to avoid SQL Sandbox conflicts
-    # In releases, Mix is not available, so we check for MIX_ENV
-    env = System.get_env("MIX_ENV", "prod")
-
-    if env == "test" do
-      []
-    else
+    if Application.get_env(:mydia, :start_health_monitors, true) do
       [Mydia.Downloads.ClientHealth]
+    else
+      []
+    end
+  end
+
+  defp indexer_health_children do
+    # Don't start IndexerHealth in test environment to avoid SQL Sandbox conflicts
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      [Mydia.Indexers.Health]
+    else
+      []
     end
   end
 
@@ -123,6 +129,98 @@ defmodule Mydia.Application do
       {:error, _reason} ->
         # Database not ready yet, profiles will be created on next startup
         :ok
+    end
+  end
+
+  defp validate_library_paths do
+    # Validate library paths from runtime configuration
+    config = Application.get_env(:mydia, :runtime_config, Mydia.Config.Schema.defaults())
+
+    paths_to_validate = []
+
+    # Check movies_path if configured
+    paths_to_validate =
+      if is_struct(config) and Map.has_key?(config, :media) and config.media.movies_path do
+        [{config.media.movies_path, "movies"} | paths_to_validate]
+      else
+        paths_to_validate
+      end
+
+    # Check tv_path if configured
+    paths_to_validate =
+      if is_struct(config) and Map.has_key?(config, :media) and config.media.tv_path do
+        [{config.media.tv_path, "TV shows"} | paths_to_validate]
+      else
+        paths_to_validate
+      end
+
+    # Validate each path
+    validation_results =
+      Enum.map(paths_to_validate, fn {path, media_type} ->
+        validate_single_path(path, media_type)
+      end)
+
+    # Report validation results
+    errors =
+      Enum.filter(validation_results, fn {status, _path, _media_type, _reason} ->
+        status == :error
+      end)
+
+    warnings =
+      Enum.filter(validation_results, fn {status, _path, _media_type, _reason} ->
+        status == :warning
+      end)
+
+    if errors != [] do
+      IO.puts("\n⚠️  Library Path Validation Errors:")
+
+      Enum.each(errors, fn {:error, path, media_type, reason} ->
+        IO.puts("  ✗ #{media_type} path '#{path}': #{reason}")
+      end)
+
+      IO.puts("\nPlease fix these paths in your configuration file or environment variables.")
+    end
+
+    if warnings != [] do
+      IO.puts("\n⚠️  Library Path Validation Warnings:")
+
+      Enum.each(warnings, fn {:warning, path, media_type, reason} ->
+        IO.puts("  ! #{media_type} path '#{path}': #{reason}")
+      end)
+    end
+
+    if errors == [] and warnings == [] and paths_to_validate != [] do
+      IO.puts("✓ All library paths validated successfully")
+    end
+
+    # Return validation status
+    if errors != [] do
+      {:error, :invalid_library_paths}
+    else
+      :ok
+    end
+  end
+
+  defp validate_single_path(path, media_type) do
+    cond do
+      is_nil(path) or path == "" ->
+        {:warning, path, media_type, "path is not configured"}
+
+      not File.exists?(path) ->
+        {:error, path, media_type, "path does not exist"}
+
+      not File.dir?(path) ->
+        {:error, path, media_type, "path exists but is not a directory"}
+
+      true ->
+        # Check if path is readable
+        case File.ls(path) do
+          {:ok, _} ->
+            {:ok, path, media_type, "valid"}
+
+          {:error, reason} ->
+            {:error, path, media_type, "path exists but is not readable: #{inspect(reason)}"}
+        end
     end
   end
 end

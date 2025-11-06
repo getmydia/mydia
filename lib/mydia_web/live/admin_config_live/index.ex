@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminConfigLive.Index do
   alias Mydia.Settings
   alias Mydia.Settings.{QualityProfile, DownloadClientConfig, IndexerConfig, LibraryPath}
   alias Mydia.Downloads.ClientHealth
+  alias Mydia.Indexers.Health, as: IndexerHealth
 
   @impl true
   def mount(_params, _session, socket) do
@@ -458,11 +459,34 @@ defmodule MydiaWeb.AdminConfigLive.Index do
   end
 
   @impl true
-  def handle_event("test_indexer", %{"id" => _id}, socket) do
-    # TODO: Implement health check
-    {:noreply,
-     socket
-     |> put_flash(:info, "Health check not yet implemented")}
+  def handle_event("test_indexer", %{"id" => id}, socket) do
+    case IndexerHealth.check_health(id, force: true) do
+      {:ok, %{status: :healthy} = health} ->
+        details = Map.get(health, :details, %{})
+        version = Map.get(details, :version, "unknown")
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Indexer connection successful! Version: #{version}")
+         |> load_configuration_data()}
+
+      {:ok, %{status: :unhealthy, error: error}} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Indexer connection failed: #{error}")
+         |> load_configuration_data()}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Indexer not found")}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Health check failed: #{inspect(reason)}")
+         |> load_configuration_data()}
+    end
   end
 
   ## Library Path Events
@@ -615,13 +639,17 @@ defmodule MydiaWeb.AdminConfigLive.Index do
     download_clients = Settings.list_download_client_configs()
     client_health = get_client_health_status(download_clients)
 
+    indexers = Settings.list_indexer_configs()
+    indexer_health = get_indexer_health_status(indexers)
+
     socket
     |> assign(:config, Settings.get_runtime_config())
     |> assign(:config_settings_with_sources, get_all_settings_with_sources())
     |> assign(:quality_profiles, Settings.list_quality_profiles())
     |> assign(:download_clients, download_clients)
     |> assign(:client_health, client_health)
-    |> assign(:indexers, Settings.list_indexer_configs())
+    |> assign(:indexers, indexers)
+    |> assign(:indexer_health, indexer_health)
     |> assign(:library_paths, Settings.list_library_paths())
     |> assign(:show_quality_profile_modal, false)
     |> assign(:show_download_client_modal, false)
@@ -635,6 +663,23 @@ defmodule MydiaWeb.AdminConfigLive.Index do
       case ClientHealth.check_health(client.id) do
         {:ok, health} -> {client.id, health}
         {:error, _} -> {client.id, %{status: :unknown, error: "Unable to check health"}}
+      end
+    end)
+    |> Map.new()
+  end
+
+  defp get_indexer_health_status(indexers) do
+    indexers
+    |> Enum.map(fn indexer ->
+      case IndexerHealth.check_health(indexer.id) do
+        {:ok, health} ->
+          # Add failure count to health status
+          failure_count = IndexerHealth.get_failure_count(indexer.id)
+          health_with_failures = Map.put(health, :consecutive_failures, failure_count)
+          {indexer.id, health_with_failures}
+
+        {:error, _} ->
+          {indexer.id, %{status: :unknown, error: "Unable to check health"}}
       end
     end)
     |> Map.new()

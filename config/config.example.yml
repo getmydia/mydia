@@ -97,14 +97,34 @@ auth:
 
 # Media Library Configuration
 # ---------------------------
+# Configure your media library paths for automatic scanning and organization.
+#
+# Basic Configuration (Simple):
+# You can use movies_path and tv_path for simple setup with a single path for
+# each media type. These paths will be monitored automatically.
+#
+# Advanced Configuration (Multiple Paths):
+# For more advanced setups with multiple libraries, use the web UI to add
+# additional library paths. The UI provides full control over:
+#   - Path and type (movies, series, or mixed)
+#   - Monitoring enabled/disabled
+#   - Scan interval per path
+#   - Quality profile assignment
+#
+# Note: Paths must exist and be readable by the application at startup.
+# The application will validate these paths on startup and log warnings
+# for any invalid paths.
 media:
   # Path to movies library
+  # This creates a monitored library path of type "movies"
   movies_path: "/media/movies"
 
   # Path to TV shows library
+  # This creates a monitored library path of type "series"
   tv_path: "/media/tv"
 
   # How often to scan the media library (in hours)
+  # This is the default scan interval for library paths
   scan_interval_hours: 1
 
 # Download Configuration

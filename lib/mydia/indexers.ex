@@ -25,6 +25,7 @@ defmodule Mydia.Indexers do
   require Logger
   alias Mydia.Indexers.Adapter
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.RateLimiter
   alias Mydia.Settings
 
   @doc """
@@ -67,8 +68,28 @@ defmodule Mydia.Indexers do
   def search(config, query, opts \\ [])
 
   def search(%Settings.IndexerConfig{} = config, query, opts) do
-    adapter_config = indexer_config_to_adapter_config(config)
-    search(adapter_config, query, opts)
+    # Check rate limit before making the request
+    case RateLimiter.check_rate_limit(config.id, config.rate_limit) do
+      :ok ->
+        adapter_config = indexer_config_to_adapter_config(config)
+
+        result = search(adapter_config, query, opts)
+
+        # Record the request if successful (even if search returned no results)
+        case result do
+          {:ok, _results} -> RateLimiter.record_request(config.id)
+          {:error, _} -> :ok
+        end
+
+        result
+
+      {:error, :rate_limited, retry_after} ->
+        Logger.warning(
+          "Rate limit exceeded for indexer #{config.name}, retry after #{retry_after}ms"
+        )
+
+        {:error, Adapter.Error.rate_limited("Rate limit exceeded, retry after #{retry_after}ms")}
+    end
   end
 
   def search(%{type: type} = config, query, opts) when is_atom(type) do

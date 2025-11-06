@@ -349,6 +349,7 @@
                     <th>Name</th>
                     <th>Type</th>
                     <th>Base URL</th>
+                    <th>Health</th>
                     <th>Enabled</th>
                     <th>Priority</th>
                     <th>Actions</th>
@@ -356,10 +357,43 @@
                 </thead>
                 <tbody>
                   <%= for indexer <- @indexers do %>
+                    <% health = Map.get(@indexer_health, indexer.id, %{status: :unknown}) %>
                     <tr>
                       <td class="font-medium">{indexer.name}</td>
                       <td><span class="badge badge-sm">{indexer.type}</span></td>
                       <td class="font-mono text-sm">{indexer.base_url}</td>
+                      <td>
+                        <div class="flex items-center gap-2">
+                          <span class={"badge badge-sm #{health_status_badge_class(health.status)}"}>
+                            <.icon name={health_status_icon(health.status)} class="w-3 h-3 mr-1" />
+                            {health_status_label(health.status)}
+                          </span>
+                          <%= if health.status == :unhealthy and health[:error] do %>
+                            <div class="tooltip tooltip-left" data-tip={health.error}>
+                              <.icon name="hero-information-circle" class="w-4 h-4 text-error" />
+                            </div>
+                          <% end %>
+                          <%= if health.status == :healthy and health[:details][:version] do %>
+                            <div
+                              class="tooltip tooltip-left"
+                              data-tip={"Version: #{health.details.version}"}
+                            >
+                              <.icon name="hero-information-circle" class="w-4 h-4 text-success" />
+                            </div>
+                          <% end %>
+                          <%= if health[:consecutive_failures] && health.consecutive_failures > 0 do %>
+                            <div
+                              class="tooltip tooltip-left"
+                              data-tip={"#{health.consecutive_failures} consecutive failures"}
+                            >
+                              <.icon
+                                name="hero-exclamation-triangle"
+                                class="w-4 h-4 text-warning"
+                              />
+                            </div>
+                          <% end %>
+                        </div>
+                      </td>
                       <td>
                         <span class={
                           if indexer.enabled, do: "badge badge-success", else: "badge badge-ghost"

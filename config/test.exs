@@ -34,3 +34,7 @@ config :mydia, Oban,
   engine: false,
   queues: false,
   plugins: false
+
+# Disable health monitoring processes in test mode
+config :mydia,
+  start_health_monitors: false

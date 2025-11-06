@@ -39,6 +39,8 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:show_retry_modal, false)
      |> assign(:retry_error_message, nil)
      |> assign(:search_results_map, %{})
+     |> assign(:show_detail_modal, false)
+     |> assign(:selected_result, nil)
      |> stream_configure(:search_results, dom_id: &generate_result_id/1)
      |> stream(:search_results, [])}
   end
@@ -278,6 +280,23 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:show_retry_modal, false)
      |> assign(:retry_error_message, nil)}
+  end
+
+  def handle_event("show_detail", %{"download_url" => download_url}, socket) do
+    # Find the search result by download URL
+    selected_result = Map.get(socket.assigns.search_results_map, download_url)
+
+    {:noreply,
+     socket
+     |> assign(:show_detail_modal, true)
+     |> assign(:selected_result, selected_result)}
+  end
+
+  def handle_event("close_detail_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_detail_modal, false)
+     |> assign(:selected_result, nil)}
   end
 
   @impl true

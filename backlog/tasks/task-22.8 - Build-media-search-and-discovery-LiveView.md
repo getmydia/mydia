@@ -1,10 +1,10 @@
 ---
 id: task-22.8
 title: Build media search and discovery LiveView
-status: In Progress
+status: Done
 assignee: []
 created_date: '2025-11-04 15:41'
-updated_date: '2025-11-04 15:50'
+updated_date: '2025-11-06 01:09'
 labels:
   - liveview
   - ui
@@ -55,8 +55,8 @@ This UI exposes the indexer search functionality built in task-22 and provides t
 - [x] #5 Sort options for quality score, seeders, and published date
 - [x] #6 Loading spinner shown during concurrent indexer searches
 - [x] #7 Empty state shown when no indexers configured or no results found
-- [ ] #8 Click result to view details and download options
-- [ ] #9 Add to library button for monitoring media automatically
+- [x] #8 Click result to view details and download options
+- [x] #9 Add to library button for monitoring media automatically
 - [x] #10 Search performance logged (timing, result counts per indexer)
 <!-- AC:END -->
 
@@ -96,4 +96,37 @@ The download and add to library buttons are present but show placeholder message
 - Download client management (for initiating downloads)
 - Media library management (for adding and monitoring titles)
 - Metadata matching services (TMDB/TVDB for enrichment)
+
+## AC #8 & #9 Implementation Complete (2025-11-05)
+
+### Detail View Modal (AC #8)
+Implemented a comprehensive detail modal that displays when users click on a search result title:
+- Shows all metadata: quality, size, health score, seeders, leechers
+- Displays indexer source and published date
+- Visual health indicator with radial progress
+- Large, easy-to-read statistics with icons
+- Responsive design that works on mobile and desktop
+
+### Add to Library & Download Actions (AC #9)
+Implemented dual-action buttons for flexible workflow:
+- **Monitor Button**: Adds media to library for monitoring without immediate download
+- **Download Button**: Adds to library AND initiates download
+- Both actions available in:
+  - Results table actions column (compact buttons)
+  - Detail modal (prominent buttons with labels)
+- Icons hide on smaller screens, text labels show on larger screens
+
+### Technical Implementation
+- Added `show_detail_modal` and `selected_result` assigns to socket
+- Implemented `show_detail` and `close_detail_modal` event handlers
+- Updated template with clickable title column and detail modal component
+- Modified actions column to show both Monitor and Download buttons
+- Used `search_results_map` for O(1) lookup of results by download URL
+
+### User Experience Improvements
+- Title column has hover effect (text color changes to primary)
+- Detail modal has close button in top-right corner
+- Modal uses DaisyUI stat components for clean data presentation
+- Separate actions give users control over download timing
+- Monitor-only option enables library-first workflow
 <!-- SECTION:NOTES:END -->

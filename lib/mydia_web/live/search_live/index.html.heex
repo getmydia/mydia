@@ -187,12 +187,19 @@
             <tr
               :for={{id, result} <- @streams.search_results}
               id={id}
-              class="hover cursor-pointer"
+              class="hover"
             >
               <%!-- Title Column --%>
-              <td>
+              <td
+                class="cursor-pointer"
+                phx-click="show_detail"
+                phx-value-download_url={result.download_url}
+              >
                 <div class="flex flex-col">
-                  <div class="font-semibold text-sm line-clamp-2" title={result.title}>
+                  <div
+                    class="font-semibold text-sm line-clamp-2 hover:text-primary"
+                    title={result.title}
+                  >
                     {result.title}
                   </div>
                   <%!-- Mobile-only compact info --%>
@@ -252,16 +259,30 @@
               </td>
               <%!-- Actions Column --%>
               <td>
-                <button
-                  class="btn btn-primary btn-sm"
-                  phx-click="add_to_library"
-                  phx-value-title={result.title}
-                  phx-value-download_url={result.download_url}
-                  phx-value-download="true"
-                  title="Add to library and download"
-                >
-                  <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
-                </button>
+                <div class="flex flex-col gap-1">
+                  <button
+                    class="btn btn-sm btn-primary"
+                    phx-click="add_to_library"
+                    phx-value-title={result.title}
+                    phx-value-download_url={result.download_url}
+                    phx-value-download="true"
+                    title="Add to library and download"
+                  >
+                    <.icon name="hero-arrow-down-tray" class="w-4 h-4" />
+                    <span class="hidden xl:inline">Download</span>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-ghost"
+                    phx-click="add_to_library"
+                    phx-value-title={result.title}
+                    phx-value-download_url={result.download_url}
+                    phx-value-download="false"
+                    title="Add to library for monitoring"
+                  >
+                    <.icon name="hero-bookmark" class="w-4 h-4" />
+                    <span class="hidden xl:inline">Monitor</span>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -434,6 +455,113 @@
             </button>
             <button class="btn btn-primary" phx-click="retry_add_to_library">
               <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    <% end %>
+    <%!-- Detail Modal --%>
+    <%= if @show_detail_modal && @selected_result do %>
+      <div class="modal modal-open">
+        <div class="modal-box max-w-3xl">
+          <button
+            class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+            phx-click="close_detail_modal"
+          >
+            <.icon name="hero-x-mark" class="w-5 h-5" />
+          </button>
+          <h3 class="font-bold text-xl mb-4 pr-8">
+            {@selected_result.title}
+          </h3>
+          <%!-- Quality and Size Info --%>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="stat bg-base-200 rounded-lg p-4">
+              <div class="stat-title text-xs">Quality</div>
+              <div class="stat-value text-lg">
+                <span class="badge badge-primary">
+                  {get_quality_badge(@selected_result)}
+                </span>
+              </div>
+            </div>
+            <div class="stat bg-base-200 rounded-lg p-4">
+              <div class="stat-title text-xs">Size</div>
+              <div class="stat-value text-lg font-mono">
+                {format_size(@selected_result)}
+              </div>
+            </div>
+            <div class="stat bg-base-200 rounded-lg p-4">
+              <div class="stat-title text-xs">Health</div>
+              <div class="stat-value text-lg">
+                <div
+                  class="radial-progress"
+                  style={"--value:#{trunc(health_score(@selected_result) * 100)}; --size:3rem;"}
+                  role="progressbar"
+                >
+                  <span class="text-sm">{trunc(health_score(@selected_result) * 100)}%</span>
+                </div>
+              </div>
+            </div>
+            <div class="stat bg-base-200 rounded-lg p-4">
+              <div class="stat-title text-xs">Source</div>
+              <div class="stat-value text-base">
+                <span class="badge badge-outline">{@selected_result.indexer}</span>
+              </div>
+            </div>
+          </div>
+          <%!-- Seeders and Leechers --%>
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="flex items-center gap-3 bg-base-200 rounded-lg p-4">
+              <.icon name="hero-arrow-up" class="w-8 h-8 text-success" />
+              <div>
+                <div class="text-xs text-base-content/70">Seeders</div>
+                <div class="text-2xl font-bold text-success">{@selected_result.seeders}</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-base-200 rounded-lg p-4">
+              <.icon name="hero-arrow-down" class="w-8 h-8 text-info" />
+              <div>
+                <div class="text-xs text-base-content/70">Leechers</div>
+                <div class="text-2xl font-bold text-info">{@selected_result.leechers}</div>
+              </div>
+            </div>
+          </div>
+          <%!-- Additional Info --%>
+          <div class="space-y-3 mb-6">
+            <%= if @selected_result.published_at do %>
+              <div class="flex items-center gap-2 text-sm">
+                <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
+                <span class="text-base-content/70">Published:</span>
+                <span class="font-semibold">{format_date(@selected_result.published_at)}</span>
+              </div>
+            <% end %>
+            <div class="flex items-center gap-2 text-sm">
+              <.icon name="hero-server" class="w-5 h-5 text-base-content/50" />
+              <span class="text-base-content/70">Indexer:</span>
+              <span class="font-semibold">{@selected_result.indexer}</span>
+            </div>
+          </div>
+          <%!-- Actions --%>
+          <div class="modal-action flex gap-2">
+            <button class="btn btn-ghost" phx-click="close_detail_modal">
+              Cancel
+            </button>
+            <button
+              class="btn btn-ghost"
+              phx-click="add_to_library"
+              phx-value-title={@selected_result.title}
+              phx-value-download_url={@selected_result.download_url}
+              phx-value-download="false"
+            >
+              <.icon name="hero-bookmark" class="w-5 h-5" /> Add to Library
+            </button>
+            <button
+              class="btn btn-primary"
+              phx-click="add_to_library"
+              phx-value-title={@selected_result.title}
+              phx-value-download_url={@selected_result.download_url}
+              phx-value-download="true"
+            >
+              <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Download
             </button>
           </div>
         </div>
