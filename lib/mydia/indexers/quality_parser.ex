@@ -52,6 +52,7 @@ defmodule Mydia.Indexers.QualityParser do
 
   # Source patterns
   @sources [
+    {"REMUX", ~r/remux/i},
     {"BluRay", ~r/blu[\-\s]?ray|bluray|bdrip|brrip|bd(?:$|[\.\s])/i},
     {"WEB-DL", ~r/web[\-\s]?dl|webdl/i},
     {"WEBRip", ~r/web[\-\s]?rip|webrip/i},
@@ -311,6 +312,7 @@ defmodule Mydia.Indexers.QualityParser do
   defp resolution_score("360p"), do: 200
   defp resolution_score(_), do: 0
 
+  defp source_score("REMUX"), do: 500
   defp source_score("BluRay"), do: 450
   defp source_score("WEB-DL"), do: 400
   defp source_score("WEBRip"), do: 350

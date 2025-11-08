@@ -36,7 +36,7 @@ defmodule Mydia.Library.FileParser do
 
   # Quality patterns
   @resolutions ~w(2160p 1080p 720p 480p 360p 4K 8K UHD)
-  @sources ~w(BluRay BDRip BRRip WEB WEBRip WEB-DL HDTV DVDRip DVD REMUX)
+  @sources ~w(REMUX BluRay BDRip BRRip WEB WEBRip WEB-DL HDTV DVDRip DVD)
   @codecs ~w(x265 x264 H265 H264 HEVC AVC XviD DivX VP9 AV1 NVENC)
   @hdr_formats ~w(HDR10+ HDR10 DolbyVision DoVi HDR)
   @audio_codecs ~w(DTS-HD DTS-X DTS TrueHD DD5.1 DD+ Atmos AAC AC3 DD)

@@ -23,7 +23,9 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
   - **HD-720p** - 720p HD content, 1-5GB file size. Balanced quality/size.
   - **HD-1080p** - 1080p Full HD content, 2-15GB. Standard high quality.
   - **Full HD** - Strict 1080p only with higher quality sources, 4-20GB.
+  - **Remux-1080p** - Lossless 1080p REMUX releases, 20-40GB. Premium quality.
   - **4K/UHD** - Ultra HD 2160p content, 15-80GB. Maximum quality.
+  - **Remux-2160p** - Lossless 4K REMUX releases, 40-100GB. Ultimate quality.
   """
   @spec defaults() :: [map()]
   def defaults do
@@ -84,8 +86,20 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         rules: %{
           min_size_mb: 4096,
           max_size_mb: 20480,
-          preferred_sources: ["BluRay"],
+          preferred_sources: ["REMUX", "BluRay"],
           description: "Strict 1080p with high-quality sources only (4-20GB)."
+        }
+      },
+      %{
+        name: "Remux-1080p",
+        qualities: ["1080p"],
+        upgrades_allowed: false,
+        upgrade_until_quality: nil,
+        rules: %{
+          min_size_mb: 20480,
+          max_size_mb: 40960,
+          preferred_sources: ["REMUX"],
+          description: "Lossless 1080p REMUX releases. Premium quality (20-40GB)."
         }
       },
       %{
@@ -96,8 +110,20 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         rules: %{
           min_size_mb: 15360,
           max_size_mb: 81920,
-          preferred_sources: ["BluRay", "WEB-DL"],
+          preferred_sources: ["REMUX", "BluRay", "WEB-DL"],
           description: "Ultra HD 2160p/4K content. Maximum quality (15-80GB)."
+        }
+      },
+      %{
+        name: "Remux-2160p",
+        qualities: ["2160p"],
+        upgrades_allowed: false,
+        upgrade_until_quality: nil,
+        rules: %{
+          min_size_mb: 40960,
+          max_size_mb: 102400,
+          preferred_sources: ["REMUX"],
+          description: "Lossless 4K REMUX releases. Ultimate quality (40-100GB)."
         }
       }
     ]
