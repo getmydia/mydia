@@ -1,10 +1,10 @@
 ---
 id: task-117.5
 title: Create Docker container and compose configuration
-status: To Do
+status: Done
 assignee: []
 created_date: '2025-11-08 03:05'
-updated_date: '2025-11-08 03:18'
+updated_date: '2025-11-08 03:48'
 labels: []
 dependencies: []
 parent_task_id: task-117
@@ -21,14 +21,14 @@ Use mix release for production builds to create a self-contained deployment arti
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Dockerfile uses multi-stage build (build stage + minimal runtime)
-- [ ] #2 Build stage compiles release with mix release
-- [ ] #3 Runtime stage uses minimal Alpine image with Elixir runtime only
-- [ ] #4 Docker image builds successfully and runs the service
-- [ ] #5 docker-compose.yml includes relay service configuration
-- [ ] #6 Health check endpoint configured in Docker
-- [ ] #7 Environment variables properly passed to container
+- [x] #1 Dockerfile uses multi-stage build (build stage + minimal runtime)
+- [x] #2 Build stage compiles release with mix release
+- [x] #3 Runtime stage uses minimal Alpine image with Elixir runtime only
+- [x] #4 Docker image builds successfully and runs the service
+- [x] #5 docker-compose.yml includes relay service configuration
+- [x] #6 Health check endpoint configured in Docker
+- [x] #7 Environment variables properly passed to container
 
-- [ ] #8 Container runs as non-root user for security
-- [ ] #9 Service accessible from host when running in Docker
+- [x] #8 Container runs as non-root user for security
+- [x] #9 Service accessible from host when running in Docker
 <!-- AC:END -->

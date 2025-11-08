@@ -1,10 +1,10 @@
 ---
 id: task-117.6
 title: Configure Fly.io deployment
-status: To Do
+status: Done
 assignee: []
 created_date: '2025-11-08 03:05'
-updated_date: '2025-11-08 03:18'
+updated_date: '2025-11-08 03:55'
 labels: []
 dependencies: []
 parent_task_id: task-117
@@ -31,3 +31,27 @@ Configure scaling, health checks, and monitoring. The service will be deployed a
 
 - [ ] #8 Deployment process documented for future updates
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Configuration files created:
+- Created fly.toml with 256MB RAM configuration and health checks
+- Updated README.md with comprehensive deployment documentation
+- Created .dockerignore for optimized builds
+
+Still TODO:
+- Actually deploy to Fly.io using `fly launch`
+- Set secrets (TMDB_API_KEY, TVDB_API_KEY)
+- Verify deployment is accessible
+- Test health endpoint
+
+Successfully deployed to Fly.io:
+- App URL: https://metadata-relay.fly.dev
+- Health check verified: OK
+- TMDB endpoints tested and working
+- Two machines running with auto-suspend enabled
+- API keys configured as secrets
+- IPv6: 2a09:8280:1::ad:c20d:0
+- IPv4: 66.241.125.34
+<!-- SECTION:NOTES:END -->

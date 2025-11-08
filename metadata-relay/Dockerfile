@@ -28,19 +28,30 @@ RUN MIX_ENV=prod mix release
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache libstdc++ openssl ncurses-libs
+RUN apk add --no-cache libstdc++ openssl ncurses-libs curl
+
+# Create non-root user
+RUN addgroup -g 1000 relay && \
+    adduser -D -u 1000 -G relay relay
 
 WORKDIR /app
 
 # Copy the release from the builder stage
-COPY --from=builder /app/_build/prod/rel/metadata_relay ./
+COPY --from=builder --chown=relay:relay /app/_build/prod/rel/metadata_relay ./
 
 # Set environment
 ENV MIX_ENV=prod
 ENV PORT=4001
 
+# Switch to non-root user
+USER relay
+
 # Expose the port
 EXPOSE 4001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:4001/health || exit 1
 
 # Run the application
 CMD ["./bin/metadata_relay", "start"]

@@ -25,7 +25,6 @@ defmodule MetadataRelay.MixProject do
       {:bandit, "~> 1.0"},
       {:plug, "~> 1.15"},
       {:req, "~> 0.4"},
-      # {:cachex, "~> 3.6"},  # Will be added in task 117.4
       {:jason, "~> 1.4"}
     ]
   end

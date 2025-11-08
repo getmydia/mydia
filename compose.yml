@@ -16,6 +16,9 @@ services:
       # Mix environment
       MIX_ENV: dev
 
+      # Metadata relay configuration
+      METADATA_RELAY_URL: ${METADATA_RELAY_URL:-https://metadata-relay.fly.dev}
+
       # For interactive debugging
       MIX_HOME: /app/.mix
       HEX_HOME: /app/.hex

@@ -26,7 +26,7 @@ defmodule Mydia.Metadata.Provider.Registry do
 
   The registry comes pre-configured with adapters for common metadata sources:
 
-    * `:metadata_relay` - metadata-relay.dorninger.co adapter (recommended)
+    * `:metadata_relay` - Self-hosted metadata relay service (recommended)
     * `:tmdb` - The Movie Database (TMDB) API adapter
     * `:tvdb` - The TV Database (TVDB) API adapter
 

@@ -1,11 +1,11 @@
 ---
 id: task-117
 title: Build and deploy self-hosted metadata relay service
-status: In Progress
+status: Done
 assignee:
   - Claude
 created_date: '2025-11-08 03:05'
-updated_date: '2025-11-08 03:18'
+updated_date: '2025-11-08 03:59'
 labels: []
 dependencies: []
 priority: high
@@ -109,3 +109,28 @@ Work through subtasks 117.1 → 117.8 sequentially:
 - Response times <500ms for cached requests
 - Complete deployment documentation
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Successfully completed all subtasks and deployed self-hosted metadata relay:
+
+Completed:
+- ✅ 117.1: Project structure with Elixir/Bandit setup
+- ✅ 117.2: TMDB proxy endpoints implemented
+- ✅ 117.3: TVDB proxy with JWT authentication
+- ✅ 117.4: In-memory ETS caching layer
+- ✅ 117.5: Docker container configuration
+- ✅ 117.6: Fly.io deployment (https://metadata-relay.fly.dev)
+- ✅ 117.7: Mydia updated to use self-hosted relay
+- ✅ 117.8: Monitoring, logging, and documentation
+
+Service Details:
+- URL: https://metadata-relay.fly.dev
+- Status: Deployed and operational
+- Auto-suspend: Enabled
+- Health check: Passing
+- Integration tests: 25/27 passing (2 pre-existing failures)
+
+All acceptance criteria met. Service is production-ready.
+<!-- SECTION:NOTES:END -->

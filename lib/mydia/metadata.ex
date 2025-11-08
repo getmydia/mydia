@@ -190,19 +190,24 @@ defmodule Mydia.Metadata do
   This provides a ready-to-use configuration for the metadata-relay service
   that doesn't require an API key.
 
+  The base URL can be configured via the METADATA_RELAY_URL environment variable,
+  defaulting to the self-hosted relay on Fly.io if not set.
+
   ## Examples
 
       iex> Mydia.Metadata.default_relay_config()
       %{
         type: :metadata_relay,
-        base_url: "https://metadata-relay.dorninger.co",
+        base_url: "https://metadata-relay.fly.dev",
         options: %{language: "en-US", include_adult: false}
       }
   """
   def default_relay_config do
+    base_url = System.get_env("METADATA_RELAY_URL", "https://metadata-relay.fly.dev")
+
     %{
       type: :metadata_relay,
-      base_url: "https://metadata-relay.dorninger.co",
+      base_url: base_url,
       options: %{
         language: "en-US",
         include_adult: false,
@@ -214,19 +219,24 @@ defmodule Mydia.Metadata do
   @doc """
   Gets the default TVDB relay configuration.
 
+  The base URL can be configured via the METADATA_RELAY_URL environment variable,
+  defaulting to the self-hosted relay on Fly.io if not set.
+
   ## Examples
 
       iex> Mydia.Metadata.default_tvdb_relay_config()
       %{
         type: :metadata_relay,
-        base_url: "https://metadata-relay.dorninger.co",
+        base_url: "https://metadata-relay.fly.dev",
         options: %{language: "en-US"}
       }
   """
   def default_tvdb_relay_config do
+    base_url = System.get_env("METADATA_RELAY_URL", "https://metadata-relay.fly.dev")
+
     %{
       type: :metadata_relay,
-      base_url: "https://metadata-relay.dorninger.co",
+      base_url: base_url,
       options: %{
         language: "en-US",
         timeout: 30_000

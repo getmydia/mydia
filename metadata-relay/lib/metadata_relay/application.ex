@@ -8,6 +8,8 @@ defmodule MetadataRelay.Application do
     port = String.to_integer(System.get_env("PORT", "4000"))
 
     children = [
+      # In-memory cache with ETS
+      MetadataRelay.CacheServer,
       # TVDB authentication GenServer
       MetadataRelay.TVDB.Auth,
       # HTTP server with Bandit

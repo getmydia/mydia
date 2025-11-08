@@ -10,6 +10,7 @@ defmodule MetadataRelay.Router do
 
   plug(Plug.Logger)
   plug(Plug.Parsers, parsers: [:urlencoded, :json], json_decoder: Jason)
+  plug(MetadataRelay.Plug.Cache)
   plug(:match)
   plug(:dispatch)
 
