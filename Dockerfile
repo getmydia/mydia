@@ -10,7 +10,10 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     sqlite-dev \
-    curl
+    curl \
+    ffmpeg-dev \
+    fdk-aac-dev \
+    pkgconfig
 
 # Set build environment
 ENV MIX_ENV=prod

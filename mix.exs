@@ -79,7 +79,7 @@ defmodule Mydia.MixProject do
       {:req, "~> 0.4"},
 
       # Utilities
-      {:uuid, "~> 1.1"},
+      {:elixir_uuid, "~> 1.2"},
       {:timex, "~> 3.7"},
       {:yaml_elixir, "~> 2.9"},
       {:luerl, "~> 1.2"},
