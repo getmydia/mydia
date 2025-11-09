@@ -291,6 +291,7 @@ See [DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md) for advanced deployment topic
 | `PORT` | Web server port | `4000` |
 | `HOST` | Server binding address | `0.0.0.0` |
 | `URL_SCHEME` | URL scheme for external links (http/https) | `http` |
+| `PHX_CHECK_ORIGIN` | WebSocket origin checking. Set to `false` to allow all origins (useful for IP-based access), or comma-separated list of allowed origins | Allows `PHX_HOST` with any scheme |
 
 ### Media Library
 

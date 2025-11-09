@@ -58,6 +58,19 @@ if config_env() == :prod do
 
   config :mydia, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # Configure check_origin for WebSocket connections
+  # This prevents LiveView reconnection loops when accessing via IP addresses or different hostnames
+  # Options:
+  # - Set PHX_CHECK_ORIGIN=false to disable origin checking (useful for Docker deployments with varying IPs)
+  # - Set PHX_CHECK_ORIGIN=https://example.com,https://other.com for specific allowed origins
+  # - If not set, defaults to allowing the configured PHX_HOST with any scheme
+  check_origin =
+    case System.get_env("PHX_CHECK_ORIGIN") do
+      "false" -> false
+      nil -> ["//#{host}"]
+      origins -> String.split(origins, ",", trim: true)
+    end
+
   config :mydia, MydiaWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
@@ -68,7 +81,8 @@ if config_env() == :prod do
       ip: {0, 0, 0, 0, 0, 0, 0, 0},
       port: port
     ],
-    secret_key_base: secret_key_base
+    secret_key_base: secret_key_base,
+    check_origin: check_origin
 
   # ## SSL Support
   #
