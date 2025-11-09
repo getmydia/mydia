@@ -125,6 +125,19 @@ if config_env() == :prod do
       """
 
   config :mydia, Mydia.Auth.Guardian, secret_key: guardian_secret_key
+
+  # Configure Logger level based on environment variable
+  # Supports: debug, info, warning, error
+  log_level =
+    case System.get_env("LOG_LEVEL") do
+      "debug" -> :debug
+      "info" -> :info
+      "warning" -> :warning
+      "error" -> :error
+      _ -> :info
+    end
+
+  config :logger, level: log_level
 end
 
 # Ueberauth OIDC configuration (all environments)

@@ -71,8 +71,28 @@ config :mydia, MydiaWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :mydia, dev_routes: true
 
-# Do not include metadata nor timestamps in development logs
-config :logger, :default_formatter, format: "[$level] $message\n"
+# Configure logger based on environment variables
+# Set MYDIA_DEBUG=true or LOG_LEVEL=debug for verbose logging
+log_level =
+  cond do
+    System.get_env("MYDIA_DEBUG") == "true" -> :debug
+    System.get_env("LOG_LEVEL") == "debug" -> :debug
+    true -> :info
+  end
+
+config :logger, level: log_level
+
+# Do not include metadata nor timestamps in development logs (but include them in debug mode)
+log_format =
+  if log_level == :debug do
+    "$time $metadata[$level] $message\n"
+  else
+    "[$level] $message\n"
+  end
+
+config :logger, :default_formatter,
+  format: log_format,
+  metadata: [:category, :operation, :user_id, :request_id]
 
 # Set a higher stacktrace during development. Avoid configuring such
 # in production as building large stacktraces may be expensive.
