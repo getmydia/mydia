@@ -65,7 +65,8 @@ defmodule Mydia.Streaming.HlsSession do
       :backend_pid,
       :temp_dir,
       :last_activity,
-      :timeout_ref
+      :timeout_ref,
+      :playlist_path
     ]
 
     @type t :: %__MODULE__{
@@ -77,7 +78,8 @@ defmodule Mydia.Streaming.HlsSession do
             backend_pid: pid() | nil,
             temp_dir: String.t(),
             last_activity: DateTime.t(),
-            timeout_ref: reference() | nil
+            timeout_ref: reference() | nil,
+            playlist_path: String.t() | nil
           }
   end
 
@@ -121,6 +123,20 @@ defmodule Mydia.Streaming.HlsSession do
   """
   def heartbeat(pid) do
     GenServer.cast(pid, :heartbeat)
+  end
+
+  @doc """
+  Caches the playlist file path for faster subsequent lookups.
+  """
+  def cache_playlist_path(pid, path) do
+    GenServer.cast(pid, {:cache_playlist_path, path})
+  end
+
+  @doc """
+  Gets the cached playlist path if available.
+  """
+  def get_playlist_path(pid) do
+    GenServer.call(pid, :get_playlist_path)
   end
 
   @doc """
@@ -242,10 +258,18 @@ defmodule Mydia.Streaming.HlsSession do
     {:reply, {:ok, info}, state}
   end
 
+  def handle_call(:get_playlist_path, _from, state) do
+    {:reply, {:ok, state.playlist_path}, state}
+  end
+
   @impl true
   def handle_cast(:heartbeat, state) do
     state = update_activity(state)
     {:noreply, state}
+  end
+
+  def handle_cast({:cache_playlist_path, path}, state) do
+    {:noreply, %{state | playlist_path: path}}
   end
 
   @impl true

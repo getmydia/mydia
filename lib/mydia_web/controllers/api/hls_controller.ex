@@ -13,16 +13,53 @@ defmodule MydiaWeb.Api.HlsController do
   """
   def master_playlist(conn, %{"session_id" => session_id}) do
     with {:ok, user_id} <- get_user_id(conn),
-         {:ok, temp_dir} <- get_session_temp_dir(session_id, user_id) do
-      # Try index.m3u8 first (new format), then playlist.m3u8 (FFmpeg default/old sessions)
-      index_path = Path.join(temp_dir, "index.m3u8")
-      playlist_path = Path.join(temp_dir, "playlist.m3u8")
-
+         {:ok, pid} <- find_session_by_id(session_id, user_id) do
+      # Try cached path first, then discover
       file_path =
-        cond do
-          File.exists?(index_path) -> index_path
-          File.exists?(playlist_path) -> playlist_path
-          true -> nil
+        case HlsSession.get_playlist_path(pid) do
+          {:ok, nil} ->
+            # No cached path - discover it
+            {:ok, info} = HlsSession.get_info(pid)
+            temp_dir = info.temp_dir
+
+            # Try index.m3u8 first (new format), then playlist.m3u8 (FFmpeg default/old sessions)
+            index_path = Path.join(temp_dir, "index.m3u8")
+            playlist_path = Path.join(temp_dir, "playlist.m3u8")
+
+            path =
+              cond do
+                File.exists?(index_path) -> index_path
+                File.exists?(playlist_path) -> playlist_path
+                true -> nil
+              end
+
+            # Cache the discovered path
+            if path, do: HlsSession.cache_playlist_path(pid, path)
+
+            path
+
+          {:ok, cached_path} ->
+            # Use cached path if it still exists
+            if File.exists?(cached_path) do
+              cached_path
+            else
+              # Cached path no longer valid, clear it and rediscover
+              HlsSession.cache_playlist_path(pid, nil)
+              {:ok, info} = HlsSession.get_info(pid)
+              temp_dir = info.temp_dir
+              index_path = Path.join(temp_dir, "index.m3u8")
+              playlist_path = Path.join(temp_dir, "playlist.m3u8")
+
+              path =
+                cond do
+                  File.exists?(index_path) -> index_path
+                  File.exists?(playlist_path) -> playlist_path
+                  true -> nil
+                end
+
+              if path, do: HlsSession.cache_playlist_path(pid, path)
+              path
+            end
         end
 
       case file_path do
