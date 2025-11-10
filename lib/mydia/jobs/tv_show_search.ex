@@ -143,7 +143,9 @@ defmodule Mydia.Jobs.TVShowSearch do
 
               :ok
             else
-              search_season(media_item, season_number, episodes, args)
+              # For "season" mode, start with counter at 0
+              search_season(media_item, season_number, episodes, 0, args)
+              :ok
             end
 
           %MediaItem{type: type} ->
@@ -214,7 +216,9 @@ defmodule Mydia.Jobs.TVShowSearch do
 
               :ok
             else
-              process_episodes_with_smart_logic(media_item, episodes, args)
+              # For "show" mode, start with counter at 0
+              process_episodes_with_smart_logic(media_item, episodes, 0, args)
+              :ok
             end
 
           %MediaItem{type: type} ->
@@ -256,7 +260,11 @@ defmodule Mydia.Jobs.TVShowSearch do
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"mode" => "all_monitored"} = args}) do
     start_time = System.monotonic_time(:millisecond)
-    Logger.info("Starting automatic search for all monitored episodes")
+    max_searches = get_max_searches_per_run()
+
+    Logger.info("Starting automatic search for all monitored episodes",
+      max_searches_per_run: max_searches
+    )
 
     episodes = load_monitored_episodes_without_files()
     total_count = length(episodes)
@@ -278,25 +286,47 @@ defmodule Mydia.Jobs.TVShowSearch do
       show_count = map_size(episodes_by_show)
       Logger.info("Grouped episodes into #{show_count} shows")
 
-      # Process each show
-      Enum.each(episodes_by_show, fn {media_item_id, show_episodes} ->
-        media_item = hd(show_episodes).media_item
+      # Process each show with search counter tracking
+      {final_count, shows_processed, shows_skipped} =
+        Enum.reduce_while(episodes_by_show, {0, 0, 0}, fn {media_item_id, show_episodes},
+                                                          {search_count, processed, skipped} ->
+          if limit_reached?(search_count, max_searches) do
+            Logger.warning("Global search limit reached, stopping execution",
+              searches_performed: search_count,
+              max_searches_per_run: max_searches,
+              shows_processed: processed,
+              shows_remaining: show_count - processed
+            )
 
-        Logger.info("Processing show",
-          media_item_id: media_item_id,
-          title: media_item.title,
-          episodes: length(show_episodes)
-        )
+            {:halt, {search_count, processed, skipped + 1}}
+          else
+            media_item = hd(show_episodes).media_item
 
-        process_episodes_with_smart_logic(media_item, show_episodes, args)
-      end)
+            Logger.info("Processing show",
+              media_item_id: media_item_id,
+              title: media_item.title,
+              episodes: length(show_episodes),
+              searches_so_far: search_count,
+              searches_remaining:
+                if(max_searches == :infinity, do: :infinity, else: max_searches - search_count)
+            )
+
+            new_search_count =
+              process_episodes_with_smart_logic(media_item, show_episodes, search_count, args)
+
+            {:cont, {new_search_count, processed + 1, skipped}}
+          end
+        end)
 
       duration = System.monotonic_time(:millisecond) - start_time
 
       Logger.info("Automatic episode search completed",
         duration_ms: duration,
         total_episodes: total_count,
-        shows_processed: show_count
+        shows_processed: shows_processed,
+        shows_skipped: shows_skipped,
+        searches_performed: final_count,
+        max_searches_per_run: max_searches
       )
 
       :ok
@@ -321,30 +351,38 @@ defmodule Mydia.Jobs.TVShowSearch do
   defp load_monitored_episodes_without_files do
     today = Date.utc_today()
 
-    Episode
-    |> join(:inner, [e], m in assoc(e, :media_item))
-    |> where([e, m], e.monitored == true and m.monitored == true)
-    |> where([e], e.air_date <= ^today)
-    |> join(:left, [e], mf in assoc(e, :media_files))
-    |> group_by([e], e.id)
-    |> having([_e, _m, mf], count(mf.id) == 0)
-    |> preload(:media_item)
-    |> Repo.all()
+    episodes =
+      Episode
+      |> join(:inner, [e], m in assoc(e, :media_item))
+      |> where([e, m], e.monitored == true and m.monitored == true)
+      |> where([e], e.air_date <= ^today)
+      |> join(:left, [e], mf in assoc(e, :media_files))
+      |> group_by([e], e.id)
+      |> having([_e, _m, mf], count(mf.id) == 0)
+      |> preload(:media_item)
+      |> Repo.all()
+
+    # Filter out special episodes (S00) unless configured to monitor them
+    filter_special_episodes(episodes)
   end
 
   defp load_episodes_for_show(media_item_id) do
     today = Date.utc_today()
 
-    Episode
-    |> join(:inner, [e], m in assoc(e, :media_item))
-    |> where([e, m], e.media_item_id == ^media_item_id)
-    |> where([e, m], e.monitored == true and m.monitored == true)
-    |> where([e], e.air_date <= ^today)
-    |> join(:left, [e], mf in assoc(e, :media_files))
-    |> group_by([e], e.id)
-    |> having([_e, _m, mf], count(mf.id) == 0)
-    |> preload(:media_item)
-    |> Repo.all()
+    episodes =
+      Episode
+      |> join(:inner, [e], m in assoc(e, :media_item))
+      |> where([e, m], e.media_item_id == ^media_item_id)
+      |> where([e, m], e.monitored == true and m.monitored == true)
+      |> where([e], e.air_date <= ^today)
+      |> join(:left, [e], mf in assoc(e, :media_files))
+      |> group_by([e], e.id)
+      |> having([_e, _m, mf], count(mf.id) == 0)
+      |> preload(:media_item)
+      |> Repo.all()
+
+    # Filter out special episodes (S00) unless configured to monitor them
+    filter_special_episodes(episodes)
   end
 
   defp load_episodes_for_season(media_item_id, season_number) do
@@ -382,11 +420,14 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   ## Private Functions - Smart Episode Processing
 
-  defp process_episodes_with_smart_logic(media_item, episodes, args) do
+  defp process_episodes_with_smart_logic(media_item, episodes, search_count, args) do
+    max_per_show = get_max_searches_per_show()
+
     Logger.info("Processing episodes with smart season pack logic",
       media_item_id: media_item.id,
       title: media_item.title,
-      total_episodes: length(episodes)
+      total_episodes: length(episodes),
+      max_searches_per_show: max_per_show
     )
 
     # Group episodes by season
@@ -394,40 +435,64 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     Logger.info("Grouped episodes into #{map_size(episodes_by_season)} seasons")
 
-    # Process each season independently
-    Enum.each(episodes_by_season, fn {season_number, season_episodes} ->
-      Logger.info("Processing season",
-        media_item_id: media_item.id,
-        title: media_item.title,
-        season_number: season_number,
-        missing_episodes: length(season_episodes)
-      )
+    # Process each season independently with counter tracking
+    {final_count, _seasons_processed} =
+      Enum.reduce_while(episodes_by_season, {search_count, 0}, fn {season_number, season_episodes},
+                                                                  {show_search_count,
+                                                                   seasons_done} ->
+        show_searches_used = show_search_count - search_count
 
-      # Determine if we should prefer season pack
-      if should_prefer_season_pack?(season_episodes, media_item, season_number) do
-        Logger.info("70% threshold met - preferring season pack",
-          media_item_id: media_item.id,
-          title: media_item.title,
-          season_number: season_number,
-          missing_episodes: length(season_episodes)
-        )
+        if limit_reached?(show_searches_used, max_per_show) do
+          Logger.warning("Per-show search limit reached, skipping remaining seasons",
+            media_item_id: media_item.id,
+            title: media_item.title,
+            searches_for_show: show_searches_used,
+            max_searches_per_show: max_per_show,
+            seasons_remaining: map_size(episodes_by_season) - seasons_done
+          )
 
-        # Try season pack first
-        search_season(media_item, season_number, season_episodes, args)
-      else
-        Logger.info("Below 70% threshold - downloading individual episodes",
-          media_item_id: media_item.id,
-          title: media_item.title,
-          season_number: season_number,
-          missing_episodes: length(season_episodes)
-        )
+          {:halt, {show_search_count, seasons_done}}
+        else
+          Logger.info("Processing season",
+            media_item_id: media_item.id,
+            title: media_item.title,
+            season_number: season_number,
+            missing_episodes: length(season_episodes),
+            show_searches_used: show_searches_used
+          )
 
-        # Download individual episodes
-        search_individual_episodes(season_episodes, args)
-      end
-    end)
+          # Determine if we should prefer season pack
+          new_count =
+            if should_prefer_season_pack?(season_episodes, media_item, season_number) do
+              Logger.info("70% threshold met - preferring season pack",
+                media_item_id: media_item.id,
+                title: media_item.title,
+                season_number: season_number,
+                missing_episodes: length(season_episodes)
+              )
 
-    :ok
+              # Try season pack first
+              search_season(media_item, season_number, season_episodes, show_search_count, args)
+            else
+              Logger.info("Below 70% threshold - downloading individual episodes",
+                media_item_id: media_item.id,
+                title: media_item.title,
+                season_number: season_number,
+                missing_episodes: length(season_episodes)
+              )
+
+              # Download individual episodes
+              search_individual_episodes(season_episodes, show_search_count, args)
+            end
+
+          # Apply rate limiting delay between seasons
+          apply_search_delay()
+
+          {:cont, {new_count, seasons_done + 1}}
+        end
+      end)
+
+    final_count
   end
 
   defp should_prefer_season_pack?(missing_episodes, media_item, season_number) do
@@ -479,7 +544,7 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   ## Private Functions - Season Search Logic
 
-  defp search_season(media_item, season_number, episodes, args) do
+  defp search_season(media_item, season_number, episodes, search_count, args) do
     Logger.info("Searching for season pack",
       media_item_id: media_item.id,
       title: media_item.title,
@@ -495,8 +560,12 @@ defmodule Mydia.Jobs.TVShowSearch do
       media_item_id: media_item.id,
       title: media_item.title,
       season_number: season_number,
-      query: query
+      query: query,
+      search_count: search_count
     )
+
+    # Increment counter for the season pack search
+    new_count = search_count + 1
 
     case Indexers.search_all(query, min_seeders: 3) do
       {:ok, []} ->
@@ -507,7 +576,7 @@ defmodule Mydia.Jobs.TVShowSearch do
         )
 
         # Fall back to searching individual episodes
-        search_individual_episodes(episodes, args)
+        search_individual_episodes(episodes, new_count, args)
 
       {:ok, results} ->
         Logger.info("Found #{length(results)} season pack results",
@@ -528,15 +597,22 @@ defmodule Mydia.Jobs.TVShowSearch do
             total_results: length(results)
           )
 
-          search_individual_episodes(episodes, args)
+          search_individual_episodes(episodes, new_count, args)
         else
-          process_season_pack_results(
-            media_item,
-            season_number,
-            episodes,
-            season_pack_results,
-            args
-          )
+          result =
+            process_season_pack_results(
+              media_item,
+              season_number,
+              episodes,
+              season_pack_results,
+              args
+            )
+
+          # If season pack processing failed, fall back to individual episodes
+          case result do
+            :ok -> new_count
+            _ -> search_individual_episodes(episodes, new_count, args)
+          end
         end
     end
   end
@@ -561,14 +637,15 @@ defmodule Mydia.Jobs.TVShowSearch do
     case ReleaseRanker.select_best_result(results, ranking_opts) do
       nil ->
         Logger.warning(
-          "No suitable season pack after ranking, falling back to individual episodes",
+          "No suitable season pack after ranking",
           media_item_id: media_item.id,
           title: media_item.title,
           season_number: season_number,
           total_results: length(results)
         )
 
-        search_individual_episodes(episodes, args)
+        # Return :no_results to signal fallback needed
+        :no_results
 
       %{result: best_result, score: score, breakdown: breakdown} ->
         Logger.info("Selected best season pack",
@@ -585,21 +662,63 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  defp search_individual_episodes(episodes, args) do
-    Logger.info("Searching for #{length(episodes)} individual episodes")
+  defp search_individual_episodes(episodes, search_count, args) do
+    max_per_season = get_max_searches_per_season()
 
-    results = Enum.map(episodes, &search_episode(&1, args))
+    # Prioritize newer episodes (sort by air_date descending)
+    prioritized = prioritize_episodes(episodes)
 
-    successful = Enum.count(results, &(&1 == :ok))
-    failed = Enum.count(results, &match?({:error, _}, &1))
+    Logger.info("Searching for individual episodes",
+      total_episodes: length(episodes),
+      max_searches_per_season: max_per_season,
+      current_search_count: search_count
+    )
+
+    {final_count, successful, failed, skipped} =
+      Enum.reduce_while(
+        prioritized,
+        {search_count, 0, 0, 0},
+        fn episode, {current_count, ok_count, err_count, skip_count} ->
+          season_searches = current_count - search_count
+
+          if limit_reached?(season_searches, max_per_season) do
+            remaining = length(prioritized) - (ok_count + err_count + skip_count)
+
+            Logger.warning("Per-season search limit reached, skipping remaining episodes",
+              season_number: episode.season_number,
+              searches_this_season: season_searches,
+              max_searches_per_season: max_per_season,
+              episodes_skipped: remaining
+            )
+
+            {:halt, {current_count, ok_count, err_count, skip_count + remaining}}
+          else
+            result = search_episode(episode, args)
+
+            # Apply rate limiting delay between searches
+            apply_search_delay()
+
+            new_counts =
+              case result do
+                :ok -> {current_count + 1, ok_count + 1, err_count, skip_count}
+                :no_results -> {current_count + 1, ok_count + 1, err_count, skip_count}
+                {:error, _} -> {current_count + 1, ok_count, err_count + 1, skip_count}
+              end
+
+            {:cont, new_counts}
+          end
+        end
+      )
 
     Logger.info("Individual episode search completed",
       total: length(episodes),
       successful: successful,
-      failed: failed
+      failed: failed,
+      skipped: skipped,
+      searches_performed: final_count - search_count
     )
 
-    :ok
+    final_count
   end
 
   ## Private Functions - Search Logic
@@ -863,5 +982,65 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   defp future_episode?(%Episode{air_date: air_date}) do
     Date.compare(air_date, Date.utc_today()) == :gt
+  end
+
+  ## Private Functions - Search Limit Configuration
+
+  defp get_max_searches_per_run do
+    Application.get_env(:mydia, :episode_monitor, [])
+    |> Keyword.get(:max_searches_per_run, :infinity)
+  end
+
+  defp get_max_searches_per_show do
+    Application.get_env(:mydia, :episode_monitor, [])
+    |> Keyword.get(:max_searches_per_show, :infinity)
+  end
+
+  defp get_max_searches_per_season do
+    Application.get_env(:mydia, :episode_monitor, [])
+    |> Keyword.get(:max_searches_per_season, :infinity)
+  end
+
+  defp monitor_special_episodes? do
+    Application.get_env(:mydia, :episode_monitor, [])
+    |> Keyword.get(:monitor_special_episodes, false)
+  end
+
+  defp get_search_delay_ms do
+    Application.get_env(:mydia, :episode_monitor, [])
+    |> Keyword.get(:search_delay_ms, 0)
+  end
+
+  defp apply_search_delay do
+    delay = get_search_delay_ms()
+
+    if delay > 0 do
+      Process.sleep(delay)
+    end
+  end
+
+  defp limit_reached?(_current, :infinity), do: false
+  defp limit_reached?(current, max) when current >= max, do: true
+  defp limit_reached?(_current, _max), do: false
+
+  defp prioritize_episodes(episodes) do
+    # Sort by air_date descending (newest first) to prioritize recent content
+    Enum.sort_by(episodes, & &1.air_date, {:desc, Date})
+  end
+
+  defp filter_special_episodes(episodes) do
+    if monitor_special_episodes?() do
+      episodes
+    else
+      {regular, specials} = Enum.split_with(episodes, &(&1.season_number != 0))
+
+      if specials != [] do
+        Logger.info(
+          "Skipping #{length(specials)} special episodes (S00) - monitor_special_episodes is disabled"
+        )
+      end
+
+      regular
+    end
   end
 end

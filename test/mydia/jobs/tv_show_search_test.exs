@@ -4,8 +4,45 @@ defmodule Mydia.Jobs.TVShowSearchTest do
 
   alias Mydia.Jobs.TVShowSearch
   alias Mydia.Library
+  alias Mydia.Settings
+  alias Mydia.IndexerMock
 
   import Mydia.MediaFixtures
+
+  setup do
+    # Disable all existing indexer configs from test database
+    Settings.list_indexer_configs()
+    |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
+    |> Enum.each(fn config ->
+      Settings.update_indexer_config(config, %{enabled: false})
+    end)
+
+    # Set up mock Prowlarr server for all tests
+    bypass = Bypass.open()
+
+    # Mock with TV show episode results
+    IndexerMock.mock_prowlarr_all(bypass, results: [
+      IndexerMock.tv_episode_result(%{title: "Breaking Bad", season: 1, episode: 1, seeders: 100}),
+      IndexerMock.tv_episode_result(%{title: "The Wire", season: 1, episode: 1, seeders: 90}),
+      IndexerMock.tv_episode_result(%{title: "The Sopranos", season: 1, episode: 1, seeders: 85}),
+      IndexerMock.tv_episode_result(%{title: "Show 1", season: 1, episode: 1, seeders: 50}),
+      IndexerMock.tv_episode_result(%{title: "Show 2", season: 1, episode: 1, seeders: 45}),
+      IndexerMock.tv_episode_result(%{title: "Long Show", season: 1, episode: 1, seeders: 40}),
+      IndexerMock.season_pack_result(%{title: "Multi Season Show", season: 1, seeders: 150})
+    ])
+
+    # Create test indexer configuration pointing to Bypass server
+    {:ok, _indexer} =
+      Settings.create_indexer_config(%{
+        name: "Test TV Indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{bypass.port}",
+        api_key: "test-key",
+        enabled: true
+      })
+
+    %{bypass: bypass}
+  end
 
   describe "perform/1 - specific mode" do
     test "returns error when episode does not exist" do
@@ -15,7 +52,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
                perform_job(TVShowSearch, %{"mode" => "specific", "episode_id" => fake_id})
     end
 
-    test "processes a valid episode" do
+    test "processes a valid episode", %{bypass: _bypass} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "Breaking Bad"})
 
       episode =
@@ -27,17 +64,15 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           air_date: ~D[2008-01-20]
         })
 
-      # Note: This will attempt to search indexers which may fail in test
-      # environment. The test verifies the job executes without crashing.
+      # Now uses mocked indexer responses
       result =
         perform_job(TVShowSearch, %{
           "mode" => "specific",
           "episode_id" => episode.id
         })
 
-      # The result should be :ok or {:error, reason}
-      # depending on whether indexers are configured
-      assert result == :ok or match?({:error, _}, result)
+      # Should succeed with mocked results
+      assert result == :ok
     end
 
     test "skips episode that already has files" do
@@ -110,7 +145,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       })
     end
 
-    test "uses custom ranking options when provided" do
+    test "uses custom ranking options when provided", %{bypass: _bypass} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "The Sopranos"})
 
       episode =
@@ -130,12 +165,13 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           "preferred_tags" => ["REMUX"]
         })
 
-      assert result == :ok or match?({:error, _}, result)
+      # Should succeed with mocked results
+      assert result == :ok
     end
   end
 
   describe "query construction" do
-    test "constructs correct S##E## format query" do
+    test "constructs correct S##E## format query", %{bypass: _bypass} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "Breaking Bad"})
 
       episode =
@@ -146,18 +182,17 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           air_date: ~D[2008-02-10]
         })
 
-      # We can't directly test the private function, but we can verify
-      # the job runs without errors which validates query construction
+      # Job runs with mocked indexer responses
       result =
         perform_job(TVShowSearch, %{
           "mode" => "specific",
           "episode_id" => episode.id
         })
 
-      assert result == :ok or match?({:error, _}, result)
+      assert result == :ok
     end
 
-    test "handles double-digit season and episode numbers" do
+    test "handles double-digit season and episode numbers", %{bypass: _bypass} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "Long Running Show"})
 
       episode =
@@ -168,11 +203,14 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           air_date: ~D[2020-05-15]
         })
 
-      # This test verifies the job executes without errors for double-digit numbers
-      perform_job(TVShowSearch, %{
-        "mode" => "specific",
-        "episode_id" => episode.id
-      })
+      # Job executes with mocked indexer for double-digit numbers
+      result =
+        perform_job(TVShowSearch, %{
+          "mode" => "specific",
+          "episode_id" => episode.id
+        })
+
+      assert result == :ok
     end
   end
 
@@ -226,7 +264,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
                })
     end
 
-    test "searches for season pack when missing episodes exist" do
+    test "searches for season pack when missing episodes exist", %{bypass: _bypass} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "The Wire"})
 
       # Create multiple missing episodes in season 1
@@ -254,7 +292,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           air_date: ~D[2002-06-16]
         })
 
-      # Should attempt to search for season pack (may return :ok or {:error, _})
+      # Searches with mocked indexer
       result =
         perform_job(TVShowSearch, %{
           "mode" => "season",
@@ -262,7 +300,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           "season_number" => 1
         })
 
-      assert result == :ok or match?({:error, _}, result)
+      assert result == :ok
     end
 
     test "skips future episodes when searching for season" do
@@ -336,7 +374,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
                })
     end
 
-    test "processes show with missing episodes in multiple seasons" do
+    test "processes show with missing episodes in multiple seasons", %{bypass: _bypass} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "Multi Season Show"})
 
       # Create missing episodes across two seasons
@@ -364,7 +402,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           air_date: ~D[2021-01-01]
         })
 
-      # Should process both seasons with smart logic
+      # Processes both seasons with mocked indexer
       assert :ok =
                perform_job(TVShowSearch, %{
                  "mode" => "show",
@@ -403,7 +441,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert :ok = perform_job(TVShowSearch, %{"mode" => "all_monitored"})
     end
 
-    test "processes monitored episodes across multiple shows" do
+    test "processes monitored episodes across multiple shows", %{bypass: _bypass} do
       # Create two TV shows with missing episodes
       tv_show1 = media_item_fixture(%{type: "tv_show", title: "Show 1", monitored: true})
 
@@ -425,7 +463,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           air_date: ~D[2020-01-01]
         })
 
-      # Should process both shows
+      # Processes both shows with mocked indexer
       assert :ok = perform_job(TVShowSearch, %{"mode" => "all_monitored"})
     end
 
@@ -469,7 +507,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert :ok = perform_job(TVShowSearch, %{"mode" => "all_monitored"})
     end
 
-    test "applies smart logic to multiple seasons across shows" do
+    test "applies smart logic to multiple seasons across shows", %{bypass: _bypass} do
       # Create show with multiple seasons
       tv_show = media_item_fixture(%{type: "tv_show", title: "Long Show", monitored: true})
 
@@ -499,7 +537,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           air_date: ~D[2021-01-08]
         })
 
-      # Should apply smart logic per season
+      # Applies smart logic per season with mocked indexer
       assert :ok = perform_job(TVShowSearch, %{"mode" => "all_monitored"})
     end
   end

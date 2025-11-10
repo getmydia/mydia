@@ -110,6 +110,23 @@ config :mydia, :streaming,
   # :always - Always re-encode (original behavior, slower but ensures consistent output)
   transcode_policy: :copy_when_compatible
 
+# Episode monitor search limits
+# Prevents excessive API usage that exhausts indexer quotas
+config :mydia, :episode_monitor,
+  # Max total searches across all shows per execution (prevents quota exhaustion)
+  max_searches_per_run: 50,
+  # Max searches for a single show per execution (ensures fair distribution)
+  max_searches_per_show: 10,
+  # Max searches for a single season per execution (limits season pack fallback impact)
+  max_searches_per_season: 5,
+  # Monitor special episodes (season 0) - default false due to low success rate (<5%)
+  # Special episodes are rarely available on indexers and waste API quota
+  # Set to true to search for specials, or search manually via UI
+  monitor_special_episodes: false,
+  # Delay between searches in milliseconds (prevents rapid-fire API calls)
+  # Set to 0 to disable delays, 250-500ms recommended for respectful API usage
+  search_delay_ms: 250
+
 # Configure Ueberauth with empty providers by default
 # This is overridden in dev.exs if OIDC is configured
 config :ueberauth, Ueberauth, providers: []
