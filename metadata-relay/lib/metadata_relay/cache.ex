@@ -70,7 +70,12 @@ defmodule MetadataRelay.Cache do
   @doc """
   Gets cache statistics.
 
-  Returns a map with cache metrics including size, etc.
+  Returns a map with cache metrics including:
+  - size: current number of cached entries
+  - memory_mb: memory usage in megabytes
+  - hits: number of cache hits
+  - misses: number of cache misses
+  - hit_rate_pct: percentage of requests served from cache
   """
   def stats do
     CacheServer.stats()

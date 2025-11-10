@@ -10,6 +10,7 @@ defmodule MetadataRelay.CacheServer do
   require Logger
 
   @table_name :metadata_relay_cache
+  @stats_table :metadata_relay_cache_stats
   @cleanup_interval :timer.minutes(15)
   @max_entries 20_000
 
@@ -32,14 +33,17 @@ defmodule MetadataRelay.CacheServer do
       [{^key, value, expires_at}] ->
         if DateTime.compare(DateTime.utc_now(), expires_at) == :lt do
           Logger.debug("Cache hit: #{key}")
+          increment_hits()
           {:ok, value}
         else
           # Expired entry
           :ets.delete(@table_name, key)
+          increment_misses()
           {:error, :not_found}
         end
 
       [] ->
+        increment_misses()
         {:error, :not_found}
     end
   end
@@ -69,12 +73,21 @@ defmodule MetadataRelay.CacheServer do
     memory_bytes = memory_words * :erlang.system_info(:wordsize)
     memory_mb = Float.round(memory_bytes / 1_024_000, 2)
 
+    hits = get_counter(:hits)
+    misses = get_counter(:misses)
+    total = hits + misses
+    hit_rate = if total > 0, do: Float.round(hits / total * 100, 1), else: 0.0
+
     %{
       size: size,
       max_entries: @max_entries,
       memory_mb: memory_mb,
       memory_bytes: memory_bytes,
-      utilization_pct: Float.round(size / @max_entries * 100, 1)
+      utilization_pct: Float.round(size / @max_entries * 100, 1),
+      hits: hits,
+      misses: misses,
+      total_requests: total,
+      hit_rate_pct: hit_rate
     }
   end
 
@@ -83,6 +96,9 @@ defmodule MetadataRelay.CacheServer do
   @impl true
   def init(_opts) do
     :ets.new(@table_name, [:named_table, :set, :public, read_concurrency: true])
+    :ets.new(@stats_table, [:named_table, :set, :public, read_concurrency: true])
+    :ets.insert(@stats_table, {:hits, 0})
+    :ets.insert(@stats_table, {:misses, 0})
     schedule_cleanup()
     {:ok, %{}}
   end
@@ -153,6 +169,21 @@ defmodule MetadataRelay.CacheServer do
     case :ets.first(@table_name) do
       :"$end_of_table" -> :ok
       key -> :ets.delete(@table_name, key)
+    end
+  end
+
+  defp increment_hits do
+    :ets.update_counter(@stats_table, :hits, 1, {:hits, 0})
+  end
+
+  defp increment_misses do
+    :ets.update_counter(@stats_table, :misses, 1, {:misses, 0})
+  end
+
+  defp get_counter(key) do
+    case :ets.lookup(@stats_table, key) do
+      [{^key, count}] -> count
+      [] -> 0
     end
   end
 end
