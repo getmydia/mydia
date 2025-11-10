@@ -192,11 +192,13 @@ defmodule Mydia.Jobs.MediaImport do
 
         cond do
           File.regular?(full_path) ->
-            [%{
-              path: full_path,
-              name: Path.basename(full_path),
-              size: File.stat!(full_path).size
-            }]
+            [
+              %{
+                path: full_path,
+                name: Path.basename(full_path),
+                size: File.stat!(full_path).size
+              }
+            ]
 
           File.dir?(full_path) ->
             list_files_recursive(full_path)
