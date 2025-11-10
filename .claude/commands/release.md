@@ -2,7 +2,6 @@
 allowed-tools: Bash(git*,gh*), Read, Edit
 argument-hint: [major|minor|patch (optional - auto-detected)]
 description: Create and publish a new release with version bump and release notes
-model: claude-3-5-sonnet-20241022
 ---
 
 # Release Process
