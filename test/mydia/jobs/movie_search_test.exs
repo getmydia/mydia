@@ -4,8 +4,43 @@ defmodule Mydia.Jobs.MovieSearchTest do
 
   alias Mydia.Jobs.MovieSearch
   alias Mydia.Library
+  alias Mydia.Settings
+  alias Mydia.IndexerMock
 
   import Mydia.MediaFixtures
+
+  setup do
+    # Disable all existing indexer configs from test database
+    Settings.list_indexer_configs()
+    |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
+    |> Enum.each(fn config ->
+      Settings.update_indexer_config(config, %{enabled: false})
+    end)
+
+    # Set up mock Prowlarr server for all tests
+    bypass = Bypass.open()
+
+    # Mock with movie results
+    IndexerMock.mock_prowlarr_all(bypass, results: [
+      IndexerMock.movie_result(%{title: "The Matrix", year: 1999, seeders: 100}),
+      IndexerMock.movie_result(%{title: "Inception", year: 2010, seeders: 80}),
+      IndexerMock.movie_result(%{title: "Movie One", year: 2020, seeders: 50}),
+      IndexerMock.movie_result(%{title: "Movie Two", year: 2021, seeders: 45}),
+      IndexerMock.movie_result(%{title: "Movie Three", year: 2022, seeders: 40})
+    ])
+
+    # Create test indexer configuration pointing to Bypass server
+    {:ok, _indexer} =
+      Settings.create_indexer_config(%{
+        name: "Test Movie Indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{bypass.port}",
+        api_key: "test-key",
+        enabled: true
+      })
+
+    %{bypass: bypass}
+  end
 
   describe "perform/1 - specific mode" do
     test "returns error when media item does not exist" do
@@ -25,24 +60,21 @@ defmodule Mydia.Jobs.MovieSearchTest do
                })
     end
 
-    test "processes a valid movie", %{} do
+    test "processes a valid movie", %{bypass: _bypass} do
       movie = media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999})
 
-      # Note: This will attempt to search indexers which may fail in test
-      # environment. The test verifies the job executes without crashing.
-      # In a production-ready test suite, we'd mock Indexers.search_all
+      # Now uses mocked indexer responses
       result =
         perform_job(MovieSearch, %{
           "mode" => "specific",
           "media_item_id" => movie.id
         })
 
-      # The result could be :ok, :no_results, or {:error, reason}
-      # depending on whether indexers are configured
-      assert result in [:ok, :no_results] or match?({:error, _}, result)
+      # Should succeed with mocked results
+      assert result == :ok
     end
 
-    test "uses custom ranking options when provided" do
+    test "uses custom ranking options when provided", %{bypass: _bypass} do
       movie = media_item_fixture(%{type: "movie", title: "Inception", year: 2010})
 
       result =
@@ -54,7 +86,8 @@ defmodule Mydia.Jobs.MovieSearchTest do
           "preferred_tags" => ["REMUX"]
         })
 
-      assert result in [:ok, :no_results] or match?({:error, _}, result)
+      # Should succeed with mocked results
+      assert result == :ok
     end
   end
 
@@ -83,9 +116,7 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert :ok = perform_job(MovieSearch, %{"mode" => "all_monitored"})
     end
 
-    @tag timeout: 120_000
-    @tag :external
-    test "processes monitored movies without files" do
+    test "processes monitored movies without files", %{bypass: _bypass} do
       # Create monitored movies without files
       _movie1 =
         media_item_fixture(%{
@@ -103,14 +134,12 @@ defmodule Mydia.Jobs.MovieSearchTest do
           monitored: true
         })
 
-      # The job should attempt to search for these movies
-      # Note: This test makes real network calls and requires configured indexers
-      # Result could be :ok, :no_results, or {:error, reason} depending on configuration
+      # The job should search for these movies using mocked indexer
       result = perform_job(MovieSearch, %{"mode" => "all_monitored"})
-      assert result in [:ok, :no_results] or match?({:error, _}, result)
+      assert result == :ok
     end
 
-    test "skips TV shows in all_monitored mode" do
+    test "skips TV shows in all_monitored mode", %{bypass: _bypass} do
       # Create a monitored TV show
       _tv_show =
         media_item_fixture(%{
@@ -132,9 +161,8 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert :ok = perform_job(MovieSearch, %{"mode" => "all_monitored"})
     end
 
-    test "continues processing after individual movie failures" do
+    test "continues processing after individual movie failures", %{bypass: _bypass} do
       # Create multiple monitored movies
-      # Some may fail to search, but the job should continue
       _movie1 =
         media_item_fixture(%{
           type: "movie",
@@ -159,24 +187,23 @@ defmodule Mydia.Jobs.MovieSearchTest do
           monitored: true
         })
 
-      # Job should return :ok even if some movies fail
+      # Job should process all movies with mocked indexer
       assert :ok = perform_job(MovieSearch, %{"mode" => "all_monitored"})
     end
   end
 
   describe "search query construction" do
-    test "includes year when available" do
+    test "includes year when available", %{bypass: _bypass} do
       movie = media_item_fixture(%{title: "The Matrix", year: 1999})
 
-      # We can't directly test the private function, but we can verify
-      # the job runs without errors with a movie that has a year
+      # Job runs with mocked indexer responses
       result =
         perform_job(MovieSearch, %{
           "mode" => "specific",
           "media_item_id" => movie.id
         })
 
-      assert result in [:ok, :no_results] or match?({:error, _}, result)
+      assert result == :ok
     end
   end
 end

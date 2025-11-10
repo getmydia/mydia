@@ -1,5 +1,5 @@
 defmodule MydiaWeb.Api.StreamControllerTest do
-  use MydiaWeb.ConnCase, async: true
+  use MydiaWeb.ConnCase, async: false
 
   import Mydia.MediaFixtures
 
