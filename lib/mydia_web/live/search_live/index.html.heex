@@ -294,152 +294,27 @@
         </table>
       </div>
     <% end %>
-    <%!-- Disambiguation Modal --%>
-    <%= if @show_disambiguation_modal do %>
-      <div class="modal modal-open">
-        <div class="modal-box max-w-4xl">
-          <h3 class="font-bold text-lg mb-4">
-            Multiple Matches Found
-          </h3>
-          <p class="text-sm text-base-content/70 mb-4">
-            We found multiple metadata matches. Please select the correct one:
-          </p>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
-            <div
-              :for={match <- @metadata_matches}
-              class="card bg-base-200 hover:bg-base-300 cursor-pointer transition-colors"
-              phx-click="select_metadata_match"
-              phx-value-match_id={match.provider_id}
-            >
-              <div class="card-body p-4">
-                <div class="flex gap-4">
-                  <%= if match.poster_path do %>
-                    <img
-                      src={"https://image.tmdb.org/t/p/w92#{match.poster_path}"}
-                      alt={match.title}
-                      class="w-16 h-24 object-cover rounded"
-                    />
-                  <% else %>
-                    <div class="w-16 h-24 bg-base-300 rounded flex items-center justify-center">
-                      <.icon name="hero-film" class="w-8 h-8 text-base-content/30" />
-                    </div>
-                  <% end %>
-                  <div class="flex-1 min-w-0">
-                    <h4 class="font-semibold text-base line-clamp-2">
-                      {match.title}
-                    </h4>
-                    <%= if match.release_date || match.first_air_date do %>
-                      <p class="text-sm text-base-content/60">
-                        {String.slice(match.release_date || match.first_air_date, 0..3)}
-                      </p>
-                    <% end %>
-                    <%= if match.overview do %>
-                      <p class="text-xs text-base-content/50 mt-2 line-clamp-3">
-                        {match.overview}
-                      </p>
-                    <% end %>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-action">
-            <button class="btn btn-ghost" phx-click="close_disambiguation_modal">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    <% end %>
-    <%!-- Manual Search Modal --%>
-    <%= if @show_manual_search_modal do %>
-      <div class="modal modal-open">
-        <div class="modal-box max-w-4xl">
-          <h3 class="font-bold text-lg mb-2">
-            Manual Search Required
-          </h3>
-          <p class="text-sm text-base-content/70 mb-4">
-            Could not automatically parse or find metadata for:
-            <span class="font-semibold block mt-1 text-base-content">
-              {@failed_release_title}
-            </span>
-          </p>
-          <p class="text-sm text-base-content/70 mb-4">
-            Please search manually for the media:
-          </p>
-          <form phx-submit="manual_search_submit" class="mb-4">
-            <div class="flex gap-2">
-              <input
-                type="text"
-                name="search_query"
-                value={@manual_search_query}
-                placeholder="Enter media title to search..."
-                class="input input-bordered flex-1"
-                phx-debounce="300"
-              />
-              <button type="submit" class="btn btn-primary">
-                <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
-              </button>
-            </div>
-          </form>
-          <%= if @metadata_matches != [] do %>
-            <div class="divider text-sm">Select a Match</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto">
-              <div
-                :for={match <- @metadata_matches}
-                class="card bg-base-200 hover:bg-base-300 cursor-pointer transition-colors"
-                phx-click="select_manual_match"
-                phx-value-match_id={match.provider_id}
-                phx-value-media_type={
-                  if match.media_type == :tv_show, do: "tv_show", else: "movie"
-                }
-              >
-                <div class="card-body p-4">
-                  <div class="flex gap-4">
-                    <%= if match.poster_path do %>
-                      <img
-                        src={"https://image.tmdb.org/t/p/w92#{match.poster_path}"}
-                        alt={match.title}
-                        class="w-16 h-24 object-cover rounded"
-                      />
-                    <% else %>
-                      <div class="w-16 h-24 bg-base-300 rounded flex items-center justify-center">
-                        <.icon name="hero-film" class="w-8 h-8 text-base-content/30" />
-                      </div>
-                    <% end %>
-                    <div class="flex-1 min-w-0">
-                      <h4 class="font-semibold text-base line-clamp-2">
-                        {match.title}
-                      </h4>
-                      <div class="flex gap-2 items-center mt-1">
-                        <%= if match.release_date || match.first_air_date do %>
-                          <p class="text-sm text-base-content/60">
-                            {String.slice(match.release_date || match.first_air_date, 0..3)}
-                          </p>
-                        <% end %>
-                        <span class="badge badge-sm badge-outline">
-                          {if match.media_type == :tv_show, do: "TV Show", else: "Movie"}
-                        </span>
-                      </div>
-                      <%= if match.overview do %>
-                        <p class="text-xs text-base-content/50 mt-2 line-clamp-2">
-                          {match.overview}
-                        </p>
-                      <% end %>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          <% end %>
-          <div class="modal-action">
-            <button class="btn btn-ghost" phx-click="close_manual_search_modal">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    <% end %>
+    <%!-- Disambiguation Modal Component --%>
+    <.live_component
+      module={MydiaWeb.Live.Components.DisambiguationModalComponent}
+      id="disambiguation-modal"
+      show={@show_disambiguation_modal}
+      matches={@metadata_matches}
+      on_select="select_metadata_match"
+      on_cancel="close_disambiguation_modal"
+    />
+    <%!-- Manual Search Modal Component --%>
+    <.live_component
+      module={MydiaWeb.Live.Components.ManualSearchModalComponent}
+      id="manual-search-modal"
+      show={@show_manual_search_modal}
+      failed_title={@failed_release_title}
+      search_query={@manual_search_query}
+      matches={@metadata_matches}
+      on_search="manual_search_submit"
+      on_select="select_manual_match"
+      on_cancel="close_manual_search_modal"
+    />
     <%!-- Retry Modal --%>
     <%= if @show_retry_modal do %>
       <div class="modal modal-open">
