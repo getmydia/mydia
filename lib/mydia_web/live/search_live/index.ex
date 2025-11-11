@@ -2,7 +2,7 @@ defmodule MydiaWeb.SearchLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Indexers
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Library.FileParser
+  alias Mydia.Library.FileParser.V2, as: FileParser
   alias Mydia.Metadata
   alias Mydia.Media
   alias Mydia.Downloads

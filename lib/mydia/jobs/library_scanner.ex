@@ -15,7 +15,8 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   require Logger
   alias Mydia.{Library, Settings, Repo, Metadata}
-  alias Mydia.Library.{MetadataMatcher, MetadataEnricher, FileParser, FileAnalyzer}
+  alias Mydia.Library.{MetadataMatcher, MetadataEnricher, FileAnalyzer}
+  alias Mydia.Library.FileParser.V2, as: FileParser
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do

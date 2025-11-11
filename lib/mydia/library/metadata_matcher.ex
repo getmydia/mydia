@@ -11,7 +11,7 @@ defmodule Mydia.Library.MetadataMatcher do
 
   require Logger
   alias Mydia.{Media, Metadata}
-  alias Mydia.Library.FileParser
+  alias Mydia.Library.FileParser.V2, as: FileParser
 
   @type match_result :: %{
           provider_id: String.t(),

@@ -24,7 +24,8 @@ defmodule Mydia.Jobs.MediaImport do
   require Logger
   alias Mydia.{Downloads, Library, Media, Settings}
   alias Mydia.Downloads.Client
-  alias Mydia.Library.{FileAnalyzer, FileNamer, FileParser}
+  alias Mydia.Library.{FileAnalyzer, FileNamer}
+  alias Mydia.Library.FileParser.V2, as: FileParser
   alias Mydia.Indexers.QualityParser
 
   @impl Oban.Worker

@@ -5,7 +5,8 @@ defmodule Mydia.Library do
 
   import Ecto.Query, warn: false
   alias Mydia.Repo
-  alias Mydia.Library.{MediaFile, FileAnalyzer, FileParser}
+  alias Mydia.Library.{MediaFile, FileAnalyzer}
+  alias Mydia.Library.FileParser.V2, as: FileParser
 
   require Logger
 
