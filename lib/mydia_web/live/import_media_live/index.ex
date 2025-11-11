@@ -281,17 +281,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     # Check if this file is orphaned and needs re-matching
     media_file_result =
       if file[:orphaned_media_file_id] do
-        # Update existing orphaned media file
-        case Library.get_media_file!(file.orphaned_media_file_id) do
-          media_file ->
-            # Update with fresh metadata
-            Library.update_media_file(media_file, %{
-              size: file.size,
-              verified_at: DateTime.utc_now()
-            })
-
-          _ ->
-            {:error, :not_found}
+        # Use existing orphaned media file - don't update it yet
+        # The enricher will handle associating it with the media item
+        try do
+          media_file = Library.get_media_file!(file.orphaned_media_file_id)
+          {:ok, media_file}
+        rescue
+          _ -> {:error, :not_found}
         end
       else
         # Create new media file record
