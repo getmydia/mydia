@@ -23,6 +23,53 @@ The `./dev` script automatically starts services if they're not running and prov
 - `./dev shell` - Open interactive shell in app container
 - `./dev logs -f` - Follow application logs
 
+### Git Guidelines
+
+**CRITICAL: Protecting Staged Changes**
+
+- **NEVER** use `git reset` to unstage files when there are staged changes you want to preserve
+- **NEVER** use `git reset` without first checking what changes will be lost
+- **ALWAYS** use `git restore --staged <file>` to unstage specific files while preserving changes
+- **ALWAYS** use `git stash` if you need to temporarily save all changes (both staged and unstaged)
+
+**Safe Workflow for Selective Staging:**
+
+When you need to commit only some files from a larger set of staged changes:
+
+1. **WRONG** (loses staged changes):
+   ```bash
+   git reset
+   git add file1.ex file2.ex
+   git commit -m "message"
+   ```
+
+2. **CORRECT** (preserves all changes):
+   ```bash
+   # Option A: Unstage specific files you don't want
+   git restore --staged file3.ex file4.ex
+   git commit -m "message"
+
+   # Option B: Create backup before reset
+   git stash --keep-index  # Stash unstaged changes only
+   git commit -m "message"
+   git stash pop  # Restore unstaged changes
+
+   # Option C: Save staged changes before reset
+   git diff --cached > staged-changes.patch
+   git reset
+   git add file1.ex file2.ex
+   git commit -m "message"
+   git apply staged-changes.patch  # Restore other changes if needed
+   ```
+
+**Before ANY `git reset` command:**
+1. Run `git status --porcelain` to see what will be affected
+2. Run `git diff --cached > backup.patch` to save staged changes
+3. Consider using `git restore --staged` instead
+4. If you must use `git reset`, understand exactly what will be lost
+
+**Remember**: Staged changes that are reset are NOT recoverable unless you explicitly backed them up first. There is no "undo" for `git reset` on uncommitted changes.
+
 ### Phoenix v1.8 guidelines
 
 - **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
