@@ -3,9 +3,29 @@ defmodule Mydia.Jobs.LibraryScannerTest do
   use Oban.Testing, repo: Mydia.Repo
 
   alias Mydia.Jobs.LibraryScanner
+  alias Mydia.Settings
   import Mydia.MediaFixtures
 
   describe "perform/1" do
+    test "handles non-existent library path gracefully" do
+      # Create a library path that points to a non-existent directory
+      {:ok, library_path} =
+        Settings.create_library_path(%{
+          path: "/nonexistent/path/to/library",
+          type: "movies",
+          monitored: true
+        })
+
+      # Perform the job with the specific library path
+      assert {:error, _reason} =
+               perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+
+      # Verify the library path was updated with failed status
+      updated_path = Settings.get_library_path!(library_path.id)
+      assert updated_path.last_scan_status == :failed
+      assert updated_path.last_scan_error =~ "Library path does not exist"
+    end
+
     @tag timeout: 120_000
     @tag :external
     test "successfully scans library with no media items" do

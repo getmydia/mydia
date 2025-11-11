@@ -134,12 +134,56 @@ defmodule Mydia.Jobs.LibraryScanner do
       Logger.debug("Scan progress", library_path_id: library_path.id, files_scanned: count)
     end
 
-    scan_result =
-      case Library.Scanner.scan(library_path.path, progress_callback: progress_callback) do
-        {:ok, result} -> result
-        {:error, reason} -> raise "Scan failed: #{inspect(reason)}"
-      end
+    # Perform scan and handle errors gracefully
+    with {:ok, scan_result} <-
+           Library.Scanner.scan(library_path.path, progress_callback: progress_callback) do
+      process_scan_result(library_path, scan_result)
+    else
+      {:error, :not_found} ->
+        handle_scan_error(library_path, "Library path does not exist: #{library_path.path}")
 
+      {:error, :not_directory} ->
+        handle_scan_error(library_path, "Path is not a directory: #{library_path.path}")
+
+      {:error, :permission_denied} ->
+        handle_scan_error(
+          library_path,
+          "Permission denied when accessing path: #{library_path.path}"
+        )
+
+      {:error, reason} ->
+        handle_scan_error(library_path, "Scan failed: #{inspect(reason)}")
+    end
+  end
+
+  defp handle_scan_error(library_path, error_message) do
+    Logger.error("Library scan error",
+      library_path_id: library_path.id,
+      error: error_message
+    )
+
+    # Update library path with error status (skip for runtime paths)
+    if updatable_library_path?(library_path) do
+      {:ok, _} =
+        Settings.update_library_path(library_path, %{
+          last_scan_at: DateTime.utc_now(),
+          last_scan_status: :failed,
+          last_scan_error: error_message
+        })
+    end
+
+    # Broadcast scan failed
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      "library_scanner",
+      {:library_scan_failed,
+       %{library_path_id: library_path.id, type: library_path.type, error: error_message}}
+    )
+
+    {:error, error_message}
+  end
+
+  defp process_scan_result(library_path, scan_result) do
     # Get existing files from database - only files within this library path
     # This prevents deleting files from other library paths during scan
     existing_files = Library.list_media_files(path_prefix: library_path.path)
@@ -360,52 +404,13 @@ defmodule Mydia.Jobs.LibraryScanner do
         {:ok, result}
 
       {:error, reason} ->
-        error_message = "Transaction failed: #{inspect(reason)}"
-
-        # Update library path with error status (skip for runtime paths)
-        if updatable_library_path?(library_path) do
-          {:ok, _} =
-            Settings.update_library_path(library_path, %{
-              last_scan_at: DateTime.utc_now(),
-              last_scan_status: :failed,
-              last_scan_error: error_message
-            })
-        end
-
-        # Broadcast scan failed
-        Phoenix.PubSub.broadcast(
-          Mydia.PubSub,
-          "library_scanner",
-          {:library_scan_failed,
-           %{library_path_id: library_path.id, type: library_path.type, error: error_message}}
-        )
-
-        {:error, reason}
+        handle_scan_error(library_path, "Transaction failed: #{inspect(reason)}")
     end
   rescue
     error ->
       error_message = Exception.format(:error, error, __STACKTRACE__)
       Logger.error("Library scan raised exception", error: error_message)
-
-      # Update library path with error status (skip for runtime paths)
-      if updatable_library_path?(library_path) do
-        {:ok, _} =
-          Settings.update_library_path(library_path, %{
-            last_scan_at: DateTime.utc_now(),
-            last_scan_status: :failed,
-            last_scan_error: error_message
-          })
-      end
-
-      # Broadcast scan failed
-      Phoenix.PubSub.broadcast(
-        Mydia.PubSub,
-        "library_scanner",
-        {:library_scan_failed,
-         %{library_path_id: library_path.id, type: library_path.type, error: error_message}}
-      )
-
-      {:error, error}
+      handle_scan_error(library_path, error_message)
   end
 
   # Checks if a library path can be updated in the database.
