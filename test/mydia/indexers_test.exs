@@ -8,6 +8,9 @@ defmodule Mydia.IndexersTest do
 
   describe "search_all/2" do
     setup do
+      # Ensure adapters are registered (needed for CI environment)
+      Indexers.register_adapters()
+
       # Disable all existing indexer configs from test database
       Settings.list_indexer_configs()
       |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
