@@ -23,11 +23,8 @@
     <%!-- Progress Steps --%>
     <div class="mb-8">
       <ul class="steps steps-horizontal w-full">
-        <li class={"step " <> if(@step in [:select_path, :scanning, :review, :importing, :complete], do: "step-primary", else: "")}>
+        <li class={"step " <> if(@step in [:select_path, :review, :importing, :complete], do: "step-primary", else: "")}>
           Select Path
-        </li>
-        <li class={"step " <> if(@step in [:scanning, :review, :importing, :complete], do: "step-primary", else: "")}>
-          Scan Files
         </li>
         <li class={"step " <> if(@step in [:review, :importing, :complete], do: "step-primary", else: "")}>
           Review Matches
@@ -46,55 +43,58 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <h2 class="card-title">Select Directory to Scan</h2>
-          <p class="text-sm text-base-content/70 mb-4">
-            Enter a filesystem path to scan for media files, or choose from your configured library paths.
+          <p class="text-sm text-base-content/70 mb-3">
+            Enter a filesystem path or choose from your configured library paths.
           </p>
 
           <%!-- Manual Path Input --%>
-          <div class="form-control mb-4">
-            <label class="label">
-              <span class="label-text">Directory Path</span>
-            </label>
+          <div class="bg-base-200/30 rounded-lg p-3 mb-3">
+            <div class="flex items-center gap-2 mb-2">
+              <.icon name="hero-pencil-square" class="w-4 h-4 text-base-content/70" />
+              <span class="text-sm font-medium">Custom Path</span>
+            </div>
             <input
               type="text"
               name="path"
               placeholder="/path/to/media/folder"
-              class="input input-bordered"
+              class="input input-bordered w-full"
               value={@scan_path}
               phx-blur="update_path"
+              list="library-paths-datalist"
+              autocomplete="off"
             />
-            <label class="label">
-              <span class="label-text-alt">
-                Enter the full path to the directory containing media files
-              </span>
-            </label>
+            <datalist id="library-paths-datalist">
+              <%= for path <- @library_paths do %>
+                <option value={path.path}>{path.type}</option>
+              <% end %>
+            </datalist>
           </div>
 
           <%!-- Quick Select from Library Paths --%>
           <%= if @library_paths != [] do %>
-            <div class="divider">OR</div>
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">Choose from Library Paths</span>
-              </label>
-              <div class="grid grid-cols-1 gap-2">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <.icon name="hero-folder-open" class="w-4 h-4 text-primary" />
+                <span class="text-sm font-medium text-primary">Library Paths</span>
+              </div>
+              <div class="flex flex-col gap-1.5">
                 <%= for path <- @library_paths do %>
                   <button
                     type="button"
-                    class="btn btn-outline justify-start"
+                    class="btn btn-sm btn-outline justify-start hover:btn-primary"
                     phx-click="select_library_path"
                     phx-value-path_id={path.id}
                   >
-                    <.icon name="hero-folder" class="w-5 h-5" />
-                    <span class="flex-1 text-left">{path.path}</span>
-                    <span class="badge badge-sm">{path.type}</span>
+                    <.icon name="hero-folder" class="w-4 h-4" />
+                    <span class="flex-1 text-left font-mono text-xs">{path.path}</span>
+                    <span class="badge badge-primary badge-sm">{path.type}</span>
                   </button>
                 <% end %>
               </div>
             </div>
           <% end %>
 
-          <div class="card-actions justify-end mt-6">
+          <div class="card-actions justify-end mt-4">
             <button
               type="button"
               class="btn btn-primary"
@@ -108,34 +108,25 @@
       </div>
     <% end %>
 
-    <%!-- Step 2: Scanning --%>
-    <%= if @step == :scanning do %>
+    <%!-- Loading State: Scanning and Matching --%>
+    <%= if @scanning or @matching do %>
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body items-center text-center">
           <span class="loading loading-spinner loading-lg text-primary"></span>
-          <h2 class="card-title mt-4">Scanning Directory</h2>
+          <h2 class="card-title mt-4">
+            {if(@scanning, do: "Scanning Directory", else: "Matching Files")}
+          </h2>
           <p class="text-base-content/70">
-            {(@scanning && "Discovering media files...") || "Matching files with TMDB..."}
+            {if(@scanning,
+              do: "Discovering media files...",
+              else: "Matching discovered files with TMDB metadata..."
+            )}
           </p>
-          <p class="text-sm text-base-content/50 mt-2">
-            Path: {@scan_path}
-          </p>
-        </div>
-      </div>
-    <% end %>
-
-    <%!-- Step 2.5: Matching --%>
-    <%= if @matching do %>
-      <div class="card bg-base-100 shadow-xl">
-        <div class="card-body items-center text-center">
-          <span class="loading loading-spinner loading-lg text-primary"></span>
-          <h2 class="card-title mt-4">Matching Files</h2>
-          <p class="text-base-content/70">
-            Matching discovered files with TMDB metadata...
-          </p>
-          <p class="text-sm text-base-content/50 mt-2">
-            Found {@scan_stats.total} new files
-          </p>
+          <%= if @matching do %>
+            <p class="text-sm text-base-content/50 mt-2">
+              Found {@scan_stats.total} new files
+            </p>
+          <% end %>
           <%= if @scan_stats.skipped > 0 do %>
             <div class="alert alert-info mt-4 max-w-md">
               <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -252,42 +243,429 @@
           </button>
         </div>
 
-        <%!-- Files List --%>
-        <div class="space-y-3">
-          <%= for {matched_file, index} <- Enum.with_index(@matched_files) do %>
-            <% is_selected = MapSet.member?(@selected_files, index) %>
-            <% match = matched_file.match_result %>
+        <%!-- Files List - Hierarchical Grouped View --%>
+        <div class="space-y-4">
+          <%!-- TV Series (Grouped by Series and Season) --%>
+          <%= for series <- @grouped_files.series do %>
+            <% series_id = "#{series.title}-#{series.provider_id}" %>
+            <% is_expanded = MapSet.member?(@expanded_series, series_id) %>
+            <div class="card bg-base-100 shadow border-2 border-primary/20">
+              <div class="card-body p-4">
+                <%!-- Series Header --%>
+                <div
+                  class="flex items-center gap-3 cursor-pointer hover:bg-base-200/50 -m-2 p-2 rounded"
+                  phx-click="toggle_series_expansion"
+                  phx-value-series_key={series_id}
+                >
+                  <.icon
+                    name={if(is_expanded, do: "hero-chevron-down", else: "hero-chevron-right")}
+                    class="w-5 h-5 text-primary"
+                  />
+                  <div class="flex-1">
+                    <h3 class="font-bold text-lg">{series.title}</h3>
+                    <%= if series.year do %>
+                      <p class="text-xs text-base-content/60">({series.year})</p>
+                    <% end %>
+                  </div>
+                  <div class="badge badge-info badge-lg">
+                    TV Series - {length(series.seasons)} {if(length(series.seasons) == 1,
+                      do: "Season",
+                      else: "Seasons"
+                    )}
+                  </div>
+                </div>
+
+                <%!-- Seasons (shown when series is expanded) --%>
+                <%= if is_expanded do %>
+                  <div class="mt-4 space-y-3 pl-4 border-l-2 border-primary/20">
+                    <%= for season <- series.seasons do %>
+                      <% season_id = "#{series_id}-s#{season.season_number}" %>
+                      <% is_season_expanded = MapSet.member?(@expanded_seasons, season_id) %>
+                      <% episode_indices = Enum.map(season.episodes, & &1.index) %>
+                      <% all_selected =
+                        Enum.all?(episode_indices, &MapSet.member?(@selected_files, &1)) %>
+                      <% some_selected =
+                        Enum.any?(episode_indices, &MapSet.member?(@selected_files, &1)) and
+                          not all_selected %>
+                      <div class="card bg-base-200 shadow-sm">
+                        <div class="card-body p-3">
+                          <%!-- Season Header --%>
+                          <div class="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              class={"checkbox checkbox-primary " <> if(some_selected, do: "checkbox-warning", else: "")}
+                              checked={all_selected or some_selected}
+                              phx-click="toggle_season_selection"
+                              phx-value-indices={Enum.join(episode_indices, ",")}
+                            />
+                            <div
+                              class="flex-1 cursor-pointer flex items-center gap-2"
+                              phx-click="toggle_season_expansion"
+                              phx-value-season_key={season_id}
+                            >
+                              <.icon
+                                name={
+                                  if(is_season_expanded,
+                                    do: "hero-chevron-down",
+                                    else: "hero-chevron-right"
+                                  )
+                                }
+                                class="w-4 h-4"
+                              />
+                              <h4 class="font-semibold">
+                                Season {season.season_number}
+                              </h4>
+                            </div>
+                            <div class="badge badge-sm">
+                              {length(season.episodes)} {if(length(season.episodes) == 1,
+                                do: "Episode",
+                                else: "Episodes"
+                              )}
+                            </div>
+                            <%= if some_selected do %>
+                              <div class="badge badge-warning badge-sm">Partially Selected</div>
+                            <% end %>
+                          </div>
+
+                          <%!-- Episodes (shown when season is expanded) --%>
+                          <%= if is_season_expanded do %>
+                            <div class="mt-3 space-y-2 pl-6">
+                              <%= for episode <- season.episodes do %>
+                                <% is_selected = MapSet.member?(@selected_files, episode.index) %>
+                                <% is_editing = @editing_file_index == episode.index %>
+                                <% match = episode.match_result %>
+                                <div class={"card bg-base-100 shadow-sm " <> if(is_selected, do: "ring-1 ring-primary", else: "")}>
+                                  <div class="card-body p-3">
+                                    <%= if is_editing do %>
+                                      <%!-- Edit Form --%>
+                                      <.form
+                                        for={%{}}
+                                        phx-submit="save_edit"
+                                        id={"edit-form-#{episode.index}"}
+                                        class="space-y-3"
+                                      >
+                                        <%!-- Series/Movie Title with Search --%>
+                                        <div class="form-control">
+                                          <label class="label">
+                                            <span class="label-text text-xs">
+                                              Series/Movie Title
+                                            </span>
+                                          </label>
+                                          <div class="relative">
+                                            <input
+                                              type="text"
+                                              name="edit_form[title]"
+                                              value={@edit_form["title"]}
+                                              class="input input-bordered input-sm w-full"
+                                              phx-change="search_series"
+                                              phx-debounce="300"
+                                              autocomplete="off"
+                                            />
+                                            <%= if @search_results != [] do %>
+                                              <div class="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                                <%= for result <- @search_results do %>
+                                                  <button
+                                                    type="button"
+                                                    class="w-full text-left px-3 py-2 hover:bg-base-200 border-b border-base-300 last:border-b-0"
+                                                    phx-click="select_search_result"
+                                                    phx-value-provider_id={result.provider_id}
+                                                    phx-value-title={result.title}
+                                                    phx-value-year={result.year || ""}
+                                                    phx-value-type={result.media_type}
+                                                  >
+                                                    <div class="font-medium text-sm">
+                                                      {result.title}
+                                                    </div>
+                                                    <div class="text-xs text-base-content/60">
+                                                      {result.year} • {String.upcase(
+                                                        to_string(result.media_type)
+                                                      )}
+                                                    </div>
+                                                  </button>
+                                                <% end %>
+                                              </div>
+                                            <% end %>
+                                          </div>
+                                        </div>
+                                        <input
+                                          type="hidden"
+                                          name="edit_form[provider_id]"
+                                          value={@edit_form["provider_id"]}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="edit_form[type]"
+                                          value={@edit_form["type"]}
+                                        />
+                                        <%!-- Season Number --%>
+                                        <div class="form-control">
+                                          <label class="label">
+                                            <span class="label-text text-xs">Season Number</span>
+                                          </label>
+                                          <input
+                                            type="number"
+                                            name="edit_form[season]"
+                                            value={@edit_form["season"]}
+                                            class="input input-bordered input-sm"
+                                            placeholder="e.g., 1"
+                                            min="0"
+                                          />
+                                        </div>
+                                        <%!-- Episode Numbers --%>
+                                        <div class="form-control">
+                                          <label class="label">
+                                            <span class="label-text text-xs">
+                                              Episode Number(s)
+                                            </span>
+                                          </label>
+                                          <input
+                                            type="text"
+                                            name="edit_form[episodes]"
+                                            value={@edit_form["episodes"]}
+                                            class="input input-bordered input-sm"
+                                            placeholder="e.g., 1, 2, 3"
+                                          />
+                                          <label class="label">
+                                            <span class="label-text-alt text-xs">
+                                              Comma-separated for multi-episode files
+                                            </span>
+                                          </label>
+                                        </div>
+                                        <%!-- Year --%>
+                                        <div class="form-control">
+                                          <label class="label">
+                                            <span class="label-text text-xs">Year</span>
+                                          </label>
+                                          <input
+                                            type="number"
+                                            name="edit_form[year]"
+                                            value={@edit_form["year"]}
+                                            class="input input-bordered input-sm"
+                                            placeholder="e.g., 2024"
+                                            min="1900"
+                                            max="2100"
+                                          />
+                                        </div>
+                                        <%!-- Action Buttons --%>
+                                        <div class="flex gap-2 justify-end">
+                                          <button
+                                            type="button"
+                                            class="btn btn-ghost btn-sm"
+                                            phx-click="cancel_edit"
+                                          >
+                                            Cancel
+                                          </button>
+                                          <button type="submit" class="btn btn-primary btn-sm">
+                                            <.icon name="hero-check" class="w-4 h-4" /> Save
+                                          </button>
+                                        </div>
+                                      </.form>
+                                    <% else %>
+                                      <%!-- Normal Display --%>
+                                      <div class="flex items-start gap-3">
+                                        <input
+                                          type="checkbox"
+                                          class="checkbox checkbox-primary checkbox-sm mt-1"
+                                          checked={is_selected}
+                                          phx-click="toggle_file_selection"
+                                          phx-value-index={episode.index}
+                                        />
+                                        <div class="flex-1 min-w-0">
+                                          <div class="flex items-start justify-between gap-2">
+                                            <div class="flex-1">
+                                              <h5 class="font-medium text-sm truncate">
+                                                {Path.basename(episode.file.path)}
+                                              </h5>
+                                              <%= if match.parsed_info.episodes do %>
+                                                <p class="text-xs text-base-content/60">
+                                                  Episode(s) {Enum.join(
+                                                    match.parsed_info.episodes,
+                                                    ", "
+                                                  )}
+                                                </p>
+                                              <% end %>
+                                              <p class="text-xs text-base-content/50">
+                                                {format_file_size(episode.file.size)}
+                                              </p>
+                                            </div>
+                                            <div class="flex flex-col gap-1 items-end">
+                                              <%= if Map.get(match, :manually_edited, false) do %>
+                                                <div class="badge badge-xs badge-info">
+                                                  <.icon name="hero-pencil" class="w-3 h-3" />
+                                                  Edited
+                                                </div>
+                                              <% end %>
+                                              <%= if episode.file[:orphaned_media_file_id] do %>
+                                                <div class="badge badge-xs badge-warning">
+                                                  Re-matching
+                                                </div>
+                                              <% end %>
+                                              <div class={"badge badge-xs " <> confidence_badge_class(match.match_confidence)}>
+                                                {confidence_label(match.match_confidence)}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <%!-- Edit Actions --%>
+                                          <div class="mt-2 flex gap-1">
+                                            <button
+                                              type="button"
+                                              class="btn btn-xs btn-ghost"
+                                              phx-click="edit_file"
+                                              phx-value-index={episode.index}
+                                            >
+                                              <.icon name="hero-pencil" class="w-3 h-3" /> Edit
+                                            </button>
+                                            <button
+                                              type="button"
+                                              class="btn btn-xs btn-ghost text-error"
+                                              phx-click="clear_match"
+                                              phx-value-index={episode.index}
+                                            >
+                                              <.icon name="hero-x-mark" class="w-3 h-3" /> Clear
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    <% end %>
+                                  </div>
+                                </div>
+                              <% end %>
+                            </div>
+                          <% end %>
+                        </div>
+                      </div>
+                    <% end %>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Movies (Flat List) --%>
+          <%= for movie <- @grouped_files.movies do %>
+            <% is_selected = MapSet.member?(@selected_files, movie.index) %>
+            <% is_editing = @editing_file_index == movie.index %>
+            <% match = movie.match_result %>
             <div class={"card bg-base-100 shadow " <> if(is_selected, do: "ring-2 ring-primary", else: "")}>
               <div class="card-body p-4">
-                <div class="flex items-start gap-4">
-                  <%!-- Checkbox --%>
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-primary mt-1"
-                    checked={is_selected}
-                    disabled={match == nil}
-                    phx-click="toggle_file_selection"
-                    phx-value-index={index}
-                  />
-
-                  <%!-- File Info --%>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-start justify-between gap-2">
-                      <div class="flex-1">
-                        <h3 class="font-semibold text-sm truncate">
-                          {Path.basename(matched_file.file.path)}
-                        </h3>
-                        <p class="text-xs text-base-content/60 truncate">
-                          {matched_file.file.path}
-                        </p>
-                        <p class="text-xs text-base-content/50 mt-1">
-                          {format_file_size(matched_file.file.size)}
-                        </p>
+                <%= if is_editing do %>
+                  <%!-- Edit Form --%>
+                  <.form
+                    for={%{}}
+                    phx-submit="save_edit"
+                    id={"edit-form-#{movie.index}"}
+                    class="space-y-3"
+                  >
+                    <%!-- Movie Title with Search --%>
+                    <div class="form-control">
+                      <label class="label">
+                        <span class="label-text text-sm">Movie Title</span>
+                      </label>
+                      <div class="relative">
+                        <input
+                          type="text"
+                          name="edit_form[title]"
+                          value={@edit_form["title"]}
+                          class="input input-bordered input-sm w-full"
+                          phx-change="search_series"
+                          phx-debounce="300"
+                          autocomplete="off"
+                        />
+                        <%= if @search_results != [] do %>
+                          <div class="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            <%= for result <- @search_results do %>
+                              <button
+                                type="button"
+                                class="w-full text-left px-3 py-2 hover:bg-base-200 border-b border-base-300 last:border-b-0"
+                                phx-click="select_search_result"
+                                phx-value-provider_id={result.provider_id}
+                                phx-value-title={result.title}
+                                phx-value-year={result.year || ""}
+                                phx-value-type={result.media_type}
+                              >
+                                <div class="font-medium text-sm">
+                                  {result.title}
+                                </div>
+                                <div class="text-xs text-base-content/60">
+                                  {result.year} • {String.upcase(to_string(result.media_type))}
+                                </div>
+                              </button>
+                            <% end %>
+                          </div>
+                        <% end %>
                       </div>
-
-                      <%= if match do %>
+                    </div>
+                    <input
+                      type="hidden"
+                      name="edit_form[provider_id]"
+                      value={@edit_form["provider_id"]}
+                    />
+                    <input
+                      type="hidden"
+                      name="edit_form[type]"
+                      value={@edit_form["type"]}
+                    />
+                    <input type="hidden" name="edit_form[season]" value="" />
+                    <input type="hidden" name="edit_form[episodes]" value="" />
+                    <%!-- Year --%>
+                    <div class="form-control">
+                      <label class="label">
+                        <span class="label-text text-sm">Year</span>
+                      </label>
+                      <input
+                        type="number"
+                        name="edit_form[year]"
+                        value={@edit_form["year"]}
+                        class="input input-bordered input-sm"
+                        placeholder="e.g., 2024"
+                        min="1900"
+                        max="2100"
+                      />
+                    </div>
+                    <%!-- Action Buttons --%>
+                    <div class="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-sm"
+                        phx-click="cancel_edit"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" class="btn btn-primary btn-sm">
+                        <.icon name="hero-check" class="w-4 h-4" /> Save
+                      </button>
+                    </div>
+                  </.form>
+                <% else %>
+                  <%!-- Normal Display --%>
+                  <div class="flex items-start gap-4">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-primary mt-1"
+                      checked={is_selected}
+                      phx-click="toggle_file_selection"
+                      phx-value-index={movie.index}
+                    />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1">
+                          <h3 class="font-semibold text-sm truncate">
+                            {Path.basename(movie.file.path)}
+                          </h3>
+                          <p class="text-xs text-base-content/60 truncate">
+                            {movie.file.path}
+                          </p>
+                          <p class="text-xs text-base-content/50 mt-1">
+                            {format_file_size(movie.file.size)}
+                          </p>
+                        </div>
                         <div class="flex flex-col items-end gap-1">
-                          <%= if matched_file.file[:orphaned_media_file_id] do %>
+                          <%= if Map.get(match, :manually_edited, false) do %>
+                            <div class="badge badge-sm badge-info">
+                              <.icon name="hero-pencil" class="w-3 h-3" /> Edited
+                            </div>
+                          <% end %>
+                          <%= if movie.file[:orphaned_media_file_id] do %>
                             <div class="badge badge-sm badge-warning">Re-matching</div>
                           <% end %>
                           <div class={"badge badge-sm " <> confidence_badge_class(match.match_confidence)}>
@@ -296,23 +674,9 @@
                               0
                             )}%)
                           </div>
-                          <%= if match.parsed_info.type == :tv_show do %>
-                            <div class="badge badge-sm badge-info">TV Show</div>
-                          <% else %>
-                            <div class="badge badge-sm badge-accent">Movie</div>
-                          <% end %>
+                          <div class="badge badge-sm badge-accent">Movie</div>
                         </div>
-                      <% else %>
-                        <div class="flex flex-col items-end gap-1">
-                          <%= if matched_file.file[:orphaned_media_file_id] do %>
-                            <div class="badge badge-sm badge-warning">Re-matching</div>
-                          <% end %>
-                          <div class="badge badge-sm badge-error">No Match</div>
-                        </div>
-                      <% end %>
-                    </div>
-
-                    <%= if match do %>
+                      </div>
                       <div class="mt-3 p-3 bg-base-200 rounded-lg">
                         <div class="flex items-start gap-3">
                           <%= if match.metadata.poster_path do %>
@@ -327,14 +691,6 @@
                             <%= if match.year do %>
                               <p class="text-xs text-base-content/60">{match.year}</p>
                             <% end %>
-                            <%= if match.parsed_info.type == :tv_show and match.parsed_info.season do %>
-                              <p class="text-xs text-base-content/60">
-                                Season {match.parsed_info.season}
-                                <%= if match.parsed_info.episodes do %>
-                                  , Episode(s) {Enum.join(match.parsed_info.episodes, ", ")}
-                                <% end %>
-                              </p>
-                            <% end %>
                             <%= if match.metadata.overview do %>
                               <p class="text-xs text-base-content/50 mt-1 line-clamp-2">
                                 {match.metadata.overview}
@@ -343,16 +699,210 @@
                           </div>
                         </div>
                       </div>
+                      <%!-- Edit Actions --%>
+                      <div class="mt-3 flex gap-1">
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-ghost"
+                          phx-click="edit_file"
+                          phx-value-index={movie.index}
+                        >
+                          <.icon name="hero-pencil" class="w-3 h-3" /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-ghost text-error"
+                          phx-click="clear_match"
+                          phx-value-index={movie.index}
+                        >
+                          <.icon name="hero-x-mark" class="w-3 h-3" /> Clear
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Ungrouped/Unmatched Files --%>
+          <%= for file <- @grouped_files.ungrouped do %>
+            <% is_editing = @editing_file_index == file.index %>
+            <div class={"card bg-base-100 shadow " <> if(!is_editing, do: "opacity-60", else: "")}>
+              <div class="card-body p-4">
+                <%= if is_editing do %>
+                  <%!-- Search and Match Form for Unmatched Files --%>
+                  <.form
+                    for={%{}}
+                    phx-submit="save_edit"
+                    id={"edit-form-#{file.index}"}
+                    class="space-y-3"
+                  >
+                    <%!-- Search Title --%>
+                    <div class="form-control">
+                      <label class="label">
+                        <span class="label-text text-sm">Search for Metadata Match</span>
+                      </label>
+                      <div class="relative">
+                        <input
+                          type="text"
+                          name="edit_form[title]"
+                          value={@edit_form["title"]}
+                          class="input input-bordered input-sm w-full"
+                          phx-change="search_series"
+                          phx-debounce="300"
+                          autocomplete="off"
+                          placeholder="Search by title..."
+                        />
+                        <%= if @search_results != [] do %>
+                          <div class="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                            <%= for result <- @search_results do %>
+                              <button
+                                type="button"
+                                class="w-full text-left px-3 py-2 hover:bg-base-200 border-b border-base-300 last:border-b-0 flex gap-3"
+                                phx-click="select_search_result"
+                                phx-value-provider_id={result.provider_id}
+                                phx-value-title={result.title}
+                                phx-value-year={result.year || ""}
+                                phx-value-type={result.media_type}
+                              >
+                                <%= if result.poster_path do %>
+                                  <img
+                                    src={"https://image.tmdb.org/t/p/w92#{result.poster_path}"}
+                                    alt={result.title}
+                                    class="w-10 rounded"
+                                  />
+                                <% end %>
+                                <div class="flex-1">
+                                  <div class="font-medium text-sm">{result.title}</div>
+                                  <div class="text-xs text-base-content/60">
+                                    {result.year} • {String.upcase(to_string(result.media_type))}
+                                  </div>
+                                </div>
+                              </button>
+                            <% end %>
+                          </div>
+                        <% end %>
+                      </div>
+                    </div>
+                    <input
+                      type="hidden"
+                      name="edit_form[provider_id]"
+                      value={@edit_form["provider_id"]}
+                    />
+                    <input
+                      type="hidden"
+                      name="edit_form[type]"
+                      value={@edit_form["type"]}
+                    />
+                    <%!-- Season and Episode for TV Shows --%>
+                    <%= if @edit_form["type"] == "tv_show" do %>
+                      <div class="grid grid-cols-2 gap-2">
+                        <div class="form-control">
+                          <label class="label">
+                            <span class="label-text text-xs">Season</span>
+                          </label>
+                          <input
+                            type="number"
+                            name="edit_form[season]"
+                            value={@edit_form["season"]}
+                            class="input input-bordered input-sm"
+                            placeholder="1"
+                            min="0"
+                          />
+                        </div>
+                        <div class="form-control">
+                          <label class="label">
+                            <span class="label-text text-xs">Episode(s)</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="edit_form[episodes]"
+                            value={@edit_form["episodes"]}
+                            class="input input-bordered input-sm"
+                            placeholder="1, 2"
+                          />
+                        </div>
+                      </div>
                     <% else %>
+                      <input type="hidden" name="edit_form[season]" value="" />
+                      <input type="hidden" name="edit_form[episodes]" value="" />
+                    <% end %>
+                    <%!-- Year --%>
+                    <div class="form-control">
+                      <label class="label">
+                        <span class="label-text text-xs">Year</span>
+                      </label>
+                      <input
+                        type="number"
+                        name="edit_form[year]"
+                        value={@edit_form["year"]}
+                        class="input input-bordered input-sm"
+                        placeholder="2024"
+                        min="1900"
+                        max="2100"
+                      />
+                    </div>
+                    <%!-- Action Buttons --%>
+                    <div class="flex gap-2 justify-end">
+                      <button type="button" class="btn btn-ghost btn-sm" phx-click="cancel_edit">
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        class="btn btn-primary btn-sm"
+                        disabled={
+                          @edit_form["provider_id"] == nil or @edit_form["provider_id"] == ""
+                        }
+                      >
+                        <.icon name="hero-check" class="w-4 h-4" /> Apply Match
+                      </button>
+                    </div>
+                  </.form>
+                <% else %>
+                  <%!-- Normal Display for Unmatched --%>
+                  <div class="flex items-start gap-4">
+                    <input type="checkbox" class="checkbox checkbox-primary mt-1" disabled />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1">
+                          <h3 class="font-semibold text-sm truncate">
+                            {Path.basename(file.file.path)}
+                          </h3>
+                          <p class="text-xs text-base-content/60 truncate">
+                            {file.file.path}
+                          </p>
+                          <p class="text-xs text-base-content/50 mt-1">
+                            {format_file_size(file.file.size)}
+                          </p>
+                        </div>
+                        <div class="flex flex-col items-end gap-1">
+                          <%= if file.file[:orphaned_media_file_id] do %>
+                            <div class="badge badge-sm badge-warning">Re-matching</div>
+                          <% end %>
+                          <div class="badge badge-sm badge-error">No Match</div>
+                        </div>
+                      </div>
                       <div class="mt-3 p-3 bg-base-200 rounded-lg">
                         <p class="text-sm text-warning">
                           <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" />
                           Could not match this file with TMDB metadata
                         </p>
                       </div>
-                    <% end %>
+                      <%!-- Find Match Action --%>
+                      <div class="mt-3">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-primary"
+                          phx-click="edit_file"
+                          phx-value-index={file.index}
+                        >
+                          <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Find Match
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                <% end %>
               </div>
             </div>
           <% end %>
