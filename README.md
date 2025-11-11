@@ -512,6 +512,22 @@ Run these checks locally before committing:
 mix precommit
 ```
 
+### Git Hooks
+
+Automatic pre-commit hooks are available to catch formatting issues before they reach CI:
+
+```bash
+# Install hooks (one-time setup)
+./scripts/install-git-hooks.sh
+```
+
+The pre-commit hook will automatically run `mix format --check-formatted` before each commit. If formatting issues are found, the commit will be blocked with instructions to fix them.
+
+To bypass the hook in exceptional cases (not recommended):
+```bash
+git commit --no-verify
+```
+
 ### Customization
 
 Create `compose.override.yml` to add services like Transmission, Prowlarr, Jackett, or custom configurations:
