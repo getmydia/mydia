@@ -394,7 +394,7 @@ defmodule MydiaWeb.AdminConfigLive.Index do
 
     # Convert client config to map for adapter
     client_config = %{
-      type: String.to_atom(client.type),
+      type: client.type,
       host: client.host,
       port: client.port,
       use_ssl: client.use_ssl,

@@ -215,6 +215,7 @@ defmodule Mydia.Downloads.UntrackedMatcher do
       username: config.username,
       password: config.password,
       url_base: config.url_base,
+      api_key: config.api_key,
       options: config.connection_settings || %{}
     }
   end
