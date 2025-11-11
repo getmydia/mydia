@@ -25,12 +25,24 @@ The `./dev` script automatically starts services if they're not running and prov
 
 ### Git Guidelines
 
-**CRITICAL: Protecting Staged Changes**
+**CRITICAL: Protecting ALL Uncommitted Changes**
 
+⚠️ **ABSOLUTE RULES - NO EXCEPTIONS:**
+
+- **NEVER** use `git restore <file>` on files with uncommitted changes
+- **NEVER** use `git reset --hard` or any destructive git command
 - **NEVER** use `git reset` to unstage files when there are staged changes you want to preserve
-- **NEVER** use `git reset` without first checking what changes will be lost
-- **ALWAYS** use `git restore --staged <file>` to unstage specific files while preserving changes
-- **ALWAYS** use `git stash` if you need to temporarily save all changes (both staged and unstaged)
+- **NEVER** discard, reset, or restore ANY uncommitted changes without EXPLICIT user permission
+- **ALWAYS** check `git status` and `git diff` before ANY git command that might lose changes
+- **ALWAYS** use `git stash` if you need to temporarily save changes (both staged and unstaged)
+- **ALWAYS** ask the user before discarding ANY uncommitted work
+
+**If you encounter compilation errors from uncommitted changes:**
+1. **DO NOT** run `git restore` to "fix" them
+2. **DO NOT** discard changes to get a "clean state"
+3. Instead: Ask the user what to do, or work around the errors, or stash the changes first
+
+**Uncommitted changes may represent hours of work from other agents or sessions. Erasing them is UNACCEPTABLE.**
 
 **Safe Workflow for Selective Staging:**
 
