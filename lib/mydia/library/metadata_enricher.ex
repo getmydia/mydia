@@ -387,7 +387,7 @@ defmodule Mydia.Library.MetadataEnricher do
            media_file_id: media_file_id
          } = match_result
        )
-       when is_integer(media_file_id) do
+       when is_binary(media_file_id) do
     Logger.info("maybe_associate_episode_file called with valid pattern match",
       episode_id: episode.id,
       episode_season: episode.season_number,
