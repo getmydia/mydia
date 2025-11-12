@@ -53,7 +53,15 @@ defmodule Mydia.Library.MetadataEnricher do
 
         # For TV shows, fetch and create episodes
         if media_type == :tv_show and Keyword.get(opts, :fetch_episodes, true) do
-          enrich_episodes(media_item, provider_id, config, match_result)
+          # Add media_file_id to match_result so it can be used for episode file association
+          match_result_with_file_id =
+            if media_file_id do
+              Map.put(match_result, :media_file_id, media_file_id)
+            else
+              match_result
+            end
+
+          enrich_episodes(media_item, provider_id, config, match_result_with_file_id)
         end
 
         {:ok, media_item}
@@ -286,8 +294,29 @@ defmodule Mydia.Library.MetadataEnricher do
               )
           end
 
-        _existing_episode ->
-          :ok
+        existing_episode ->
+          # Update existing episode with fresh metadata
+          attrs = build_episode_attrs(media_item.id, season_number, episode_data)
+
+          case Media.update_episode(existing_episode, attrs) do
+            {:ok, updated_episode} ->
+              Logger.debug("Updated episode",
+                media_item_id: media_item.id,
+                season: season_number,
+                episode: episode_data.episode_number
+              )
+
+              # Match the current file to this episode if applicable
+              maybe_associate_episode_file(updated_episode, match_result)
+
+            {:error, reason} ->
+              Logger.warning("Failed to update episode",
+                media_item_id: media_item.id,
+                season: season_number,
+                episode: episode_data.episode_number,
+                reason: reason
+              )
+          end
       end
     end)
   end
@@ -326,7 +355,7 @@ defmodule Mydia.Library.MetadataEnricher do
          parsed_info: %{season: season, episodes: episode_numbers},
          media_file_id: media_file_id
        })
-       when is_binary(media_file_id) do
+       when is_integer(media_file_id) do
     # Check if this episode matches the file we're processing
     if episode.season_number == season && episode.episode_number in episode_numbers do
       case Mydia.Library.get_media_file!(media_file_id) do
