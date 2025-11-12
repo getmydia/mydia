@@ -223,34 +223,44 @@ defmodule Mydia.Jobs.MediaImport do
     # Get library paths from settings
     library_paths = Settings.list_library_paths()
 
-    cond do
-      # TV episode
-      download.episode && download.media_item ->
-        # Find a library path for series
-        Enum.find(library_paths, fn lp ->
-          lp.type in [:series, :mixed] && lp.monitored
-        end)
+    {media_type, required_types} =
+      cond do
+        # TV episode
+        download.episode && download.media_item ->
+          {"TV show", [:series, :mixed]}
 
-      # Movie
-      download.media_item && download.media_item.type == "movie" ->
-        # Find a library path for movies
-        Enum.find(library_paths, fn lp ->
-          lp.type in [:movies, :mixed] && lp.monitored
-        end)
+        # Movie
+        download.media_item && download.media_item.type == "movie" ->
+          {"movie", [:movies, :mixed]}
 
-      # TV show (no specific episode)
-      download.media_item && download.media_item.type == "tv_show" ->
-        # Find a library path for series
-        Enum.find(library_paths, fn lp ->
-          lp.type in [:series, :mixed] && lp.monitored
-        end)
+        # TV show (no specific episode)
+        download.media_item && download.media_item.type == "tv_show" ->
+          {"TV show", [:series, :mixed]}
 
-      true ->
-        # Fallback: use first monitored mixed library
-        Enum.find(library_paths, fn lp ->
-          lp.type == :mixed && lp.monitored
-        end)
+        true ->
+          {"unknown", [:mixed]}
+      end
+
+    # Find compatible library path
+    library_path =
+      Enum.find(library_paths, fn lp ->
+        lp.type in required_types && lp.monitored
+      end)
+
+    # Log warning if no compatible library found
+    if is_nil(library_path) do
+      Logger.warning("No compatible library path found for import",
+        download_id: download.id,
+        media_type: media_type,
+        required_library_types: required_types,
+        available_libraries:
+          Enum.map(library_paths, fn lp ->
+            %{path: lp.path, type: lp.type, monitored: lp.monitored}
+          end)
+      )
     end
+
+    library_path
   end
 
   defp organize_and_import_files(download, files, library_path, args) do
@@ -781,12 +791,28 @@ defmodule Mydia.Jobs.MediaImport do
         {:ok, media_file}
 
       {:error, changeset} ->
-        Logger.error("Failed to create media file record",
-          path: path,
-          errors: inspect(changeset.errors)
-        )
+        # Check if this is a library type mismatch error
+        if has_library_type_mismatch_error?(changeset) do
+          media_type = if episode, do: "TV show", else: "movie"
 
-        {:error, :database_error}
+          Logger.error("Library type mismatch during import",
+            path: path,
+            media_type: media_type,
+            download_id: download.id,
+            media_item_id: download.media_item_id,
+            episode_id: episode && episode.id,
+            errors: format_changeset_errors(changeset)
+          )
+
+          {:error, :library_type_mismatch}
+        else
+          Logger.error("Failed to create media file record",
+            path: path,
+            errors: inspect(changeset.errors)
+          )
+
+          {:error, :database_error}
+        end
     end
   end
 
@@ -834,4 +860,21 @@ defmodule Mydia.Jobs.MediaImport do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, _key, ""), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # Checks if a changeset has a library type mismatch error
+  defp has_library_type_mismatch_error?(changeset) do
+    Enum.any?(changeset.errors, fn {field, {message, _opts}} ->
+      (field == :media_item_id or field == :episode_id) and
+        (String.contains?(message, "cannot add movies to a library") or
+           String.contains?(message, "cannot add TV episodes to a library"))
+    end)
+  end
+
+  # Formats changeset errors for logging
+  defp format_changeset_errors(changeset) do
+    Enum.map(changeset.errors, fn {field, {message, _opts}} ->
+      "#{field}: #{message}"
+    end)
+    |> Enum.join(", ")
+  end
 end
