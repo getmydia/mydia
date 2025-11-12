@@ -524,43 +524,6 @@ mix phx.server
 
 Visit [localhost:4000](http://localhost:4000)
 
-### Releases
-
-**Creating a stable release:**
-
-Use the `/release` Claude Code command to automatically create a new release:
-
-```bash
-/release         # Auto-detect version bump (patch/minor/major)
-/release patch   # Explicitly create a patch release (0.0.X)
-/release minor   # Explicitly create a minor release (0.X.0)
-/release major   # Explicitly create a major release (X.0.0)
-```
-
-This will:
-1. Analyze changes since the last release
-2. Update version in `mix.exs`
-3. Create a commit and Git tag
-4. Push to GitHub
-5. Create a GitHub release with auto-generated notes
-6. Trigger Docker image build and publish to GitHub Container Registry
-
-**Creating a beta/rc release:**
-
-Beta and release candidate (RC) releases are for testing new features before stable release:
-
-```bash
-/release beta    # Create a beta pre-release (e.g., v1.2.3-beta.1)
-/release rc      # Create a release candidate (e.g., v1.2.3-rc.1)
-```
-
-Beta/RC releases:
-- Do NOT update `mix.exs` version
-- Do NOT create a commit (only a Git tag)
-- Publish Docker images tagged with `beta` (not `latest`)
-- Are marked as pre-release on GitHub
-- Allow testing unreleased versions without affecting stable production deployments
-
 ### Continuous Integration
 
 All pull requests and commits to the main branch automatically run:
