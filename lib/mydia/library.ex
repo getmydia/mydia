@@ -170,6 +170,104 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Matches unassociated media files to their episodes for a TV show.
+
+  Finds all media files that are linked to a media_item but not to specific episodes,
+  parses their filenames to extract season/episode information, and associates them
+  with the correct episode records.
+
+  Returns `{:ok, matched_count}` where matched_count is the number of files that
+  were successfully matched to episodes.
+
+  ## Parameters
+    - `media_item_id` - The ID of the TV show media item
+
+  ## Examples
+
+      iex> match_files_to_episodes("some-uuid")
+      {:ok, 8}
+  """
+  def match_files_to_episodes(media_item_id) do
+    # Get all media files for this item that don't have an episode_id
+    unmatched_files =
+      MediaFile
+      |> where([mf], mf.media_item_id == ^media_item_id)
+      |> where([mf], is_nil(mf.episode_id))
+      |> Repo.all()
+
+    Logger.info(
+      "Found #{length(unmatched_files)} unmatched files for media item #{media_item_id}"
+    )
+
+    # Match each file to an episode
+    matched_count =
+      Enum.reduce(unmatched_files, 0, fn media_file, count ->
+        case match_file_to_episode(media_file, media_item_id) do
+          {:ok, _} -> count + 1
+          {:error, _} -> count
+        end
+      end)
+
+    Logger.info("Successfully matched #{matched_count} files to episodes")
+
+    {:ok, matched_count}
+  end
+
+  defp match_file_to_episode(media_file, media_item_id) do
+    filename = Path.basename(media_file.path)
+
+    # Parse the filename to extract season/episode information
+    parsed_info = FileParser.parse(filename)
+    season = Map.get(parsed_info, :season)
+    episode_numbers = Map.get(parsed_info, :episodes)
+
+    if is_integer(season) and is_list(episode_numbers) and length(episode_numbers) > 0 do
+      # For multi-episode files, we'll just match to the first episode
+      episode_number = List.first(episode_numbers)
+
+      # Find the matching episode
+      case Mydia.Media.get_episode_by_number(media_item_id, season, episode_number) do
+        nil ->
+          Logger.debug("No episode found for file",
+            filename: filename,
+            season: season,
+            episode: episode_number
+          )
+
+          {:error, :episode_not_found}
+
+        episode ->
+          # Update the media file with the episode_id
+          case update_media_file(media_file, %{
+                 media_item_id: nil,
+                 episode_id: episode.id
+               }) do
+            {:ok, updated_file} ->
+              Logger.debug("Matched file to episode",
+                filename: filename,
+                season: season,
+                episode: episode_number,
+                episode_id: episode.id
+              )
+
+              {:ok, updated_file}
+
+            {:error, reason} ->
+              Logger.warning("Failed to update media file",
+                filename: filename,
+                reason: inspect(reason)
+              )
+
+              {:error, reason}
+          end
+      end
+    else
+      Logger.debug("File did not contain valid episode information", filename: filename)
+      {:error, :no_episode_info}
+    end
+  end
+
+  @doc """
   Returns orphaned media files (files without media_item_id or episode_id).
 
   These files were scanned but failed to match to any media items.
