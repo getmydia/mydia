@@ -1,6 +1,184 @@
 defmodule Mydia.Library.MetadataEnricherTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Library.MetadataEnricher
+  alias Mydia.{Library, Settings}
+
+  describe "library type validation" do
+    setup do
+      # Create library paths for testing
+      {:ok, movies_lib} =
+        Settings.create_library_path(%{
+          path: "/media/movies",
+          type: :movies
+        })
+
+      {:ok, series_lib} =
+        Settings.create_library_path(%{
+          path: "/media/series",
+          type: :series
+        })
+
+      {:ok, mixed_lib} =
+        Settings.create_library_path(%{
+          path: "/media/mixed",
+          type: :mixed
+        })
+
+      %{
+        movies_lib: movies_lib,
+        series_lib: series_lib,
+        mixed_lib: mixed_lib
+      }
+    end
+
+    test "allows movies in movies-only library", %{movies_lib: movies_lib} do
+      # First create a movie media item
+      {:ok, movie} =
+        Mydia.Media.create_media_item(%{
+          title: "The Matrix",
+          type: "movie",
+          year: 1999,
+          tmdb_id: 603
+        })
+
+      # Create a media file in movies library associated with the movie
+      {:ok, media_file} =
+        Library.create_media_file(%{
+          path: "#{movies_lib.path}/The Matrix (1999).mkv",
+          media_item_id: movie.id
+        })
+
+      # Should succeed - movie in movies library
+      assert media_file.path =~ movies_lib.path
+      assert media_file.media_item_id == movie.id
+    end
+
+    test "allows TV shows in series-only library", %{series_lib: series_lib} do
+      # First create a TV show and episode
+      {:ok, tv_show} =
+        Mydia.Media.create_media_item(%{
+          title: "Breaking Bad",
+          type: "tv_show",
+          year: 2008,
+          tmdb_id: 1396
+        })
+
+      {:ok, episode} =
+        Mydia.Media.create_episode(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          title: "Pilot"
+        })
+
+      {:ok, media_file} =
+        Library.create_media_file(%{
+          path: "#{series_lib.path}/Breaking Bad/Season 01/Breaking Bad S01E01.mkv",
+          episode_id: episode.id
+        })
+
+      assert media_file.path =~ series_lib.path
+      assert media_file.episode_id == episode.id
+    end
+
+    test "allows both movies and TV shows in mixed library", %{mixed_lib: mixed_lib} do
+      # Create movie
+      {:ok, movie} =
+        Mydia.Media.create_media_item(%{
+          title: "The Matrix",
+          type: "movie",
+          year: 1999,
+          tmdb_id: 603
+        })
+
+      # Create TV show and episode
+      {:ok, tv_show} =
+        Mydia.Media.create_media_item(%{
+          title: "Breaking Bad",
+          type: "tv_show",
+          year: 2008,
+          tmdb_id: 1396
+        })
+
+      {:ok, episode} =
+        Mydia.Media.create_episode(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          title: "Pilot"
+        })
+
+      {:ok, movie_file} =
+        Library.create_media_file(%{
+          path: "#{mixed_lib.path}/movies/The Matrix (1999).mkv",
+          media_item_id: movie.id
+        })
+
+      {:ok, tv_file} =
+        Library.create_media_file(%{
+          path: "#{mixed_lib.path}/tv/Breaking Bad/Season 01/S01E01.mkv",
+          episode_id: episode.id
+        })
+
+      assert movie_file.path =~ mixed_lib.path
+      assert tv_file.path =~ mixed_lib.path
+    end
+
+    test "prevents movies in series-only library", %{series_lib: series_lib} do
+      # First create a movie media item
+      {:ok, movie} =
+        Mydia.Media.create_media_item(%{
+          title: "The Matrix",
+          type: "movie",
+          year: 1999,
+          tmdb_id: 603
+        })
+
+      # Try to create a media file in series library and associate with movie
+      assert {:error, changeset} =
+               Library.create_media_file(%{
+                 path: "#{series_lib.path}/The Matrix (1999).mkv",
+                 media_item_id: movie.id
+               })
+
+      error_message = hd(errors_on(changeset).media_item_id)
+      assert error_message =~ "cannot add movies to a library path configured for TV series only"
+    end
+
+    test "prevents TV shows in movies-only library", %{movies_lib: movies_lib} do
+      # First create a TV show media item
+      {:ok, tv_show} =
+        Mydia.Media.create_media_item(%{
+          title: "Breaking Bad",
+          type: "tv_show",
+          year: 2008,
+          tmdb_id: 1396
+        })
+
+      # Create an episode
+      {:ok, episode} =
+        Mydia.Media.create_episode(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          title: "Pilot"
+        })
+
+      # Try to create a media file in movies library and associate with episode
+      assert {:error, changeset} =
+               Library.create_media_file(%{
+                 path: "#{movies_lib.path}/Breaking Bad S01E01.mkv",
+                 episode_id: episode.id
+               })
+
+      error_message = hd(errors_on(changeset).episode_id)
+
+      assert error_message =~
+               "cannot add TV episodes to a library path configured for movies only"
+    end
+  end
+
   describe "year extraction from metadata" do
     test "extracts year from Date struct in release_date" do
       # Simulate metadata with Date struct (as returned by some TMDB responses)

@@ -10,7 +10,7 @@ defmodule Mydia.Library.MetadataEnricher do
   """
 
   require Logger
-  alias Mydia.{Media, Metadata}
+  alias Mydia.{Media, Metadata, Settings}
 
   @doc """
   Enriches a media item with full metadata from the provider.
@@ -46,42 +46,55 @@ defmodule Mydia.Library.MetadataEnricher do
       parsed_info: Map.get(match_result, :parsed_info)
     )
 
-    # Check if media item already exists
-    case get_or_create_media_item(provider_id, media_type, match_result, config) do
-      {:ok, media_item} ->
-        # Associate media file with media_item for movies only
-        # For TV shows, files are associated with episodes instead
-        if media_file_id && media_type == :movie do
-          associate_media_file(media_item, media_file_id)
-        end
+    # Validate library type compatibility if we have a media file
+    with :ok <- validate_library_type_compatibility(media_type, media_file_id) do
+      # Check if media item already exists
+      case get_or_create_media_item(provider_id, media_type, match_result, config) do
+        {:ok, media_item} ->
+          # Associate media file with media_item for movies only
+          # For TV shows, files are associated with episodes instead
+          if media_file_id && media_type == :movie do
+            associate_media_file(media_item, media_file_id)
+          end
 
-        # For TV shows, fetch and create episodes
-        if media_type == :tv_show and Keyword.get(opts, :fetch_episodes, true) do
-          # Add media_file_id to match_result so it can be used for episode file association
-          match_result_with_file_id =
-            if media_file_id do
-              Logger.info("""
-              Adding media_file_id to match_result for episode association:
-                media_file_id: #{inspect(media_file_id)}
-                season: #{inspect(get_in(match_result, [:parsed_info, :season]))}
-                episodes: #{inspect(get_in(match_result, [:parsed_info, :episodes]))}
-                parsed_info keys: #{inspect(Map.keys(match_result.parsed_info))}
-              """)
+          # For TV shows, fetch and create episodes
+          if media_type == :tv_show and Keyword.get(opts, :fetch_episodes, true) do
+            # Add media_file_id to match_result so it can be used for episode file association
+            match_result_with_file_id =
+              if media_file_id do
+                Logger.info("""
+                Adding media_file_id to match_result for episode association:
+                  media_file_id: #{inspect(media_file_id)}
+                  season: #{inspect(get_in(match_result, [:parsed_info, :season]))}
+                  episodes: #{inspect(get_in(match_result, [:parsed_info, :episodes]))}
+                  parsed_info keys: #{inspect(Map.keys(match_result.parsed_info))}
+                """)
 
-              Map.put(match_result, :media_file_id, media_file_id)
-            else
-              Logger.warning("No media_file_id provided for TV show import")
-              match_result
-            end
+                Map.put(match_result, :media_file_id, media_file_id)
+              else
+                Logger.warning("No media_file_id provided for TV show import")
+                match_result
+              end
 
-          enrich_episodes(media_item, provider_id, config, match_result_with_file_id)
-        end
+            enrich_episodes(media_item, provider_id, config, match_result_with_file_id)
+          end
 
-        {:ok, media_item}
+          {:ok, media_item}
 
+        {:error, reason} = error ->
+          Logger.error("Failed to enrich media",
+            provider_id: provider_id,
+            reason: reason
+          )
+
+          error
+      end
+    else
       {:error, reason} = error ->
-        Logger.error("Failed to enrich media",
+        Logger.error("Library type validation failed",
           provider_id: provider_id,
+          media_type: media_type,
+          media_file_id: media_file_id,
           reason: reason
         )
 
@@ -457,5 +470,110 @@ defmodule Mydia.Library.MetadataEnricher do
     """)
 
     :ok
+  end
+
+  # Validates that the media type is compatible with the library path type
+  defp validate_library_type_compatibility(_media_type, nil) do
+    # No media file, skip validation
+    :ok
+  end
+
+  defp validate_library_type_compatibility(media_type, media_file_id)
+       when is_binary(media_file_id) do
+    case Mydia.Repo.get(Mydia.Library.MediaFile, media_file_id) do
+      nil ->
+        # Media file not found, let it proceed (will fail later with better error)
+        :ok
+
+      media_file ->
+        validate_media_type_against_library_path(media_type, media_file.path)
+    end
+  rescue
+    error ->
+      Logger.error("Exception during library type validation",
+        media_type: media_type,
+        media_file_id: media_file_id,
+        error: inspect(error)
+      )
+
+      # Allow to proceed if validation itself fails
+      :ok
+  end
+
+  defp validate_media_type_against_library_path(media_type, file_path) do
+    library_path = find_library_path_for_file(file_path)
+    media_type_string = media_type_to_string(media_type)
+
+    cond do
+      # No library path found, allow the operation
+      is_nil(library_path) ->
+        :ok
+
+      # Library is :mixed, allow both types
+      library_path.type == :mixed ->
+        :ok
+
+      # Movie in :series library
+      media_type_string == "movie" and library_path.type == :series ->
+        emit_type_mismatch_telemetry(media_type_string, library_path)
+
+        Logger.warning("Type mismatch: Cannot add movies to series-only library",
+          media_type: media_type_string,
+          library_path: library_path.path,
+          library_type: library_path.type,
+          file_path: file_path
+        )
+
+        {:error,
+         {:library_type_mismatch,
+          "Cannot add movies to a library path configured for TV series only (path: #{library_path.path})"}}
+
+      # TV show in :movies library
+      media_type_string == "tv_show" and library_path.type == :movies ->
+        emit_type_mismatch_telemetry(media_type_string, library_path)
+
+        Logger.warning("Type mismatch: Cannot add TV shows to movies-only library",
+          media_type: media_type_string,
+          library_path: library_path.path,
+          library_type: library_path.type,
+          file_path: file_path
+        )
+
+        {:error,
+         {:library_type_mismatch,
+          "Cannot add TV shows to a library path configured for movies only (path: #{library_path.path})"}}
+
+      # All other cases are valid
+      true ->
+        :ok
+    end
+  end
+
+  # Finds the library path that contains the given file path
+  # Prefers the longest matching prefix (most specific path)
+  defp find_library_path_for_file(file_path) do
+    library_paths = Settings.list_library_paths()
+
+    library_paths
+    |> Enum.filter(fn library_path ->
+      String.starts_with?(file_path, library_path.path)
+    end)
+    |> Enum.max_by(
+      fn library_path -> String.length(library_path.path) end,
+      fn -> nil end
+    )
+  end
+
+  # Emits telemetry event for type mismatch tracking
+  defp emit_type_mismatch_telemetry(media_type, library_path) do
+    :telemetry.execute(
+      [:mydia, :library, :type_mismatch],
+      %{count: 1},
+      %{
+        media_type: media_type,
+        library_type: library_path.type,
+        library_path: library_path.path
+      }
+    )
   end
 end
