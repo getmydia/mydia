@@ -599,7 +599,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
   defp apply_filters(socket) do
     # Re-filter the current results without re-searching
-    results = socket.assigns.search_results |> Enum.map(fn {_id, result} -> result end)
+    results = socket.assigns.search_results_map |> Map.values()
     filtered_results = filter_results(results, socket.assigns)
     sorted_results = sort_results(filtered_results, socket.assigns.sort_by)
 
@@ -610,7 +610,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
   defp apply_sort(socket) do
     # Re-sort the current results
-    results = socket.assigns.search_results |> Enum.map(fn {_id, result} -> result end)
+    results = socket.assigns.search_results_map |> Map.values()
     sorted_results = sort_results(results, socket.assigns.sort_by)
 
     socket

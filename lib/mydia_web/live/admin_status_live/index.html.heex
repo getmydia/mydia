@@ -1,11 +1,4 @@
-<Layouts.app
-  flash={@flash}
-  current_user={@current_user}
-  movie_count={@movie_count}
-  tv_show_count={@tv_show_count}
-  downloads_count={@downloads_count}
-  pending_requests_count={@pending_requests_count}
->
+<Layouts.app {assigns}>
   <div class="container mx-auto px-4 py-8">
     <div class="mb-8">
       <h1 class="text-4xl font-bold mb-2">System Status</h1>

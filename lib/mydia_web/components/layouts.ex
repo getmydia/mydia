@@ -18,15 +18,13 @@ defmodule MydiaWeb.Layouts do
   and it often contains your application menu, sidebar,
   or similar.
 
+  Navigation counts (movie_count, tv_show_count, downloads_count, pending_requests_count)
+  are automatically loaded by the :load_navigation_data on_mount hook in all authenticated LiveViews.
+  Templates should pass these through to the layout component.
+
   ## Examples
 
-      <Layouts.app
-        flash={@flash}
-        movie_count={@movie_count}
-        tv_show_count={@tv_show_count}
-        downloads_count={@downloads_count}
-        pending_requests_count={@pending_requests_count}
-      >
+      <Layouts.app {assigns}>
         <h1>Content</h1>
       </Layouts.app>
 
@@ -47,7 +45,8 @@ defmodule MydiaWeb.Layouts do
 
   def app(assigns) do
     # Navigation counts are loaded by the :load_navigation_data on_mount hook
-    # in the LiveView session (see router.ex and user_auth.ex) and passed as attributes
+    # in the LiveView session (see router.ex and user_auth.ex)
+
     ~H"""
     <div class="drawer lg:drawer-open">
       <input id="main-drawer" type="checkbox" class="drawer-toggle" />

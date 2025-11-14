@@ -1,11 +1,4 @@
-<Layouts.app
-  flash={@flash}
-  current_user={@current_user}
-  movie_count={@movie_count}
-  tv_show_count={@tv_show_count}
-  downloads_count={@downloads_count}
-  pending_requests_count={@pending_requests_count}
->
+<Layouts.app {assigns}>
   <div class="flex flex-col h-full">
     <%!-- Header --%>
     <div class="mb-4 md:mb-6">
@@ -176,11 +169,7 @@
     <%!-- Results Table --%>
     <%= if @search_query != "" && !@searching && !@results_empty? do %>
       <div class="overflow-x-auto">
-        <table
-          id="search-results"
-          phx-update="stream"
-          class="table table-zebra w-full bg-base-100 shadow-lg"
-        >
+        <table class="table table-zebra w-full bg-base-100 shadow-lg">
           <thead>
             <tr class="bg-base-300">
               <th class="w-2/5">Release Title</th>
@@ -190,7 +179,7 @@
               <th class="w-32">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="search-results" phx-update="stream">
             <tr
               :for={{id, result} <- @streams.search_results}
               id={id}
@@ -221,18 +210,16 @@
                 </div>
               </td>
               <%!-- Quality & Size Column --%>
-              <td>
-                <div class="flex flex-col gap-2">
-                  <div class="flex flex-wrap gap-1">
-                    <%= for badge <- get_quality_badges(result) do %>
-                      <span class={"badge badge-sm #{badge.color}"}>
-                        {badge.text}
-                      </span>
-                    <% end %>
-                  </div>
-                  <span class="text-xs font-mono text-base-content/70">
-                    {format_size(result)}
-                  </span>
+              <td class="align-top">
+                <div class="flex flex-wrap gap-1 mb-2">
+                  <%= for badge <- get_quality_badges(result) do %>
+                    <span class={"badge badge-sm #{badge.color}"}>
+                      {badge.text}
+                    </span>
+                  <% end %>
+                </div>
+                <div class="text-xs font-mono text-base-content/70">
+                  {format_size(result)}
                 </div>
               </td>
               <%!-- Health Column (Seeders/Peers with indicator) --%>

@@ -1,11 +1,4 @@
-<Layouts.app
-  flash={@flash}
-  current_user={@current_user}
-  movie_count={@movie_count}
-  tv_show_count={@tv_show_count}
-  downloads_count={@downloads_count}
-  pending_requests_count={@pending_requests_count}
->
+<Layouts.app {assigns}>
   <%!-- Page Container --%>
   <div class="relative -mx-4 -mt-4 mb-4">
     <%!-- Backdrop Image (if available) --%>

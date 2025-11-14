@@ -1,11 +1,4 @@
-<Layouts.app
-  flash={@flash}
-  current_user={@current_user}
-  movie_count={@movie_count}
-  tv_show_count={@tv_show_count}
-  downloads_count={@downloads_count}
-  pending_requests_count={@pending_requests_count}
->
+<Layouts.app {assigns}>
   <div class="flex flex-col h-full" phx-window-keydown="keydown">
     <%!-- Header with title and view controls --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
@@ -284,7 +277,7 @@
               <.progress_badge :if={progress} progress={progress} />
               <%!-- Quality badge --%>
               <%= if quality = get_quality_badge(item) do %>
-                <div class="badge badge-primary badge-sm absolute top-2 left-2 z-10 shadow-md">
+                <div class="badge badge-primary badge-sm absolute top-2 right-2 z-10 shadow-md">
                   {quality}
                 </div>
               <% end %>
@@ -294,36 +287,20 @@
             <h3 class="card-title text-sm line-clamp-2" title={item.title}>
               {item.title}
             </h3>
-            <div class="flex flex-col gap-2">
-              <%!-- Status badge --%>
-              <% {status, counts} = get_media_item_status(item) %>
-              <div class="flex items-center gap-1">
+            <%!-- Status badge and year --%>
+            <% {status, counts} = get_media_item_status(item) %>
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center justify-between gap-2">
                 <div class="tooltip tooltip-right" data-tip={media_status_label(status)}>
                   <span class={["badge badge-xs", media_status_color(status)]}>
                     <.icon name={media_status_icon(status)} class="w-3 h-3" />
                   </span>
                 </div>
-                <%= if episode_count = format_episode_count(counts) do %>
-                  <span class="text-xs text-base-content/70">{episode_count}</span>
-                <% end %>
+                <span class="text-xs text-base-content/70">{format_year(item.year)}</span>
               </div>
-              <%!-- Type and year --%>
-              <div class="flex items-center justify-between text-xs text-base-content/70">
-                <span>{format_year(item.year)}</span>
-                <span class="badge badge-ghost badge-sm">
-                  {if item.type == "movie", do: "Movie", else: "TV"}
-                </span>
-              </div>
-            </div>
-            <%!-- Navigation button --%>
-            <div class="card-actions mt-2">
-              <.link
-                navigate={~p"/media/#{item.id}"}
-                class="btn btn-primary btn-sm w-full gap-2"
-              >
-                <.icon name="hero-arrow-right" class="w-4 h-4" />
-                {if item.type == "movie", do: "Go to Movie", else: "Go to Show"}
-              </.link>
+              <%= if episode_count = format_episode_count(counts) do %>
+                <span class="text-xs text-base-content/70">{episode_count}</span>
+              <% end %>
             </div>
           </div>
         </div>
@@ -343,12 +320,10 @@
             </th>
             <th class="w-12"></th>
             <th>Title</th>
-            <th class="hidden md:table-cell">Type</th>
             <th class="hidden md:table-cell">Year</th>
             <th class="hidden lg:table-cell">Status</th>
             <th class="hidden lg:table-cell">Quality</th>
             <th class="hidden xl:table-cell">Size</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="media-items-list" phx-update="stream">
@@ -374,7 +349,12 @@
             <td>
               <div class="flex items-center gap-2">
                 <div class="flex-1 min-w-0">
-                  <div class="font-semibold">{item.title}</div>
+                  <.link
+                    navigate={~p"/media/#{item.id}"}
+                    class="font-semibold hover:text-primary transition-colors"
+                  >
+                    {item.title}
+                  </.link>
                   <%= if item.original_title && item.original_title != item.title do %>
                     <div class="text-sm text-base-content/70">{item.original_title}</div>
                   <% end %>
@@ -393,11 +373,6 @@
                   <% end %>
                 <% end %>
               </div>
-            </td>
-            <td class="hidden md:table-cell">
-              <span class="badge badge-ghost">
-                {if item.type == "movie", do: "Movie", else: "TV Show"}
-              </span>
             </td>
             <td class="hidden md:table-cell">{format_year(item.year)}</td>
             <td class="hidden lg:table-cell">
@@ -422,19 +397,6 @@
             </td>
             <td class="hidden xl:table-cell">
               {format_file_size(total_file_size(item))}
-            </td>
-            <td>
-              <div class="flex gap-2">
-                <.link
-                  navigate={~p"/media/#{item.id}"}
-                  class="btn btn-primary btn-sm gap-2"
-                >
-                  <.icon name="hero-arrow-right" class="w-4 h-4" />
-                  <span class="hidden lg:inline">
-                    {if item.type == "movie", do: "Go to Movie", else: "Go to Show"}
-                  </span>
-                </.link>
-              </div>
             </td>
           </tr>
         </tbody>

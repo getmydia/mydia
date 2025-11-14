@@ -1,11 +1,4 @@
-<Layouts.app
-  flash={@flash}
-  current_user={@current_user}
-  movie_count={@movie_count}
-  tv_show_count={@tv_show_count}
-  downloads_count={@downloads_count}
-  pending_requests_count={@pending_requests_count}
->
+<Layouts.app {assigns}>
   <div class="max-w-7xl mx-auto">
     <%!-- Header --%>
     <div class="flex items-center justify-between mb-6">
