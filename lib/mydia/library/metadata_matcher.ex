@@ -12,18 +12,9 @@ defmodule Mydia.Library.MetadataMatcher do
   require Logger
   alias Mydia.{Media, Metadata}
   alias Mydia.Library.FileParser.V2, as: FileParser
+  alias Mydia.Library.Structs.MatchResult
 
-  @type match_result :: %{
-          required(:provider_id) => String.t(),
-          required(:provider_type) => atom(),
-          required(:title) => String.t(),
-          required(:year) => integer() | nil,
-          required(:match_confidence) => float(),
-          required(:metadata) => map(),
-          optional(:match_type) => :full_match | :partial_match,
-          optional(:partial_reason) => :episode_not_found | :season_not_found,
-          optional(:parsed_info) => map()
-        }
+  @type match_result :: MatchResult.t()
 
   @doc """
   Matches a file path to metadata provider entries.
@@ -237,7 +228,7 @@ defmodule Mydia.Library.MetadataMatcher do
 
             # Return partial match result
             {:ok,
-             %{
+             MatchResult.new(
                provider_id: to_string(series.provider_id),
                provider_type: :tmdb,
                title: series.title,
@@ -248,7 +239,7 @@ defmodule Mydia.Library.MetadataMatcher do
                partial_reason: :episode_not_found,
                metadata: series,
                parsed_info: parsed
-             }}
+             )}
 
           {:error, _} ->
             {:error, :no_matches_found}
@@ -311,7 +302,7 @@ defmodule Mydia.Library.MetadataMatcher do
       [item | _] ->
         # Found a match! Return a match_result struct
         {:ok,
-         %{
+         MatchResult.new(
            provider_id: to_string(item.tmdb_id),
            provider_type: :tmdb,
            title: item.title,
@@ -320,7 +311,7 @@ defmodule Mydia.Library.MetadataMatcher do
            metadata: item.metadata || %{},
            parsed_info: parsed,
            from_local_db: true
-         }}
+         )}
     end
   end
 
@@ -342,7 +333,7 @@ defmodule Mydia.Library.MetadataMatcher do
       [item | _] ->
         # Found a match! Return a match_result struct
         {:ok,
-         %{
+         MatchResult.new(
            provider_id: to_string(item.tmdb_id),
            provider_type: :tmdb,
            title: item.title,
@@ -351,7 +342,7 @@ defmodule Mydia.Library.MetadataMatcher do
            metadata: item.metadata || %{},
            parsed_info: parsed,
            from_local_db: true
-         }}
+         )}
     end
   end
 
@@ -408,7 +399,7 @@ defmodule Mydia.Library.MetadataMatcher do
         )
 
         {:ok,
-         %{
+         MatchResult.new(
            provider_id: to_string(best_match.provider_id),
            provider_type: :tmdb,
            title: best_match.title,
@@ -416,7 +407,7 @@ defmodule Mydia.Library.MetadataMatcher do
            match_confidence: score,
            metadata: best_match,
            parsed_info: parsed
-         }}
+         )}
 
       _ ->
         Logger.warning("No confident movie match found",
@@ -445,7 +436,7 @@ defmodule Mydia.Library.MetadataMatcher do
         )
 
         {:ok,
-         %{
+         MatchResult.new(
            provider_id: to_string(best_match.provider_id),
            provider_type: :tmdb,
            title: best_match.title,
@@ -454,7 +445,7 @@ defmodule Mydia.Library.MetadataMatcher do
            match_type: :full_match,
            metadata: best_match,
            parsed_info: parsed
-         }}
+         )}
 
       _ ->
         Logger.warning("No confident TV show match found",
