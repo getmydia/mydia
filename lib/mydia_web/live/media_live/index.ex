@@ -492,13 +492,13 @@ defmodule MydiaWeb.MediaLive.Index do
 
     Enum.filter(items, fn item ->
       # Match against title
+      # Match against original title
+      # Match against year (convert to string for matching)
+      # Match against overview in metadata
       String.contains?(String.downcase(item.title), query_lower) or
-        # Match against original title
         (item.original_title &&
            String.contains?(String.downcase(item.original_title), query_lower)) or
-        # Match against year (convert to string for matching)
         (item.year && String.contains?(to_string(item.year), query_lower)) or
-        # Match against overview in metadata
         match_metadata_overview?(item.metadata, query_lower)
     end)
   end

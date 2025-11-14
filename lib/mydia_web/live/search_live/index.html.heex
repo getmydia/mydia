@@ -6,9 +6,9 @@
   downloads_count={@downloads_count}
   pending_requests_count={@pending_requests_count}
 >
-  <div class="flex flex-col h-full p-6">
+  <div class="flex flex-col h-full">
     <%!-- Header --%>
-    <div class="mb-6">
+    <div class="mb-4 md:mb-6">
       <h1 class="text-3xl font-bold">{@page_title}</h1>
       <p class="text-base-content/70 mt-1">
         Search for movies and TV shows across your configured indexers
@@ -16,7 +16,7 @@
     </div>
 
     <%!-- Search Bar --%>
-    <form phx-submit="search" id="indexer-search-form" class="mb-6">
+    <form phx-submit="search" id="indexer-search-form" class="mb-4 md:mb-6">
       <div class="flex w-full">
         <div class="flex-1">
           <.input
@@ -46,7 +46,7 @@
 
     <%!-- Filters and Sort --%>
     <%= if @search_query != "" || @searching do %>
-      <div class="flex flex-col lg:flex-row gap-4 mb-6">
+      <div class="flex flex-col lg:flex-row gap-3 md:gap-4 mb-4 md:mb-6">
         <%!-- Filters --%>
         <div class="card bg-base-100 shadow flex-1">
           <div class="card-body p-4">

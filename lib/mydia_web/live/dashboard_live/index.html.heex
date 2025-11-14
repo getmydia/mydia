@@ -12,7 +12,7 @@
   </div>
   
 <!-- Stats Cards -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
     <!-- Movies Card -->
     <div class="card bg-base-100 shadow-sm">
       <div class="card-body">
@@ -59,9 +59,9 @@
   </div>
   
 <!-- Quick Actions -->
-  <div class="mb-8">
-    <h2 class="text-2xl font-bold mb-4">Quick Actions</h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div class="mb-6 md:mb-8">
+    <h2 class="text-2xl font-bold mb-3 md:mb-4">Quick Actions</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
       <%= if @current_user && @current_user.role == "guest" do %>
         <%!-- Guest users see request options --%>
         <.link
@@ -181,8 +181,8 @@
   </div>
   
 <!-- Trending Movies -->
-  <div class="mb-8">
-    <div class="flex items-center justify-between mb-4">
+  <div class="mb-6 md:mb-8">
+    <div class="flex items-center justify-between mb-3 md:mb-4">
       <h2 class="text-2xl font-bold">Trending Movies</h2>
       <.link navigate="/movies" class="btn btn-sm btn-ghost">
         View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
