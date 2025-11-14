@@ -99,6 +99,7 @@ curl http://localhost:4000/health
 ```
 
 Response:
+
 ```json
 {
   "status": "ok",
@@ -161,6 +162,7 @@ On first startup, the application will:
 ### Container won't start
 
 Check the logs:
+
 ```bash
 docker logs mydia
 ```
@@ -168,6 +170,7 @@ docker logs mydia
 ### Health check failing
 
 Ensure the application is listening on the correct port:
+
 ```bash
 docker exec mydia curl -f http://localhost:4000/health
 ```
@@ -175,6 +178,7 @@ docker exec mydia curl -f http://localhost:4000/health
 ### Database permission issues
 
 Ensure the data volume has correct permissions:
+
 ```bash
 docker exec mydia ls -la /data
 ```
