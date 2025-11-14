@@ -66,7 +66,7 @@ defmodule MydiaWeb.MediaLive.Index do
     {:noreply, assign(socket, :view_mode, view_mode)}
   end
 
-  def handle_event("search", %{"search" => query}, socket) do
+  def handle_event("search", %{"value" => query}, socket) do
     {:noreply,
      socket
      |> assign(:search_query, query)

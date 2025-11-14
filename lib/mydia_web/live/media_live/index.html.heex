@@ -168,16 +168,15 @@
     <div class="flex flex-col md:flex-row gap-3 md:gap-4 mb-4 md:mb-6">
       <%!-- Search input --%>
       <div class="flex-1">
-        <form phx-change="search" phx-submit="search" id="search-form">
-          <.input
-            type="text"
-            name="search"
-            value={@search_query}
-            placeholder="Search media..."
-            phx-debounce="300"
-            class="input input-bordered w-full"
-          />
-        </form>
+        <input
+          type="text"
+          name="search"
+          value={@search_query}
+          placeholder="Search media..."
+          phx-change="search"
+          phx-debounce="300"
+          class="input input-bordered w-full"
+        />
       </div>
 
       <%!-- Filters --%>
