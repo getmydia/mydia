@@ -63,4 +63,23 @@ defmodule Mydia.SettingsFixtures do
     {:ok, indexer} = Settings.create_indexer_config(attrs)
     indexer
   end
+
+  @doc """
+  Generate a library path.
+  """
+  def library_path_fixture(attrs \\ %{}) do
+    unique_path =
+      Path.join(System.tmp_dir!(), "test_library_#{System.unique_integer([:positive])}")
+
+    default_attrs = %{
+      path: unique_path,
+      type: "movies",
+      name: "Test Library #{System.unique_integer([:positive])}"
+    }
+
+    attrs = Map.merge(default_attrs, attrs)
+
+    {:ok, library_path} = Settings.create_library_path(attrs)
+    library_path
+  end
 end

@@ -61,6 +61,7 @@ defmodule Mydia.Library.MediaFile do
       :media_item_id,
       :episode_id,
       :quality_profile_id,
+      :path,
       :relative_path,
       :library_path_id,
       :size,

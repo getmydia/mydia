@@ -3,6 +3,8 @@ defmodule Mydia.MediaFixtures do
   This module defines test helpers for creating entities via the `Mydia.Media` context.
   """
 
+  import Mydia.SettingsFixtures
+
   @doc """
   Generate a media item.
   """
@@ -59,6 +61,22 @@ defmodule Mydia.MediaFixtures do
     # Convert keyword list to map if needed
     attrs = Map.new(attrs)
 
+    # Create library_path if not provided
+    attrs =
+      if Map.has_key?(attrs, :library_path_id) do
+        attrs
+      else
+        # Determine library type based on media_item or episode
+        library_type =
+          cond do
+            Map.has_key?(attrs, :episode_id) -> "series"
+            true -> "movies"
+          end
+
+        library_path = library_path_fixture(%{type: library_type})
+        Map.put(attrs, :library_path_id, library_path.id)
+      end
+
     # Ensure either media_item_id or episode_id is provided
     attrs =
       cond do
@@ -71,17 +89,27 @@ defmodule Mydia.MediaFixtures do
           Map.put(attrs, :media_item_id, media_item.id)
       end
 
-    {:ok, media_file} =
-      attrs
-      |> Enum.into(%{
-        path: "/media/test/file-#{System.unique_integer([:positive])}.mp4",
-        size: 1_000_000_000,
-        resolution: "1080p",
-        codec: "h264",
-        audio_codec: "aac",
-        metadata: %{"container" => "mp4"}
-      })
-      |> Mydia.Library.create_media_file()
+    # Get library_path to construct full path (for backward compatibility during migration)
+    library_path = Mydia.Repo.get!(Mydia.Settings.LibraryPath, attrs.library_path_id)
+
+    # Build default attrs
+    default_attrs = %{
+      relative_path: "test/file-#{System.unique_integer([:positive])}.mp4",
+      size: 1_000_000_000,
+      resolution: "1080p",
+      codec: "h264",
+      audio_codec: "aac",
+      metadata: %{"container" => "mp4"}
+    }
+
+    # Merge attrs with defaults
+    final_attrs = Enum.into(attrs, default_attrs)
+
+    # Add full path for backward compatibility (using relative_path from final_attrs)
+    final_attrs =
+      Map.put(final_attrs, :path, Path.join(library_path.path, final_attrs.relative_path))
+
+    {:ok, media_file} = Mydia.Library.create_media_file(final_attrs)
 
     media_file
   end

@@ -2,15 +2,35 @@ defmodule MydiaWeb.Api.StreamControllerTest do
   use MydiaWeb.ConnCase, async: false
 
   import Mydia.MediaFixtures
+  import Mydia.SettingsFixtures
+
+  alias Mydia.Library.MediaFile
 
   setup do
     # Create test user and get auth token
     user = MydiaWeb.AuthHelpers.create_test_user()
     {_user, token} = MydiaWeb.AuthHelpers.create_user_and_token()
 
-    # Create a test media file with actual file on disk
-    test_file_path = create_test_video_file()
-    media_file = media_file_fixture(%{path: test_file_path})
+    # Create a test library path
+    library_path = library_path_fixture()
+
+    # Create the library directory if it doesn't exist
+    File.mkdir_p!(library_path.path)
+
+    # Create a test video file in the library path
+    test_file_name = "test_video_#{System.unique_integer([:positive])}.mp4"
+    test_file_path = Path.join(library_path.path, test_file_name)
+    File.write!(test_file_path, :crypto.strong_rand_bytes(1024 * 10))
+
+    # Create media file with relative path
+    media_file =
+      media_file_fixture(%{
+        library_path_id: library_path.id,
+        relative_path: test_file_name
+      })
+
+    # Preload library_path for absolute path resolution
+    media_file = Mydia.Repo.preload(media_file, :library_path)
 
     on_exit(fn ->
       # Clean up test file
@@ -60,7 +80,8 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       token: token,
       media_file: media_file
     } do
-      file_stat = File.stat!(media_file.path)
+      file_path = MediaFile.absolute_path(media_file)
+      file_stat = File.stat!(file_path)
       file_size = file_stat.size
 
       conn =
@@ -107,8 +128,10 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       conn: conn,
       token: token
     } do
-      # Create a media file record with non-existent path
-      media_file = media_file_fixture(%{path: "/nonexistent/file.mp4"})
+      # Create a media file record with non-existent relative path
+      media_file =
+        media_file_fixture(%{relative_path: "nonexistent/file.mp4"})
+        |> Mydia.Repo.preload(:library_path)
 
       conn =
         conn
@@ -133,12 +156,19 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       ]
 
       for {ext, container, codec, audio_codec, expected_mime} <- test_files do
+        # Create test library path
+        library_path = library_path_fixture()
+        File.mkdir_p!(library_path.path)
+
         # Create test file with specific extension
-        test_path = create_test_video_file(ext)
+        test_file_name = "test_video_#{System.unique_integer([:positive])}#{ext}"
+        test_path = Path.join(library_path.path, test_file_name)
+        File.write!(test_path, :crypto.strong_rand_bytes(1024 * 10))
 
         media_file =
           media_file_fixture(%{
-            path: test_path,
+            library_path_id: library_path.id,
+            relative_path: test_file_name,
             codec: codec,
             audio_codec: audio_codec,
             metadata: %{"container" => container}
@@ -155,17 +185,5 @@ defmodule MydiaWeb.Api.StreamControllerTest do
         File.rm!(test_path)
       end
     end
-  end
-
-  # Helper to create a small test video file
-  defp create_test_video_file(ext \\ ".mp4") do
-    # Create temp directory if it doesn't exist
-    temp_dir = System.tmp_dir!()
-    test_file_path = Path.join(temp_dir, "test_video_#{System.unique_integer([:positive])}#{ext}")
-
-    # Create a small dummy file (not a real video, but good enough for HTTP range testing)
-    File.write!(test_file_path, :crypto.strong_rand_bytes(1024 * 10))
-
-    test_file_path
   end
 end

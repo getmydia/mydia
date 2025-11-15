@@ -2,6 +2,7 @@ defmodule MydiaWeb.Api.StreamController do
   use MydiaWeb, :controller
 
   alias Mydia.Library
+  alias Mydia.Library.MediaFile
   alias Mydia.Streaming.Compatibility
   alias Mydia.Streaming.{HlsSessionSupervisor, HlsSession}
   alias MydiaWeb.Api.RangeHelper
@@ -15,7 +16,8 @@ defmodule MydiaWeb.Api.StreamController do
   """
   def stream_movie(conn, %{"id" => media_item_id}) do
     try do
-      media_item = Mydia.Media.get_media_item!(media_item_id, preload: [:media_files])
+      media_item =
+        Mydia.Media.get_media_item!(media_item_id, preload: [media_files: :library_path])
 
       # Select the first (highest quality) media file
       case media_item.media_files do
@@ -42,7 +44,7 @@ defmodule MydiaWeb.Api.StreamController do
   """
   def stream_episode(conn, %{"id" => episode_id}) do
     try do
-      episode = Mydia.Media.get_episode!(episode_id, preload: [:media_files])
+      episode = Mydia.Media.get_episode!(episode_id, preload: [media_files: :library_path])
 
       # Select the first (highest quality) media file
       case episode.media_files do
@@ -77,7 +79,9 @@ defmodule MydiaWeb.Api.StreamController do
   def stream(conn, %{"id" => media_file_id}) do
     # Load media file with preloads to check access
     try do
-      media_file = Library.get_media_file!(media_file_id, preload: [:media_item, :episode])
+      media_file =
+        Library.get_media_file!(media_file_id, preload: [:media_item, :episode, :library_path])
+
       stream_media_file(conn, media_file)
     rescue
       Ecto.NoResultsError ->
@@ -89,31 +93,46 @@ defmodule MydiaWeb.Api.StreamController do
 
   # Main streaming function that handles a media file
   defp stream_media_file(conn, media_file) do
-    # Verify file exists on disk
-    if File.exists?(media_file.path) do
-      route_stream(conn, media_file)
-    else
-      conn
-      |> put_status(:not_found)
-      |> json(%{error: "Media file not found on disk"})
+    # Resolve absolute path from relative path and library_path
+    case MediaFile.absolute_path(media_file) do
+      nil ->
+        Logger.error("Cannot resolve path for media_file #{media_file.id}: missing library_path")
+
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: "Media file path cannot be resolved"})
+
+      absolute_path ->
+        # Verify file exists on disk
+        if File.exists?(absolute_path) do
+          route_stream(conn, media_file, absolute_path)
+        else
+          Logger.warning(
+            "Media file #{media_file.id} not found at resolved path: #{absolute_path}"
+          )
+
+          conn
+          |> put_status(:not_found)
+          |> json(%{error: "Media file not found on disk"})
+        end
     end
   end
 
   # Routes to appropriate streaming method based on file compatibility
-  defp route_stream(conn, media_file) do
+  defp route_stream(conn, media_file, absolute_path) do
     case Compatibility.check_compatibility(media_file) do
       :direct_play ->
         Logger.debug(
-          "Streaming #{media_file.path} via direct play (compatible: #{media_file.codec}/#{media_file.audio_codec})"
+          "Streaming #{absolute_path} via direct play (compatible: #{media_file.codec}/#{media_file.audio_codec})"
         )
 
-        stream_file_direct(conn, media_file)
+        stream_file_direct(conn, media_file, absolute_path)
 
       :needs_transcoding ->
         reason = Compatibility.transcoding_reason(media_file)
 
         Logger.info(
-          "File #{media_file.path} needs transcoding: #{reason} (codec: #{media_file.codec}, audio: #{media_file.audio_codec})"
+          "File #{absolute_path} needs transcoding: #{reason} (codec: #{media_file.codec}, audio: #{media_file.audio_codec})"
         )
 
         # Start HLS transcoding session
@@ -212,8 +231,7 @@ defmodule MydiaWeb.Api.StreamController do
     end
   end
 
-  defp stream_file_direct(conn, media_file) do
-    file_path = media_file.path
+  defp stream_file_direct(conn, _media_file, file_path) do
     file_stat = File.stat!(file_path)
     file_size = file_stat.size
 
