@@ -381,7 +381,11 @@ defmodule Mydia.Events do
       resource_type: "media_item",
       resource_id: media_item.id,
       metadata: %{
-        "file_path" => Path.basename(media_file.path),
+        "file_path" =>
+          case media_file.relative_path do
+            nil -> "unknown"
+            relative_path -> Path.basename(relative_path)
+          end,
         "resolution" => media_file.resolution,
         "codec" => media_file.codec,
         "size" => media_file.size,

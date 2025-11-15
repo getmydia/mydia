@@ -562,20 +562,29 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_info({:perform_scan, path}, socket) do
     case Scanner.scan(path) do
       {:ok, scan_result} ->
-        # Get existing files from database
+        # Get existing files from database (preload library_path for absolute_path resolution)
         # Only skip files that have valid parent associations (not orphaned)
-        existing_files = Library.list_media_files()
+        existing_files = Library.list_media_files(preload: [:library_path])
 
         existing_valid_paths =
           existing_files
           |> Enum.reject(&Library.orphaned_media_file?/1)
-          |> MapSet.new(& &1.path)
+          |> Enum.map(&MediaFile.absolute_path/1)
+          |> Enum.reject(&is_nil/1)
+          |> MapSet.new()
 
         # Build map of orphaned files for re-matching
         orphaned_files_map =
           existing_files
           |> Enum.filter(&Library.orphaned_media_file?/1)
-          |> Map.new(&{&1.path, &1})
+          |> Enum.map(fn file ->
+            case MediaFile.absolute_path(file) do
+              nil -> nil
+              abs_path -> {abs_path, file}
+            end
+          end)
+          |> Enum.reject(&is_nil/1)
+          |> Map.new()
 
         # Filter out files that already have valid associations
         # Include orphaned files for re-matching
@@ -739,9 +748,16 @@ defmodule MydiaWeb.ImportMediaLive.Index do
           _ -> {:error, :not_found}
         end
       else
-        # Create new media file record
+        # Create new media file record with relative path
+        # Find matching library_path and calculate relative_path
+        library_paths = Settings.list_library_paths()
+
+        {library_path_id, relative_path} =
+          calculate_relative_path_for_import(file.path, library_paths)
+
         Library.create_scanned_media_file(%{
-          path: file.path,
+          relative_path: relative_path,
+          library_path_id: library_path_id,
           size: file.size,
           verified_at: DateTime.utc_now()
         })
@@ -1023,6 +1039,37 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  # Calculates the relative path and library_path_id for an absolute file path
+  # Returns {library_path_id, relative_path}
+  defp calculate_relative_path_for_import(absolute_path, library_paths) do
+    # Find the library_path that this file belongs to (longest matching prefix)
+    matching_path =
+      library_paths
+      |> Enum.filter(fn lp -> String.starts_with?(absolute_path, lp.path) end)
+      |> Enum.max_by(fn lp -> String.length(lp.path) end, fn -> nil end)
+
+    case matching_path do
+      nil ->
+        require Logger
+
+        Logger.warning("No matching library path found for file during import",
+          path: absolute_path
+        )
+
+        # Return nil for both - the changeset will handle validation
+        {nil, nil}
+
+      library_path ->
+        # Calculate relative path by removing the library path prefix
+        relative_path =
+          absolute_path
+          |> String.replace_prefix(library_path.path, "")
+          |> String.trim_leading("/")
+
+        {library_path.id, relative_path}
     end
   end
 end

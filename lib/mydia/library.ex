@@ -40,13 +40,35 @@ defmodule Mydia.Library do
   end
 
   @doc """
-  Gets a media file by path (legacy - absolute path).
+  Gets a media file by absolute path.
+
+  Matches the path against all library paths to find the relative path,
+  then queries by relative_path and library_path_id.
+
+  Returns nil if no matching file is found.
   """
-  def get_media_file_by_path(path, opts \\ []) do
-    MediaFile
-    |> where([f], f.path == ^path)
-    |> maybe_preload(opts[:preload])
-    |> Repo.one()
+  def get_media_file_by_path(absolute_path, opts \\ []) do
+    alias Mydia.Settings
+
+    # Get all library paths to match the absolute path
+    library_paths = Settings.list_library_paths()
+
+    # Calculate relative path and library_path_id
+    {library_path_id, relative_path} = calculate_relative_path(absolute_path, library_paths)
+
+    case {library_path_id, relative_path} do
+      {nil, _} ->
+        # No matching library path found
+        nil
+
+      {_, nil} ->
+        # No relative path calculated
+        nil
+
+      {lp_id, rel_path} ->
+        # Query by relative_path and library_path_id
+        get_media_file_by_relative_path(lp_id, rel_path, opts)
+    end
   end
 
   @doc """
@@ -236,61 +258,73 @@ defmodule Mydia.Library do
   end
 
   defp match_file_to_episode(media_file, media_item_id) do
-    # Use relative_path for filename parsing (fallback to path for legacy data)
+    # Use relative_path for filename parsing
     filename =
       case media_file.relative_path do
-        nil -> Path.basename(media_file.path)
-        relative_path -> Path.basename(relative_path)
+        nil ->
+          Logger.warning("Media file missing relative_path during episode matching",
+            media_file_id: media_file.id
+          )
+
+          # Cannot match without relative_path
+          nil
+
+        relative_path ->
+          Path.basename(relative_path)
       end
 
     # Parse the filename to extract season/episode information
-    parsed_info = FileParser.parse(filename)
-    season = parsed_info.season
-    episode_numbers = parsed_info.episodes
-
-    if is_integer(season) and is_list(episode_numbers) and length(episode_numbers) > 0 do
-      # For multi-episode files, we'll just match to the first episode
-      episode_number = List.first(episode_numbers)
-
-      # Find the matching episode
-      case Mydia.Media.get_episode_by_number(media_item_id, season, episode_number) do
-        nil ->
-          Logger.debug("No episode found for file",
-            filename: filename,
-            season: season,
-            episode: episode_number
-          )
-
-          {:error, :episode_not_found}
-
-        episode ->
-          # Update the media file with the episode_id
-          case update_media_file(media_file, %{
-                 media_item_id: nil,
-                 episode_id: episode.id
-               }) do
-            {:ok, updated_file} ->
-              Logger.debug("Matched file to episode",
-                filename: filename,
-                season: season,
-                episode: episode_number,
-                episode_id: episode.id
-              )
-
-              {:ok, updated_file}
-
-            {:error, reason} ->
-              Logger.warning("Failed to update media file",
-                filename: filename,
-                reason: inspect(reason)
-              )
-
-              {:error, reason}
-          end
-      end
+    if is_nil(filename) do
+      {:error, :no_relative_path}
     else
-      Logger.debug("File did not contain valid episode information", filename: filename)
-      {:error, :no_episode_info}
+      parsed_info = FileParser.parse(filename)
+      season = parsed_info.season
+      episode_numbers = parsed_info.episodes
+
+      if is_integer(season) and is_list(episode_numbers) and length(episode_numbers) > 0 do
+        # For multi-episode files, we'll just match to the first episode
+        episode_number = List.first(episode_numbers)
+
+        # Find the matching episode
+        case Mydia.Media.get_episode_by_number(media_item_id, season, episode_number) do
+          nil ->
+            Logger.debug("No episode found for file",
+              filename: filename,
+              season: season,
+              episode: episode_number
+            )
+
+            {:error, :episode_not_found}
+
+          episode ->
+            # Update the media file with the episode_id
+            case update_media_file(media_file, %{
+                   media_item_id: nil,
+                   episode_id: episode.id
+                 }) do
+              {:ok, updated_file} ->
+                Logger.debug("Matched file to episode",
+                  filename: filename,
+                  season: season,
+                  episode: episode_number,
+                  episode_id: episode.id
+                )
+
+                {:ok, updated_file}
+
+              {:error, reason} ->
+                Logger.warning("Failed to update media file",
+                  filename: filename,
+                  reason: inspect(reason)
+                )
+
+                {:error, reason}
+            end
+        end
+      else
+        Logger.debug("File did not contain valid episode information", filename: filename)
+        {:error, :no_episode_info}
+      end
     end
   end
 
@@ -667,19 +701,28 @@ defmodule Mydia.Library do
 
   # Creates MediaFile records for a list of scanned files
   defp create_media_files_for_series(file_infos, media_item_id) do
+    alias Mydia.Settings
+
+    # Get all library paths to match files
+    library_paths = Settings.list_library_paths()
+
     results =
       Enum.map(file_infos, fn file_info ->
+        # Find matching library_path and calculate relative_path
+        {library_path_id, relative_path} = calculate_relative_path(file_info.path, library_paths)
+
         attrs = %{
-          path: file_info.path,
+          relative_path: relative_path,
+          library_path_id: library_path_id,
           size: file_info.size,
-          media_item_id: media_item_id,
-          library_path_id: nil
+          media_item_id: media_item_id
         }
 
         case create_scanned_media_file(attrs) do
           {:ok, media_file} ->
             Logger.debug("Created media file record",
-              path: file_info.path,
+              relative_path: relative_path,
+              library_path_id: library_path_id,
               media_file_id: media_file.id
             )
 
@@ -749,19 +792,28 @@ defmodule Mydia.Library do
 
   # Creates MediaFile records for a list of scanned movie files
   defp create_media_files_for_movie(file_infos, media_item_id) do
+    alias Mydia.Settings
+
+    # Get all library paths to match files
+    library_paths = Settings.list_library_paths()
+
     results =
       Enum.map(file_infos, fn file_info ->
+        # Find matching library_path and calculate relative_path
+        {library_path_id, relative_path} = calculate_relative_path(file_info.path, library_paths)
+
         attrs = %{
-          path: file_info.path,
+          relative_path: relative_path,
+          library_path_id: library_path_id,
           size: file_info.size,
-          media_item_id: media_item_id,
-          library_path_id: nil
+          media_item_id: media_item_id
         }
 
         case create_scanned_media_file(attrs) do
           {:ok, media_file} ->
             Logger.debug("Created media file record for movie",
-              path: file_info.path,
+              relative_path: relative_path,
+              library_path_id: library_path_id,
               media_file_id: media_file.id
             )
 
@@ -808,6 +860,35 @@ defmodule Mydia.Library do
 
   ## Private Functions
 
+  # Calculates the relative path and library_path_id for an absolute file path
+  # Returns {library_path_id, relative_path}
+  defp calculate_relative_path(absolute_path, library_paths) do
+    # Find the library_path that this file belongs to (longest matching prefix)
+    matching_path =
+      library_paths
+      |> Enum.filter(fn lp -> String.starts_with?(absolute_path, lp.path) end)
+      |> Enum.max_by(fn lp -> String.length(lp.path) end, fn -> nil end)
+
+    case matching_path do
+      nil ->
+        Logger.warning("No matching library path found for file",
+          path: absolute_path
+        )
+
+        # Return nil for both - the changeset will handle validation
+        {nil, nil}
+
+      library_path ->
+        # Calculate relative path by removing the library path prefix
+        relative_path =
+          absolute_path
+          |> String.replace_prefix(library_path.path, "")
+          |> String.trim_leading("/")
+
+        {library_path.id, relative_path}
+    end
+  end
+
   defp apply_media_file_filters(query, opts) do
     Enum.reduce(opts, query, fn
       {:media_item_id, media_item_id}, query ->
@@ -820,10 +901,11 @@ defmodule Mydia.Library do
         # Filter files by library_path_id (for relative path scans)
         where(query, [f], f.library_path_id == ^library_path_id)
 
-      {:path_prefix, prefix}, query ->
-        # Filter files by path prefix (legacy - for absolute paths)
-        like_pattern = "#{prefix}%"
-        where(query, [f], like(f.path, ^like_pattern))
+      {:path_prefix, _prefix}, query ->
+        # Legacy option - no longer supported
+        # Use :library_path_id instead
+        Logger.warning("path_prefix filter is deprecated, use library_path_id instead")
+        query
 
       _other, query ->
         query
