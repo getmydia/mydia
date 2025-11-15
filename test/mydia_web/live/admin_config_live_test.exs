@@ -377,6 +377,16 @@ defmodule MydiaWeb.AdminConfigLiveTest do
     end
 
     test "creates a new library path", %{view: view} do
+      # Create a temporary directory for testing
+      test_dir =
+        Path.join(System.tmp_dir!(), "test_library_#{:erlang.unique_integer([:positive])}")
+
+      File.mkdir_p!(test_dir)
+
+      on_exit(fn ->
+        File.rm_rf(test_dir)
+      end)
+
       view
       |> element(~s{button}, "New Path")
       |> render_click()
@@ -384,7 +394,7 @@ defmodule MydiaWeb.AdminConfigLiveTest do
       view
       |> form("#library-path-form",
         library_path: %{
-          path: "/media/movies",
+          path: test_dir,
           type: "movies",
           monitored: "true"
         }
@@ -394,7 +404,7 @@ defmodule MydiaWeb.AdminConfigLiveTest do
       # Wait for LiveView to process the update (important for CI)
       Process.sleep(100)
 
-      assert has_element?(view, "td", "/media/movies")
+      assert has_element?(view, "td", test_dir)
       refute has_element?(view, ~s{div[class*="modal-open"]})
     end
   end

@@ -72,6 +72,9 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       updated_by_id: user.id
     })
 
+    # Create test library path for media files
+    library_path = library_path_fixture(%{path: "/test/library", type: "series"})
+
     # Disable all existing indexer configs from test database
     Settings.list_indexer_configs()
     |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
@@ -115,7 +118,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         enabled: true
       })
 
-    %{bypass: bypass}
+    %{bypass: bypass, library_path: library_path}
   end
 
   describe "perform/1 - specific mode" do
@@ -149,7 +152,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert result == :ok
     end
 
-    test "skips episode that already has files" do
+    test "skips episode that already has files", %{library_path: library_path} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "The Wire"})
 
       episode =
@@ -165,6 +168,8 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         Library.create_media_file(%{
           episode_id: episode.id,
           path: "/fake/path/episode.mkv",
+          relative_path: "episode.mkv",
+          library_path_id: library_path.id,
           size: 500_000_000,
           quality: %{resolution: "1080p"}
         })
@@ -311,7 +316,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
                })
     end
 
-    test "returns ok when no missing episodes in season" do
+    test "returns ok when no missing episodes in season", %{library_path: library_path} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "Complete Show"})
 
       # Create episodes with media files (no missing episodes)
@@ -327,6 +332,8 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         Library.create_media_file(%{
           episode_id: episode.id,
           path: "/fake/path/s01e01.mkv",
+          relative_path: "s01e01.mkv",
+          library_path_id: library_path.id,
           size: 500_000_000
         })
 
@@ -422,7 +429,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
                })
     end
 
-    test "returns ok when no missing episodes" do
+    test "returns ok when no missing episodes", %{library_path: library_path} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "Complete Show"})
 
       # Create episode with media file (no missing episodes)
@@ -438,6 +445,8 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         Library.create_media_file(%{
           episode_id: episode.id,
           path: "/fake/path/s01e01.mkv",
+          relative_path: "s01e01.mkv",
+          library_path_id: library_path.id,
           size: 500_000_000
         })
 
@@ -559,7 +568,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert :ok = perform_job(TVShowSearch, %{"mode" => "all_monitored"})
     end
 
-    test "skips episodes that already have files" do
+    test "skips episodes that already have files", %{library_path: library_path} do
       tv_show = media_item_fixture(%{type: "tv_show", title: "Complete Show", monitored: true})
 
       episode =
@@ -574,6 +583,8 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         Library.create_media_file(%{
           episode_id: episode.id,
           path: "/fake/path/s01e01.mkv",
+          relative_path: "s01e01.mkv",
+          library_path_id: library_path.id,
           size: 500_000_000
         })
 

@@ -6,22 +6,25 @@ defmodule Mydia.Library.MetadataEnricherTest do
 
   describe "library type validation" do
     setup do
+      # Create unique paths for each test to avoid conflicts
+      unique_id = :erlang.unique_integer([:positive])
+
       # Create library paths for testing
       {:ok, movies_lib} =
         Settings.create_library_path(%{
-          path: "/media/movies",
+          path: "/media/movies_#{unique_id}",
           type: :movies
         })
 
       {:ok, series_lib} =
         Settings.create_library_path(%{
-          path: "/media/series",
+          path: "/media/series_#{unique_id}",
           type: :series
         })
 
       {:ok, mixed_lib} =
         Settings.create_library_path(%{
-          path: "/media/mixed",
+          path: "/media/mixed_#{unique_id}",
           type: :mixed
         })
 
@@ -46,6 +49,8 @@ defmodule Mydia.Library.MetadataEnricherTest do
       {:ok, media_file} =
         Library.create_media_file(%{
           path: "#{movies_lib.path}/The Matrix (1999).mkv",
+          relative_path: "The Matrix (1999).mkv",
+          library_path_id: movies_lib.id,
           media_item_id: movie.id
         })
 
@@ -75,6 +80,8 @@ defmodule Mydia.Library.MetadataEnricherTest do
       {:ok, media_file} =
         Library.create_media_file(%{
           path: "#{series_lib.path}/Breaking Bad/Season 01/Breaking Bad S01E01.mkv",
+          relative_path: "Breaking Bad/Season 01/Breaking Bad S01E01.mkv",
+          library_path_id: series_lib.id,
           episode_id: episode.id
         })
 
@@ -112,12 +119,16 @@ defmodule Mydia.Library.MetadataEnricherTest do
       {:ok, movie_file} =
         Library.create_media_file(%{
           path: "#{mixed_lib.path}/movies/The Matrix (1999).mkv",
+          relative_path: "movies/The Matrix (1999).mkv",
+          library_path_id: mixed_lib.id,
           media_item_id: movie.id
         })
 
       {:ok, tv_file} =
         Library.create_media_file(%{
           path: "#{mixed_lib.path}/tv/Breaking Bad/Season 01/S01E01.mkv",
+          relative_path: "tv/Breaking Bad/Season 01/S01E01.mkv",
+          library_path_id: mixed_lib.id,
           episode_id: episode.id
         })
 
@@ -139,6 +150,8 @@ defmodule Mydia.Library.MetadataEnricherTest do
       assert {:error, changeset} =
                Library.create_media_file(%{
                  path: "#{series_lib.path}/The Matrix (1999).mkv",
+                 relative_path: "The Matrix (1999).mkv",
+                 library_path_id: series_lib.id,
                  media_item_id: movie.id
                })
 
@@ -169,6 +182,8 @@ defmodule Mydia.Library.MetadataEnricherTest do
       assert {:error, changeset} =
                Library.create_media_file(%{
                  path: "#{movies_lib.path}/Breaking Bad S01E01.mkv",
+                 relative_path: "Breaking Bad S01E01.mkv",
+                 library_path_id: movies_lib.id,
                  episode_id: episode.id
                })
 

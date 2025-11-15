@@ -72,6 +72,9 @@ defmodule Mydia.Jobs.MovieSearchTest do
       updated_by_id: user.id
     })
 
+    # Create test library path for media files
+    library_path = library_path_fixture(%{path: "/test/library", type: "movies"})
+
     # Disable all existing indexer configs from test database
     Settings.list_indexer_configs()
     |> Enum.filter(fn config -> not is_nil(config.inserted_at) end)
@@ -103,7 +106,7 @@ defmodule Mydia.Jobs.MovieSearchTest do
         enabled: true
       })
 
-    %{bypass: bypass}
+    %{bypass: bypass, library_path: library_path}
   end
 
   describe "perform/1 - specific mode" do
@@ -163,7 +166,7 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert :ok = perform_job(MovieSearch, %{"mode" => "all_monitored"})
     end
 
-    test "skips movies that already have files" do
+    test "skips movies that already have files", %{library_path: library_path} do
       # Create a monitored movie
       movie = media_item_fixture(%{type: "movie", monitored: true})
 
@@ -172,6 +175,8 @@ defmodule Mydia.Jobs.MovieSearchTest do
         Library.create_media_file(%{
           media_item_id: movie.id,
           path: "/fake/path/movie.mkv",
+          relative_path: "movie.mkv",
+          library_path_id: library_path.id,
           size: 1_000_000_000,
           quality: %{resolution: "1080p"}
         })
