@@ -96,6 +96,7 @@ defmodule Mydia.Downloads.Client do
   """
 
   alias Mydia.Downloads.Client.Error
+  alias Mydia.Downloads.Structs.{ClientInfo, TorrentStatus}
 
   @type config :: %{
           type: atom(),
@@ -111,22 +112,7 @@ defmodule Mydia.Downloads.Client do
 
   @type torrent_state :: :downloading | :seeding | :paused | :error | :completed | :checking
 
-  @type status_map :: %{
-          id: String.t(),
-          name: String.t(),
-          state: torrent_state(),
-          progress: float(),
-          download_speed: non_neg_integer(),
-          upload_speed: non_neg_integer(),
-          downloaded: non_neg_integer(),
-          uploaded: non_neg_integer(),
-          size: non_neg_integer(),
-          eta: non_neg_integer() | nil,
-          ratio: float(),
-          save_path: String.t(),
-          added_at: DateTime.t(),
-          completed_at: DateTime.t() | nil
-        }
+  @type status_map :: TorrentStatus.t()
 
   @type add_torrent_opts :: [
           category: String.t(),
@@ -148,19 +134,19 @@ defmodule Mydia.Downloads.Client do
   @doc """
   Tests the connection to the download client.
 
-  Returns `{:ok, info}` where info is a map containing client information
-  (version, api_version, etc.) if successful, or `{:error, reason}` if the
-  connection fails.
+  Returns `{:ok, info}` where info is a ClientInfo struct containing client
+  information (version, api_version, etc.) if successful, or `{:error, reason}`
+  if the connection fails.
 
   ## Examples
 
       iex> test_connection(config)
-      {:ok, %{version: "v4.5.0", api_version: "2.8.19"}}
+      {:ok, %ClientInfo{version: "v4.5.0", api_version: "2.8.19"}}
 
       iex> test_connection(bad_config)
       {:error, %Error{type: :connection_failed, message: "Connection refused"}}
   """
-  @callback test_connection(config()) :: {:ok, map()} | {:error, Error.t()}
+  @callback test_connection(config()) :: {:ok, ClientInfo.t()} | {:error, Error.t()}
 
   @doc """
   Adds a torrent to the download client.

@@ -543,10 +543,13 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       ranked = ReleaseRanker.rank_all([result])
       breakdown = List.first(ranked).breakdown
 
-      for {_key, value} <- breakdown do
-        # Check that each value has at most 2 decimal places
-        assert Float.round(value, 2) == value
-      end
+      # Check that each field value has at most 2 decimal places
+      assert Float.round(breakdown.quality, 2) == breakdown.quality
+      assert Float.round(breakdown.seeders, 2) == breakdown.seeders
+      assert Float.round(breakdown.size, 2) == breakdown.size
+      assert Float.round(breakdown.age, 2) == breakdown.age
+      assert Float.round(breakdown.tag_bonus, 2) == breakdown.tag_bonus
+      assert Float.round(breakdown.total, 2) == breakdown.total
     end
 
     test "total score matches sum of weighted components" do

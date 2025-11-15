@@ -2,6 +2,7 @@ defmodule Mydia.Library.FileParser.V2Test do
   use ExUnit.Case, async: true
 
   alias Mydia.Library.FileParser.V2, as: FileParser
+  alias Mydia.Library.Structs.Quality
 
   describe "parse_movie/1 - basic functionality" do
     test "parses basic movie with year and quality" do
@@ -676,7 +677,7 @@ defmodule Mydia.Library.FileParser.V2Test do
 
       assert result.title == "Just A Title"
       assert result.year == 2024
-      assert result.quality == %{}
+      assert Quality.empty?(result.quality)
     end
 
     test "handles complex title with numbers" do
@@ -1069,7 +1070,7 @@ defmodule Mydia.Library.FileParser.V2Test do
       # File with no quality markers
       result = FileParser.parse("RandomFile.mkv", standardize: true)
 
-      assert result.quality == %{}
+      assert Quality.empty?(result.quality)
       assert result.type == :unknown
     end
 

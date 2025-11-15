@@ -60,6 +60,7 @@ defmodule Mydia.Downloads.Client.Transmission do
   @behaviour Mydia.Downloads.Client
 
   alias Mydia.Downloads.Client.{Error, HTTP}
+  alias Mydia.Downloads.Structs.{ClientInfo, TorrentStatus}
 
   # Sequential counter for RPC request tags
   @agent_name __MODULE__.TagCounter
@@ -77,7 +78,7 @@ defmodule Mydia.Downloads.Client.Transmission do
         version = get_in(response, ["arguments", "version"]) || "unknown"
         rpc_version = get_in(response, ["arguments", "rpc-version"]) || "unknown"
 
-        {:ok, %{version: version, rpc_version: rpc_version}}
+        {:ok, ClientInfo.new(version: version, rpc_version: rpc_version)}
 
       {:error, _} = error ->
         error
@@ -374,7 +375,7 @@ defmodule Mydia.Downloads.Client.Transmission do
         download_dir
       end
 
-    %{
+    TorrentStatus.new(%{
       id: torrent["hashString"],
       name: torrent_name,
       state: parse_state(torrent["status"]),
@@ -389,7 +390,7 @@ defmodule Mydia.Downloads.Client.Transmission do
       save_path: save_path,
       added_at: parse_timestamp(torrent["addedDate"]),
       completed_at: parse_timestamp(torrent["doneDate"])
-    }
+    })
   end
 
   defp parse_state(status) when is_integer(status) do

@@ -13,6 +13,7 @@ defmodule Mydia.Library.MetadataMatcher do
   alias Mydia.{Media, Metadata}
   alias Mydia.Library.FileParser.V2, as: FileParser
   alias Mydia.Library.Structs.MatchResult
+  alias Mydia.Metadata.Structs.MediaMetadata
 
   @type match_result :: MatchResult.t()
 
@@ -227,6 +228,13 @@ defmodule Mydia.Library.MetadataMatcher do
             )
 
             # Return partial match result
+            series_metadata =
+              MediaMetadata.from_api_response(
+                series,
+                :tv_show,
+                to_string(series.provider_id)
+              )
+
             {:ok,
              MatchResult.new(
                provider_id: to_string(series.provider_id),
@@ -237,7 +245,7 @@ defmodule Mydia.Library.MetadataMatcher do
                # Lower confidence for partial match
                match_type: :partial_match,
                partial_reason: :episode_not_found,
-               metadata: series,
+               metadata: series_metadata,
                parsed_info: parsed
              )}
 
@@ -308,7 +316,7 @@ defmodule Mydia.Library.MetadataMatcher do
            title: item.title,
            year: item.year,
            match_confidence: 0.95,
-           metadata: item.metadata || %{},
+           metadata: convert_db_metadata(item.metadata, item, :movie),
            parsed_info: parsed,
            from_local_db: true
          )}
@@ -339,7 +347,7 @@ defmodule Mydia.Library.MetadataMatcher do
            title: item.title,
            year: item.year,
            match_confidence: 0.95,
-           metadata: item.metadata || %{},
+           metadata: convert_db_metadata(item.metadata, item, :tv_show),
            parsed_info: parsed,
            from_local_db: true
          )}
@@ -398,6 +406,13 @@ defmodule Mydia.Library.MetadataMatcher do
           match_score: score
         )
 
+        movie_metadata =
+          MediaMetadata.from_api_response(
+            best_match,
+            :movie,
+            to_string(best_match.provider_id)
+          )
+
         {:ok,
          MatchResult.new(
            provider_id: to_string(best_match.provider_id),
@@ -405,7 +420,7 @@ defmodule Mydia.Library.MetadataMatcher do
            title: best_match.title,
            year: best_match.year,
            match_confidence: score,
-           metadata: best_match,
+           metadata: movie_metadata,
            parsed_info: parsed
          )}
 
@@ -435,6 +450,13 @@ defmodule Mydia.Library.MetadataMatcher do
           match_score: score
         )
 
+        tv_metadata =
+          MediaMetadata.from_api_response(
+            best_match,
+            :tv_show,
+            to_string(best_match.provider_id)
+          )
+
         {:ok,
          MatchResult.new(
            provider_id: to_string(best_match.provider_id),
@@ -443,7 +465,7 @@ defmodule Mydia.Library.MetadataMatcher do
            year: best_match.year,
            match_confidence: score,
            match_type: :full_match,
-           metadata: best_match,
+           metadata: tv_metadata,
            parsed_info: parsed
          )}
 
@@ -654,5 +676,22 @@ defmodule Mydia.Library.MetadataMatcher do
 
     Enum.zip(s1_matched, s2_matched)
     |> Enum.count(fn {c1, c2} -> c1 != c2 end)
+  end
+
+  # Convert database metadata to MediaMetadata struct
+  # If metadata is nil, create a minimal struct from the media item
+  # If metadata is a map, convert it using from_api_response
+  defp convert_db_metadata(nil, item, media_type) do
+    %MediaMetadata{
+      provider_id: to_string(item.tmdb_id),
+      provider: :tmdb,
+      media_type: media_type,
+      title: item.title,
+      year: item.year
+    }
+  end
+
+  defp convert_db_metadata(metadata_map, item, media_type) when is_map(metadata_map) do
+    MediaMetadata.from_api_response(metadata_map, media_type, to_string(item.tmdb_id))
   end
 end

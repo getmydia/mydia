@@ -70,7 +70,9 @@ defmodule Mydia.Metadata.Provider.Relay do
     SearchResult,
     MediaMetadata,
     SeasonData,
-    EpisodeData
+    EpisodeData,
+    ImageData,
+    ImagesResponse
   }
 
   @default_language "en-US"
@@ -288,25 +290,12 @@ defmodule Mydia.Metadata.Provider.Relay do
     MediaMetadata.from_api_response(data, media_type, provider_id)
   end
 
-  defp parse_images(%{"posters" => posters, "backdrops" => backdrops, "logos" => logos}) do
-    %{
-      posters: Enum.map(posters || [], &parse_image/1),
-      backdrops: Enum.map(backdrops || [], &parse_image/1),
-      logos: Enum.map(logos || [], &parse_image/1)
-    }
+  defp parse_images(data) do
+    ImagesResponse.from_api_response(data)
   end
 
-  defp parse_images(_), do: %{posters: [], backdrops: [], logos: []}
-
   defp parse_image(image) do
-    %{
-      file_path: image["file_path"],
-      width: image["width"],
-      height: image["height"],
-      aspect_ratio: image["aspect_ratio"],
-      vote_average: image["vote_average"],
-      vote_count: image["vote_count"]
-    }
+    ImageData.from_api_response(image)
   end
 
   defp parse_season(data) do

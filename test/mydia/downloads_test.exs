@@ -11,6 +11,7 @@ defmodule Mydia.DownloadsTest do
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Client.Error
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.Structs.SearchResultMetadata
 
   # Mock adapter for testing
   defmodule MockAdapter do
@@ -564,11 +565,7 @@ defmodule Mydia.DownloadsTest do
       # Try to initiate another season pack download for same season
       season_pack_result = %{
         search_result
-        | metadata: %{
-            season_pack: true,
-            season_number: 1,
-            episode_count: 10
-          }
+        | metadata: SearchResultMetadata.season_pack(1, 10)
       }
 
       result = Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
@@ -598,11 +595,7 @@ defmodule Mydia.DownloadsTest do
       # Try to initiate season pack download for season 2
       season_pack_result = %{
         search_result
-        | metadata: %{
-            season_pack: true,
-            season_number: 2,
-            episode_count: 12
-          }
+        | metadata: SearchResultMetadata.season_pack(2, 12)
       }
 
       result = Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
@@ -673,11 +666,7 @@ defmodule Mydia.DownloadsTest do
       # Try to initiate season pack download - should be prevented since some episodes have files
       season_pack_result = %{
         search_result
-        | metadata: %{
-            season_pack: true,
-            season_number: 2,
-            episode_count: 3
-          }
+        | metadata: SearchResultMetadata.season_pack(2, 3)
       }
 
       result = Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
@@ -696,11 +685,7 @@ defmodule Mydia.DownloadsTest do
       # Try to initiate season pack download - should be allowed
       season_pack_result = %{
         search_result
-        | metadata: %{
-            season_pack: true,
-            season_number: 3,
-            episode_count: 2
-          }
+        | metadata: SearchResultMetadata.season_pack(3, 2)
       }
 
       result = Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
@@ -722,11 +707,7 @@ defmodule Mydia.DownloadsTest do
       # Try to initiate season pack download for season 5 - should be allowed
       season_pack_result = %{
         search_result
-        | metadata: %{
-            season_pack: true,
-            season_number: 5,
-            episode_count: 1
-          }
+        | metadata: SearchResultMetadata.season_pack(5, 1)
       }
 
       result = Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)

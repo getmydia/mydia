@@ -2,10 +2,13 @@ defmodule Mydia.Metadata.Provider.RegistryTest do
   use ExUnit.Case, async: false
 
   alias Mydia.Metadata.Provider.{Error, Registry}
+  alias Mydia.Metadata.Structs.ImagesResponse
 
   # Test provider modules
   defmodule TestProvider do
     @behaviour Mydia.Metadata.Provider
+
+    alias Mydia.Metadata.Structs.ImagesResponse
 
     @impl true
     def test_connection(_config), do: {:ok, %{status: "ok", version: "3"}}
@@ -17,7 +20,8 @@ defmodule Mydia.Metadata.Provider.RegistryTest do
     def fetch_by_id(_config, _id, _opts), do: {:ok, %{}}
 
     @impl true
-    def fetch_images(_config, _id, _opts), do: {:ok, %{posters: [], backdrops: [], logos: []}}
+    def fetch_images(_config, _id, _opts),
+      do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
     def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}
@@ -25,6 +29,8 @@ defmodule Mydia.Metadata.Provider.RegistryTest do
 
   defmodule AnotherTestProvider do
     @behaviour Mydia.Metadata.Provider
+
+    alias Mydia.Metadata.Structs.ImagesResponse
 
     @impl true
     def test_connection(_config), do: {:ok, %{status: "ok", version: "4"}}
@@ -36,7 +42,8 @@ defmodule Mydia.Metadata.Provider.RegistryTest do
     def fetch_by_id(_config, _id, _opts), do: {:ok, %{}}
 
     @impl true
-    def fetch_images(_config, _id, _opts), do: {:ok, %{posters: [], backdrops: [], logos: []}}
+    def fetch_images(_config, _id, _opts),
+      do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
     def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}

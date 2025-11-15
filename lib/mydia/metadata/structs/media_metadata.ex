@@ -8,6 +8,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   Supports both movies and TV shows with shared and type-specific fields.
   """
 
+  alias Mydia.Metadata.Structs.{CastMember, CrewMember, SeasonInfo}
+
   @enforce_keys [:provider_id, :provider, :media_type]
   defstruct [
     # Required fields
@@ -72,8 +74,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           production_countries: [String.t()] | nil,
           spoken_languages: [String.t()] | nil,
           homepage: String.t() | nil,
-          cast: [map()] | nil,
-          crew: [map()] | nil,
+          cast: [CastMember.t()] | nil,
+          crew: [CrewMember.t()] | nil,
           alternative_titles: [String.t()] | nil,
           number_of_seasons: integer() | nil,
           number_of_episodes: integer() | nil,
@@ -81,7 +83,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           first_air_date: Date.t() | nil,
           last_air_date: Date.t() | nil,
           in_production: boolean() | nil,
-          seasons: [map()] | nil
+          seasons: [SeasonInfo.t()] | nil
         }
 
   @doc """
@@ -208,16 +210,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   defp parse_seasons_list(nil), do: []
 
   defp parse_seasons_list(seasons) when is_list(seasons) do
-    Enum.map(seasons, fn season ->
-      %{
-        season_number: season["season_number"],
-        name: season["name"],
-        overview: season["overview"],
-        air_date: season["air_date"],
-        episode_count: season["episode_count"],
-        poster_path: season["poster_path"]
-      }
-    end)
+    Enum.map(seasons, &SeasonInfo.from_api_response/1)
   end
 
   defp parse_seasons_list(_), do: []
@@ -242,12 +235,12 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     cast
     |> Enum.take(20)
     |> Enum.map(fn member ->
-      %{
+      CastMember.new(
         name: member["name"],
         character: member["character"],
         order: member["order"],
         profile_path: member["profile_path"]
-      }
+      )
     end)
   end
 
@@ -262,12 +255,12 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     end)
     |> Enum.take(10)
     |> Enum.map(fn member ->
-      %{
+      CrewMember.new(
         name: member["name"],
         job: member["job"],
         department: member["department"],
         profile_path: member["profile_path"]
-      }
+      )
     end)
   end
 

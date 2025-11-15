@@ -285,6 +285,101 @@ defmodule MydiaWeb.MediaLive.Show do
     end
   end
 
+  def handle_event("rescan_series", _params, socket) do
+    media_item = socket.assigns.media_item
+
+    if media_item.type != "tv_show" do
+      {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
+    else
+      # Start async task to re-scan the series directory for new files AND refresh metadata
+      {:noreply,
+       socket
+       |> put_flash(:info, "Re-scanning series: discovering new files and refreshing metadata...")
+       |> start_async(:rescan_series, fn ->
+         # Step 1: Discover new files in the directory
+         scan_result = Library.rescan_series(media_item.id)
+
+         # Step 2: Refresh file metadata for all files (existing + new)
+         case scan_result do
+           {:ok, _result} ->
+             # Reload the media item to get the updated file list
+             updated_media_item = Media.get_media_item!(media_item.id, preload: [:episodes])
+             all_media_files = Enum.flat_map(updated_media_item.episodes, & &1.media_files)
+             refresh_result = refresh_files(all_media_files)
+             {scan_result, refresh_result}
+
+           error ->
+             {error, {:ok, 0, 0}}
+         end
+       end)}
+    end
+  end
+
+  def handle_event("rescan_season", %{"season-number" => season_number_str}, socket) do
+    media_item = socket.assigns.media_item
+    season_num = String.to_integer(season_number_str)
+
+    if media_item.type != "tv_show" do
+      {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
+    else
+      # Start async task to re-scan the season for new files AND refresh metadata
+      {:noreply,
+       socket
+       |> assign(:rescanning_season, season_num)
+       |> put_flash(
+         :info,
+         "Re-scanning season #{season_num}: discovering new files and refreshing metadata..."
+       )
+       |> start_async(:rescan_season, fn ->
+         # Step 1: Discover new files in the season directory
+         scan_result = Library.rescan_season(media_item.id, season_num)
+
+         # Step 2: Refresh file metadata for all season files (existing + new)
+         case scan_result do
+           {:ok, _result} ->
+             # Reload the media item to get the updated file list
+             updated_media_item = Media.get_media_item!(media_item.id, preload: [:episodes])
+             season_media_files = get_season_media_files(updated_media_item, season_num)
+             refresh_result = refresh_files(season_media_files)
+             {season_num, scan_result, refresh_result}
+
+           error ->
+             {season_num, error, {:ok, 0, 0}}
+         end
+       end)}
+    end
+  end
+
+  def handle_event("rescan_movie", _params, socket) do
+    media_item = socket.assigns.media_item
+
+    if media_item.type != "movie" do
+      {:noreply, put_flash(socket, :error, "Re-scan is only available for movies")}
+    else
+      # Start async task to re-scan the movie directory for new files AND refresh metadata
+      {:noreply,
+       socket
+       |> put_flash(:info, "Re-scanning movie: discovering new files and refreshing metadata...")
+       |> start_async(:rescan_movie, fn ->
+         # Step 1: Discover new files in the directory
+         scan_result = Library.rescan_movie(media_item.id)
+
+         # Step 2: Refresh file metadata for all files (existing + new)
+         case scan_result do
+           {:ok, _result} ->
+             # Reload the media item to get the updated file list
+             updated_media_item = Media.get_media_item!(media_item.id, preload: [:media_files])
+             all_media_files = updated_media_item.media_files
+             refresh_result = refresh_files(all_media_files)
+             {scan_result, refresh_result}
+
+           error ->
+             {error, {:ok, 0, 0}}
+         end
+       end)}
+    end
+  end
+
   def handle_event("show_edit_modal", _params, socket) do
     media_item = socket.assigns.media_item
     changeset = Media.change_media_item(media_item)
@@ -1156,6 +1251,134 @@ defmodule MydiaWeb.MediaLive.Show do
      socket
      |> assign(:rescanning_season, nil)
      |> put_flash(:error, "Season metadata refresh failed unexpectedly")}
+  end
+
+  def handle_async(:rescan_series, {:ok, {{:ok, scan_result}, {:ok, refreshed, _errors}}}, socket) do
+    message =
+      if Enum.empty?(scan_result.errors) do
+        "Re-scan complete! Found #{scan_result.new_files} new file(s), refreshed metadata for #{refreshed} file(s)"
+      else
+        "Re-scan complete! Found #{scan_result.new_files} new file(s), refreshed metadata for #{refreshed} file(s), #{length(scan_result.errors)} error(s)"
+      end
+
+    {:noreply,
+     socket
+     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> put_flash(:info, message)}
+  end
+
+  def handle_async(:rescan_series, {:ok, {{:error, :not_a_tv_show}, _}}, socket) do
+    {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
+  end
+
+  def handle_async(:rescan_series, {:ok, {{:error, :no_media_files}, _}}, socket) do
+    {:noreply,
+     put_flash(
+       socket,
+       :error,
+       "No existing media files found. Please import at least one file first."
+     )}
+  end
+
+  def handle_async(:rescan_series, {:ok, {{:error, reason}, _}}, socket) do
+    Logger.error("Series re-scan failed: #{inspect(reason)}")
+    {:noreply, put_flash(socket, :error, "Failed to re-scan series: #{inspect(reason)}")}
+  end
+
+  def handle_async(:rescan_series, {:exit, reason}, socket) do
+    Logger.error("Series re-scan task crashed: #{inspect(reason)}")
+    {:noreply, put_flash(socket, :error, "Series re-scan failed unexpectedly")}
+  end
+
+  def handle_async(:rescan_movie, {:ok, {{:ok, scan_result}, {:ok, refreshed, _errors}}}, socket) do
+    message =
+      if Enum.empty?(scan_result.errors) do
+        "Re-scan complete! Found #{scan_result.new_files} new file(s), refreshed metadata for #{refreshed} file(s)"
+      else
+        "Re-scan complete! Found #{scan_result.new_files} new file(s), refreshed metadata for #{refreshed} file(s), #{length(scan_result.errors)} error(s)"
+      end
+
+    {:noreply,
+     socket
+     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> put_flash(:info, message)}
+  end
+
+  def handle_async(:rescan_movie, {:ok, {{:error, :not_a_movie}, _}}, socket) do
+    {:noreply, put_flash(socket, :error, "Re-scan is only available for movies")}
+  end
+
+  def handle_async(:rescan_movie, {:ok, {{:error, :no_media_files}, _}}, socket) do
+    {:noreply,
+     put_flash(
+       socket,
+       :error,
+       "No existing media files found. Please import at least one file first."
+     )}
+  end
+
+  def handle_async(:rescan_movie, {:ok, {{:error, reason}, _}}, socket) do
+    Logger.error("Movie re-scan failed: #{inspect(reason)}")
+    {:noreply, put_flash(socket, :error, "Failed to re-scan movie: #{inspect(reason)}")}
+  end
+
+  def handle_async(:rescan_movie, {:exit, reason}, socket) do
+    Logger.error("Movie re-scan task crashed: #{inspect(reason)}")
+    {:noreply, put_flash(socket, :error, "Movie re-scan failed unexpectedly")}
+  end
+
+  def handle_async(
+        :rescan_season,
+        {:ok, {season_num, {:ok, scan_result}, {:ok, refreshed, _errors}}},
+        socket
+      ) do
+    message =
+      if Enum.empty?(scan_result.errors) do
+        "Season #{season_num} re-scan complete! Found #{scan_result.new_files} new file(s), refreshed metadata for #{refreshed} file(s)"
+      else
+        "Season #{season_num} re-scan complete! Found #{scan_result.new_files} new file(s), refreshed metadata for #{refreshed} file(s), #{length(scan_result.errors)} error(s)"
+      end
+
+    {:noreply,
+     socket
+     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(:rescanning_season, nil)
+     |> put_flash(:info, message)}
+  end
+
+  def handle_async(:rescan_season, {:ok, {_season_num, {:error, :not_a_tv_show}, _}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> put_flash(:error, "Re-scan is only available for TV shows")}
+  end
+
+  def handle_async(:rescan_season, {:ok, {season_num, {:error, :no_media_files}, _}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> put_flash(
+       :error,
+       "No existing media files found for season #{season_num}. Please import at least one file first."
+     )}
+  end
+
+  def handle_async(:rescan_season, {:ok, {season_num, {:error, reason}, _}}, socket) do
+    Logger.error("Season #{season_num} re-scan failed: #{inspect(reason)}")
+
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> put_flash(:error, "Failed to re-scan season #{season_num}: #{inspect(reason)}")}
+  end
+
+  def handle_async(:rescan_season, {:exit, reason}, socket) do
+    Logger.error("Season re-scan task crashed: #{inspect(reason)}")
+
+    {:noreply,
+     socket
+     |> assign(:rescanning_season, nil)
+     |> put_flash(:error, "Season re-scan failed unexpectedly")}
   end
 
   def handle_async(:rename_files, {:ok, {:ok, results}}, socket) do

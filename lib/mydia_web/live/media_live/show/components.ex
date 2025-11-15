@@ -96,6 +96,28 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <.icon name="hero-arrow-path" class="w-5 h-5" /> Refresh Metadata
         </button>
 
+        <%= if @media_item.type == "tv_show" && has_media_files?(@media_item) do %>
+          <button
+            type="button"
+            phx-click="rescan_series"
+            class="btn btn-ghost btn-block"
+            title="Re-scan series: discover new files and refresh metadata for all episodes"
+          >
+            <.icon name="hero-arrow-path" class="w-5 h-5" /> Re-scan Series
+          </button>
+        <% end %>
+
+        <%= if @media_item.type == "movie" && has_media_files?(@media_item) do %>
+          <button
+            type="button"
+            phx-click="rescan_movie"
+            class="btn btn-ghost btn-block"
+            title="Re-scan movie: discover new files and refresh metadata"
+          >
+            <.icon name="hero-arrow-path" class="w-5 h-5" /> Re-scan
+          </button>
+        <% end %>
+
         <%= if has_media_files?(@media_item) do %>
           <button
             type="button"
@@ -275,10 +297,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       <.icon name="hero-magnifying-glass" class="w-4 h-4" />
                     </button>
                   </div>
-                  <div class="tooltip tooltip-bottom" data-tip="Re-scan file metadata">
+                  <div
+                    class="tooltip tooltip-bottom"
+                    data-tip="Re-scan season: discover new files and refresh metadata"
+                  >
                     <button
                       type="button"
-                      phx-click="rescan_season_files"
+                      phx-click="rescan_season"
                       phx-value-season-number={season_num}
                       class="btn btn-sm btn-ghost"
                       disabled={@rescanning_season == season_num}
@@ -436,22 +461,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     <%= if length(@media_item.media_files) > 0 do %>
       <div class="card bg-base-200 shadow-lg mb-6">
         <div class="card-body">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="card-title">Media Files</h2>
-            <button
-              type="button"
-              phx-click="refresh_all_file_metadata"
-              class="btn btn-ghost btn-sm"
-              disabled={@refreshing_file_metadata}
-              title="Re-scan file metadata (resolution, codec, audio)"
-            >
-              <%= if @refreshing_file_metadata do %>
-                <span class="loading loading-spinner loading-xs"></span> Re-scanning...
-              <% else %>
-                <.icon name="hero-arrow-path" class="w-5 h-5" /> Re-scan Files
-              <% end %>
-            </button>
-          </div>
+          <h2 class="card-title mb-4">Media Files</h2>
           <%!-- DaisyUI list component --%>
           <ul class="menu bg-base-100 rounded-box p-0">
             <li :for={file <- @media_item.media_files}>

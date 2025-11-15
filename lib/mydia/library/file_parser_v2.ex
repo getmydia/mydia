@@ -39,15 +39,9 @@ defmodule Mydia.Library.FileParser.V2 do
   require Logger
 
   alias Mydia.Library.Structs.ParsedFileInfo
+  alias Mydia.Library.Structs.Quality
 
   @type media_type :: :movie | :tv_show | :unknown
-  @type quality_info :: %{
-          resolution: String.t() | nil,
-          source: String.t() | nil,
-          codec: String.t() | nil,
-          hdr_format: String.t() | nil,
-          audio: String.t() | nil
-        }
 
   # Keep backward-compatible type alias
   @type parse_result :: ParsedFileInfo.t()
@@ -362,7 +356,7 @@ defmodule Mydia.Library.FileParser.V2 do
 
             case pattern.type do
               :quality ->
-                # Update quality map
+                # Update quality map (will be converted to struct in build_result)
                 quality = Map.get(metadata, :quality, %{})
                 Map.put(metadata, :quality, Map.put(quality, pattern.name, value))
 
@@ -576,8 +570,11 @@ defmodule Mydia.Library.FileParser.V2 do
     year = metadata[:year]
     season = metadata[:season]
     episodes = metadata[:episodes]
-    quality = metadata[:quality] || %{}
+    quality_map = metadata[:quality] || %{}
     release_group = metadata[:release_group]
+
+    # Convert quality map to struct
+    quality = Quality.new(quality_map)
 
     # Determine media type if not already set
     type =
@@ -620,7 +617,7 @@ defmodule Mydia.Library.FileParser.V2 do
   defp infer_media_type(title, year, quality) do
     # Require at least some meaningful attributes to classify as movie
     has_year = year != nil
-    has_quality = quality != %{} && (quality[:resolution] != nil || quality[:source] != nil)
+    has_quality = !Quality.empty?(quality) && (quality.resolution != nil || quality.source != nil)
     has_good_title = title != nil && String.length(title) > 3
 
     cond do
@@ -670,7 +667,7 @@ defmodule Mydia.Library.FileParser.V2 do
 
   defp calculate_movie_confidence(title, year, quality) do
     has_year = year != nil
-    has_quality = quality != %{} && (quality[:resolution] != nil || quality[:source] != nil)
+    has_quality = !Quality.empty?(quality) && (quality.resolution != nil || quality.source != nil)
     has_good_title = title != nil && String.length(title) > 3
 
     base_confidence =
@@ -684,8 +681,8 @@ defmodule Mydia.Library.FileParser.V2 do
       base_confidence
       |> add_confidence(has_good_title, 0.2)
       |> add_confidence(year != nil, 0.15)
-      |> add_confidence(quality[:resolution] != nil, 0.1)
-      |> add_confidence(quality[:source] != nil, 0.05)
+      |> add_confidence(quality.resolution != nil, 0.1)
+      |> add_confidence(quality.source != nil, 0.05)
 
     min(confidence, 1.0)
   end
@@ -698,7 +695,7 @@ defmodule Mydia.Library.FileParser.V2 do
       |> add_confidence(title != nil && String.length(title) > 0, 0.15)
       |> add_confidence(season != nil, 0.1)
       |> add_confidence(episodes != nil && length(episodes) > 0, 0.1)
-      |> add_confidence(quality[:resolution] != nil, 0.05)
+      |> add_confidence(quality.resolution != nil, 0.05)
 
     min(confidence, 1.0)
   end
@@ -716,16 +713,14 @@ defmodule Mydia.Library.FileParser.V2 do
       iex> standardize_quality(%{audio: "DDP5.1", codec: "x264"})
       %{audio: "Dolby Digital Plus 5.1", codec: "H.264/AVC"}
   """
-  defp standardize_quality(quality) when is_map(quality) do
-    quality
-    |> Map.update(:audio, nil, &standardize_audio/1)
-    |> Map.update(:codec, nil, &standardize_codec/1)
-    |> Map.update(:source, nil, &standardize_source/1)
-    |> Map.update(:resolution, nil, &standardize_resolution/1)
-    |> Map.update(:hdr_format, nil, &standardize_hdr/1)
-    # Remove nil values to avoid polluting the quality map
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Map.new()
+  defp standardize_quality(%Quality{} = quality) do
+    %Quality{
+      audio: standardize_audio(quality.audio),
+      codec: standardize_codec(quality.codec),
+      source: standardize_source(quality.source),
+      resolution: standardize_resolution(quality.resolution),
+      hdr_format: standardize_hdr(quality.hdr_format)
+    }
   end
 
   # Audio Codec Standardization

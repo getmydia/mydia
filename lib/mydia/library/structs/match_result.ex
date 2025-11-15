@@ -19,6 +19,9 @@ defmodule Mydia.Library.Structs.MatchResult do
   - `:from_local_db` - Whether this match came from local database
   """
 
+  alias Mydia.Library.Structs.ParsedFileInfo
+  alias Mydia.Metadata.Structs.MediaMetadata
+
   @enforce_keys [:provider_id, :provider_type, :title, :match_confidence, :metadata]
   defstruct [
     # Required fields
@@ -41,10 +44,10 @@ defmodule Mydia.Library.Structs.MatchResult do
           title: String.t(),
           year: integer() | nil,
           match_confidence: float(),
-          metadata: map(),
+          metadata: MediaMetadata.t(),
           match_type: :full_match | :partial_match | nil,
           partial_reason: :episode_not_found | :season_not_found | nil,
-          parsed_info: map() | nil,
+          parsed_info: ParsedFileInfo.t() | nil,
           from_local_db: boolean() | nil
         }
 

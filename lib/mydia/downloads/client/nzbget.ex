@@ -66,6 +66,7 @@ defmodule Mydia.Downloads.Client.Nzbget do
   @behaviour Mydia.Downloads.Client
 
   alias Mydia.Downloads.Client.{Error, HTTP}
+  alias Mydia.Downloads.Structs.{ClientInfo, TorrentStatus}
   require Logger
 
   @impl true
@@ -80,7 +81,7 @@ defmodule Mydia.Downloads.Client.Nzbget do
   defp do_test_connection(config) do
     case rpc_call(config, "version", []) do
       {:ok, version} when is_binary(version) ->
-        {:ok, %{version: version, api_version: "JSON-RPC 2.0"}}
+        {:ok, ClientInfo.new(version: version, api_version: "JSON-RPC 2.0")}
 
       {:ok, result} ->
         {:error, Error.api_error("Unexpected version response", %{result: result})}
@@ -471,7 +472,7 @@ defmodule Mydia.Downloads.Client.Nzbget do
         nil
       end
 
-    %{
+    TorrentStatus.new(%{
       id: Integer.to_string(nzb_id),
       name: nzb_name,
       state: parse_state(status),
@@ -489,7 +490,7 @@ defmodule Mydia.Downloads.Client.Nzbget do
       save_path: dest_dir,
       added_at: added_at,
       completed_at: completed_at
-    }
+    })
   end
 
   defp parse_state(status) when is_binary(status) do

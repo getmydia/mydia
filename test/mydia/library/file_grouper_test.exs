@@ -291,8 +291,7 @@ defmodule Mydia.Library.FileGrouperTest do
             year: 2020,
             parsed_info: %{type: :movie}
           },
-          import_status: :pending,
-          custom_field: "custom_value"
+          import_status: :pending
         }
       ]
 
@@ -302,7 +301,7 @@ defmodule Mydia.Library.FileGrouperTest do
       assert movie.file.path == "/movies/movie.mkv"
       assert movie.file.size == 5000
       assert movie.file.codec == "h264"
-      assert movie.custom_field == "custom_value"
+      assert movie.import_status == :pending
     end
 
     test "handles unknown media types as ungrouped" do

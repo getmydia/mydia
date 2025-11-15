@@ -46,6 +46,7 @@ defmodule Mydia.Downloads.Client.Qbittorrent do
   @behaviour Mydia.Downloads.Client
 
   alias Mydia.Downloads.Client.{Error, HTTP}
+  alias Mydia.Downloads.Structs.{ClientInfo, TorrentStatus}
 
   @impl true
   def test_connection(config) do
@@ -53,7 +54,7 @@ defmodule Mydia.Downloads.Client.Qbittorrent do
          {:ok, response} <- HTTP.get(req, "/api/v2/app/version") do
       case response.status do
         200 ->
-          {:ok, %{version: response.body, api_version: "2.x"}}
+          {:ok, ClientInfo.new(version: response.body, api_version: "2.x")}
 
         _ ->
           {:error, Error.api_error("Unexpected response status", %{status: response.status})}
@@ -348,7 +349,7 @@ defmodule Mydia.Downloads.Client.Qbittorrent do
   end
 
   defp parse_torrent_status(torrent) do
-    %{
+    TorrentStatus.new(%{
       id: torrent["hash"],
       name: torrent["name"],
       state: parse_state(torrent["state"]),
@@ -363,7 +364,7 @@ defmodule Mydia.Downloads.Client.Qbittorrent do
       save_path: torrent["save_path"] || "",
       added_at: parse_timestamp(torrent["added_on"]),
       completed_at: parse_timestamp(torrent["completion_on"])
-    }
+    })
   end
 
   defp parse_state(state) when is_binary(state) do

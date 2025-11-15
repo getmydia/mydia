@@ -34,21 +34,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
   """
 
   alias Mydia.Indexers.{QualityParser, SearchResult}
+  alias Mydia.Indexers.Structs.{RankedResult, ScoreBreakdown}
 
-  @type ranked_result :: %{
-          result: SearchResult.t(),
-          score: float(),
-          breakdown: score_breakdown()
-        }
-
-  @type score_breakdown :: %{
-          quality: float(),
-          seeders: float(),
-          size: float(),
-          age: float(),
-          tag_bonus: float(),
-          total: float()
-        }
+  @type ranked_result :: RankedResult.t()
+  @type score_breakdown :: ScoreBreakdown.t()
 
   @type ranking_options :: [
           min_seeders: non_neg_integer(),
@@ -104,7 +93,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
     |> filter_acceptable(opts)
     |> Enum.map(fn result ->
       breakdown = calculate_score_breakdown(result, opts)
-      %{result: result, score: breakdown.total, breakdown: breakdown}
+      RankedResult.new(%{result: result, score: breakdown.total, breakdown: breakdown})
     end)
     |> sort_by_score_and_preferences(preferred_qualities)
   end
@@ -171,14 +160,14 @@ defmodule Mydia.Indexers.ReleaseRanker do
         age_score * 0.05 +
         tag_bonus
 
-    %{
+    ScoreBreakdown.new(%{
       quality: round_score(quality_score),
       seeders: round_score(seeder_score),
       size: round_score(size_score),
       age: round_score(age_score),
       tag_bonus: round_score(tag_bonus),
       total: round_score(total)
-    }
+    })
   end
 
   defp score_quality(%SearchResult{quality: nil}, _opts), do: 0.0

@@ -21,59 +21,78 @@ defmodule Mydia.Library.FileGrouper do
       # Returns:
       # %{
       #   series: [
-      #     %{
+      #     %GroupedSeries{
       #       title: "Show A",
       #       seasons: [
-      #         %{season_number: 1, episodes: [%{file: file1, index: 0, ...}]}
+      #         %GroupedSeason{season_number: 1, episodes: [%GroupedEpisode{file: file1, index: 0, ...}]}
       #       ]
       #     }
       #   ],
-      #   movies: [%{file: file2, index: 1, ...}],
-      #   ungrouped: [%{file: file3, index: 2, ...}]
+      #   movies: [%GroupedFile{file: file2, index: 1, ...}],
+      #   ungrouped: [%GroupedFile{file: file3, index: 2, ...}]
       # }
   """
 
+  alias Mydia.Library.Structs.{GroupedEpisode, GroupedFile, GroupedSeason, GroupedSeries}
+  alias Mydia.Library.Structs.MatchResult
+
+  # Internal accumulator structs for grouping process
+  defmodule SeasonState do
+    @moduledoc false
+    @enforce_keys [:season_number, :episodes]
+    defstruct [:season_number, :episodes]
+
+    @type t :: %__MODULE__{
+            season_number: non_neg_integer(),
+            episodes: [GroupedEpisode.t()]
+          }
+
+    @spec new(map()) :: t()
+    def new(%{season_number: season_number}) do
+      %__MODULE__{
+        season_number: season_number,
+        episodes: []
+      }
+    end
+  end
+
+  defmodule GroupingState do
+    @moduledoc false
+    @enforce_keys [:title, :provider_id, :year, :seasons]
+    defstruct [:title, :provider_id, :year, :seasons]
+
+    @type t :: %__MODULE__{
+            title: String.t(),
+            provider_id: String.t(),
+            year: non_neg_integer() | nil,
+            seasons: %{non_neg_integer() => SeasonState.t()}
+          }
+
+    @spec new(map()) :: t()
+    def new(%{title: title, provider_id: provider_id, year: year}) do
+      %__MODULE__{
+        title: title,
+        provider_id: provider_id,
+        year: year,
+        seasons: %{}
+      }
+    end
+  end
+
   @type matched_file :: %{
           file: map(),
-          match_result: match_result() | nil,
+          match_result: MatchResult.t() | nil,
           import_status: atom()
         }
 
-  @type match_result :: %{
-          title: String.t(),
-          provider_id: String.t(),
-          year: integer() | nil,
-          parsed_info: parsed_info()
-        }
-
-  @type parsed_info :: %{
-          type: :tv_show | :movie,
-          season: integer() | nil,
-          episodes: [integer()] | nil
-        }
-
-  @type episode :: %{
-          file: map(),
-          match_result: match_result(),
-          index: integer()
-        }
-
-  @type season :: %{
-          season_number: integer(),
-          episodes: [episode()]
-        }
-
-  @type series :: %{
-          title: String.t(),
-          provider_id: String.t(),
-          year: integer() | nil,
-          seasons: [season()]
-        }
+  @type episode :: GroupedEpisode.t()
+  @type season :: GroupedSeason.t()
+  @type series :: GroupedSeries.t()
 
   @type grouped_files :: %{
           series: [series()],
-          movies: [matched_file()],
-          ungrouped: [matched_file()]
+          movies: [GroupedFile.t()],
+          ungrouped: [GroupedFile.t()]
         }
 
   @doc """
@@ -140,7 +159,7 @@ defmodule Mydia.Library.FileGrouper do
       iex> FileGrouper.series_key(%{title: "Breaking Bad", provider_id: "1396"})
       "Breaking Bad-1396"
   """
-  @spec series_key(match_result() | series()) :: String.t()
+  @spec series_key(MatchResult.t() | series()) :: String.t()
   def series_key(%{title: title, provider_id: provider_id}) do
     "#{title}-#{provider_id}"
   end
@@ -152,7 +171,15 @@ defmodule Mydia.Library.FileGrouper do
     case matched_file.match_result do
       nil ->
         # No match - add to ungrouped
-        %{acc | ungrouped: acc.ungrouped ++ [Map.put(matched_file, :index, index)]}
+        grouped_file =
+          GroupedFile.new(%{
+            file: matched_file.file,
+            match_result: matched_file.match_result,
+            import_status: matched_file.import_status,
+            index: index
+          })
+
+        %{acc | ungrouped: acc.ungrouped ++ [grouped_file]}
 
       match when match.parsed_info.type == :tv_show ->
         # TV show episode - group by series and season
@@ -160,11 +187,27 @@ defmodule Mydia.Library.FileGrouper do
 
       match when match.parsed_info.type == :movie ->
         # Movie - add to movies list
-        %{acc | movies: acc.movies ++ [Map.put(matched_file, :index, index)]}
+        grouped_file =
+          GroupedFile.new(%{
+            file: matched_file.file,
+            match_result: matched_file.match_result,
+            import_status: matched_file.import_status,
+            index: index
+          })
+
+        %{acc | movies: acc.movies ++ [grouped_file]}
 
       _other ->
         # Unknown type - add to ungrouped
-        %{acc | ungrouped: acc.ungrouped ++ [Map.put(matched_file, :index, index)]}
+        grouped_file =
+          GroupedFile.new(%{
+            file: matched_file.file,
+            match_result: matched_file.match_result,
+            import_status: matched_file.import_status,
+            index: index
+          })
+
+        %{acc | ungrouped: acc.ungrouped ++ [grouped_file]}
     end
   end
 
@@ -175,23 +218,38 @@ defmodule Mydia.Library.FileGrouper do
 
     # Get or create series entry
     series_entry =
-      Map.get(acc.series, series_id, %{
-        title: match.title,
-        provider_id: match.provider_id,
-        year: match.year,
-        seasons: %{}
-      })
+      Map.get(
+        acc.series,
+        series_id,
+        GroupingState.new(%{
+          title: match.title,
+          provider_id: match.provider_id,
+          year: match.year
+        })
+      )
 
     # Get or create season entry
     season_entry =
-      Map.get(series_entry.seasons, season_num, %{
-        season_number: season_num,
-        episodes: []
-      })
+      Map.get(
+        series_entry.seasons,
+        season_num,
+        SeasonState.new(%{season_number: season_num})
+      )
 
     # Add episode to season
-    episode_entry = Map.put(matched_file, :index, index)
-    updated_season = %{season_entry | episodes: season_entry.episodes ++ [episode_entry]}
+    episode_entry =
+      GroupedEpisode.new(%{
+        file: matched_file.file,
+        match_result: matched_file.match_result,
+        import_status: matched_file.import_status,
+        index: index
+      })
+
+    updated_season = %SeasonState{
+      season_entry
+      | episodes: season_entry.episodes ++ [episode_entry]
+    }
+
     updated_series = put_in(series_entry.seasons[season_num], updated_season)
     updated_series_map = Map.put(acc.series, series_id, updated_series)
 
@@ -207,9 +265,20 @@ defmodule Mydia.Library.FileGrouper do
         seasons_list =
           series.seasons
           |> Map.values()
+          |> Enum.map(fn season_state ->
+            GroupedSeason.new(%{
+              season_number: season_state.season_number,
+              episodes: season_state.episodes
+            })
+          end)
           |> Enum.sort_by(& &1.season_number)
 
-        Map.put(series, :seasons, seasons_list)
+        GroupedSeries.new(%{
+          title: series.title,
+          provider_id: series.provider_id,
+          year: series.year,
+          seasons: seasons_list
+        })
       end)
       |> Enum.sort_by(& &1.title)
 

@@ -8,7 +8,10 @@ defmodule Mydia.Downloads do
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Client.Registry
+  alias Mydia.Downloads.Structs.DownloadMetadata
+  alias Mydia.Downloads.Structs.EnrichedDownload
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Settings
   alias Mydia.Library.MediaFile
   alias Mydia.Media.Episode
@@ -496,7 +499,11 @@ defmodule Mydia.Downloads do
           where(base_query, [d], d.episode_id == ^episode_id)
 
         # For season packs, check if there's an active download for same media_item and season
-        media_item_id && match?(%{season_pack: true, season_number: _}, search_result.metadata) ->
+        media_item_id &&
+            match?(
+              %SearchResultMetadata{season_pack: true, season_number: _},
+              search_result.metadata
+            ) ->
           season_number = search_result.metadata.season_number
 
           base_query
@@ -527,7 +534,7 @@ defmodule Mydia.Downloads do
       true ->
         season_info =
           case search_result.metadata do
-            %{season_pack: true, season_number: sn} -> " (season #{sn})"
+            %SearchResultMetadata{season_pack: true, season_number: sn} -> " (season #{sn})"
             _ -> ""
           end
 
@@ -560,7 +567,11 @@ defmodule Mydia.Downloads do
         end
 
       # For season packs, check if any episodes in the season already have media files
-      media_item_id && match?(%{season_pack: true, season_number: _}, search_result.metadata) ->
+      media_item_id &&
+          match?(
+            %SearchResultMetadata{season_pack: true, season_number: _},
+            search_result.metadata
+          ) ->
         season_number = search_result.metadata.season_number
 
         # Get all episodes for this season
@@ -711,23 +722,30 @@ defmodule Mydia.Downloads do
   end
 
   defp create_download_record(search_result, client_config, client_id, opts) do
-    # Base metadata from search result
-    base_metadata = %{
+    # Build DownloadMetadata struct from search result
+    metadata_attrs = %{
       size: search_result.size,
       seeders: search_result.seeders,
       leechers: search_result.leechers,
-      quality: search_result.quality
+      quality: search_result.quality,
+      download_protocol: search_result.download_protocol
     }
 
-    # Merge with season pack metadata if present
-    metadata =
+    # Add season pack metadata if present
+    metadata_attrs =
       case search_result.metadata do
-        %{season_pack: true} = season_metadata ->
-          Map.merge(base_metadata, season_metadata)
+        %SearchResultMetadata{season_pack: true, season_number: season_number} ->
+          Map.merge(metadata_attrs, %{
+            season_pack: true,
+            season_number: season_number
+          })
 
         _ ->
-          base_metadata
+          metadata_attrs
       end
+
+    # Create DownloadMetadata struct and convert to map for database storage
+    metadata = metadata_attrs |> DownloadMetadata.new() |> DownloadMetadata.to_map()
 
     attrs = %{
       indexer: search_result.indexer,
@@ -796,8 +814,11 @@ defmodule Mydia.Downloads do
       |> Map.get(download.download_client_id)
 
     if torrent_status do
+      # Convert metadata map to struct for type-safe access
+      metadata = DownloadMetadata.from_map(download.metadata)
+
       # Merge download DB record with real-time client status
-      %{
+      EnrichedDownload.new(%{
         id: download.id,
         media_item_id: download.media_item_id,
         episode_id: download.episode_id,
@@ -820,14 +841,14 @@ defmodule Mydia.Downloads do
         downloaded: torrent_status.downloaded,
         uploaded: torrent_status.uploaded,
         ratio: torrent_status.ratio,
-        seeders: torrent_status[:seeders],
-        leechers: torrent_status[:leechers],
+        seeders: if(metadata, do: metadata.seeders, else: nil),
+        leechers: if(metadata, do: metadata.leechers, else: nil),
         save_path: torrent_status.save_path,
         completed_at: download.completed_at || torrent_status.completed_at,
         error_message: download.error_message,
         # Preserve database completed_at for tracking if we've already processed it
         db_completed_at: download.completed_at
-      }
+      })
     else
       # Download not found in client - might be removed or completed
       enrich_download_with_empty_status(download)
@@ -844,7 +865,10 @@ defmodule Mydia.Downloads do
         true -> "missing"
       end
 
-    %{
+    # Convert metadata map to struct for type-safe access
+    metadata = DownloadMetadata.from_map(download.metadata)
+
+    EnrichedDownload.new(%{
       id: download.id,
       media_item_id: download.media_item_id,
       episode_id: download.episode_id,
@@ -862,7 +886,7 @@ defmodule Mydia.Downloads do
       download_speed: 0,
       upload_speed: 0,
       eta: nil,
-      size: download.metadata["size"],
+      size: if(metadata, do: metadata.size, else: 0),
       downloaded: 0,
       uploaded: 0,
       ratio: 0.0,
@@ -873,7 +897,7 @@ defmodule Mydia.Downloads do
       error_message: download.error_message,
       # Preserve database completed_at for tracking if we've already processed it
       db_completed_at: download.completed_at
-    }
+    })
   end
 
   defp status_from_torrent_state(state) do

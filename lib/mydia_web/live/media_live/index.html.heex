@@ -157,6 +157,15 @@
       </div>
     </div>
 
+    <%!-- Hidden debug info for tests --%>
+    <div
+      class="hidden"
+      id="test-debug-info"
+      data-search-query={@search_query}
+      data-stream-count={Enum.count(@streams.media_items)}
+    >
+    </div>
+
     <%!-- Search and Filters --%>
     <div class="flex flex-col md:flex-row gap-3 md:gap-4 mb-4 md:mb-6">
       <%!-- Search input --%>

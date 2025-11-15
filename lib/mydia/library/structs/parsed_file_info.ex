@@ -8,6 +8,8 @@ defmodule Mydia.Library.Structs.ParsedFileInfo do
   Used by the FileParser to return structured, type-safe parsing results.
   """
 
+  alias Mydia.Library.Structs.Quality
+
   @enforce_keys [:type, :original_filename, :confidence]
   defstruct [
     # Required fields
@@ -25,21 +27,13 @@ defmodule Mydia.Library.Structs.ParsedFileInfo do
 
   @type media_type :: :movie | :tv_show | :unknown
 
-  @type quality_info :: %{
-          resolution: String.t() | nil,
-          source: String.t() | nil,
-          codec: String.t() | nil,
-          hdr_format: String.t() | nil,
-          audio: String.t() | nil
-        }
-
   @type t :: %__MODULE__{
           type: media_type(),
           title: String.t() | nil,
           year: integer() | nil,
           season: integer() | nil,
           episodes: [integer()] | nil,
-          quality: quality_info(),
+          quality: Quality.t(),
           release_group: String.t() | nil,
           confidence: float(),
           original_filename: String.t()
@@ -60,7 +54,7 @@ defmodule Mydia.Library.Structs.ParsedFileInfo do
       year: metadata[:year],
       season: metadata[:season],
       episodes: metadata[:episodes],
-      quality: metadata[:quality] || %{},
+      quality: metadata[:quality] || Quality.empty(),
       release_group: metadata[:release_group],
       confidence: confidence,
       original_filename: original_filename

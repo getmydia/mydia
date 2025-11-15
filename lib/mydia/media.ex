@@ -7,6 +7,7 @@ defmodule Mydia.Media do
   require Logger
   alias Mydia.Repo
   alias Mydia.Media.{MediaItem, Episode}
+  alias Mydia.Media.Structs.CalendarEntry
   alias Mydia.Events
 
   ## Media Items
@@ -656,22 +657,22 @@ defmodule Mydia.Media do
           episode_count =
             Enum.reduce(seasons_to_fetch, 0, fn season, count ->
               # Skip season 0 (specials) unless explicitly monitoring all
-              if season[:season_number] == 0 and season_monitoring != "all" do
+              if season.season_number == 0 and season_monitoring != "all" do
                 count
               else
-                Logger.info("Processing episodes for season #{season[:season_number]}")
+                Logger.info("Processing episodes for season #{season.season_number}")
 
                 case create_episodes_for_season(media_item, season, config, force) do
                   {:ok, created} ->
                     Logger.info(
-                      "Processed #{created} episodes for season #{season[:season_number]}"
+                      "Processed #{created} episodes for season #{season.season_number}"
                     )
 
                     count + created
 
                   {:error, reason} ->
                     Logger.error(
-                      "Failed to create episodes for season #{season[:season_number]}: #{inspect(reason)}"
+                      "Failed to create episodes for season #{season.season_number}: #{inspect(reason)}"
                     )
 
                     count
@@ -733,6 +734,20 @@ defmodule Mydia.Media do
     })
     |> order_by([e, m], asc: e.air_date, asc: m.title)
     |> Repo.all()
+    |> Enum.map(fn entry ->
+      CalendarEntry.new_episode(
+        id: entry.id,
+        air_date: entry.air_date,
+        title: entry.title,
+        season_number: entry.season_number,
+        episode_number: entry.episode_number,
+        media_item_id: entry.media_item_id,
+        media_item_title: entry.media_item_title,
+        media_item_type: entry.media_item_type,
+        has_files: entry.has_files,
+        has_downloads: entry.has_downloads
+      )
+    end)
   end
 
   @doc """
@@ -774,9 +789,8 @@ defmodule Mydia.Media do
       has_downloads =
         Repo.exists?(from d in Mydia.Downloads.Download, where: d.media_item_id == ^item.id)
 
-      %{
+      CalendarEntry.new_movie(
         id: item.id,
-        type: "movie",
         air_date: release_date,
         title: item.title,
         media_item_id: item.id,
@@ -784,7 +798,7 @@ defmodule Mydia.Media do
         media_item_type: item.type,
         has_files: has_files,
         has_downloads: has_downloads
-      }
+      )
     end)
   end
 
@@ -800,14 +814,14 @@ defmodule Mydia.Media do
         _ -> media_item.tmdb_id
       end
 
-    case Metadata.fetch_season(config, to_string(tmdb_id), season[:season_number]) do
+    case Metadata.fetch_season(config, to_string(tmdb_id), season.season_number) do
       {:ok, season_data} ->
-        episodes = season_data[:episodes] || []
+        episodes = season_data.episodes || []
 
         created_count =
           Enum.reduce(episodes, 0, fn episode, count ->
-            season_num = episode[:season_number]
-            episode_num = episode[:episode_number]
+            season_num = episode.season_number
+            episode_num = episode.episode_number
 
             # Skip if season or episode number is nil
             if is_nil(season_num) or is_nil(episode_num) do
@@ -830,8 +844,8 @@ defmodule Mydia.Media do
                        media_item_id: media_item.id,
                        season_number: season_num,
                        episode_number: episode_num,
-                       title: episode[:name],
-                       air_date: parse_air_date(episode[:air_date]),
+                       title: episode.name,
+                       air_date: parse_air_date(episode.air_date),
                        metadata: episode,
                        monitored: media_item.monitored
                      }) do
@@ -841,8 +855,8 @@ defmodule Mydia.Media do
               else
                 # Update existing episode with fresh metadata
                 case update_episode(existing, %{
-                       title: episode[:name],
-                       air_date: parse_air_date(episode[:air_date]),
+                       title: episode.name,
+                       air_date: parse_air_date(episode.air_date),
                        metadata: episode
                      }) do
                   {:ok, _episode} -> count + 1

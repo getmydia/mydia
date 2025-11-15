@@ -268,6 +268,448 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Re-scans a TV series directory to discover and import new episode files.
+
+  This function performs a comprehensive re-scan of a TV series:
+  1. Finds the series base directory from existing media files
+  2. Scans the directory for all video files
+  3. Creates MediaFile records for newly discovered files
+  4. Refreshes episode metadata from TMDB
+  5. Matches files to episodes
+
+  Returns `{:ok, result_map}` with statistics about the re-scan, or `{:error, reason}`.
+
+  ## Result Map
+    - `:new_files` - Number of new files discovered and added
+    - `:matched` - Number of files matched to episodes
+    - `:errors` - List of error tuples for files that failed to process
+
+  ## Examples
+
+      iex> rescan_series("media-item-uuid")
+      {:ok, %{new_files: 3, matched: 3, errors: []}}
+  """
+  def rescan_series(media_item_id) do
+    alias Mydia.Library.Scanner
+    alias Mydia.Media
+
+    # Get media item and verify it's a TV show
+    media_item = Media.get_media_item!(media_item_id)
+
+    if media_item.type != "tv_show" do
+      {:error, :not_a_tv_show}
+    else
+      # Find base directory from existing media files
+      case find_series_base_directory(media_item_id) do
+        {:ok, base_directory} ->
+          Logger.info("Re-scanning TV series",
+            media_item_id: media_item_id,
+            title: media_item.title,
+            directory: base_directory
+          )
+
+          # Scan directory for all video files
+          case Scanner.scan(base_directory, recursive: true) do
+            {:ok, scan_result} ->
+              # Get existing media file paths for this series
+              existing_files = get_media_files_for_item(media_item_id)
+              existing_paths = MapSet.new(existing_files, & &1.path)
+
+              # Find new files (not already in database)
+              new_files =
+                scan_result.files
+                |> Enum.reject(fn file_info -> MapSet.member?(existing_paths, file_info.path) end)
+
+              Logger.info("Found new files during re-scan",
+                new_file_count: length(new_files),
+                total_scanned: length(scan_result.files)
+              )
+
+              # Create MediaFile records for new files
+              {created_count, create_errors} =
+                create_media_files_for_series(new_files, media_item_id)
+
+              # Refresh episodes from TMDB to ensure we have all episode metadata
+              case Media.refresh_episodes_for_tv_show(media_item, season_monitoring: "all") do
+                {:ok, episode_count} ->
+                  Logger.info("Refreshed episode metadata",
+                    media_item_id: media_item_id,
+                    episode_count: episode_count
+                  )
+
+                {:error, reason} ->
+                  Logger.warning("Failed to refresh episodes during re-scan",
+                    media_item_id: media_item_id,
+                    reason: inspect(reason)
+                  )
+              end
+
+              # Match unassociated files to episodes
+              {:ok, matched_count} = match_files_to_episodes(media_item_id)
+
+              Logger.info("Re-scan complete",
+                media_item_id: media_item_id,
+                new_files: created_count,
+                matched: matched_count,
+                errors: length(create_errors)
+              )
+
+              {:ok,
+               %{
+                 new_files: created_count,
+                 matched: matched_count,
+                 errors: create_errors
+               }}
+
+            {:error, reason} ->
+              Logger.error("Failed to scan directory",
+                directory: base_directory,
+                reason: inspect(reason)
+              )
+
+              {:error, :scan_failed}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Re-scans a specific season of a TV series to discover and import new episode files.
+
+  Similar to `rescan_series/1` but scoped to a single season.
+
+  Returns `{:ok, result_map}` with statistics about the re-scan, or `{:error, reason}`.
+
+  ## Examples
+
+      iex> rescan_season("media-item-uuid", 1)
+      {:ok, %{new_files: 2, matched: 2, errors: []}}
+  """
+  def rescan_season(media_item_id, season_number) do
+    alias Mydia.Library.Scanner
+    alias Mydia.Media
+
+    # Get media item and verify it's a TV show
+    media_item = Media.get_media_item!(media_item_id)
+
+    if media_item.type != "tv_show" do
+      {:error, :not_a_tv_show}
+    else
+      # Find base directory from existing media files
+      case find_series_base_directory(media_item_id) do
+        {:ok, base_directory} ->
+          Logger.info("Re-scanning TV series season",
+            media_item_id: media_item_id,
+            title: media_item.title,
+            season: season_number,
+            directory: base_directory
+          )
+
+          # Scan directory for all video files
+          case Scanner.scan(base_directory, recursive: true) do
+            {:ok, scan_result} ->
+              # Parse all scanned files and filter to this season
+              season_files =
+                scan_result.files
+                |> Enum.filter(fn file_info ->
+                  parsed = FileParser.parse(Path.basename(file_info.path))
+                  parsed.season == season_number
+                end)
+
+              # Get existing media file paths for this series
+              existing_files = get_media_files_for_item(media_item_id)
+              existing_paths = MapSet.new(existing_files, & &1.path)
+
+              # Find new files for this season
+              new_files =
+                season_files
+                |> Enum.reject(fn file_info -> MapSet.member?(existing_paths, file_info.path) end)
+
+              Logger.info("Found new files for season during re-scan",
+                season: season_number,
+                new_file_count: length(new_files),
+                total_season_files: length(season_files)
+              )
+
+              # Create MediaFile records for new files
+              {created_count, create_errors} =
+                create_media_files_for_series(new_files, media_item_id)
+
+              # Refresh episodes from TMDB for this season
+              case Media.refresh_episodes_for_tv_show(media_item, season_monitoring: "all") do
+                {:ok, episode_count} ->
+                  Logger.info("Refreshed episode metadata for season",
+                    media_item_id: media_item_id,
+                    season: season_number,
+                    episode_count: episode_count
+                  )
+
+                {:error, reason} ->
+                  Logger.warning("Failed to refresh episodes during season re-scan",
+                    media_item_id: media_item_id,
+                    season: season_number,
+                    reason: inspect(reason)
+                  )
+              end
+
+              # Match unassociated files to episodes (will match all seasons, but that's fine)
+              {:ok, matched_count} = match_files_to_episodes(media_item_id)
+
+              Logger.info("Season re-scan complete",
+                media_item_id: media_item_id,
+                season: season_number,
+                new_files: created_count,
+                matched: matched_count,
+                errors: length(create_errors)
+              )
+
+              {:ok,
+               %{
+                 new_files: created_count,
+                 matched: matched_count,
+                 errors: create_errors
+               }}
+
+            {:error, reason} ->
+              Logger.error("Failed to scan directory for season",
+                directory: base_directory,
+                season: season_number,
+                reason: inspect(reason)
+              )
+
+              {:error, :scan_failed}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Re-scans a movie's directory for new files and creates MediaFile records.
+
+  Discovers new video files in the movie's directory that aren't already
+  in the database. For each new file, creates a MediaFile record and refreshes
+  FFprobe metadata.
+
+  Returns `{:ok, result_map}` with statistics about the re-scan, or `{:error, reason}`.
+
+  ## Result Map
+    - `:new_files` - Number of new files discovered and added
+    - `:errors` - List of error tuples for files that failed to process
+
+  ## Examples
+
+      iex> rescan_movie("media-item-uuid")
+      {:ok, %{new_files: 1, errors: []}}
+  """
+  def rescan_movie(media_item_id) do
+    alias Mydia.Library.Scanner
+    alias Mydia.Media
+
+    # Get media item and verify it's a movie
+    media_item = Media.get_media_item!(media_item_id)
+
+    if media_item.type != "movie" do
+      {:error, :not_a_movie}
+    else
+      # Find base directory from existing media files
+      case find_movie_base_directory(media_item_id) do
+        {:ok, base_directory} ->
+          Logger.info("Re-scanning movie",
+            media_item_id: media_item_id,
+            title: media_item.title,
+            directory: base_directory
+          )
+
+          # Scan directory for video files (not recursive for movies)
+          case Scanner.scan(base_directory, recursive: false) do
+            {:ok, scan_result} ->
+              # Get existing media file paths for this movie
+              existing_files = get_media_files_for_item(media_item_id)
+              existing_paths = MapSet.new(existing_files, & &1.path)
+
+              # Find new files (not already in database)
+              new_files =
+                scan_result.files
+                |> Enum.reject(fn file_info -> MapSet.member?(existing_paths, file_info.path) end)
+
+              Logger.info("Found new files during movie re-scan",
+                new_file_count: length(new_files),
+                total_scanned: length(scan_result.files)
+              )
+
+              # Create MediaFile records for new files
+              {created_count, create_errors} =
+                create_media_files_for_movie(new_files, media_item_id)
+
+              Logger.info("Movie re-scan complete",
+                media_item_id: media_item_id,
+                new_files: created_count,
+                errors: length(create_errors)
+              )
+
+              {:ok,
+               %{
+                 new_files: created_count,
+                 errors: create_errors
+               }}
+
+            {:error, reason} ->
+              Logger.error("Failed to scan directory",
+                directory: base_directory,
+                reason: inspect(reason)
+              )
+
+              {:error, :scan_failed}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  # Finds the base directory for a TV series by looking at existing media file paths
+  defp find_series_base_directory(media_item_id) do
+    media_files = get_media_files_for_item(media_item_id, preload: [:episode])
+
+    case media_files do
+      [] ->
+        Logger.warning("No media files found for series",
+          media_item_id: media_item_id
+        )
+
+        {:error, :no_media_files}
+
+      files ->
+        # Get the most common directory (in case files are in different locations)
+        base_dir =
+          files
+          |> Enum.map(fn file -> Path.dirname(file.path) end)
+          |> Enum.frequencies()
+          |> Enum.max_by(fn {_dir, count} -> count end)
+          |> elem(0)
+
+        # Go up one level to get the series directory (files are usually in season subdirs)
+        series_dir = Path.dirname(base_dir)
+
+        Logger.debug("Detected series base directory",
+          media_item_id: media_item_id,
+          directory: series_dir
+        )
+
+        {:ok, series_dir}
+    end
+  end
+
+  # Creates MediaFile records for a list of scanned files
+  defp create_media_files_for_series(file_infos, media_item_id) do
+    results =
+      Enum.map(file_infos, fn file_info ->
+        attrs = %{
+          path: file_info.path,
+          size: file_info.size,
+          media_item_id: media_item_id,
+          library_path_id: nil
+        }
+
+        case create_scanned_media_file(attrs) do
+          {:ok, media_file} ->
+            Logger.debug("Created media file record",
+              path: file_info.path,
+              media_file_id: media_file.id
+            )
+
+            {:ok, media_file}
+
+          {:error, changeset} ->
+            Logger.warning("Failed to create media file record",
+              path: file_info.path,
+              errors: inspect(changeset.errors)
+            )
+
+            {:error, {:create_failed, file_info.path}}
+        end
+      end)
+
+    created_count = Enum.count(results, &match?({:ok, _}, &1))
+    errors = Enum.filter(results, &match?({:error, _}, &1))
+
+    {created_count, errors}
+  end
+
+  # Finds the base directory for a movie by looking at existing media file paths
+  defp find_movie_base_directory(media_item_id) do
+    media_files = get_media_files_for_item(media_item_id)
+
+    case media_files do
+      [] ->
+        Logger.warning("No media files found for movie",
+          media_item_id: media_item_id
+        )
+
+        {:error, :no_media_files}
+
+      files ->
+        # Get the most common directory (movies are typically in a single directory)
+        movie_dir =
+          files
+          |> Enum.map(fn file -> Path.dirname(file.path) end)
+          |> Enum.frequencies()
+          |> Enum.max_by(fn {_dir, count} -> count end)
+          |> elem(0)
+
+        Logger.debug("Detected movie base directory",
+          media_item_id: media_item_id,
+          directory: movie_dir
+        )
+
+        {:ok, movie_dir}
+    end
+  end
+
+  # Creates MediaFile records for a list of scanned movie files
+  defp create_media_files_for_movie(file_infos, media_item_id) do
+    results =
+      Enum.map(file_infos, fn file_info ->
+        attrs = %{
+          path: file_info.path,
+          size: file_info.size,
+          media_item_id: media_item_id,
+          library_path_id: nil
+        }
+
+        case create_scanned_media_file(attrs) do
+          {:ok, media_file} ->
+            Logger.debug("Created media file record for movie",
+              path: file_info.path,
+              media_file_id: media_file.id
+            )
+
+            {:ok, media_file}
+
+          {:error, changeset} ->
+            Logger.warning("Failed to create media file record for movie",
+              path: file_info.path,
+              errors: inspect(changeset.errors)
+            )
+
+            {:error, {:create_failed, file_info.path}}
+        end
+      end)
+
+    created_count = Enum.count(results, &match?({:ok, _}, &1))
+    errors = Enum.filter(results, &match?({:error, _}, &1))
+
+    {created_count, errors}
+  end
+
+  @doc """
   Returns orphaned media files (files without media_item_id or episode_id).
 
   These files were scanned but failed to match to any media items.

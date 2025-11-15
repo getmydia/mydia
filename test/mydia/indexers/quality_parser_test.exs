@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.QualityParserTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.QualityParser
+  alias Mydia.Indexers.Structs.QualityInfo
 
   describe "parse/1" do
     test "parses complete quality information" do
@@ -251,45 +252,48 @@ defmodule Mydia.Indexers.QualityParserTest do
 
   describe "quality_score/1" do
     test "scores 2160p BluRay with HDR highest" do
-      quality = %{
-        resolution: "2160p",
-        source: "BluRay",
-        codec: "x265",
-        audio: nil,
-        hdr: true,
-        proper: false,
-        repack: false
-      }
+      quality =
+        QualityInfo.new(
+          resolution: "2160p",
+          source: "BluRay",
+          codec: "x265",
+          audio: nil,
+          hdr: true,
+          proper: false,
+          repack: false
+        )
 
       score = QualityParser.quality_score(quality)
       assert score == 1650
     end
 
     test "scores 1080p WEB-DL x264 appropriately" do
-      quality = %{
-        resolution: "1080p",
-        source: "WEB-DL",
-        codec: "x264",
-        audio: nil,
-        hdr: false,
-        proper: false,
-        repack: false
-      }
+      quality =
+        QualityInfo.new(
+          resolution: "1080p",
+          source: "WEB-DL",
+          codec: "x264",
+          audio: nil,
+          hdr: false,
+          proper: false,
+          repack: false
+        )
 
       score = QualityParser.quality_score(quality)
       assert score == 1300
     end
 
     test "adds bonus for PROPER" do
-      quality_without = %{
-        resolution: "1080p",
-        source: "BluRay",
-        codec: "x264",
-        audio: nil,
-        hdr: false,
-        proper: false,
-        repack: false
-      }
+      quality_without =
+        QualityInfo.new(
+          resolution: "1080p",
+          source: "BluRay",
+          codec: "x264",
+          audio: nil,
+          hdr: false,
+          proper: false,
+          repack: false
+        )
 
       quality_with = %{quality_without | proper: true}
 
@@ -298,15 +302,16 @@ defmodule Mydia.Indexers.QualityParserTest do
     end
 
     test "adds bonus for REPACK" do
-      quality_without = %{
-        resolution: "1080p",
-        source: "BluRay",
-        codec: "x264",
-        audio: nil,
-        hdr: false,
-        proper: false,
-        repack: false
-      }
+      quality_without =
+        QualityInfo.new(
+          resolution: "1080p",
+          source: "BluRay",
+          codec: "x264",
+          audio: nil,
+          hdr: false,
+          proper: false,
+          repack: false
+        )
 
       quality_with = %{quality_without | repack: true}
 
@@ -315,29 +320,31 @@ defmodule Mydia.Indexers.QualityParserTest do
     end
 
     test "handles nil values gracefully" do
-      quality = %{
-        resolution: nil,
-        source: nil,
-        codec: nil,
-        audio: nil,
-        hdr: false,
-        proper: false,
-        repack: false
-      }
+      quality =
+        QualityInfo.new(
+          resolution: nil,
+          source: nil,
+          codec: nil,
+          audio: nil,
+          hdr: false,
+          proper: false,
+          repack: false
+        )
 
       assert QualityParser.quality_score(quality) == 0
     end
 
     test "scores CAM releases lowest" do
-      quality = %{
-        resolution: "480p",
-        source: "CAM",
-        codec: "XviD",
-        audio: nil,
-        hdr: false,
-        proper: false,
-        repack: false
-      }
+      quality =
+        QualityInfo.new(
+          resolution: "480p",
+          source: "CAM",
+          codec: "XviD",
+          audio: nil,
+          hdr: false,
+          proper: false,
+          repack: false
+        )
 
       score = QualityParser.quality_score(quality)
       assert score < 500

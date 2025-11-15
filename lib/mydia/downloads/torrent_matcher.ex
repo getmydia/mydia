@@ -73,17 +73,13 @@ defmodule Mydia.Downloads.TorrentMatcher do
   - Similar-sounding movies from different years
   """
 
+  alias Mydia.Downloads.Structs.TorrentMatchResult
   alias Mydia.Media
   alias Mydia.Media.{MediaItem, Episode}
 
   require Logger
 
-  @type match_result :: %{
-          media_item: MediaItem.t(),
-          episode: Episode.t() | nil,
-          confidence: float(),
-          match_reason: String.t()
-        }
+  @type match_result :: TorrentMatchResult.t()
 
   @doc """
   Finds the best matching library item for parsed torrent info.
@@ -137,12 +133,12 @@ defmodule Mydia.Downloads.TorrentMatcher do
     case id_match_result do
       {:ok, movie, confidence, reason} ->
         {:ok,
-         %{
+         TorrentMatchResult.new(%{
            media_item: movie,
            episode: nil,
            confidence: confidence,
            match_reason: reason
-         }}
+         })}
 
       {:error, :no_id_match} when require_id_match ->
         Logger.debug(
@@ -171,12 +167,12 @@ defmodule Mydia.Downloads.TorrentMatcher do
     case matches do
       [{movie, confidence} | _] ->
         {:ok,
-         %{
+         TorrentMatchResult.new(%{
            media_item: movie,
            episode: nil,
            confidence: confidence,
            match_reason: build_movie_match_reason(movie, torrent_info, confidence)
-         }}
+         })}
 
       [] ->
         {:error, :no_match_found}
@@ -280,13 +276,13 @@ defmodule Mydia.Downloads.TorrentMatcher do
         case find_episode(show, torrent_info) do
           {:ok, episode} ->
             {:ok,
-             %{
+             TorrentMatchResult.new(%{
                media_item: show,
                episode: episode,
                confidence: confidence,
                match_reason:
                  build_tv_match_reason_with_id(show, episode, torrent_info, confidence)
-             }}
+             })}
 
           {:error, :episode_not_found} ->
             {:error, :episode_not_found}
@@ -322,12 +318,12 @@ defmodule Mydia.Downloads.TorrentMatcher do
         case find_episode(show, torrent_info) do
           {:ok, episode} ->
             {:ok,
-             %{
+             TorrentMatchResult.new(%{
                media_item: show,
                episode: episode,
                confidence: confidence,
                match_reason: build_tv_match_reason(show, episode, torrent_info, confidence)
-             }}
+             })}
 
           {:error, :episode_not_found} ->
             {:error, :episode_not_found}
@@ -371,12 +367,12 @@ defmodule Mydia.Downloads.TorrentMatcher do
     case id_match_result do
       {:ok, show, confidence, reason} ->
         {:ok,
-         %{
+         TorrentMatchResult.new(%{
            media_item: show,
            episode: nil,
            confidence: confidence,
            match_reason: reason
-         }}
+         })}
 
       {:error, :no_id_match} when require_id_match ->
         Logger.debug(
@@ -406,12 +402,12 @@ defmodule Mydia.Downloads.TorrentMatcher do
       [{show, confidence} | _] ->
         # For season packs, match the show but don't require a specific episode
         {:ok,
-         %{
+         TorrentMatchResult.new(%{
            media_item: show,
            episode: nil,
            confidence: confidence,
            match_reason: build_tv_season_match_reason(show, torrent_info, confidence)
-         }}
+         })}
 
       [] ->
         {:error, :no_match_found}

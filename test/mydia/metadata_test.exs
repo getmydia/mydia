@@ -4,10 +4,13 @@ defmodule Mydia.MetadataTest do
   alias Mydia.Metadata
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Provider
+  alias Mydia.Metadata.Structs.ImagesResponse
 
   # Mock provider for testing
   defmodule MockProvider do
     @behaviour Mydia.Metadata.Provider
+
+    alias Mydia.Metadata.Structs.ImagesResponse
 
     @impl true
     def test_connection(_config), do: {:ok, %{status: "ok"}}
@@ -19,7 +22,8 @@ defmodule Mydia.MetadataTest do
     def fetch_by_id(_config, _id, _opts), do: {:ok, %{}}
 
     @impl true
-    def fetch_images(_config, _id, _opts), do: {:ok, %{posters: [], backdrops: [], logos: []}}
+    def fetch_images(_config, _id, _opts),
+      do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
     def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}

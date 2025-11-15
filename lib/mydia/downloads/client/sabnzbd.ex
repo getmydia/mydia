@@ -58,6 +58,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
   @behaviour Mydia.Downloads.Client
 
   alias Mydia.Downloads.Client.{Error, HTTP}
+  alias Mydia.Downloads.Structs.{ClientInfo, TorrentStatus}
   require Logger
 
   @impl true
@@ -83,7 +84,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
     case HTTP.get(req, api_path, params: params) do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         version = get_in(body, ["version"]) || "unknown"
-        {:ok, %{version: version, api_version: "1.0"}}
+        {:ok, ClientInfo.new(version: version, api_version: "1.0")}
 
       {:ok, %{status: status, body: body}} ->
         {:error, Error.api_error("Unexpected response status", %{status: status, body: body})}
@@ -485,7 +486,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
     completed_at =
       if status == "Completed", do: parse_timestamp(get_in(item, ["completed"])), else: nil
 
-    %{
+    TorrentStatus.new(%{
       id: nzo_id,
       name: filename,
       state: parse_state(status),
@@ -503,7 +504,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
       save_path: storage,
       added_at: added_at,
       completed_at: completed_at
-    }
+    })
   end
 
   defp parse_state(status) when is_binary(status) do

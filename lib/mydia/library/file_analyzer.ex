@@ -13,14 +13,9 @@ defmodule Mydia.Library.FileAnalyzer do
 
   require Logger
 
-  @type analysis_result :: %{
-          resolution: String.t() | nil,
-          codec: String.t() | nil,
-          audio_codec: String.t() | nil,
-          bitrate: integer() | nil,
-          hdr_format: String.t() | nil,
-          size: integer() | nil
-        }
+  alias Mydia.Library.Structs.FileAnalysisResult
+
+  @type analysis_result :: FileAnalysisResult.t()
 
   @doc """
   Analyzes a media file and extracts technical metadata.
@@ -46,7 +41,7 @@ defmodule Mydia.Library.FileAnalyzer do
            {:ok, metadata} <- parse_ffprobe_output(ffprobe_data) do
         # Add file size
         size = File.stat!(file_path).size
-        {:ok, Map.put(metadata, :size, size)}
+        {:ok, %{metadata | size: size}}
       end
     else
       {:error, :file_not_found}
@@ -118,14 +113,15 @@ defmodule Mydia.Library.FileAnalyzer do
     video_stream = Enum.find(streams, fn stream -> stream["codec_type"] == "video" end)
     audio_stream = Enum.find(streams, fn stream -> stream["codec_type"] == "audio" end)
 
-    metadata = %{
-      resolution: extract_resolution(video_stream),
-      codec: extract_video_codec(video_stream),
-      audio_codec: extract_audio_codec(audio_stream),
-      bitrate: extract_bitrate(video_stream, format),
-      hdr_format: extract_hdr_format(video_stream),
-      size: nil
-    }
+    metadata =
+      FileAnalysisResult.new(%{
+        resolution: extract_resolution(video_stream),
+        codec: extract_video_codec(video_stream),
+        audio_codec: extract_audio_codec(audio_stream),
+        bitrate: extract_bitrate(video_stream, format),
+        hdr_format: extract_hdr_format(video_stream),
+        size: nil
+      })
 
     {:ok, metadata}
   end

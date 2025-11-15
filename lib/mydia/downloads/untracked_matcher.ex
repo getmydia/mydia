@@ -181,11 +181,11 @@ defmodule Mydia.Downloads.UntrackedMatcher do
       episode_id: match.episode && match.episode.id,
       metadata: %{
         size: torrent.size,
-        seeders: torrent[:seeders],
-        leechers: torrent[:leechers],
-        quality: parsed_info[:quality],
-        source: parsed_info[:source],
-        codec: parsed_info[:codec],
+        seeders: Map.get(torrent, :seeders),
+        leechers: Map.get(torrent, :leechers),
+        quality: Map.get(parsed_info, :quality),
+        source: Map.get(parsed_info, :source),
+        codec: Map.get(parsed_info, :codec),
         matched_from_client: true,
         match_confidence: match.confidence,
         match_reason: match.match_reason

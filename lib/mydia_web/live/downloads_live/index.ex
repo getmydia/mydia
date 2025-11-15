@@ -1,6 +1,7 @@
 defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
+  alias Mydia.Downloads.Structs.DownloadMetadata
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
 
@@ -141,15 +142,18 @@ defmodule MydiaWeb.DownloadsLive.Index do
       # Clear error message if any
       case Downloads.update_download(download, %{error_message: nil}) do
         {:ok, updated} ->
+          # Convert metadata to struct for type-safe access
+          metadata = DownloadMetadata.from_map(updated.metadata)
+
           # Re-add to client using the original download URL
           search_result = %Mydia.Indexers.SearchResult{
             download_url: updated.download_url,
             title: updated.title,
             indexer: updated.indexer,
-            size: updated.metadata["size"],
-            seeders: updated.metadata["seeders"],
-            leechers: updated.metadata["leechers"],
-            quality: updated.metadata["quality"]
+            size: metadata.size,
+            seeders: metadata.seeders,
+            leechers: metadata.leechers,
+            quality: metadata.quality
           }
 
           opts =
@@ -212,14 +216,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
         try do
           download = Downloads.get_download!(id, preload: [:media_item, :episode])
 
+          # Convert metadata to struct for type-safe access
+          metadata = DownloadMetadata.from_map(download.metadata)
+
           search_result = %Mydia.Indexers.SearchResult{
             download_url: download.download_url,
             title: download.title,
             indexer: download.indexer,
-            size: download.metadata["size"],
-            seeders: download.metadata["seeders"],
-            leechers: download.metadata["leechers"],
-            quality: download.metadata["quality"]
+            size: metadata.size,
+            seeders: metadata.seeders,
+            leechers: metadata.leechers,
+            quality: metadata.quality
           }
 
           opts =
@@ -437,9 +444,22 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp format_progress(progress), do: Float.round(progress, 1)
 
   defp get_metadata_value(download, key) do
-    case download.metadata do
-      %{^key => value} -> value
-      _ -> nil
+    # Convert metadata to struct for type-safe access
+    metadata = DownloadMetadata.from_map(download.metadata)
+
+    if metadata do
+      case key do
+        "size" -> metadata.size
+        "seeders" -> metadata.seeders
+        "leechers" -> metadata.leechers
+        "quality" -> metadata.quality
+        "season_pack" -> metadata.season_pack
+        "season_number" -> metadata.season_number
+        "download_protocol" -> metadata.download_protocol
+        _ -> nil
+      end
+    else
+      nil
     end
   end
 

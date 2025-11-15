@@ -453,19 +453,23 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   defp load_media_items(socket, opts) do
+    require Logger
     reset? = Keyword.get(opts, :reset, false)
     page = if reset?, do: 0, else: socket.assigns.page
     offset = if page == 0, do: 0, else: @items_per_page + (page - 1) * @items_per_scroll
     limit = if page == 0, do: @items_per_page, else: @items_per_scroll
 
     query_opts = build_query_opts(socket.assigns)
-    items = Media.list_media_items(query_opts)
+    all_items = Media.list_media_items(query_opts)
+    Logger.debug("load_media_items: total items from DB=#{length(all_items)}")
 
     # Apply search filtering (client-side for now)
-    items = apply_search_filter(items, socket.assigns.search_query)
+    items = apply_search_filter(all_items, socket.assigns.search_query)
+    Logger.debug("load_media_items: after search filter=#{length(items)}")
 
     # Apply quality filtering (client-side for now)
     items = apply_quality_filter(items, socket.assigns.filter_quality)
+    Logger.debug("load_media_items: after quality filter=#{length(items)}")
 
     # Apply sorting
     items = apply_sorting(items, socket.assigns.sort_by)
@@ -474,10 +478,38 @@ defmodule MydiaWeb.MediaLive.Index do
     paginated_items = items |> Enum.drop(offset) |> Enum.take(limit)
     has_more = length(items) > offset + limit
 
+    Logger.debug(
+      "load_media_items: paginated=#{length(paginated_items)}, reset=#{reset?}, titles=#{inspect(Enum.map(paginated_items, & &1.title))}, ids=#{inspect(Enum.map(paginated_items, & &1.id))}"
+    )
+
+    socket =
+      socket
+      |> assign(:has_more, has_more)
+      |> assign(:media_items_empty?, reset? and paginated_items == [])
+
+    # When resetting, delete all items that are not in the new filtered set
+    socket =
+      if reset? do
+        filtered_ids = MapSet.new(paginated_items, & &1.id)
+
+        items_to_delete =
+          Enum.reject(all_items, fn item -> MapSet.member?(filtered_ids, item.id) end)
+
+        Logger.debug("Deleting #{length(items_to_delete)} items from stream")
+
+        socket
+        |> then(fn sock ->
+          Enum.reduce(items_to_delete, sock, fn item, acc ->
+            stream_delete(acc, :media_items, item)
+          end)
+        end)
+        |> stream(:media_items, paginated_items)
+      else
+        stream(socket, :media_items, paginated_items)
+      end
+
+    Logger.debug("stream updated")
     socket
-    |> assign(:has_more, has_more)
-    |> assign(:media_items_empty?, reset? and paginated_items == [])
-    |> stream(:media_items, paginated_items, reset: reset?)
   end
 
   defp build_query_opts(assigns) do
@@ -504,14 +536,22 @@ defmodule MydiaWeb.MediaLive.Index do
   defp apply_search_filter(items, ""), do: items
 
   defp apply_search_filter(items, query) do
+    require Logger
     query_lower = String.downcase(query)
 
-    Enum.filter(items, fn item ->
-      title_match?(item.title, query_lower) or
-        title_match?(item.original_title, query_lower) or
-        year_match?(item.year, query_lower) or
-        match_metadata_overview?(item.metadata, query_lower)
-    end)
+    filtered =
+      Enum.filter(items, fn item ->
+        title_match?(item.title, query_lower) or
+          title_match?(item.original_title, query_lower) or
+          year_match?(item.year, query_lower) or
+          match_metadata_overview?(item.metadata, query_lower)
+      end)
+
+    Logger.debug(
+      "Search filter: query=#{inspect(query)}, input_count=#{length(items)}, output_count=#{length(filtered)}"
+    )
+
+    filtered
   end
 
   defp title_match?(nil, _query), do: false

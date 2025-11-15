@@ -16,26 +16,11 @@ defmodule Mydia.Library.FileParser do
 
   require Logger
 
-  @type media_type :: :movie | :tv_show | :unknown
-  @type quality_info :: %{
-          resolution: String.t() | nil,
-          source: String.t() | nil,
-          codec: String.t() | nil,
-          hdr_format: String.t() | nil,
-          audio: String.t() | nil
-        }
+  alias Mydia.Library.Structs.{ParsedFileInfo, Quality}
 
-  @type parse_result :: %{
-          type: media_type(),
-          title: String.t() | nil,
-          year: integer() | nil,
-          season: integer() | nil,
-          episodes: [integer()] | nil,
-          quality: quality_info(),
-          release_group: String.t() | nil,
-          confidence: float(),
-          original_filename: String.t()
-        }
+  @type media_type :: :movie | :tv_show | :unknown
+  @type quality_info :: Quality.t()
+  @type parse_result :: ParsedFileInfo.t()
 
   # Quality patterns - Phase 1: Regex-based patterns
   # Note: Dots are normalized to spaces in filenames, so we need to handle both

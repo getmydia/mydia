@@ -125,17 +125,17 @@ defmodule Mydia.Metadata.Provider do
 
   ## Images Structure
 
-  The `fetch_images/3` callback should return image maps:
+  The `fetch_images/3` callback should return an `ImagesResponse` struct:
 
-      %{
+      %ImagesResponse{
         posters: [
-          %{file_path: "/poster1.jpg", width: 2000, height: 3000, aspect_ratio: 0.667, vote_average: 5.4, vote_count: 12}
+          %ImageData{file_path: "/poster1.jpg", width: 2000, height: 3000, aspect_ratio: 0.667, vote_average: 5.4, vote_count: 12}
         ],
         backdrops: [
-          %{file_path: "/backdrop1.jpg", width: 3840, height: 2160, aspect_ratio: 1.778, vote_average: 5.3, vote_count: 8}
+          %ImageData{file_path: "/backdrop1.jpg", width: 3840, height: 2160, aspect_ratio: 1.778, vote_average: 5.3, vote_count: 8}
         ],
         logos: [
-          %{file_path: "/logo1.png", width: 500, height: 200, aspect_ratio: 2.5}
+          %ImageData{file_path: "/logo1.png", width: 500, height: 200, aspect_ratio: 2.5}
         ]
       }
 
@@ -174,108 +174,34 @@ defmodule Mydia.Metadata.Provider do
           options: map()
         }
 
+  alias Mydia.Metadata.Structs.{
+    CastMember,
+    CrewMember,
+    EpisodeData,
+    ImageData,
+    ImagesResponse,
+    MediaMetadata,
+    SearchResult,
+    SeasonData
+  }
+
   @type media_type :: :movie | :tv_show
 
-  @type search_result :: %{
-          provider_id: String.t(),
-          provider: atom(),
-          title: String.t(),
-          original_title: String.t() | nil,
-          year: integer() | nil,
-          media_type: media_type(),
-          overview: String.t() | nil,
-          poster_path: String.t() | nil,
-          backdrop_path: String.t() | nil,
-          popularity: float() | nil,
-          vote_average: float() | nil,
-          vote_count: integer() | nil
-        }
+  @type search_result :: SearchResult.t()
 
-  @type metadata :: %{
-          provider_id: String.t(),
-          provider: atom(),
-          title: String.t(),
-          original_title: String.t() | nil,
-          year: integer() | nil,
-          release_date: Date.t() | nil,
-          media_type: media_type(),
-          overview: String.t() | nil,
-          tagline: String.t() | nil,
-          runtime: integer() | nil,
-          status: String.t() | nil,
-          genres: [String.t()],
-          poster_path: String.t() | nil,
-          backdrop_path: String.t() | nil,
-          popularity: float() | nil,
-          vote_average: float() | nil,
-          vote_count: integer() | nil,
-          imdb_id: String.t() | nil,
-          # TV show specific
-          number_of_seasons: integer() | nil,
-          number_of_episodes: integer() | nil,
-          episode_run_time: [integer()] | nil,
-          first_air_date: Date.t() | nil,
-          last_air_date: Date.t() | nil,
-          in_production: boolean() | nil,
-          # Additional metadata
-          production_companies: [String.t()],
-          production_countries: [String.t()],
-          spoken_languages: [String.t()],
-          homepage: String.t() | nil,
-          cast: [cast_member()],
-          crew: [crew_member()],
-          alternative_titles: [String.t()]
-        }
+  @type metadata :: MediaMetadata.t()
 
-  @type cast_member :: %{
-          name: String.t(),
-          character: String.t(),
-          order: integer(),
-          profile_path: String.t() | nil
-        }
+  @type cast_member :: CastMember.t()
 
-  @type crew_member :: %{
-          name: String.t(),
-          job: String.t(),
-          department: String.t(),
-          profile_path: String.t() | nil
-        }
+  @type crew_member :: CrewMember.t()
 
-  @type image :: %{
-          file_path: String.t(),
-          width: integer(),
-          height: integer(),
-          aspect_ratio: float(),
-          vote_average: float() | nil,
-          vote_count: integer() | nil
-        }
+  @type image :: ImageData.t()
 
-  @type images :: %{
-          posters: [image()],
-          backdrops: [image()],
-          logos: [image()]
-        }
+  @type images :: ImagesResponse.t()
 
-  @type episode :: %{
-          episode_number: integer(),
-          name: String.t(),
-          overview: String.t() | nil,
-          air_date: Date.t() | nil,
-          runtime: integer() | nil,
-          still_path: String.t() | nil,
-          vote_average: float() | nil,
-          vote_count: integer() | nil
-        }
+  @type episode :: EpisodeData.t()
 
-  @type season :: %{
-          season_number: integer(),
-          name: String.t(),
-          overview: String.t() | nil,
-          air_date: Date.t() | nil,
-          poster_path: String.t() | nil,
-          episode_count: integer(),
-          episodes: [episode()]
-        }
+  @type season :: SeasonData.t()
 
   @type search_opts :: [
           media_type: media_type(),
@@ -382,7 +308,7 @@ defmodule Mydia.Metadata.Provider do
   ## Examples
 
       iex> fetch_images(config, "603", media_type: :movie)
-      {:ok, %{posters: [...], backdrops: [...], logos: [...]}}
+      {:ok, %ImagesResponse{posters: [...], backdrops: [...], logos: [...]}}
   """
   @callback fetch_images(config(), provider_id :: String.t(), image_opts()) ::
               {:ok, images()} | {:error, Error.t()}
