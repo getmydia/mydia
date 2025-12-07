@@ -20,9 +20,14 @@ defmodule Mydia.DataCase do
   use ExUnit.CaseTemplate
 
   using opts do
-    # Force async: false for SQLite to prevent Database busy errors
-    # Override any async: true setting from the test module
-    async_mode = Keyword.get(opts, :async, false) && false
+    # Allow async mode with PostgreSQL, force sync with SQLite to prevent busy errors
+    requested_async = Keyword.get(opts, :async, false)
+
+    async_mode =
+      case Application.get_env(:mydia, :database_type) do
+        :postgres -> requested_async
+        _ -> false
+      end
 
     quote do
       use ExUnit.Case, async: unquote(async_mode)

@@ -89,31 +89,40 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
   end
 
   describe "test_connection/1" do
-    test "successfully validates indexer config", %{definition: _definition} do
+    test "successfully validates indexer config", %{definition: definition} do
+      # Use Bypass to mock the indexer base URL
+      bypass = Bypass.open()
+
+      # Update the YAML definition to use the Bypass URL
+      updated_yaml =
+        String.replace(
+          definition.definition,
+          "https://test-indexer.example.com",
+          "http://localhost:#{bypass.port}"
+        )
+
+      definition
+      |> CardigannDefinition.changeset(%{
+        links: %{"0" => "http://localhost:#{bypass.port}"},
+        definition: updated_yaml
+      })
+      |> Repo.update!()
+
+      Bypass.expect_once(bypass, "GET", "/", fn conn ->
+        Plug.Conn.resp(conn, 200, "<html><title>Test Indexer</title></html>")
+      end)
+
       config = %{
         type: :cardigann,
         name: "Test Indexer",
         indexer_id: "test-indexer"
       }
 
-      # Mock HTTP request to base URL
-      # In a real test we'd use a mocking library or bypass
-      # For now, we'll test that the adapter at least attempts to connect
       result = Cardigann.test_connection(config)
 
-      # Should either succeed or fail with connection error (not config error)
-      case result do
-        {:ok, info} ->
-          assert info.name == "Test Indexer"
-          assert info.indexer_id == "test-indexer"
-
-        {:error, %Error{type: :connection_failed}} ->
-          # This is expected if the test indexer is not actually running
-          assert true
-
-        other ->
-          flunk("Unexpected result: #{inspect(other)}")
-      end
+      assert {:ok, info} = result
+      assert info.name == "Test Indexer"
+      assert info.indexer_id == "test-indexer"
     end
 
     test "fails with missing indexer_id" do
@@ -331,9 +340,31 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
     end
 
     test "test_connection executes normally when feature flag is enabled", %{
-      definition: _definition
+      definition: definition
     } do
       original = Application.get_env(:mydia, :features, [])
+
+      # Use Bypass to mock the indexer base URL
+      bypass = Bypass.open()
+
+      # Update the YAML definition to use the Bypass URL
+      updated_yaml =
+        String.replace(
+          definition.definition,
+          "https://test-indexer.example.com",
+          "http://localhost:#{bypass.port}"
+        )
+
+      definition
+      |> CardigannDefinition.changeset(%{
+        links: %{"0" => "http://localhost:#{bypass.port}"},
+        definition: updated_yaml
+      })
+      |> Repo.update!()
+
+      Bypass.expect_once(bypass, "GET", "/", fn conn ->
+        Plug.Conn.resp(conn, 200, "<html><title>Test Indexer</title></html>")
+      end)
 
       try do
         # Enable feature flag
@@ -345,14 +376,9 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
           indexer_id: "test-indexer"
         }
 
-        # Should proceed to test connection (will fail with connection error in test env)
         result = Cardigann.test_connection(config)
 
-        case result do
-          {:ok, _info} -> assert true
-          {:error, %Error{type: :connection_failed}} -> assert true
-          other -> flunk("Unexpected result: #{inspect(other)}")
-        end
+        assert {:ok, _info} = result
       after
         Application.put_env(:mydia, :features, original)
       end

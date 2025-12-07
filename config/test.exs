@@ -1,7 +1,8 @@
 import Config
 
 # Configure your database based on DATABASE_TYPE environment variable
-# Use DATABASE_TYPE=postgres to use PostgreSQL, otherwise SQLite is used
+# Default to SQLite for isolated test environments (no network access)
+# Use DATABASE_TYPE=postgres for faster parallel test execution in CI
 #
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
@@ -98,3 +99,9 @@ config :wallaby,
   screenshot_on_failure: true,
   screenshot_dir: "tmp/wallaby_screenshots",
   chromedriver: wallaby_chromedriver_opts
+
+# Faster HTTP timeouts in test mode to avoid long waits for unreachable hosts
+# This significantly speeds up tests that hit non-existent endpoints
+config :mydia, :test_http_options,
+  connect_timeout: 1_000,
+  receive_timeout: 2_000

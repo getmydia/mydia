@@ -221,23 +221,31 @@ defmodule Mydia.DownloadsTest do
     end
 
     test "handles URL download links", %{search_result: search_result} do
-      url_result = %{search_result | download_url: "https://example.com/file.torrent"}
+      # Use Bypass to mock the torrent download endpoint
+      bypass = Bypass.open()
 
-      # Note: This test will fail to download the file (connection refused)
-      # since the URL doesn't exist. We accept this failure for now.
-      # In a real scenario, the download would succeed and return {:file, body}
-      result = Downloads.initiate_download(url_result)
+      # Create a minimal valid torrent file content
+      torrent_content = "d8:announce0:e"
 
-      case result do
-        {:ok, download} ->
-          assert download.download_url == url_result.download_url
-          # After downloading and detecting file type, it uses {:file, body}
-          assert download.download_client_id == "mock-file-id"
+      # The code first sends HEAD requests to check for redirects, then GET to download
+      Bypass.stub(bypass, "HEAD", "/file.torrent", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/x-bittorrent")
+        |> Plug.Conn.resp(200, "")
+      end)
 
-        {:error, {:download_failed, _reason}} ->
-          # Expected when the URL can't be reached
-          assert true
-      end
+      Bypass.stub(bypass, "GET", "/file.torrent", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/x-bittorrent")
+        |> Plug.Conn.resp(200, torrent_content)
+      end)
+
+      url_result = %{search_result | download_url: "http://localhost:#{bypass.port}/file.torrent"}
+
+      assert {:ok, download} = Downloads.initiate_download(url_result)
+      assert download.download_url == url_result.download_url
+      # After downloading and detecting file type, it uses {:file, body}
+      assert download.download_client_id == "mock-file-id"
     end
 
     test "returns error when no clients are configured" do

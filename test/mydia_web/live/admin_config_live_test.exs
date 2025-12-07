@@ -392,6 +392,21 @@ defmodule MydiaWeb.AdminConfigLiveTest do
     end
 
     test "creates a new indexer", %{view: view} do
+      # Use Bypass to mock the Prowlarr API endpoint for health checks
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/api/v1/system/status", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{version: "1.0.0"}))
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v1/indexer", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!([]))
+      end)
+
       view
       |> element(~s{button[phx-click="new_indexer"]})
       |> render_click()
@@ -401,7 +416,7 @@ defmodule MydiaWeb.AdminConfigLiveTest do
         indexer_config: %{
           name: "Prowlarr",
           type: "prowlarr",
-          base_url: "http://localhost:9696",
+          base_url: "http://localhost:#{bypass.port}",
           api_key: "test-api-key",
           enabled: "true",
           priority: "1"

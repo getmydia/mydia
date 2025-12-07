@@ -1,9 +1,15 @@
-# Limit concurrent test execution for SQLite compatibility
-# SQLite doesn't handle high concurrency well, even with WAL mode
-# Using 1 concurrent case to avoid "Database busy" errors with SQLite
+# Configure test parallelism based on database type
+# PostgreSQL supports full parallelism, SQLite needs sequential execution
+max_cases =
+  case Application.get_env(:mydia, :database_type) do
+    :sqlite -> 1
+    :postgres -> System.schedulers_online() * 2
+    _ -> System.schedulers_online() * 2
+  end
+
 # Exclude external integration tests by default (require external services)
 # Exclude feature tests by default (require chromedriver)
-ExUnit.start(max_cases: 1, exclude: [:external, :feature])
+ExUnit.start(max_cases: max_cases, exclude: [:external, :feature])
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 
 # Configure ExMachina
