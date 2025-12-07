@@ -11,16 +11,26 @@ defmodule Mydia.DBTest do
   alias Mydia.Media.MediaItem
 
   describe "adapter detection" do
-    test "adapter_type/0 returns :sqlite for SQLite adapter" do
-      assert Mydia.DB.adapter_type() == :sqlite
+    test "adapter_type/0 returns configured adapter type" do
+      # Test that adapter_type returns a valid database type
+      assert Mydia.DB.adapter_type() in [:sqlite, :postgres]
     end
 
-    test "sqlite?/0 returns true for SQLite adapter" do
-      assert Mydia.DB.sqlite?() == true
+    test "sqlite?/0 and postgres?/0 are mutually exclusive" do
+      # One must be true, the other false
+      assert Mydia.DB.sqlite?() != Mydia.DB.postgres?()
     end
 
-    test "postgres?/0 returns false for SQLite adapter" do
-      assert Mydia.DB.postgres?() == false
+    test "adapter functions match adapter_type/0" do
+      case Mydia.DB.adapter_type() do
+        :sqlite ->
+          assert Mydia.DB.sqlite?() == true
+          assert Mydia.DB.postgres?() == false
+
+        :postgres ->
+          assert Mydia.DB.sqlite?() == false
+          assert Mydia.DB.postgres?() == true
+      end
     end
   end
 
@@ -378,7 +388,8 @@ defmodule Mydia.DBTest do
         )
         |> Repo.one()
 
-      assert result == 1
+      # SQLite truncates (floor), PostgreSQL rounds, so accept either
+      assert result in [1, 2]
     end
   end
 
@@ -403,8 +414,11 @@ defmodule Mydia.DBTest do
         )
         |> Repo.one()
 
+      # PostgreSQL returns Decimal, SQLite returns float - convert to float for comparison
+      result_float = if is_struct(result, Decimal), do: Decimal.to_float(result), else: result
+
       # Allow for small timing differences (within 5 seconds)
-      assert_in_delta result, 3600.0, 5.0
+      assert_in_delta result_float, 3600.0, 5.0
     end
   end
 
@@ -437,9 +451,12 @@ defmodule Mydia.DBTest do
         )
         |> Repo.one()
 
+      # PostgreSQL returns Decimal, SQLite returns float - convert to float for comparison
+      result_float = if is_struct(result, Decimal), do: Decimal.to_float(result), else: result
+
       # Average of 3600 and 7200 seconds = 5400 seconds
       # Allow for small timing differences
-      assert_in_delta result, 5400.0, 10.0
+      assert_in_delta result_float, 5400.0, 10.0
     end
   end
 end

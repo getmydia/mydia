@@ -9,8 +9,11 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
   describe "test_connection/2" do
     test "returns error when definition not found" do
+      # Use a valid UUID format that doesn't exist in the database
+      nonexistent_uuid = Ecto.UUID.generate()
+
       assert {:error, "Indexer definition not found"} =
-               CardigannHealthCheck.test_connection("nonexistent-id")
+               CardigannHealthCheck.test_connection(nonexistent_uuid)
     end
 
     test "tests connection for valid public indexer" do

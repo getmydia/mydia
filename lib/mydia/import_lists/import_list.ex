@@ -144,6 +144,7 @@ defmodule Mydia.ImportLists.ImportList do
     else
       # Preset lists should be unique per media type
       unique_constraint(changeset, [:type, :media_type],
+        name: :import_lists_type_media_type_unique,
         message: "already exists for this media type"
       )
     end

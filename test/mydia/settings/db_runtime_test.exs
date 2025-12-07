@@ -230,10 +230,19 @@ defmodule Mydia.DBRuntimeTest do
     end
 
     test "adapter_type returns configured type" do
-      # Verify we're testing with SQLite
-      assert Mydia.DB.adapter_type() == :sqlite
-      assert Mydia.DB.sqlite?() == true
-      assert Mydia.DB.postgres?() == false
+      # Verify adapter functions are consistent
+      adapter = Mydia.DB.adapter_type()
+      assert adapter in [:sqlite, :postgres]
+
+      case adapter do
+        :sqlite ->
+          assert Mydia.DB.sqlite?() == true
+          assert Mydia.DB.postgres?() == false
+
+        :postgres ->
+          assert Mydia.DB.sqlite?() == false
+          assert Mydia.DB.postgres?() == true
+      end
     end
   end
 end

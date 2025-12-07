@@ -2,8 +2,17 @@ defmodule Mydia.Jobs.EventCleanupTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
+  import Ecto.Query
+
   alias Mydia.Jobs.EventCleanup
   alias Mydia.Events
+  alias Mydia.Events.Event
+
+  # Helper to backdate an event's inserted_at using Ecto (database-agnostic)
+  defp backdate_event(event, datetime) do
+    from(e in Event, where: e.id == ^event.id)
+    |> Mydia.Repo.update_all(set: [inserted_at: datetime])
+  end
 
   describe "perform/1" do
     test "successfully cleans up events with no events in database" do
@@ -23,10 +32,7 @@ defmodule Mydia.Jobs.EventCleanupTest do
         })
 
       # Manually update inserted_at to be old
-      Mydia.Repo.query!(
-        "UPDATE events SET inserted_at = ? WHERE id = ?",
-        [old_date, old_event.id]
-      )
+      backdate_event(old_event, old_date)
 
       # Create recent event
       {:ok, _recent_event} =
@@ -63,10 +69,7 @@ defmodule Mydia.Jobs.EventCleanupTest do
         })
 
       # Manually update inserted_at
-      Mydia.Repo.query!(
-        "UPDATE events SET inserted_at = ? WHERE id = ?",
-        [old_date, old_event.id]
-      )
+      backdate_event(old_event, old_date)
 
       # Run cleanup job
       assert :ok = perform_job(EventCleanup, %{})
@@ -91,10 +94,7 @@ defmodule Mydia.Jobs.EventCleanupTest do
         })
 
       # Manually update inserted_at
-      Mydia.Repo.query!(
-        "UPDATE events SET inserted_at = ? WHERE id = ?",
-        [date, event.id]
-      )
+      backdate_event(event, date)
 
       # Run cleanup job (default 90 days retention)
       assert :ok = perform_job(EventCleanup, %{})
