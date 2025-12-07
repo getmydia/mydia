@@ -7,17 +7,14 @@ defmodule MydiaWeb.SessionControllerTest do
     # Get the current runtime config and ensure local auth is enabled
     original_config = Application.get_env(:mydia, :runtime_config)
 
-    config =
-      original_config ||
-        %Mydia.Config.Schema{
-          auth: %Mydia.Config.Schema.Auth{
-            local_enabled: true,
-            oidc_enabled: false
-          }
-        }
+    # Create a proper config struct regardless of what was stored
+    config = %Mydia.Config.Schema{
+      auth: %Mydia.Config.Schema.Auth{
+        local_enabled: true,
+        oidc_enabled: false
+      }
+    }
 
-    # Ensure local auth is enabled
-    config = put_in(config.auth.local_enabled, true)
     Application.put_env(:mydia, :runtime_config, config)
 
     on_exit(fn ->

@@ -389,6 +389,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply, load_downloads(socket)}
   end
 
+  @impl true
+  def handle_info({:search_completed, _media_item_id, _stats}, socket) do
+    # Search completion events are broadcast to the downloads topic
+    # but are primarily handled by MediaLive.Show - we can ignore them here
+    {:noreply, socket}
+  end
+
   # Private functions
 
   defp reload_stream(socket) do
