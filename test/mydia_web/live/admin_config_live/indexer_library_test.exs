@@ -354,11 +354,6 @@ defmodule MydiaWeb.AdminConfigLive.IndexerLibraryTest do
 
   # Helper functions
 
-  defp register_and_log_in_admin(%{conn: conn}) do
-    admin = admin_user_fixture()
-    %{conn: log_in_user(conn, admin), admin: admin}
-  end
-
   defp enable_cardigann_feature_flag(_context) do
     set_cardigann_feature_flag(true)
     :ok
