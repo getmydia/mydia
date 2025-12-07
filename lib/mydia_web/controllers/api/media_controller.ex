@@ -22,7 +22,7 @@ defmodule MydiaWeb.Api.MediaController do
     - 404: Media item not found
   """
   def show(conn, %{"id" => id}) do
-    case Media.get_media_item!(id, preload: [:library_path, :episodes]) do
+    case Media.get_media_item!(id, preload: [:episodes]) do
       nil ->
         conn
         |> put_status(:not_found)
@@ -265,41 +265,53 @@ defmodule MydiaWeb.Api.MediaController do
   end
 
   defp serialize_media_item(media_item) do
+    # Extract metadata fields if available
+    metadata = media_item.metadata
+
     %{
       id: media_item.id,
       title: media_item.title,
+      original_title: media_item.original_title,
       type: media_item.type,
       year: media_item.year,
       tmdb_id: media_item.tmdb_id,
-      overview: media_item.overview,
-      poster_url: media_item.poster_url,
-      backdrop_url: media_item.backdrop_url,
-      genres: media_item.genres,
-      runtime: media_item.runtime,
-      status: media_item.status,
+      imdb_id: media_item.imdb_id,
       monitored: media_item.monitored,
-      library_path_id: media_item.library_path_id,
       quality_profile_id: media_item.quality_profile_id,
-      metadata: media_item.metadata,
       inserted_at: media_item.inserted_at,
       updated_at: media_item.updated_at,
+      # Include metadata-derived fields
+      overview: get_in_metadata(metadata, :overview),
+      poster_url: get_in_metadata(metadata, :poster_path),
+      backdrop_url: get_in_metadata(metadata, :backdrop_path),
+      genres: get_in_metadata(metadata, :genres),
+      runtime: get_in_metadata(metadata, :runtime),
+      status: get_in_metadata(metadata, :status),
       # Include associations if preloaded
       episodes: serialize_episodes(media_item.episodes)
     }
   end
 
+  defp get_in_metadata(nil, _key), do: nil
+  defp get_in_metadata(metadata, key) when is_map(metadata), do: Map.get(metadata, key)
+  defp get_in_metadata(_metadata, _key), do: nil
+
   defp serialize_episodes(%Ecto.Association.NotLoaded{}), do: nil
 
   defp serialize_episodes(episodes) when is_list(episodes) do
     Enum.map(episodes, fn episode ->
+      metadata = episode.metadata
+
       %{
         id: episode.id,
         season_number: episode.season_number,
         episode_number: episode.episode_number,
         title: episode.title,
-        overview: episode.overview,
         air_date: episode.air_date,
-        still_url: episode.still_url
+        monitored: episode.monitored,
+        # Include metadata-derived fields
+        overview: get_in_metadata(metadata, :overview),
+        still_url: get_in_metadata(metadata, :still_path)
       }
     end)
   end

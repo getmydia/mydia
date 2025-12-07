@@ -118,7 +118,7 @@ defmodule MydiaWeb.Api.ConfigController do
 
       true ->
         validated_data = Ecto.Changeset.apply_changes(changeset)
-        perform_update(conn, key, validated_data.value, validated_data.description)
+        perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
     end
   end
 
