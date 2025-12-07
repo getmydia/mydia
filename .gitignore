@@ -14,6 +14,8 @@
 # Nix development environment cache directories
 /.nix-hex/
 /.nix-mix/
+**/.nix-mix/
+**/.nix-hex/
 
 # Nix build result symlink
 /result
@@ -54,6 +56,9 @@ npm-debug.log
 *.db
 *.db-*
 /priv/repo/structure.sql
+mydia_test
+mydia_test-shm
+mydia_test-wal
 
 # Docker Compose override files (personal dev environment customization)
 compose.override.yml

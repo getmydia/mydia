@@ -59,7 +59,7 @@ ${YELLOW}Container Commands:${NC}
   bash                 Open bash shell in the app container
 
 ${YELLOW}Development Commands:${NC}
-  test [args]          Run tests (mix test)
+  test [args]          Run tests in isolated container (no network)
   feature-test [args]  Run Wallaby browser tests
   format               Format code (mix format)
   deps.get             Install dependencies
@@ -104,6 +104,83 @@ is_container_running() {
     docker compose ps --status=running --format '{{.Service}}' 2>/dev/null | grep -q "^${SERVICE_NAME}$"
 }
 
+# Get the docker image name for the app service
+get_image_name() {
+    local name
+    name=$(docker compose config --images 2>/dev/null | grep -E "mydia.*app|app" | head -1)
+    echo "${name:-mydia-app}"
+}
+
+# Run command in isolated container for tests (SQLite)
+# Uses separate build cache to avoid conflicts with dev environment
+run_isolated_sqlite() {
+    docker compose build "$SERVICE_NAME" > /dev/null 2>&1
+    docker run --rm \
+        -e MIX_ENV=test \
+        -e DATABASE_TYPE=sqlite \
+        -e DATABASE_PATH=/tmp/test.db \
+        -v "$(pwd)":/app \
+        -v mydia_deps_cache:/app/deps \
+        -v mydia_test_build_cache:/app/_build \
+        -v mydia_mix_cache:/app/.mix \
+        -v mydia_hex_cache:/app/.hex \
+        -w /app \
+        "$(get_image_name)" \
+        "$@"
+}
+
+# Run tests with PostgreSQL for parallel execution
+run_isolated_postgres() {
+    # Ensure postgres is running
+    if ! docker compose --profile postgres ps --status=running 2>/dev/null | grep -q postgres; then
+        echo -e "${YELLOW}Starting PostgreSQL...${NC}"
+        docker compose --profile postgres up -d postgres > /dev/null 2>&1
+        # Wait for postgres to be ready
+        echo -e "${YELLOW}Waiting for PostgreSQL to be ready...${NC}"
+        for i in {1..30}; do
+            if docker compose --profile postgres exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+                break
+            fi
+            sleep 1
+        done
+    fi
+
+    # Get the compose network name (usually projectname_default)
+    local network_name
+    network_name=$(docker compose --profile postgres config --format json 2>/dev/null | grep -o '"name":"[^"]*_default"' | head -1 | cut -d'"' -f4)
+    network_name="${network_name:-mydia_default}"
+
+    # Build the image if needed
+    docker compose build "$SERVICE_NAME" > /dev/null 2>&1
+
+    # Run tests with postgres connection using plain docker run for isolation
+    # Uses separate build cache since database adapter is compile-time
+    docker run --rm \
+        --network "$network_name" \
+        -e MIX_ENV=test \
+        -e DATABASE_TYPE=postgres \
+        -e DATABASE_HOST=postgres \
+        -e DATABASE_PORT=5432 \
+        -v "$(pwd)":/app \
+        -v mydia_deps_cache:/app/deps \
+        -v mydia_test_pg_build_cache:/app/_build \
+        -v mydia_mix_cache:/app/.mix \
+        -v mydia_hex_cache:/app/.hex \
+        -w /app \
+        "$(get_image_name)" \
+        "$@"
+}
+
+# Default test runner - use DATABASE_TYPE env or default to postgres
+run_isolated() {
+    local db_type="${DATABASE_TYPE:-postgres}"
+    if [ "$db_type" = "sqlite" ]; then
+        run_isolated_sqlite "$@"
+    else
+        run_isolated_postgres "$@"
+    fi
+}
+
 # Helper function to run commands - uses exec if container is running, otherwise run
 run_in_container() {
     if is_container_running; then
@@ -138,9 +215,9 @@ case "$COMMAND" in
 
     # Mix command shortcuts
     mix)
-        # Set MIX_ENV=test for commands that run tests
+        # Run test-related commands in isolated container
         if [[ "$1" == "precommit" ]] || [[ "$1" == "test" ]]; then
-            docker compose run --rm -e MIX_ENV=test "$SERVICE_NAME" mix "$@"
+            run_isolated mix "$@"
         else
             run_in_container mix "$@"
         fi
@@ -148,8 +225,8 @@ case "$COMMAND" in
 
     # Common development shortcuts
     test)
-        echo -e "${GREEN}Running tests...${NC}"
-        docker compose run --rm -e MIX_ENV=test "$SERVICE_NAME" sh -c 'mix ecto.create --quiet && mix ecto.migrate --quiet && mix test '"$*"
+        echo -e "${GREEN}Running tests in isolated container...${NC}"
+        run_isolated mix test "$@"
         ;;
 
     feature-test)

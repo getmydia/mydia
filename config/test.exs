@@ -28,7 +28,7 @@ case database_type do
         System.get_env("DATABASE_NAME") || "mydia_test#{System.get_env("MIX_TEST_PARTITION")}",
       username: System.get_env("DATABASE_USER") || "postgres",
       password: System.get_env("DATABASE_PASSWORD") || "postgres",
-      pool_size: 5,
+      pool_size: 20,
       pool: Ecto.Adapters.SQL.Sandbox,
       pool_timeout: 60_000,
       timeout: 60_000
