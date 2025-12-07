@@ -15,8 +15,8 @@ env:
   OTP_VERSION: "27"
 
 jobs:
-  test:
-    name: Test & Quality Checks
+  test-postgres:
+    name: Test (PostgreSQL)
     runs-on: ubuntu-latest
 
     services:
@@ -64,9 +64,96 @@ jobs:
         uses: actions/cache@v4
         with:
           path: _build
-          key: ${{ runner.os }}-build-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          key: ${{ runner.os }}-build-postgres-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-
+            ${{ runner.os }}-build-postgres-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile code
+        run: mix compile
+
+      - name: Setup test database
+        run: mix ecto.create && mix ecto.migrate
+
+      - name: Run tests
+        run: mix test
+
+  test-sqlite:
+    name: Test (SQLite)
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_TYPE: sqlite
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-deps-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-
+
+      - name: Restore build cache
+        uses: actions/cache@v4
+        with:
+          path: _build
+          key: ${{ runner.os }}-build-sqlite-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          restore-keys: |
+            ${{ runner.os }}-build-sqlite-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile code
+        run: mix compile
+
+      - name: Setup test database
+        run: mix ecto.create && mix ecto.migrate
+
+      - name: Run tests
+        run: mix test
+
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-deps-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-
+
+      - name: Restore build cache
+        uses: actions/cache@v4
+        with:
+          path: _build
+          key: ${{ runner.os }}-build-quality-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('lib/**/*.ex') }}
+          restore-keys: |
+            ${{ runner.os }}-build-quality-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('**/mix.lock') }}-
 
       - name: Install dependencies
         run: mix deps.get
@@ -75,19 +162,13 @@ jobs:
         run: mix deps.unlock --check-unused
 
       - name: Compile code
-        run: mix compile
+        run: mix compile --warnings-as-errors
 
       - name: Check code formatting
         run: mix format --check-formatted
 
       - name: Run Credo static analysis
         run: mix credo --mute-exit-status
-
-      - name: Setup test database
-        run: mix ecto.create && mix ecto.migrate
-
-      - name: Run tests with coverage
-        run: mix test --cover
 
   postgres-migrations:
     name: PostgreSQL Migrations

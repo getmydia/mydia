@@ -1,17 +1,19 @@
 import Config
 
 # Configure your database based on DATABASE_TYPE environment variable
-# Default to SQLite for isolated test environments (no network access)
-# Use DATABASE_TYPE=postgres for faster parallel test execution in CI
+# Default to PostgreSQL for faster parallel test execution locally
+# CI runs tests on both PostgreSQL and SQLite
 #
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 database_type =
   case System.get_env("DATABASE_TYPE") do
+    "sqlite" -> :sqlite
     "postgres" -> :postgres
     "postgresql" -> :postgres
-    _ -> :sqlite
+    # Default to PostgreSQL locally for faster parallel execution
+    _ -> :postgres
   end
 
 # Set database_type for runtime helpers (used by Mydia.DB and migrations)
