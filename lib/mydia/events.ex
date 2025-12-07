@@ -114,7 +114,8 @@ defmodule Mydia.Events do
     Event
     |> apply_filters(opts)
     |> apply_pagination(opts)
-    |> order_by([e], desc: e.inserted_at)
+    # Use id as secondary sort for deterministic ordering when timestamps match
+    |> order_by([e], desc: e.inserted_at, desc: e.id)
     |> Repo.all()
   end
 

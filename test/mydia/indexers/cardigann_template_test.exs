@@ -553,13 +553,16 @@ defmodule Mydia.Indexers.CardigannTemplateTest do
     test "logs debug for field resolution on missing field" do
       context = %{}
 
-      log =
-        capture_log([level: :debug], fn ->
+      {result, log} =
+        with_log([level: :debug], fn ->
           CardigannTemplate.render("{{ .NonExistentField }}", context)
         end)
 
-      # Debug logging should mention the field or resolution
-      assert log == "" or log =~ "field" or log =~ "resolve"
+      # Should render without crashing (returns empty string for missing field)
+      assert result == ""
+      # Debug logging should mention the field or resolution, or be empty
+      # Note: with async tests, we might capture unrelated logs
+      assert log == "" or log =~ "field" or log =~ "resolve" or log =~ "NonExistentField"
     end
 
     test "logs warning for unknown function" do
