@@ -17,8 +17,19 @@ defmodule MydiaWeb.ConnCase do
 
   use ExUnit.CaseTemplate
 
-  using do
+  using opts do
+    # Allow async mode with PostgreSQL, force sync with SQLite to prevent busy errors
+    requested_async = Keyword.get(opts, :async, false)
+
+    async_mode =
+      case Application.get_env(:mydia, :database_type) do
+        :postgres -> requested_async
+        _ -> false
+      end
+
     quote do
+      use ExUnit.Case, async: unquote(async_mode)
+
       # The default endpoint for testing
       @endpoint MydiaWeb.Endpoint
 

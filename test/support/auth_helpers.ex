@@ -61,10 +61,38 @@ defmodule MydiaWeb.AuthHelpers do
 
   @doc """
   Registers and logs in a user for LiveView tests.
-  Returns {conn, user} tuple.
+  Returns {conn, user} tuple when called with a conn.
+  When used as a setup callback, returns %{conn: conn, user: user}.
   """
-  def register_and_log_in_user(conn, attrs \\ %{}) do
+  def register_and_log_in_user(conn, attrs \\ %{})
+
+  def register_and_log_in_user(%{conn: conn}, attrs) do
     user = create_test_user(attrs)
+    conn = log_in_user(conn, user)
+    %{conn: conn, user: user}
+  end
+
+  def register_and_log_in_user(%Plug.Conn{} = conn, attrs) do
+    user = create_test_user(attrs)
+    conn = log_in_user(conn, user)
+    {conn, user}
+  end
+
+  @doc """
+  Registers and logs in an admin user for LiveView tests.
+  Returns {conn, user} tuple when called with a conn.
+  When used as a setup callback, returns %{conn: conn, user: user}.
+  """
+  def register_and_log_in_admin(context_or_conn, attrs \\ %{})
+
+  def register_and_log_in_admin(%{conn: conn}, attrs) do
+    user = create_admin_user(attrs)
+    conn = log_in_user(conn, user)
+    %{conn: conn, user: user}
+  end
+
+  def register_and_log_in_admin(%Plug.Conn{} = conn, attrs) do
+    user = create_admin_user(attrs)
     conn = log_in_user(conn, user)
     {conn, user}
   end

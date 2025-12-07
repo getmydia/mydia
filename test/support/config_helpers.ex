@@ -42,22 +42,25 @@ defmodule Mydia.ConfigHelpers do
   end
 
   @doc """
-  Creates a test indexer configuration.
-  Returns the indexer configuration map.
+  Creates a test indexer configuration and inserts it into the database.
+  Returns the indexer configuration struct.
   """
   def create_test_indexer(attrs \\ %{}) do
-    id = Ecto.UUID.generate()
-
     config = %{
-      "id" => id,
-      "type" => "prowlarr",
-      "name" => "Test Indexer #{id}",
-      "base_url" => "http://localhost:9696",
-      "api_key" => "test_api_key_#{id}",
-      "enabled" => true
+      type: :prowlarr,
+      name: "Test Indexer #{System.unique_integer([:positive])}",
+      base_url: "http://localhost:9696",
+      api_key: "test_api_key_#{System.unique_integer([:positive])}",
+      enabled: true,
+      priority: 1
     }
 
-    Map.merge(config, attrs)
+    final_attrs = Map.merge(config, attrs)
+
+    # Create indexer config in the database
+    {:ok, indexer_config} = Settings.create_indexer_config(final_attrs)
+
+    indexer_config
   end
 
   @doc """

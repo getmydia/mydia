@@ -36,6 +36,7 @@ defmodule Mydia.SettingsFixtures do
       name: "test-profile-#{System.unique_integer([:positive])}",
       min_size: 0,
       max_size: 10_737_418_240,
+      qualities: ["1080p", "720p", "480p"],
       preferred_qualities: ["1080p", "720p"]
     }
 
