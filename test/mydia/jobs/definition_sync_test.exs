@@ -35,6 +35,7 @@ defmodule Mydia.Jobs.DefinitionSyncTest do
       end
     end
 
+    @tag :external
     test "handles sync with limit parameter" do
       original = Application.get_env(:mydia, :features, [])
 

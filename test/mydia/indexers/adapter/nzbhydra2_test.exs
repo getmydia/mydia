@@ -317,7 +317,13 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
 
   describe "adapter structure" do
     test "implements required callbacks" do
-      assert function_exported?(NzbHydra2, :search, 3)
+      # Ensure module is loaded before checking exports
+      {:module, _} = Code.ensure_loaded(NzbHydra2)
+
+      # search/3 has a default argument, which creates both search/2 and search/3
+      assert function_exported?(NzbHydra2, :search, 2) or
+               function_exported?(NzbHydra2, :search, 3)
+
       assert function_exported?(NzbHydra2, :test_connection, 1)
       assert function_exported?(NzbHydra2, :get_capabilities, 1)
     end

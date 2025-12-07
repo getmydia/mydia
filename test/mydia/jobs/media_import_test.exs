@@ -231,6 +231,22 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
+  describe "new/2" do
+    test "creates a valid job changeset with download_id" do
+      id = Ecto.UUID.generate()
+      changeset = MediaImport.new(%{"download_id" => id})
+      assert changeset.valid?
+      assert changeset.changes.args["download_id"] == id
+    end
+
+    test "creates a valid job changeset with snooze_count" do
+      id = Ecto.UUID.generate()
+      changeset = MediaImport.new(%{"download_id" => id, "snooze_count" => 5})
+      assert changeset.valid?
+      assert changeset.changes.args["snooze_count"] == 5
+    end
+  end
+
   # Helper functions
 
   defp create_test_library_path(base_path, type) do
