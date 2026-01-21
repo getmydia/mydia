@@ -1005,10 +1005,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#libp2p-components" class="md-nav__link">
+  <a href="#p2p-components" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Libp2p Components
+        P2P Components
       
     </span>
   </a>
@@ -1632,10 +1632,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#libp2p-components" class="md-nav__link">
+  <a href="#p2p-components" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Libp2p Components
+        P2P Components
       
     </span>
   </a>
@@ -1781,11 +1781,11 @@
 <h1 id="remote-access">Remote Access</h1>
 <p>Remote access allows the Mydia mobile app to connect to your Mydia instance from anywhere, even when your server is behind NAT or a firewall.</p>
 <h2 id="how-it-works">How It Works</h2>
-<p>Mydia uses <strong>libp2p</strong> for decentralized peer-to-peer connectivity:</p>
+<p>Mydia uses <strong>p2p</strong> for decentralized peer-to-peer connectivity:</p>
 <ol>
 <li><strong>Discovery</strong>: Nodes find each other via mDNS (local network) and Kademlia DHT (internet)</li>
 <li><strong>Transport</strong>: Connections are established over TCP or QUIC, secured with Noise encryption</li>
-<li><strong>Media</strong>: Media streams (HLS) are served over the libp2p connection via a local proxy in the client</li>
+<li><strong>Media</strong>: Media streams (HLS) are served over the p2p connection via a local proxy in the client</li>
 </ol>
 <p>This approach provides:
 - <strong>Decentralized</strong>: No central relay dependency for connectivity
@@ -1797,7 +1797,7 @@
 <ol>
 <li>Navigate to <strong>Settings &gt; Remote Access</strong> in the Mydia web interface</li>
 <li>Toggle <strong>Enable Remote Access</strong></li>
-<li>Your instance will start the libp2p server and announce itself</li>
+<li>Your instance will start the p2p server and announce itself</li>
 </ol>
 <h3 id="direct-urls">Direct URLs</h3>
 <p>Direct URLs are automatically detected from your instance's network configuration:
@@ -1808,7 +1808,7 @@
 <h3 id="encryption">Encryption</h3>
 <p>All communication is encrypted end-to-end using the Noise protocol:</p>
 <ul>
-<li><strong>Transport</strong>: All libp2p connections use Noise encryption</li>
+<li><strong>Transport</strong>: All p2p connections use Noise encryption</li>
 <li><strong>Authentication</strong>: Peers authenticate via Ed25519 keys</li>
 <li><strong>Forward Secrecy</strong>: Fresh ephemeral keys for each connection</li>
 </ul>
@@ -1821,11 +1821,11 @@
 <h3 id="certificate-verification">Certificate Verification</h3>
 <p>For direct HTTPS connections, the app verifies the server's TLS certificate fingerprint against the fingerprint stored during pairing, preventing man-in-the-middle attacks.</p>
 <h2 id="architecture-details">Architecture Details</h2>
-<h3 id="libp2p-components">Libp2p Components</h3>
-<p>The libp2p implementation is shared between backend and frontend:</p>
+<h3 id="p2p-components">P2P Components</h3>
+<p>The p2p implementation is shared between backend and frontend:</p>
 <ul>
 <li><strong>Core (Rust)</strong>: <code>native/mydia_p2p_core</code> - shared networking logic</li>
-<li><strong>Backend (Elixir)</strong>: Wrapped via Rustler NIF (<code>Mydia.Libp2p</code>)</li>
+<li><strong>Backend (Elixir)</strong>: Wrapped via Rustler NIF (<code>Mydia.P2p</code>)</li>
 <li><strong>Frontend (Flutter)</strong>: Wrapped via <code>flutter_rust_bridge</code></li>
 </ul>
 <h3 id="protocols-used">Protocols Used</h3>
@@ -1857,21 +1857,21 @@
 </table>
 <h3 id="instance-registration">Instance Registration</h3>
 <p>When remote access is enabled, your Mydia instance:
-1. Starts the libp2p server
+1. Starts the p2p server
 2. Announces itself via mDNS and DHT
 3. Listens for incoming peer connections
 4. Handles connection requests from paired devices</p>
 <h3 id="client-connection">Client Connection</h3>
 <p>When the app connects:
 1. Discovers the instance via mDNS or DHT lookup
-2. Establishes libp2p connection (TCP or QUIC)
+2. Establishes p2p connection (TCP or QUIC)
 3. Completes Noise handshake for authentication
 4. Routes API and media requests over the secure connection</p>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="app-wont-connect">App won't connect</h3>
 <ol>
 <li><strong>Check remote access is enabled</strong> on your Mydia instance</li>
-<li><strong>Verify libp2p server is running</strong> - check logs for startup messages</li>
+<li><strong>Verify p2p server is running</strong> - check logs for startup messages</li>
 <li><strong>Check claim code</strong> - codes expire after 5 minutes</li>
 </ol>
 <h3 id="slow-performance">Slow performance</h3>
@@ -1881,7 +1881,7 @@
 <li><strong>Firewall rules</strong> - ensure UDP ports are open for QUIC</li>
 </ol>
 <h3 id="connection-drops">Connection drops</h3>
-<p>The libp2p stack handles reconnection automatically:</p>
+<p>The p2p stack handles reconnection automatically:</p>
 <ol>
 <li><strong>Transient failures</strong> - automatic retry with backoff</li>
 <li><strong>Network change</strong> - reconnection after network switch</li>

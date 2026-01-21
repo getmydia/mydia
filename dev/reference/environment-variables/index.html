@@ -815,6 +815,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#port-configuration-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port Configuration Notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#phx_check_origin-options" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1470,6 +1481,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#port-configuration-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port Configuration Notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#phx_check_origin-options" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1683,8 +1705,13 @@
 </tr>
 <tr>
 <td><code>PORT</code></td>
-<td>Web server port</td>
+<td>HTTP server port (also used for URL generation)</td>
 <td><code>4000</code></td>
+</tr>
+<tr>
+<td><code>HTTPS_PORT</code></td>
+<td>HTTPS server port (also used for URL generation)</td>
+<td><code>4443</code></td>
 </tr>
 <tr>
 <td><code>HOST</code></td>
@@ -1703,6 +1730,11 @@
 </tr>
 </tbody>
 </table>
+<h3 id="port-configuration-notes">Port Configuration Notes</h3>
+<p>The <code>PORT</code> and <code>HTTPS_PORT</code> environment variables serve dual purposes:
+1. <strong>Server binding</strong> - The ports on which the HTTP and HTTPS servers listen
+2. <strong>URL generation</strong> - Used to generate direct access URLs (e.g., sslip.io URLs for remote access)</p>
+<p>This simplifies configuration by eliminating the need for separate port variables for URL generation.</p>
 <h3 id="phx_check_origin-options">PHX_CHECK_ORIGIN Options</h3>
 <ul>
 <li><code>false</code> - Allow all origins (useful for IP-based access)</li>
