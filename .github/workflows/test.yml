@@ -17,7 +17,7 @@ env:
 jobs:
   test:
     name: Test & Quality Checks
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout repository
@@ -68,7 +68,7 @@ jobs:
 
   postgres-migrations:
     name: PostgreSQL Migrations
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     services:
       postgres:

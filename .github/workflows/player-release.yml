@@ -17,7 +17,7 @@ jobs:
   # Extract version from tag
   prepare:
     name: Prepare Release
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       version: ${{ steps.get_version.outputs.version }}
       version_code: ${{ steps.get_version.outputs.version_code }}
@@ -43,7 +43,7 @@ jobs:
   build-web:
     name: Build Web
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -91,7 +91,7 @@ jobs:
   build-android:
     name: Build Android APK
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -388,7 +388,7 @@ jobs:
   build-windows:
     name: Build Windows
     needs: prepare
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -459,7 +459,7 @@ jobs:
   build-linux:
     name: Build Linux
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -538,7 +538,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     needs: [prepare, build-web, build-android, build-ios, build-macos, build-windows, build-linux]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:

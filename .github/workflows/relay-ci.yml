@@ -23,7 +23,7 @@ env:
 jobs:
   test:
     name: Relay - Test & Quality Checks
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: metadata-relay
@@ -78,18 +78,16 @@ jobs:
         uses: useblacksmith/setup-buildx@v1
 
       - name: Build Docker image
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: ./metadata-relay/Dockerfile
           push: false
           tags: metadata-relay:ci-test
-          cache-from: type=gha,scope=metadata-relay
-          cache-to: type=gha,mode=max,scope=metadata-relay
 
   status-check:
     name: All Relay Checks Passed
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test, docker-build]
     if: always()
 
