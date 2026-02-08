@@ -1,0 +1,66 @@
+name: CI / Player E2E
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    paths:
+      - "player/**"
+      - "lib/**"
+      - "native/**"
+      - "metadata-relay/**"
+      - "config/**"
+      - "Dockerfile.e2e"
+      - "compose.player-e2e.yml"
+      - ".github/workflows/ci-player-e2e.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-player-e2e:
+    name: Test / Player E2E
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - name: Build E2E images
+        run: DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build
+
+      - name: Run player E2E tests
+        run: |
+          docker compose -f compose.player-e2e.yml up \
+            --abort-on-container-exit \
+            --exit-code-from test
+        env:
+          E2E_TEST_TARGET: integration_test/pairing_flow_test.dart
+
+      - name: Collect service logs
+        if: failure()
+        run: |
+          docker compose -f compose.player-e2e.yml logs mydia > mydia-logs.txt 2>&1 || true
+          docker compose -f compose.player-e2e.yml logs relay > relay-logs.txt 2>&1 || true
+          docker compose -f compose.player-e2e.yml logs test > test-logs.txt 2>&1 || true
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-e2e-logs
+          path: |
+            mydia-logs.txt
+            relay-logs.txt
+            test-logs.txt
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f compose.player-e2e.yml down -v
