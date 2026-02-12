@@ -447,17 +447,20 @@ jobs:
         run: |
           # Extract provisioning profile name
           PP_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -1)
-          PP_NAME=$(security cms -D -i "$PP_PATH" | /usr/libexec/PlistBuddy -c "Print Name" /dev/stdin)
+          security cms -D -i "$PP_PATH" > $RUNNER_TEMP/pp.plist
+          PP_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" $RUNNER_TEMP/pp.plist)
           echo "Using provisioning profile: $PP_NAME"
 
-          # Switch Xcode project to manual signing
-          PROJECT="Runner.xcodeproj/project.pbxproj"
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' "$PROJECT"
-          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "iPhone Developer"/"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution"/g' "$PROJECT"
+          # Remove CODE_SIGN_STYLE from project so xcconfig takes over
+          sed -i '' '/CODE_SIGN_STYLE = Automatic;/d' Runner.xcodeproj/project.pbxproj
 
-          # Add provisioning profile specifier to Runner target build configs
-          sed -i '' "/PRODUCT_BUNDLE_IDENTIFIER = dev.mydia.player;/a\\
-          \\t\\t\\t\\tPROVISIONING_PROFILE_SPECIFIER = \"$PP_NAME\";" "$PROJECT"
+          # Inject signing overrides into Release.xcconfig
+          cat >> Flutter/Release.xcconfig << EOF
+          // CI Signing Overrides
+          CODE_SIGN_STYLE=Manual
+          CODE_SIGN_IDENTITY=Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER=$PP_NAME
+          EOF
 
       - name: Build iOS (unsigned)
         if: steps.check_ios.outputs.enabled == 'true' && env.IOS_CERTIFICATE_BASE64 == ''
