@@ -1,95 +1,95 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/advanced/cardigann/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/advanced/cardigann/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/advanced/deployment/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/advanced/deployment/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/advanced/oidc/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/advanced/oidc/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/advanced/postgresql/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/advanced/postgresql/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/development/architecture/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/development/architecture/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/development/e2e-testing/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/development/e2e-testing/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/development/setup/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/development/setup/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/development/testing/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/development/testing/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/getting-started/first-steps/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/getting-started/first-steps/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/getting-started/installation/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/getting-started/installation/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/getting-started/quick-start/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/getting-started/quick-start/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/reference/api/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/reference/api/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/reference/configuration/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/reference/configuration/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/reference/database/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/reference/database/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/reference/environment-variables/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/reference/environment-variables/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/reference/remote-access/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/reference/remote-access/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/user-guide/adding-media/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/user-guide/adding-media/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/user-guide/download-clients/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/user-guide/download-clients/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/user-guide/indexers/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/user-guide/indexers/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/user-guide/libraries/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/user-guide/libraries/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/user-guide/quality-profiles/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/user-guide/quality-profiles/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
     <url>
-         <loc>https://getmydia.github.io/mydia/0.8.1-rc3/user-guide/users/</loc>
-         <lastmod>2026-02-08</lastmod>
+         <loc>https://docs.mydia.dev/0.8.1-rc3/user-guide/users/</loc>
+         <lastmod>2026-02-22</lastmod>
     </url>
 </urlset>
