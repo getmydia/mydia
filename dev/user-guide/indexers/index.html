@@ -753,6 +753,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#nzbhydra2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NZBHydra2
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="NZBHydra2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setup_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cardigann-experimental" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1553,6 +1592,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#nzbhydra2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NZBHydra2
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="NZBHydra2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setup_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cardigann-experimental" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1689,6 +1767,11 @@
 <td>Yes</td>
 </tr>
 <tr>
+<td><strong>NZBHydra2</strong></td>
+<td>NZB meta search aggregator</td>
+<td>Yes</td>
+</tr>
+<tr>
 <td><strong>Cardigann</strong></td>
 <td>Built-in indexer support</td>
 <td>Experimental</td>
@@ -1733,6 +1816,25 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">INDEXER_2_BASE_URL</span><span class="o">=</span>http://jackett:9117
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nv">INDEXER_2_API_KEY</span><span class="o">=</span>your-jackett-api-key
 </code></pre></div>
+<h2 id="nzbhydra2">NZBHydra2</h2>
+<p>NZBHydra2 is a meta search aggregator for NZB indexers.</p>
+<h3 id="setup_2">Setup</h3>
+<ol>
+<li>Navigate to <strong>Admin &gt; Indexers</strong></li>
+<li>Click <strong>Add Indexer</strong></li>
+<li>Select <strong>NZBHydra2</strong></li>
+<li>Enter connection details:</li>
+<li>Base URL: <code>http://nzbhydra2:5076</code></li>
+<li>API Key: Your NZBHydra2 API key</li>
+<li>Test connection</li>
+<li>Save</li>
+</ol>
+<h3 id="environment-variables_2">Environment Variables</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">INDEXER_3_NAME</span><span class="o">=</span>NZBHydra2
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">INDEXER_3_TYPE</span><span class="o">=</span>nzbhydra2
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">INDEXER_3_BASE_URL</span><span class="o">=</span>http://nzbhydra2:5076
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nv">INDEXER_3_API_KEY</span><span class="o">=</span>your-nzbhydra2-api-key
+</code></pre></div>
 <h2 id="cardigann-experimental">Cardigann (Experimental)</h2>
 <p>Mydia includes built-in Cardigann indexer support, allowing direct indexer connections without Prowlarr or Jackett.</p>
 <div class="admonition warning">
@@ -1741,7 +1843,7 @@
 </div>
 <h3 id="enable-cardigann">Enable Cardigann</h3>
 <p>Set environment variable:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">ENABLE_CARDIGANN</span><span class="o">=</span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">ENABLE_CARDIGANN</span><span class="o">=</span><span class="nb">true</span>
 </code></pre></div>
 <h3 id="configuration">Configuration</h3>
 <p>Cardigann indexers are configured through the Admin UI with their specific settings.</p>

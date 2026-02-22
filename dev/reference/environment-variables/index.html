@@ -925,6 +925,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#remote-access-p2p" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remote Access (P2P)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metadata-relay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata Relay
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flaresolverr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlareSolverr
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#advanced-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1591,6 +1624,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#remote-access-p2p" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remote Access (P2P)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metadata-relay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata Relay
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flaresolverr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlareSolverr
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#advanced-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1827,8 +1893,8 @@
 <td><code>false</code></td>
 </tr>
 <tr>
-<td><code>OIDC_DISCOVERY_DOCUMENT_URI</code></td>
-<td>OIDC discovery endpoint URL</td>
+<td><code>OIDC_ISSUER</code></td>
+<td>OIDC issuer URL (e.g., <code>https://auth.example.com</code>)</td>
 <td>-</td>
 </tr>
 <tr>
@@ -1853,6 +1919,10 @@
 </tr>
 </tbody>
 </table>
+<div class="admonition note">
+<p class="admonition-title">Legacy Variable</p>
+<p><code>OIDC_DISCOVERY_DOCUMENT_URI</code> is accepted as a legacy alias for <code>OIDC_ISSUER</code>. The issuer is extracted by stripping the <code>/.well-known/openid-configuration</code> suffix.</p>
+</div>
 <h2 id="feature-flags">Feature Flags</h2>
 <table>
 <thead>
@@ -1874,14 +1944,14 @@
 <td><code>true</code></td>
 </tr>
 <tr>
-<td><code>ENABLE_SUBTITLES</code></td>
-<td>Enable subtitle download and management</td>
+<td><code>ENABLE_IMPORT_LISTS</code></td>
+<td>Enable import lists for syncing external lists (TMDB watchlists, popular, etc.)</td>
 <td><code>false</code></td>
 </tr>
 <tr>
-<td><code>ENABLE_IMPORT_LISTS</code></td>
-<td>Enable import lists for syncing external lists (TMDB watchlists, popular, etc.)</td>
-<td><code>true</code></td>
+<td><code>ENABLE_REMOTE_ACCESS</code></td>
+<td>Enable P2P remote access for the Flutter player</td>
+<td><code>false</code></td>
 </tr>
 </tbody>
 </table>
@@ -2017,7 +2087,7 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Indexer Types:</strong> <code>prowlarr</code>, <code>jackett</code>, <code>public</code></p>
+<p><strong>Indexer Types:</strong> <code>prowlarr</code>, <code>jackett</code>, <code>nzbhydra2</code>, <code>public</code></p>
 <h2 id="postgresql-configuration">PostgreSQL Configuration</h2>
 <p>For PostgreSQL deployments (using <code>latest-pg</code> image):</p>
 <table>
@@ -2063,6 +2133,83 @@
 <td><code>POOL_SIZE</code></td>
 <td>Connection pool size</td>
 <td><code>10</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="remote-access-p2p">Remote Access (P2P)</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>P2P_KEYPAIR_PATH</code></td>
+<td>Path to store the P2P keypair for persistent node identity</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>P2P_BIND_PORT</code></td>
+<td>UDP port for direct peer-to-peer connections (enables hole punching)</td>
+<td>Random</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>P2P_KEYPAIR_PATH</code> is required for remote access. Without it, the node ID changes on restart and paired devices can't reconnect.</p>
+</div>
+<h2 id="metadata-relay">Metadata Relay</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>METADATA_RELAY_URL</code></td>
+<td>URL for the metadata relay service</td>
+<td><code>https://relay.mydia.dev</code></td>
+</tr>
+</tbody>
+</table>
+<p>The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See <a href="../../development/architecture/">Architecture</a> for details.</p>
+<h2 id="flaresolverr">FlareSolverr</h2>
+<p>FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FLARESOLVERR_URL</code></td>
+<td>FlareSolverr instance URL</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>FLARESOLVERR_ENABLED</code></td>
+<td>Enable FlareSolverr integration</td>
+<td>Auto-enabled if URL is set</td>
+</tr>
+<tr>
+<td><code>FLARESOLVERR_TIMEOUT</code></td>
+<td>Request timeout in milliseconds</td>
+<td><code>60000</code></td>
+</tr>
+<tr>
+<td><code>FLARESOLVERR_MAX_TIMEOUT</code></td>
+<td>Maximum timeout in milliseconds</td>
+<td><code>120000</code></td>
 </tr>
 </tbody>
 </table>

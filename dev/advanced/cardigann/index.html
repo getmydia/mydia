@@ -1138,6 +1138,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#flaresolverr-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlareSolverr Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="FlareSolverr Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1536,6 +1564,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#flaresolverr-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlareSolverr Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="FlareSolverr Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1711,6 +1767,19 @@
 <li>Site-specific options</li>
 </ul>
 <p>Refer to the indexer's requirements in the Admin UI.</p>
+<h2 id="flaresolverr-integration">FlareSolverr Integration</h2>
+<p>Some indexer sites are protected by Cloudflare or similar anti-bot services. You can use <a href="https://github.com/FlareSolverr/FlareSolverr">FlareSolverr</a> to bypass these challenges automatically.</p>
+<h3 id="setup">Setup</h3>
+<ol>
+<li>Run a FlareSolverr instance (e.g., via Docker)</li>
+<li>Configure the following environment variables:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">FLARESOLVERR_URL</span><span class="o">=</span>http://flaresolverr:8191
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># FLARESOLVERR_ENABLED is auto-enabled when URL is set</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># FLARESOLVERR_TIMEOUT=60000</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># FLARESOLVERR_MAX_TIMEOUT=120000</span>
+</code></pre></div>
+<p>See <a href="../../reference/environment-variables/#flaresolverr">Environment Variables</a> for the full reference.</p>
 <h2 id="limitations">Limitations</h2>
 <h3 id="known-issues">Known Issues</h3>
 <ul>

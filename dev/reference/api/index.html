@@ -876,10 +876,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#planned-features" class="md-nav__link">
+  <a href="#graphql-api" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Planned Features
+        GraphQL API
       
     </span>
   </a>
@@ -887,10 +887,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#internal-apis" class="md-nav__link">
+  <a href="#rest-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Internal APIs
+        REST Endpoints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stability
       
     </span>
   </a>
@@ -1347,10 +1358,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#planned-features" class="md-nav__link">
+  <a href="#graphql-api" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Planned Features
+        GraphQL API
       
     </span>
   </a>
@@ -1358,10 +1369,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#internal-apis" class="md-nav__link">
+  <a href="#rest-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Internal APIs
+        REST Endpoints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stability
       
     </span>
   </a>
@@ -1412,27 +1434,71 @@
 
 <h1 id="api-reference">API Reference</h1>
 <div class="admonition info">
-<p class="admonition-title">Coming Soon</p>
-<p>API documentation is planned for a future release. Mydia currently provides a web interface for all functionality.</p>
+<p class="admonition-title">Internal APIs</p>
+<p>Mydia exposes HTTP and GraphQL APIs primarily for internal use by the Flutter player and the web UI. These APIs are not yet stable or documented for third-party consumption.</p>
 </div>
 <h2 id="current-state">Current State</h2>
-<p>Mydia does not currently expose a public REST API. All functionality is accessible through the Phoenix LiveView web interface.</p>
-<h2 id="planned-features">Planned Features</h2>
-<p>Future API support may include:</p>
+<p>Mydia includes several internal API surfaces used by its own components:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Downloads</strong></td>
+<td>Download client management and status</td>
+</tr>
+<tr>
+<td><strong>Indexers</strong></td>
+<td>Search queries to configured indexers</td>
+</tr>
+<tr>
+<td><strong>Media</strong></td>
+<td>Library browsing, metadata, and management</td>
+</tr>
+<tr>
+<td><strong>Playback</strong></td>
+<td>Playback session control</td>
+</tr>
+<tr>
+<td><strong>Streaming</strong></td>
+<td>HLS streaming session lifecycle</td>
+</tr>
+<tr>
+<td><strong>Subtitles</strong></td>
+<td>Subtitle search and download</td>
+</tr>
+<tr>
+<td><strong>Admin/Config</strong></td>
+<td>Server configuration and settings</td>
+</tr>
+<tr>
+<td><strong>GraphQL</strong></td>
+<td>Absinthe-based GraphQL API (used by the Flutter player)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="graphql-api">GraphQL API</h2>
+<p>The GraphQL endpoint is available at <code>/api/graphql</code> and is used by the Flutter player for:</p>
 <ul>
-<li>REST API for media management</li>
-<li>WebSocket events for real-time updates</li>
-<li>API key authentication</li>
-<li>Rate limiting</li>
+<li>Browsing movies and TV shows</li>
+<li>Managing streaming sessions</li>
+<li>Fetching media metadata and files</li>
 </ul>
-<h2 id="internal-apis">Internal APIs</h2>
-<p>Mydia uses internal APIs for:</p>
+<p>The schema uses Absinthe with connection/edges/node pagination for collections.</p>
+<h2 id="rest-endpoints">REST Endpoints</h2>
+<p>REST-style endpoints handle:</p>
 <ul>
-<li>Download client communication (qBittorrent, Transmission, SABnzbd, NZBGet)</li>
-<li>Indexer queries (Prowlarr, Jackett)</li>
-<li>Metadata fetching (via metadata-relay service)</li>
+<li>HLS manifest and segment serving</li>
+<li>Subtitle file delivery</li>
+<li>Download client webhooks</li>
+<li>Admin configuration</li>
 </ul>
-<p>These are implementation details and not intended for external use.</p>
+<h2 id="stability">Stability</h2>
+<p>These APIs are <strong>internal</strong> and may change between versions without notice. If you're interested in a stable public API for third-party integrations, please open a <a href="https://github.com/getmydia/mydia/issues/new">feature request</a>.</p>
 <h2 id="integration-options">Integration Options</h2>
 <p>Currently, you can integrate with Mydia through:</p>
 <ol>
