@@ -1,5 +1,12 @@
 [
   {
+    "version": "delete-rc3",
+    "title": "delete-rc3",
+    "aliases": [
+      "latest"
+    ]
+  },
+  {
     "version": "dev",
     "title": "dev",
     "aliases": []
