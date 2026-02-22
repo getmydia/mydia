@@ -1,12 +1,5 @@
 [
   {
-    "version": "delete-rc3",
-    "title": "delete-rc3",
-    "aliases": [
-      "latest"
-    ]
-  },
-  {
     "version": "dev",
     "title": "dev",
     "aliases": []
@@ -14,11 +7,6 @@
   {
     "version": "0.8.1",
     "title": "0.8.1",
-    "aliases": []
-  },
-  {
-    "version": "0.8.1-rc3",
-    "title": "0.8.1-rc3",
     "aliases": []
   },
   {
