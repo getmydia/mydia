@@ -59,6 +59,13 @@
 
     
     
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.mydia.dev/js/pa-H3lvJys17D0-xiK_1xsxu.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+
   </head>
   
   
@@ -1848,7 +1855,7 @@
 <h2 id="configuration">Configuration</h2>
 <h3 id="environment-variables">Environment Variables</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">OIDC_DISCOVERY_DOCUMENT_URI</span><span class="o">=</span>https://your-provider/.well-known/openid-configuration
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://your-provider
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>mydia
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nv">OIDC_REDIRECT_URI</span><span class="o">=</span>http://localhost:4000/auth/oidc/callback
@@ -1870,8 +1877,8 @@
 <td>Yes</td>
 </tr>
 <tr>
-<td><code>OIDC_DISCOVERY_DOCUMENT_URI</code></td>
-<td>Provider's discovery endpoint</td>
+<td><code>OIDC_ISSUER</code></td>
+<td>OIDC issuer URL (e.g., <code>https://auth.example.com</code>)</td>
 <td>Yes</td>
 </tr>
 <tr>
@@ -1896,6 +1903,10 @@
 </tr>
 </tbody>
 </table>
+<div class="admonition note">
+<p class="admonition-title">Legacy Variable</p>
+<p><code>OIDC_DISCOVERY_DOCUMENT_URI</code> is still accepted as a legacy alias for <code>OIDC_ISSUER</code>. The issuer is extracted by stripping the <code>/.well-known/openid-configuration</code> suffix.</p>
+</div>
 <h2 id="provider-setup">Provider Setup</h2>
 <h3 id="minimal-configuration">Minimal Configuration</h3>
 <p>Mydia uses standard OAuth2 authentication. Configure your provider with:</p>
@@ -1919,7 +1930,7 @@
 <li>Add redirect URI: <code>https://mydia.example.com/auth/oidc/callback</code></li>
 <li>Copy client ID and secret</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">OIDC_DISCOVERY_DOCUMENT_URI</span><span class="o">=</span>https://keycloak.example.com/realms/myrealm/.well-known/openid-configuration
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://keycloak.example.com/realms/myrealm
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>mydia
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
 </code></pre></div>
@@ -1942,7 +1953,7 @@
 <ol>
 <li>Configure Mydia:</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">OIDC_DISCOVERY_DOCUMENT_URI</span><span class="o">=</span>https://authelia.example.com/.well-known/openid-configuration
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://authelia.example.com
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>mydia
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
 </code></pre></div>
@@ -1952,7 +1963,7 @@
 <li>Configure allowed callback URLs</li>
 <li>Copy domain, client ID, and secret</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">OIDC_DISCOVERY_DOCUMENT_URI</span><span class="o">=</span>https://your-tenant.auth0.com/.well-known/openid-configuration
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://your-tenant.auth0.com
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>your-client-id
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
 </code></pre></div>
@@ -1962,7 +1973,7 @@
 <li>Add authorized redirect URIs</li>
 <li>Copy client ID and secret</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">OIDC_DISCOVERY_DOCUMENT_URI</span><span class="o">=</span>https://accounts.google.com/.well-known/openid-configuration
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://accounts.google.com
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>your-client-id.apps.googleusercontent.com
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
 </code></pre></div>

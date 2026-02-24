@@ -59,6 +59,13 @@
 
     
     
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.mydia.dev/js/pa-H3lvJys17D0-xiK_1xsxu.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+
   </head>
   
   
@@ -1700,7 +1707,7 @@
 </ul>
 <h3 id="configuration_1">Configuration</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">OIDC_DISCOVERY_DOCUMENT_URI</span><span class="o">=</span>https://your-provider/.well-known/openid-configuration
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://your-provider
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>mydia
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nv">OIDC_REDIRECT_URI</span><span class="o">=</span>http://localhost:4000/auth/oidc/callback
