@@ -15,7 +15,7 @@ pub fn init_app() {
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Debug)
             .with_filter(android_logger::FilterBuilder::new()
-                .parse("info,mydia=debug,iroh=info,iroh_quinn=warn,iroh_quinn_proto=warn,yamux=warn,netlink_proto=warn")
+                .parse("info,mydia=debug,iroh=info,noq=warn,noq_proto=warn,yamux=warn,netlink_proto=warn")
                 .build())
             .with_tag("mydia_p2p"),
     );
@@ -23,7 +23,7 @@ pub fn init_app() {
     // Initialize tracing for mydia_p2p_core and iroh (which use tracing:: macros)
     // This must be done BEFORE Host::new() is called to capture iroh's startup logs
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,mydia_p2p_core=debug,iroh=info,quinn=warn,rustls=warn"));
+        .unwrap_or_else(|_| EnvFilter::new("info,mydia_p2p_core=debug,iroh=info,noq=warn,rustls=warn"));
 
     #[cfg(target_os = "android")]
     {

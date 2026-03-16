@@ -6,7 +6,7 @@
 use iroh::{
     defaults::prod as default_relays,
     dns::DnsResolver,
-    endpoint::{Connection, SendStream},
+    endpoint::{presets, Connection, SendStream},
     Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
     Watcher,
 };
@@ -324,7 +324,7 @@ fn init_tracing(event_tx: mpsc::Sender<Event>) {
 
     // Set up tracing with env filter (default to info, but can be overridden with RUST_LOG)
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,quinn=warn,rustls=warn"));
+        .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,noq=warn,rustls=warn"));
 
     let _ = tracing_subscriber::registry()
         .with(filter)
@@ -670,7 +670,7 @@ async fn run_event_loop(
     init_tracing(event_tx.clone());
 
     // Build the endpoint
-    let mut builder = Endpoint::builder()
+    let mut builder = Endpoint::builder(presets::N0)
         .secret_key(secret_key)
         .alpns(vec![ALPN.to_vec()])
         .dns_resolver(create_dns_resolver());
@@ -961,7 +961,9 @@ async fn run_event_loop(
         }
     }
 
-    tracing::info!("Event loop terminated");
+    tracing::info!("Event loop terminated, closing endpoint gracefully");
+    endpoint.close().await;
+    tracing::info!("Endpoint closed");
 }
 
 /// Handle dialing a peer
