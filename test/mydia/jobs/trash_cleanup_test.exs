@@ -14,11 +14,15 @@ defmodule Mydia.Jobs.TrashCleanupTest do
           type: "movies"
         })
 
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Cleanup Test", year: 2024})
+
       # Create and trash a file
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "old_cleanup.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -46,10 +50,14 @@ defmodule Mydia.Jobs.TrashCleanupTest do
           type: "movies"
         })
 
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Recent Cleanup", year: 2024})
+
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "recent_cleanup.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 

@@ -302,10 +302,10 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
         ❌ Cannot fix movie in series library (no compatible library found):
            Title: #{media_item.title} (#{media_item.year})
            File: #{absolute_path}
-           Action: Delete the media_file association (file will become orphaned)
+           Action: Delete the media_file record (file will be re-scanned by library scanner)
         """)
 
-        # Delete the media file association (orphan the file)
+        # Delete the media file record
         case Library.delete_media_file(media_file) do
           {:ok, _} ->
             Mix.shell().info("   ✓ Media file association deleted")
@@ -330,14 +330,14 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
            From: #{current_library.path} (type: :series)
            To: #{target_library.path} (type: #{target_library.type})
            File: #{absolute_path}
-           Note: This task does not move physical files, only orphans the association.
+           Note: This task does not move physical files, deletes the media file record.
                  Use library scanner to re-import in the correct library.
         """)
 
-        # For now, just orphan the file - let library scanner re-import it
+        # Delete the file record — library scanner will re-import in the correct library
         case Library.delete_media_file(media_file) do
           {:ok, _} ->
-            Mix.shell().info("   ✓ Media file association deleted (file orphaned)")
+            Mix.shell().info("   ✓ Media file record deleted")
 
           {:error, reason} ->
             Mix.shell().error("   ✗ Failed to delete association: #{inspect(reason)}")
@@ -363,10 +363,10 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
            Show: #{media_item.title}
            Episode: S#{String.pad_leading("#{episode.season_number}", 2, "0")}E#{String.pad_leading("#{episode.episode_number}", 2, "0")}
            File: #{absolute_path}
-           Action: Delete the media_file association (file will become orphaned)
+           Action: Delete the media_file record (file will be re-scanned by library scanner)
         """)
 
-        # Delete the media file association (orphan the file)
+        # Delete the media file record
         case Library.delete_media_file(media_file) do
           {:ok, _} ->
             Mix.shell().info("   ✓ Media file association deleted")
@@ -393,14 +393,14 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
            From: #{current_library.path} (type: :movies)
            To: #{target_library.path} (type: #{target_library.type})
            File: #{absolute_path}
-           Note: This task does not move physical files, only orphans the association.
+           Note: This task does not move physical files, deletes the media file record.
                  Use library scanner to re-import in the correct library.
         """)
 
-        # For now, just orphan the file - let library scanner re-import it
+        # Delete the file record — library scanner will re-import in the correct library
         case Library.delete_media_file(media_file) do
           {:ok, _} ->
-            Mix.shell().info("   ✓ Media file association deleted (file orphaned)")
+            Mix.shell().info("   ✓ Media file record deleted")
 
           {:error, reason} ->
             Mix.shell().error("   ✗ Failed to delete association: #{inspect(reason)}")

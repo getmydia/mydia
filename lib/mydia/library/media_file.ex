@@ -63,185 +63,46 @@ defmodule Mydia.Library.MediaFile do
 
   def absolute_path(%__MODULE__{}), do: nil
 
+  @cast_fields [
+    :media_item_id,
+    :episode_id,
+    :quality_profile_id,
+    :path,
+    :relative_path,
+    :library_path_id,
+    :size,
+    :resolution,
+    :codec,
+    :hdr_format,
+    :audio_codec,
+    :bitrate,
+    :verified_at,
+    :metadata,
+    :cover_blob,
+    :sprite_blob,
+    :vtt_blob,
+    :preview_blob,
+    :phash,
+    :generated_at,
+    :trashed_at
+  ]
+
   @doc """
   Changeset for creating or updating a media file.
+
+  The `media_item_id` NOT NULL constraint is enforced at the database level.
+  Library type compatibility is validated by the scanner and enricher before
+  file creation — not in the changeset — to avoid DB queries during validation.
   """
   def changeset(media_file, attrs) do
     media_file
-    |> cast(attrs, [
-      :media_item_id,
-      :episode_id,
-      :quality_profile_id,
-      :path,
-      :relative_path,
-      :library_path_id,
-      :size,
-      :resolution,
-      :codec,
-      :hdr_format,
-      :audio_codec,
-      :bitrate,
-      :verified_at,
-      :metadata,
-      :cover_blob,
-      :sprite_blob,
-      :vtt_blob,
-      :preview_blob,
-      :phash,
-      :generated_at,
-      :trashed_at
-    ])
+    |> cast(attrs, @cast_fields)
     |> validate_required([:relative_path, :library_path_id])
-    |> validate_parent_association()
-    |> validate_library_type_compatibility()
     |> validate_number(:size, greater_than: 0)
     |> validate_number(:bitrate, greater_than: 0)
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
-  end
-
-  @doc """
-  Changeset for creating a media file during library scanning.
-  Allows media_item_id to be nil temporarily — the scanner resolves the
-  parent before insert, but some paths (adult, specialized) may not have one yet.
-  """
-  def scan_changeset(media_file, attrs) do
-    media_file
-    |> cast(attrs, [
-      :media_item_id,
-      :episode_id,
-      :quality_profile_id,
-      :relative_path,
-      :library_path_id,
-      :size,
-      :resolution,
-      :codec,
-      :hdr_format,
-      :audio_codec,
-      :bitrate,
-      :verified_at,
-      :metadata,
-      :cover_blob,
-      :sprite_blob,
-      :vtt_blob,
-      :preview_blob,
-      :phash,
-      :generated_at,
-      :trashed_at
-    ])
-    |> validate_required([:relative_path, :library_path_id])
-    |> validate_library_type_compatibility()
-    |> validate_number(:size, greater_than: 0)
-    |> validate_number(:bitrate, greater_than: 0)
-    |> foreign_key_constraint(:media_item_id)
-    |> foreign_key_constraint(:episode_id)
-    |> foreign_key_constraint(:quality_profile_id)
-    |> foreign_key_constraint(:library_path_id)
-  end
-
-  # Validates that media_item_id is set for standard (non-specialized) libraries
-  defp validate_parent_association(changeset) do
-    media_item_id = get_field(changeset, :media_item_id)
-    library_path_id = get_field(changeset, :library_path_id)
-
-    if is_nil(media_item_id) and not specialized_library?(library_path_id) do
-      add_error(changeset, :media_item_id, "is required")
-    else
-      changeset
-    end
-  end
-
-  # Checks if the library path is a specialized type (music, books, adult)
-  defp specialized_library?(nil), do: false
-
-  defp specialized_library?(library_path_id) do
-    case Mydia.Repo.get(Mydia.Settings.LibraryPath, library_path_id) do
-      nil -> false
-      library_path -> library_path.type in [:music, :books, :adult]
-    end
-  end
-
-  # Validates that the media type is compatible with the library path type
-  defp validate_library_type_compatibility(changeset) do
-    media_item_id = get_field(changeset, :media_item_id)
-    episode_id = get_field(changeset, :episode_id)
-    library_path_id = get_field(changeset, :library_path_id)
-
-    # Skip validation if library_path_id is missing (will be caught by validate_required)
-    if is_nil(library_path_id) do
-      changeset
-    else
-      if specialized_library?(library_path_id) do
-        changeset
-      else
-        # Only validate if we have a parent to check against
-        if is_nil(media_item_id) and is_nil(episode_id) do
-          changeset
-        else
-          validate_media_type_against_library_path_id(
-            changeset,
-            library_path_id,
-            media_item_id,
-            episode_id
-          )
-        end
-      end
-    end
-  end
-
-  defp validate_media_type_against_library_path_id(
-         changeset,
-         library_path_id,
-         media_item_id,
-         episode_id
-       ) do
-    case Mydia.Repo.get(Mydia.Settings.LibraryPath, library_path_id) do
-      nil ->
-        # Library path not found, let foreign key constraint handle it
-        changeset
-
-      library_path ->
-        cond do
-          # If library is :mixed, allow both types
-          library_path.type == :mixed ->
-            changeset
-
-          # Movie in :series library
-          not is_nil(media_item_id) and library_path.type == :series ->
-            media_type = get_media_type_for_item(media_item_id)
-
-            if media_type == "movie" do
-              add_error(
-                changeset,
-                :media_item_id,
-                "cannot add movies to a library path configured for TV series only (path: #{library_path.path})"
-              )
-            else
-              changeset
-            end
-
-          # TV show in :movies library
-          not is_nil(episode_id) and library_path.type == :movies ->
-            add_error(
-              changeset,
-              :episode_id,
-              "cannot add TV episodes to a library path configured for movies only (path: #{library_path.path})"
-            )
-
-          # All other cases are valid
-          true ->
-            changeset
-        end
-    end
-  end
-
-  # Gets the media type (movie or tv_show) for a media item by ID
-  defp get_media_type_for_item(media_item_id) do
-    case Mydia.Repo.get(Mydia.Media.MediaItem, media_item_id) do
-      nil -> nil
-      media_item -> media_item.type
-    end
   end
 end

@@ -126,7 +126,7 @@ defmodule MydiaWeb.AdultLive.Show do
                   (file.metadata || %{})
                   |> Map.put("duration", duration)
 
-                Library.update_media_file_scan(file, %{metadata: updated_metadata})
+                Library.update_media_file(file, %{metadata: updated_metadata})
               end)
 
               duration

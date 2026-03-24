@@ -166,6 +166,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       {:ok, _media_file} =
         Library.create_media_file(%{
           episode_id: episode.id,
+          media_item_id: tv_show.id,
           path: "/fake/path/episode.mkv",
           relative_path: "episode.mkv",
           library_path_id: library_path.id,
@@ -330,6 +331,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       {:ok, _media_file} =
         Library.create_media_file(%{
           episode_id: episode.id,
+          media_item_id: tv_show.id,
           path: "/fake/path/s01e01.mkv",
           relative_path: "s01e01.mkv",
           library_path_id: library_path.id,
@@ -443,6 +445,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       {:ok, _media_file} =
         Library.create_media_file(%{
           episode_id: episode.id,
+          media_item_id: tv_show.id,
           path: "/fake/path/s01e01.mkv",
           relative_path: "s01e01.mkv",
           library_path_id: library_path.id,
@@ -581,6 +584,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       {:ok, _media_file} =
         Library.create_media_file(%{
           episode_id: episode.id,
+          media_item_id: tv_show.id,
           path: "/fake/path/s01e01.mkv",
           relative_path: "s01e01.mkv",
           library_path_id: library_path.id,

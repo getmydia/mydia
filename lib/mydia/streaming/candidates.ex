@@ -159,7 +159,7 @@ defmodule Mydia.Streaming.Candidates do
         }
 
         spawn(fn ->
-          Mydia.Library.update_media_file_scan(media_file, %{
+          Mydia.Library.update_media_file(media_file, %{
             codec: updated.codec,
             audio_codec: updated.audio_codec,
             resolution: analysis.resolution,
@@ -185,7 +185,7 @@ defmodule Mydia.Streaming.Candidates do
               |> Map.put("duration", duration)
 
             spawn(fn ->
-              Mydia.Library.update_media_file_scan(media_file, %{metadata: updated_metadata})
+              Mydia.Library.update_media_file(media_file, %{metadata: updated_metadata})
             end)
 
             %{media_file | metadata: updated_metadata}

@@ -188,7 +188,6 @@ defmodule Mydia.Library do
 
   @doc """
   Creates a media file during library scanning.
-  Parent association is optional and will be set later during metadata enrichment.
 
   Automatically extracts technical metadata (codec, resolution, container) via FFprobe
   using the library_path_id and relative_path to compute the absolute path.
@@ -198,7 +197,7 @@ defmodule Mydia.Library do
     attrs = maybe_extract_technical_metadata(attrs)
 
     %MediaFile{}
-    |> MediaFile.scan_changeset(attrs)
+    |> MediaFile.changeset(attrs)
     |> Repo.insert()
   end
 
@@ -264,18 +263,6 @@ defmodule Mydia.Library do
   def update_media_file(%MediaFile{} = media_file, attrs) do
     media_file
     |> MediaFile.changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Updates a media file during library scanning.
-
-  Uses scan_changeset which allows orphaned files (files not yet matched to
-  a media_item or episode) to be updated without validation errors.
-  """
-  def update_media_file_scan(%MediaFile{} = media_file, attrs) do
-    media_file
-    |> MediaFile.scan_changeset(attrs)
     |> Repo.update()
   end
 

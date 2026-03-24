@@ -193,6 +193,7 @@ defmodule Mydia.Library.MigrationValidationTest do
         %MediaFile{}
         |> Ecto.Changeset.change(%{
           path: absolute_path,
+          media_item_id: tv_show.id,
           episode_id: episode.id,
           size: 500_000
         })

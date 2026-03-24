@@ -434,7 +434,16 @@ defmodule Mydia.Repo.Migrations.Helpers do
       end
     end
 
-    execute "PRAGMA foreign_key_check"
+    # Verify FK integrity — PRAGMA foreign_key_check returns rows for violations
+    %{rows: fk_violations} = repo().query!("PRAGMA foreign_key_check")
+
+    if fk_violations != [] do
+      raise """
+      Foreign key violations detected after recreating table #{table_name}:
+      #{inspect(fk_violations)}
+      """
+    end
+
     execute "PRAGMA foreign_keys = ON"
   end
 

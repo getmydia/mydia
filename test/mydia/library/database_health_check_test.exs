@@ -19,10 +19,15 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
     end
 
     test "counts files with relative_path but missing library_path_id" do
-      # Directly insert a malformed media file record
+      # Create a media item so we can satisfy the NOT NULL constraint
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Orphan Test", year: 2024})
+
+      # Directly insert a malformed media file record (missing library_path_id)
       Repo.insert!(%MediaFile{
         relative_path: "some/path.mkv",
         library_path_id: nil,
+        media_item_id: media_item.id,
         size: 1_000_000_000
       })
 
@@ -39,10 +44,15 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
     end
 
     test "aggregates all issue types correctly" do
+      # Create a media item so we can satisfy the NOT NULL constraint
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Issue Test", year: 2024})
+
       # One file missing library_path
       Repo.insert!(%MediaFile{
         relative_path: "orphaned/path.mkv",
         library_path_id: nil,
+        media_item_id: media_item.id,
         size: 1_000_000_000
       })
 
@@ -103,18 +113,27 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
   end
 
   defp insert_media_file(library_path, opts \\ []) do
+    # Create a media_item if not provided
+    media_item_id =
+      if Keyword.has_key?(opts, :media_item_id) do
+        Keyword.get(opts, :media_item_id)
+      else
+        {:ok, media_item} =
+          Mydia.Media.create_media_item(%{
+            type: "movie",
+            title: "Test File #{System.unique_integer([:positive])}",
+            year: 2024
+          })
+
+        media_item.id
+      end
+
     attrs = %{
       relative_path: "file_#{System.unique_integer([:positive])}.mkv",
       library_path_id: library_path.id,
+      media_item_id: media_item_id,
       size: 1_000_000_000
     }
-
-    attrs =
-      if Keyword.has_key?(opts, :media_item_id) do
-        Map.put(attrs, :media_item_id, Keyword.get(opts, :media_item_id))
-      else
-        attrs
-      end
 
     attrs =
       if Keyword.has_key?(opts, :episode_id) do
@@ -123,10 +142,9 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
         attrs
       end
 
-    # Use scan_changeset to allow orphaned files
     {:ok, media_file} =
       %MediaFile{}
-      |> MediaFile.scan_changeset(attrs)
+      |> MediaFile.changeset(attrs)
       |> Repo.insert()
 
     media_file

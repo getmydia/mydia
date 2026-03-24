@@ -49,8 +49,11 @@ defmodule Mydia.Factory do
   end
 
   def media_file_factory do
+    tv_show = build(:tv_show)
+
     %MediaFile{
-      episode: build(:episode),
+      media_item: tv_show,
+      episode: build(:episode, media_item: tv_show),
       path: sequence(:file_path, &"/media/shows/episode#{&1}.mkv"),
       size: 1_000_000_000,
       resolution: "1080p",

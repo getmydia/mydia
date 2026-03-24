@@ -11,7 +11,8 @@ defmodule Mydia.Repo.Migrations.EnforceMediaItemOnMediaFiles do
   2. Delete true orphans (both parents NULL — overwhelmingly trashed files)
   3. Recreate table with NOT NULL on media_item_id
 
-  This migration is idempotent — safe to run multiple times.
+  This migration runs within a database transaction. If any step fails,
+  the entire migration rolls back with no data changes.
   """
 
   use Ecto.Migration
@@ -27,8 +28,7 @@ defmodule Mydia.Repo.Migrations.EnforceMediaItemOnMediaFiles do
      [references: {:episodes, [type: :binary_id, on_delete: :nilify_all]}]},
     {:path, :string, []},
     {:size, :bigint, []},
-    {:quality_profile_id, :binary_id,
-     [references: {:quality_profiles, [type: :binary_id, on_delete: :nilify_all]}]},
+    {:quality_profile_id, :binary_id, [references: {:quality_profiles, [type: :binary_id]}]},
     {:resolution, :string, []},
     {:codec, :string, []},
     {:hdr_format, :string, []},
@@ -72,6 +72,17 @@ defmodule Mydia.Repo.Migrations.EnforceMediaItemOnMediaFiles do
 
     # Step 2: Delete true orphans (both parents NULL)
     # These are files with no association — overwhelmingly trashed
+    %{rows: [[orphan_count]]} =
+      repo().query!(
+        "SELECT COUNT(*) FROM media_files WHERE media_item_id IS NULL AND episode_id IS NULL"
+      )
+
+    if orphan_count > 0 do
+      IO.puts(
+        "[Migration] Deleting #{orphan_count} orphaned media_files (both media_item_id and episode_id NULL)"
+      )
+    end
+
     execute("""
     DELETE FROM media_files
     WHERE media_item_id IS NULL AND episode_id IS NULL
@@ -85,7 +96,11 @@ defmodule Mydia.Repo.Migrations.EnforceMediaItemOnMediaFiles do
       raise """
       Cannot apply NOT NULL constraint: #{count} media_files still have NULL media_item_id.
       These files have episode_id set but the episode's media_item_id is also NULL.
-      Please investigate and fix these records before running this migration.
+
+      To diagnose, run in iex:
+        Mydia.Repo.query!("SELECT mf.id, mf.episode_id, e.media_item_id FROM media_files mf LEFT JOIN episodes e ON e.id = mf.episode_id WHERE mf.media_item_id IS NULL")
+
+      Please fix these records before running this migration.
       """
     end
 

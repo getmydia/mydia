@@ -154,7 +154,7 @@ defmodule Mydia.Library.FileOrganizerTest do
       # Create media file
       {:ok, media_file} =
         %MediaFile{}
-        |> MediaFile.scan_changeset(%{
+        |> MediaFile.changeset(%{
           relative_path: "Spirited Away (2001)/movie.mkv",
           library_path_id: library_path.id,
           media_item_id: media_item.id
@@ -188,7 +188,7 @@ defmodule Mydia.Library.FileOrganizerTest do
       # Create a media file that's already in the correct location
       {:ok, media_file} =
         %MediaFile{}
-        |> MediaFile.scan_changeset(%{
+        |> MediaFile.changeset(%{
           relative_path: "Anime/Spirited Away (2001)/movie.mkv",
           library_path_id: library_path.id,
           media_item_id: media_item.id
@@ -232,7 +232,7 @@ defmodule Mydia.Library.FileOrganizerTest do
 
       {:ok, media_file} =
         %MediaFile{}
-        |> MediaFile.scan_changeset(%{
+        |> MediaFile.changeset(%{
           relative_path: "Naruto/Season 01/episode.mkv",
           library_path_id: library_path.id,
           media_item_id: media_item.id
@@ -280,7 +280,7 @@ defmodule Mydia.Library.FileOrganizerTest do
 
       {:ok, anime_file} =
         %MediaFile{}
-        |> MediaFile.scan_changeset(%{
+        |> MediaFile.changeset(%{
           relative_path: "Spirited Away (2001)/movie.mkv",
           library_path_id: library_path.id,
           media_item_id: anime_item.id
@@ -305,7 +305,7 @@ defmodule Mydia.Library.FileOrganizerTest do
 
       {:ok, movie_file} =
         %MediaFile{}
-        |> MediaFile.scan_changeset(%{
+        |> MediaFile.changeset(%{
           relative_path: "The Matrix (1999)/movie.mkv",
           library_path_id: library_path.id,
           media_item_id: movie_item.id
@@ -328,30 +328,6 @@ defmodule Mydia.Library.FileOrganizerTest do
       assert summary.skipped == 1
       assert summary.errors == 0
       assert length(summary.details) == 2
-    end
-  end
-
-  describe "organize_file/2 error handling" do
-    test "returns error when media_item not found" do
-      base_path = unique_path("/media/movies")
-
-      {:ok, library_path} =
-        %LibraryPath{}
-        |> LibraryPath.changeset(%{
-          path: base_path,
-          type: :movies
-        })
-        |> Repo.insert()
-
-      {:ok, media_file} =
-        %MediaFile{}
-        |> MediaFile.scan_changeset(%{
-          relative_path: "orphan.mkv",
-          library_path_id: library_path.id
-        })
-        |> Repo.insert()
-
-      assert {:error, :no_media_item} = FileOrganizer.organize_file(media_file, dry_run: true)
     end
   end
 end

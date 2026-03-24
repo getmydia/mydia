@@ -360,90 +360,9 @@ defmodule Mydia.Jobs.LibraryScanner do
     )
 
     # Process adult content metadata (studios, scenes, adult_files)
+    # Adult content is fully managed by AdultScanner — no MediaFile records needed
+    # since media_files now requires media_item_id (NOT NULL).
     adult_result = AdultScanner.process_scan_result(library_path, scan_result)
-
-    # Also process as standard media files for thumbnails and playback
-    # Get existing media files from database
-    existing_files = Library.list_media_files(library_path_id: library_path.id)
-
-    # Detect changes using the shared scanner logic
-    changes = Library.Scanner.detect_changes(scan_result, existing_files, library_path)
-
-    # Create MediaFile records for new files (for thumbnails and playback)
-    new_media_file_ids =
-      Enum.flat_map(changes.new_files, fn file_info ->
-        relative_path = Path.relative_to(file_info.path, library_path.path)
-
-        case Library.create_scanned_media_file(%{
-               library_path_id: library_path.id,
-               relative_path: relative_path,
-               size: file_info.size,
-               verified_at: DateTime.utc_now()
-             }) do
-          {:ok, media_file} ->
-            Logger.debug("Created media file for adult content",
-              path: file_info.path,
-              media_file_id: media_file.id
-            )
-
-            [media_file.id]
-
-          {:error, changeset} ->
-            Logger.error("Failed to create media file for adult content",
-              path: file_info.path,
-              errors: inspect(changeset.errors)
-            )
-
-            []
-        end
-      end)
-
-    # Update modified files
-    Enum.each(changes.modified_files, fn file_info ->
-      relative_path = Path.relative_to(file_info.path, library_path.path)
-
-      case Library.get_media_file_by_relative_path(library_path.id, relative_path) do
-        nil ->
-          Logger.warning("Modified file not found in database",
-            path: file_info.path,
-            relative_path: relative_path
-          )
-
-        media_file ->
-          Library.update_media_file(media_file, %{
-            size: file_info.size,
-            verified_at: DateTime.utc_now()
-          })
-      end
-    end)
-
-    # Trash removed files (soft-delete for recovery)
-    Enum.each(changes.deleted_files, fn media_file ->
-      Library.trash_media_file(media_file)
-    end)
-
-    # Find existing files missing thumbnails
-    existing_files_missing_thumbnails =
-      existing_files
-      |> Enum.filter(&is_nil(&1.cover_blob))
-      |> Enum.map(& &1.id)
-
-    # Combine new files and existing files missing thumbnails
-    files_needing_thumbnails = new_media_file_ids ++ existing_files_missing_thumbnails
-
-    # Enqueue thumbnail generation for all files needing thumbnails (includes sprites)
-    if length(files_needing_thumbnails) > 0 do
-      Logger.info("Enqueueing thumbnail generation for adult files",
-        new_files: length(new_media_file_ids),
-        existing_missing: length(existing_files_missing_thumbnails),
-        total: length(files_needing_thumbnails)
-      )
-
-      Mydia.Jobs.ThumbnailGeneration.enqueue_batch(files_needing_thumbnails,
-        include_sprites: true,
-        include_previews: true
-      )
-    end
 
     # Update library path with success status
     if updatable_library_path?(library_path) do
@@ -539,39 +458,45 @@ defmodule Mydia.Jobs.LibraryScanner do
            }}
         )
 
-        Enum.map(batch, fn file_info ->
-          relative_path = Path.relative_to(file_info.path, library_path.path)
+        batch
+        |> Task.async_stream(
+          fn file_info ->
+            relative_path = Path.relative_to(file_info.path, library_path.path)
 
-          # Check if a trashed file with the same path exists — restore it instead of creating a duplicate
-          case Library.get_media_file_by_relative_path(
-                 library_path.id,
-                 relative_path,
-                 include_trashed: true
-               ) do
-            %{trashed_at: trashed_at} = trashed_file when not is_nil(trashed_at) ->
-              case Library.restore_media_file(trashed_file) do
-                {:ok, restored_file} ->
-                  Logger.info("Restored trashed media file",
-                    path: file_info.path,
-                    relative_path: relative_path
-                  )
+            # Check if a trashed file with the same path exists — restore it instead of creating a duplicate
+            case Library.get_media_file_by_relative_path(
+                   library_path.id,
+                   relative_path,
+                   include_trashed: true
+                 ) do
+              %{trashed_at: trashed_at} = trashed_file when not is_nil(trashed_at) ->
+                case Library.restore_media_file(trashed_file) do
+                  {:ok, restored_file} ->
+                    Logger.info("Restored trashed media file",
+                      path: file_info.path,
+                      relative_path: relative_path
+                    )
 
-                  {:ok, restored_file, file_info}
+                    {:ok, restored_file, file_info}
 
-                {:error, _reason} ->
-                  Logger.error("Failed to restore trashed media file",
-                    path: file_info.path,
-                    relative_path: relative_path
-                  )
+                  {:error, _reason} ->
+                    Logger.error("Failed to restore trashed media file",
+                      path: file_info.path,
+                      relative_path: relative_path
+                    )
 
-                  {:error, file_info}
-              end
+                    {:error, file_info}
+                end
 
-            _ ->
-              # No existing file — create new, but only if we can resolve a parent
-              create_matched_media_file(file_info, relative_path, library_path)
-          end
-        end)
+              _ ->
+                # No existing file — create new, but only if we can resolve a parent
+                create_matched_media_file(file_info, relative_path, library_path)
+            end
+          end,
+          max_concurrency: 10,
+          timeout: :infinity
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
       end)
 
     # Process modified files in batches
@@ -617,7 +542,7 @@ defmodule Mydia.Jobs.LibraryScanner do
 
             media_file ->
               {:ok, _} =
-                Library.update_media_file_scan(media_file, %{
+                Library.update_media_file(media_file, %{
                   size: file_info.size,
                   verified_at: DateTime.utc_now()
                 })

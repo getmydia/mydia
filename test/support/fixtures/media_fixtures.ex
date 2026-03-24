@@ -82,11 +82,16 @@ defmodule Mydia.MediaFixtures do
         Map.put(attrs, :library_path_id, library_path.id)
       end
 
-    # Ensure either media_item_id or episode_id is provided
+    # Ensure media_item_id is always provided (NOT NULL constraint)
     attrs =
       cond do
-        Map.has_key?(attrs, :media_item_id) or Map.has_key?(attrs, :episode_id) ->
+        Map.has_key?(attrs, :media_item_id) ->
           attrs
+
+        Map.has_key?(attrs, :episode_id) ->
+          # Look up the episode to get its media_item_id
+          episode = Mydia.Repo.get!(Mydia.Media.Episode, attrs.episode_id)
+          Map.put(attrs, :media_item_id, episode.media_item_id)
 
         true ->
           # Create a movie by default

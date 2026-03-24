@@ -511,7 +511,15 @@ defmodule Mydia.SettingsTest do
           monitored: true
         })
 
-      %{library_path: library_path}
+      # Create a media item for file creation (media_item_id is NOT NULL)
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{
+          type: "movie",
+          title: "Settings Test Movie #{test_id}",
+          year: 2024
+        })
+
+      %{library_path: library_path, media_item: media_item}
     end
 
     test "allows path update when no media files exist", %{library_path: library_path} do
@@ -523,7 +531,8 @@ defmodule Mydia.SettingsTest do
     end
 
     test "allows path update when all files exist at new location", %{
-      library_path: library_path
+      library_path: library_path,
+      media_item: media_item
     } do
       # Create test directory structure
       test_dir = System.tmp_dir!()
@@ -548,8 +557,9 @@ defmodule Mydia.SettingsTest do
       for file <- test_files do
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
-          |> Mydia.Library.MediaFile.scan_changeset(%{
+          |> Mydia.Library.MediaFile.changeset(%{
             library_path_id: library_path.id,
+            media_item_id: media_item.id,
             relative_path: file,
             size: 1000
           })
@@ -567,7 +577,8 @@ defmodule Mydia.SettingsTest do
     end
 
     test "prevents path update when files don't exist at new location", %{
-      library_path: library_path
+      library_path: library_path,
+      media_item: media_item
     } do
       # Create test directory structure
       test_dir = System.tmp_dir!()
@@ -591,8 +602,9 @@ defmodule Mydia.SettingsTest do
       for file <- test_files do
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
-          |> Mydia.Library.MediaFile.scan_changeset(%{
+          |> Mydia.Library.MediaFile.changeset(%{
             library_path_id: library_path.id,
+            media_item_id: media_item.id,
             relative_path: file,
             size: 1000
           })
@@ -617,7 +629,8 @@ defmodule Mydia.SettingsTest do
     end
 
     test "prevents path update when some files missing at new location", %{
-      library_path: library_path
+      library_path: library_path,
+      media_item: media_item
     } do
       # Create test directory structure
       test_dir = System.tmp_dir!()
@@ -645,8 +658,9 @@ defmodule Mydia.SettingsTest do
       for file <- test_files do
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
-          |> Mydia.Library.MediaFile.scan_changeset(%{
+          |> Mydia.Library.MediaFile.changeset(%{
             library_path_id: library_path.id,
+            media_item_id: media_item.id,
             relative_path: file,
             size: 1000
           })
@@ -679,7 +693,10 @@ defmodule Mydia.SettingsTest do
       assert updated.path == library_path.path
     end
 
-    test "samples up to 10 files for validation", %{library_path: library_path} do
+    test "samples up to 10 files for validation", %{
+      library_path: library_path,
+      media_item: media_item
+    } do
       # Create test directory structure
       test_dir = System.tmp_dir!()
       old_path = Path.join(test_dir, "old_movies")
@@ -703,8 +720,9 @@ defmodule Mydia.SettingsTest do
       for file <- test_files do
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
-          |> Mydia.Library.MediaFile.scan_changeset(%{
+          |> Mydia.Library.MediaFile.changeset(%{
             library_path_id: library_path.id,
+            media_item_id: media_item.id,
             relative_path: file,
             size: 1000
           })
@@ -736,14 +754,25 @@ defmodule Mydia.SettingsTest do
           monitored: true
         })
 
-      %{library_path: library_path}
+      # Create a media item for file creation (media_item_id is NOT NULL)
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{
+          type: "movie",
+          title: "Validate Test Movie #{test_id}",
+          year: 2024
+        })
+
+      %{library_path: library_path, media_item: media_item}
     end
 
     test "returns :ok when no media files exist", %{library_path: library_path} do
       assert :ok = Settings.validate_new_library_path(library_path, "/new/path")
     end
 
-    test "returns :ok when all files are accessible", %{library_path: library_path} do
+    test "returns :ok when all files are accessible", %{
+      library_path: library_path,
+      media_item: media_item
+    } do
       # Create test directory structure
       test_dir = System.tmp_dir!()
       old_path = Path.join(test_dir, "old_movies")
@@ -767,8 +796,9 @@ defmodule Mydia.SettingsTest do
       for file <- test_files do
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
-          |> Mydia.Library.MediaFile.scan_changeset(%{
+          |> Mydia.Library.MediaFile.changeset(%{
             library_path_id: library_path.id,
+            media_item_id: media_item.id,
             relative_path: file,
             size: 1000
           })
@@ -783,7 +813,10 @@ defmodule Mydia.SettingsTest do
       File.rm_rf!(new_path)
     end
 
-    test "returns error when files are not accessible", %{library_path: library_path} do
+    test "returns error when files are not accessible", %{
+      library_path: library_path,
+      media_item: media_item
+    } do
       # Create test directory structure
       test_dir = System.tmp_dir!()
       old_path = Path.join(test_dir, "old_movies")
@@ -806,8 +839,9 @@ defmodule Mydia.SettingsTest do
       for file <- test_files do
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
-          |> Mydia.Library.MediaFile.scan_changeset(%{
+          |> Mydia.Library.MediaFile.changeset(%{
             library_path_id: library_path.id,
+            media_item_id: media_item.id,
             relative_path: file,
             size: 1000
           })
@@ -825,7 +859,8 @@ defmodule Mydia.SettingsTest do
     end
 
     test "returns error with helpful message when some files are missing", %{
-      library_path: library_path
+      library_path: library_path,
+      media_item: media_item
     } do
       # Create test directory structure
       test_dir = System.tmp_dir!()
@@ -852,8 +887,9 @@ defmodule Mydia.SettingsTest do
       for file <- test_files do
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
-          |> Mydia.Library.MediaFile.scan_changeset(%{
+          |> Mydia.Library.MediaFile.changeset(%{
             library_path_id: library_path.id,
+            media_item_id: media_item.id,
             relative_path: file,
             size: 1000
           })

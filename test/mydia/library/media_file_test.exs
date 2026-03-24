@@ -102,9 +102,13 @@ defmodule Mydia.Library.MediaFileTest do
       assert changeset.valid?
     end
 
-    test "prevents movies in :series library", %{series_library: series_library} do
+    test "changeset does not validate library type compatibility", %{
+      series_library: series_library
+    } do
       movie = insert(:media_item, type: "movie")
 
+      # Library type compatibility is now validated by the scanner/enricher,
+      # not in the changeset, to avoid DB queries during validation
       changeset =
         %MediaFile{}
         |> MediaFile.changeset(%{
@@ -114,10 +118,7 @@ defmodule Mydia.Library.MediaFileTest do
           size: 1_000_000_000
         })
 
-      refute changeset.valid?
-      errors = errors_on(changeset).media_item_id
-      assert length(errors) == 1
-      assert hd(errors) =~ "cannot add movies to a library path configured for TV series only"
+      assert changeset.valid?
     end
 
     test "allows TV episodes in :series library", %{series_library: series_library} do
@@ -136,10 +137,12 @@ defmodule Mydia.Library.MediaFileTest do
       assert changeset.valid?
     end
 
-    test "prevents TV episodes in :movies library", %{movies_library: movies_library} do
+    test "changeset allows episodes in any library type", %{movies_library: movies_library} do
       tv_show = insert(:tv_show)
       episode = insert(:episode, media_item: tv_show)
 
+      # Library type compatibility is now validated by the scanner/enricher,
+      # not in the changeset
       changeset =
         %MediaFile{}
         |> MediaFile.changeset(%{
@@ -149,10 +152,7 @@ defmodule Mydia.Library.MediaFileTest do
           size: 1_000_000_000
         })
 
-      refute changeset.valid?
-      errors = errors_on(changeset).episode_id
-      assert length(errors) == 1
-      assert hd(errors) =~ "cannot add TV episodes to a library path configured for movies only"
+      assert changeset.valid?
     end
 
     test "allows both movies and TV shows in :mixed library", %{mixed_library: mixed_library} do
@@ -199,45 +199,6 @@ defmodule Mydia.Library.MediaFileTest do
       assert :library_path_id in Keyword.keys(changeset.errors)
     end
 
-    test "allows orphaned files (no parent association)" do
-      {:ok, library} =
-        %LibraryPath{}
-        |> LibraryPath.changeset(%{
-          path: "/test/orphaned",
-          type: :mixed,
-          monitored: true
-        })
-        |> Repo.insert()
-
-      changeset =
-        %MediaFile{}
-        |> MediaFile.scan_changeset(%{
-          relative_path: "orphaned.mkv",
-          library_path_id: library.id,
-          size: 1_000_000_000
-        })
-
-      assert changeset.valid?
-    end
-
-    test "validates with scan_changeset when parent is set", %{series_library: series_library} do
-      movie = insert(:media_item, type: "movie")
-
-      changeset =
-        %MediaFile{}
-        |> MediaFile.scan_changeset(%{
-          relative_path: "movie.mkv",
-          library_path_id: series_library.id,
-          media_item_id: movie.id,
-          size: 1_000_000_000
-        })
-
-      refute changeset.valid?
-      errors = errors_on(changeset).media_item_id
-      assert length(errors) == 1
-      assert hd(errors) =~ "cannot add movies to a library path configured for TV series only"
-    end
-
     test "handles TV show type correctly in :movies library", %{movies_library: movies_library} do
       # Create a TV show media item
       tv_show = insert(:tv_show)
@@ -257,7 +218,7 @@ defmodule Mydia.Library.MediaFileTest do
       assert changeset.valid?
     end
 
-    test "validates library_path_id exists via foreign key", %{series_library: series_library} do
+    test "changeset is valid with mismatched library type", %{series_library: series_library} do
       movie = insert(:media_item, type: "movie")
 
       changeset =
@@ -269,8 +230,8 @@ defmodule Mydia.Library.MediaFileTest do
           size: 1_000_000_000
         })
 
-      # Should be valid but type mismatch should fail
-      refute changeset.valid?
+      # Type compatibility is no longer checked in changeset
+      assert changeset.valid?
     end
   end
 

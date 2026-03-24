@@ -2908,7 +2908,7 @@ defmodule MydiaWeb.AdminConfigLive.Index do
           key: "library.auto_repair_enabled",
           label: "Auto-Repair Database Issues",
           description:
-            "Automatically queue a library re-scan on startup when database issues (orphaned files) are detected",
+            "Automatically queue a library re-scan on startup when database issues are detected",
           type: :boolean,
           value: get_library_auto_repair_enabled(),
           source: get_source("DATABASE_AUTO_REPAIR", "library.auto_repair_enabled")

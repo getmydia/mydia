@@ -5,17 +5,33 @@ defmodule Mydia.LibraryTest do
 
   import Mydia.SettingsFixtures
 
+  # Helper to create a media item for tests that need one
+  defp create_test_media_item(title \\ "Test Movie") do
+    {:ok, media_item} =
+      Mydia.Media.create_media_item(%{
+        type: "movie",
+        title: "#{title} #{System.unique_integer([:positive])}",
+        year: 2024
+      })
+
+    media_item
+  end
+
   describe "list_media_files/1 with library_path_type filter" do
     test "filters media files by library path type" do
       # Create library paths of different types
       movies_path = library_path_fixture(%{path: "/movies", type: "movies"})
       adult_path = library_path_fixture(%{path: "/adult", type: "adult"})
 
+      movie_item = create_test_media_item("Filter Movie")
+      adult_item = create_test_media_item("Filter Adult")
+
       # Create media files in each library
       {:ok, movies_file} =
         Library.create_scanned_media_file(%{
           relative_path: "movie.mp4",
           library_path_id: movies_path.id,
+          media_item_id: movie_item.id,
           size: 1_000_000
         })
 
@@ -23,6 +39,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "video.mp4",
           library_path_id: adult_path.id,
+          media_item_id: adult_item.id,
           size: 2_000_000
         })
 
@@ -40,11 +57,13 @@ defmodule Mydia.LibraryTest do
     test "returns empty list when no files match type" do
       # Create a library path of one type
       movies_path = library_path_fixture(%{path: "/movies2", type: "movies"})
+      movie_item = create_test_media_item("No Match Movie")
 
       {:ok, _movies_file} =
         Library.create_scanned_media_file(%{
           relative_path: "movie2.mp4",
           library_path_id: movies_path.id,
+          media_item_id: movie_item.id,
           size: 1_000_000
         })
 
@@ -55,11 +74,13 @@ defmodule Mydia.LibraryTest do
 
     test "can combine library_path_type with preload" do
       adult_path = library_path_fixture(%{path: "/adult2", type: "adult"})
+      adult_item = create_test_media_item("Preload Adult")
 
       {:ok, _adult_file} =
         Library.create_scanned_media_file(%{
           relative_path: "video2.mp4",
           library_path_id: adult_path.id,
+          media_item_id: adult_item.id,
           size: 2_000_000
         })
 
@@ -69,52 +90,28 @@ defmodule Mydia.LibraryTest do
     end
   end
 
-  describe "update_media_file_scan/2" do
-    test "updates orphaned media file without validation errors" do
+  describe "update_media_file/2" do
+    test "updates media file fields" do
       library_path = library_path_fixture(%{type: "movies"})
+      media_item = create_test_media_item("Update Test")
 
-      # Create an orphaned file (no media_item_id or episode_id)
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
-          relative_path: "orphaned/file.mp4",
+          relative_path: "update_test/file.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
-      assert is_nil(media_file.media_item_id)
-      assert is_nil(media_file.episode_id)
-
-      # Update using scan function should succeed
+      # Update should succeed
       {:ok, updated} =
-        Library.update_media_file_scan(media_file, %{
+        Library.update_media_file(media_file, %{
           size: 2_000_000,
           verified_at: DateTime.utc_now()
         })
 
       assert updated.size == 2_000_000
       assert updated.verified_at != nil
-    end
-
-    test "regular update_media_file fails on orphaned files" do
-      library_path = library_path_fixture(%{type: "movies"})
-
-      # Create an orphaned file
-      {:ok, media_file} =
-        Library.create_scanned_media_file(%{
-          relative_path: "orphaned/file2.mp4",
-          library_path_id: library_path.id,
-          size: 1_000_000
-        })
-
-      # Regular update should fail due to missing parent
-      {:error, changeset} =
-        Library.update_media_file(media_file, %{
-          size: 2_000_000,
-          verified_at: DateTime.utc_now()
-        })
-
-      assert %{media_item_id: ["either media_item_id or episode_id must be set"]} =
-               errors_on(changeset)
     end
   end
 
@@ -165,32 +162,38 @@ defmodule Mydia.LibraryTest do
       assert media_ids == []
     end
 
-    test "excludes files without media_item_id" do
-      unique_path = "/media/orphaned_#{System.unique_integer([:positive])}"
+    test "returns all media item IDs from files in library path" do
+      unique_path = "/media/all_items_#{System.unique_integer([:positive])}"
       library_path = library_path_fixture(%{path: unique_path, type: "movies"})
 
-      # Create orphaned file (no media_item_id)
-      {:ok, _orphaned_file} =
-        Library.create_scanned_media_file(%{
-          relative_path: "orphaned.mp4",
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "All Items Test", year: 2024})
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "test_movie.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
       media_ids = Library.list_media_ids_in_library_path(library_path)
 
-      assert media_ids == []
+      assert length(media_ids) == 1
+      assert hd(media_ids) == media_item.id
     end
   end
 
   describe "trash_media_file/1" do
     test "sets trashed_at timestamp" do
       library_path = library_path_fixture(%{type: "movies"})
+      media_item = create_test_media_item("Trash Test")
 
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "trash_test.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -204,11 +207,13 @@ defmodule Mydia.LibraryTest do
   describe "restore_media_file/1" do
     test "clears trashed_at timestamp" do
       library_path = library_path_fixture(%{type: "movies"})
+      media_item = create_test_media_item("Restore Test")
 
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "restore_test.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -228,10 +233,13 @@ defmodule Mydia.LibraryTest do
           type: "movies"
         })
 
+      media_item = create_test_media_item("Trash Filter")
+
       {:ok, file1} =
         Library.create_scanned_media_file(%{
           relative_path: "active.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -239,6 +247,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "trashed.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 2_000_000
         })
 
@@ -256,10 +265,13 @@ defmodule Mydia.LibraryTest do
           type: "movies"
         })
 
+      media_item = create_test_media_item("Trash Include")
+
       {:ok, _file1} =
         Library.create_scanned_media_file(%{
           relative_path: "active2.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -267,6 +279,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "trashed2.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 2_000_000
         })
 
@@ -285,11 +298,14 @@ defmodule Mydia.LibraryTest do
           type: "movies"
         })
 
+      media_item = create_test_media_item("Purge Test")
+
       # Create two files
       {:ok, old_file} =
         Library.create_scanned_media_file(%{
           relative_path: "old_trashed.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -297,6 +313,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "recent_trashed.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 2_000_000
         })
 
@@ -327,10 +344,13 @@ defmodule Mydia.LibraryTest do
           type: "movies"
         })
 
+      media_item = create_test_media_item("Purge Safe")
+
       {:ok, active_file} =
         Library.create_scanned_media_file(%{
           relative_path: "active_purge.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -349,10 +369,13 @@ defmodule Mydia.LibraryTest do
           type: "movies"
         })
 
+      media_item = create_test_media_item("Rel Path Trash")
+
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "trashable.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -368,10 +391,13 @@ defmodule Mydia.LibraryTest do
           type: "movies"
         })
 
+      media_item = create_test_media_item("Rel Path Include")
+
       {:ok, media_file} =
         Library.create_scanned_media_file(%{
           relative_path: "trashable2.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 1_000_000
         })
 
@@ -395,10 +421,13 @@ defmodule Mydia.LibraryTest do
           type: "movies"
         })
 
+      media_item = create_test_media_item("Storage Trash")
+
       {:ok, _active} =
         Library.create_scanned_media_file(%{
           relative_path: "counted.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 500
         })
 
@@ -406,6 +435,7 @@ defmodule Mydia.LibraryTest do
         Library.create_scanned_media_file(%{
           relative_path: "not_counted.mp4",
           library_path_id: library_path.id,
+          media_item_id: media_item.id,
           size: 300
         })
 

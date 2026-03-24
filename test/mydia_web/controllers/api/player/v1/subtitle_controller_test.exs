@@ -58,6 +58,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
     {:ok, episode_file} =
       Repo.insert(%Mydia.Library.MediaFile{
         episode_id: episode.id,
+        media_item_id: tv_show.id,
         library_path_id: library_path.id,
         relative_path: "Test.Show.S01E01.mkv",
         size: 1_000_000,

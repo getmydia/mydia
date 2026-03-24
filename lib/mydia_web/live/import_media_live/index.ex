@@ -416,6 +416,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         movies: [],
         ungrouped: [],
         type_filtered: [],
+        sample_filtered: [],
         simple: []
       })
       |> assign(:selected_files, MapSet.new())
@@ -424,12 +425,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         matched: 0,
         unmatched: 0,
         skipped: 0,
-        type_filtered: 0
+        type_filtered: 0,
+        sample_filtered: 0
       })
       |> assign(:import_progress, %{current: 0, total: 0, current_file: nil})
       |> assign(:import_results, %{success: 0, failed: 0, skipped: 0})
       |> assign(:detailed_results, [])
       |> assign(:show_type_filtered, false)
+      |> assign(:show_sample_filtered, false)
       |> assign(:collapsed_seasons, MapSet.new())
 
     {:noreply, socket}
@@ -1771,37 +1774,18 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     library_path = Enum.find(library_paths, &(&1.id == library_path_id))
 
     if library_path && library_path.type in [:music, :books, :adult] do
-      # Import file for specialized library without metadata
-      case Library.create_scanned_media_file(%{
-             relative_path: relative_path,
-             library_path_id: library_path_id,
-             size: file.size,
-             verified_at: DateTime.utc_now()
-           }) do
-        {:ok, _media_file} ->
-          %{
-            file_path: file.path,
-            file_name: Path.basename(file.path),
-            status: :success,
-            media_item_title: Path.basename(file.path, Path.extname(file.path)),
-            error_message: nil,
-            action_taken: "Added to #{library_type_label(library_path.type)} library",
-            metadata: %{size: file.size, library_type: library_path.type}
-          }
-
-        {:error, changeset} ->
-          error_msg = format_changeset_errors_friendly(changeset)
-
-          %{
-            file_path: file.path,
-            file_name: Path.basename(file.path),
-            status: :failed,
-            media_item_title: nil,
-            error_message: error_msg,
-            action_taken: nil,
-            metadata: %{size: file.size}
-          }
-      end
+      # Specialized libraries are handled by their own scanners (MusicScanner,
+      # BookScanner, AdultScanner). Use library scan instead of manual import.
+      %{
+        file_path: file.path,
+        file_name: Path.basename(file.path),
+        status: :skipped,
+        media_item_title: nil,
+        error_message:
+          "#{library_type_label(library_path.type)} files are imported automatically by the library scanner",
+        action_taken: nil,
+        metadata: %{size: file.size, library_type: library_path.type}
+      }
     else
       # Standard library file without metadata match - report failure
       %{
