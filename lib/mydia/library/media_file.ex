@@ -92,14 +92,10 @@ defmodule Mydia.Library.MediaFile do
       :trashed_at
     ])
     |> validate_required([:relative_path, :library_path_id])
-    |> validate_one_parent()
+    |> validate_parent_association()
     |> validate_library_type_compatibility()
     |> validate_number(:size, greater_than: 0)
     |> validate_number(:bitrate, greater_than: 0)
-    |> check_constraint(:media_item_id,
-      name: :media_files_parent_check,
-      message: "cannot set both media_item_id and episode_id"
-    )
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:quality_profile_id)
@@ -108,8 +104,8 @@ defmodule Mydia.Library.MediaFile do
 
   @doc """
   Changeset for creating a media file during library scanning.
-  Parent association (media_item_id or episode_id) is optional during initial creation
-  and will be set later during metadata enrichment.
+  Allows media_item_id to be nil temporarily — the scanner resolves the
+  parent before insert, but some paths (adult, specialized) may not have one yet.
   """
   def scan_changeset(media_file, attrs) do
     media_file
@@ -136,42 +132,24 @@ defmodule Mydia.Library.MediaFile do
       :trashed_at
     ])
     |> validate_required([:relative_path, :library_path_id])
-    |> validate_parent_exclusivity()
     |> validate_library_type_compatibility()
     |> validate_number(:size, greater_than: 0)
     |> validate_number(:bitrate, greater_than: 0)
-    |> check_constraint(:media_item_id,
-      name: :media_files_parent_check,
-      message: "cannot set both media_item_id and episode_id"
-    )
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
   end
 
-  # Ensure either media_item_id or episode_id is set, but not both
-  # Exception: specialized library types (music, books, adult) allow both to be nil
-  defp validate_one_parent(changeset) do
+  # Validates that media_item_id is set for standard (non-specialized) libraries
+  defp validate_parent_association(changeset) do
     media_item_id = get_field(changeset, :media_item_id)
-    episode_id = get_field(changeset, :episode_id)
     library_path_id = get_field(changeset, :library_path_id)
 
-    cond do
-      # Both are nil - check if this is a specialized library type
-      is_nil(media_item_id) and is_nil(episode_id) ->
-        if specialized_library?(library_path_id) do
-          # Specialized libraries (music, books, adult) don't require media_item/episode
-          changeset
-        else
-          add_error(changeset, :media_item_id, "either media_item_id or episode_id must be set")
-        end
-
-      not is_nil(media_item_id) and not is_nil(episode_id) ->
-        add_error(changeset, :media_item_id, "cannot set both media_item_id and episode_id")
-
-      true ->
-        changeset
+    if is_nil(media_item_id) and not specialized_library?(library_path_id) do
+      add_error(changeset, :media_item_id, "is required")
+    else
+      changeset
     end
   end
 
@@ -185,19 +163,6 @@ defmodule Mydia.Library.MediaFile do
     end
   end
 
-  # Ensure both media_item_id and episode_id are not set at the same time
-  # (allows both to be nil for orphaned files during scanning)
-  defp validate_parent_exclusivity(changeset) do
-    media_item_id = get_field(changeset, :media_item_id)
-    episode_id = get_field(changeset, :episode_id)
-
-    if not is_nil(media_item_id) and not is_nil(episode_id) do
-      add_error(changeset, :media_item_id, "cannot set both media_item_id and episode_id")
-    else
-      changeset
-    end
-  end
-
   # Validates that the media type is compatible with the library path type
   defp validate_library_type_compatibility(changeset) do
     media_item_id = get_field(changeset, :media_item_id)
@@ -208,14 +173,10 @@ defmodule Mydia.Library.MediaFile do
     if is_nil(library_path_id) do
       changeset
     else
-      # Check if this is a specialized library type
       if specialized_library?(library_path_id) do
-        # For specialized libraries, we don't need media_item/episode validation
-        # Files can exist without associations in music, books, adult libraries
         changeset
       else
-        # For standard video libraries, validate media type compatibility
-        # Only validate if parent association is set (orphaned files are allowed)
+        # Only validate if we have a parent to check against
         if is_nil(media_item_id) and is_nil(episode_id) do
           changeset
         else

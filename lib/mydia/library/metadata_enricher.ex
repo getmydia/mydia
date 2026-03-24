@@ -54,9 +54,8 @@ defmodule Mydia.Library.MetadataEnricher do
       # Check if media item already exists
       case get_or_create_media_item(provider_id, media_type, match_result, config) do
         {:ok, media_item} ->
-          # Associate media file with media_item for movies only
-          # For TV shows, files are associated with episodes instead
-          if media_file_id && media_type == :movie do
+          # Associate media file with its parent media_item (all types)
+          if media_file_id do
             associate_media_file(media_item, media_file_id)
           end
 
@@ -434,7 +433,10 @@ defmodule Mydia.Library.MetadataEnricher do
       Mydia.Library.get_media_file!(media_file_id)
       |> Mydia.Repo.preload(:library_path)
 
-    case Mydia.Library.update_media_file(media_file, %{episode_id: episode.id}) do
+    case Mydia.Library.update_media_file(media_file, %{
+           media_item_id: episode.media_item_id,
+           episode_id: episode.id
+         }) do
       {:ok, _updated_file} ->
         Logger.debug("Associated file with episode",
           episode_id: episode.id,

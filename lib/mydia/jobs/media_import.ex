@@ -962,20 +962,20 @@ defmodule Mydia.Jobs.MediaImport do
       }
     }
 
-    # Use the episode parameter if provided, otherwise fall back to download associations
-    # For specialized libraries (music, books, adult), there may be no media_item/episode
+    # Resolve parent associations — media_item_id is always required
+    # episode_id is optional (set for TV show files when the episode is known)
     attrs =
       cond do
         episode && episode.id ->
           Map.merge(attrs, %{
             episode_id: episode.id,
-            media_item_id: nil
+            media_item_id: episode.media_item_id
           })
 
-        download.episode_id ->
+        download.episode_id && download.episode ->
           Map.merge(attrs, %{
             episode_id: download.episode_id,
-            media_item_id: nil
+            media_item_id: download.episode.media_item_id
           })
 
         download.media_item_id ->

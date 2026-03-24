@@ -191,8 +191,6 @@ config :logger, :default_formatter,
     :failed_count,
     :items_processed,
     :shows_processed,
-    :orphaned_files_fixed,
-    :tv_orphans_fixed,
     # Search and matching metadata
     :query,
     :score,

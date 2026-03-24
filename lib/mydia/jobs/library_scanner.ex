@@ -511,7 +511,9 @@ defmodule Mydia.Jobs.LibraryScanner do
       batch_size: batch_size
     )
 
-    # Process new files in batches
+    # Process new files: match → create with parent → enrich
+    # Each file is matched using the existing MetadataMatcher pipeline before creation,
+    # ensuring every MediaFile has a media_item_id from the start.
     new_media_files =
       regular_new_files
       |> Enum.chunk_every(batch_size)
@@ -537,66 +539,39 @@ defmodule Mydia.Jobs.LibraryScanner do
            }}
         )
 
-        # Process batch in a transaction
-        {:ok, batch_results} =
-          Repo.transaction(fn ->
-            Enum.map(batch, fn file_info ->
-              # Calculate relative path from library root
-              relative_path = Path.relative_to(file_info.path, library_path.path)
+        Enum.map(batch, fn file_info ->
+          relative_path = Path.relative_to(file_info.path, library_path.path)
 
-              # Check if a trashed file with the same path exists — restore it instead of creating a duplicate
-              case Library.get_media_file_by_relative_path(
-                     library_path.id,
-                     relative_path,
-                     include_trashed: true
-                   ) do
-                %{trashed_at: trashed_at} = trashed_file when not is_nil(trashed_at) ->
-                  case Library.restore_media_file(trashed_file) do
-                    {:ok, restored_file} ->
-                      Logger.info("Restored trashed media file",
-                        path: file_info.path,
-                        relative_path: relative_path
-                      )
+          # Check if a trashed file with the same path exists — restore it instead of creating a duplicate
+          case Library.get_media_file_by_relative_path(
+                 library_path.id,
+                 relative_path,
+                 include_trashed: true
+               ) do
+            %{trashed_at: trashed_at} = trashed_file when not is_nil(trashed_at) ->
+              case Library.restore_media_file(trashed_file) do
+                {:ok, restored_file} ->
+                  Logger.info("Restored trashed media file",
+                    path: file_info.path,
+                    relative_path: relative_path
+                  )
 
-                      {:ok, restored_file, file_info}
+                  {:ok, restored_file, file_info}
 
-                    {:error, _reason} ->
-                      Logger.error("Failed to restore trashed media file",
-                        path: file_info.path,
-                        relative_path: relative_path
-                      )
+                {:error, _reason} ->
+                  Logger.error("Failed to restore trashed media file",
+                    path: file_info.path,
+                    relative_path: relative_path
+                  )
 
-                      {:error, file_info}
-                  end
-
-                _ ->
-                  case Library.create_scanned_media_file(%{
-                         library_path_id: library_path.id,
-                         relative_path: relative_path,
-                         size: file_info.size,
-                         verified_at: DateTime.utc_now()
-                       }) do
-                    {:ok, media_file} ->
-                      Logger.debug("Added new media file",
-                        path: file_info.path,
-                        relative_path: relative_path
-                      )
-
-                      {:ok, media_file, file_info}
-
-                    {:error, changeset} ->
-                      Logger.error("Failed to create media file",
-                        path: file_info.path,
-                        errors: inspect(changeset.errors)
-                      )
-
-                      {:error, file_info}
-                  end
+                  {:error, file_info}
               end
-            end)
-          end)
 
-        batch_results
+            _ ->
+              # No existing file — create new, but only if we can resolve a parent
+              create_matched_media_file(file_info, relative_path, library_path)
+          end
+        end)
       end)
 
     # Process modified files in batches
@@ -692,146 +667,22 @@ defmodule Mydia.Jobs.LibraryScanner do
       end)
     end)
 
-    # Prepare result for metadata enrichment
+    # Matching and enrichment already happened during file creation above.
+    # Build result for downstream cleanup code.
     result = %{changes: changes, scan_result: scan_result, new_media_files: new_media_files}
 
-    # Get metadata provider config
-    metadata_config = Metadata.default_relay_config()
-
-    # Process metadata enrichment for new files in parallel (outside transaction)
-    # Use Task.async_stream for concurrency with back-pressure
-    total_to_enrich = Enum.count(result.new_media_files, &match?({:ok, _, _}, &1))
-
-    Logger.info("Starting metadata enrichment",
-      total_files: total_to_enrich,
-      max_concurrency: 10
-    )
-
-    enrichment_results =
-      result.new_media_files
-      |> Enum.filter(&match?({:ok, _, _}, &1))
-      |> Stream.with_index()
-      |> Task.async_stream(
-        fn {{:ok, media_file, file_info}, index} ->
-          # Broadcast progress every 10 files
-          if rem(index, 10) == 0 do
-            Phoenix.PubSub.broadcast(
-              Mydia.PubSub,
-              "library_scanner",
-              {:library_scan_progress,
-               %{
-                 library_path_id: library_path.id,
-                 stage: :enriching_metadata,
-                 current: index,
-                 total: total_to_enrich
-               }}
-            )
-          end
-
-          # Try to parse, match, and enrich the file
-          process_result = process_media_file(media_file, file_info, metadata_config)
-          {media_file, process_result}
-        end,
-        max_concurrency: 10,
-        timeout: :infinity,
-        on_timeout: :kill_task
-      )
-      |> Enum.map(fn
-        {:ok, result} ->
-          result
-
-        {:exit, reason} ->
-          Logger.warning("Metadata enrichment task crashed", reason: inspect(reason))
-          nil
-      end)
-      |> Enum.reject(&is_nil/1)
-
-    # Count type mismatches in new files
+    # Count type mismatches from the new file results
     type_mismatch_count =
-      Enum.count(enrichment_results, fn {_file, result} ->
-        result == {:error, :library_type_mismatch}
-      end)
+      Enum.count(new_media_files, &match?({:error, :library_type_mismatch, _}, &1))
 
     # Initialize tracking for robust cleanup operations
     cleanup_stats = %{
-      orphaned_files_fixed: 0,
-      tv_orphans_fixed: 0,
       associations_updated: 0,
       invalid_paths_removed: 0,
       type_mismatches_detected: type_mismatch_count,
       movies_in_series_libs: 0,
       tv_in_movies_libs: 0
     }
-
-    # 1. Re-enrich completely orphaned files (no media_item_id and no episode_id)
-    # Skip extras/samples/trailers — they should remain orphaned
-    completely_orphaned =
-      existing_files
-      |> Enum.filter(fn file ->
-        is_nil(file.media_item_id) and is_nil(file.episode_id)
-      end)
-      |> Enum.reject(fn file ->
-        file = Mydia.Repo.preload(file, :library_path)
-        abs_path = Mydia.Library.MediaFile.absolute_path(file)
-
-        not SampleDetector.skip_detection?(abs_path) and
-          SampleDetector.excluded?(SampleDetector.detect(abs_path))
-      end)
-
-    cleanup_stats =
-      if completely_orphaned != [] do
-        Logger.info("Re-enriching completely orphaned files",
-          count: length(completely_orphaned)
-        )
-
-        fixed_count =
-          Enum.count(completely_orphaned, fn media_file ->
-            # Preload library_path association for path resolution
-            media_file = Mydia.Repo.preload(media_file, :library_path)
-            absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-            file_info =
-              Enum.find(result.scan_result.files, fn f -> f.path == absolute_path end)
-
-            if file_info do
-              Logger.debug("Re-enriching orphaned file", path: absolute_path)
-              process_media_file(media_file, file_info, metadata_config)
-              true
-            else
-              false
-            end
-          end)
-
-        Map.put(cleanup_stats, :orphaned_files_fixed, fixed_count)
-      else
-        cleanup_stats
-      end
-
-    # 2. Fix orphaned TV show files (have media_item_id for TV show but no episode_id)
-    # Preload media_item to check type
-    tv_orphaned_files =
-      existing_files
-      |> Repo.preload(:media_item)
-      |> Enum.filter(fn file ->
-        not is_nil(file.media_item_id) and
-          is_nil(file.episode_id) and
-          file.media_item != nil and
-          file.media_item.type == "tv_show"
-      end)
-
-    cleanup_stats =
-      if tv_orphaned_files != [] do
-        Logger.info("Fixing orphaned TV show files", count: length(tv_orphaned_files))
-
-        fixed_count =
-          Enum.count(tv_orphaned_files, fn media_file ->
-            fix_orphaned_tv_file(media_file, metadata_config)
-          end)
-
-        Map.put(cleanup_stats, :tv_orphans_fixed, fixed_count)
-      else
-        cleanup_stats
-      end
 
     # 3. Re-validate file associations for TV shows
     # Check if season/episode info changed by re-parsing filenames
@@ -910,13 +761,10 @@ defmodule Mydia.Jobs.LibraryScanner do
       Map.put(cleanup_stats, :invalid_paths_removed, length(result.changes.deleted_files))
 
     # Log cleanup summary
-    if cleanup_stats.orphaned_files_fixed > 0 or cleanup_stats.tv_orphans_fixed > 0 or
-         cleanup_stats.associations_updated > 0 or cleanup_stats.invalid_paths_removed > 0 or
+    if cleanup_stats.associations_updated > 0 or cleanup_stats.invalid_paths_removed > 0 or
          cleanup_stats.type_mismatches_detected > 0 or cleanup_stats.movies_in_series_libs > 0 or
          cleanup_stats.tv_in_movies_libs > 0 do
       Logger.info("Cleanup summary",
-        orphaned_files_fixed: cleanup_stats.orphaned_files_fixed,
-        tv_orphans_fixed: cleanup_stats.tv_orphans_fixed,
         associations_updated: cleanup_stats.associations_updated,
         invalid_paths_removed: cleanup_stats.invalid_paths_removed,
         type_mismatches_detected: cleanup_stats.type_mismatches_detected,
@@ -950,8 +798,6 @@ defmodule Mydia.Jobs.LibraryScanner do
          new_files: length(result.changes.new_files),
          modified_files: length(result.changes.modified_files),
          deleted_files: length(result.changes.deleted_files),
-         orphaned_files_fixed: Map.get(cleanup_stats, :orphaned_files_fixed, 0),
-         tv_orphans_fixed: Map.get(cleanup_stats, :tv_orphans_fixed, 0),
          associations_updated: Map.get(cleanup_stats, :associations_updated, 0),
          invalid_paths_removed: Map.get(cleanup_stats, :invalid_paths_removed, 0),
          type_mismatches_detected: Map.get(cleanup_stats, :type_mismatches_detected, 0),
@@ -976,26 +822,105 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   defp updatable_library_path?(_), do: true
 
-  defp process_media_file(media_file, file_info, metadata_config) do
-    Logger.debug("Processing media file for metadata", path: file_info.path)
-
-    # Load library_path to check type restrictions
-    media_file = Repo.preload(media_file, :library_path)
-    library_path = media_file.library_path
-
-    # Early validation: check if file type is compatible with library type
-    # Parse the file using full path to leverage folder structure for TV shows
-    # This ensures files in "/media/tv/Show Name/Season XX/" are correctly identified
+  # Creates a new media file only after successfully matching it to a local MediaItem.
+  # Uses the existing MetadataMatcher + MetadataEnricher pipeline — no duplicated logic.
+  # Returns {:ok, media_file, file_info} | {:error, reason, file_info} | {:skipped, file_info}
+  defp create_matched_media_file(file_info, relative_path, library_path) do
+    metadata_config = Metadata.default_relay_config()
     parsed = FileParser.parse_with_path(file_info.path)
 
-    case validate_file_type_for_library(parsed.type, library_path, file_info.path) do
-      :ok ->
-        # Type is compatible, proceed with matching
-        match_file_to_existing_items(media_file, file_info, metadata_config, parsed)
+    with :ok <- validate_file_type_for_library(parsed.type, library_path, file_info.path),
+         {:ok, match_result} <- match_to_local_item(file_info.path, metadata_config),
+         {:ok, media_item} <- enrich_match(match_result, metadata_config, file_info.path) do
+      # Create file with media_item_id set
+      case Library.create_scanned_media_file(%{
+             library_path_id: library_path.id,
+             relative_path: relative_path,
+             media_item_id: media_item.id,
+             size: file_info.size,
+             verified_at: DateTime.utc_now()
+           }) do
+        {:ok, media_file} ->
+          Logger.info("Created matched media file",
+            path: file_info.path,
+            media_item: media_item.title,
+            media_item_id: media_item.id
+          )
 
-      {:error, _reason} = error ->
-        # Type mismatch, skip processing
-        error
+          # For TV shows, associate with episode using existing enricher
+          if media_item.type == "tv_show" and Map.has_key?(match_result, :parsed_info) do
+            MetadataEnricher.enrich(
+              Map.put(match_result, :media_file_id, media_file.id),
+              config: metadata_config,
+              fetch_episodes: true
+            )
+          end
+
+          {:ok, media_file, file_info}
+
+        {:error, changeset} ->
+          Logger.error("Failed to create media file",
+            path: file_info.path,
+            errors: inspect(changeset.errors)
+          )
+
+          {:error, file_info}
+      end
+    else
+      {:error, :library_type_mismatch} ->
+        {:error, :library_type_mismatch, file_info}
+
+      {:skip, _reason} ->
+        {:skipped, file_info}
+    end
+  rescue
+    error ->
+      Logger.error("Exception creating matched media file",
+        path: file_info.path,
+        error: Exception.message(error)
+      )
+
+      {:error, file_info}
+  end
+
+  # Matches a file to a local DB item using the existing MetadataMatcher pipeline.
+  # Returns {:ok, match_result} for local matches, {:skip, reason} otherwise.
+  defp match_to_local_item(file_path, metadata_config) do
+    case MetadataMatcher.match_file(file_path, config: metadata_config) do
+      {:ok, match_result} ->
+        if Map.get(match_result, :from_local_db, false) do
+          {:ok, match_result}
+        else
+          Logger.info("Skipping file (external match only, use Import page)",
+            path: file_path,
+            title: match_result.title
+          )
+
+          {:skip, :external_match_only}
+        end
+
+      {:error, reason} ->
+        Logger.info("Skipping unmatched file", path: file_path, reason: reason)
+        {:skip, reason}
+    end
+  end
+
+  # Enriches a match result to get/create the MediaItem.
+  defp enrich_match(match_result, metadata_config, file_path) do
+    case MetadataEnricher.enrich(match_result, config: metadata_config) do
+      {:ok, media_item} ->
+        {:ok, media_item}
+
+      {:error, {:library_type_mismatch, _}} ->
+        {:error, :library_type_mismatch}
+
+      {:error, reason} ->
+        Logger.warning("Failed to enrich — skipping file",
+          path: file_path,
+          reason: reason
+        )
+
+        {:skip, reason}
     end
   end
 
@@ -1045,104 +970,6 @@ defmodule Mydia.Jobs.LibraryScanner do
     end
   end
 
-  defp match_file_to_existing_items(media_file, file_info, metadata_config, _parsed) do
-    # Try to match the file to metadata
-    case MetadataMatcher.match_file(file_info.path, config: metadata_config) do
-      {:ok, match_result} ->
-        Logger.info("Matched media file",
-          path: file_info.path,
-          title: match_result.title,
-          provider_id: match_result.provider_id,
-          confidence: match_result.match_confidence,
-          from_local_db: Map.get(match_result, :from_local_db, false)
-        )
-
-        # Only enrich if the match is from the local database
-        # This prevents creating new MediaItems - we only want to associate files
-        # with MediaItems that already exist in the database
-        if Map.get(match_result, :from_local_db, false) do
-          # Enrich with full metadata - this will update the existing item
-          # and associate the file with it
-          case MetadataEnricher.enrich(match_result,
-                 config: metadata_config,
-                 media_file_id: media_file.id
-               ) do
-            {:ok, media_item} ->
-              Logger.info("Associated file with existing media item",
-                media_item_id: media_item.id,
-                title: media_item.title,
-                path: file_info.path
-              )
-
-              {:ok, :enriched}
-
-            {:error, {:library_type_mismatch, message}} ->
-              Logger.warning("Library type mismatch detected",
-                path: file_info.path,
-                error: message
-              )
-
-              {:error, :library_type_mismatch}
-
-            {:error, reason} ->
-              Logger.warning("Failed to enrich media",
-                path: file_info.path,
-                reason: reason
-              )
-
-              {:error, :enrichment_failed}
-          end
-        else
-          # External match found, but we don't want to create new items
-          # The file will remain orphaned until the user imports it via the Import page
-          Logger.info("Skipping external match - file will remain orphaned for manual import",
-            path: file_info.path,
-            title: match_result.title,
-            provider_id: match_result.provider_id
-          )
-
-          {:error, :no_local_match}
-        end
-
-      {:error, :unknown_media_type} ->
-        Logger.debug("Could not determine media type",
-          path: file_info.path
-        )
-
-        {:error, :unknown_media_type}
-
-      {:error, :no_matches_found} ->
-        Logger.info("No metadata matches found - file will remain orphaned",
-          path: file_info.path
-        )
-
-        {:error, :no_matches_found}
-
-      {:error, :low_confidence_match} ->
-        Logger.info("Only low confidence matches found - file will remain orphaned",
-          path: file_info.path
-        )
-
-        {:error, :low_confidence_match}
-
-      {:error, reason} ->
-        Logger.warning("Failed to match media file",
-          path: file_info.path,
-          reason: reason
-        )
-
-        {:error, reason}
-    end
-  rescue
-    error ->
-      Logger.error("Exception while processing media file",
-        path: file_info.path,
-        error: Exception.message(error)
-      )
-
-      {:error, :exception}
-  end
-
   # Detects type mismatches in existing files based on library path type
   defp detect_type_mismatches(existing_files, library_path, mismatch_type) do
     # Skip detection for :mixed libraries (they allow both types)
@@ -1167,134 +994,6 @@ defmodule Mydia.Jobs.LibraryScanner do
               file.episode != nil
         end
       end)
-    end
-  end
-
-  # Attempts to fix an orphaned TV show file by matching it to an episode
-  defp fix_orphaned_tv_file(media_file, metadata_config) do
-    try do
-      # Preload library_path association for path resolution
-      media_file = Mydia.Repo.preload(media_file, :library_path)
-      path_for_log = Mydia.Library.MediaFile.absolute_path(media_file)
-
-      Logger.debug("Attempting to fix orphaned TV file",
-        path: path_for_log,
-        media_item_id: media_file.media_item_id
-      )
-
-      # Parse using full path to extract season from folder structure if available
-      # This handles files where filename doesn't contain season info but folder does
-      parsed = FileParser.parse_with_path(path_for_log)
-
-      case parsed do
-        %{type: :tv_show, season: season, episodes: episodes}
-        when not is_nil(season) and not is_nil(episodes) ->
-          # Try to find the episode in the database
-          # For multi-episode files, use the first episode
-          episode_number = List.first(episodes)
-
-          case Mydia.Media.get_episode_by_number(media_file.media_item_id, season, episode_number) do
-            nil ->
-              # Episode doesn't exist yet, try to fetch it from TMDB
-              Logger.info("Episode not found, attempting to fetch from provider",
-                media_item_id: media_file.media_item_id,
-                season: season,
-                episode: episode_number
-              )
-
-              # Fetch the media item to get provider ID
-              media_item = Mydia.Media.get_media_item!(media_file.media_item_id)
-
-              # Prefer tvdb_id for TV shows, fall back to tmdb_id
-              {provider_id, has_tvdb} =
-                cond do
-                  media_item.tvdb_id -> {media_item.tvdb_id, true}
-                  media_item.tmdb_id -> {media_item.tmdb_id, false}
-                  true -> {nil, false}
-                end
-
-              if provider_id do
-                # Pass tvdb_season_id when using TVDB so the relay routes correctly
-                fetch_opts =
-                  if has_tvdb do
-                    # For TVDB we need the season's TVDB ID for proper routing
-                    # We don't have it here, so pass empty opts (relay will use series ID + season number)
-                    []
-                  else
-                    []
-                  end
-
-                # Fetch season data from the appropriate provider
-                case Metadata.fetch_season(
-                       metadata_config,
-                       to_string(provider_id),
-                       season,
-                       fetch_opts
-                     ) do
-                  {:ok, season_data} ->
-                    # Create episodes for this season
-                    create_episodes_from_season(media_item, season_data)
-
-                    # Try to find the episode again
-                    case Mydia.Media.get_episode_by_number(
-                           media_file.media_item_id,
-                           season,
-                           episode_number
-                         ) do
-                      nil ->
-                        Logger.warning("Episode still not found after provider fetch",
-                          media_item_id: media_file.media_item_id,
-                          season: season,
-                          episode: episode_number
-                        )
-
-                        false
-
-                      episode ->
-                        associate_file_with_episode(media_file, episode)
-                    end
-
-                  {:error, reason} ->
-                    Logger.warning("Failed to fetch season from provider",
-                      media_item_id: media_file.media_item_id,
-                      season: season,
-                      reason: reason
-                    )
-
-                    false
-                end
-              else
-                Logger.warning("Media item has no provider ID, cannot fetch episodes",
-                  media_item_id: media_file.media_item_id
-                )
-
-                false
-              end
-
-            episode ->
-              # Episode exists, associate the file with it
-              associate_file_with_episode(media_file, episode)
-          end
-
-        _ ->
-          Logger.debug("Could not parse season/episode info from filename",
-            path: path_for_log
-          )
-
-          false
-      end
-    rescue
-      error ->
-        # Recalculate path for error logging if media_file hasn't been preloaded yet
-        media_file = Mydia.Repo.preload(media_file, :library_path, force: true)
-        error_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-        Logger.error("Exception while fixing orphaned TV file",
-          path: error_path,
-          error: Exception.message(error)
-        )
-
-        false
     end
   end
 
@@ -1382,62 +1081,5 @@ defmodule Mydia.Jobs.LibraryScanner do
       )
 
       false
-  end
-
-  # Associates a media file with an episode
-  # For TV shows, files should have episode_id set, not media_item_id
-  # So we need to clear media_item_id when setting episode_id
-  defp associate_file_with_episode(media_file, episode) do
-    try do
-      # Preload library_path association for path resolution
-      media_file = Mydia.Repo.preload(media_file, :library_path)
-      path_for_log = Mydia.Library.MediaFile.absolute_path(media_file)
-
-      case Library.update_media_file(media_file, %{episode_id: episode.id, media_item_id: nil}) do
-        {:ok, _updated_file} ->
-          Logger.info("Associated file with episode",
-            path: path_for_log,
-            episode: "S#{episode.season_number}E#{episode.episode_number}"
-          )
-
-          true
-
-        {:error, reason} ->
-          Logger.error("Failed to associate file with episode",
-            path: path_for_log,
-            reason: inspect(reason)
-          )
-
-          false
-      end
-    rescue
-      error ->
-        # Recalculate path for error logging
-        media_file = Mydia.Repo.preload(media_file, :library_path, force: true)
-        error_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-        Logger.error("Exception while associating file with episode",
-          path: error_path,
-          error: Exception.message(error)
-        )
-
-        false
-    end
-  end
-
-  # Creates/updates episodes from season data using the consolidated function
-  defp create_episodes_from_season(media_item, season_data) do
-    {:ok, count} = Mydia.Media.upsert_episodes_from_season(media_item, season_data)
-
-    Logger.debug("Upserted #{count} episodes from season data",
-      media_item_id: media_item.id,
-      season: season_data.season_number
-    )
-  rescue
-    error ->
-      Logger.error("Exception while creating episodes from season data",
-        media_item_id: media_item.id,
-        error: Exception.message(error)
-      )
   end
 end

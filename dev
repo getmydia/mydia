@@ -9,7 +9,8 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+DIM='\033[2m'
+NC='\033[0m'
 
 # Configuration
 COMPOSE_FILE="compose.yml"
@@ -233,39 +234,36 @@ run_step() {
 }
 
 # Run a single precommit step for tests (extracts summary on success)
-# Usage: run_step_test <label> <command>
 run_step_test() {
     local label="$1"
     local cmd="$2"
-    local output
     local exit_code
+    local output_file
+    output_file=$(mktemp /tmp/mydia-test-output-XXXXXX.log)
 
-    printf "  %-30s" "$label"
+    printf "  %-30s " "$label"
+    echo -e "${DIM}(output → $output_file)${NC}"
     local start_time=$SECONDS
-    output=$(eval "$cmd" 2>&1)
+    eval "$cmd" > "$output_file" 2>&1
     exit_code=$?
     local elapsed=$(( SECONDS - start_time ))
 
     if [ $exit_code -eq 0 ]; then
-        # Extract test summary line (e.g., "186 tests, 0 failures")
         local summary
-        summary=$(echo "$output" | grep -oE '[0-9]+ tests?, [0-9]+ failures?' | tail -1)
+        summary=$(grep -oE '[0-9]+ tests?, [0-9]+ failures?' "$output_file" | tail -1)
         if [ -n "$summary" ]; then
-            echo -e "${GREEN}✓${NC} $summary (${elapsed}s)"
+            echo -e "  ${GREEN}✓ $label${NC} — $summary (${elapsed}s)"
         else
-            echo -e "${GREEN}✓${NC} ${elapsed}s"
+            echo -e "  ${GREEN}✓ $label${NC} (${elapsed}s)"
         fi
+        rm -f "$output_file"
     else
-        echo -e "${RED}✗${NC} ${elapsed}s"
-        # Save full output to temp file for inspection
-        local full_output_file
-        full_output_file=$(mktemp /tmp/mydia-test-output-XXXXXX.log)
-        echo "$output" > "$full_output_file"
-        # Extract only failure blocks and summary, stripping noise
+        echo -e "  ${RED}✗ $label${NC} (${elapsed}s)"
+        echo -e "  ${DIM}Full output: $output_file${NC}"
         local filtered
-        filtered=$(echo "$output" | sed 's/\x1b\[[0-9;]*m//g' | sed -n '/^  [0-9]\+) /,/^$/p; /^Finished in/p; /^[0-9]\+ tests\?/p')
+        filtered=$(sed 's/\x1b\[[0-9;]*m//g' "$output_file" | sed -n '/^  [0-9]\+) /,/^$/p; /^Finished in/p; /^[0-9]\+ tests\?/p')
         FAILED_STEPS+=("$label")
-        FAILED_OUTPUTS+=("$(printf '%s\n\nFull output: %s' "$filtered" "$full_output_file")")
+        FAILED_OUTPUTS+=("$(printf '%s\n\nFull output: %s' "$filtered" "$output_file")")
     fi
 
     return $exit_code

@@ -41,7 +41,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       matched: 0,
       unmatched: 0,
       skipped: 0,
-      orphaned: 0,
       type_filtered: 0,
       sample_filtered: 0
     })
@@ -425,7 +424,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         matched: 0,
         unmatched: 0,
         skipped: 0,
-        orphaned: 0,
         type_filtered: 0
       })
       |> assign(:import_progress, %{current: 0, total: 0, current_file: nil})
@@ -1180,48 +1178,22 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_info({:scan_complete, {:ok, scan_result}}, socket) do
-    # Get existing files from database (preload library_path for absolute_path resolution)
-    # Only skip files that have valid parent associations (not orphaned)
-    # Exception: specialized library files (adult, music, books) don't have parent associations
+    # Get existing file paths to skip files already in the database
     existing_files = Library.list_media_files(preload: [:library_path])
 
-    existing_valid_paths =
+    existing_paths =
       existing_files
-      |> Enum.reject(&orphaned_non_specialized_file?/1)
       |> Enum.map(&MediaFile.absolute_path/1)
       |> Enum.reject(&is_nil/1)
       |> MapSet.new()
 
-    # Build map of orphaned files for re-matching (only non-specialized libraries)
-    orphaned_files_map =
-      existing_files
-      |> Enum.filter(&orphaned_non_specialized_file?/1)
-      |> Enum.map(fn file ->
-        case MediaFile.absolute_path(file) do
-          nil -> nil
-          abs_path -> {abs_path, file}
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-      |> Map.new()
-
-    # Filter out files that already have valid associations
-    # Include orphaned files for re-matching
-    new_files =
-      Enum.reject(scan_result.files, fn file ->
-        MapSet.member?(existing_valid_paths, file.path)
-      end)
-
-    # Track which files are orphaned (for re-matching)
+    # Filter out files that already exist in the database
     files_to_match =
-      Enum.map(new_files, fn file ->
-        orphaned_file = Map.get(orphaned_files_map, file.path)
-
-        Map.put(file, :orphaned_media_file_id, orphaned_file && orphaned_file.id)
+      Enum.reject(scan_result.files, fn file ->
+        MapSet.member?(existing_paths, file.path)
       end)
 
-    skipped_count = length(scan_result.files) - length(new_files)
-    orphaned_count = map_size(orphaned_files_map)
+    skipped_count = length(scan_result.files) - length(files_to_match)
 
     # Start matching files
     send(self(), {:match_files, files_to_match})
@@ -1238,8 +1210,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          total: length(files_to_match),
          matched: 0,
          unmatched: 0,
-         skipped: skipped_count,
-         orphaned: orphaned_count
+         skipped: skipped_count
        }
      )}
   end
@@ -1430,15 +1401,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp specialized_library?(nil), do: false
   defp specialized_library?(%{type: type}), do: type in [:music, :books, :adult]
 
-  # Checks if a media file is orphaned AND belongs to a non-specialized library.
-  # Files in specialized libraries (adult, music, books) are expected to not have
-  # parent associations (media_item_id/episode_id), so they should not be considered
-  # orphaned for re-matching purposes.
-  defp orphaned_non_specialized_file?(%MediaFile{} = media_file) do
-    Library.orphaned_media_file?(media_file) and
-      not specialized_library?(media_file.library_path)
-  end
-
   # Handle files for specialized libraries (music, books, adult)
   # These don't need metadata matching - just create a simple file listing
   defp handle_specialized_library_files(files, socket) do
@@ -1585,7 +1547,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       if session.scan_stats && session.scan_stats != %{} do
         atomize_keys(session.scan_stats)
       else
-        %{total: 0, matched: 0, unmatched: 0, skipped: 0, orphaned: 0, type_filtered: 0}
+        %{total: 0, matched: 0, unmatched: 0, skipped: 0, type_filtered: 0}
       end
     )
     |> assign(:library_paths, library_paths)
@@ -1855,48 +1817,42 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   defp import_file_with_details(%{file: file, match_result: match_result}, config) do
-    # Check if this file is orphaned and needs re-matching
-    media_file_result =
-      if file[:orphaned_media_file_id] do
-        # Use existing orphaned media file - don't update it yet
-        # The enricher will handle associating it with the media item
-        try do
-          media_file = Library.get_media_file!(file.orphaned_media_file_id)
-          {:ok, media_file}
-        rescue
-          _ -> {:error, :not_found}
-        end
-      else
-        # Create new media file record with relative path
-        # Find matching library_path and calculate relative_path
+    # Step 1: Enrich first to get/create the MediaItem
+    case Library.MetadataEnricher.enrich(match_result, config: config) do
+      {:ok, media_item} ->
+        # Step 2: Create the MediaFile with media_item_id set
         library_paths = Settings.list_library_paths()
 
         {library_path_id, relative_path} =
           calculate_relative_path_for_import(file.path, library_paths)
 
-        Library.create_scanned_media_file(%{
-          relative_path: relative_path,
-          library_path_id: library_path_id,
-          size: file.size,
-          verified_at: DateTime.utc_now()
-        })
-      end
+        media_file_result =
+          Library.create_scanned_media_file(%{
+            relative_path: relative_path,
+            library_path_id: library_path_id,
+            media_item_id: media_item.id,
+            size: file.size,
+            verified_at: DateTime.utc_now()
+          })
 
-    case media_file_result do
-      {:ok, media_file} ->
-        # Enrich with metadata
-        case Library.MetadataEnricher.enrich(match_result,
-               config: config,
-               media_file_id: media_file.id
-             ) do
-          {:ok, media_item} ->
+        case media_file_result do
+          {:ok, media_file} ->
+            # Step 3: For TV shows, associate with episode
+            if media_item.type == "tv_show" and Map.has_key?(match_result, :parsed_info) do
+              Library.MetadataEnricher.enrich(
+                Map.put(match_result, :media_file_id, media_file.id),
+                config: config,
+                fetch_episodes: true
+              )
+            end
+
             %{
               file_path: file.path,
               file_name: Path.basename(file.path),
               status: :success,
               media_item_title: match_result.title,
               error_message: nil,
-              action_taken: build_success_message(match_result, file[:orphaned_media_file_id]),
+              action_taken: "Imported as #{match_result.title}",
               metadata: %{
                 size: file.size,
                 media_item_id: media_item.id,
@@ -1905,27 +1861,27 @@ defmodule MydiaWeb.ImportMediaLive.Index do
               }
             }
 
-          {:error, reason} ->
+          {:error, changeset} ->
+            error_msg = format_changeset_errors_friendly(changeset)
+
             %{
               file_path: file.path,
               file_name: Path.basename(file.path),
               status: :failed,
               media_item_title: match_result.title,
-              error_message: "Failed to enrich metadata: #{format_error(reason)}",
+              error_message: error_msg,
               action_taken: nil,
               metadata: %{size: file.size}
             }
         end
 
-      {:error, changeset} ->
-        error_msg = format_changeset_errors_friendly(changeset)
-
+      {:error, reason} ->
         %{
           file_path: file.path,
           file_name: Path.basename(file.path),
           status: :failed,
           media_item_title: match_result.title,
-          error_message: error_msg,
+          error_message: "Failed to enrich metadata: #{format_error(reason)}",
           action_taken: nil,
           metadata: %{size: file.size}
         }
@@ -1941,23 +1897,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         action_taken: nil,
         metadata: %{size: file.size}
       }
-  end
-
-  defp build_success_message(match_result, _is_orphaned) do
-    media_type =
-      case match_result.parsed_info.type do
-        :tv_show ->
-          if match_result.parsed_info.season do
-            "TV Show S#{String.pad_leading("#{match_result.parsed_info.season}", 2, "0")}"
-          else
-            "TV Show"
-          end
-
-        _ ->
-          "Movie"
-      end
-
-    "Imported #{media_type}: '#{match_result.title}'"
   end
 
   defp library_type_label(:music), do: "Music"

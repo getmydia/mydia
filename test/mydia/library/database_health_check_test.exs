@@ -5,95 +5,6 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
   alias Mydia.Library.MediaFile
   alias Mydia.Settings.LibraryPath
 
-  describe "count_orphaned_files/0" do
-    test "returns 0 when no media files exist" do
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "returns 0 when all files in standard libraries have parent associations" do
-      library_path = create_library_path(:movies)
-      media_item = insert(:media_item, type: "movie")
-
-      insert_media_file(library_path, media_item_id: media_item.id)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "counts orphaned files in movies library" do
-      library_path = create_library_path(:movies)
-
-      # Insert orphaned file (no media_item_id, no episode_id)
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 1
-    end
-
-    test "counts orphaned files in series library" do
-      library_path = create_library_path(:series)
-
-      insert_media_file(library_path)
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 2
-    end
-
-    test "counts orphaned files in mixed library" do
-      library_path = create_library_path(:mixed)
-
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 1
-    end
-
-    test "excludes files from music libraries" do
-      library_path = create_library_path(:music)
-
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "excludes files from books libraries" do
-      library_path = create_library_path(:books)
-
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "excludes files from adult libraries" do
-      library_path = create_library_path(:adult)
-
-      insert_media_file(library_path)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "counts files with episode_id as not orphaned" do
-      library_path = create_library_path(:series)
-      tv_show = insert(:tv_show)
-      episode = insert(:episode, media_item: tv_show)
-
-      insert_media_file(library_path, episode_id: episode.id)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 0
-    end
-
-    test "handles mixed libraries with some orphaned and some associated files" do
-      library_path = create_library_path(:mixed)
-      media_item = insert(:media_item, type: "movie")
-
-      # Two orphaned files
-      insert_media_file(library_path)
-      insert_media_file(library_path)
-
-      # One associated file
-      insert_media_file(library_path, media_item_id: media_item.id)
-
-      assert DatabaseHealthCheck.count_orphaned_files() == 2
-    end
-  end
-
   describe "count_files_missing_library_path/0" do
     test "returns 0 when no media files exist" do
       assert DatabaseHealthCheck.count_files_missing_library_path() == 0
@@ -122,20 +33,12 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
   describe "detect_issues/0" do
     test "returns zero counts when no issues exist" do
       assert %{
-               orphaned_files: 0,
                missing_library_path: 0,
                total_issues: 0
              } = DatabaseHealthCheck.detect_issues()
     end
 
     test "aggregates all issue types correctly" do
-      library_path = create_library_path(:movies)
-
-      # Three orphaned files
-      insert_media_file(library_path)
-      insert_media_file(library_path)
-      insert_media_file(library_path)
-
       # One file missing library_path
       Repo.insert!(%MediaFile{
         relative_path: "orphaned/path.mkv",
@@ -145,9 +48,8 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
 
       issues = DatabaseHealthCheck.detect_issues()
 
-      assert issues.orphaned_files == 3
       assert issues.missing_library_path == 1
-      assert issues.total_issues == 4
+      assert issues.total_issues == 1
     end
   end
 

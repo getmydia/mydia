@@ -170,7 +170,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   ## Attributes
     * `:scanning` - Whether currently scanning
     * `:matching` - Whether currently matching files
-    * `:scan_stats` - Map with stats (`:total`, `:skipped`, `:orphaned`)
+    * `:scan_stats` - Map with stats (`:total`, `:skipped`)
     * `:scan_progress` - Map with real-time scan progress (`:files_found`)
     * `:match_progress` - Map with real-time match progress (`:matched`, `:total`)
   """
@@ -345,7 +345,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   Renders the stats cards for the review screen.
 
   ## Attributes
-    * `:scan_stats` - Map with `:total`, `:matched`, `:unmatched`, `:skipped`, `:orphaned`, `:type_filtered`, `:sample_filtered`
+    * `:scan_stats` - Map with `:total`, `:matched`, `:unmatched`, `:skipped`, `:type_filtered`, `:sample_filtered`
   """
   attr :scan_stats, :map, required: true
 

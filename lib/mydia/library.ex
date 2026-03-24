@@ -506,11 +506,8 @@ defmodule Mydia.Library do
             {:error, :episode_not_found}
 
           episode ->
-            # Update the media file with the episode_id
-            case update_media_file(media_file, %{
-                   media_item_id: nil,
-                   episode_id: episode.id
-                 }) do
+            # Update the media file with the episode_id, keeping media_item_id
+            case update_media_file(media_file, %{episode_id: episode.id}) do
               {:ok, updated_file} ->
                 Logger.debug("Matched file to episode",
                   filename: filename,
@@ -1233,30 +1230,6 @@ defmodule Mydia.Library do
     errors = Enum.filter(results, &match?({:error, _}, &1))
 
     {created_count, errors}
-  end
-
-  @doc """
-  Returns orphaned media files (files without media_item_id or episode_id).
-
-  These files were scanned but failed to match to any media items.
-  They can be safely re-matched or deleted.
-
-  ## Options
-    - `:preload` - List of associations to preload
-  """
-  def list_orphaned_media_files(opts \\ []) do
-    MediaFile
-    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
-    |> where([f], is_nil(f.trashed_at))
-    |> maybe_preload(opts[:preload])
-    |> Repo.all()
-  end
-
-  @doc """
-  Checks if a media file is orphaned (has no parent association).
-  """
-  def orphaned_media_file?(%MediaFile{} = media_file) do
-    is_nil(media_file.media_item_id) and is_nil(media_file.episode_id)
   end
 
   @doc """

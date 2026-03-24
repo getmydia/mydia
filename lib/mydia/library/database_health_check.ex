@@ -4,8 +4,7 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   triggers library re-scans when needed.
 
   Runs on application startup to detect:
-  1. Orphaned media files (no media_item_id or episode_id in standard libraries)
-  2. Media files with relative_path but missing library_path_id
+  1. Media files with relative_path but missing library_path_id
 
   When issues are detected above a threshold, a library re-scan is queued as a
   background job to attempt automatic repair.
@@ -40,7 +39,6 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Library.MediaFile
-  alias Mydia.Settings.LibraryPath
 
   @default_threshold 10
 
@@ -82,40 +80,17 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   Returns a map with issue counts:
 
       %{
-        orphaned_files: 15,
         missing_library_path: 2,
-        total_issues: 17
+        total_issues: 2
       }
   """
   def detect_issues do
-    orphaned_count = count_orphaned_files()
     missing_library_path_count = count_files_missing_library_path()
 
     %{
-      orphaned_files: orphaned_count,
       missing_library_path: missing_library_path_count,
-      total_issues: orphaned_count + missing_library_path_count
+      total_issues: missing_library_path_count
     }
-  end
-
-  @doc """
-  Counts orphaned media files in standard (non-specialized) libraries.
-
-  Orphaned files are those with no `media_item_id` and no `episode_id`.
-  Files in specialized libraries (music, books, adult) are excluded as they
-  don't require parent associations.
-  """
-  def count_orphaned_files do
-    standard_types = [:movies, :series, :mixed]
-
-    from(mf in MediaFile,
-      join: lp in LibraryPath,
-      on: mf.library_path_id == lp.id,
-      where: is_nil(mf.media_item_id) and is_nil(mf.episode_id),
-      where: lp.type in ^standard_types,
-      select: count(mf.id)
-    )
-    |> Repo.one()
   end
 
   @doc """
@@ -201,13 +176,6 @@ defmodule Mydia.Library.DatabaseHealthCheck do
 
   defp log_detected_issues(issues) do
     parts = []
-
-    parts =
-      if issues.orphaned_files > 0 do
-        ["#{issues.orphaned_files} orphaned file(s)" | parts]
-      else
-        parts
-      end
 
     parts =
       if issues.missing_library_path > 0 do
