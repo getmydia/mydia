@@ -889,14 +889,25 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :transcode_jobs, :map, default: %{}
 
   def media_files_section(assigns) do
+    # For TV shows, episode files are already shown in the episodes section.
+    # Only show files not linked to an episode to avoid duplication.
+    files =
+      if assigns.media_item.type == "tv_show" do
+        Enum.filter(assigns.media_item.media_files, &is_nil(&1.episode_id))
+      else
+        assigns.media_item.media_files
+      end
+
+    assigns = assign(assigns, :files, files)
+
     ~H"""
-    <%= if length(@media_item.media_files) > 0 do %>
+    <%= if @files != [] do %>
       <div class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
           <%!-- DaisyUI list component --%>
           <ul class="menu bg-base-100 rounded-box p-0">
-            <li :for={file <- @media_item.media_files}>
+            <li :for={file <- @files}>
               <div class="flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
                 <div class="flex items-start justify-between gap-4">
                   <%!-- Left side: File info --%>
