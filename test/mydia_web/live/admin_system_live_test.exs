@@ -160,5 +160,31 @@ defmodule MydiaWeb.AdminSystemLiveTest do
       assert html =~ ~s{href="/admin/config/library-paths"}
       assert html =~ ~s{href="/admin/config/media-servers"}
     end
+
+    test "hides remote access tab when feature is disabled", %{conn: conn} do
+      original_features = Application.get_env(:mydia, :features, [])
+      Application.put_env(:mydia, :features, Keyword.put(original_features, :remote_access_enabled, false))
+
+      on_exit(fn ->
+        Application.put_env(:mydia, :features, original_features)
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config")
+
+      refute has_element?(view, ~s{a[role="tab"]}, "Remote Access")
+    end
+
+    test "shows remote access tab when feature is enabled", %{conn: conn} do
+      original_features = Application.get_env(:mydia, :features, [])
+      Application.put_env(:mydia, :features, Keyword.put(original_features, :remote_access_enabled, true))
+
+      on_exit(fn ->
+        Application.put_env(:mydia, :features, original_features)
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config")
+
+      assert has_element?(view, ~s{a[role="tab"]}, "Remote Access")
+    end
   end
 end
