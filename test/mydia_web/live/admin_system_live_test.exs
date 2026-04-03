@@ -162,29 +162,30 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
 
     test "hides remote access tab when feature is disabled", %{conn: conn} do
-      original_features = Application.get_env(:mydia, :features, [])
-      Application.put_env(:mydia, :features, Keyword.put(original_features, :remote_access_enabled, false))
+      with_remote_access_feature(false, fn ->
+        {:ok, view, _html} = live(conn, ~p"/admin/config")
 
-      on_exit(fn ->
-        Application.put_env(:mydia, :features, original_features)
+        refute has_element?(view, ~s{a[role="tab"]}, "Remote Access")
       end)
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config")
-
-      refute has_element?(view, ~s{a[role="tab"]}, "Remote Access")
     end
 
     test "shows remote access tab when feature is enabled", %{conn: conn} do
-      original_features = Application.get_env(:mydia, :features, [])
-      Application.put_env(:mydia, :features, Keyword.put(original_features, :remote_access_enabled, true))
+      with_remote_access_feature(true, fn ->
+        {:ok, view, _html} = live(conn, ~p"/admin/config")
 
-      on_exit(fn ->
-        Application.put_env(:mydia, :features, original_features)
+        assert has_element?(view, ~s{a[role="tab"]}, "Remote Access")
       end)
+    end
+  end
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config")
+  defp with_remote_access_feature(enabled, callback) do
+    original_features = Application.get_env(:mydia, :features, [])
+    Application.put_env(:mydia, :features, Keyword.put(original_features, :remote_access_enabled, enabled))
 
-      assert has_element?(view, ~s{a[role="tab"]}, "Remote Access")
+    try do
+      callback.()
+    after
+      Application.put_env(:mydia, :features, original_features)
     end
   end
 end
