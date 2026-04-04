@@ -107,6 +107,45 @@ defmodule Mydia.Settings.QualityMatcher do
   end
 
   def is_upgrade?(%SearchResult{} = result, %QualityProfile{} = profile, current_quality) do
+    is_upgrade?(result, profile, current_quality, nil)
+  end
+
+  @doc """
+  Checks if a result would be an upgrade, with composite score comparison
+  for same-resolution upgrades.
+
+  When `current_score` is provided (a float from 0.0-100.0), same-resolution
+  results are compared by composite quality score. This allows detecting upgrades
+  like 1080p Telesync → 1080p BluRay where the resolution is the same but the
+  overall quality is significantly better.
+
+  The `current_score` should be computed via `QualityProfile.score_media_file/2`
+  on the existing file's attributes.
+
+  ## Examples
+
+      iex> QualityMatcher.is_upgrade?(bluray_result, profile, "1080p", 45.0)
+      true  # BluRay scores higher than the current 45.0 (e.g., telesync)
+
+      iex> QualityMatcher.is_upgrade?(similar_result, profile, "1080p", 80.0)
+      false  # Similar quality, not worth upgrading
+  """
+  @spec is_upgrade?(SearchResult.t(), QualityProfile.t(), String.t() | nil, float() | nil) ::
+          boolean()
+  def is_upgrade?(_result, %QualityProfile{upgrades_allowed: false}, _current_quality, _score) do
+    false
+  end
+
+  def is_upgrade?(%SearchResult{quality: nil}, _profile, _current_quality, _score) do
+    false
+  end
+
+  def is_upgrade?(
+        %SearchResult{} = result,
+        %QualityProfile{} = profile,
+        current_quality,
+        current_score
+      ) do
     result_quality = result.quality.resolution
 
     cond do
@@ -122,9 +161,18 @@ defmodule Mydia.Settings.QualityMatcher do
       profile.upgrade_until_quality && current_quality == profile.upgrade_until_quality ->
         false
 
-      # Compare quality levels
+      # Higher resolution is always an upgrade
+      quality_level(result_quality) > quality_level(current_quality) ->
+        true
+
+      # Same resolution: compare composite scores if current_score is available
+      quality_level(result_quality) == quality_level(current_quality) && current_score != nil ->
+        candidate_score = calculate_score(result, profile)
+        candidate_score > current_score
+
+      # Same or lower resolution without score comparison
       true ->
-        quality_level(result_quality) > quality_level(current_quality)
+        false
     end
   end
 
