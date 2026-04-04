@@ -641,13 +641,16 @@ defmodule Mydia.Downloads do
   defp check_for_duplicate_download(search_result, opts) do
     media_item_id = Keyword.get(opts, :media_item_id)
     episode_id = Keyword.get(opts, :episode_id)
+    download_reason = Keyword.get(opts, :download_reason)
+    # Legacy support: manual: true maps to download_reason: :manual
     manual? = Keyword.get(opts, :manual, false)
+    skip_file_check? = manual? or download_reason in [:manual, :upgrade]
 
     # Always check for active downloads to prevent downloading the same thing twice
     with :ok <- check_for_active_download(search_result, media_item_id, episode_id) do
-      # Skip media file check for manual downloads - the user explicitly chose this release
-      # (they may want to upgrade quality or grab a different version)
-      if manual? do
+      # Skip media file check for manual downloads (user explicitly chose this release)
+      # and upgrade downloads (a file exists by definition - we're replacing it)
+      if skip_file_check? do
         :ok
       else
         check_for_existing_media_files(search_result, media_item_id, episode_id)
@@ -966,6 +969,14 @@ defmodule Mydia.Downloads do
 
     # Create DownloadMetadata struct and convert to map for database storage
     metadata = metadata_attrs |> DownloadMetadata.new() |> DownloadMetadata.to_map()
+
+    # Store download_reason in metadata for post-import processing (e.g., upgrade cleanup)
+    download_reason = Keyword.get(opts, :download_reason)
+
+    metadata =
+      if download_reason,
+        do: Map.put(metadata, "download_reason", to_string(download_reason)),
+        else: metadata
 
     attrs = %{
       indexer: search_result.indexer,
