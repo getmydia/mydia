@@ -430,4 +430,152 @@ defmodule Mydia.Settings.QualityMatcherTest do
       refute QualityMatcher.is_upgrade?(result, profile, "720p")
     end
   end
+
+  describe "is_upgrade?/4 (same-resolution composite scoring)" do
+    setup do
+      profile = %QualityProfile{
+        name: "Test Profile",
+        qualities: ["720p", "1080p", "2160p"],
+        upgrades_allowed: true,
+        upgrade_until_quality: "2160p",
+        quality_standards: %{
+          preferred_video_codecs: ["h265", "h264"],
+          preferred_audio_codecs: ["atmos", "truehd", "ac3", "aac"],
+          preferred_resolutions: ["2160p", "1080p"],
+          preferred_sources: ["BluRay", "REMUX", "WEB-DL", "HDTV"],
+          min_video_bitrate_mbps: 5.0,
+          max_video_bitrate_mbps: 50.0,
+          movie_min_size_mb: 2048,
+          movie_max_size_mb: 15360
+        }
+      }
+
+      {:ok, profile: profile}
+    end
+
+    test "returns true for same-resolution upgrade with higher score (e.g., TS -> BluRay)", %{
+      profile: profile
+    } do
+      # BluRay result at 1080p
+      bluray_result = %SearchResult{
+        title: "Test Movie 2024 1080p BluRay x265 AC3",
+        size: 8 * 1024 * 1024 * 1024,
+        seeders: 100,
+        leechers: 10,
+        download_url: "magnet:?xt=...",
+        indexer: "Test",
+        quality: %QualityInfo{
+          resolution: "1080p",
+          source: "BluRay",
+          codec: "x265",
+          audio: "AC3",
+          hdr: false,
+          proper: false,
+          repack: false
+        }
+      }
+
+      # Current file is a low-quality 1080p telesync (low composite score)
+      low_score = 25.0
+
+      assert QualityMatcher.is_upgrade?(bluray_result, profile, "1080p", low_score)
+    end
+
+    test "returns false for same-resolution with similar or lower score", %{profile: profile} do
+      # Another WEB-DL at 1080p
+      webdl_result = %SearchResult{
+        title: "Test Movie 2024 1080p WEB-DL x264 AAC",
+        size: 4 * 1024 * 1024 * 1024,
+        seeders: 50,
+        leechers: 5,
+        download_url: "magnet:?xt=...",
+        indexer: "Test",
+        quality: %QualityInfo{
+          resolution: "1080p",
+          source: "WEB-DL",
+          codec: "x264",
+          audio: "AAC",
+          hdr: false,
+          proper: false,
+          repack: false
+        }
+      }
+
+      # Current file already has a high score (e.g., already a BluRay)
+      high_score = 90.0
+
+      refute QualityMatcher.is_upgrade?(webdl_result, profile, "1080p", high_score)
+    end
+
+    test "returns false for same-resolution when current_score is nil (falls back to resolution only)",
+         %{profile: profile} do
+      result = %SearchResult{
+        title: "Test Movie 2024 1080p BluRay",
+        size: 8 * 1024 * 1024 * 1024,
+        seeders: 100,
+        leechers: 10,
+        download_url: "magnet:?xt=...",
+        indexer: "Test",
+        quality: %QualityInfo{
+          resolution: "1080p",
+          source: "BluRay",
+          codec: "x265",
+          audio: "AC3",
+          hdr: false,
+          proper: false,
+          repack: false
+        }
+      }
+
+      # Without current_score, same resolution is not an upgrade
+      refute QualityMatcher.is_upgrade?(result, profile, "1080p", nil)
+    end
+
+    test "higher resolution is always an upgrade regardless of score", %{profile: profile} do
+      result_2160p = %SearchResult{
+        title: "Test Movie 2024 2160p WEB-DL",
+        size: 12 * 1024 * 1024 * 1024,
+        seeders: 50,
+        leechers: 5,
+        download_url: "magnet:?xt=...",
+        indexer: "Test",
+        quality: %QualityInfo{
+          resolution: "2160p",
+          source: "WEB-DL",
+          codec: "x264",
+          audio: "AAC",
+          hdr: false,
+          proper: false,
+          repack: false
+        }
+      }
+
+      # Even with a very high current score, higher resolution wins
+      assert QualityMatcher.is_upgrade?(result_2160p, profile, "1080p", 95.0)
+    end
+
+    test "respects upgrades_allowed: false even with score", %{profile: profile} do
+      no_upgrade_profile = %{profile | upgrades_allowed: false}
+
+      result = %SearchResult{
+        title: "Test Movie 2024 1080p BluRay",
+        size: 8 * 1024 * 1024 * 1024,
+        seeders: 100,
+        leechers: 10,
+        download_url: "magnet:?xt=...",
+        indexer: "Test",
+        quality: %QualityInfo{
+          resolution: "1080p",
+          source: "BluRay",
+          codec: "x265",
+          audio: "AC3",
+          hdr: false,
+          proper: false,
+          repack: false
+        }
+      }
+
+      refute QualityMatcher.is_upgrade?(result, no_upgrade_profile, "720p", 30.0)
+    end
+  end
 end
