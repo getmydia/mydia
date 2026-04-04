@@ -198,11 +198,14 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
     if upgrade_results == [] do
       record_backoff(movie, "no_upgrade_available")
 
-      Events.search_no_results(movie, %{
-        "query" => query,
-        "indexers_searched" => Pipeline.count_enabled_indexers(),
-        "actor_id" => "movie_upgrade_search"
-      })
+      Events.search_no_results(
+        movie,
+        %{
+          "query" => query,
+          "indexers_searched" => Pipeline.count_enabled_indexers()
+        },
+        actor_id: "movie_upgrade_search"
+      )
 
       :no_upgrade
     else
@@ -238,14 +241,17 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
       score: score
     )
 
-    Events.search_completed(movie, %{
-      "query" => query,
-      "results_count" => length(results),
-      "selected_release" => best_result.title,
-      "score" => score,
-      "breakdown" => Pipeline.stringify_keys(breakdown),
-      "actor_id" => "movie_upgrade_search"
-    })
+    Events.search_completed(
+      movie,
+      %{
+        "query" => query,
+        "results_count" => length(results),
+        "selected_release" => best_result.title,
+        "score" => score,
+        "breakdown" => Pipeline.stringify_keys(breakdown)
+      },
+      actor_id: "movie_upgrade_search"
+    )
 
     case Pipeline.initiate_download(movie, best_result, download_reason: :upgrade) do
       {:ok, _download} ->

@@ -1121,6 +1121,7 @@ defmodule Mydia.Events do
   """
   def search_completed(media_item, metadata, opts \\ []) do
     episode = opts[:episode]
+    actor_id = opts[:actor_id] || search_actor_id(media_item)
 
     base_metadata =
       %{
@@ -1134,7 +1135,7 @@ defmodule Mydia.Events do
       category: "search",
       type: "search.completed",
       actor_type: :job,
-      actor_id: search_actor_id(media_item),
+      actor_id: actor_id,
       resource_type: resource_type_for_search(episode),
       resource_id: resource_id_for_search(media_item, episode),
       severity: :info,
@@ -1160,6 +1161,7 @@ defmodule Mydia.Events do
   """
   def search_no_results(media_item, metadata, opts \\ []) do
     episode = opts[:episode]
+    actor_id = opts[:actor_id] || search_actor_id(media_item)
 
     base_metadata =
       %{
@@ -1173,7 +1175,7 @@ defmodule Mydia.Events do
       category: "search",
       type: "search.no_results",
       actor_type: :job,
-      actor_id: search_actor_id(media_item),
+      actor_id: actor_id,
       resource_type: resource_type_for_search(episode),
       resource_id: resource_id_for_search(media_item, episode),
       severity: :warning,
