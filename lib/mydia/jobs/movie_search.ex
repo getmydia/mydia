@@ -33,10 +33,11 @@ defmodule Mydia.Jobs.MovieSearch do
 
   import Ecto.Query, warn: false
 
-  alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
+  alias Mydia.{Repo, Media, Indexers, Events, Search}
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
+  alias Mydia.Search.Pipeline
   alias Phoenix.PubSub
 
   defmodule Args do
@@ -81,10 +82,7 @@ defmodule Mydia.Jobs.MovieSearch do
     end
   end
 
-  # Get min_seeders from config (defaults to 0 for Usenet compatibility)
-  defp get_min_seeders do
-    Application.get_env(:mydia, :auto_search, [])[:min_seeders] || 0
-  end
+  defdelegate get_min_seeders, to: Pipeline
 
   @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
@@ -108,7 +106,7 @@ defmodule Mydia.Jobs.MovieSearch do
       results =
         Enum.map(movies, fn movie ->
           result = search_movie(movie, args)
-          apply_search_delay()
+          Pipeline.apply_search_delay()
           result
         end)
 
@@ -215,8 +213,8 @@ defmodule Mydia.Jobs.MovieSearch do
   end
 
   defp search_movie_with_stats(%MediaItem{} = movie, args) do
-    query = build_search_query(movie)
-    indexers_count = count_enabled_indexers()
+    query = Pipeline.build_search_query(movie)
+    indexers_count = Pipeline.count_enabled_indexers()
 
     Logger.info("Searching for movie",
       media_item_id: movie.id,
@@ -281,7 +279,7 @@ defmodule Mydia.Jobs.MovieSearch do
   end
 
   defp process_search_results_with_count(movie, results, args, query) do
-    ranking_opts = build_ranking_options(movie, args)
+    ranking_opts = build_ranking_options_from_args(movie, args)
 
     case ReleaseRanker.select_best_result(results, ranking_opts) do
       nil ->
@@ -295,7 +293,7 @@ defmodule Mydia.Jobs.MovieSearch do
         Events.search_filtered_out(movie, %{
           "query" => query,
           "results_count" => length(results),
-          "filter_stats" => build_filter_stats(results, ranking_opts)
+          "filter_stats" => Pipeline.build_filter_stats(results, ranking_opts)
         })
 
         {:no_results, 0}
@@ -315,7 +313,7 @@ defmodule Mydia.Jobs.MovieSearch do
           "results_count" => length(results),
           "selected_release" => best_result.title,
           "score" => score,
-          "breakdown" => stringify_keys(breakdown)
+          "breakdown" => Pipeline.stringify_keys(breakdown)
         })
 
         case initiate_download(movie, best_result) do
@@ -334,23 +332,6 @@ defmodule Mydia.Jobs.MovieSearch do
             {:no_results, 0}
         end
     end
-  end
-
-  defp count_enabled_indexers do
-    # Count enabled indexers from Settings
-    indexers = Mydia.Settings.list_indexer_configs()
-    enabled_count = Enum.count(indexers, & &1.enabled)
-
-    # Also count Cardigann indexers if feature is enabled
-    cardigann_count =
-      if Application.get_env(:mydia, :features, [])[:cardigann_indexers] do
-        Mydia.Indexers.list_cardigann_definitions()
-        |> Enum.count(& &1.enabled)
-      else
-        0
-      end
-
-    enabled_count + cardigann_count
   end
 
   defp load_monitored_movies_without_files do
@@ -380,7 +361,7 @@ defmodule Mydia.Jobs.MovieSearch do
   end
 
   defp search_movie(%MediaItem{} = movie, args) do
-    query = build_search_query(movie)
+    query = Pipeline.build_search_query(movie)
 
     Logger.info("Searching for movie",
       media_item_id: movie.id,
@@ -414,7 +395,7 @@ defmodule Mydia.Jobs.MovieSearch do
         # Log search event for no results
         Events.search_no_results(movie, %{
           "query" => query,
-          "indexers_searched" => count_enabled_indexers()
+          "indexers_searched" => Pipeline.count_enabled_indexers()
         })
 
         :no_results
@@ -429,16 +410,19 @@ defmodule Mydia.Jobs.MovieSearch do
     end
   end
 
-  defp build_search_query(%MediaItem{title: title, year: nil}) do
-    title
-  end
-
-  defp build_search_query(%MediaItem{title: title, year: year}) do
-    "#{title} #{year}"
+  # Bridge function: converts Args struct to Pipeline's keyword opts
+  defp build_ranking_options_from_args(movie, %Args{} = args) do
+    Pipeline.build_ranking_options(movie,
+      min_seeders: args.min_seeders,
+      size_range: args.size_range,
+      blocked_tags: args.blocked_tags,
+      preferred_tags: args.preferred_tags,
+      media_type: :movie
+    )
   end
 
   defp process_search_results(movie, results, args, query) do
-    ranking_opts = build_ranking_options(movie, args)
+    ranking_opts = build_ranking_options_from_args(movie, args)
 
     case ReleaseRanker.select_best_result(results, ranking_opts) do
       nil ->
@@ -455,7 +439,7 @@ defmodule Mydia.Jobs.MovieSearch do
         Events.search_filtered_out(movie, %{
           "query" => query,
           "results_count" => length(results),
-          "filter_stats" => build_filter_stats(results, ranking_opts)
+          "filter_stats" => Pipeline.build_filter_stats(results, ranking_opts)
         })
 
         :no_results
@@ -475,7 +459,7 @@ defmodule Mydia.Jobs.MovieSearch do
           "results_count" => length(results),
           "selected_release" => best_result.title,
           "score" => score,
-          "breakdown" => stringify_keys(breakdown)
+          "breakdown" => Pipeline.stringify_keys(breakdown)
         })
 
         case initiate_download(movie, best_result) do
@@ -498,99 +482,8 @@ defmodule Mydia.Jobs.MovieSearch do
     end
   end
 
-  defp build_ranking_options(movie, %Args{} = args) do
-    # Start with base options
-    # Include search_query for title relevance scoring and media_type for unified scoring
-    # Note: size_range is nil by default (no filtering) unless specified in args or quality profile
-    base_opts = [
-      min_seeders: args.min_seeders || get_min_seeders(),
-      size_range: args.size_range,
-      search_query: build_search_query(movie),
-      media_type: :movie,
-      expected_title: movie.title
-    ]
-
-    # Add quality profile for unified scoring via SearchScorer
-    opts_with_quality =
-      case load_quality_profile(movie) do
-        nil ->
-          base_opts
-
-        quality_profile ->
-          base_opts
-          |> Keyword.put(:quality_profile, quality_profile)
-          |> Keyword.merge(build_quality_options(quality_profile, :movie))
-      end
-
-    # Add any custom blocked/preferred tags from args
-    opts_with_quality
-    |> maybe_add_option(:blocked_tags, args.blocked_tags)
-    |> maybe_add_option(:preferred_tags, args.preferred_tags)
-  end
-
-  defp load_quality_profile(%MediaItem{quality_profile_id: nil}), do: nil
-
-  defp load_quality_profile(%MediaItem{} = movie) do
-    movie
-    |> Repo.preload(:quality_profile)
-    |> Map.get(:quality_profile)
-  end
-
-  defp build_quality_options(quality_profile, media_type) do
-    # Extract preferred qualities from quality profile
-    # The :qualities field contains the list of allowed resolutions in preference order
-    quality_opts =
-      case Map.get(quality_profile, :qualities) do
-        nil -> []
-        qualities when is_list(qualities) -> [preferred_qualities: qualities]
-        _ -> []
-      end
-
-    # Extract min_ratio from rules if present
-    rules_opts =
-      case Map.get(quality_profile, :rules) do
-        %{"min_ratio" => min_ratio} when is_number(min_ratio) ->
-          [min_ratio: min_ratio]
-
-        _ ->
-          []
-      end
-
-    # Extract size constraints from quality_standards based on media type
-    size_opts = extract_size_range(quality_profile, media_type)
-
-    quality_opts
-    |> Keyword.merge(rules_opts)
-    |> Keyword.merge(size_opts)
-  end
-
-  defp extract_size_range(%{quality_standards: standards}, media_type) when is_map(standards) do
-    {min_key, max_key} =
-      case media_type do
-        :movie -> {:movie_min_size_mb, :movie_max_size_mb}
-        :episode -> {:episode_min_size_mb, :episode_max_size_mb}
-      end
-
-    min_size = Map.get(standards, min_key)
-    max_size = Map.get(standards, max_key)
-
-    case {min_size, max_size} do
-      {nil, nil} -> []
-      {min, nil} when is_number(min) -> [size_range: {min, nil}]
-      {nil, max} when is_number(max) -> [size_range: {nil, max}]
-      {min, max} when is_number(min) and is_number(max) -> [size_range: {min, max}]
-      _ -> []
-    end
-  end
-
-  defp extract_size_range(_, _), do: []
-
-  defp maybe_add_option(opts, _key, nil), do: opts
-  defp maybe_add_option(opts, _key, []), do: opts
-  defp maybe_add_option(opts, key, value), do: Keyword.put(opts, key, value)
-
   defp initiate_download(movie, result) do
-    case Downloads.initiate_download(result, media_item_id: movie.id) do
+    case Pipeline.initiate_download(movie, result) do
       {:ok, download} ->
         Logger.info("Successfully initiated download for movie",
           media_item_id: movie.id,
@@ -609,21 +502,6 @@ defmodule Mydia.Jobs.MovieSearch do
         )
 
         {:error, reason}
-    end
-  end
-
-  ## Private Functions - Search Delay
-
-  defp get_search_delay_ms do
-    Application.get_env(:mydia, :episode_monitor, [])
-    |> Keyword.get(:search_delay_ms, 0)
-  end
-
-  defp apply_search_delay do
-    delay = get_search_delay_ms()
-
-    if delay > 0 do
-      Process.sleep(delay)
     end
   end
 
@@ -674,30 +552,4 @@ defmodule Mydia.Jobs.MovieSearch do
         Events.search_backoff_reset(movie, previous_count)
     end
   end
-
-  ## Private Functions - Event Helpers
-
-  # Build a map of filter statistics for rejected results
-  defp build_filter_stats(results, ranking_opts) do
-    min_seeders = Keyword.get(ranking_opts, :min_seeders, get_min_seeders())
-
-    low_seeders = Enum.count(results, fn r -> r.seeders < min_seeders end)
-
-    %{
-      "total_results" => length(results),
-      "low_seeders" => low_seeders,
-      "below_quality_threshold" => length(results) - low_seeders
-    }
-  end
-
-  # Convert a map with atom keys to string keys for JSON serialization
-  defp stringify_keys(%{__struct__: _} = struct) do
-    struct |> Map.from_struct() |> stringify_keys()
-  end
-
-  defp stringify_keys(map) when is_map(map) do
-    Map.new(map, fn {k, v} -> {to_string(k), v} end)
-  end
-
-  defp stringify_keys(other), do: other
 end
