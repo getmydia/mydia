@@ -344,10 +344,20 @@ defmodule Mydia.Library do
   def purge_old_trashed_media_files(days \\ 30) do
     cutoff = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-days, :day)
 
-    {count, _} =
+    files =
       from(f in MediaFile,
-        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff
+        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff,
+        preload: [:library_path]
       )
+      |> Repo.all()
+
+    # Delete physical files from disk before removing DB records
+    delete_media_files_from_disk(files)
+
+    ids = Enum.map(files, & &1.id)
+
+    {count, _} =
+      from(f in MediaFile, where: f.id in ^ids)
       |> Repo.delete_all()
 
     {:ok, count}
