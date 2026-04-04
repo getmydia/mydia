@@ -260,7 +260,8 @@ config :mydia, Oban,
     notifications: 1,
     maintenance: 1,
     import_lists: 2,
-    integrations: 2
+    integrations: 2,
+    upgrade_search: 1
   ],
   plugins: [
     # Keep completed jobs for 7 days
@@ -291,7 +292,9 @@ config :mydia, Oban,
        # Permanently delete trashed media files past retention period daily at 5 AM
        {"0 5 * * *", Mydia.Jobs.TrashCleanup},
        # Sync watched status with media servers every 30 minutes
-       {"*/30 * * * *", Mydia.Jobs.MediaServerWatchedSync, args: %{"mode" => "all_enabled"}}
+       {"*/30 * * * *", Mydia.Jobs.MediaServerWatchedSync, args: %{"mode" => "all_enabled"}},
+       # Search for quality upgrades for monitored movies daily at 4:30 AM
+       {"30 4 * * *", Mydia.Jobs.MovieUpgradeSearch, args: %{"mode" => "all_monitored"}}
      ]}
   ]
 
