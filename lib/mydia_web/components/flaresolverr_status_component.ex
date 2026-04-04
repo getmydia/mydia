@@ -100,7 +100,7 @@ defmodule MydiaWeb.FlareSolverrStatusComponent do
               Configure FlareSolverr to bypass Cloudflare protection on supported indexers.
             </p>
             <.link
-              patch="/admin/config?tab=general"
+              navigate="/admin/config/settings"
               class="btn btn-sm btn-primary gap-2"
             >
               <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Configure

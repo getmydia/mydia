@@ -1,26 +1,13 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
-        </p>
-      </div>
-    </div>
-
-    <MydiaWeb.AdminComponents.tab_nav active_tab={@active_tab} />
-
-    <div class="bg-base-100">
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profiles_tab
-        quality_profiles={@quality_profiles}
-        default_quality_profile_id={@default_quality_profile_id}
-      />
-    </div>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminQualityProfilesLive.Components.quality_profiles_tab
+      quality_profiles={@quality_profiles}
+      default_quality_profile_id={@default_quality_profile_id}
+    />
 
     <%!-- Quality Profile Modal --%>
     <%= if assigns[:show_quality_profile_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profile_modal
+      <MydiaWeb.AdminQualityProfilesLive.Modals.quality_profile_modal
         quality_profile_form={@quality_profile_form}
         quality_profile_mode={@quality_profile_mode}
         quality_profile_active_tab={@quality_profile_active_tab}
@@ -29,7 +16,7 @@
 
     <%!-- Quality Profile Delete Confirm Modal --%>
     <%= if assigns[:show_delete_profile_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profile_delete_confirm_modal
+      <MydiaWeb.AdminQualityProfilesLive.Modals.quality_profile_delete_confirm_modal
         profile_to_delete={@profile_to_delete}
         affected_media_count={@affected_media_count}
       />
@@ -37,17 +24,15 @@
 
     <%!-- Import Quality Profile Modal --%>
     <%= if assigns[:show_import_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.import_modal import_error={
-        assigns[:import_error]
-      } />
+      <MydiaWeb.AdminQualityProfilesLive.Modals.import_modal import_error={assigns[:import_error]} />
     <% end %>
 
     <%!-- Browse Presets Modal --%>
     <%= if assigns[:show_browse_presets_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.browse_presets_modal
+      <MydiaWeb.AdminQualityProfilesLive.Modals.browse_presets_modal
         presets={assigns[:browse_presets] || []}
         selected_category={assigns[:browse_presets_category] || :all}
       />
     <% end %>
-  </div>
+  </.admin_page>
 </Layouts.app>

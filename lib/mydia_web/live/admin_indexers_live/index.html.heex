@@ -1,33 +1,20 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
-        </p>
-      </div>
-    </div>
-
-    <MydiaWeb.AdminComponents.tab_nav active_tab={@active_tab} />
-
-    <div class="bg-base-100">
-      <MydiaWeb.AdminIndexersLive.Components.indexers_tab
-        indexers={@indexers}
-        indexer_health={@indexer_health}
-        library_indexers={@library_indexers}
-        library_indexer_stats={@library_indexer_stats}
-        cardigann_enabled={@cardigann_enabled}
-        recently_disabled_indexer={@recently_disabled_indexer}
-        flaresolverr_available={
-          @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
-        }
-      />
-    </div>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminIndexersLive.Components.indexers_tab
+      indexers={@indexers}
+      indexer_health={@indexer_health}
+      library_indexers={@library_indexers}
+      library_indexer_stats={@library_indexer_stats}
+      cardigann_enabled={@cardigann_enabled}
+      recently_disabled_indexer={@recently_disabled_indexer}
+      flaresolverr_available={
+        @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
+      }
+    />
 
     <%!-- Indexer Modal --%>
     <%= if assigns[:show_indexer_modal] do %>
-      <MydiaWeb.AdminIndexersLive.Components.indexer_modal
+      <MydiaWeb.AdminIndexersLive.Modals.indexer_modal
         indexer_form={@indexer_form}
         indexer_mode={@indexer_mode}
         testing_indexer_connection={assigns[:testing_indexer_connection] || false}
@@ -41,7 +28,7 @@
 
     <%!-- Indexer Library Modal --%>
     <%= if assigns[:show_indexer_library_modal] and @cardigann_enabled do %>
-      <MydiaWeb.AdminIndexersLive.Components.indexer_library_modal
+      <MydiaWeb.AdminIndexersLive.Modals.indexer_library_modal
         definitions={@library_definitions}
         available_languages={@library_available_languages}
         filter_type={@library_filter_type}
@@ -56,12 +43,12 @@
 
     <%!-- Library Indexer Config Modal --%>
     <%= if assigns[:show_library_config_modal] and assigns[:configuring_library_indexer] do %>
-      <MydiaWeb.AdminIndexersLive.Components.library_config_modal
+      <MydiaWeb.AdminIndexersLive.Modals.library_config_modal
         configuring_library_indexer={@configuring_library_indexer}
         settings={@library_indexer_settings}
         testing={assigns[:library_config_testing] || false}
         test_result={assigns[:library_config_test_result]}
       />
     <% end %>
-  </div>
+  </.admin_page>
 </Layouts.app>
