@@ -227,6 +227,9 @@ defmodule Mydia.Jobs.MediaImport do
                   download_id: download.id
                 )
 
+                # Enqueue upgrade cleanup if this was an upgrade download
+                maybe_enqueue_upgrade_cleanup(updated_download, imported_files)
+
               {:error, changeset} ->
                 Logger.warning("Failed to mark download as imported",
                   download_id: download.id,
@@ -1540,6 +1543,31 @@ defmodule Mydia.Jobs.MediaImport do
         )
 
         :error
+    end
+  end
+
+  ## Private Functions - Upgrade Cleanup
+
+  defp maybe_enqueue_upgrade_cleanup(download, imported_files) do
+    download_reason = get_in(download.metadata || %{}, ["download_reason"])
+
+    if download_reason == "upgrade" && download.media_item_id do
+      new_file_ids = Enum.map(imported_files, & &1.id)
+
+      case Mydia.Jobs.UpgradeCleanup.enqueue(download.media_item_id, new_file_ids) do
+        {:ok, _job} ->
+          Logger.info("Enqueued upgrade cleanup",
+            download_id: download.id,
+            media_item_id: download.media_item_id,
+            new_file_ids: new_file_ids
+          )
+
+        {:error, reason} ->
+          Logger.error("Failed to enqueue upgrade cleanup",
+            download_id: download.id,
+            reason: inspect(reason)
+          )
+      end
     end
   end
 end
