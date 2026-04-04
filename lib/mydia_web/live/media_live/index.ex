@@ -870,16 +870,9 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
-  @quality_levels %{
-    "360p" => 1,
-    "480p" => 2,
-    "576p" => 3,
-    "720p" => 4,
-    "1080p" => 5,
-    "2160p" => 6
-  }
-
   defp upgrade_target(media_item) do
+    alias Mydia.Settings.QualityMatcher
+
     profile = media_item.quality_profile
     current = get_quality_badge(media_item)
 
@@ -896,8 +889,8 @@ defmodule MydiaWeb.MediaLive.Index do
       is_nil(profile.upgrade_until_quality) ->
         nil
 
-      Map.get(@quality_levels, current, 0) >=
-          Map.get(@quality_levels, profile.upgrade_until_quality, 0) ->
+      QualityMatcher.quality_level(current) >=
+          QualityMatcher.quality_level(profile.upgrade_until_quality) ->
         nil
 
       true ->

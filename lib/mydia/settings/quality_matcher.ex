@@ -97,6 +97,10 @@ defmodule Mydia.Settings.QualityMatcher do
       iex> QualityMatcher.is_upgrade?(result, profile, "2160p")
       false  # Already at max quality
   """
+  # Minimum composite score improvement required for same-resolution upgrades.
+  # Prevents upgrade churn from downloading marginally-better files.
+  @min_upgrade_margin 10.0
+
   @spec is_upgrade?(SearchResult.t(), QualityProfile.t(), String.t() | nil) :: boolean()
   def is_upgrade?(_result, %QualityProfile{upgrades_allowed: false}, _current_quality) do
     false
@@ -166,14 +170,56 @@ defmodule Mydia.Settings.QualityMatcher do
         true
 
       # Same resolution: compare composite scores if current_score is available
-      quality_level(result_quality) == quality_level(current_quality) && current_score != nil ->
+      # Require a minimum margin to prevent upgrade churn
+      quality_level(result_quality) == quality_level(current_quality) &&
+          is_number(current_score) ->
         candidate_score = calculate_score(result, profile)
-        candidate_score > current_score
+        threshold = (current_score || 0.0) + @min_upgrade_margin
+        candidate_score > threshold
 
       # Same or lower resolution without score comparison
       true ->
         false
     end
+  end
+
+  ## Public Helpers
+
+  @doc """
+  Maps a resolution string to a numeric quality level for ordering.
+
+  Returns 0 for unknown resolutions.
+
+  ## Examples
+
+      iex> QualityMatcher.quality_level("1080p")
+      5
+
+      iex> QualityMatcher.quality_level("unknown")
+      0
+  """
+  @spec quality_level(String.t()) :: non_neg_integer()
+  def quality_level("360p"), do: 1
+  def quality_level("480p"), do: 2
+  def quality_level("576p"), do: 3
+  def quality_level("720p"), do: 4
+  def quality_level("1080p"), do: 5
+  def quality_level("2160p"), do: 6
+  def quality_level(_), do: 0
+
+  @doc """
+  Normalizes a codec string for consistent comparison.
+
+  Downcases and strips dots and hyphens (e.g., "H.265" -> "h265").
+  """
+  @spec normalize_codec(String.t() | nil) :: String.t() | nil
+  def normalize_codec(nil), do: nil
+
+  def normalize_codec(codec) when is_binary(codec) do
+    codec
+    |> String.downcase()
+    |> String.replace(".", "")
+    |> String.replace("-", "")
   end
 
   ## Private Functions
@@ -208,7 +254,7 @@ defmodule Mydia.Settings.QualityMatcher do
       quality ->
         %{
           video_codec: normalize_codec(quality.codec),
-          audio_codec: normalize_audio_codec(quality.audio),
+          audio_codec: normalize_codec(quality.audio),
           resolution: quality.resolution,
           source: quality.source,
           file_size_mb: size_mb,
@@ -218,25 +264,7 @@ defmodule Mydia.Settings.QualityMatcher do
     end
   end
 
-  # Normalize video codec to match QualityProfile's expected format
-  defp normalize_codec(nil), do: nil
-
-  defp normalize_codec(codec) when is_binary(codec) do
-    codec
-    |> String.downcase()
-    |> String.replace(".", "")
-    |> String.replace("-", "")
-  end
-
-  # Normalize audio codec to match QualityProfile's expected format
-  defp normalize_audio_codec(nil), do: nil
-
-  defp normalize_audio_codec(codec) when is_binary(codec) do
-    codec
-    |> String.downcase()
-    |> String.replace(".", "")
-    |> String.replace("-", "")
-  end
+  # normalize_codec/1 and normalize_audio_codec/1 unified as public normalize_codec/1 above
 
   # Check quality allowed using legacy qualities field for backward compatibility
   defp check_quality_allowed(%SearchResult{quality: nil}, _profile) do
@@ -253,12 +281,5 @@ defmodule Mydia.Settings.QualityMatcher do
     end
   end
 
-  # Map quality strings to numeric levels for comparison
-  defp quality_level("360p"), do: 1
-  defp quality_level("480p"), do: 2
-  defp quality_level("576p"), do: 3
-  defp quality_level("720p"), do: 4
-  defp quality_level("1080p"), do: 5
-  defp quality_level("2160p"), do: 6
-  defp quality_level(_), do: 0
+  # quality_level/1 is now a public function defined above
 end

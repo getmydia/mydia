@@ -38,17 +38,7 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
   alias Mydia.Settings.{QualityMatcher, QualityProfile}
 
   @max_movies_per_run 25
-
-  defmodule Args do
-    @moduledoc false
-    defstruct [:mode]
-
-    @type t :: %__MODULE__{mode: String.t()}
-
-    def parse(%{"mode" => "all_monitored"}) do
-      %__MODULE__{mode: "all_monitored"}
-    end
-  end
+  @actor_id "movie_upgrade_search"
 
   @spec perform(Oban.Job.t()) :: :ok | {:error, term()}
   @impl Oban.Worker
@@ -173,7 +163,16 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
     )
 
     case Indexers.search_all(query, min_seeders: min_seeders) do
-      {:ok, %{results: []}} ->
+      {:ok, %{results: [], indexer_errors: indexer_errors}} ->
+        if indexer_errors != [] do
+          Logger.warning("Upgrade search failed due to indexer errors",
+            media_item_id: movie.id,
+            title: movie.title,
+            query: query,
+            errors: inspect(indexer_errors)
+          )
+        end
+
         record_backoff(movie, "no_results")
         :no_upgrade
 
@@ -204,7 +203,7 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
           "query" => query,
           "indexers_searched" => Pipeline.count_enabled_indexers()
         },
-        actor_id: "movie_upgrade_search"
+        actor_id: @actor_id
       )
 
       :no_upgrade
@@ -250,7 +249,7 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
         "score" => score,
         "breakdown" => Pipeline.stringify_keys(breakdown)
       },
-      actor_id: "movie_upgrade_search"
+      actor_id: @actor_id
     )
 
     case Pipeline.initiate_download(movie, best_result, download_reason: :upgrade) do
@@ -310,8 +309,8 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
 
   defp file_to_media_attrs(%MediaFile{} = file) do
     %{
-      video_codec: file.codec,
-      audio_codec: file.audio_codec,
+      video_codec: QualityMatcher.normalize_codec(file.codec),
+      audio_codec: QualityMatcher.normalize_codec(file.audio_codec),
       resolution: file.resolution,
       source: nil,
       file_size_mb: if(file.size, do: file.size / (1024 * 1024), else: nil),
@@ -331,6 +330,13 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
           reason: reason
         )
 
+        Events.search_backoff_applied(
+          movie,
+          reason,
+          Search.get_backoff_info("movie", movie.id),
+          actor_id: @actor_id
+        )
+
       {:error, _changeset} ->
         Logger.error("Failed to record upgrade search backoff",
           media_item_id: movie.id
@@ -340,18 +346,23 @@ defmodule Mydia.Jobs.MovieUpgradeSearch do
 
   defp reset_backoff(movie) do
     case Search.get_backoff("movie", movie.id) do
-      nil -> :ok
-      _backoff -> Search.reset_backoff("movie", movie.id)
+      nil ->
+        :ok
+
+      backoff ->
+        previous_count = backoff.failure_count
+        Search.reset_backoff("movie", movie.id)
+
+        Logger.info("Reset upgrade search backoff",
+          media_item_id: movie.id,
+          previous_failure_count: previous_count
+        )
+
+        Events.search_backoff_reset(movie, previous_count, actor_id: @actor_id)
     end
   end
 
   ## Private Functions - Quality Level
 
-  defp quality_level("360p"), do: 1
-  defp quality_level("480p"), do: 2
-  defp quality_level("576p"), do: 3
-  defp quality_level("720p"), do: 4
-  defp quality_level("1080p"), do: 5
-  defp quality_level("2160p"), do: 6
-  defp quality_level(_), do: 0
+  defp quality_level(resolution), do: QualityMatcher.quality_level(resolution)
 end

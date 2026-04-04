@@ -1214,6 +1214,7 @@ defmodule Mydia.Events do
   """
   def search_filtered_out(media_item, metadata, opts \\ []) do
     episode = opts[:episode]
+    actor_id = opts[:actor_id] || search_actor_id(media_item)
 
     base_metadata =
       %{
@@ -1227,7 +1228,7 @@ defmodule Mydia.Events do
       category: "search",
       type: "search.filtered_out",
       actor_type: :job,
-      actor_id: search_actor_id(media_item),
+      actor_id: actor_id,
       resource_type: resource_type_for_search(episode),
       resource_id: resource_id_for_search(media_item, episode),
       severity: :warning,
@@ -1421,6 +1422,7 @@ defmodule Mydia.Events do
   def search_backoff_applied(media_item, reason, backoff_info, opts \\ []) do
     episode = opts[:episode]
     season_number = opts[:season_number]
+    actor_id = opts[:actor_id] || search_actor_id(media_item)
 
     base_metadata =
       %{
@@ -1438,7 +1440,7 @@ defmodule Mydia.Events do
       category: "search",
       type: "search.backoff_applied",
       actor_type: :job,
-      actor_id: search_actor_id(media_item),
+      actor_id: actor_id,
       resource_type: resource_type_for_backoff(episode, season_number),
       resource_id: resource_id_for_backoff(media_item, episode),
       severity: :info,
@@ -1464,6 +1466,7 @@ defmodule Mydia.Events do
   def search_backoff_reset(media_item, previous_count, opts \\ []) do
     episode = opts[:episode]
     season_number = opts[:season_number]
+    actor_id = opts[:actor_id] || search_actor_id(media_item)
 
     base_metadata =
       %{
@@ -1478,7 +1481,7 @@ defmodule Mydia.Events do
       category: "search",
       type: "search.backoff_reset",
       actor_type: :job,
-      actor_id: search_actor_id(media_item),
+      actor_id: actor_id,
       resource_type: resource_type_for_backoff(episode, season_number),
       resource_id: resource_id_for_backoff(media_item, episode),
       severity: :info,

@@ -352,12 +352,25 @@ defmodule Mydia.Library do
       |> Repo.all()
 
     # Delete physical files from disk before removing DB records
-    delete_media_files_from_disk(files)
+    # Only remove DB records for files successfully deleted from disk
+    results =
+      Enum.map(files, fn file ->
+        {file.id, delete_media_file_from_disk(file)}
+      end)
 
-    ids = Enum.map(files, & &1.id)
+    successfully_deleted_ids =
+      results
+      |> Enum.filter(fn {_id, result} -> result == :ok end)
+      |> Enum.map(fn {id, _} -> id end)
+
+    failed_count = length(results) - length(successfully_deleted_ids)
+
+    if failed_count > 0 do
+      Logger.warning("Failed to delete #{failed_count} files from disk, keeping their DB records")
+    end
 
     {count, _} =
-      from(f in MediaFile, where: f.id in ^ids)
+      from(f in MediaFile, where: f.id in ^successfully_deleted_ids)
       |> Repo.delete_all()
 
     {:ok, count}

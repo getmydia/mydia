@@ -87,24 +87,35 @@ defmodule Mydia.Jobs.UpgradeCleanup do
         old_file_ids: Enum.map(old_files, & &1.id)
       )
 
-      Enum.each(old_files, fn file ->
-        case Library.trash_media_file(file) do
-          {:ok, _trashed} ->
-            Logger.info("Trashed old media file",
-              media_file_id: file.id,
-              media_item_id: media_item_id
-            )
+      results =
+        Enum.map(old_files, fn file ->
+          case Library.trash_media_file(file) do
+            {:ok, _trashed} ->
+              Logger.info("Trashed old media file",
+                media_file_id: file.id,
+                media_item_id: media_item_id
+              )
 
-          {:error, reason} ->
-            Logger.error("Failed to trash old media file",
-              media_file_id: file.id,
-              media_item_id: media_item_id,
-              reason: inspect(reason)
-            )
-        end
-      end)
+              :ok
 
-      :ok
+            {:error, reason} ->
+              Logger.error("Failed to trash old media file",
+                media_file_id: file.id,
+                media_item_id: media_item_id,
+                reason: inspect(reason)
+              )
+
+              {:error, reason}
+          end
+        end)
+
+      failed = Enum.count(results, &match?({:error, _}, &1))
+
+      if failed > 0 do
+        {:error, "Failed to trash #{failed} of #{length(old_files)} old files"}
+      else
+        :ok
+      end
     end
   end
 
