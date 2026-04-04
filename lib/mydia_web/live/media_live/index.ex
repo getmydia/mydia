@@ -663,6 +663,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> maybe_add_filter(:library_path_type, assigns[:filter_library_type])
     |> Keyword.put(:preload, [
       :downloads,
+      :quality_profile,
       media_files: active_files_query,
       playback_progress: progress_query,
       episodes: [media_files: active_files_query, downloads: []]
@@ -866,6 +867,41 @@ defmodule MydiaWeb.MediaLive.Index do
         |> Enum.reject(&is_nil/1)
         |> Enum.sort(:desc)
         |> List.first()
+    end
+  end
+
+  @quality_levels %{
+    "360p" => 1,
+    "480p" => 2,
+    "576p" => 3,
+    "720p" => 4,
+    "1080p" => 5,
+    "2160p" => 6
+  }
+
+  defp upgrade_target(media_item) do
+    profile = media_item.quality_profile
+    current = get_quality_badge(media_item)
+
+    cond do
+      is_nil(profile) ->
+        nil
+
+      !profile.upgrades_allowed ->
+        nil
+
+      is_nil(current) ->
+        nil
+
+      is_nil(profile.upgrade_until_quality) ->
+        nil
+
+      Map.get(@quality_levels, current, 0) >=
+          Map.get(@quality_levels, profile.upgrade_until_quality, 0) ->
+        nil
+
+      true ->
+        profile.upgrade_until_quality
     end
   end
 

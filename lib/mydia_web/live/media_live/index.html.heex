@@ -357,10 +357,18 @@
                   <% progress = get_progress(item) %>
                   <.progress_bar :if={progress} progress={progress} class="hide-on-select" />
                   <.progress_badge :if={progress} progress={progress} class="hide-on-select" />
-                  <%!-- Quality badge --%>
+                  <%!-- Quality badge with upgrade indicator --%>
                   <%= if quality = get_quality_badge(item) do %>
-                    <div class="badge badge-primary badge-sm absolute top-2 right-2 z-10 shadow-md hide-on-select">
-                      {quality}
+                    <% target = upgrade_target(item) %>
+                    <div class={[
+                      "badge badge-sm absolute top-2 right-2 z-10 shadow-md hide-on-select",
+                      if(target, do: "badge-warning", else: "badge-primary")
+                    ]}>
+                      <%= if target do %>
+                        {quality} → {target}
+                      <% else %>
+                        {quality}
+                      <% end %>
                     </div>
                   <% end %>
                 </figure>
@@ -536,9 +544,14 @@
               </div>
             </div>
             <%!-- Quality column --%>
-            <div class="w-20 hidden lg:block text-center flex-shrink-0">
+            <div class="w-24 hidden lg:block text-center flex-shrink-0">
               <%= if quality = get_quality_badge(item) do %>
-                <span class="badge badge-primary badge-sm">{quality}</span>
+                <% target = upgrade_target(item) %>
+                <%= if target do %>
+                  <span class="badge badge-warning badge-sm">{quality} → {target}</span>
+                <% else %>
+                  <span class="badge badge-primary badge-sm">{quality}</span>
+                <% end %>
               <% else %>
                 <span class="text-base-content/40">—</span>
               <% end %>

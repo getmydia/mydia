@@ -144,6 +144,7 @@ defmodule MydiaWeb.LibraryComponents do
   attr :progress, :map, default: nil
   attr :status, :any, default: nil
   attr :quality, :string, default: nil
+  attr :upgrade_target, :string, default: nil
 
   slot :badges
   slot :footer
@@ -201,10 +202,17 @@ defmodule MydiaWeb.LibraryComponents do
             <%!-- Progress indicators --%>
             <.progress_bar :if={@progress} progress={@progress} />
             <.progress_badge :if={@progress} progress={@progress} />
-            <%!-- Quality badge --%>
+            <%!-- Quality badge with optional upgrade indicator --%>
             <%= if @quality do %>
-              <div class="badge badge-primary badge-sm absolute top-2 right-2 z-10 shadow-md">
-                {@quality}
+              <div class={[
+                "badge badge-sm absolute top-2 right-2 z-10 shadow-md",
+                if(@upgrade_target, do: "badge-warning", else: "badge-primary")
+              ]}>
+                <%= if @upgrade_target do %>
+                  {@quality} → {@upgrade_target}
+                <% else %>
+                  {@quality}
+                <% end %>
               </div>
             <% end %>
             <%!-- Custom badges slot --%>
