@@ -12,7 +12,7 @@ max_cases =
     1
   end
 
-ExUnit.start(max_cases: max_cases, exclude: [:external, :feature, :requires_relay])
+ExUnit.start(max_cases: max_cases, exclude: [:external, :feature, :requires_relay, :e2e])
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 
 # Clear runtime config indexers, download clients, and media servers so tests
