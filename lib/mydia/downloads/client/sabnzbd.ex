@@ -38,9 +38,9 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
     * `Downloading`, `Fetching` -> `:downloading`
     * `Paused` -> `:paused`
     * `Completed` -> `:completed`
-    * `Failed`, `Extracting`, `Moving` -> `:error`
+    * `Failed` -> `:error`
     * `Queued` -> `:downloading` (queued but counted as downloading)
-    * `Verifying`, `Repairing` -> `:checking`
+    * `Verifying`, `Repairing`, `Extracting`, `Moving` -> `:checking`
 
   ## API Response Format
 
@@ -174,9 +174,11 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
     stream = File.stream!(tmp_file, [], 2048)
     stat = File.stat!(tmp_file)
 
+    nzb_filename = build_nzb_filename(opts[:title])
+
     multipart_body = [
       {"nzbfile",
-       {stream, [filename: "upload.nzb", content_type: MIME.from_path(tmp_file), size: stat.size]}}
+       {stream, [filename: nzb_filename, content_type: MIME.from_path(tmp_file), size: stat.size]}}
     ]
 
     # Perform the request and ensure the temp file is removed afterwards
@@ -466,7 +468,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
       apikey: config.api_key,
       output: "json",
       mode: "history",
-      limit: "100"
+      limit: "500"
     ]
 
     api_path = build_api_path(config)
@@ -632,4 +634,22 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
   defp map_priority(:normal), do: "0"
   defp map_priority(:high), do: "1"
   defp map_priority(_), do: nil
+
+  @doc false
+  def build_nzb_filename(nil), do: "upload.nzb"
+  def build_nzb_filename(""), do: "upload.nzb"
+
+  def build_nzb_filename(title) do
+    sanitized =
+      title
+      |> String.replace(~r/[\/\\:*?"<>|]/, "_")
+      |> String.replace(~r/^_+$/, "")
+      |> String.trim()
+
+    if sanitized == "" do
+      "upload.nzb"
+    else
+      "#{sanitized}.nzb"
+    end
+  end
 end

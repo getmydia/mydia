@@ -24,6 +24,7 @@ defmodule Mydia.Downloads.Download do
           import_last_error: String.t() | nil,
           import_next_retry_at: DateTime.t() | nil,
           import_failed_at: DateTime.t() | nil,
+          save_path: String.t() | nil,
           media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
           episode: Mydia.Media.Episode.t() | nil | Ecto.Association.NotLoaded.t(),
           library_path: Mydia.Settings.LibraryPath.t() | nil | Ecto.Association.NotLoaded.t(),
@@ -48,6 +49,7 @@ defmodule Mydia.Downloads.Download do
     field :import_last_error, :string
     field :import_next_retry_at, :utc_datetime
     field :import_failed_at, :utc_datetime
+    field :save_path, :string
 
     belongs_to :media_item, Mydia.Media.MediaItem
     belongs_to :episode, Mydia.Media.Episode
@@ -81,7 +83,8 @@ defmodule Mydia.Downloads.Download do
       :import_retry_count,
       :import_last_error,
       :import_next_retry_at,
-      :import_failed_at
+      :import_failed_at,
+      :save_path
     ])
     |> validate_required([:title])
     |> validate_inclusion(:match_status, ["unmatched", "unresolved_files"])

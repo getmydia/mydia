@@ -105,8 +105,16 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Get the download struct from database (with media_item preloaded)
     download = Downloads.get_download!(download_map.id, preload: [:media_item])
 
-    # Mark download as completed in database (prevents reprocessing on next monitor run)
+    # Mark download as completed and persist save_path from client
+    # (save_path is critical for Usenet imports where items leave client history fast)
     {:ok, download} = Downloads.mark_download_completed(download)
+
+    {:ok, download} =
+      if download_map.save_path do
+        Downloads.update_download(download, %{save_path: download_map.save_path})
+      else
+        {:ok, download}
+      end
 
     # Track completion event
     Events.download_completed(download, media_item: download.media_item)
@@ -259,16 +267,18 @@ defmodule Mydia.Jobs.DownloadMonitor do
     |> Oban.insert()
   end
 
-  # Enqueue import job for stuck downloads (save_path will be fetched by MediaImport)
+  # Enqueue import job for stuck downloads (use persisted save_path when available)
   defp enqueue_import_job(download) do
-    changeset =
+    args =
       %{
         "download_id" => download.id,
         "cleanup_client" => true,
         "use_hardlinks" => true,
         "move_files" => false
       }
-      |> Mydia.Jobs.MediaImport.new()
+      |> maybe_add_save_path(download.save_path)
+
+    changeset = Mydia.Jobs.MediaImport.new(args)
 
     # Use Oban.insert if available, otherwise fall back to Repo.insert for testing
     result =
@@ -298,4 +308,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
         error
     end
   end
+
+  defp maybe_add_save_path(args, nil), do: args
+  defp maybe_add_save_path(args, ""), do: args
+  defp maybe_add_save_path(args, save_path), do: Map.put(args, "save_path", save_path)
 end

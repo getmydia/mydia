@@ -158,10 +158,31 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
     end
   end
 
-  describe "state mapping" do
-    # These tests verify the state parsing logic works correctly
-    # We can't easily test this without mocking, so we'll add integration tests instead
-    # The state mapping is tested indirectly through integration tests
+  describe "build_nzb_filename/1" do
+    test "uses title when provided" do
+      assert Sabnzbd.build_nzb_filename("My Show S01E01") == "My Show S01E01.nzb"
+    end
+
+    test "falls back to upload.nzb when title is nil" do
+      assert Sabnzbd.build_nzb_filename(nil) == "upload.nzb"
+    end
+
+    test "falls back to upload.nzb when title is empty" do
+      assert Sabnzbd.build_nzb_filename("") == "upload.nzb"
+    end
+
+    test "sanitizes unsafe filename characters" do
+      assert Sabnzbd.build_nzb_filename("Show: The \"Best\" S01E01") ==
+               "Show_ The _Best_ S01E01.nzb"
+
+      assert Sabnzbd.build_nzb_filename("path/to\\file") == "path_to_file.nzb"
+      assert Sabnzbd.build_nzb_filename("what*is?this") == "what_is_this.nzb"
+      assert Sabnzbd.build_nzb_filename("a<b>c|d") == "a_b_c_d.nzb"
+    end
+
+    test "handles title that becomes empty after sanitization" do
+      assert Sabnzbd.build_nzb_filename(":::") == "upload.nzb"
+    end
   end
 
   describe "URL base handling" do

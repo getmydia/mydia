@@ -9,6 +9,49 @@ defmodule Mydia.Jobs.MediaImportTest do
 
   @moduletag :tmp_dir
 
+  describe "Args.parse/1" do
+    test "extracts save_path from job args" do
+      args =
+        MediaImport.Args.parse(%{
+          "download_id" => "abc-123",
+          "save_path" => "/downloads/my-show"
+        })
+
+      assert args.save_path == "/downloads/my-show"
+      assert args.download_id == "abc-123"
+    end
+
+    test "save_path is nil when not in args" do
+      args =
+        MediaImport.Args.parse(%{
+          "download_id" => "abc-123"
+        })
+
+      assert args.save_path == nil
+    end
+
+    test "preserves all existing fields" do
+      args =
+        MediaImport.Args.parse(%{
+          "download_id" => "abc-123",
+          "save_path" => "/downloads/test",
+          "target_files" => [%{"path" => "/a.mkv", "episode_id" => "ep1"}],
+          "snooze_count" => 3,
+          "use_hardlinks" => false,
+          "move_files" => true,
+          "rename_files" => true
+        })
+
+      assert args.download_id == "abc-123"
+      assert args.save_path == "/downloads/test"
+      assert args.target_files == [%{"path" => "/a.mkv", "episode_id" => "ep1"}]
+      assert args.snooze_count == 3
+      assert args.use_hardlinks == false
+      assert args.move_files == true
+      assert args.rename_files == true
+    end
+  end
+
   describe "perform/1" do
     test "schedules retry when download is not completed (first snooze)" do
       media_item = media_item_fixture()

@@ -36,6 +36,7 @@ defmodule Mydia.Jobs.MediaImport do
     defstruct [
       :download_id,
       :target_files,
+      :save_path,
       snooze_count: 0,
       use_hardlinks: true,
       move_files: false,
@@ -45,6 +46,7 @@ defmodule Mydia.Jobs.MediaImport do
     @type t :: %__MODULE__{
             download_id: String.t() | nil,
             target_files: [map()] | nil,
+            save_path: String.t() | nil,
             snooze_count: integer(),
             use_hardlinks: boolean(),
             move_files: boolean(),
@@ -55,6 +57,7 @@ defmodule Mydia.Jobs.MediaImport do
       %__MODULE__{
         download_id: download_id,
         target_files: Map.get(raw, "target_files"),
+        save_path: Map.get(raw, "save_path"),
         snooze_count: Map.get(raw, "snooze_count", 0),
         use_hardlinks: Map.get(raw, "use_hardlinks", true) != false,
         move_files: Map.get(raw, "move_files", false) == true,
@@ -151,7 +154,29 @@ defmodule Mydia.Jobs.MediaImport do
     process_targeted_import(download, target_files, args)
   end
 
+  defp import_download(download, %Args{save_path: save_path} = args)
+       when is_binary(save_path) and save_path != "" do
+    # Use persisted save_path directly — avoids re-fetching from client
+    # (Usenet items leave client history fast, so re-fetch often fails)
+    case list_files_in_path(save_path) do
+      {:ok, files} when files != [] ->
+        process_import(download, files, args)
+
+      {:ok, []} ->
+        Logger.warning("No files at persisted save_path, falling back to client re-fetch",
+          download_id: download.id,
+          save_path: save_path
+        )
+
+        import_download_via_client(download, args)
+    end
+  end
+
   defp import_download(download, args) do
+    import_download_via_client(download, args)
+  end
+
+  defp import_download_via_client(download, args) do
     # Get the download client details to locate files
     client_info = get_client_info(download)
 
@@ -393,7 +418,26 @@ defmodule Mydia.Jobs.MediaImport do
         |> then(&{:ok, &1})
       end
     else
-      Logger.warning("Download path does not exist", path: path)
+      parent_dir = Path.dirname(path)
+      parent_exists = File.exists?(parent_dir)
+
+      parent_contents =
+        if parent_exists and File.dir?(parent_dir) do
+          case File.ls(parent_dir) do
+            {:ok, entries} -> entries
+            {:error, _} -> []
+          end
+        else
+          []
+        end
+
+      Logger.warning("Download path does not exist",
+        path: path,
+        parent_dir: parent_dir,
+        parent_exists: parent_exists,
+        parent_contents: parent_contents
+      )
+
       {:ok, []}
     end
   end
