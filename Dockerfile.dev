@@ -2,23 +2,30 @@
 # Development image with all tools (Elixir, Rust, Node, Flutter, Chrome)
 FROM elixir:1.19
 
+# Environment variables for tools (paths set in base image)
+ENV RUSTUP_HOME=/opt/rustup
+ENV CARGO_HOME=/opt/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+ENV FLUTTER_HOME=/opt/flutter
+ENV PATH="${FLUTTER_HOME}/bin:${PATH}"
+
 # Install build dependencies and development tools
 RUN apt-get update -qq && \
     apt-get install -y \
-      build-essential \
-      git \
-      inotify-tools \
-      curl \
-      sqlite3 \
-      libsqlite3-dev \
-      libpq-dev \
-      postgresql-client \
-      ffmpeg \
-      chromium \
-      chromium-driver \
-      ca-certificates \
-      xz-utils \
-      gosu 2>/dev/null || true && \
+        build-essential \
+        git \
+        inotify-tools \
+        curl \
+        sqlite3 \
+        libsqlite3-dev \
+        libpq-dev \
+        postgresql-client \
+        ffmpeg \
+        chromium \
+        chromium-driver \
+        ca-certificates \
+        xz-utils \
+        gosu 2>/dev/null || true && \
     (which node || (curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs)) && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* 2>/dev/null || true
@@ -39,13 +46,6 @@ RUN which flutter || ( \
 
 # Install Hex and Rebar if not present
 RUN mix local.hex --force && mix local.rebar --force 2>/dev/null || true
-
-# Environment variables for tools (paths set in base image)
-ENV RUSTUP_HOME=/opt/rustup
-ENV CARGO_HOME=/opt/cargo
-ENV PATH="${CARGO_HOME}/bin:${PATH}"
-ENV FLUTTER_HOME=/opt/flutter
-ENV PATH="${FLUTTER_HOME}/bin:${PATH}"
 
 WORKDIR /app
 
