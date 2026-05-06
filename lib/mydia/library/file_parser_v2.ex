@@ -65,10 +65,14 @@ defmodule Mydia.Library.FileParser.V2 do
       |AAC                                 # Plain AAC (after AAC with numbers)
       |AC3
       |OPUS(?:\d+[\s.]?\d*)?               # OPUS, OPUS2.0
+      |MP3
+      |FLAC
+      |(?:[257]ch)
     )
     \b
   /xi
 
+  # Video codec regex list for extraction
   @codec_pattern ~r/
     \b
     (?:
@@ -76,12 +80,13 @@ defmodule Mydia.Library.FileParser.V2 do
       |HEVC|AVC                            # HEVC, AVC
       |XviD|DivX                           # Legacy codecs
       |VP9|AV1                             # Modern codecs
-      |NVENC                               # Hardware encoder
+      |NVENC|QSV|AMF|VCE|VideoToolbox      # Hardware encoders
     )
     \b
   /xi
 
-  @resolution_pattern ~r/\b(?:\d{3,4}[pP]|4K|8K|UHD)\b/i
+  # Matches: 1080p in "Movie.1080p.mkv", [360p-DivX], (720p), 4K, etc.
+  @resolution_pattern ~r/(?:^|[^\d])(\d{3,4}[pP]|4K|8K|UHD)(?:$|[^\d])/i
 
   # Source pattern - order matters: match longer patterns first (WEB-DL before WEB)
   # WEB is included but validated in extract_source to avoid matching titles like "Madame.Web"
@@ -109,15 +114,21 @@ defmodule Mydia.Library.FileParser.V2 do
   # Additional noise patterns
   @bit_depth_pattern ~r/\b(8|10|12)[\s-]?bits?\b/i
   @encoder_pattern ~r/[-_. ](NVENC|QSV|AMF|VCE|VideoToolbox)\b/i
+
   # Match any content in square brackets (typically quality/metadata tags, not titles)
   @bracket_contents_pattern ~r/\[[^\]]+\]/i
+
   # Streaming service identifiers and other release noise
   @extra_noise_pattern ~r/\b(PROPER|REPACK|INTERNAL|LIMITED|UNRATED|DIRECTORS?\.CUT|EXTENDED|THEATRICAL|HYBRID|AMZN|ATVP|DSNP|HMAX|HULU|NF|PMTP|PCOK|STAN|iT|MA)\b/i
+  @streaming_service_pattern ~r/\b(AMZN|ATVP|DSNP|HMAX|HULU|NF|PMTP|PCOK|STAN|iT|MA)\b/i
+  @language_pattern ~r/\b(MULTi|MULTI|DUAL|DUBBED|SUBBED|KORSUB|FRENCH|TRUEFRENCH|GERMAN|SPANISH|ITALIAN|JAPANESE)\b/i
   @audio_channels_pattern ~r/\b[257]\s+1\b/i
   @vmaf_pattern ~r/\bVMAF\d+(?:\.\d+)?\b/i
 
-  # Year pattern - prioritize parenthesized/bracketed years
-  @year_pattern_primary ~r/[\(\[](19\d{2}|20\d{2})[\)\]]/
+  # Year pattern - prioritize parenthesized/bracketed years (tolerant of malformed/reversed brackets)
+  @year_pattern_primary ~r/[\(\[\]\)\s]*\b(19\d{2}|20\d{2})\b[\(\[\]\)\s]*/
+
+  # Standalone years without brackets (e.g., Movie.2020.1080p)
   @year_pattern_secondary ~r/[\s._-](19\d{2}|20\d{2})(?:[\s._-]|$)/
 
   # Release group pattern - hyphen, dot, or space prefix with optional site tag in brackets
@@ -126,6 +137,39 @@ defmodule Mydia.Library.FileParser.V2 do
   # The $ anchor ensures this only matches at the end, preventing false matches on title words
   # The pattern also requires multiple spaces before the group to avoid matching single-space-separated title words
   @release_group_pattern ~r/(?:[-.]|\s{2,})([A-Z0-9]+(?:[.\s][A-Z0-9]+)?)(?:\[[^\]]+\])?\s*$/i
+
+  # Rating pattern recognition
+  @rating_pattern ~r/\b(G|PG|PG-13|R|NC-17|NR|TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)\b/i
+
+  # Pull runtime from metadata in filename if exists
+  @runtime_pattern ~r/\b\d+[-]min\b/i
+
+  # Episode regex pattern, e.g. S03E21
+  @episode_pattern ~r/[._-]?S\d{1,2}[._-]?E\d{1,2}/i
+
+  # --- Extraction & Validation Patterns ---
+  @year_extract_pattern ~r/(19\d{2}|20\d{2})/
+  @resolution_extract_pattern ~r/(\d{3,4}[pP]|4K|8K|UHD)/i
+  @web_word_pattern ~r/\bWEB\b/i
+  @codec_space_pattern ~r/^[hxHX]\s26[45]$/i
+  @dolby_vision_extract_pattern ~r/Dolby[\s.]?Vision/i
+
+  # Audio normalizers
+  @audio_space_digit_pattern ~r/\d\s\d/
+  @audio_space_digit_capture ~r/(\d)\s(\d)/
+  @audio_dtshd_ma_pattern ~r/DTS-HD\sMA/i
+  @audio_dtshd_ma_capture ~r/(DTS-HD)\s(MA)/i
+  @audio_channels_capture ~r/(\d+\.?\d*)/
+
+  # --- Cleanup & Normalization Patterns ---
+  @clean_filename_pattern ~r/[_.]/
+  @clean_comparison_pattern ~r/[-_.':]/
+
+  # Title cleaning
+  @clean_empty_brackets ~r/[[(]\s*[])]/
+  @clean_multi_space ~r/\s+/
+  @clean_multi_dash ~r/[-_]{2,}/
+  @clean_edge_separators ~r/^[-_\s]+|[-_\s]+$/
 
   # TV show patterns - defined as function to avoid module attribute issues
   defp tv_patterns do
@@ -171,16 +215,20 @@ defmodule Mydia.Library.FileParser.V2 do
         confidence: 0.9
       }
   """
-  @spec parse(String.t(), keyword()) :: parse_result()
+@spec parse(String.t(), keyword()) :: parse_result()
   def parse(filename, opts \\ []) when is_binary(filename) do
     # Normalize filename (remove extension, convert dots/underscores to spaces)
     normalized = normalize_filename(filename)
 
-    # Apply sequential extraction
-    {metadata, remaining_text} = extract_all_patterns(normalized)
+    # Establish the Title Boundary BEFORE extraction
+    boundary_pos = find_title_boundary(normalized)
+    isolated_title_raw = byte_slice_before(normalized, boundary_pos)
 
-    # Extract title from remaining text
-    title = clean_title(remaining_text)
+    # Apply sequential extraction to the full normalized string
+    {metadata, _remaining_text} = extract_all_patterns(normalized)
+
+    # Clean the isolated title instead of relying on the remaining text!
+    title = clean_title(isolated_title_raw)
 
     # Build result
     result = build_result(metadata, title, filename, opts)
@@ -481,8 +529,8 @@ defmodule Mydia.Library.FileParser.V2 do
   defp normalize_for_comparison(title) do
     title
     |> String.downcase()
-    |> String.replace(~r/[-_.':]/, " ")
-    |> String.replace(~r/\s+/, " ")
+    |> String.replace(@clean_comparison_pattern, " ")
+    |> String.replace(@clean_multi_space, " ")
     |> String.trim()
   end
 
@@ -539,33 +587,33 @@ defmodule Mydia.Library.FileParser.V2 do
       # Noise patterns - remove but don't extract
       %{
         name: :bit_depth,
-        type: :noise,
+        type: :quality,
         regex: @bit_depth_pattern,
-        handler: &extract_and_discard/3
+        handler: &extract_bit_depth/3
       },
       %{
         name: :encoder,
-        type: :noise,
+        type: :quality,
         regex: @encoder_pattern,
-        handler: &extract_and_discard/3
+        handler: &extract_encoder/3
       },
       %{
         name: :audio_channels,
-        type: :noise,
+        type: :quality,
         regex: @audio_channels_pattern,
-        handler: &extract_and_discard/3
+        handler: &extract_audio_channels/3
       },
       %{
-        name: :vmaf,
-        type: :noise,
+        name: :vmaf_score,
+        type: :quality,
         regex: @vmaf_pattern,
-        handler: &extract_and_discard/3
+        handler: &extract_vmaf_score/3
       },
       %{
         name: :hdr_profile,
-        type: :noise,
+        type: :quality,
         regex: @hdr_profile_pattern,
-        handler: &extract_and_discard/3
+        handler: &extract_hdr_profile/3
       },
       %{
         name: :bracket_contents,
@@ -574,10 +622,34 @@ defmodule Mydia.Library.FileParser.V2 do
         handler: &extract_and_discard/3
       },
       %{
-        name: :extra_noise,
-        type: :noise,
+        name: :release_tags,
+        type: :quality,
         regex: @extra_noise_pattern,
-        handler: &extract_and_discard/3
+        handler: &extract_release_tags/3
+      },
+      %{
+        name: :streaming_service,
+        type: :quality,
+        regex: @streaming_service_pattern,
+        handler: &extract_streaming_service/3
+      },
+      %{
+        name: :language,
+        type: :quality,
+        regex: @language_pattern,
+        handler: &extract_language/3
+      },
+      %{
+        name: :rating,
+        type: :quality,
+        regex: @rating_pattern,
+        handler: &extract_rating/3
+      },
+      %{
+        name: :runtime,
+        type: :quality,
+        regex: @runtime_pattern,
+        handler: &extract_runtime/3
       },
       # Year (secondary) - standalone years (only if no year extracted yet)
       %{
@@ -603,7 +675,7 @@ defmodule Mydia.Library.FileParser.V2 do
     # Reduce over all patterns, extracting and removing matches sequentially
     {metadata, remaining} =
       Enum.reduce(extraction_patterns(), {initial_metadata, text}, fn pattern,
-                                                                      {metadata, remaining_text} ->
+        {metadata, remaining_text} ->
         extract_pattern(pattern, metadata, remaining_text)
       end)
 
@@ -815,7 +887,7 @@ defmodule Mydia.Library.FileParser.V2 do
 
   def extract_year(match, _text, _metadata) do
     # Extract year from match (can be in parentheses, brackets, dots, or standalone)
-    case Regex.run(~r/(19\d{2}|20\d{2})/, match) do
+    case Regex.run(@year_extract_pattern, match) do
       [_, year_str] -> String.to_integer(year_str)
       [year_str] -> String.to_integer(year_str)
       _ -> nil
@@ -836,13 +908,10 @@ defmodule Mydia.Library.FileParser.V2 do
   end
 
   def extract_resolution(match, _text, _metadata) do
-    # Normalize resolution case (1080P → 1080p)
-    cond do
-      String.match?(match, ~r/^\d+[pP]$/) ->
-        String.replace(match, ~r/[pP]$/, "p")
-
-      true ->
-        match
+    case Regex.run(@resolution_extract_pattern, match) do
+      [_, resolution] -> String.downcase(resolution)
+      [resolution] -> String.downcase(resolution)
+      nil -> String.downcase(match)
     end
   end
 
@@ -860,14 +929,14 @@ defmodule Mydia.Library.FileParser.V2 do
 
   # Validates WEB is a source and not part of the title by checking position
   # relative to quality markers (year, resolution, episode markers)
-  defp validate_web_source(text) do
+defp validate_web_source(text) do
     # Find the position of WEB in the text
-    web_pos = find_word_position(text, ~r/\bWEB\b/i)
+    web_pos = find_word_position(text, @web_word_pattern)
 
     # Find positions of quality markers that would indicate WEB is after them
-    year_pos = find_word_position(text, ~r/[\s._-](19\d{2}|20\d{2})(?:[\s._-]|$)/)
-    resolution_pos = find_word_position(text, ~r/\b\d{3,4}[pP]\b/)
-    episode_pos = find_word_position(text, ~r/[. _-]S\d{1,2}E\d{1,2}/i)
+    year_pos = find_word_position(text, @year_pattern_secondary)
+    resolution_pos = find_word_position(text, @resolution_pattern)
+    episode_pos = find_word_position(text, @episode_pattern)
 
     # WEB is valid if it appears after any quality marker
     quality_marker_pos =
@@ -894,7 +963,7 @@ defmodule Mydia.Library.FileParser.V2 do
 
   def extract_codec(match, _text, _metadata) do
     # Normalize codec (x 264 → x.264, h 264 → h.264)
-    if String.match?(match, ~r/^[hxHX]\s26[45]$/i) do
+    if String.match?(match, @codec_space_pattern) do
       String.replace(match, " ", ".")
     else
       match
@@ -904,22 +973,18 @@ defmodule Mydia.Library.FileParser.V2 do
   def extract_hdr(match, _text, _metadata) do
     # Normalize HDR formats
     cleaned_match = String.trim(match)
+    upcase_match = String.upcase(cleaned_match)
 
     cond do
-      String.contains?(cleaned_match, "HDR10+") ||
-          String.contains?(cleaned_match, "HDR10 ") ->
+      String.contains?(upcase_match, "HDR10+") ||
+        String.contains?(upcase_match, "HDR10 ") ->
         "HDR10+"
-
-      String.match?(cleaned_match, ~r/Dolby[\s.]?Vision/i) ->
+      String.match?(cleaned_match, @dolby_vision_extract_pattern) ->
+        "DolbyVision"
+      upcase_match in ["DOVI", "DV"] ->
         "DolbyVision"
 
-      String.match?(cleaned_match, ~r/^DoVi$/i) ->
-        "DolbyVision"
-
-      String.match?(cleaned_match, ~r/^DV$/i) ->
-        "DolbyVision"
-
-      true ->
+        true ->
         cleaned_match
     end
   end
@@ -927,19 +992,66 @@ defmodule Mydia.Library.FileParser.V2 do
   def extract_audio(match, _text, _metadata) do
     # Normalize audio codec
     normalized =
-      if String.match?(match, ~r/\d\s\d/) do
-        # Restore dots in channel specs (5 1 → 5.1)
-        String.replace(match, ~r/(\d)\s(\d)/, "\\1.\\2")
+      if String.match?(match, @audio_space_digit_pattern) do
+        String.replace(match, @audio_space_digit_capture, "\\1.\\2")
       else
         match
       end
 
     # Normalize DTS-HD MA → DTS-HD.MA
-    if String.match?(normalized, ~r/DTS-HD\sMA/i) do
-      String.replace(normalized, ~r/(DTS-HD)\s(MA)/i, "\\1.\\2")
+    if String.match?(normalized, @audio_dtshd_ma_pattern) do
+      String.replace(normalized, @audio_dtshd_ma_capture, "\\1.\\2")
     else
       normalized
     end
+  end
+
+  # Additional quality metadata extractors for feature parity with V1
+  def extract_bit_depth(match, _text, _metadata) do
+    case Regex.run(~r/(8|10|12)/, match) do
+      [_, depth] -> "#{depth}bit"
+      _ -> nil
+    end
+  end
+
+  def extract_encoder(match, _text, _metadata) do
+    case Regex.run(~r/(NVENC|QSV|AMF|VCE|VideoToolbox)/, match) do
+      [_, encoder] -> encoder
+      _ -> nil
+    end
+  end
+
+  def extract_audio_channels(match, _text, _metadata) do
+    # Normalize "5 1" to "5.1"
+    String.replace(match, " ", ".")
+  end
+
+  def extract_vmaf_score(match, _text, _metadata) do
+    match
+  end
+
+  def extract_hdr_profile(match, _text, _metadata) do
+    match
+  end
+
+  def extract_release_tags(match, _text, _metadata) do
+    match
+  end
+
+  def extract_streaming_service(match, _text, _metadata) do
+    match
+  end
+
+  def extract_language(match, _text, _metadata) do
+    match
+  end
+
+  def extract_rating(match, _text, _metadata) do
+    match
+  end
+
+  def extract_runtime(match, _text, _metadata) do
+    match
   end
 
   def extract_and_discard(_match, _text, _metadata) do
@@ -1016,11 +1128,11 @@ defmodule Mydia.Library.FileParser.V2 do
 
   ## Helper Functions
 
-  defp normalize_filename(filename) do
+defp normalize_filename(filename) do
     filename
     |> Path.basename()
     |> Path.rootname()
-    |> String.replace(~r/[_.]/, " ")
+    |> String.replace(@clean_filename_pattern, " ")
     |> String.trim()
   end
 
@@ -1031,23 +1143,45 @@ defmodule Mydia.Library.FileParser.V2 do
 
     text
     # Remove empty brackets/parentheses that remain after extraction
-    |> String.replace(~r/[[(]\s*[])]/, " ")
+    |> String.replace(@clean_empty_brackets, " ")
     # Collapse multiple spaces
-    |> String.replace(~r/\s+/, " ")
+    |> String.replace(@clean_multi_space, " ")
     # Remove multiple dashes/underscores
-    |> String.replace(~r/[-_]{2,}/, " ")
+    |> String.replace(@clean_multi_dash, " ")
     # Remove leading/trailing separators
-    |> String.replace(~r/^[-_\s]+|[-_\s]+$/, "")
+    |> String.replace(@clean_edge_separators, "")
     |> String.trim()
     # Split into words and clean up
-    |> String.split(~r/\s+/)
-    |> Enum.reject(&(&1 == "" || &1 == "-" || &1 == "_" || &1 == "+"))
+    |> String.split(@clean_multi_space)
+    |> Enum.reject(&(&1 in ["", "-", "_", "+"]))
     # Filter out quality markers (case-insensitive) but preserve numbers that are part of titles
     |> Enum.reject(fn word ->
       String.downcase(word) in quality_markers
-    end)
+      end)
     |> Enum.map(&smart_capitalize/1)
     |> Enum.join(" ")
+  end
+
+# Finds the exact byte index where the title ends and the metadata/garbage begins
+  defp find_title_boundary(text) do
+    # These are definitive markers that almost never appear IN a title,
+    # but always appear immediately AFTER a title.
+    markers = [
+      @year_pattern_primary,          # e.g., [2008] or (1999)
+      @resolution_pattern,            # e.g., 1080p, 4K, UHD
+      @episode_pattern                # e.g., S01E01
+    ]
+
+    markers
+    |> Enum.map(fn pattern ->
+      case Regex.run(pattern, text, return: :index) do
+        [{pos, _len} | _] -> pos
+        nil -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    # If no markers are found, assume the whole string is the title
+    |> Enum.min(fn -> byte_size(text) end)
   end
 
   # Smart capitalization that preserves intentional mixed case but normalizes random mixed case
@@ -1138,30 +1272,25 @@ defmodule Mydia.Library.FileParser.V2 do
 
     cond do
       # Dolby Digital Plus (E-AC3) - must check EAC3 and AC3 separately from DDP/DD to avoid matching the "3"
-      String.match?(normalized, ~r/^eac3$/i) ->
+      normalized == "eac3" ->
         "Dolby Digital Plus"
-
-      Regex.match?(~r/^ddp(\d+\.?\d*)?$/i, normalized) ->
+      String.starts_with?(normalized, "ddp") ->
         extract_channels(audio, "Dolby Digital Plus")
 
       # Dolby Digital (AC3) - must check AC3 separately from DD to avoid matching the "3"
-      String.match?(normalized, ~r/^ac3$/i) ->
+      normalized == "ac3" ->
         "Dolby Digital"
-
-      Regex.match?(~r/^dd(\d+\.?\d*)?$/i, normalized) ->
+      String.starts_with?(normalized, "dd") ->
         extract_channels(audio, "Dolby Digital")
 
       # DTS variants
       String.contains?(normalized, "dts-hd") && String.contains?(normalized, "ma") ->
         "DTS-HD Master Audio"
-
       String.contains?(normalized, "dts-hd") ->
         "DTS-HD High Resolution Audio"
-
-      String.match?(normalized, ~r/^dts-x$/i) ->
+      normalized == "dts-x" ->
         "DTS:X"
-
-      String.match?(normalized, ~r/^dts$/i) ->
+      normalized == "dts" ->
         "DTS"
 
       # Dolby TrueHD
@@ -1169,14 +1298,13 @@ defmodule Mydia.Library.FileParser.V2 do
         extract_channels(audio, "Dolby TrueHD")
 
       # Dolby Atmos
-      String.match?(normalized, ~r/^atmos$/i) ->
+      normalized == "atmos" ->
         "Dolby Atmos"
 
       # AAC variants
-      String.match?(normalized, ~r/^aac-lc/i) ->
+      String.starts_with?(normalized, "aac-lc") ->
         "AAC-LC"
-
-      String.match?(normalized, ~r/^aac/i) ->
+      String.starts_with?(normalized, "aac") ->
         extract_channels(audio, "AAC")
 
       # Unknown - return as-is
@@ -1186,7 +1314,7 @@ defmodule Mydia.Library.FileParser.V2 do
   end
 
   defp extract_channels(audio, base_name) do
-    case Regex.run(~r/(\d+\.?\d*)/, audio) do
+    case Regex.run(@audio_channels_capture, audio) do
       [_, channels] -> "#{base_name} #{channels}"
       _ -> base_name
     end
@@ -1200,29 +1328,27 @@ defmodule Mydia.Library.FileParser.V2 do
 
     cond do
       # H.265/HEVC
-      Regex.match?(~r/^[hx][\s.]?265$/i, normalized) || String.match?(normalized, ~r/^hevc$/i) ->
+      normalized in ["hevc", "h265", "h.265", "x265", "x.265"] ->
         "H.265/HEVC"
 
       # H.264/AVC
-      Regex.match?(~r/^[hx][\s.]?264$/i, normalized) || String.match?(normalized, ~r/^avc$/i) ->
+      normalized in ["avc", "h264", "h.264", "x264", "x.264"] ->
         "H.264/AVC"
 
       # Legacy codecs
-      String.match?(normalized, ~r/^xvid$/i) ->
+      normalized == "xvid" ->
         "XviD"
-
-      String.match?(normalized, ~r/^divx$/i) ->
+      normalized == "divx" ->
         "DivX"
 
       # Modern codecs
-      String.match?(normalized, ~r/^vp9$/i) ->
+      normalized == "vp9" ->
         "VP9"
-
-      String.match?(normalized, ~r/^av1$/i) ->
+      normalized == "av1" ->
         "AV1"
 
       # Hardware encoders
-      String.match?(normalized, ~r/^nvenc$/i) ->
+      normalized == "nvenc" ->
         "NVENC"
 
       # Unknown - return as-is
@@ -1239,15 +1365,15 @@ defmodule Mydia.Library.FileParser.V2 do
 
     cond do
       # Blu-ray variants
-      String.match?(normalized, ~r/^(bluray|bdrip|brrip)$/i) ->
+      normalized in ["bluray", "bdrip", "brrip"] ->
         "Blu-ray"
 
       # REMUX
-      String.match?(normalized, ~r/^remux$/i) ->
+      normalized == "remux" ->
         "Remux"
 
       # WEB variants (keep distinct)
-      String.match?(normalized, ~r/^web-dl$/i) ->
+      normalized == "web-dl" ->
         "WEB-DL"
 
       String.match?(normalized, ~r/^webrip$/i) ->
@@ -1257,11 +1383,11 @@ defmodule Mydia.Library.FileParser.V2 do
         "WEB"
 
       # HDTV
-      String.match?(normalized, ~r/^hdtv$/i) ->
+      normalized == "hdtv" ->
         "HDTV"
 
       # DVD variants
-      String.match?(normalized, ~r/^(dvd|dvdrip|dvdscr)$/i) ->
+      normalized in ["dvd", "dvdrip", "dvdscr"] ->
         "DVD"
 
       # Unknown - return as-is
@@ -1278,23 +1404,23 @@ defmodule Mydia.Library.FileParser.V2 do
 
     cond do
       # 4K/2160p
-      String.match?(normalized, ~r/^(2160p|4k|uhd)$/i) ->
+      normalized in ["2160p", "4k", "uhd"] ->
         "2160p (4K)"
 
-      # 1080p
-      String.match?(normalized, ~r/^1080p$/i) ->
+        # 1080p
+      normalized == "1080p" ->
         "1080p (Full HD)"
 
       # 720p
-      String.match?(normalized, ~r/^720p$/i) ->
+      normalized == "720p" ->
         "720p (HD)"
 
       # 8K
-      String.match?(normalized, ~r/^(4320p|8k)$/i) ->
+      normalized in ["4320p", "8k"] ->
         "4320p (8K)"
 
       # 576p/480p (SD)
-      String.match?(normalized, ~r/^(576p|480p)$/i) ->
+      normalized in ["576p", "480p"] ->
         "#{resolution} (SD)"
 
       # Unknown - return as-is
@@ -1315,15 +1441,15 @@ defmodule Mydia.Library.FileParser.V2 do
         "HDR10+"
 
       # HDR10
-      String.match?(normalized, ~r/^hdr10$/i) ->
+      normalized == "hdr10" ->
         "HDR10"
 
       # Dolby Vision
-      String.match?(normalized, ~r/^(dolbyvision|dovi)$/i) ->
+      normalized in ["dolbyvision", "dovi"] ->
         "Dolby Vision"
 
       # Generic HDR
-      String.match?(normalized, ~r/^hdr$/i) ->
+      normalized == "hdr" ->
         "HDR"
 
       # Unknown - return as-is
