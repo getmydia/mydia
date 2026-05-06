@@ -35,6 +35,8 @@ defmodule Mydia.Library.FileParser do
       |Atmos
       |AAC(?:-LC)?(?:[\s.]\d+[\s.]?\d*)?  # AAC, AAC-LC, AAC 2.0
       |AC3
+      |MP3|FLAC                            # Simple audio formats
+      |[257]ch                             # Audio channels: 2ch, 5ch, 7ch
     )
     \b
   /xi
@@ -47,13 +49,14 @@ defmodule Mydia.Library.FileParser do
       |HEVC|AVC                            # HEVC, AVC
       |XviD|DivX                           # Legacy codecs
       |VP9|AV1                             # Modern codecs
-      |NVENC                               # Hardware encoder
+      |NVENC|QSV|AMF|VCE|VideoToolbox      # Hardware encoders
     )
     \b
   /xi
 
   # Resolution pattern - normalize to lowercase 'p' in extract function
-  @resolution_pattern ~r/\b(?:\d{3,4}[pP]|4K|8K|UHD)\b/i
+  # Uses (?:^|[^\d]) to handle resolutions inside brackets like [360p-DivX]
+  @resolution_pattern ~r/(?:^|[^\d])(\d{3,4}[pP]|4K|8K|UHD)(?:$|[^\d])/i
 
   # Source pattern
   # Note: WEB-DL and WEBRip must come before WEB to avoid partial matching
@@ -82,40 +85,49 @@ defmodule Mydia.Library.FileParser do
   # Additional patterns to strip
   @bit_depth_pattern ~r/\b(8|10|12)[\s-]?bits?\b/i
   @encoder_pattern ~r/[-_. ](NVENC|QSV|AMF|VCE|VideoToolbox)\b/i
-  # Only remove brackets that contain quality info (not years)
   @bracket_contents_pattern ~r/\[(HDR|HDR10|HDR10\+|DolbyVision|DoVi|10bit|8bit|x265|x264|HEVC|AVC|2160p|1080p|720p)[^\]]*\]/i
-  @extra_noise_pattern ~r/\b(PROPER|REPACK|INTERNAL|LIMITED|UNRATED|DIRECTORS?\.CUT|EXTENDED|THEATRICAL)\b/i
+
+  # Extra release tag information
+  @release_tags_pattern ~r/\b(PROPER|REPACK|INTERNAL|LIMITED|UNRATED|DIRECTORS?\.CUT|EXTENDED|THEATRICAL)\b/i
+
   # Streaming service identifiers that should be stripped from titles
   @streaming_service_pattern ~r/\b(AMZN|ATVP|DSNP|HMAX|HULU|NF|PMTP|PCOK|STAN|iT|MA)\b/i
+
   # Multi-language/region identifiers
   @language_pattern ~r/\b(MULTi|MULTI|DUAL|DUBBED|SUBBED|KORSUB|FRENCH|TRUEFRENCH|GERMAN|SPANISH|ITALIAN|JAPANESE)\b/i
+
   # HDR profile numbers (P5, P8, etc.) and other quality indicators to strip
   @hdr_profile_pattern ~r/\bP[0-9]+\b/i
+
   # Audio channel indicators (after dot normalization)
   @audio_channels_pattern ~r/\b[257]\s+1\b/i
+
   # VMAF quality metric pattern (e.g., VMAF96, VMAF95.5)
   @vmaf_pattern ~r/\bVMAF\d+(?:\.\d+)?\b/i
+
+  # Rating identifiers for both movies and series
+  @rating_pattern ~r/\b(G|PG|PG-13|R|NC-17|NR|TV-Y|TV-Y7|TV-G|TV-PG|TV-14|TV-MA)\b/i
+
+  @runtime_pattern ~r/\b\d+[-]min\b/i
 
   # Common release group patterns (hyphen prefix)
   @release_group_pattern ~r/-([A-Z0-9]+)$/i
 
-  # TV show patterns
-  defp tv_patterns do
-    [
+  # Series episode patterns (converted from function to module for parsing efficiency)
+  @series_patterns [
       # S01E01 or s01e01, with optional separator (S01 E01), and optional multi-episode S01E01-E03 or S01E01E03
-      ~r/[. _-]S(\d{1,2})[. _-]?E(\d{1,2})(?:[. _-]?E(\d{1,2}))?/i,
+    ~r/[. _-]S(\d{1,2})[. _-]?E(\d{1,2})(?:[. _-]?E(\d{1,2}))?/i,
       # 1x01
-      ~r/[. _-](\d{1,2})x(\d{1,2})/i,
+    ~r/[. _-](\d{1,2})x(\d{1,2})/i,
       # Season 1 Episode 1 (verbose)
-      ~r/Season[. _-](\d{1,2})[. _-]Episode[. _-](\d{1,2})/i,
+    ~r/Season[. _-](\d{1,2})[. _-]Episode[. _-](\d{1,2})/i,
       # Absolute episode numbering (E01, E001, E0001) - common in anime
       # Must use word boundary \b to avoid matching "ETHEL" in encoder names
-      ~r/[. _-]E(\d{2,4})\b/i
-    ]
-  end
+    ~r/[. _-]E(\d{2,4})\b/i
+  ]
 
-  # Year pattern - (2020), [2020], or .2020.
-  defp year_pattern, do: ~r/[\(\[. _-](19\d{2}|20\d{2})[\)\]. _-]/
+  # Year pattern - (2020), [2020], .2020. or malformed ]2020]
+  @year_pattern ~r/[\(\[\]\)\s]*\b((?:19|20)\d{2})\b[\(\[\]\)\s]*/
 
   @doc """
   Parses a file name or path and extracts media metadata.
@@ -181,21 +193,23 @@ defmodule Mydia.Library.FileParser do
   def parse_movie(filename) do
     cleaned = normalize_filename(filename)
 
-    # Extract year FIRST, before removing brackets
-    year = extract_year(cleaned)
+    # Establish the Title Boundary BEFORE extraction
+    boundary_pos = case Regex.run(@year_pattern, cleaned, return: :index) do
+      [{pos, _len} | _] -> pos
+      nil -> byte_size(cleaned)
+    end
 
+    # Isolate the title portion immediately
+    title_raw = :binary.part(cleaned, 0, boundary_pos)
+
+    # Extract metadata from the FULL string
+    year = extract_year(cleaned)
     # Extract quality info and release group
     quality = extract_quality(cleaned)
     release_group = extract_release_group(cleaned)
 
-    # Remove quality markers and release group to isolate title
-    title_part = clean_for_title_extraction(cleaned, quality, release_group)
-
-    # Clean up title
-    title =
-      title_part
-      |> remove_year_from_title(year)
-      |> clean_title()
+    # Clean only the isolated title
+    title = clean_title(title_raw)
 
     # Calculate confidence
     confidence = calculate_movie_confidence(title, year, quality)
@@ -219,35 +233,42 @@ defmodule Mydia.Library.FileParser do
   Returns a parse result with type: :tv_show or :unknown.
   """
   @spec parse_tv_show(String.t()) :: parse_result()
-  def parse_tv_show(filename) do
-    cleaned = normalize_filename(filename)
+def parse_tv_show(filename) do
+  cleaned = normalize_filename(filename)
 
     # Try to match TV patterns
-    case match_tv_pattern(cleaned) do
-      {:ok, season, episodes, match_index} ->
-        # Extract quality info and release group
-        quality = extract_quality(cleaned)
-        release_group = extract_release_group(cleaned)
+  case match_tv_pattern(cleaned) do
+    {:ok, season, episodes, match_index} ->
+      # Boundary Logic: Check if a year appears BEFORE the episode marker
+      # Reuse @year_pattern and compare it to the match_index found by match_tv_pattern
+      boundary_pos = case Regex.run(@year_pattern, cleaned, return: :index) do
+        [{year_pos, _} | _] when year_pos < match_index -> year_pos
+        _ -> match_index
+      end
 
-        # Extract title (everything before the season/episode pattern)
-        title = extract_tv_title(cleaned, match_index)
+      # Isolate and Clean the Title
+      title_raw = :binary.part(cleaned, 0, boundary_pos)
+      title = clean_title(title_raw)
 
-        # Calculate confidence
-        confidence = calculate_tv_confidence(title, season, episodes, quality)
+      # Use FULL cleaned string for metadata so nothing is missed
+      quality = extract_quality(cleaned)
+      release_group = extract_release_group(cleaned)
 
-        %{
-          type: :tv_show,
-          title: title,
-          year: extract_year(cleaned),
-          season: season,
-          episodes: episodes,
-          quality: quality,
-          release_group: release_group,
-          confidence: confidence,
-          original_filename: filename
-        }
+      confidence = calculate_tv_confidence(title, season, episodes, quality)
 
-      :error ->
+      %{
+        type: :tv_show,
+        title: title,
+        year: extract_year(cleaned),
+        season: season,
+        episodes: episodes,
+        quality: quality,
+        release_group: release_group,
+        confidence: confidence,
+        original_filename: filename
+      }
+
+    :error ->
         %{
           type: :unknown,
           title: nil,
@@ -259,8 +280,8 @@ defmodule Mydia.Library.FileParser do
           confidence: 0.0,
           original_filename: filename
         }
-    end
   end
+end
 
   ## Private Functions
 
@@ -274,7 +295,7 @@ defmodule Mydia.Library.FileParser do
 
   defp match_tv_pattern(text) do
     # Try each TV pattern
-    Enum.reduce_while(tv_patterns(), :error, fn pattern, _acc ->
+    Enum.reduce_while(@series_patterns, :error, fn pattern, _acc ->
       case Regex.run(pattern, text, return: :index) do
         nil ->
           {:cont, :error}
@@ -314,23 +335,23 @@ defmodule Mydia.Library.FileParser do
     end
   end
 
-  defp extract_tv_title(text, match_index) do
-    # Extract year first
-    year = extract_year(text)
-
-    text
-    |> :binary.part(0, match_index)
-    |> remove_year_from_title(year)
-    |> clean_title()
-  end
-
   defp extract_quality(text) do
     %{
       resolution: extract_resolution(text),
       source: extract_source(text),
       codec: extract_codec(text),
       hdr_format: extract_hdr(text),
-      audio: extract_audio(text)
+      audio: extract_audio(text),
+      bit_depth: extract_bit_depth(text),
+      encoder: extract_encoder(text),
+      rating: extract_rating(text),
+      runtime: extract_runtime(text),
+      release_tags: extract_release_tags(text),
+      streaming_service: extract_streaming_service(text),
+      language: extract_language(text),
+      hdr_profile: extract_hdr_profile(text),
+      audio_channels: extract_audio_channels(text),
+      vmaf_score: extract_vmaf_score(text)
     }
   end
 
@@ -357,7 +378,7 @@ defmodule Mydia.Library.FileParser do
   # Resolution extraction - normalize case to lowercase 'p'
   defp extract_resolution(text) do
     case Regex.run(@resolution_pattern, text) do
-      [match | _] ->
+      [_, match | _] ->
         # Normalize resolution to lowercase 'p' format (1080p not 1080P)
         cond do
           String.match?(match, ~r/^\d+[pP]$/) ->
@@ -447,91 +468,81 @@ defmodule Mydia.Library.FileParser do
     end
   end
 
-  defp extract_year(text) do
-    case Regex.run(year_pattern(), text) do
-      [_, year_str] -> String.to_integer(year_str)
+  defp extract_bit_depth(text) do
+    case Regex.run(@bit_depth_pattern, text) do
+      [match, depth] -> "#{depth}bit"
       _ -> nil
     end
   end
 
-  defp clean_for_title_extraction(text, quality, release_group) do
-    text
-    |> remove_quality_markers(quality)
-    |> remove_release_group(release_group)
-    |> remove_bit_depth()
-    |> remove_encoders()
-    |> remove_audio_channels()
-    |> remove_vmaf()
-    |> remove_bracket_contents()
-    |> remove_extra_noise()
-    |> remove_streaming_services()
-    |> remove_language_identifiers()
-    |> remove_hdr_profiles()
+  defp extract_encoder(text) do
+    case Regex.run(@encoder_pattern, text) do
+      [_, encoder] -> encoder
+      _ -> nil
+    end
   end
 
-  defp remove_quality_markers(text, _quality) do
-    # Remove ALL known quality patterns using regex patterns
-    # This handles variations automatically (DD5.1, DD51, DDP5.1, etc.)
-    # Use :global option to replace all occurrences
-    text
-    |> String.replace(@audio_pattern, " ", global: true)
-    |> String.replace(@codec_pattern, " ", global: true)
-    |> String.replace(@resolution_pattern, " ", global: true)
-    |> String.replace(@source_pattern, " ", global: true)
-    |> String.replace(@hdr_pattern, " ", global: true)
+  defp extract_rating(text) do
+    case Regex.run(@rating_pattern, text) do
+      [match] -> match
+      _ -> nil
+    end
   end
 
-  defp remove_release_group(text, nil), do: text
-
-  defp remove_release_group(text, group) do
-    String.replace(text, ~r/-#{Regex.escape(group)}$/i, " ")
+  defp extract_runtime(text) do
+    case Regex.run(@runtime_pattern, text) do
+      [match] -> match
+      _ -> nil
+    end
   end
 
-  defp remove_bit_depth(text) do
-    String.replace(text, @bit_depth_pattern, " ")
+  defp extract_release_tags(text) do
+    case Regex.run(@release_tags_pattern, text) do
+      [match] -> match
+      _ -> nil
+    end
   end
 
-  defp remove_encoders(text) do
-    String.replace(text, @encoder_pattern, " ")
+  defp extract_streaming_service(text) do
+    case Regex.run(@streaming_service_pattern, text) do
+      [match] -> match
+      _ -> nil
+    end
   end
 
-  defp remove_audio_channels(text) do
-    String.replace(text, @audio_channels_pattern, " ")
+  defp extract_language(text) do
+    case Regex.run(@language_pattern, text) do
+      [match] -> match
+      _ -> nil
+    end
   end
 
-  defp remove_vmaf(text) do
-    String.replace(text, @vmaf_pattern, " ")
+  defp extract_hdr_profile(text) do
+    case Regex.run(@hdr_profile_pattern, text) do
+      [match] -> match
+      _ -> nil
+    end
   end
 
-  defp remove_bracket_contents(text) do
-    text
-    |> String.replace(@bracket_contents_pattern, " ")
-    |> String.replace(~r/\[\s*\]/, " ")
-    |> String.replace(~r/\(\s*\)/, " ")
+  defp extract_audio_channels(text) do
+    case Regex.run(@audio_channels_pattern, text) do
+      [match] -> String.replace(match, " ", ".")  # Convert "5 1" to "5.1"
+      _ -> nil
+    end
   end
 
-  defp remove_extra_noise(text) do
-    String.replace(text, @extra_noise_pattern, " ")
+  defp extract_vmaf_score(text) do
+    case Regex.run(@vmaf_pattern, text) do
+      [match] -> match
+      _ -> nil
+    end
   end
 
-  defp remove_streaming_services(text) do
-    String.replace(text, @streaming_service_pattern, " ")
-  end
-
-  defp remove_language_identifiers(text) do
-    String.replace(text, @language_pattern, " ")
-  end
-
-  defp remove_hdr_profiles(text) do
-    String.replace(text, @hdr_profile_pattern, " ")
-  end
-
-  defp remove_year_from_title(text, nil), do: text
-
-  defp remove_year_from_title(text, year) do
-    text
-    |> String.replace(~r/[\(\[. _-]#{year}[\)\]. _-]/, " ")
-    |> String.replace(~r/#{year}/, " ")
+  defp extract_year(text) do
+    case Regex.run(@year_pattern, text) do
+      [_, year_str] -> String.to_integer(year_str)
+      _ -> nil
+    end
   end
 
   defp clean_title(text) do
