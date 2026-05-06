@@ -215,7 +215,7 @@ defmodule Mydia.Library.FileParser.V2 do
         confidence: 0.9
       }
   """
-@spec parse(String.t(), keyword()) :: parse_result()
+  @spec parse(String.t(), keyword()) :: parse_result()
   def parse(filename, opts \\ []) when is_binary(filename) do
     # Normalize filename (remove extension, convert dots/underscores to spaces)
     normalized = normalize_filename(filename)
@@ -675,7 +675,7 @@ defmodule Mydia.Library.FileParser.V2 do
     # Reduce over all patterns, extracting and removing matches sequentially
     {metadata, remaining} =
       Enum.reduce(extraction_patterns(), {initial_metadata, text}, fn pattern,
-        {metadata, remaining_text} ->
+                                                                      {metadata, remaining_text} ->
         extract_pattern(pattern, metadata, remaining_text)
       end)
 
@@ -929,7 +929,7 @@ defmodule Mydia.Library.FileParser.V2 do
 
   # Validates WEB is a source and not part of the title by checking position
   # relative to quality markers (year, resolution, episode markers)
-defp validate_web_source(text) do
+  defp validate_web_source(text) do
     # Find the position of WEB in the text
     web_pos = find_word_position(text, @web_word_pattern)
 
@@ -977,14 +977,16 @@ defp validate_web_source(text) do
 
     cond do
       String.contains?(upcase_match, "HDR10+") ||
-        String.contains?(upcase_match, "HDR10 ") ->
+          String.contains?(upcase_match, "HDR10 ") ->
         "HDR10+"
+
       String.match?(cleaned_match, @dolby_vision_extract_pattern) ->
         "DolbyVision"
+
       upcase_match in ["DOVI", "DV"] ->
         "DolbyVision"
 
-        true ->
+      true ->
         cleaned_match
     end
   end
@@ -1128,7 +1130,7 @@ defp validate_web_source(text) do
 
   ## Helper Functions
 
-defp normalize_filename(filename) do
+  defp normalize_filename(filename) do
     filename
     |> Path.basename()
     |> Path.rootname()
@@ -1157,19 +1159,22 @@ defp normalize_filename(filename) do
     # Filter out quality markers (case-insensitive) but preserve numbers that are part of titles
     |> Enum.reject(fn word ->
       String.downcase(word) in quality_markers
-      end)
+    end)
     |> Enum.map(&smart_capitalize/1)
     |> Enum.join(" ")
   end
 
-# Finds the exact byte index where the title ends and the metadata/garbage begins
+  # Finds the exact byte index where the title ends and the metadata/garbage begins
   defp find_title_boundary(text) do
     # These are definitive markers that almost never appear IN a title,
     # but always appear immediately AFTER a title.
     markers = [
-      @year_pattern_primary,          # e.g., [2008] or (1999)
-      @resolution_pattern,            # e.g., 1080p, 4K, UHD
-      @episode_pattern                # e.g., S01E01
+      # e.g., [2008] or (1999)
+      @year_pattern_primary,
+      # e.g., 1080p, 4K, UHD
+      @resolution_pattern,
+      # e.g., S01E01
+      @episode_pattern
     ]
 
     markers
@@ -1274,22 +1279,27 @@ defp normalize_filename(filename) do
       # Dolby Digital Plus (E-AC3) - must check EAC3 and AC3 separately from DDP/DD to avoid matching the "3"
       normalized == "eac3" ->
         "Dolby Digital Plus"
+
       String.starts_with?(normalized, "ddp") ->
         extract_channels(audio, "Dolby Digital Plus")
 
       # Dolby Digital (AC3) - must check AC3 separately from DD to avoid matching the "3"
       normalized == "ac3" ->
         "Dolby Digital"
+
       String.starts_with?(normalized, "dd") ->
         extract_channels(audio, "Dolby Digital")
 
       # DTS variants
       String.contains?(normalized, "dts-hd") && String.contains?(normalized, "ma") ->
         "DTS-HD Master Audio"
+
       String.contains?(normalized, "dts-hd") ->
         "DTS-HD High Resolution Audio"
+
       normalized == "dts-x" ->
         "DTS:X"
+
       normalized == "dts" ->
         "DTS"
 
@@ -1304,6 +1314,7 @@ defp normalize_filename(filename) do
       # AAC variants
       String.starts_with?(normalized, "aac-lc") ->
         "AAC-LC"
+
       String.starts_with?(normalized, "aac") ->
         extract_channels(audio, "AAC")
 
@@ -1338,12 +1349,14 @@ defp normalize_filename(filename) do
       # Legacy codecs
       normalized == "xvid" ->
         "XviD"
+
       normalized == "divx" ->
         "DivX"
 
       # Modern codecs
       normalized == "vp9" ->
         "VP9"
+
       normalized == "av1" ->
         "AV1"
 
@@ -1407,7 +1420,7 @@ defp normalize_filename(filename) do
       normalized in ["2160p", "4k", "uhd"] ->
         "2160p (4K)"
 
-        # 1080p
+      # 1080p
       normalized == "1080p" ->
         "1080p (Full HD)"
 

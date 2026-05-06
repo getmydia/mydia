@@ -85,7 +85,6 @@ defmodule Mydia.Library.FileParser do
   # Additional patterns to strip
   @bit_depth_pattern ~r/\b(8|10|12)[\s-]?bits?\b/i
   @encoder_pattern ~r/[-_. ](NVENC|QSV|AMF|VCE|VideoToolbox)\b/i
-  @bracket_contents_pattern ~r/\[(HDR|HDR10|HDR10\+|DolbyVision|DoVi|10bit|8bit|x265|x264|HEVC|AVC|2160p|1080p|720p)[^\]]*\]/i
 
   # Extra release tag information
   @release_tags_pattern ~r/\b(PROPER|REPACK|INTERNAL|LIMITED|UNRATED|DIRECTORS?\.CUT|EXTENDED|THEATRICAL)\b/i
@@ -115,14 +114,14 @@ defmodule Mydia.Library.FileParser do
 
   # Series episode patterns (converted from function to module for parsing efficiency)
   @series_patterns [
-      # S01E01 or s01e01, with optional separator (S01 E01), and optional multi-episode S01E01-E03 or S01E01E03
+    # S01E01 or s01e01, with optional separator (S01 E01), and optional multi-episode S01E01-E03 or S01E01E03
     ~r/[. _-]S(\d{1,2})[. _-]?E(\d{1,2})(?:[. _-]?E(\d{1,2}))?/i,
-      # 1x01
+    # 1x01
     ~r/[. _-](\d{1,2})x(\d{1,2})/i,
-      # Season 1 Episode 1 (verbose)
+    # Season 1 Episode 1 (verbose)
     ~r/Season[. _-](\d{1,2})[. _-]Episode[. _-](\d{1,2})/i,
-      # Absolute episode numbering (E01, E001, E0001) - common in anime
-      # Must use word boundary \b to avoid matching "ETHEL" in encoder names
+    # Absolute episode numbering (E01, E001, E0001) - common in anime
+    # Must use word boundary \b to avoid matching "ETHEL" in encoder names
     ~r/[. _-]E(\d{2,4})\b/i
   ]
 
@@ -194,10 +193,11 @@ defmodule Mydia.Library.FileParser do
     cleaned = normalize_filename(filename)
 
     # Establish the Title Boundary BEFORE extraction
-    boundary_pos = case Regex.run(@year_pattern, cleaned, return: :index) do
-      [{pos, _len} | _] -> pos
-      nil -> byte_size(cleaned)
-    end
+    boundary_pos =
+      case Regex.run(@year_pattern, cleaned, return: :index) do
+        [{pos, _len} | _] -> pos
+        nil -> byte_size(cleaned)
+      end
 
     # Isolate the title portion immediately
     title_raw = :binary.part(cleaned, 0, boundary_pos)
@@ -233,42 +233,43 @@ defmodule Mydia.Library.FileParser do
   Returns a parse result with type: :tv_show or :unknown.
   """
   @spec parse_tv_show(String.t()) :: parse_result()
-def parse_tv_show(filename) do
-  cleaned = normalize_filename(filename)
+  def parse_tv_show(filename) do
+    cleaned = normalize_filename(filename)
 
     # Try to match TV patterns
-  case match_tv_pattern(cleaned) do
-    {:ok, season, episodes, match_index} ->
-      # Boundary Logic: Check if a year appears BEFORE the episode marker
-      # Reuse @year_pattern and compare it to the match_index found by match_tv_pattern
-      boundary_pos = case Regex.run(@year_pattern, cleaned, return: :index) do
-        [{year_pos, _} | _] when year_pos < match_index -> year_pos
-        _ -> match_index
-      end
+    case match_tv_pattern(cleaned) do
+      {:ok, season, episodes, match_index} ->
+        # Boundary Logic: Check if a year appears BEFORE the episode marker
+        # Reuse @year_pattern and compare it to the match_index found by match_tv_pattern
+        boundary_pos =
+          case Regex.run(@year_pattern, cleaned, return: :index) do
+            [{year_pos, _} | _] when year_pos < match_index -> year_pos
+            _ -> match_index
+          end
 
-      # Isolate and Clean the Title
-      title_raw = :binary.part(cleaned, 0, boundary_pos)
-      title = clean_title(title_raw)
+        # Isolate and Clean the Title
+        title_raw = :binary.part(cleaned, 0, boundary_pos)
+        title = clean_title(title_raw)
 
-      # Use FULL cleaned string for metadata so nothing is missed
-      quality = extract_quality(cleaned)
-      release_group = extract_release_group(cleaned)
+        # Use FULL cleaned string for metadata so nothing is missed
+        quality = extract_quality(cleaned)
+        release_group = extract_release_group(cleaned)
 
-      confidence = calculate_tv_confidence(title, season, episodes, quality)
+        confidence = calculate_tv_confidence(title, season, episodes, quality)
 
-      %{
-        type: :tv_show,
-        title: title,
-        year: extract_year(cleaned),
-        season: season,
-        episodes: episodes,
-        quality: quality,
-        release_group: release_group,
-        confidence: confidence,
-        original_filename: filename
-      }
+        %{
+          type: :tv_show,
+          title: title,
+          year: extract_year(cleaned),
+          season: season,
+          episodes: episodes,
+          quality: quality,
+          release_group: release_group,
+          confidence: confidence,
+          original_filename: filename
+        }
 
-    :error ->
+      :error ->
         %{
           type: :unknown,
           title: nil,
@@ -280,8 +281,8 @@ def parse_tv_show(filename) do
           confidence: 0.0,
           original_filename: filename
         }
+    end
   end
-end
 
   ## Private Functions
 
@@ -470,7 +471,7 @@ end
 
   defp extract_bit_depth(text) do
     case Regex.run(@bit_depth_pattern, text) do
-      [match, depth] -> "#{depth}bit"
+      [_match, depth] -> "#{depth}bit"
       _ -> nil
     end
   end
@@ -526,7 +527,8 @@ end
 
   defp extract_audio_channels(text) do
     case Regex.run(@audio_channels_pattern, text) do
-      [match] -> String.replace(match, " ", ".")  # Convert "5 1" to "5.1"
+      # Convert "5 1" to "5.1"
+      [match] -> String.replace(match, " ", ".")
       _ -> nil
     end
   end
