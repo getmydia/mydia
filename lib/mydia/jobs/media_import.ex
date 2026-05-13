@@ -421,21 +421,22 @@ defmodule Mydia.Jobs.MediaImport do
       parent_dir = Path.dirname(path)
       parent_exists = File.exists?(parent_dir)
 
-      parent_contents =
+      {parent_entry_count, parent_entries_sample} =
         if parent_exists and File.dir?(parent_dir) do
           case File.ls(parent_dir) do
-            {:ok, entries} -> entries
-            {:error, _} -> []
+            {:ok, entries} -> {length(entries), Enum.take(entries, 20)}
+            {:error, _} -> {0, []}
           end
         else
-          []
+          {0, []}
         end
 
       Logger.warning("Download path does not exist",
         path: path,
         parent_dir: parent_dir,
         parent_exists: parent_exists,
-        parent_contents: parent_contents
+        parent_entry_count: parent_entry_count,
+        parent_entries_sample: parent_entries_sample
       )
 
       {:ok, []}

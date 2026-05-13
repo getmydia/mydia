@@ -110,7 +110,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
     {:ok, download} = Downloads.mark_download_completed(download)
 
     {:ok, download} =
-      if download_map.save_path do
+      if is_binary(download_map.save_path) and download_map.save_path != "" do
         Downloads.update_download(download, %{save_path: download_map.save_path})
       else
         {:ok, download}

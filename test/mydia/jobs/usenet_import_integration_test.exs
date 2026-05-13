@@ -11,7 +11,7 @@ defmodule Mydia.Jobs.UsenetImportIntegrationTest do
   use Oban.Testing, repo: Mydia.Repo
 
   alias Mydia.Downloads
-  alias Mydia.Jobs.{DownloadMonitor, MediaImport}
+  alias Mydia.Jobs.MediaImport
   alias Mydia.Settings
 
   import Mydia.MediaFixtures
