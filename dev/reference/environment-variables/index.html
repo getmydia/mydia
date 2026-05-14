@@ -2184,9 +2184,15 @@
 <td>URL for the metadata relay service</td>
 <td><code>https://relay.mydia.dev</code></td>
 </tr>
+<tr>
+<td><code>METADATA_LANGUAGE</code></td>
+<td>Language sent to TMDB/TVDB for titles, descriptions, and posters. Accepts ISO 639-1 codes (<code>de</code>) or BCP 47 tags (<code>de-DE</code>, <code>pt-BR</code>).</td>
+<td><code>en-US</code></td>
+</tr>
 </tbody>
 </table>
 <p>The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See <a href="../../development/architecture/">Architecture</a> for details.</p>
+<p><code>METADATA_LANGUAGE</code> can also be set per-instance from <strong>Settings → Configuration → Metadata</strong> in the admin UI; the env var overrides the database value when both are set.</p>
 <h2 id="flaresolverr">FlareSolverr</h2>
 <p>FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.</p>
 <table>
