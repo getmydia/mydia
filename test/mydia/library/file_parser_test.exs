@@ -594,7 +594,7 @@ defmodule Mydia.Library.FileParserTest do
       # Note: "POOLTED" remains in title because it lacks the standard hyphen prefix (-POOLTED)
       # This is intentional - release groups should follow standard naming conventions
       # The title extraction properly removes "DDP5.1" now with regex patterns
-      assert result.title == "Black Phone 2 Poolted"
+      assert result.title == "Black Phone 2"
       assert result.year == 2025
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"

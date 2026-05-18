@@ -113,7 +113,8 @@ defmodule Mydia.Library.FileParser do
   @release_group_pattern ~r/-([A-Z0-9]+)$/i
 
   # Series episode patterns (converted from function to module for parsing efficiency)
-  @series_patterns [
+  defp episode_patterns do
+  [
     # S01E01 or s01e01, with optional separator (S01 E01), and optional multi-episode S01E01-E03 or S01E01E03
     ~r/[. _-]S(\d{1,2})[. _-]?E(\d{1,2})(?:[. _-]?E(\d{1,2}))?/i,
     # 1x01
@@ -124,9 +125,10 @@ defmodule Mydia.Library.FileParser do
     # Must use word boundary \b to avoid matching "ETHEL" in encoder names
     ~r/[. _-]E(\d{2,4})\b/i
   ]
+  end
 
   # Year pattern - (2020), [2020], .2020. or malformed ]2020]
-  @year_pattern ~r/[\(\[\]\)\s]*\b((?:19|20)\d{2})\b[\(\[\]\)\s]*/
+  @year_pattern ~r/[\(\[\]\)\s]+\b((?:19|20)\d{2})\b[\(\[\]\)\s]*/
 
   @doc """
   Parses a file name or path and extracts media metadata.
@@ -296,7 +298,7 @@ defmodule Mydia.Library.FileParser do
 
   defp match_tv_pattern(text) do
     # Try each TV pattern
-    Enum.reduce_while(@series_patterns, :error, fn pattern, _acc ->
+    Enum.reduce_while(episode_patterns(), :error, fn pattern, _acc ->
       case Regex.run(pattern, text, return: :index) do
         nil ->
           {:cont, :error}
@@ -337,7 +339,7 @@ defmodule Mydia.Library.FileParser do
   end
 
   defp extract_quality(text) do
-    %{
+    Quality.new(
       resolution: extract_resolution(text),
       source: extract_source(text),
       codec: extract_codec(text),
@@ -353,7 +355,7 @@ defmodule Mydia.Library.FileParser do
       hdr_profile: extract_hdr_profile(text),
       audio_channels: extract_audio_channels(text),
       vmaf_score: extract_vmaf_score(text)
-    }
+    )
   end
 
   # Source extraction - handles both explicit patterns and standalone WEB with context
@@ -485,7 +487,7 @@ defmodule Mydia.Library.FileParser do
 
   defp extract_rating(text) do
     case Regex.run(@rating_pattern, text) do
-      [match] -> match
+      [_full, match] -> match
       _ -> nil
     end
   end
@@ -499,7 +501,7 @@ defmodule Mydia.Library.FileParser do
 
   defp extract_release_tags(text) do
     case Regex.run(@release_tags_pattern, text) do
-      [match] -> match
+      [_full, match] -> match
       _ -> nil
     end
   end
@@ -513,7 +515,7 @@ defmodule Mydia.Library.FileParser do
 
   defp extract_language(text) do
     case Regex.run(@language_pattern, text) do
-      [match] -> match
+      [_full, match] -> match
       _ -> nil
     end
   end
@@ -549,6 +551,11 @@ defmodule Mydia.Library.FileParser do
 
   defp clean_title(text) do
     text
+    |> String.replace(@audio_pattern, " ")
+    |> String.replace(@codec_pattern, " ")
+    |> String.replace(@hdr_pattern, " ")
+    |> String.replace(@resolution_pattern, " ")
+    |> String.replace(@source_pattern, " ")
     |> String.replace(~r/\s+/, " ")
     |> String.replace(~r/[-_]{2,}/, " ")
     |> String.replace(~r/^[-_\s]+|[-_\s]+$/, "")

@@ -65,20 +65,9 @@ defmodule Mydia.Library.Structs.Quality do
   Checks if a Quality struct is empty (all fields are nil).
   """
   def empty?(%__MODULE__{} = quality) do
-    quality.resolution == nil &&
-      quality.source == nil &&
-      quality.codec == nil &&
-      quality.hdr_format == nil &&
-      quality.audio == nil &&
-      quality.bit_depth == nil &&
-      quality.encoder == nil &&
-      quality.rating == nil &&
-      quality.runtime == nil &&
-      quality.release_tags == nil &&
-      quality.streaming_service == nil &&
-      quality.language == nil &&
-      quality.hdr_profile == nil &&
-      quality.audio_channels == nil &&
-      quality.vmaf_score == nil
+    quality
+    |> Map.from_struct()
+    |> Map.values()
+    |> Enum.all?(&is_nil/1)
   end
 end

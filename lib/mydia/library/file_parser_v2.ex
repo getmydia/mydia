@@ -119,14 +119,14 @@ defmodule Mydia.Library.FileParser.V2 do
   @bracket_contents_pattern ~r/\[[^\]]+\]/i
 
   # Streaming service identifiers and other release noise
-  @extra_noise_pattern ~r/\b(PROPER|REPACK|INTERNAL|LIMITED|UNRATED|DIRECTORS?\.CUT|EXTENDED|THEATRICAL|HYBRID|AMZN|ATVP|DSNP|HMAX|HULU|NF|PMTP|PCOK|STAN|iT|MA)\b/i
+  @release_tags_pattern ~r/\b(PROPER|REPACK|INTERNAL|LIMITED|UNRATED|DIRECTORS?\.CUT|EXTENDED|THEATRICAL|HYBRID)\b/i
   @streaming_service_pattern ~r/\b(AMZN|ATVP|DSNP|HMAX|HULU|NF|PMTP|PCOK|STAN|iT|MA)\b/i
   @language_pattern ~r/\b(MULTi|MULTI|DUAL|DUBBED|SUBBED|KORSUB|FRENCH|TRUEFRENCH|GERMAN|SPANISH|ITALIAN|JAPANESE)\b/i
   @audio_channels_pattern ~r/\b[257]\s+1\b/i
   @vmaf_pattern ~r/\bVMAF\d+(?:\.\d+)?\b/i
 
   # Year pattern - prioritize parenthesized/bracketed years (tolerant of malformed/reversed brackets)
-  @year_pattern_primary ~r/[\(\[\]\)\s]*\b(19\d{2}|20\d{2})\b[\(\[\]\)\s]*/
+  @year_pattern_primary ~r/[\(\[\]\)\s]+\b(19\d{2}|20\d{2})\b[\(\[\]\)\s]*/
 
   # Standalone years without brackets (e.g., Movie.2020.1080p)
   @year_pattern_secondary ~r/[\s._-](19\d{2}|20\d{2})(?:[\s._-]|$)/
@@ -143,9 +143,6 @@ defmodule Mydia.Library.FileParser.V2 do
 
   # Pull runtime from metadata in filename if exists
   @runtime_pattern ~r/\b\d+[-]min\b/i
-
-  # Episode regex pattern, e.g. S03E21
-  @episode_pattern ~r/[._-]?S\d{1,2}[._-]?E\d{1,2}/i
 
   # --- Extraction & Validation Patterns ---
   @year_extract_pattern ~r/(19\d{2}|20\d{2})/
@@ -172,14 +169,18 @@ defmodule Mydia.Library.FileParser.V2 do
   @clean_edge_separators ~r/^[-_\s]+|[-_\s]+$/
 
   # TV show patterns - defined as function to avoid module attribute issues
-  defp tv_patterns do
+  # Series episode patterns (converted from function to module for parsing efficiency)
+  defp episode_patterns do
     [
       # S01E01 or s01e01, with optional separator (S01 E01), and optional multi-episode S01E01-E03 or S01E01E03
       ~r/[. _-]S(\d{1,2})[. _-]?E(\d{1,2})(?:[. _-]?E(\d{1,2}))?/i,
       # 1x01
       ~r/[. _-](\d{1,2})x(\d{1,2})/i,
       # Season 1 Episode 1 (verbose)
-      ~r/Season[. _-](\d{1,2})[. _-]Episode[. _-](\d{1,2})/i
+      ~r/Season[. _-](\d{1,2})[. _-]Episode[. _-](\d{1,2})/i,
+      # Absolute episode numbering (E01, E001, E0001) - common in anime
+      # Must use word boundary \b to avoid matching "ETHEL" in encoder names
+      ~r/[. _-]E(\d{2,4})\b/i
     ]
   end
 
@@ -543,7 +544,7 @@ defmodule Mydia.Library.FileParser.V2 do
       %{
         name: :tv_show,
         type: :tv_identifier,
-        regex: :tv_patterns,
+        regex: :episode_patterns,
         handler: &extract_tv_info/3
       },
       # Year (primary) - parenthesized/bracketed years first (highest priority)
@@ -624,7 +625,7 @@ defmodule Mydia.Library.FileParser.V2 do
       %{
         name: :release_tags,
         type: :quality,
-        regex: @extra_noise_pattern,
+        regex: @release_tags_pattern,
         handler: &extract_release_tags/3
       },
       %{
@@ -675,8 +676,8 @@ defmodule Mydia.Library.FileParser.V2 do
     # Reduce over all patterns, extracting and removing matches sequentially
     {metadata, remaining} =
       Enum.reduce(extraction_patterns(), {initial_metadata, text}, fn pattern,
-                                                                      {metadata, remaining_text} ->
-        extract_pattern(pattern, metadata, remaining_text)
+        {metadata, remaining_text} ->
+          extract_pattern(pattern, metadata, remaining_text)
       end)
 
     # Remove internal metadata before returning
@@ -693,9 +694,9 @@ defmodule Mydia.Library.FileParser.V2 do
   defp byte_slice_after(text, byte_pos),
     do: :binary.part(text, byte_pos, byte_size(text) - byte_pos)
 
-  defp extract_pattern(%{regex: :tv_patterns}, metadata, text) do
+  defp extract_pattern(%{regex: :episode_patterns}, metadata, text) do
     # Special case: TV patterns use a list of regexes
-    case match_tv_patterns(text) do
+    case match_episode_patterns(text) do
       {:ok, tv_metadata, match_start, match_length} ->
         # Remove the matched TV pattern from text and everything after it until a quality marker
         before = byte_slice_before(text, match_start)
@@ -776,8 +777,8 @@ defmodule Mydia.Library.FileParser.V2 do
   ## Pattern Handlers
 
   # TV show pattern matcher
-  defp match_tv_patterns(text) do
-    Enum.reduce_while(tv_patterns(), :error, fn pattern, _acc ->
+  defp match_episode_patterns(text) do
+    Enum.reduce_while(episode_patterns(), :error, fn pattern, _acc ->
       case Regex.run(pattern, text, return: :index) do
         nil ->
           {:cont, :error}
@@ -820,6 +821,10 @@ defmodule Mydia.Library.FileParser.V2 do
       when is_integer(season) and is_integer(episode1) and is_integer(episode2) ->
         # Multi-episode (e.g., S01E01-E03)
         {season, Enum.to_list(episode1..episode2)}
+
+      [episode] when is_integer(episode) ->
+        # Absolute episode numbering (e.g. E05) — default to season 1 (from V1 parser)
+        {1, [episode]}
 
       _ ->
         {nil, []}
@@ -881,7 +886,7 @@ defmodule Mydia.Library.FileParser.V2 do
   end
 
   def extract_tv_info(_match, _text, _metadata) do
-    # TV info is handled specially in match_tv_patterns
+    # TV info is handled specially in match_episode_patterns
     nil
   end
 
@@ -909,9 +914,18 @@ defmodule Mydia.Library.FileParser.V2 do
 
   def extract_resolution(match, _text, _metadata) do
     case Regex.run(@resolution_extract_pattern, match) do
-      [_, resolution] -> String.downcase(resolution)
-      [resolution] -> String.downcase(resolution)
-      nil -> String.downcase(match)
+      [_, resolution] -> normalize_resolution(resolution)
+      [resolution]    -> normalize_resolution(resolution)
+      nil             -> normalize_resolution(match)
+    end
+  end
+
+  defp normalize_resolution(res) do
+    # Normalize "1080P" -> "1080p" but preserve "4K", "8K", "UHD" as-is
+    if String.match?(res, ~r/^\d+[pP]$/) do
+      String.replace(res, ~r/[pP]$/, "p")
+    else
+      String.upcase(res)  # 4k -> 4K, uhd -> UHD, 8k -> 8K
     end
   end
 
@@ -936,7 +950,10 @@ defmodule Mydia.Library.FileParser.V2 do
     # Find positions of quality markers that would indicate WEB is after them
     year_pos = find_word_position(text, @year_pattern_secondary)
     resolution_pos = find_word_position(text, @resolution_pattern)
-    episode_pos = find_word_position(text, @episode_pattern)
+    episode_pos =
+      Enum.find_value(episode_patterns(), fn pattern ->
+        find_word_position(text, pattern)
+      end)
 
     # WEB is valid if it appears after any quality marker
     quality_marker_pos =
@@ -1172,19 +1189,28 @@ defmodule Mydia.Library.FileParser.V2 do
       # e.g., [2008] or (1999)
       @year_pattern_primary,
       # e.g., 1080p, 4K, UHD
-      @resolution_pattern,
-      # e.g., S01E01
-      @episode_pattern
+      @resolution_pattern
     ]
 
-    markers
-    |> Enum.map(fn pattern ->
-      case Regex.run(pattern, text, return: :index) do
-        [{pos, _len} | _] -> pos
-        nil -> nil
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
+    episode_boundary =
+      Enum.find_value(episode_patterns(), fn pattern ->
+        case Regex.run(pattern, text, return: :index) do
+          [{pos, _len} | _] -> pos
+          nil -> nil
+        end
+      end)
+
+    static_boundaries =
+      markers
+      |> Enum.map(fn pattern ->
+        case Regex.run(pattern, text, return: :index) do
+          [{pos, _len} | _] -> pos
+          nil -> nil
+        end
+      end)
+
+    [episode_boundary | static_boundaries]
+    |> Enum.reject(&(&1 == 0 or is_nil(&1)))
     # If no markers are found, assume the whole string is the title
     |> Enum.min(fn -> byte_size(text) end)
   end
@@ -1260,7 +1286,7 @@ defmodule Mydia.Library.FileParser.V2 do
 
   # Standardizes quality metadata to canonical forms.
   defp standardize_quality(%Quality{} = quality) do
-    %Quality{
+    %Quality{quality |
       audio: standardize_audio(quality.audio),
       codec: standardize_codec(quality.codec),
       source: standardize_source(quality.source),
