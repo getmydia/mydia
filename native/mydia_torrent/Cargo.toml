@@ -10,7 +10,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = "0.37.2"
+rustler = "0.34.0"
 mydia_torrent_core = { path = "../mydia_torrent_core" }
 librqbit = "8"
 tokio = { version = "1.49", features = ["rt-multi-thread", "sync"] }
