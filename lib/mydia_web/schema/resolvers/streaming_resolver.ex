@@ -142,26 +142,42 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       user ->
         %{magnet_link: magnet_link, release_title: release_title} = args
 
-        attrs = %{
-          user_id: user.id,
-          magnet: magnet_link,
-          release_title: release_title,
-          media_item_id: args[:media_item_id],
-          episode_id: args[:episode_id],
-          state: :initializing
-        }
+        # Enforce that exactly one of media_item_id or episode_id is provided
+        case {args[:media_item_id], args[:episode_id]} do
+          {nil, nil} ->
+            {:error, "Either media_item_id or episode_id must be provided"}
 
-        case Mydia.Streaming.Torrent.start_session(attrs) do
-          {:ok, %{session: session}} ->
-            # Automatically add the torrent to the session
-            case Mydia.Streaming.Torrent.add_torrent(session.id, magnet_link) do
-              :ok -> {:ok, session}
-              {:error, reason} -> {:error, "Failed to add torrent: #{inspect(reason)}"}
+          _ ->
+            attrs = %{
+              user_id: user.id,
+              magnet: magnet_link,
+              release_title: release_title,
+              media_item_id: args[:media_item_id],
+              episode_id: args[:episode_id],
+              state: :initializing
+            }
+
+            case Mydia.Streaming.Torrent.start_session(attrs) do
+              {:ok, %{session: session}} ->
+                # Automatically add the torrent to the session
+                case Mydia.Streaming.Torrent.add_torrent(session.id, magnet_link) do
+                  :ok ->
+                    {:ok, session}
+
+                  {:error, reason} ->
+                    # Clean up the session so we don't leak a DB row + supervised process
+                    Logger.warning(
+                      "add_torrent failed for session #{session.id}, cleaning up: #{inspect(reason)}"
+                    )
+
+                    Mydia.Streaming.Torrent.stop_session(session.id)
+                    {:error, "Failed to add torrent: #{inspect(reason)}"}
+                end
+
+              {:error, reason} ->
+                Logger.error("Failed to start torrent session: #{inspect(reason)}")
+                {:error, "Failed to start torrent session"}
             end
-
-          {:error, reason} ->
-            Logger.error("Failed to start torrent session: #{inspect(reason)}")
-            {:error, "Failed to start torrent session"}
         end
     end
   end

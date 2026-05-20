@@ -539,6 +539,9 @@ defmodule Mydia.P2p.Server do
     end
   end
 
+  # Maximum chunk size for torrent reads — prevents OOM/DoS when no Range header is present
+  @torrent_max_chunk_bytes 4 * 1024 * 1024
+
   defp handle_torrent_stream(resource, stream_id, session_id, req) do
     # For torrent streaming, we expect req.path to be something like "file/0/chunk"
     # or just a direct read.
@@ -548,20 +551,35 @@ defmodule Mydia.P2p.Server do
       ["file", file_index_str, "data"] ->
         file_index = String.to_integer(file_index_str)
 
-        # Parse range if present
-        {offset, length} =
-          case parse_range(req.range_start, req.range_end, 1_000_000_000_000) do
-            {:full, len} -> {0, len}
-            {:partial, start, _end, len} -> {start, len}
+        # Parse range if present; default to a safe bounded read from offset 0
+        {offset, length, is_partial} =
+          case parse_range(req.range_start, req.range_end, @torrent_max_chunk_bytes) do
+            {:full, _} ->
+              # No Range header — serve first chunk up to the cap
+              {0, @torrent_max_chunk_bytes, false}
+
+            {:partial, start, _end, len} ->
+              # Clamp the requested length to the cap
+              {start, min(len, @torrent_max_chunk_bytes), true}
           end
 
         case Mydia.Streaming.Torrent.read_chunk(session_id, file_index, offset, length) do
           {:ok, data} ->
+            actual_length = byte_size(data)
+            end_byte = offset + actual_length - 1
+
+            {status, content_range} =
+              if is_partial do
+                {206, "bytes #{offset}-#{end_byte}/*"}
+              else
+                {200, nil}
+              end
+
             header = %P2p.HlsResponseHeader{
-              status: 200,
+              status: status,
               content_type: "application/octet-stream",
-              content_length: byte_size(data),
-              content_range: nil,
+              content_length: actual_length,
+              content_range: content_range,
               cache_control: "no-cache"
             }
 

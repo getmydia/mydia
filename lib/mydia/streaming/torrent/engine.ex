@@ -6,6 +6,7 @@ defmodule Mydia.Streaming.Torrent.Engine do
   use GenServer
 
   alias Mydia.Torrent
+  require Logger
 
   @name __MODULE__
 
@@ -34,13 +35,26 @@ defmodule Mydia.Streaming.Torrent.Engine do
       File.mkdir_p!(staging_dir)
 
       try do
-        resource = Torrent.start_engine(staging_dir)
-        {:ok, %{resource: resource}}
+        case Torrent.start_engine(staging_dir) do
+          {:ok, resource} ->
+            Logger.info("Torrent engine started successfully (staging: #{staging_dir})")
+            {:ok, %{resource: resource}}
+
+          {:error, reason} ->
+            Logger.error(
+              "Torrent engine failed to start: #{inspect(reason)}. " <>
+                "Embedded streaming will be disabled."
+            )
+
+            {:ok, %{resource: nil, error: reason}}
+        end
       rescue
         e ->
-          # We don't want to crash the whole app if the engine fails to start,
-          # but we should log it.
-          # In a real app, we might want to retry or signal failure.
+          Logger.error(
+            "Torrent engine crashed during startup:\n" <>
+              Exception.format(:error, e, __STACKTRACE__)
+          )
+
           {:ok, %{resource: nil, error: e}}
       end
     else

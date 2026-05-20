@@ -26,17 +26,24 @@ impl std::panic::UnwindSafe for EngineResource {}
 #[rustler::resource_impl]
 impl rustler::Resource for EngineResource {}
 
-#[rustler::nif]
-fn start_engine(staging_dir: String) -> ResourceArc<EngineResource> {
-    let runtime = Runtime::new().expect("Failed to create runtime");
-    let engine = runtime.block_on(async {
-        Engine::new(staging_dir).await
-    }).expect("Failed to start engine");
+#[rustler::nif(schedule = "DirtyIo")]
+fn start_engine(env: Env, staging_dir: String) -> Term {
+    let runtime = match Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => return (atoms::error(), e.to_string()).encode(env),
+    };
 
-    ResourceArc::new(EngineResource {
+    let engine = match runtime.block_on(async { Engine::new(staging_dir).await }) {
+        Ok(e) => e,
+        Err(e) => return (atoms::error(), e.to_string()).encode(env),
+    };
+
+    let resource = ResourceArc::new(EngineResource {
         engine: Arc::new(engine),
         runtime: Arc::new(runtime),
-    })
+    });
+
+    (atoms::ok(), resource).encode(env)
 }
 
 #[rustler::nif(schedule = "DirtyIo")]

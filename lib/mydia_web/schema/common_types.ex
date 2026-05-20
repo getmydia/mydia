@@ -230,7 +230,11 @@ defmodule MydiaWeb.Schema.CommonTypes do
   @desc "A torrent streaming session"
   object :torrent_session do
     field :id, non_null(:id), description: "The session UUID"
-    field :magnet_link, non_null(:string), description: "The magnet link being streamed"
+
+    field :magnet_link, non_null(:string), description: "The magnet link being streamed" do
+      resolve(fn session, _args, _info -> {:ok, session.magnet} end)
+    end
+
     field :release_title, non_null(:string), description: "The title of the release"
     field :user_id, non_null(:id), description: "The user who started the session"
     field :inserted_at, non_null(:datetime), description: "Creation timestamp"

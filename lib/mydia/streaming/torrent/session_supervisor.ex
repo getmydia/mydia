@@ -33,7 +33,7 @@ defmodule Mydia.Streaming.Torrent.SessionSupervisor do
         session_opts = [session_id: session_id, name: name]
 
         child_spec = %{
-          id: Session,
+          id: {Session, session_id},
           start: {Session, :start_link, [session_opts]},
           restart: :temporary
         }
