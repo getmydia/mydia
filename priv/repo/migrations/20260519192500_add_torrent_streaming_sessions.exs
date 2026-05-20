@@ -6,11 +6,13 @@ defmodule Mydia.Repo.Migrations.AddTorrentStreamingSessions do
       add :id, :binary_id, primary_key: true
 
       add :media_item_id, references(:media_items, type: :binary_id, on_delete: :delete_all),
-        null: false
+        null: true
+
+      add :episode_id, references(:episodes, type: :binary_id, on_delete: :delete_all), null: true
 
       add :user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false
       add :release_title, :string, null: false
-      add :infohash, :string, null: false
+      add :infohash, :string, null: true
       add :magnet, :text, null: false
       add :file_id, :integer
       add :staging_path, :string
@@ -25,6 +27,7 @@ defmodule Mydia.Repo.Migrations.AddTorrentStreamingSessions do
 
     create index(:torrent_streaming_sessions, [:state])
     create index(:torrent_streaming_sessions, [:media_item_id])
+    create index(:torrent_streaming_sessions, [:episode_id])
     create index(:torrent_streaming_sessions, [:user_id])
 
     create unique_index(:torrent_streaming_sessions, [:infohash],
