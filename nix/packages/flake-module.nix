@@ -14,10 +14,13 @@
         sha256 = "be3324cc454a42d80951cf6023b9954e9ff27c6daa255483b3e8d608670303f5";
       };
 
-      # Pre-fetch Rust/Cargo dependencies for the p2p NIF (required for sandbox build)
       cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
         src = ../../native/mydia_p2p;
         hash = "sha256-mwciW6cx+n26KEQYv3rJi4ceq+sKhy6rBaTMOC7/8Is=";
+      };
+      torrentCargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+        src = ../../native/mydia_torrent;
+        hash = "sha256-1JW7Lwf8jl0jJn+7hGikoV90VeUrPUivY0kSR4LkiR0=";
       };
 
       # Import Mix dependencies from deps.nix with overrides for Nix sandbox builds
@@ -209,6 +212,16 @@
 
             [source.vendored-sources]
             directory = "${cargoDeps}"
+            CARGO_EOF
+
+            # Set up Cargo vendoring for the Rust torrent NIF
+            mkdir -p native/mydia_torrent/.cargo
+            cat > native/mydia_torrent/.cargo/config.toml <<CARGO_EOF
+            [source.crates-io]
+            replace-with = "vendored-sources"
+
+            [source.vendored-sources]
+            directory = "${torrentCargoDeps}"
             CARGO_EOF
           '';
 
