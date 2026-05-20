@@ -131,3 +131,6 @@ terraform.rc
 
 .claude/worktrees/
 .opencode/
+.antigravitycli/
+__pycache__/
+*.pyc
