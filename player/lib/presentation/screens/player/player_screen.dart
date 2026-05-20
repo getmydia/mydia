@@ -184,8 +184,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
 
         // Play downloaded content in offline mode
-        await _initializeOfflinePlayback(localPath);
+        await _initializeOfflinePlayback(offlinePath);
         return;
+      }
+
+      // In online mode, prefer a locally downloaded copy if available
+      // (avoids unnecessary network streaming when the file is already on disk)
+      if (downloadedMedia != null && !kIsWeb) {
+        final localPath =
+            await _resolveDownloadedFilePath(downloadedMedia.filePath);
+        if (localPath != null) {
+          debugPrint('[PlayerScreen] Using local downloaded file: $localPath');
+          await _initializeOfflinePlayback(localPath);
+          return;
+        }
       }
 
       // If a stream URL is directly provided (e.g. from a torrent session), use it

@@ -682,9 +682,23 @@ class EpisodeDetailScreen extends ConsumerWidget {
             final localProxy = ref.read(localProxyServiceProvider);
             final connection = ref.read(connectionProvider);
 
+            final serverNodeAddr = connection.serverNodeAddr;
+            if (serverNodeAddr == null) {
+              // Not in P2P mode — torrent streaming requires P2P
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'Torrent streaming requires a P2P connection.'),
+                  ),
+                );
+              }
+              return;
+            }
+
             if (!localProxy.isRunning) {
               await localProxy.start(
-                targetPeer: connection.serverNodeAddr!,
+                targetPeer: serverNodeAddr,
                 authToken: ref.read(authTokenProvider).value,
               );
             }

@@ -1,50 +1,23 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import '../../domain/models/torrent_candidate.dart';
+import '../../graphql/queries/torrent_candidates.graphql.dart';
+import '../../graphql/mutations/start_torrent_session.graphql.dart';
+import '../../graphql/mutations/end_torrent_session.graphql.dart';
 
 class TorrentStreamService {
   final GraphQLClient _client;
 
   TorrentStreamService(this._client);
 
-  static const String torrentCandidatesQuery = r'''
-    query TorrentCandidates($contentType: String!, $id: ID!) {
-      torrentCandidates(contentType: $contentType, id: $id) {
-        title
-        size
-        seeders
-        leechers
-        magnetLink
-        indexer
-        quality
-        healthScore
-      }
-    }
-  ''';
-
-  static const String startTorrentSessionMutation = r'''
-    mutation StartTorrentSession($magnetLink: String!, $releaseTitle: String!, $mediaItemId: ID, $episodeId: ID) {
-      startTorrentSession(magnetLink: $magnetLink, releaseTitle: $releaseTitle, mediaItemId: $mediaItemId, episodeId: $episodeId) {
-        id
-        magnetLink
-        releaseTitle
-      }
-    }
-  ''';
-
-  static const String endTorrentSessionMutation = r'''
-    mutation EndTorrentSession($sessionId: ID!) {
-      endTorrentSession(sessionId: $sessionId)
-    }
-  ''';
-
-  Future<List<TorrentCandidate>> getCandidates(String contentType, String id) async {
+  Future<List<TorrentCandidate>> getCandidates(
+      String contentType, String id) async {
     final result = await _client.query(
       QueryOptions(
-        document: gql(torrentCandidatesQuery),
-        variables: {
-          'contentType': contentType,
-          'id': id,
-        },
+        document: documentNodeQueryTorrentCandidates,
+        variables: Variables$Query$TorrentCandidates(
+          contentType: contentType,
+          id: id,
+        ).toJson(),
         fetchPolicy: FetchPolicy.networkOnly,
       ),
     );
@@ -53,8 +26,23 @@ class TorrentStreamService {
       throw result.exception!;
     }
 
-    final List<dynamic> candidatesJson = result.data?['torrentCandidates'] ?? [];
-    return candidatesJson.map((json) => TorrentCandidate.fromJson(json)).toList();
+    final parsed = Query$TorrentCandidates.fromJson(result.data!);
+    final candidates = parsed.torrentCandidates ?? [];
+    return candidates
+        .whereType<Query$TorrentCandidates$torrentCandidates>()
+        .map(
+          (c) => TorrentCandidate(
+            title: c.title,
+            size: c.size,
+            seeders: c.seeders,
+            leechers: c.leechers,
+            magnetLink: c.magnetLink,
+            indexer: c.indexer,
+            quality: c.quality,
+            healthScore: c.healthScore,
+          ),
+        )
+        .toList();
   }
 
   Future<Map<String, String>> startSession({
@@ -65,13 +53,13 @@ class TorrentStreamService {
   }) async {
     final result = await _client.mutate(
       MutationOptions(
-        document: gql(startTorrentSessionMutation),
-        variables: {
-          'magnetLink': magnetLink,
-          'releaseTitle': releaseTitle,
-          'mediaItemId': mediaItemId,
-          'episodeId': episodeId,
-        },
+        document: documentNodeMutationStartTorrentSession,
+        variables: Variables$Mutation$StartTorrentSession(
+          magnetLink: magnetLink,
+          releaseTitle: releaseTitle,
+          mediaItemId: mediaItemId,
+          episodeId: episodeId,
+        ).toJson(),
       ),
     );
 
@@ -79,20 +67,24 @@ class TorrentStreamService {
       throw result.exception!;
     }
 
-    final data = result.data?['startTorrentSession'];
+    final parsed = Mutation$StartTorrentSession.fromJson(result.data!);
+    final session = parsed.startTorrentSession;
+    if (session == null) {
+      throw Exception('No session data returned from server');
+    }
     return {
-      'id': data['id'] as String,
-      'title': data['releaseTitle'] as String,
+      'id': session.id,
+      'title': session.releaseTitle,
     };
   }
 
   Future<bool> endSession(String sessionId) async {
     final result = await _client.mutate(
       MutationOptions(
-        document: gql(endTorrentSessionMutation),
-        variables: {
-          'sessionId': sessionId,
-        },
+        document: documentNodeMutationEndTorrentSession,
+        variables: Variables$Mutation$EndTorrentSession(
+          sessionId: sessionId,
+        ).toJson(),
       ),
     );
 
@@ -100,6 +92,7 @@ class TorrentStreamService {
       throw result.exception!;
     }
 
-    return result.data?['endTorrentSession'] as bool? ?? false;
+    final parsed = Mutation$EndTorrentSession.fromJson(result.data!);
+    return parsed.endTorrentSession ?? false;
   }
 }

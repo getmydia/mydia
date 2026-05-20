@@ -15,9 +15,8 @@ defmodule Mydia.Streaming.Torrent.Session do
   # Client API
 
   def start_link(args) do
-    # Use session_id as the name for easy lookup if needed,
-    # or just use Registry if we have many.
-    GenServer.start_link(__MODULE__, args)
+    {name_opts, _} = Keyword.split(args, [:name])
+    GenServer.start_link(__MODULE__, args, name_opts)
   end
 
   def add_torrent(pid, magnet_link) do

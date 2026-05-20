@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart';
+
+@immutable
 class TorrentCandidate {
   final String title;
   final int size;
@@ -32,10 +35,37 @@ class TorrentCandidate {
     );
   }
 
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TorrentCandidate &&
+          runtimeType == other.runtimeType &&
+          title == other.title &&
+          size == other.size &&
+          seeders == other.seeders &&
+          leechers == other.leechers &&
+          magnetLink == other.magnetLink &&
+          indexer == other.indexer &&
+          quality == other.quality &&
+          healthScore == other.healthScore;
+
+  @override
+  int get hashCode =>
+      title.hashCode ^
+      size.hashCode ^
+      seeders.hashCode ^
+      leechers.hashCode ^
+      magnetLink.hashCode ^
+      indexer.hashCode ^
+      quality.hashCode ^
+      healthScore.hashCode;
+
   String get formattedSize {
     if (size < 1024) return '$size B';
     if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
-    if (size < 1024 * 1024 * 1024) return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

@@ -11,7 +11,7 @@ defmodule Mydia.Streaming.Torrent.Candidates do
   Discovers and ranks torrent candidates for a media item.
   """
   def list_candidates(content_type, id) do
-    with query when not is_nil(query) <- build_search_query(content_type, id) do
+    with query when is_binary(query) <- build_search_query(content_type, id) do
       # Perform search across all indexers
       # We use a lower max_results for instant streaming to keep it snappy
       {:ok, %{results: results}} = Indexers.search_all(query, max_results: 20)
@@ -30,7 +30,7 @@ defmodule Mydia.Streaming.Torrent.Candidates do
       {:ok, candidates}
     else
       nil -> {:error, :not_found}
-      _ -> {:error, :invalid_content_type}
+      :error -> {:error, :invalid_content_type}
     end
   end
 
