@@ -14,6 +14,7 @@ import '../../widgets/smart_play_button.dart';
 import '../../widgets/torrent_stream_picker.dart';
 import '../../../core/p2p/local_proxy_service.dart';
 import '../../../core/connection/connection_provider.dart';
+import '../../../core/graphql/graphql_provider.dart';
 
 class MovieDetailScreen extends ConsumerWidget {
   final String id;
