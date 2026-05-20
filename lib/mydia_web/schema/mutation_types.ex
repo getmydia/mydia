@@ -131,6 +131,21 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:session_id, non_null(:string))
       resolve(&StreamingResolver.end_streaming_session/3)
     end
+
+    @desc "Start a torrent streaming session"
+    field :start_torrent_session, :torrent_session do
+      arg(:magnet_link, non_null(:string))
+      arg(:release_title, non_null(:string))
+      arg(:media_item_id, :id)
+      arg(:episode_id, :id)
+      resolve(&StreamingResolver.start_torrent_session/3)
+    end
+
+    @desc "End a torrent streaming session"
+    field :end_torrent_session, :boolean do
+      arg(:session_id, non_null(:id))
+      resolve(&StreamingResolver.end_torrent_session/3)
+    end
   end
 
   object :download_mutations do

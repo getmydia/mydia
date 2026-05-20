@@ -268,9 +268,17 @@ defmodule MydiaWeb.AdminSystemLive.Components do
         </div>
         <span class={[
           "badge badge-xs badge-outline",
-          if(@session.mode == :transcode, do: "badge-warning", else: "badge-success")
+          case @session.mode do
+            :transcode -> "badge-warning"
+            :torrent -> "badge-primary"
+            _ -> "badge-success"
+          end
         ]}>
-          {if @session.mode == :transcode, do: "Transcode", else: "Direct"}
+          {case @session.mode do
+            :transcode -> "Transcode"
+            :torrent -> "Torrent"
+            _ -> "Direct"
+          end}
         </span>
       </div>
     </div>

@@ -1,0 +1,12 @@
+query TorrentCandidates($contentType: String!, $id: ID!) {
+  torrentCandidates(contentType: $contentType, id: $id) {
+    title
+    size
+    seeders
+    leechers
+    magnetLink
+    indexer
+    quality
+    healthScore
+  }
+}

@@ -115,6 +115,10 @@ defmodule Mydia.Settings.RuntimeConfig do
     get_runtime_config().oban
   end
 
+  def get_streaming_config do
+    get_runtime_config().streaming
+  end
+
   ## Runtime Config Builders
 
   def get_runtime_download_clients do

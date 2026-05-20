@@ -1,0 +1,19 @@
+[package]
+name = "mydia_torrent"
+version = "0.1.0"
+authors = []
+edition = "2021"
+
+[lib]
+name = "mydia_torrent"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37.2"
+mydia_torrent_core = { path = "../mydia_torrent_core" }
+librqbit = "8"
+tokio = { version = "1.49", features = ["rt-multi-thread", "sync"] }
+anyhow = "1.0"
+serde_json = "1.0"
+hex = "0.4"

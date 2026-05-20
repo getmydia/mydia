@@ -11,6 +11,9 @@ import '../../../core/downloads/download_job_providers.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/smart_play_button.dart';
+import '../../widgets/torrent_stream_picker.dart';
+import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/connection/connection_provider.dart';
 
 class MovieDetailScreen extends ConsumerWidget {
   final String id;
@@ -333,18 +336,79 @@ class MovieDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  SmartPlayButton(
-                    files: movie.files,
-                    onFileSelected: (file) {
-                      context.push(
-                        '/player/movie/${movie.id}?fileId=${file.id}&title=${Uri.encodeComponent(movie.title)}',
-                      );
-                    },
-                  ),
+                  movie.files.isNotEmpty
+                      ? SmartPlayButton(
+                          files: movie.files,
+                          onFileSelected: (file) {
+                            context.push(
+                              '/player/movie/${movie.id}?fileId=${file.id}&title=${Uri.encodeComponent(movie.title)}',
+                            );
+                          },
+                        )
+                      : _buildStreamButton(context, ref, movie),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStreamButton(BuildContext context, WidgetRef ref, movie) {
+    return Material(
+      color: AppColors.primary,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final result = await showTorrentStreamPicker(
+            context,
+            contentType: 'movie',
+            contentId: movie.id,
+            title: movie.title,
+          );
+
+          if (result != null && context.mounted) {
+            final sessionId = result['sessionId'] as String;
+            final title = result['title'] as String;
+
+            // Get local proxy URL
+            final localProxy = ref.read(localProxyServiceProvider);
+            final connection = ref.read(connectionProvider);
+
+            if (!localProxy.isRunning) {
+              await localProxy.start(
+                targetPeer: connection.serverNodeAddr!,
+                authToken: ref.read(authTokenProvider).value,
+              );
+            }
+
+            final streamUrl = localProxy.buildHlsUrl(sessionId);
+
+            if (context.mounted) {
+              context.push(
+                '/player/movie/${movie.id}?streamUrl=${Uri.encodeComponent(streamUrl)}&title=${Uri.encodeComponent(title)}&sessionId=$sessionId',
+              );
+            }
+          }
+        },
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.play_arrow_rounded, color: Colors.white),
+              SizedBox(width: 4),
+              Text(
+                'Stream',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

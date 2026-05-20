@@ -788,6 +788,12 @@ defmodule Mydia.Settings do
   defdelegate get_logging_config(), to: Mydia.Settings.RuntimeConfig
 
   @doc """
+  Gets streaming configuration.
+  """
+  @spec get_streaming_config() :: Mydia.Config.Schema.Streaming.t() | nil
+  defdelegate get_streaming_config(), to: Mydia.Settings.RuntimeConfig
+
+  @doc """
   Gets Oban configuration.
   """
   @spec get_oban_config() :: Mydia.Config.Schema.Oban.t() | nil

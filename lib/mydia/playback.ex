@@ -71,10 +71,40 @@ defmodule Mydia.Playback do
     case result do
       {:ok, progress} ->
         maybe_scrobble(user_id, content_id, progress)
+        maybe_promote_torrent(user_id, content_id, progress)
         {:ok, progress}
 
       error ->
         error
+    end
+  end
+
+  defp maybe_promote_torrent(user_id, content_id, progress) do
+    if progress.completion_percentage >= 90.0 do
+      query =
+        cond do
+          content_id[:media_item_id] ->
+            from s in Mydia.Streaming.Torrent.SessionSchema,
+              where:
+                s.user_id == ^user_id and s.media_item_id == ^content_id[:media_item_id] and
+                  s.state != :completed
+
+          content_id[:episode_id] ->
+            from s in Mydia.Streaming.Torrent.SessionSchema,
+              where:
+                s.user_id == ^user_id and s.episode_id == ^content_id[:episode_id] and
+                  s.state != :completed
+
+          true ->
+            nil
+        end
+
+      if query do
+        Repo.all(query)
+        |> Enum.each(fn session ->
+          Mydia.Streaming.Torrent.check_and_promote(session.id)
+        end)
+      end
     end
   end
 

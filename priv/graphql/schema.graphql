@@ -59,6 +59,9 @@ type RootQueryType {
   "Get streaming candidates for a media item"
   streamingCandidates(contentType: String!, id: ID!): StreamingCandidatesResult
 
+  "Get torrent candidates for instant streaming"
+  torrentCandidates(contentType: String!, id: ID!): [TorrentCandidate]
+
   "List user's collections (excluding system collections)"
   collections(first: Int): [Collection]
 
@@ -127,6 +130,12 @@ type RootMutationType {
 
   "End an HLS streaming session"
   endStreamingSession(sessionId: String!): Boolean
+
+  "Start a torrent streaming session"
+  startTorrentSession(magnetLink: String!, releaseTitle: String!, mediaItemId: ID, episodeId: ID): TorrentSession
+
+  "End a torrent streaming session"
+  endTorrentSession(sessionId: ID!): Boolean
 
   "Get available download quality options for a media item"
   downloadOptions(
@@ -318,6 +327,8 @@ type Movie implements Node {
 
   tmdbId: Int
 
+  tvdbId: Int
+
   imdbId: String
 
   category: MediaCategory
@@ -373,6 +384,8 @@ type TvShow implements Node {
   year: Int
 
   tmdbId: Int
+
+  tvdbId: Int
 
   imdbId: String
 
@@ -645,6 +658,12 @@ type LibraryPath implements Node {
 
   "Whether auto-import is enabled"
   autoImport: Boolean!
+
+  "Whether NFO files are written alongside media"
+  writeNfo: Boolean!
+
+  "Whether auto-rename on import is enabled"
+  autoRename: Boolean!
 }
 
 "Result of toggling favorite status"
@@ -807,6 +826,36 @@ type StreamingSessionResult {
 
   "Media duration in seconds (if known)"
   duration: Float
+}
+
+"A torrent streaming session"
+type TorrentSession {
+  "The session UUID"
+  id: ID!
+
+  "The magnet link being streamed"
+  magnetLink: String!
+
+  "The title of the release"
+  releaseTitle: String!
+
+  "The user who started the session"
+  userId: ID!
+
+  "Creation timestamp"
+  insertedAt: DateTime!
+}
+
+"A torrent search result candidate for instant streaming"
+type TorrentCandidate {
+  title: String!
+  size: Int!
+  seeders: Int
+  leechers: Int
+  magnetLink: String!
+  indexer: String!
+  quality: String
+  healthScore: Float!
 }
 
 "A download quality option"

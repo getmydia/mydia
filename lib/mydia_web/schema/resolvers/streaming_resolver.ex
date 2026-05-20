@@ -62,6 +62,19 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
     end
   end
 
+  @doc """
+  Returns torrent candidates for instant streaming.
+  """
+  def torrent_candidates(_parent, %{content_type: content_type, id: id}, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:error, "Authentication required"}
+
+      _user ->
+        Mydia.Streaming.Torrent.Candidates.list_candidates(content_type, id)
+    end
+  end
+
   defp strategy_to_atom("DIRECT_PLAY"), do: :direct_play
   defp strategy_to_atom("REMUX"), do: :remux
   defp strategy_to_atom("HLS_COPY"), do: :hls_copy
@@ -115,6 +128,55 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
       _user ->
         terminate_session(session_id)
+    end
+  end
+
+  @doc """
+  Starts a torrent streaming session.
+  """
+  def start_torrent_session(_parent, args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:error, "Authentication required"}
+
+      user ->
+        %{magnet_link: magnet_link, release_title: release_title} = args
+
+        attrs = %{
+          user_id: user.id,
+          magnet: magnet_link,
+          release_title: release_title,
+          media_item_id: args[:media_item_id],
+          episode_id: args[:episode_id],
+          state: :initializing
+        }
+
+        case Mydia.Streaming.Torrent.start_session(attrs) do
+          {:ok, %{session: session}} ->
+            # Automatically add the torrent to the session
+            case Mydia.Streaming.Torrent.add_torrent(session.id, magnet_link) do
+              :ok -> {:ok, session}
+              {:error, reason} -> {:error, "Failed to add torrent: #{inspect(reason)}"}
+            end
+
+          {:error, reason} ->
+            Logger.error("Failed to start torrent session: #{inspect(reason)}")
+            {:error, "Failed to start torrent session"}
+        end
+    end
+  end
+
+  @doc """
+  Ends a torrent streaming session.
+  """
+  def end_torrent_session(_parent, %{session_id: session_id}, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:error, "Authentication required"}
+
+      _user ->
+        Mydia.Streaming.Torrent.stop_session(session_id)
+        {:ok, true}
     end
   end
 

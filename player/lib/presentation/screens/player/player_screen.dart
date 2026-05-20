@@ -45,19 +45,23 @@ import '../../../core/p2p/local_proxy_service.dart';
 class PlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
   final String mediaType;
-  final String fileId;
+  final String? fileId; // Optional for torrent streaming
   final String? title;
   final String? showId;
   final int? seasonNumber;
+  final String? streamUrl; // For direct streaming (torrents)
+  final String? sessionId; // For cleanup
 
   const PlayerScreen({
     super.key,
     required this.mediaId,
     required this.mediaType,
-    required this.fileId,
+    this.fileId,
     this.title,
     this.showId,
     this.seasonNumber,
+    this.streamUrl,
+    this.sessionId,
   });
 
   @override
@@ -180,33 +184,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
 
         // Play downloaded content in offline mode
-        await _initializeOfflinePlayback(offlinePath);
+        await _initializeOfflinePlayback(localPath);
         return;
       }
 
-      // In online mode, if content is downloaded locally, play it directly
-      // without requiring network for streaming
-      if (downloadedMedia != null && !kIsWeb) {
-        final localPath =
-            await _resolveDownloadedFilePath(downloadedMedia.filePath);
-        if (localPath != null) {
-          debugPrint('Playing from local file: $localPath');
+      // If a stream URL is directly provided (e.g. from a torrent session), use it
+      if (widget.streamUrl != null) {
+        debugPrint(
+            '[PlayerScreen] Using provided stream URL: ${widget.streamUrl}');
 
-          // Try to initialize progress sync (optional - local playback
-          // works even if server is unreachable)
-          try {
-            final graphqlClient =
-                await ref.read(asyncGraphqlClientProvider.future);
-            _progressService = ProgressService(graphqlClient);
-            await _fetchProgressAndEpisodes(graphqlClient);
-          } catch (e) {
-            debugPrint('Could not initialize progress sync: $e');
-          }
+        _hlsSessionId = widget.sessionId;
 
-          await _openPlayerAndStart(localPath, {});
-          return;
+        // Try to initialize progress sync (optional)
+        try {
+          final graphqlClient =
+              await ref.read(asyncGraphqlClientProvider.future);
+          _progressService = ProgressService(graphqlClient);
+          await _fetchProgressAndEpisodes(graphqlClient);
+        } catch (e) {
+          debugPrint('Could not initialize progress sync: $e');
         }
-        debugPrint('Downloaded file not found, falling back to streaming');
+
+        await _openPlayerAndStart(widget.streamUrl!, {});
+        return;
       }
 
       // Online mode - initialize network services
@@ -330,11 +330,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         final hlsStrategy = _pickHlsStrategy(candidatesResult?.candidates);
 
         // Start HLS session via GraphQL mutation (works for both modes)
+        if (widget.fileId == null) {
+          throw Exception('File ID is required for HLS streaming');
+        }
+
         final result = await graphqlClient.mutate(
           MutationOptions(
             document: documentNodeMutationStartStreamingSession,
             variables: Variables$Mutation$StartStreamingSession(
-              fileId: widget.fileId,
+              fileId: widget.fileId!,
               strategy: hlsStrategy,
             ).toJson(),
           ),
@@ -1095,16 +1099,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
 
     // End HLS session via GraphQL (works for both modes)
-    final sessionId = _hlsSessionId;
-    if (sessionId != null) {
-      debugPrint('[PlayerScreen] Terminating HLS session: $sessionId');
+    if (widget.sessionId != null && widget.streamUrl != null) {
+      // If it was a torrent session, we should end it
+      final service = await ref.read(torrentStreamServiceProvider.future);
+      await service.endSession(widget.sessionId!);
+      debugPrint(
+          '[PlayerScreen] Torrent session terminated: ${widget.sessionId}');
+    } else if (_hlsSessionId != null) {
+      // Standard HLS session
+      debugPrint('[PlayerScreen] Terminating HLS session: $_hlsSessionId');
       try {
         final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
         final result = await graphqlClient.mutate(
           MutationOptions(
             document: documentNodeMutationEndStreamingSession,
             variables: Variables$Mutation$EndStreamingSession(
-              sessionId: sessionId,
+              sessionId: _hlsSessionId!,
             ).toJson(),
           ),
         );

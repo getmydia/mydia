@@ -431,6 +431,10 @@ defmodule Mydia.P2p.Server do
             job_id = String.replace_prefix(req.session_id, "download:", "")
             handle_download_stream(resource, stream_id, job_id, req)
 
+          String.starts_with?(req.session_id, "torrent:") ->
+            session_id = String.replace_prefix(req.session_id, "torrent:", "")
+            handle_torrent_stream(resource, stream_id, session_id, req)
+
           true ->
             handle_hls_session_stream(resource, stream_id, req)
         end
@@ -532,6 +536,48 @@ defmodule Mydia.P2p.Server do
       {:error, :not_ready} ->
         Logger.warning("Download stream: job #{job_id} not ready")
         send_hls_error(resource, stream_id, 503, "Job not ready")
+    end
+  end
+
+  defp handle_torrent_stream(resource, stream_id, session_id, req) do
+    # For torrent streaming, we expect req.path to be something like "file/0/chunk"
+    # or just a direct read.
+    # The flutter client will call this with a path that indicates what it wants.
+    # Pattern: "file/<index>/data"
+    case String.split(req.path, "/", trim: true) do
+      ["file", file_index_str, "data"] ->
+        file_index = String.to_integer(file_index_str)
+
+        # Parse range if present
+        {offset, length} =
+          case parse_range(req.range_start, req.range_end, 1_000_000_000_000) do
+            {:full, len} -> {0, len}
+            {:partial, start, _end, len} -> {start, len}
+          end
+
+        case Mydia.Streaming.Torrent.read_chunk(session_id, file_index, offset, length) do
+          {:ok, data} ->
+            header = %P2p.HlsResponseHeader{
+              status: 200,
+              content_type: "application/octet-stream",
+              content_length: byte_size(data),
+              content_range: nil,
+              cache_control: "no-cache"
+            }
+
+            if P2p.send_hls_header(resource, stream_id, header) == "ok" do
+              P2p.send_hls_chunk(resource, stream_id, data)
+              P2p.finish_hls_stream(resource, stream_id)
+            end
+
+          {:error, reason} ->
+            Logger.warning("Torrent read failed for session #{session_id}: #{inspect(reason)}")
+            send_hls_error(resource, stream_id, 500, "Torrent read failed: #{inspect(reason)}")
+        end
+
+      _ ->
+        Logger.warning("Invalid torrent stream path: #{req.path}")
+        send_hls_error(resource, stream_id, 400, "Invalid path")
     end
   end
 

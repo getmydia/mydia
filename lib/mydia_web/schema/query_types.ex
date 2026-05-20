@@ -124,6 +124,13 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:id, non_null(:id))
       resolve(&StreamingResolver.streaming_candidates/3)
     end
+
+    @desc "Get torrent candidates for instant streaming"
+    field :torrent_candidates, list_of(:torrent_candidate) do
+      arg(:content_type, non_null(:string))
+      arg(:id, non_null(:id))
+      resolve(&StreamingResolver.torrent_candidates/3)
+    end
   end
 
   # Discovery queries - for home screen rails

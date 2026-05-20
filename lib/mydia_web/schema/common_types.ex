@@ -227,6 +227,27 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :duration, :float, description: "Media duration in seconds (if known)"
   end
 
+  @desc "A torrent streaming session"
+  object :torrent_session do
+    field :id, non_null(:id), description: "The session UUID"
+    field :magnet_link, non_null(:string), description: "The magnet link being streamed"
+    field :release_title, non_null(:string), description: "The title of the release"
+    field :user_id, non_null(:id), description: "The user who started the session"
+    field :inserted_at, non_null(:datetime), description: "Creation timestamp"
+  end
+
+  @desc "A torrent search result candidate for instant streaming"
+  object :torrent_candidate do
+    field :title, non_null(:string)
+    field :size, non_null(:integer)
+    field :seeders, :integer
+    field :leechers, :integer
+    field :magnet_link, non_null(:string)
+    field :indexer, non_null(:string)
+    field :quality, :string
+    field :health_score, non_null(:float)
+  end
+
   @desc "A download quality option"
   object :download_option do
     field :resolution, non_null(:string),

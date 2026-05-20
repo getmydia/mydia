@@ -1,0 +1,3 @@
+mutation EndTorrentSession($sessionId: ID!) {
+  endTorrentSession(sessionId: $sessionId)
+}

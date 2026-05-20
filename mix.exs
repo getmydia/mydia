@@ -134,7 +134,7 @@ defmodule Mydia.MixProject do
       {:corsica, "~> 2.1"},
 
       # Rustler for Libp2p NIF
-      {:rustler, "~> 0.34.0", runtime: false},
+      {:rustler, "~> 0.37.0", runtime: false},
 
       # GraphQL
       {:absinthe, "~> 1.7"},

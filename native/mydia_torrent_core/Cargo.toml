@@ -1,0 +1,20 @@
+[package]
+name = "mydia_torrent_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+librqbit = "8"
+tokio = { version = "1.49", features = ["full"] }
+anyhow = "1.0"
+tracing = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+futures = "0.3"
+uuid = { version = "1.20", features = ["v4"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = "z"
+strip = true
+panic = "abort"

@@ -20,6 +20,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
       :timer.send_interval(refresh_interval, self(), :refresh_system_data)
       Phoenix.PubSub.subscribe(Mydia.PubSub, "hls_sessions")
       Phoenix.PubSub.subscribe(Mydia.PubSub, "transcodes")
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "torrent_sessions")
     end
 
     {:ok,
@@ -68,7 +69,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   end
 
   @impl true
-  def handle_info(:session_started, socket) do
+  def handle_info(msg, socket) when msg in [:session_started, :session_stopped] do
     {:noreply, update(socket, :active_sessions, fn _ -> Streaming.list_active_sessions() end)}
   end
 

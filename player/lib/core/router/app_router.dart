@@ -285,9 +285,11 @@ GoRouter appRouter(Ref ref) {
           final showId = state.uri.queryParameters['showId'];
           final seasonNumber = int.tryParse(
               state.uri.queryParameters['seasonNumber'] ?? '');
+          final streamUrl = state.uri.queryParameters['streamUrl'];
+          final sessionId = state.uri.queryParameters['sessionId'];
 
-          if (fileId == null) {
-            // If no fileId provided, show error
+          if (fileId == null && streamUrl == null) {
+            // If no fileId or streamUrl provided, show error
             return Scaffold(
               body: Center(
                 child: Column(
@@ -296,7 +298,7 @@ GoRouter appRouter(Ref ref) {
                     const Icon(Icons.error_outline,
                         size: 64, color: Colors.red),
                     const SizedBox(height: 16),
-                    const Text('No file selected for playback'),
+                    const Text('No content selected for playback'),
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
@@ -321,6 +323,8 @@ GoRouter appRouter(Ref ref) {
             title: title,
             showId: showId,
             seasonNumber: seasonNumber,
+            streamUrl: streamUrl,
+            sessionId: sessionId,
           );
         },
       ),

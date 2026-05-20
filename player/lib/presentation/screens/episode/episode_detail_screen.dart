@@ -12,6 +12,10 @@ import '../../../core/downloads/download_job_providers.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/smart_play_button.dart';
+import '../../widgets/torrent_stream_picker.dart';
+import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/connection/connection_provider.dart';
+import '../../../core/graphql/graphql_provider.dart';
 
 class EpisodeDetailScreen extends ConsumerWidget {
   final String id;
@@ -194,6 +198,10 @@ class EpisodeDetailScreen extends ConsumerWidget {
                         );
                       },
                     ),
+                    if (episode.files.isEmpty) ...[
+                      const SizedBox(width: 12),
+                      _buildStreamButton(context, ref, episode),
+                    ],
                   ],
                 ),
               ),
@@ -647,6 +655,66 @@ class EpisodeDetailScreen extends ConsumerWidget {
                 ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStreamButton(
+      BuildContext context, WidgetRef ref, EpisodeDetail episode) {
+    return Material(
+      color: AppColors.primary,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final result = await showTorrentStreamPicker(
+            context,
+            contentType: 'episode',
+            contentId: episode.id,
+            title: episode.fullTitle,
+          );
+
+          if (result != null && context.mounted) {
+            final sessionId = result['sessionId'] as String;
+            final title = result['title'] as String;
+
+            // Get local proxy URL
+            final localProxy = ref.read(localProxyServiceProvider);
+            final connection = ref.read(connectionProvider);
+
+            if (!localProxy.isRunning) {
+              await localProxy.start(
+                targetPeer: connection.serverNodeAddr!,
+                authToken: ref.read(authTokenProvider).value,
+              );
+            }
+
+            final streamUrl = localProxy.buildHlsUrl(sessionId);
+
+            if (context.mounted) {
+              context.push(
+                '/player/episode/${episode.id}?streamUrl=${Uri.encodeComponent(streamUrl)}&title=${Uri.encodeComponent(title)}&sessionId=$sessionId&showId=${episode.show.id}&seasonNumber=${episode.seasonNumber}',
+              );
+            }
+          }
+        },
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.play_arrow_rounded, color: Colors.white),
+              SizedBox(width: 4),
+              Text(
+                'Stream',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

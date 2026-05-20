@@ -23,11 +23,19 @@ defmodule Mydia.Streaming do
   end
 
   @doc """
-  Lists all active HLS streaming sessions with enriched metadata.
+  Lists all active streaming sessions (HLS and Torrent) with enriched metadata.
 
   Returns a list of `ActiveSession` structs.
   """
   def list_active_sessions do
+    hls_sessions = list_active_hls_sessions()
+    torrent_sessions = list_active_torrent_sessions()
+
+    (hls_sessions ++ torrent_sessions)
+    |> Enum.sort_by(& &1.started_at, {:desc, DateTime})
+  end
+
+  defp list_active_hls_sessions do
     HlsSessionSupervisor.list_sessions()
     |> Enum.map(fn {_key, pid, meta} ->
       # Get fresh info from the session process if alive
@@ -95,7 +103,34 @@ defmodule Mydia.Streaming do
     # Filter out sessions where user or media might be missing (deleted)
     |> Enum.reject(&is_nil/1)
     |> Enum.filter(&(&1.user != nil))
-    |> Enum.sort_by(& &1.started_at, {:desc, DateTime})
+  end
+
+  defp list_active_torrent_sessions do
+    Mydia.Streaming.Torrent.list_active_sessions()
+    |> Enum.map(fn session ->
+      {title, type, episode_info} =
+        case session do
+          %{episode: %{season_number: s, episode_number: e, title: ep_title}, media_item: show} ->
+            {show.title, :tv_show, "S#{pad(s)}E#{pad(e)} - #{ep_title}"}
+
+          %{media_item: movie} ->
+            {movie.title, :movie, nil}
+
+          %{release_title: release_title} ->
+            {release_title, :movie, nil}
+        end
+
+      %ActiveSession{
+        session_id: session.id,
+        user: session.user,
+        media_title: title,
+        media_type: type,
+        episode_info: episode_info,
+        mode: :torrent,
+        started_at: session.started_at,
+        ready: session.state == :ready
+      }
+    end)
   end
 
   defp pad(num), do: String.pad_leading("#{num}", 2, "0")

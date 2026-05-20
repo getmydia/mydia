@@ -20,6 +20,7 @@ defmodule Mydia.Config.Schema do
           oban: __MODULE__.Oban.t() | nil,
           hooks: __MODULE__.Hooks.t() | nil,
           flaresolverr: __MODULE__.FlareSolverr.t() | nil,
+          streaming: __MODULE__.Streaming.t() | nil,
           download_clients: [__MODULE__.DownloadClient.t()],
           indexers: [__MODULE__.Indexer.t()],
           media_servers: [__MODULE__.MediaServer.t()],
@@ -110,6 +111,12 @@ defmodule Mydia.Config.Schema do
       field :max_timeout, :integer, default: 120_000
     end
 
+    embeds_one :streaming, Streaming, on_replace: :update, primary_key: false do
+      field :embedded_enabled, :boolean, default: false
+      field :concurrent_cap, :integer, default: 3
+      field :torrent_staging_dir, :string, default: "/tmp/mydia/streaming"
+    end
+
     embeds_many :download_clients, DownloadClient, on_replace: :delete, primary_key: false do
       field :name, :string
 
@@ -176,6 +183,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:oban, with: &oban_changeset/2)
     |> cast_embed(:hooks, with: &hooks_changeset/2)
     |> cast_embed(:flaresolverr, with: &flaresolverr_changeset/2)
+    |> cast_embed(:streaming, with: &streaming_changeset/2)
     |> cast_embed(:download_clients, with: &download_client_changeset/2)
     |> cast_embed(:indexers, with: &indexer_changeset/2)
     |> cast_embed(:media_servers, with: &media_server_changeset/2)
@@ -298,6 +306,13 @@ defmodule Mydia.Config.Schema do
     |> validate_flaresolverr_url()
     |> validate_number(:timeout, greater_than: 0)
     |> validate_number(:max_timeout, greater_than: 0)
+  end
+
+  defp streaming_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [:embedded_enabled, :concurrent_cap, :torrent_staging_dir])
+    |> validate_required([:embedded_enabled])
+    |> validate_number(:concurrent_cap, greater_than: 0)
   end
 
   defp validate_flaresolverr_url(changeset) do
@@ -462,6 +477,7 @@ defmodule Mydia.Config.Schema do
       oban: %__MODULE__.Oban{},
       hooks: %__MODULE__.Hooks{},
       flaresolverr: %__MODULE__.FlareSolverr{},
+      streaming: %__MODULE__.Streaming{},
       download_clients: [],
       indexers: [],
       media_servers: [],
