@@ -18,3 +18,4 @@ codegen-units = 1
 opt-level = "z"
 strip = true
 panic = "abort"
+openssl = { version = "0.10", features = ["vendored"] }
