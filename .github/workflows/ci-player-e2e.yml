@@ -12,9 +12,18 @@ concurrency:
 
 jobs:
   test-player-e2e:
-    name: Test / Player E2E
+    name: Test / Player E2E (${{ matrix.suite }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: pairing
+            test_target: integration_test/pairing_flow_test.dart
+          - suite: p2p-streaming
+            test_target: integration_test/p2p_streaming_test.dart
 
     steps:
       - name: Checkout
@@ -61,7 +70,7 @@ jobs:
             --abort-on-container-exit \
             --exit-code-from test
         env:
-          E2E_TEST_TARGET: integration_test/pairing_flow_test.dart
+          E2E_TEST_TARGET: ${{ matrix.test_target }}
 
       - name: Collect service logs
         if: failure() && steps.should.outputs.run == 'true'
@@ -74,7 +83,7 @@ jobs:
         if: failure() && steps.should.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: player-e2e-logs
+          name: player-e2e-logs-${{ matrix.suite }}
           path: |
             mydia-logs.txt
             relay-logs.txt
