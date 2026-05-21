@@ -88,18 +88,21 @@ class ConnectionNotifier extends Notifier<ConnectionState> {
 
   /// Loads stored connection state on startup.
   Future<void> _loadStoredState() async {
-    final serverNodeAddr = await _authStorage.read(_ConnectionStorageKeys.serverNodeAddr);
+    final serverNodeAddr =
+        await _authStorage.read(_ConnectionStorageKeys.serverNodeAddr);
     final relayUrl = await _authStorage.read(_ConnectionStorageKeys.relayUrl);
 
     // Check AFTER awaits - setP2PMode may have run during the async gap
     if (state.isP2PMode) {
-      debugPrint('[ConnectionNotifier] Already in P2P mode, skipping stored state load');
+      debugPrint(
+          '[ConnectionNotifier] Already in P2P mode, skipping stored state load');
       return;
     }
 
     // If we have P2P credentials (serverNodeAddr), enter P2P mode
     if (serverNodeAddr != null) {
-      debugPrint('[ConnectionNotifier] Found P2P credentials, entering P2P mode');
+      debugPrint(
+          '[ConnectionNotifier] Found P2P credentials, entering P2P mode');
       state = ConnectionState.p2p(
         serverNodeAddr: serverNodeAddr,
         relayUrl: relayUrl,
@@ -115,7 +118,8 @@ class ConnectionNotifier extends Notifier<ConnectionState> {
     debugPrint('[ConnectionNotifier] Setting P2P mode with serverNodeAddr');
 
     // Store credentials for reconnection
-    await _authStorage.write(_ConnectionStorageKeys.serverNodeAddr, serverNodeAddr);
+    await _authStorage.write(
+        _ConnectionStorageKeys.serverNodeAddr, serverNodeAddr);
     if (relayUrl != null) {
       await _authStorage.write(_ConnectionStorageKeys.relayUrl, relayUrl);
     }
@@ -131,7 +135,7 @@ class ConnectionNotifier extends Notifier<ConnectionState> {
     debugPrint('[ConnectionNotifier] Setting direct mode (runtime only)');
     state = ConnectionState.direct();
   }
-  
+
   Future<void> clear() async {
     debugPrint('[ConnectionNotifier] Clearing connection state');
 
@@ -150,4 +154,5 @@ class ConnectionNotifier extends Notifier<ConnectionState> {
 
 /// Provider for the current connection state.
 final connectionProvider =
-    NotifierProvider<ConnectionNotifier, ConnectionState>(ConnectionNotifier.new);
+    NotifierProvider<ConnectionNotifier, ConnectionState>(
+        ConnectionNotifier.new);

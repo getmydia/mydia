@@ -8,11 +8,12 @@ class Variables$Query$MoviesList {
     int? first,
     String? after,
     Enum$MediaCategory? category,
-  }) => Variables$Query$MoviesList._({
-    if (first != null) r'first': first,
-    if (after != null) r'after': after,
-    if (category != null) r'category': category,
-  });
+  }) =>
+      Variables$Query$MoviesList._({
+        if (first != null) r'first': first,
+        if (after != null) r'after': after,
+        if (category != null) r'category': category,
+      });
 
   Variables$Query$MoviesList._(this._$data);
 
@@ -56,15 +57,14 @@ class Variables$Query$MoviesList {
     }
     if (_$data.containsKey('category')) {
       final l$category = category;
-      result$data['category'] = l$category == null
-          ? null
-          : toJson$Enum$MediaCategory(l$category);
+      result$data['category'] =
+          l$category == null ? null : toJson$Enum$MediaCategory(l$category);
     }
     return result$data;
   }
 
   CopyWith$Variables$Query$MoviesList<Variables$Query$MoviesList>
-  get copyWith => CopyWith$Variables$Query$MoviesList(this, (i) => i);
+      get copyWith => CopyWith$Variables$Query$MoviesList(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -142,14 +142,16 @@ class _CopyWithImpl$Variables$Query$MoviesList<TRes>
     Object? first = _undefined,
     Object? after = _undefined,
     Object? category = _undefined,
-  }) => _then(
-    Variables$Query$MoviesList._({
-      ..._instance._$data,
-      if (first != _undefined) 'first': (first as int?),
-      if (after != _undefined) 'after': (after as String?),
-      if (category != _undefined) 'category': (category as Enum$MediaCategory?),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Query$MoviesList._({
+          ..._instance._$data,
+          if (first != _undefined) 'first': (first as int?),
+          if (after != _undefined) 'after': (after as String?),
+          if (category != _undefined)
+            'category': (category as Enum$MediaCategory?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Query$MoviesList<TRes>
@@ -685,10 +687,9 @@ abstract class CopyWith$Query$MoviesList$movies<TRes> {
   TRes edges(
     Iterable<Query$MoviesList$movies$edges> Function(
       Iterable<
-        CopyWith$Query$MoviesList$movies$edges<Query$MoviesList$movies$edges>
-      >,
-    )
-    _fn,
+          CopyWith$Query$MoviesList$movies$edges<
+              Query$MoviesList$movies$edges>>,
+    ) _fn,
   );
   CopyWith$Query$MoviesList$movies$pageInfo<TRes> get pageInfo;
 }
@@ -708,37 +709,38 @@ class _CopyWithImpl$Query$MoviesList$movies<TRes>
     Object? pageInfo = _undefined,
     Object? totalCount = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$MoviesList$movies(
-      edges: edges == _undefined || edges == null
-          ? _instance.edges
-          : (edges as List<Query$MoviesList$movies$edges>),
-      pageInfo: pageInfo == _undefined || pageInfo == null
-          ? _instance.pageInfo
-          : (pageInfo as Query$MoviesList$movies$pageInfo),
-      totalCount: totalCount == _undefined || totalCount == null
-          ? _instance.totalCount
-          : (totalCount as int),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$MoviesList$movies(
+          edges: edges == _undefined || edges == null
+              ? _instance.edges
+              : (edges as List<Query$MoviesList$movies$edges>),
+          pageInfo: pageInfo == _undefined || pageInfo == null
+              ? _instance.pageInfo
+              : (pageInfo as Query$MoviesList$movies$pageInfo),
+          totalCount: totalCount == _undefined || totalCount == null
+              ? _instance.totalCount
+              : (totalCount as int),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   TRes edges(
     Iterable<Query$MoviesList$movies$edges> Function(
       Iterable<
-        CopyWith$Query$MoviesList$movies$edges<Query$MoviesList$movies$edges>
-      >,
-    )
-    _fn,
-  ) => call(
-    edges: _fn(
-      _instance.edges.map(
-        (e) => CopyWith$Query$MoviesList$movies$edges(e, (i) => i),
-      ),
-    ).toList(),
-  );
+          CopyWith$Query$MoviesList$movies$edges<
+              Query$MoviesList$movies$edges>>,
+    ) _fn,
+  ) =>
+      call(
+        edges: _fn(
+          _instance.edges.map(
+            (e) => CopyWith$Query$MoviesList$movies$edges(e, (i) => i),
+          ),
+        ).toList(),
+      );
 
   CopyWith$Query$MoviesList$movies$pageInfo<TRes> get pageInfo {
     final local$pageInfo = _instance.pageInfo;
@@ -760,7 +762,8 @@ class _CopyWithStubImpl$Query$MoviesList$movies<TRes>
     Query$MoviesList$movies$pageInfo? pageInfo,
     int? totalCount,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   edges(_fn) => _res;
 
@@ -844,7 +847,7 @@ class Query$MoviesList$movies$edges {
 extension UtilityExtension$Query$MoviesList$movies$edges
     on Query$MoviesList$movies$edges {
   CopyWith$Query$MoviesList$movies$edges<Query$MoviesList$movies$edges>
-  get copyWith => CopyWith$Query$MoviesList$movies$edges(this, (i) => i);
+      get copyWith => CopyWith$Query$MoviesList$movies$edges(this, (i) => i);
 }
 
 abstract class CopyWith$Query$MoviesList$movies$edges<TRes> {
@@ -878,19 +881,20 @@ class _CopyWithImpl$Query$MoviesList$movies$edges<TRes>
     Object? node = _undefined,
     Object? cursor = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$MoviesList$movies$edges(
-      node: node == _undefined || node == null
-          ? _instance.node
-          : (node as Query$MoviesList$movies$edges$node),
-      cursor: cursor == _undefined || cursor == null
-          ? _instance.cursor
-          : (cursor as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$MoviesList$movies$edges(
+          node: node == _undefined || node == null
+              ? _instance.node
+              : (node as Query$MoviesList$movies$edges$node),
+          cursor: cursor == _undefined || cursor == null
+              ? _instance.cursor
+              : (cursor as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Query$MoviesList$movies$edges$node<TRes> get node {
     final local$node = _instance.node;
@@ -911,7 +915,8 @@ class _CopyWithStubImpl$Query$MoviesList$movies$edges<TRes>
     Query$MoviesList$movies$edges$node? node,
     String? cursor,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Query$MoviesList$movies$edges$node<TRes> get node =>
       CopyWith$Query$MoviesList$movies$edges$node.stub(_res);
@@ -1142,9 +1147,9 @@ class Query$MoviesList$movies$edges$node {
 extension UtilityExtension$Query$MoviesList$movies$edges$node
     on Query$MoviesList$movies$edges$node {
   CopyWith$Query$MoviesList$movies$edges$node<
-    Query$MoviesList$movies$edges$node
-  >
-  get copyWith => CopyWith$Query$MoviesList$movies$edges$node(this, (i) => i);
+          Query$MoviesList$movies$edges$node>
+      get copyWith =>
+          CopyWith$Query$MoviesList$movies$edges$node(this, (i) => i);
 }
 
 abstract class CopyWith$Query$MoviesList$movies$edges$node<TRes> {
@@ -1197,38 +1202,40 @@ class _CopyWithImpl$Query$MoviesList$movies$edges$node<TRes>
     Object? progress = _undefined,
     Object? isFavorite = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$MoviesList$movies$edges$node(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      year: year == _undefined ? _instance.year : (year as int?),
-      overview: overview == _undefined
-          ? _instance.overview
-          : (overview as String?),
-      runtime: runtime == _undefined ? _instance.runtime : (runtime as int?),
-      genres: genres == _undefined
-          ? _instance.genres
-          : (genres as List<String?>?),
-      contentRating: contentRating == _undefined
-          ? _instance.contentRating
-          : (contentRating as String?),
-      rating: rating == _undefined ? _instance.rating : (rating as double?),
-      artwork: artwork == _undefined
-          ? _instance.artwork
-          : (artwork as Fragment$ArtworkFragment?),
-      progress: progress == _undefined
-          ? _instance.progress
-          : (progress as Fragment$ProgressFragment?),
-      isFavorite: isFavorite == _undefined || isFavorite == null
-          ? _instance.isFavorite
-          : (isFavorite as bool),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$MoviesList$movies$edges$node(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          year: year == _undefined ? _instance.year : (year as int?),
+          overview: overview == _undefined
+              ? _instance.overview
+              : (overview as String?),
+          runtime:
+              runtime == _undefined ? _instance.runtime : (runtime as int?),
+          genres: genres == _undefined
+              ? _instance.genres
+              : (genres as List<String?>?),
+          contentRating: contentRating == _undefined
+              ? _instance.contentRating
+              : (contentRating as String?),
+          rating: rating == _undefined ? _instance.rating : (rating as double?),
+          artwork: artwork == _undefined
+              ? _instance.artwork
+              : (artwork as Fragment$ArtworkFragment?),
+          progress: progress == _undefined
+              ? _instance.progress
+              : (progress as Fragment$ProgressFragment?),
+          isFavorite: isFavorite == _undefined || isFavorite == null
+              ? _instance.isFavorite
+              : (isFavorite as bool),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork {
     final local$artwork = _instance.artwork;
@@ -1270,7 +1277,8 @@ class _CopyWithStubImpl$Query$MoviesList$movies$edges$node<TRes>
     Fragment$ProgressFragment? progress,
     bool? isFavorite,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork =>
       CopyWith$Fragment$ArtworkFragment.stub(_res);
@@ -1385,7 +1393,7 @@ class Query$MoviesList$movies$pageInfo {
 extension UtilityExtension$Query$MoviesList$movies$pageInfo
     on Query$MoviesList$movies$pageInfo {
   CopyWith$Query$MoviesList$movies$pageInfo<Query$MoviesList$movies$pageInfo>
-  get copyWith => CopyWith$Query$MoviesList$movies$pageInfo(this, (i) => i);
+      get copyWith => CopyWith$Query$MoviesList$movies$pageInfo(this, (i) => i);
 }
 
 abstract class CopyWith$Query$MoviesList$movies$pageInfo<TRes> {
@@ -1422,25 +1430,27 @@ class _CopyWithImpl$Query$MoviesList$movies$pageInfo<TRes>
     Object? startCursor = _undefined,
     Object? endCursor = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$MoviesList$movies$pageInfo(
-      hasNextPage: hasNextPage == _undefined || hasNextPage == null
-          ? _instance.hasNextPage
-          : (hasNextPage as bool),
-      hasPreviousPage: hasPreviousPage == _undefined || hasPreviousPage == null
-          ? _instance.hasPreviousPage
-          : (hasPreviousPage as bool),
-      startCursor: startCursor == _undefined
-          ? _instance.startCursor
-          : (startCursor as String?),
-      endCursor: endCursor == _undefined
-          ? _instance.endCursor
-          : (endCursor as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$MoviesList$movies$pageInfo(
+          hasNextPage: hasNextPage == _undefined || hasNextPage == null
+              ? _instance.hasNextPage
+              : (hasNextPage as bool),
+          hasPreviousPage:
+              hasPreviousPage == _undefined || hasPreviousPage == null
+                  ? _instance.hasPreviousPage
+                  : (hasPreviousPage as bool),
+          startCursor: startCursor == _undefined
+              ? _instance.startCursor
+              : (startCursor as String?),
+          endCursor: endCursor == _undefined
+              ? _instance.endCursor
+              : (endCursor as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$MoviesList$movies$pageInfo<TRes>
@@ -1455,5 +1465,6 @@ class _CopyWithStubImpl$Query$MoviesList$movies$pageInfo<TRes>
     String? startCursor,
     String? endCursor,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

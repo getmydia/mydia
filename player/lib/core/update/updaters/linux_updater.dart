@@ -59,8 +59,7 @@ class LinuxUpdater extends PlatformUpdater {
     final extractResult =
         await Process.run('tar', ['-xzf', archivePath, '-C', extractDir]);
     if (extractResult.exitCode != 0) {
-      throw Exception(
-          'Failed to extract update: ${extractResult.stderr}');
+      throw Exception('Failed to extract update: ${extractResult.stderr}');
     }
 
     final execPath = Platform.resolvedExecutable;

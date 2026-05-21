@@ -27,7 +27,8 @@ class Variables$Mutation$ToggleFavorite {
   }
 
   CopyWith$Variables$Mutation$ToggleFavorite<Variables$Mutation$ToggleFavorite>
-  get copyWith => CopyWith$Variables$Mutation$ToggleFavorite(this, (i) => i);
+      get copyWith =>
+          CopyWith$Variables$Mutation$ToggleFavorite(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -76,12 +77,12 @@ class _CopyWithImpl$Variables$Mutation$ToggleFavorite<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? mediaItemId = _undefined}) => _then(
-    Variables$Mutation$ToggleFavorite._({
-      ..._instance._$data,
-      if (mediaItemId != _undefined && mediaItemId != null)
-        'mediaItemId': (mediaItemId as String),
-    }),
-  );
+        Variables$Mutation$ToggleFavorite._({
+          ..._instance._$data,
+          if (mediaItemId != _undefined && mediaItemId != null)
+            'mediaItemId': (mediaItemId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$ToggleFavorite<TRes>
@@ -188,16 +189,17 @@ class _CopyWithImpl$Mutation$ToggleFavorite<TRes>
   TRes call({
     Object? toggleFavorite = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$ToggleFavorite(
-      toggleFavorite: toggleFavorite == _undefined
-          ? _instance.toggleFavorite
-          : (toggleFavorite as Mutation$ToggleFavorite$toggleFavorite?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$ToggleFavorite(
+          toggleFavorite: toggleFavorite == _undefined
+              ? _instance.toggleFavorite
+              : (toggleFavorite as Mutation$ToggleFavorite$toggleFavorite?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$ToggleFavorite$toggleFavorite<TRes> get toggleFavorite {
     final local$toggleFavorite = _instance.toggleFavorite;
@@ -219,7 +221,8 @@ class _CopyWithStubImpl$Mutation$ToggleFavorite<TRes>
   call({
     Mutation$ToggleFavorite$toggleFavorite? toggleFavorite,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$ToggleFavorite$toggleFavorite<TRes> get toggleFavorite =>
       CopyWith$Mutation$ToggleFavorite$toggleFavorite.stub(_res);
@@ -366,10 +369,9 @@ class Mutation$ToggleFavorite$toggleFavorite {
 extension UtilityExtension$Mutation$ToggleFavorite$toggleFavorite
     on Mutation$ToggleFavorite$toggleFavorite {
   CopyWith$Mutation$ToggleFavorite$toggleFavorite<
-    Mutation$ToggleFavorite$toggleFavorite
-  >
-  get copyWith =>
-      CopyWith$Mutation$ToggleFavorite$toggleFavorite(this, (i) => i);
+          Mutation$ToggleFavorite$toggleFavorite>
+      get copyWith =>
+          CopyWith$Mutation$ToggleFavorite$toggleFavorite(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$ToggleFavorite$toggleFavorite<TRes> {
@@ -401,19 +403,20 @@ class _CopyWithImpl$Mutation$ToggleFavorite$toggleFavorite<TRes>
     Object? isFavorite = _undefined,
     Object? mediaItemId = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$ToggleFavorite$toggleFavorite(
-      isFavorite: isFavorite == _undefined || isFavorite == null
-          ? _instance.isFavorite
-          : (isFavorite as bool),
-      mediaItemId: mediaItemId == _undefined || mediaItemId == null
-          ? _instance.mediaItemId
-          : (mediaItemId as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$ToggleFavorite$toggleFavorite(
+          isFavorite: isFavorite == _undefined || isFavorite == null
+              ? _instance.isFavorite
+              : (isFavorite as bool),
+          mediaItemId: mediaItemId == _undefined || mediaItemId == null
+              ? _instance.mediaItemId
+              : (mediaItemId as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$ToggleFavorite$toggleFavorite<TRes>

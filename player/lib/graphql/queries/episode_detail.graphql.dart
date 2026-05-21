@@ -28,7 +28,7 @@ class Variables$Query$EpisodeDetail {
   }
 
   CopyWith$Variables$Query$EpisodeDetail<Variables$Query$EpisodeDetail>
-  get copyWith => CopyWith$Variables$Query$EpisodeDetail(this, (i) => i);
+      get copyWith => CopyWith$Variables$Query$EpisodeDetail(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -77,11 +77,11 @@ class _CopyWithImpl$Variables$Query$EpisodeDetail<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? id = _undefined}) => _then(
-    Variables$Query$EpisodeDetail._({
-      ..._instance._$data,
-      if (id != _undefined && id != null) 'id': (id as String),
-    }),
-  );
+        Variables$Query$EpisodeDetail._({
+          ..._instance._$data,
+          if (id != _undefined && id != null) 'id': (id as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Query$EpisodeDetail<TRes>
@@ -691,7 +691,7 @@ class Query$EpisodeDetail$episode {
 extension UtilityExtension$Query$EpisodeDetail$episode
     on Query$EpisodeDetail$episode {
   CopyWith$Query$EpisodeDetail$episode<Query$EpisodeDetail$episode>
-  get copyWith => CopyWith$Query$EpisodeDetail$episode(this, (i) => i);
+      get copyWith => CopyWith$Query$EpisodeDetail$episode(this, (i) => i);
 }
 
 abstract class CopyWith$Query$EpisodeDetail$episode<TRes> {
@@ -723,10 +723,8 @@ abstract class CopyWith$Query$EpisodeDetail$episode<TRes> {
   TRes files(
     Iterable<Fragment$MediaFileFragment?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?
-      >?,
-    )
-    _fn,
+          CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?>?,
+    ) _fn,
   );
   CopyWith$Query$EpisodeDetail$episode$show<TRes> get $show;
 }
@@ -756,44 +754,47 @@ class _CopyWithImpl$Query$EpisodeDetail$episode<TRes>
     Object? files = _undefined,
     Object? $show = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$EpisodeDetail$episode(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      seasonNumber: seasonNumber == _undefined || seasonNumber == null
-          ? _instance.seasonNumber
-          : (seasonNumber as int),
-      episodeNumber: episodeNumber == _undefined || episodeNumber == null
-          ? _instance.episodeNumber
-          : (episodeNumber as int),
-      title: title == _undefined ? _instance.title : (title as String?),
-      overview: overview == _undefined
-          ? _instance.overview
-          : (overview as String?),
-      airDate: airDate == _undefined ? _instance.airDate : (airDate as String?),
-      runtime: runtime == _undefined ? _instance.runtime : (runtime as int?),
-      monitored: monitored == _undefined || monitored == null
-          ? _instance.monitored
-          : (monitored as bool),
-      thumbnailUrl: thumbnailUrl == _undefined
-          ? _instance.thumbnailUrl
-          : (thumbnailUrl as String?),
-      hasFile: hasFile == _undefined || hasFile == null
-          ? _instance.hasFile
-          : (hasFile as bool),
-      progress: progress == _undefined
-          ? _instance.progress
-          : (progress as Fragment$ProgressFragment?),
-      files: files == _undefined
-          ? _instance.files
-          : (files as List<Fragment$MediaFileFragment?>?),
-      $show: $show == _undefined
-          ? _instance.$show
-          : ($show as Query$EpisodeDetail$episode$show?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$EpisodeDetail$episode(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          seasonNumber: seasonNumber == _undefined || seasonNumber == null
+              ? _instance.seasonNumber
+              : (seasonNumber as int),
+          episodeNumber: episodeNumber == _undefined || episodeNumber == null
+              ? _instance.episodeNumber
+              : (episodeNumber as int),
+          title: title == _undefined ? _instance.title : (title as String?),
+          overview: overview == _undefined
+              ? _instance.overview
+              : (overview as String?),
+          airDate:
+              airDate == _undefined ? _instance.airDate : (airDate as String?),
+          runtime:
+              runtime == _undefined ? _instance.runtime : (runtime as int?),
+          monitored: monitored == _undefined || monitored == null
+              ? _instance.monitored
+              : (monitored as bool),
+          thumbnailUrl: thumbnailUrl == _undefined
+              ? _instance.thumbnailUrl
+              : (thumbnailUrl as String?),
+          hasFile: hasFile == _undefined || hasFile == null
+              ? _instance.hasFile
+              : (hasFile as bool),
+          progress: progress == _undefined
+              ? _instance.progress
+              : (progress as Fragment$ProgressFragment?),
+          files: files == _undefined
+              ? _instance.files
+              : (files as List<Fragment$MediaFileFragment?>?),
+          $show: $show == _undefined
+              ? _instance.$show
+              : ($show as Query$EpisodeDetail$episode$show?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ProgressFragment<TRes> get progress {
     final local$progress = _instance.progress;
@@ -808,18 +809,18 @@ class _CopyWithImpl$Query$EpisodeDetail$episode<TRes>
   TRes files(
     Iterable<Fragment$MediaFileFragment?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?
-      >?,
-    )
-    _fn,
-  ) => call(
-    files: _fn(
-      _instance.files?.map(
-        (e) =>
-            e == null ? null : CopyWith$Fragment$MediaFileFragment(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?>?,
+    ) _fn,
+  ) =>
+      call(
+        files: _fn(
+          _instance.files?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Fragment$MediaFileFragment(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 
   CopyWith$Query$EpisodeDetail$episode$show<TRes> get $show {
     final local$$show = _instance.$show;
@@ -853,7 +854,8 @@ class _CopyWithStubImpl$Query$EpisodeDetail$episode<TRes>
     List<Fragment$MediaFileFragment?>? files,
     Query$EpisodeDetail$episode$show? $show,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ProgressFragment<TRes> get progress =>
       CopyWith$Fragment$ProgressFragment.stub(_res);
@@ -955,7 +957,7 @@ class Query$EpisodeDetail$episode$show {
 extension UtilityExtension$Query$EpisodeDetail$episode$show
     on Query$EpisodeDetail$episode$show {
   CopyWith$Query$EpisodeDetail$episode$show<Query$EpisodeDetail$episode$show>
-  get copyWith => CopyWith$Query$EpisodeDetail$episode$show(this, (i) => i);
+      get copyWith => CopyWith$Query$EpisodeDetail$episode$show(this, (i) => i);
 }
 
 abstract class CopyWith$Query$EpisodeDetail$episode$show<TRes> {
@@ -991,20 +993,21 @@ class _CopyWithImpl$Query$EpisodeDetail$episode$show<TRes>
     Object? title = _undefined,
     Object? artwork = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$EpisodeDetail$episode$show(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      artwork: artwork == _undefined
-          ? _instance.artwork
-          : (artwork as Fragment$ArtworkFragment?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$EpisodeDetail$episode$show(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          artwork: artwork == _undefined
+              ? _instance.artwork
+              : (artwork as Fragment$ArtworkFragment?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork {
     final local$artwork = _instance.artwork;
@@ -1028,7 +1031,8 @@ class _CopyWithStubImpl$Query$EpisodeDetail$episode$show<TRes>
     String? title,
     Fragment$ArtworkFragment? artwork,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork =>
       CopyWith$Fragment$ArtworkFragment.stub(_res);

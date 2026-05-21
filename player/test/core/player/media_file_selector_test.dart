@@ -171,8 +171,7 @@ void main() {
         bitrate: 8000000, // 8 Mbps
       );
 
-      final result =
-          MediaFileSelector.selectBest([fileLow, fileHigh], context);
+      final result = MediaFileSelector.selectBest([fileLow, fileHigh], context);
       expect(result?.id, equals('high-br'));
     });
 
@@ -185,8 +184,7 @@ void main() {
       final fileNull = _makeFile(id: 'null-res');
       final file720 = _makeFile(id: '720', resolution: '720p');
 
-      final result =
-          MediaFileSelector.selectBest([fileNull, file720], context);
+      final result = MediaFileSelector.selectBest([fileNull, file720], context);
       expect(result?.id, equals('720'));
     });
 
@@ -221,8 +219,7 @@ void main() {
         bitrate: 20000000, // 20 Mbps
       );
 
-      final result =
-          MediaFileSelector.selectBest([fileLow, fileHigh], context);
+      final result = MediaFileSelector.selectBest([fileLow, fileHigh], context);
       expect(result?.id, equals('low-br'));
     });
 
@@ -235,8 +232,7 @@ void main() {
       final file1080 = _makeFile(id: '1080', resolution: '1080p');
       final file4k = _makeFile(id: '4k', resolution: '4K');
 
-      final result =
-          MediaFileSelector.selectBest([file1080, file4k], context);
+      final result = MediaFileSelector.selectBest([file1080, file4k], context);
       expect(result?.id, equals('4k'));
     });
   });

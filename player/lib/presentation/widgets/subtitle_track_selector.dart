@@ -113,9 +113,7 @@ class _TrackTile extends StatelessWidget {
               style: const TextStyle(color: Colors.grey),
             )
           : null,
-      trailing: isSelected
-          ? const Icon(Icons.check, color: Colors.red)
-          : null,
+      trailing: isSelected ? const Icon(Icons.check, color: Colors.red) : null,
       onTap: onTap,
     );
   }

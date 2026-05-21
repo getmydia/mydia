@@ -4,10 +4,11 @@ class Variables$Query$TorrentCandidates {
   factory Variables$Query$TorrentCandidates({
     required String contentType,
     required String id,
-  }) => Variables$Query$TorrentCandidates._({
-    r'contentType': contentType,
-    r'id': id,
-  });
+  }) =>
+      Variables$Query$TorrentCandidates._({
+        r'contentType': contentType,
+        r'id': id,
+      });
 
   Variables$Query$TorrentCandidates._(this._$data);
 
@@ -38,7 +39,8 @@ class Variables$Query$TorrentCandidates {
   }
 
   CopyWith$Variables$Query$TorrentCandidates<Variables$Query$TorrentCandidates>
-  get copyWith => CopyWith$Variables$Query$TorrentCandidates(this, (i) => i);
+      get copyWith =>
+          CopyWith$Variables$Query$TorrentCandidates(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -142,9 +144,8 @@ class Query$TorrentCandidates {
   Map<String, dynamic> toJson() {
     final _resultData = <String, dynamic>{};
     final l$torrentCandidates = torrentCandidates;
-    _resultData['torrentCandidates'] = l$torrentCandidates
-        ?.map((e) => e?.toJson())
-        .toList();
+    _resultData['torrentCandidates'] =
+        l$torrentCandidates?.map((e) => e?.toJson()).toList();
     final l$$__typename = $__typename;
     _resultData['__typename'] = l$$__typename;
     return _resultData;
@@ -216,12 +217,9 @@ abstract class CopyWith$Query$TorrentCandidates<TRes> {
   TRes torrentCandidates(
     Iterable<Query$TorrentCandidates$torrentCandidates?>? Function(
       Iterable<
-        CopyWith$Query$TorrentCandidates$torrentCandidates<
-          Query$TorrentCandidates$torrentCandidates
-        >?
-      >?,
-    )
-    _fn,
+          CopyWith$Query$TorrentCandidates$torrentCandidates<
+              Query$TorrentCandidates$torrentCandidates>?>?,
+    ) _fn,
   );
 }
 
@@ -238,36 +236,36 @@ class _CopyWithImpl$Query$TorrentCandidates<TRes>
   TRes call({
     Object? torrentCandidates = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$TorrentCandidates(
-      torrentCandidates: torrentCandidates == _undefined
-          ? _instance.torrentCandidates
-          : (torrentCandidates
-                as List<Query$TorrentCandidates$torrentCandidates?>?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$TorrentCandidates(
+          torrentCandidates: torrentCandidates == _undefined
+              ? _instance.torrentCandidates
+              : (torrentCandidates
+                  as List<Query$TorrentCandidates$torrentCandidates?>?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   TRes torrentCandidates(
     Iterable<Query$TorrentCandidates$torrentCandidates?>? Function(
       Iterable<
-        CopyWith$Query$TorrentCandidates$torrentCandidates<
-          Query$TorrentCandidates$torrentCandidates
-        >?
-      >?,
-    )
-    _fn,
-  ) => call(
-    torrentCandidates: _fn(
-      _instance.torrentCandidates?.map(
-        (e) => e == null
-            ? null
-            : CopyWith$Query$TorrentCandidates$torrentCandidates(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Query$TorrentCandidates$torrentCandidates<
+              Query$TorrentCandidates$torrentCandidates>?>?,
+    ) _fn,
+  ) =>
+      call(
+        torrentCandidates: _fn(
+          _instance.torrentCandidates?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Query$TorrentCandidates$torrentCandidates(
+                    e, (i) => i),
+          ),
+        )?.toList(),
+      );
 }
 
 class _CopyWithStubImpl$Query$TorrentCandidates<TRes>
@@ -279,7 +277,8 @@ class _CopyWithStubImpl$Query$TorrentCandidates<TRes>
   call({
     List<Query$TorrentCandidates$torrentCandidates?>? torrentCandidates,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   torrentCandidates(_fn) => _res;
 }
@@ -565,10 +564,9 @@ class Query$TorrentCandidates$torrentCandidates {
 extension UtilityExtension$Query$TorrentCandidates$torrentCandidates
     on Query$TorrentCandidates$torrentCandidates {
   CopyWith$Query$TorrentCandidates$torrentCandidates<
-    Query$TorrentCandidates$torrentCandidates
-  >
-  get copyWith =>
-      CopyWith$Query$TorrentCandidates$torrentCandidates(this, (i) => i);
+          Query$TorrentCandidates$torrentCandidates>
+      get copyWith =>
+          CopyWith$Query$TorrentCandidates$torrentCandidates(this, (i) => i);
 }
 
 abstract class CopyWith$Query$TorrentCandidates$torrentCandidates<TRes> {
@@ -616,31 +614,35 @@ class _CopyWithImpl$Query$TorrentCandidates$torrentCandidates<TRes>
     Object? quality = _undefined,
     Object? healthScore = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$TorrentCandidates$torrentCandidates(
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      size: size == _undefined || size == null ? _instance.size : (size as int),
-      seeders: seeders == _undefined ? _instance.seeders : (seeders as int?),
-      leechers: leechers == _undefined
-          ? _instance.leechers
-          : (leechers as int?),
-      magnetLink: magnetLink == _undefined || magnetLink == null
-          ? _instance.magnetLink
-          : (magnetLink as String),
-      indexer: indexer == _undefined || indexer == null
-          ? _instance.indexer
-          : (indexer as String),
-      quality: quality == _undefined ? _instance.quality : (quality as String?),
-      healthScore: healthScore == _undefined || healthScore == null
-          ? _instance.healthScore
-          : (healthScore as double),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$TorrentCandidates$torrentCandidates(
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          size: size == _undefined || size == null
+              ? _instance.size
+              : (size as int),
+          seeders:
+              seeders == _undefined ? _instance.seeders : (seeders as int?),
+          leechers:
+              leechers == _undefined ? _instance.leechers : (leechers as int?),
+          magnetLink: magnetLink == _undefined || magnetLink == null
+              ? _instance.magnetLink
+              : (magnetLink as String),
+          indexer: indexer == _undefined || indexer == null
+              ? _instance.indexer
+              : (indexer as String),
+          quality:
+              quality == _undefined ? _instance.quality : (quality as String?),
+          healthScore: healthScore == _undefined || healthScore == null
+              ? _instance.healthScore
+              : (healthScore as double),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$TorrentCandidates$torrentCandidates<TRes>
@@ -659,5 +661,6 @@ class _CopyWithStubImpl$Query$TorrentCandidates$torrentCandidates<TRes>
     String? quality,
     double? healthScore,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

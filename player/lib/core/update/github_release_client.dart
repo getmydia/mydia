@@ -32,9 +32,9 @@ class GitHubReleaseClient {
       final version = tagName.startsWith('v') ? tagName.substring(1) : tagName;
       final htmlUrl = data['html_url'] as String? ?? '';
       final name = data['name'] as String? ?? tagName;
-      final publishedAt = DateTime.tryParse(
-              data['published_at'] as String? ?? '') ??
-          DateTime.now();
+      final publishedAt =
+          DateTime.tryParse(data['published_at'] as String? ?? '') ??
+              DateTime.now();
 
       final assets = data['assets'] as List<dynamic>? ?? [];
       final pattern = _platformAssetPattern();

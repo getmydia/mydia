@@ -24,9 +24,8 @@ class ConnectionStatusBadge extends ConsumerWidget {
         '[ConnectionStatusBadge] build: isP2P=$isP2P, peerConnectionType=${p2pStatus.peerConnectionType}');
 
     // Get color and label based on connection type
-    final (Color statusColor, String label) = isP2P
-        ? _getP2PStatusInfo(p2pStatus)
-        : (Colors.green, 'Direct');
+    final (Color statusColor, String label) =
+        isP2P ? _getP2PStatusInfo(p2pStatus) : (Colors.green, 'Direct');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

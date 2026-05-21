@@ -4,8 +4,8 @@
 /// This allows the Flutter web player to auto-authenticate without manual login.
 library;
 
-import 'web_config_stub.dart'
-    if (dart.library.js_interop) 'web_config_web.dart' as impl;
+import 'web_config_stub.dart' if (dart.library.js_interop) 'web_config_web.dart'
+    as impl;
 
 /// Configuration injected by Phoenix for web auto-authentication.
 class MydiaWebConfig {

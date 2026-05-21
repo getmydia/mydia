@@ -178,7 +178,8 @@ void main() {
           directTimeout: const Duration(seconds: 10),
         );
 
-        expect(customManager.directTimeout, equals(const Duration(seconds: 10)));
+        expect(
+            customManager.directTimeout, equals(const Duration(seconds: 10)));
 
         customManager.dispose();
       });

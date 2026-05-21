@@ -5,11 +5,12 @@ class Variables$Mutation$PrepareDownload {
     required String contentType,
     required String id,
     String? resolution,
-  }) => Variables$Mutation$PrepareDownload._({
-    r'contentType': contentType,
-    r'id': id,
-    if (resolution != null) r'resolution': resolution,
-  });
+  }) =>
+      Variables$Mutation$PrepareDownload._({
+        r'contentType': contentType,
+        r'id': id,
+        if (resolution != null) r'resolution': resolution,
+      });
 
   Variables$Mutation$PrepareDownload._(this._$data);
 
@@ -50,9 +51,9 @@ class Variables$Mutation$PrepareDownload {
   }
 
   CopyWith$Variables$Mutation$PrepareDownload<
-    Variables$Mutation$PrepareDownload
-  >
-  get copyWith => CopyWith$Variables$Mutation$PrepareDownload(this, (i) => i);
+          Variables$Mutation$PrepareDownload>
+      get copyWith =>
+          CopyWith$Variables$Mutation$PrepareDownload(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -124,15 +125,16 @@ class _CopyWithImpl$Variables$Mutation$PrepareDownload<TRes>
     Object? contentType = _undefined,
     Object? id = _undefined,
     Object? resolution = _undefined,
-  }) => _then(
-    Variables$Mutation$PrepareDownload._({
-      ..._instance._$data,
-      if (contentType != _undefined && contentType != null)
-        'contentType': (contentType as String),
-      if (id != _undefined && id != null) 'id': (id as String),
-      if (resolution != _undefined) 'resolution': (resolution as String?),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Mutation$PrepareDownload._({
+          ..._instance._$data,
+          if (contentType != _undefined && contentType != null)
+            'contentType': (contentType as String),
+          if (id != _undefined && id != null) 'id': (id as String),
+          if (resolution != _undefined) 'resolution': (resolution as String?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$PrepareDownload<TRes>
@@ -241,16 +243,17 @@ class _CopyWithImpl$Mutation$PrepareDownload<TRes>
   TRes call({
     Object? prepareDownload = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$PrepareDownload(
-      prepareDownload: prepareDownload == _undefined
-          ? _instance.prepareDownload
-          : (prepareDownload as Mutation$PrepareDownload$prepareDownload?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$PrepareDownload(
+          prepareDownload: prepareDownload == _undefined
+              ? _instance.prepareDownload
+              : (prepareDownload as Mutation$PrepareDownload$prepareDownload?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$PrepareDownload$prepareDownload<TRes> get prepareDownload {
     final local$prepareDownload = _instance.prepareDownload;
@@ -274,7 +277,8 @@ class _CopyWithStubImpl$Mutation$PrepareDownload<TRes>
   call({
     Mutation$PrepareDownload$prepareDownload? prepareDownload,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$PrepareDownload$prepareDownload<TRes> get prepareDownload =>
       CopyWith$Mutation$PrepareDownload$prepareDownload.stub(_res);
@@ -490,10 +494,9 @@ class Mutation$PrepareDownload$prepareDownload {
 extension UtilityExtension$Mutation$PrepareDownload$prepareDownload
     on Mutation$PrepareDownload$prepareDownload {
   CopyWith$Mutation$PrepareDownload$prepareDownload<
-    Mutation$PrepareDownload$prepareDownload
-  >
-  get copyWith =>
-      CopyWith$Mutation$PrepareDownload$prepareDownload(this, (i) => i);
+          Mutation$PrepareDownload$prepareDownload>
+      get copyWith =>
+          CopyWith$Mutation$PrepareDownload$prepareDownload(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$PrepareDownload$prepareDownload<TRes> {
@@ -533,25 +536,25 @@ class _CopyWithImpl$Mutation$PrepareDownload$prepareDownload<TRes>
     Object? progress = _undefined,
     Object? fileSize = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$PrepareDownload$prepareDownload(
-      jobId: jobId == _undefined || jobId == null
-          ? _instance.jobId
-          : (jobId as String),
-      status: status == _undefined || status == null
-          ? _instance.status
-          : (status as String),
-      progress: progress == _undefined || progress == null
-          ? _instance.progress
-          : (progress as double),
-      fileSize: fileSize == _undefined
-          ? _instance.fileSize
-          : (fileSize as int?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$PrepareDownload$prepareDownload(
+          jobId: jobId == _undefined || jobId == null
+              ? _instance.jobId
+              : (jobId as String),
+          status: status == _undefined || status == null
+              ? _instance.status
+              : (status as String),
+          progress: progress == _undefined || progress == null
+              ? _instance.progress
+              : (progress as double),
+          fileSize:
+              fileSize == _undefined ? _instance.fileSize : (fileSize as int?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$PrepareDownload$prepareDownload<TRes>
@@ -566,5 +569,6 @@ class _CopyWithStubImpl$Mutation$PrepareDownload$prepareDownload<TRes>
     double? progress,
     int? fileSize,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

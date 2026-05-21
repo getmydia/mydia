@@ -52,7 +52,8 @@ class Episode {
     );
   }
 
-  String get episodeCode => 'S${seasonNumber.toString().padLeft(2, '0')}E${episodeNumber.toString().padLeft(2, '0')}';
+  String get episodeCode =>
+      'S${seasonNumber.toString().padLeft(2, '0')}E${episodeNumber.toString().padLeft(2, '0')}';
 
   String get runtimeDisplay {
     if (runtime == null) return '';

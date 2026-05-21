@@ -37,9 +37,8 @@ class SearchResult {
   String get yearDisplay => year?.toString() ?? '';
 
   /// Route path for this result
-  String get routePath => type == SearchResultType.movie
-      ? '/movie/$id'
-      : '/show/$id';
+  String get routePath =>
+      type == SearchResultType.movie ? '/movie/$id' : '/show/$id';
 }
 
 /// Type of search result

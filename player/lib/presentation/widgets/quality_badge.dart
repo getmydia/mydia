@@ -26,8 +26,7 @@ class QualityBadge extends StatelessWidget {
       : type = QualityBadgeType.resolution;
 
   /// Creates an HDR badge (e.g., "HDR10", "Dolby Vision")
-  const QualityBadge.hdr(this.label, {super.key})
-      : type = QualityBadgeType.hdr;
+  const QualityBadge.hdr(this.label, {super.key}) : type = QualityBadgeType.hdr;
 
   /// Creates a codec badge (e.g., "HEVC", "H.264")
   const QualityBadge.codec(this.label, {super.key})
@@ -114,7 +113,8 @@ class MediaQuality {
   });
 
   /// Returns true if any quality information is present
-  bool get hasQuality => resolution != null || hdrFormat != null || codec != null;
+  bool get hasQuality =>
+      resolution != null || hdrFormat != null || codec != null;
 
   /// Converts quality information to a list of badges
   List<QualityBadge> toBadges() {
@@ -175,7 +175,8 @@ int _getResolutionPriority(String? resolution) {
   if (res.contains('8k') || res.contains('4320')) return 800;
 
   // 4K/UHD variants
-  if (res.contains('4k') || res.contains('2160') || res.contains('uhd')) return 400;
+  if (res.contains('4k') || res.contains('2160') || res.contains('uhd'))
+    return 400;
 
   // 1440p/QHD variants
   if (res.contains('1440') || res.contains('qhd')) return 300;

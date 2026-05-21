@@ -64,7 +64,9 @@ class StorageSettings {
 
   /// Get the cleanup policy enum value.
   CleanupPolicy get cleanupPolicy {
-    return cleanupPolicyValue == 'lru' ? CleanupPolicy.lru : CleanupPolicy.byDate;
+    return cleanupPolicyValue == 'lru'
+        ? CleanupPolicy.lru
+        : CleanupPolicy.byDate;
   }
 
   /// Check if storage limit is set.
@@ -102,7 +104,9 @@ class StorageSettings {
     bool clearMaxStorageLimit = false,
   }) {
     return StorageSettings(
-      maxStorageBytes: clearMaxStorageLimit ? null : (maxStorageBytes ?? this.maxStorageBytes),
+      maxStorageBytes: clearMaxStorageLimit
+          ? null
+          : (maxStorageBytes ?? this.maxStorageBytes),
       warningThreshold: warningThreshold ?? this.warningThreshold,
       autoCleanupEnabled: autoCleanupEnabled ?? this.autoCleanupEnabled,
       cleanupPolicyValue: cleanupPolicy?.name ?? cleanupPolicyValue,

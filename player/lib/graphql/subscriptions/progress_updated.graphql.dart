@@ -28,10 +28,9 @@ class Variables$Subscription$ProgressUpdated {
   }
 
   CopyWith$Variables$Subscription$ProgressUpdated<
-    Variables$Subscription$ProgressUpdated
-  >
-  get copyWith =>
-      CopyWith$Variables$Subscription$ProgressUpdated(this, (i) => i);
+          Variables$Subscription$ProgressUpdated>
+      get copyWith =>
+          CopyWith$Variables$Subscription$ProgressUpdated(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -83,11 +82,12 @@ class _CopyWithImpl$Variables$Subscription$ProgressUpdated<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? nodeId = _undefined}) => _then(
-    Variables$Subscription$ProgressUpdated._({
-      ..._instance._$data,
-      if (nodeId != _undefined && nodeId != null) 'nodeId': (nodeId as String),
-    }),
-  );
+        Variables$Subscription$ProgressUpdated._({
+          ..._instance._$data,
+          if (nodeId != _undefined && nodeId != null)
+            'nodeId': (nodeId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Subscription$ProgressUpdated<TRes>
@@ -164,7 +164,7 @@ class Subscription$ProgressUpdated {
 extension UtilityExtension$Subscription$ProgressUpdated
     on Subscription$ProgressUpdated {
   CopyWith$Subscription$ProgressUpdated<Subscription$ProgressUpdated>
-  get copyWith => CopyWith$Subscription$ProgressUpdated(this, (i) => i);
+      get copyWith => CopyWith$Subscription$ProgressUpdated(this, (i) => i);
 }
 
 abstract class CopyWith$Subscription$ProgressUpdated<TRes> {
@@ -193,16 +193,17 @@ class _CopyWithImpl$Subscription$ProgressUpdated<TRes>
   TRes call({
     Object? progressUpdated = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Subscription$ProgressUpdated(
-      progressUpdated: progressUpdated == _undefined
-          ? _instance.progressUpdated
-          : (progressUpdated as Fragment$ProgressFragment?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Subscription$ProgressUpdated(
+          progressUpdated: progressUpdated == _undefined
+              ? _instance.progressUpdated
+              : (progressUpdated as Fragment$ProgressFragment?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ProgressFragment<TRes> get progressUpdated {
     final local$progressUpdated = _instance.progressUpdated;

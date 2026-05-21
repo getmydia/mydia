@@ -6,10 +6,11 @@ class Variables$Query$SeasonEpisodes {
   factory Variables$Query$SeasonEpisodes({
     required String showId,
     required int seasonNumber,
-  }) => Variables$Query$SeasonEpisodes._({
-    r'showId': showId,
-    r'seasonNumber': seasonNumber,
-  });
+  }) =>
+      Variables$Query$SeasonEpisodes._({
+        r'showId': showId,
+        r'seasonNumber': seasonNumber,
+      });
 
   Variables$Query$SeasonEpisodes._(this._$data);
 
@@ -38,7 +39,7 @@ class Variables$Query$SeasonEpisodes {
   }
 
   CopyWith$Variables$Query$SeasonEpisodes<Variables$Query$SeasonEpisodes>
-  get copyWith => CopyWith$Variables$Query$SeasonEpisodes(this, (i) => i);
+      get copyWith => CopyWith$Variables$Query$SeasonEpisodes(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -143,9 +144,8 @@ class Query$SeasonEpisodes {
   Map<String, dynamic> toJson() {
     final _resultData = <String, dynamic>{};
     final l$seasonEpisodes = seasonEpisodes;
-    _resultData['seasonEpisodes'] = l$seasonEpisodes
-        ?.map((e) => e?.toJson())
-        .toList();
+    _resultData['seasonEpisodes'] =
+        l$seasonEpisodes?.map((e) => e?.toJson()).toList();
     final l$$__typename = $__typename;
     _resultData['__typename'] = l$$__typename;
     return _resultData;
@@ -217,12 +217,9 @@ abstract class CopyWith$Query$SeasonEpisodes<TRes> {
   TRes seasonEpisodes(
     Iterable<Query$SeasonEpisodes$seasonEpisodes?>? Function(
       Iterable<
-        CopyWith$Query$SeasonEpisodes$seasonEpisodes<
-          Query$SeasonEpisodes$seasonEpisodes
-        >?
-      >?,
-    )
-    _fn,
+          CopyWith$Query$SeasonEpisodes$seasonEpisodes<
+              Query$SeasonEpisodes$seasonEpisodes>?>?,
+    ) _fn,
   );
 }
 
@@ -239,35 +236,34 @@ class _CopyWithImpl$Query$SeasonEpisodes<TRes>
   TRes call({
     Object? seasonEpisodes = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$SeasonEpisodes(
-      seasonEpisodes: seasonEpisodes == _undefined
-          ? _instance.seasonEpisodes
-          : (seasonEpisodes as List<Query$SeasonEpisodes$seasonEpisodes?>?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$SeasonEpisodes(
+          seasonEpisodes: seasonEpisodes == _undefined
+              ? _instance.seasonEpisodes
+              : (seasonEpisodes as List<Query$SeasonEpisodes$seasonEpisodes?>?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   TRes seasonEpisodes(
     Iterable<Query$SeasonEpisodes$seasonEpisodes?>? Function(
       Iterable<
-        CopyWith$Query$SeasonEpisodes$seasonEpisodes<
-          Query$SeasonEpisodes$seasonEpisodes
-        >?
-      >?,
-    )
-    _fn,
-  ) => call(
-    seasonEpisodes: _fn(
-      _instance.seasonEpisodes?.map(
-        (e) => e == null
-            ? null
-            : CopyWith$Query$SeasonEpisodes$seasonEpisodes(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Query$SeasonEpisodes$seasonEpisodes<
+              Query$SeasonEpisodes$seasonEpisodes>?>?,
+    ) _fn,
+  ) =>
+      call(
+        seasonEpisodes: _fn(
+          _instance.seasonEpisodes?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Query$SeasonEpisodes$seasonEpisodes(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 }
 
 class _CopyWithStubImpl$Query$SeasonEpisodes<TRes>
@@ -279,7 +275,8 @@ class _CopyWithStubImpl$Query$SeasonEpisodes<TRes>
   call({
     List<Query$SeasonEpisodes$seasonEpisodes?>? seasonEpisodes,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   seasonEpisodes(_fn) => _res;
 }
@@ -702,9 +699,9 @@ class Query$SeasonEpisodes$seasonEpisodes {
 extension UtilityExtension$Query$SeasonEpisodes$seasonEpisodes
     on Query$SeasonEpisodes$seasonEpisodes {
   CopyWith$Query$SeasonEpisodes$seasonEpisodes<
-    Query$SeasonEpisodes$seasonEpisodes
-  >
-  get copyWith => CopyWith$Query$SeasonEpisodes$seasonEpisodes(this, (i) => i);
+          Query$SeasonEpisodes$seasonEpisodes>
+      get copyWith =>
+          CopyWith$Query$SeasonEpisodes$seasonEpisodes(this, (i) => i);
 }
 
 abstract class CopyWith$Query$SeasonEpisodes$seasonEpisodes<TRes> {
@@ -735,10 +732,8 @@ abstract class CopyWith$Query$SeasonEpisodes$seasonEpisodes<TRes> {
   TRes files(
     Iterable<Fragment$MediaFileFragment?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?
-      >?,
-    )
-    _fn,
+          CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?>?,
+    ) _fn,
   );
 }
 
@@ -766,41 +761,44 @@ class _CopyWithImpl$Query$SeasonEpisodes$seasonEpisodes<TRes>
     Object? progress = _undefined,
     Object? files = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$SeasonEpisodes$seasonEpisodes(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      seasonNumber: seasonNumber == _undefined || seasonNumber == null
-          ? _instance.seasonNumber
-          : (seasonNumber as int),
-      episodeNumber: episodeNumber == _undefined || episodeNumber == null
-          ? _instance.episodeNumber
-          : (episodeNumber as int),
-      title: title == _undefined ? _instance.title : (title as String?),
-      overview: overview == _undefined
-          ? _instance.overview
-          : (overview as String?),
-      airDate: airDate == _undefined ? _instance.airDate : (airDate as String?),
-      runtime: runtime == _undefined ? _instance.runtime : (runtime as int?),
-      monitored: monitored == _undefined || monitored == null
-          ? _instance.monitored
-          : (monitored as bool),
-      thumbnailUrl: thumbnailUrl == _undefined
-          ? _instance.thumbnailUrl
-          : (thumbnailUrl as String?),
-      hasFile: hasFile == _undefined || hasFile == null
-          ? _instance.hasFile
-          : (hasFile as bool),
-      progress: progress == _undefined
-          ? _instance.progress
-          : (progress as Fragment$ProgressFragment?),
-      files: files == _undefined
-          ? _instance.files
-          : (files as List<Fragment$MediaFileFragment?>?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$SeasonEpisodes$seasonEpisodes(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          seasonNumber: seasonNumber == _undefined || seasonNumber == null
+              ? _instance.seasonNumber
+              : (seasonNumber as int),
+          episodeNumber: episodeNumber == _undefined || episodeNumber == null
+              ? _instance.episodeNumber
+              : (episodeNumber as int),
+          title: title == _undefined ? _instance.title : (title as String?),
+          overview: overview == _undefined
+              ? _instance.overview
+              : (overview as String?),
+          airDate:
+              airDate == _undefined ? _instance.airDate : (airDate as String?),
+          runtime:
+              runtime == _undefined ? _instance.runtime : (runtime as int?),
+          monitored: monitored == _undefined || monitored == null
+              ? _instance.monitored
+              : (monitored as bool),
+          thumbnailUrl: thumbnailUrl == _undefined
+              ? _instance.thumbnailUrl
+              : (thumbnailUrl as String?),
+          hasFile: hasFile == _undefined || hasFile == null
+              ? _instance.hasFile
+              : (hasFile as bool),
+          progress: progress == _undefined
+              ? _instance.progress
+              : (progress as Fragment$ProgressFragment?),
+          files: files == _undefined
+              ? _instance.files
+              : (files as List<Fragment$MediaFileFragment?>?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ProgressFragment<TRes> get progress {
     final local$progress = _instance.progress;
@@ -815,18 +813,18 @@ class _CopyWithImpl$Query$SeasonEpisodes$seasonEpisodes<TRes>
   TRes files(
     Iterable<Fragment$MediaFileFragment?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?
-      >?,
-    )
-    _fn,
-  ) => call(
-    files: _fn(
-      _instance.files?.map(
-        (e) =>
-            e == null ? null : CopyWith$Fragment$MediaFileFragment(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?>?,
+    ) _fn,
+  ) =>
+      call(
+        files: _fn(
+          _instance.files?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Fragment$MediaFileFragment(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 }
 
 class _CopyWithStubImpl$Query$SeasonEpisodes$seasonEpisodes<TRes>
@@ -849,7 +847,8 @@ class _CopyWithStubImpl$Query$SeasonEpisodes$seasonEpisodes<TRes>
     Fragment$ProgressFragment? progress,
     List<Fragment$MediaFileFragment?>? files,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ProgressFragment<TRes> get progress =>
       CopyWith$Fragment$ProgressFragment.stub(_res);

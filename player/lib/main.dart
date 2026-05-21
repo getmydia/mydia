@@ -36,7 +36,8 @@ void main() async {
           rethrow;
         }
       } else {
-        debugPrint('[RustLib] Skipping Rust bridge initialization on web platform');
+        debugPrint(
+            '[RustLib] Skipping Rust bridge initialization on web platform');
       }
 
       // Initialize media_kit for video playback

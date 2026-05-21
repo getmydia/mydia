@@ -27,9 +27,9 @@ class Variables$Mutation$EndTorrentSession {
   }
 
   CopyWith$Variables$Mutation$EndTorrentSession<
-    Variables$Mutation$EndTorrentSession
-  >
-  get copyWith => CopyWith$Variables$Mutation$EndTorrentSession(this, (i) => i);
+          Variables$Mutation$EndTorrentSession>
+      get copyWith =>
+          CopyWith$Variables$Mutation$EndTorrentSession(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -81,12 +81,12 @@ class _CopyWithImpl$Variables$Mutation$EndTorrentSession<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? sessionId = _undefined}) => _then(
-    Variables$Mutation$EndTorrentSession._({
-      ..._instance._$data,
-      if (sessionId != _undefined && sessionId != null)
-        'sessionId': (sessionId as String),
-    }),
-  );
+        Variables$Mutation$EndTorrentSession._({
+          ..._instance._$data,
+          if (sessionId != _undefined && sessionId != null)
+            'sessionId': (sessionId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$EndTorrentSession<TRes>
@@ -159,7 +159,7 @@ class Mutation$EndTorrentSession {
 extension UtilityExtension$Mutation$EndTorrentSession
     on Mutation$EndTorrentSession {
   CopyWith$Mutation$EndTorrentSession<Mutation$EndTorrentSession>
-  get copyWith => CopyWith$Mutation$EndTorrentSession(this, (i) => i);
+      get copyWith => CopyWith$Mutation$EndTorrentSession(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$EndTorrentSession<TRes> {
@@ -187,16 +187,17 @@ class _CopyWithImpl$Mutation$EndTorrentSession<TRes>
   TRes call({
     Object? endTorrentSession = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$EndTorrentSession(
-      endTorrentSession: endTorrentSession == _undefined
-          ? _instance.endTorrentSession
-          : (endTorrentSession as bool?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$EndTorrentSession(
+          endTorrentSession: endTorrentSession == _undefined
+              ? _instance.endTorrentSession
+              : (endTorrentSession as bool?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$EndTorrentSession<TRes>

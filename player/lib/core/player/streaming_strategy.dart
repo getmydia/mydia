@@ -61,7 +61,8 @@ class StreamingStrategyService {
     required StreamingStrategy strategy,
     String? mediaToken,
   }) {
-    final url = '$serverUrl/api/v1/stream/file/$fileId?strategy=${strategy.value}';
+    final url =
+        '$serverUrl/api/v1/stream/file/$fileId?strategy=${strategy.value}';
 
     // Append token if provided (for claim code mode)
     // Server expects 'token' query parameter, not 'media_token'

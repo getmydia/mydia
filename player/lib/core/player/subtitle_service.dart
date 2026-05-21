@@ -39,7 +39,8 @@ class SubtitleService {
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body) as Map<String, dynamic>;
         final tracks = (jsonData['data'] as List<dynamic>)
-            .map((track) => SubtitleTrack.fromJson(track as Map<String, dynamic>))
+            .map((track) =>
+                SubtitleTrack.fromJson(track as Map<String, dynamic>))
             .toList();
 
         debugPrint('Found ${tracks.length} subtitle tracks');

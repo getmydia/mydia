@@ -76,18 +76,20 @@ class CastMiniController extends ConsumerWidget {
                       children: [
                         Text(
                           mediaInfo.title,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (device != null)
                           Text(
                             'Casting to ${device.name}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey[600],
+                                    ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

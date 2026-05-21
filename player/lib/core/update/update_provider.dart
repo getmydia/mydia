@@ -132,7 +132,8 @@ class UpdateNotifier extends Notifier<UpdateState> {
     final update = state.availableUpdate;
     if (update == null || _platformUpdater == null || state.isApplying) return;
 
-    state = state.copyWith(isApplying: true, downloadProgress: 0.0, clearError: true);
+    state = state.copyWith(
+        isApplying: true, downloadProgress: 0.0, clearError: true);
 
     try {
       await _platformUpdater.applyUpdate(

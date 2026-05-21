@@ -159,28 +159,30 @@ class _CopyWithImpl$Fragment$ProgressFragment<TRes>
     Object? watched = _undefined,
     Object? lastWatchedAt = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Fragment$ProgressFragment(
-      positionSeconds: positionSeconds == _undefined || positionSeconds == null
-          ? _instance.positionSeconds
-          : (positionSeconds as int),
-      durationSeconds: durationSeconds == _undefined
-          ? _instance.durationSeconds
-          : (durationSeconds as int?),
-      percentage: percentage == _undefined
-          ? _instance.percentage
-          : (percentage as double?),
-      watched: watched == _undefined || watched == null
-          ? _instance.watched
-          : (watched as bool),
-      lastWatchedAt: lastWatchedAt == _undefined
-          ? _instance.lastWatchedAt
-          : (lastWatchedAt as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Fragment$ProgressFragment(
+          positionSeconds:
+              positionSeconds == _undefined || positionSeconds == null
+                  ? _instance.positionSeconds
+                  : (positionSeconds as int),
+          durationSeconds: durationSeconds == _undefined
+              ? _instance.durationSeconds
+              : (durationSeconds as int?),
+          percentage: percentage == _undefined
+              ? _instance.percentage
+              : (percentage as double?),
+          watched: watched == _undefined || watched == null
+              ? _instance.watched
+              : (watched as bool),
+          lastWatchedAt: lastWatchedAt == _undefined
+              ? _instance.lastWatchedAt
+              : (lastWatchedAt as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Fragment$ProgressFragment<TRes>
@@ -196,7 +198,8 @@ class _CopyWithStubImpl$Fragment$ProgressFragment<TRes>
     bool? watched,
     String? lastWatchedAt,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }
 
 const fragmentDefinitionProgressFragment = FragmentDefinitionNode(

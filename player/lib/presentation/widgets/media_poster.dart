@@ -68,70 +68,73 @@ class _MediaPosterState extends State<MediaPoster> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: Stack(
-                children: [
-                  SizedBox.expand(
-                    child: widget.posterUrl != null
-                        ? CachedNetworkImage(
-                            imageUrl: widget.posterUrl!,
-                            fit: BoxFit.cover,
-                            cacheManager: PosterCacheManager(),
-                            placeholder: (context, url) => Container(
-                              color: AppColors.surfaceVariant,
-                              child: const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: AppColors.surfaceVariant,
-                              child: const Icon(
-                                Icons.movie,
-                                size: 48,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          )
-                        : Container(
-                            color: AppColors.surfaceVariant,
-                            child: const Icon(
-                              Icons.movie,
-                              size: 48,
-                              color: AppColors.textSecondary,
+                      children: [
+                        SizedBox.expand(
+                          child: widget.posterUrl != null
+                              ? CachedNetworkImage(
+                                  imageUrl: widget.posterUrl!,
+                                  fit: BoxFit.cover,
+                                  cacheManager: PosterCacheManager(),
+                                  placeholder: (context, url) => Container(
+                                    color: AppColors.surfaceVariant,
+                                    child: const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  ),
+                                  errorWidget: (context, url, error) =>
+                                      Container(
+                                    color: AppColors.surfaceVariant,
+                                    child: const Icon(
+                                      Icons.movie,
+                                      size: 48,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                )
+                              : Container(
+                                  color: AppColors.surfaceVariant,
+                                  child: const Icon(
+                                    Icons.movie,
+                                    size: 48,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                        ),
+                        if (widget.progressPercentage != null &&
+                            widget.progressPercentage! > 0)
+                          ProgressOverlay(
+                              percentage: widget.progressPercentage!),
+                        if (widget.isFavorite)
+                          const Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Icon(
+                              Icons.favorite,
+                              color: Colors.red,
+                              size: 20,
                             ),
                           ),
-                  ),
-                  if (widget.progressPercentage != null && widget.progressPercentage! > 0)
-                    ProgressOverlay(percentage: widget.progressPercentage!),
-                  if (widget.isFavorite)
-                    const Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Icon(
-                        Icons.favorite,
-                        color: Colors.red,
-                        size: 20,
-                      ),
-                    ),
-                  // Hover overlay with play button
-                  AnimatedOpacity(
-                    opacity: _isHovered ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeInOut,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: AppColors.overlayDark,
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.play_circle_filled,
-                          size: 48,
-                          color: AppColors.textPrimary,
+                        // Hover overlay with play button
+                        AnimatedOpacity(
+                          opacity: _isHovered ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: AppColors.overlayDark,
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.play_circle_filled,
+                                size: 48,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
                 ),
               ),
             ),

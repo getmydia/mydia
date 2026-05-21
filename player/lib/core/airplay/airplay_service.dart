@@ -8,7 +8,8 @@ import '../../domain/models/airplay_device.dart';
 /// This service uses a platform channel to communicate with native iOS code
 /// that integrates AVRoutePickerView for AirPlay device selection.
 class AirPlayService {
-  static const MethodChannel _channel = MethodChannel('com.mydia.player/airplay');
+  static const MethodChannel _channel =
+      MethodChannel('com.mydia.player/airplay');
 
   final _devicesController = StreamController<List<AirPlayDevice>>.broadcast();
   final _sessionController = StreamController<AirPlaySession?>.broadcast();

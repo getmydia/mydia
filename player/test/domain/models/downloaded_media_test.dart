@@ -158,8 +158,10 @@ void main() {
         expect(media.episodeNumber, equals(1));
         expect(media.showId, equals('show-789'));
         expect(media.showTitle, equals('Test Show'));
-        expect(media.showPosterUrl, equals('https://example.com/show-poster.jpg'));
-        expect(media.thumbnailUrl, equals('https://example.com/episode-thumb.jpg'));
+        expect(
+            media.showPosterUrl, equals('https://example.com/show-poster.jpg'));
+        expect(media.thumbnailUrl,
+            equals('https://example.com/episode-thumb.jpg'));
         expect(media.airDate, equals('2024-01-15'));
       });
 
@@ -179,10 +181,14 @@ void main() {
         final media = DownloadedMedia.fromTask(task);
         final after = DateTime.now();
 
-        expect(media.downloadedAt.isAfter(before) ||
-            media.downloadedAt.isAtSameMomentAs(before), isTrue);
-        expect(media.downloadedAt.isBefore(after) ||
-            media.downloadedAt.isAtSameMomentAs(after), isTrue);
+        expect(
+            media.downloadedAt.isAfter(before) ||
+                media.downloadedAt.isAtSameMomentAs(before),
+            isTrue);
+        expect(
+            media.downloadedAt.isBefore(after) ||
+                media.downloadedAt.isAtSameMomentAs(after),
+            isTrue);
       });
 
       test('handles null genres from task', () {
