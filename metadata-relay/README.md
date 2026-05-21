@@ -479,7 +479,7 @@ To use a custom domain:
 **Check health status:**
 
 ```bash
-curl https://metadata-relay.fly.dev/health
+curl https://relay.mydia.dev/health
 ```
 
 **View application logs:**
@@ -777,7 +777,7 @@ The service is instrumented with Elixir's Telemetry library for metrics collecti
 The `/health` endpoint provides basic service status:
 
 ```bash
-curl https://metadata-relay.fly.dev/health
+curl https://relay.mydia.dev/health
 ```
 
 Response:
@@ -864,7 +864,7 @@ All workflows must pass before code can be merged, ensuring production stability
 - [x] Update Mydia to use self-hosted relay (task 117.7)
 - [x] Add monitoring, logging, and deployment documentation (task 117.8)
 
-**Service URL**: https://metadata-relay.fly.dev
+**Service URL**: https://relay.mydia.dev
 
 ## License
 

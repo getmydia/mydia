@@ -3,7 +3,7 @@ defmodule Mydia.Metadata.Provider.Relay do
   Metadata provider adapter for metadata-relay service.
 
   This adapter interfaces with the self-hosted metadata-relay service
-  (https://metadata-relay.fly.dev) which acts as a caching proxy for TMDB and TVDB APIs.
+  (https://relay.mydia.dev) which acts as a caching proxy for TMDB and TVDB APIs.
   Using the relay provides several benefits:
 
     * No API key required for basic usage
@@ -18,7 +18,7 @@ defmodule Mydia.Metadata.Provider.Relay do
 
       config = %{
         type: :metadata_relay,
-        base_url: "https://metadata-relay.fly.dev",
+        base_url: "https://relay.mydia.dev",
         options: %{
           language: "en-US",
           include_adult: false,

@@ -8,7 +8,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
   @config %{
     type: :metadata_relay,
-    base_url: "https://metadata-relay.fly.dev",
+    base_url: "https://relay.mydia.dev",
     options: %{
       language: "en-US",
       include_adult: false
