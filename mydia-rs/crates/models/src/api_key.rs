@@ -1,7 +1,7 @@
 //! Port of `Mydia.Accounts.ApiKey` (`lib/mydia/accounts/api_key.ex`).
 //!
 //! Phoenix table: `api_keys`. `permissions` is the dual-encoded
-//! [`StringArray`] -> `text[]` on Postgres, JSON-text on SQLite (per
+//! [`StringArray`] -> `text[]` on Postgres, JSON-text on `SQLite` (per
 //! `priv/repo/migrations/20260223100000_fix_array_columns_for_postgres.exs`).
 //! The virtual `key` field exists only on the Ecto changeset and is
 //! not modelled here; only the hash and the stored prefix survive to

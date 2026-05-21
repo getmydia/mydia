@@ -3,7 +3,7 @@
 //!
 //! The Phoenix discovery resolver builds these shapes inline in the
 //! resolver. The mirror types here let the Rust resolver return
-//! strongly-typed values without round-tripping through serde_json.
+//! strongly-typed values without round-tripping through `serde_json`.
 
 use async_graphql::{Enum, SimpleObject, ID};
 use chrono::{DateTime, Utc};

@@ -26,7 +26,9 @@ pub fn get_i64(metadata: Option<&Value>, key: &str) -> Option<i64> {
 
 /// Extract an f64 from the metadata blob.
 pub fn get_f64(metadata: Option<&Value>, key: &str) -> Option<f64> {
-    metadata.and_then(|v| v.get(key)).and_then(|v| v.as_f64())
+    metadata
+        .and_then(|v| v.get(key))
+        .and_then(serde_json::Value::as_f64)
 }
 
 /// Extract a `Vec<String>` from a JSON array field. Returns an
@@ -39,7 +41,7 @@ pub fn get_string_array(metadata: Option<&Value>, key: &str) -> Vec<String> {
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_owned()))
+                .filter_map(|v| v.as_str().map(std::borrow::ToOwned::to_owned))
                 .collect()
         })
         .unwrap_or_default()

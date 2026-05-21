@@ -1,6 +1,6 @@
 //! Port of `Mydia.Collections` query slice — list / get / item enumeration.
 //!
-//! Mutations (toggle_favorite) live in [`super::collections`]; this
+//! Mutations (`toggle_favorite`) live in [`super::collections`]; this
 //! module is the read-side. Smart collections (Phoenix's
 //! `Collections.SmartRules` evaluator) are not ported yet — U14
 //! returns empty item lists for `type = "smart"` and notes the gap.
@@ -158,7 +158,7 @@ pub async fn poster_paths(
                 .as_ref()
                 .and_then(|m| m.0.get("poster_path"))
                 .and_then(Value::as_str)
-                .map(|s| s.to_owned())
+                .map(std::borrow::ToOwned::to_owned)
         })
         .collect();
     Ok(posters)

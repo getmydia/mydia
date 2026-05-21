@@ -42,8 +42,8 @@ struct Cli {
     #[arg(long)]
     corpus: PathBuf,
 
-    /// Path to a SQLite database, OR a Postgres URL. When set to a
-    /// path, defaults to SQLite. When prefixed with `postgres://`, the
+    /// Path to a `SQLite` database, OR a Postgres URL. When set to a
+    /// path, defaults to `SQLite`. When prefixed with `postgres://`, the
     /// Postgres driver is used.
     #[arg(long, default_value = ":memory:")]
     database: String,

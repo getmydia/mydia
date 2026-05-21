@@ -8,9 +8,9 @@
 //! Coverage:
 //! - happy path: publish → receive
 //! - topic matches the encoded global node ID exactly (Phoenix shape)
-//! - device_status: subscriber can watch their own user, gets blocked
+//! - `device_status`: subscriber can watch their own user, gets blocked
 //!   from another user (non-admin)
-//! - admin can subscribe to any user_id's device events
+//! - admin can subscribe to any `user_id`'s device events
 //! - subscribe without auth is rejected
 //! - malformed payloads are dropped (not crash)
 //! - subscription on an episode topic resolves only episode events
@@ -92,7 +92,7 @@ fn progress_payload(position: i32, duration: i32) -> serde_json::Value {
     json!({
         "position_seconds": position,
         "duration_seconds": duration,
-        "percentage": (position as f64 / duration as f64) * 100.0,
+        "percentage": (f64::from(position) / f64::from(duration)) * 100.0,
         "watched": false,
         "last_watched_at": "2024-01-01T00:00:00Z"
     })
@@ -110,11 +110,11 @@ async fn progress_subscription_yields_event_for_movie_topic() {
     let encoded_id = format!("movie:{movie_uuid}");
 
     let request = Request::new(
-        r#"subscription Sub($id: ID!) {
+        r"subscription Sub($id: ID!) {
             progressUpdated(nodeId: $id) {
                 positionSeconds durationSeconds percentage watched
             }
-        }"#,
+        }",
     )
     .variables(Variables::from_json(json!({"id": encoded_id.clone()})))
     .data(GraphqlRequestContext::with_user(alice));
@@ -154,9 +154,9 @@ async fn progress_subscription_filters_by_topic() {
     let movie_b = format!("movie:{}", Uuid::new_v4());
 
     let request = Request::new(
-        r#"subscription S($id: ID!) {
+        r"subscription S($id: ID!) {
             progressUpdated(nodeId: $id) { positionSeconds }
-        }"#,
+        }",
     )
     .variables(Variables::from_json(json!({"id": movie_a.clone()})))
     .data(GraphqlRequestContext::with_user(alice));
@@ -212,9 +212,9 @@ async fn progress_subscription_drops_malformed_payload() {
     let movie_id = format!("movie:{}", Uuid::new_v4());
 
     let request = Request::new(
-        r#"subscription S($id: ID!) {
+        r"subscription S($id: ID!) {
             progressUpdated(nodeId: $id) { positionSeconds }
-        }"#,
+        }",
     )
     .variables(Variables::from_json(json!({"id": movie_id.clone()})))
     .data(GraphqlRequestContext::with_user(alice));
@@ -264,12 +264,12 @@ async fn device_status_subscription_yields_event_for_own_user() {
     let alice = user(alice_id, "alice", Role::User);
 
     let request = Request::new(
-        r#"subscription S($id: ID!) {
+        r"subscription S($id: ID!) {
             deviceStatusChanged(userId: $id) {
                 event
                 device { id deviceName platform }
             }
-        }"#,
+        }",
     )
     .variables(Variables::from_json(json!({"id": alice_id.to_string()})))
     .data(GraphqlRequestContext::with_user(alice));
@@ -306,9 +306,9 @@ async fn device_status_subscription_rejects_other_user_for_non_admin() {
     let response = first_response(
         &schema,
         alice,
-        r#"subscription S($id: ID!) {
+        r"subscription S($id: ID!) {
             deviceStatusChanged(userId: $id) { event }
-        }"#,
+        }",
         Variables::from_json(json!({"id": other_user})),
         Duration::from_secs(1),
     )
@@ -329,7 +329,7 @@ async fn device_status_subscription_allows_admin_to_watch_any_user() {
     let target_user = Uuid::new_v4();
 
     let request =
-        Request::new(r#"subscription S($id: ID!) { deviceStatusChanged(userId: $id) { event } }"#)
+        Request::new(r"subscription S($id: ID!) { deviceStatusChanged(userId: $id) { event } }")
             .variables(Variables::from_json(json!({"id": target_user.to_string()})))
             .data(GraphqlRequestContext::with_user(admin));
     let mut stream = schema.execute_stream(request);
@@ -374,12 +374,12 @@ async fn two_subscribers_on_different_topics_do_not_cross_talk() {
     let topic_b = format!("movie:{}", Uuid::new_v4());
 
     let req_a = Request::new(
-        r#"subscription S($id: ID!) { progressUpdated(nodeId: $id) { positionSeconds } }"#,
+        r"subscription S($id: ID!) { progressUpdated(nodeId: $id) { positionSeconds } }",
     )
     .variables(Variables::from_json(json!({"id": topic_a.clone()})))
     .data(GraphqlRequestContext::with_user(alice.clone()));
     let req_b = Request::new(
-        r#"subscription S($id: ID!) { progressUpdated(nodeId: $id) { positionSeconds } }"#,
+        r"subscription S($id: ID!) { progressUpdated(nodeId: $id) { positionSeconds } }",
     )
     .variables(Variables::from_json(json!({"id": topic_b.clone()})))
     .data(GraphqlRequestContext::with_user(alice));

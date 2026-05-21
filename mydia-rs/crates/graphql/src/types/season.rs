@@ -1,7 +1,7 @@
 //! Season — virtual type, port of `lib/mydia_web/schema/media_types.ex:190-233`.
 //!
 //! There is no `seasons` DB table; Phoenix builds Season records on
-//! the fly from the episodes belonging to a media_item. The Rust
+//! the fly from the episodes belonging to a `media_item`. The Rust
 //! port mirrors that shape: `Season::build_from_episodes` walks an
 //! episode list and computes the counts.
 
@@ -67,7 +67,7 @@ impl Season {
     }
 
     /// Build a season ignoring air-date filtering. Used in the
-    /// `seasons` field resolver on TvShow (U10.c) where the resolver
+    /// `seasons` field resolver on `TvShow` (U10.c) where the resolver
     /// already paginates by season.
     #[allow(dead_code)]
     pub fn build_unchecked(

@@ -10,7 +10,7 @@
 //! See `crates/models/src/conventions.md` for the rules covering the
 //! remaining ~40 schemas. Common surface:
 //!
-//! - snake_case field names, matching Ecto. async-graphql does
+//! - `snake_case` field names, matching Ecto. async-graphql does
 //!   snake -> camel conversion at the API edge.
 //! - UUID primary keys and foreign keys use [`mydia_rs_db::types::UuidText`].
 //! - `:utc_datetime` columns use [`mydia_rs_db::types::DateTimeSecs`];
@@ -21,7 +21,7 @@
 //! - `{:array, :string}` columns use [`mydia_rs_db::types::StringArray`].
 //! - Ecto `Ecto.Enum` and string-validated columns map to Rust enums
 //!   exposed alongside the struct; the DB column itself stays `String`
-//!   to avoid sqlx-derive `type_name` mismatches between SQLite TEXT
+//!   to avoid sqlx-derive `type_name` mismatches between `SQLite` TEXT
 //!   and Postgres TEXT.
 
 pub mod api_key;

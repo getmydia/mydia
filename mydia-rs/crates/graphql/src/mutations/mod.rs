@@ -2,15 +2,15 @@
 //! mutation family from `lib/mydia_web/schema/resolvers/`:
 //!
 //! - [`playback`] — update_*_progress, mark_*_watched/unwatched,
-//!   mark_season_watched, toggle_favorite (U11).
-//! - [`streaming`] — start_streaming_session, end_streaming_session
+//!   `mark_season_watched`, `toggle_favorite` (U11).
+//! - [`streaming`] — `start_streaming_session`, `end_streaming_session`
 //!   (U11; the HLS supervisor itself lands in U19).
 //! - [`auth`] — `login` (U14; password verify + Guardian-shaped JWT).
 //! - [`api_key`] — create / revoke / delete (U14).
 //! - [`device`] — `revokeDevice` (U14 stub; U29 real).
-//! - [`download`] — download_options / prepare / status / cancel
+//! - [`download`] — `download_options` / prepare / status / cancel
 //!   (U14 stubs; U20 real).
-//! - [`remote_access`] — generate_claim_code / refresh_media_token
+//! - [`remote_access`] — `generate_claim_code` / `refresh_media_token`
 //!   (U14 stubs; U29 real).
 
 pub mod api_key;

@@ -42,12 +42,13 @@ pub struct TvShow {
 #[ComplexObject]
 impl TvShow {
     async fn overview(&self) -> Option<String> {
-        metadata::get_str(self.raw_metadata.as_ref(), "overview").map(|s| s.to_owned())
+        metadata::get_str(self.raw_metadata.as_ref(), "overview")
+            .map(std::borrow::ToOwned::to_owned)
     }
 
     /// `metadata.status` — e.g. "Continuing", "Ended".
     async fn status(&self) -> Option<String> {
-        metadata::get_str(self.raw_metadata.as_ref(), "status").map(|s| s.to_owned())
+        metadata::get_str(self.raw_metadata.as_ref(), "status").map(std::borrow::ToOwned::to_owned)
     }
 
     async fn genres(&self) -> Vec<String> {

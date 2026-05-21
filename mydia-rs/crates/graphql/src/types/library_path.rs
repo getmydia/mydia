@@ -1,7 +1,7 @@
 //! Library path — port of `lib/mydia_web/schema/common_types.ex:92-130`.
 //!
 //! Implements the Node interface (full implementation in U10.c). For
-//! U10.a this is a plain SimpleObject; the `parent`, `children`,
+//! U10.a this is a plain `SimpleObject`; the `parent`, `children`,
 //! `ancestors`, `is_playable` fields land alongside the Node enum.
 
 use async_graphql::{Enum, SimpleObject};

@@ -16,7 +16,7 @@ fn env_lock() -> MutexGuard<'static, ()> {
     // Poisoning is irrelevant for these tests; recover and continue.
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
-        .unwrap_or_else(|poison| poison.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 const OIDC_ENV_KEYS: &[&str] = &[
@@ -163,11 +163,11 @@ fn at_least_one_auth_method_required() {
     let _guard = env_lock();
     clear_env();
     let file = write_toml(
-        r#"
+        r"
         [auth]
         local_enabled = false
         oidc_enabled = false
-        "#,
+        ",
     );
     let err = load_from_path(file.path()).expect_err("must reject");
     assert!(format!("{err}").contains("at least one authentication method"));

@@ -94,7 +94,7 @@ impl CollectionQueries {
         )
         .await?
         .ok_or_else(|| async_graphql::Error::new("Collection not found"))?;
-        let limit = first.max(0) as i64;
+        let limit = i64::from(first.max(0));
         let items = collections_query::list_items(&state.db, row.id, limit).await?;
         Ok(items.iter().map(build_recently_added_item).collect())
     }

@@ -6,7 +6,7 @@
 //!   queries (JSON extract, datetime arithmetic, casts) stay readable at
 //!   the call site.
 //! - [`types`] holds `sqlx::Type` impls matching the on-disk format Ecto
-//!   actually writes — TEXT-UUID and RFC3339-Z datetimes on SQLite,
+//!   actually writes — TEXT-UUID and RFC3339-Z datetimes on `SQLite`,
 //!   native types on Postgres. Phoenix and mydia-rs read each other's
 //!   rows unchanged through these.
 //! - [`schema_check`] runs the boot-time `schema_migrations` probe so

@@ -1,7 +1,7 @@
 //! U10.a integration test — browse resolvers against a Phoenix-shaped
-//! SQLite fixture.
+//! `SQLite` fixture.
 //!
-//! Each test builds an in-process SQLite DB matching the relevant
+//! Each test builds an in-process `SQLite` DB matching the relevant
 //! Phoenix tables, seeds rows that resemble the player's typical
 //! browse output, then runs the GraphQL operations through the
 //! merged schema. Asserts the response shapes match Phoenix:
@@ -9,7 +9,7 @@
 //! - Connection cursors are base64 of `cursor:<offset>` (the
 //!   `BrowseResolver.encode_cursor/1` byte shape).
 //! - Edge nodes carry encoded global IDs (`movie:<uuid>`).
-//! - PageInfo has the expected boolean shape on first/last pages.
+//! - `PageInfo` has the expected boolean shape on first/last pages.
 
 use async_graphql::{Request, Variables};
 use chrono::{TimeZone, Utc};
@@ -77,7 +77,7 @@ async fn seed_movie(
     .bind(id)
     .bind(title)
     .bind(year)
-    .bind(year as i64) // tmdb_id placeholder
+    .bind(i64::from(year)) // tmdb_id placeholder
     .bind(metadata)
     .bind(inserted_at)
     .bind(inserted_at)
@@ -112,7 +112,7 @@ async fn seed_tv_show(db: &Db, id: UuidText, title: &str, year: i32, inserted_at
     .bind(id)
     .bind(title)
     .bind(year)
-    .bind(year as i64)
+    .bind(i64::from(year))
     .bind(metadata)
     .bind(inserted_at)
     .bind(inserted_at)
@@ -191,7 +191,7 @@ async fn movies_query_returns_seeded_rows_with_phoenix_cursor() {
 
     let response = schema
         .execute(
-            r#"
+            r"
             {
                 movies(first: 10) {
                     totalCount
@@ -202,7 +202,7 @@ async fn movies_query_returns_seeded_rows_with_phoenix_cursor() {
                     }
                 }
             }
-            "#,
+            ",
         )
         .await;
 
@@ -252,7 +252,9 @@ async fn movies_query_paginates_using_after_cursor() {
 
     // First page of 2 — should include Alpha, Beta (title ASC).
     let resp1 = schema
-        .execute(r#"{ movies(first: 2) { pageInfo { endCursor hasNextPage } edges { node { title } } } }"#)
+        .execute(
+            r"{ movies(first: 2) { pageInfo { endCursor hasNextPage } edges { node { title } } } }",
+        )
         .await;
     assert!(resp1.errors.is_empty(), "errors: {:?}", resp1.errors);
     let data1 = resp1.data.into_json().unwrap();
@@ -307,8 +309,8 @@ async fn movies_sort_year_desc() {
 
     let resp = schema
         .execute(
-            r#"{ movies(first: 10, sort: { field: YEAR, direction: DESC }) {
-                  edges { node { title year } } } }"#,
+            r"{ movies(first: 10, sort: { field: YEAR, direction: DESC }) {
+                  edges { node { title year } } } }",
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -356,10 +358,10 @@ async fn tv_shows_query_filters_correctly() {
     let schema = build_test_schema(db).await;
     let resp = schema
         .execute(
-            r#"{
+            r"{
                 movies(first: 10) { totalCount edges { node { title } } }
                 tvShows(first: 10) { totalCount edges { node { title } } }
-            }"#,
+            }",
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -378,15 +380,12 @@ async fn movie_by_id_handles_both_encoded_and_raw_uuid() {
 
     let schema = build_test_schema(db).await;
 
-    const MOVIE_QUERY: &str = r#"query M($id: ID!) { movie(id: $id) { title } }"#;
+    const MOVIE_QUERY: &str = r"query M($id: ID!) { movie(id: $id) { title } }";
 
     // Encoded form.
     let encoded = format!("movie:{movie_uuid}");
     let resp = schema
-        .execute(
-            Request::new(MOVIE_QUERY)
-                .variables(Variables::from_json(json!({"id": encoded}))),
-        )
+        .execute(Request::new(MOVIE_QUERY).variables(Variables::from_json(json!({"id": encoded}))))
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     assert_eq!(resp.data.into_json().unwrap()["movie"]["title"], "Pinned");
@@ -426,7 +425,7 @@ async fn libraries_returns_seeded_paths() {
 
     let schema = build_test_schema(db).await;
     let resp = schema
-        .execute(r#"{ libraries { id path type monitored } }"#)
+        .execute(r"{ libraries { id path type monitored } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -464,11 +463,11 @@ async fn season_query_aggregates_episodes() {
     let resp = schema
         .execute(
             Request::new(
-                r#"query S($id: ID!) {
+                r"query S($id: ID!) {
                 season(showId: $id, seasonNumber: 1) {
                     id seasonNumber episodeCount hasFiles
                 }
-            }"#,
+            }",
             )
             .variables(Variables::from_json(json!({"id": show_uuid_str.clone()}))),
         )
@@ -514,11 +513,11 @@ async fn season_episodes_query() {
     let resp = schema
         .execute(
             Request::new(
-                r#"query E($id: ID!) {
+                r"query E($id: ID!) {
                 seasonEpisodes(showId: $id, seasonNumber: 1) {
                     seasonNumber episodeNumber title
                 }
-            }"#,
+            }",
             )
             .variables(Variables::from_json(json!({"id": show_id.0.to_string()}))),
         )
@@ -542,9 +541,9 @@ async fn node_query_dispatches_by_type() {
     let resp = schema
         .execute(
             Request::new(
-                r#"query N($id: ID!) {
+                r"query N($id: ID!) {
                 node(id: $id) { __typename ... on Movie { title } }
-            }"#,
+            }",
             )
             .variables(Variables::from_json(json!({"id": encoded}))),
         )

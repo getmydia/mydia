@@ -1,7 +1,7 @@
 //! Integration tests for the boot-time mutual exclusion lock.
 //!
-//! SQLite path covered end-to-end via tempfile DBs. Postgres path is
-//! gated on DATABASE_URL the same way the db crate's postgres_smoke
+//! `SQLite` path covered end-to-end via tempfile DBs. Postgres path is
+//! gated on `DATABASE_URL` the same way the db crate's `postgres_smoke`
 //! tests are; the CI matrix exercises it.
 
 use std::path::{Path, PathBuf};

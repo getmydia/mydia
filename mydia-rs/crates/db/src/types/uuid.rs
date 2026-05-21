@@ -2,10 +2,10 @@
 //!
 //! Phoenix uses `ecto_sqlite3`'s default `:binary_id_type = :string`,
 //! which stores UUIDs as 36-character lowercase-hyphenated TEXT on
-//! SQLite (e.g. `0186fa3d-1c2f-7c4f-9aaa-1234567890ab`). Postgres uses
+//! `SQLite` (e.g. `0186fa3d-1c2f-7c4f-9aaa-1234567890ab`). Postgres uses
 //! the native `uuid` type. sqlx's built-in `Uuid` Type stores BLOB on
-//! SQLite, which would corrupt cross-backend reads, so we wrap with
-//! [`UuidText`] and route the SQLite path through TEXT.
+//! `SQLite`, which would corrupt cross-backend reads, so we wrap with
+//! [`UuidText`] and route the `SQLite` path through TEXT.
 
 use std::fmt;
 use std::str::FromStr;
@@ -18,7 +18,7 @@ use sqlx::error::BoxDynError;
 use sqlx::{Postgres, Sqlite, Type};
 use uuid::Uuid;
 
-/// Newtype wrapper around [`uuid::Uuid`] that encodes as TEXT on SQLite
+/// Newtype wrapper around [`uuid::Uuid`] that encodes as TEXT on `SQLite`
 /// and as the native `uuid` type on Postgres.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]

@@ -55,7 +55,7 @@ impl StreamingMutations {
             .metadata
             .as_ref()
             .and_then(|m| m.0.get("duration"))
-            .and_then(|v| v.as_f64());
+            .and_then(serde_json::Value::as_f64);
 
         Ok(StreamingSessionResult {
             session_id,

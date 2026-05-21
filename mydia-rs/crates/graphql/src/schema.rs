@@ -99,7 +99,7 @@ impl IntrospectionMutations {
     /// Keeps the mutation root non-empty when the merged set has
     /// nothing else to expose (e.g. in U13's parity harness when it
     /// builds a schema without DB-backed resolvers). Once U14 lands
-    /// auth/api_key/device mutations, this can be dropped.
+    /// `auth/api_key/device` mutations, this can be dropped.
     async fn ping(&self) -> &'static str {
         "pong"
     }
@@ -111,7 +111,7 @@ impl Default for IntrospectionMutations {
     }
 }
 
-/// The merged Mutation root. Same convention as QueryRoot: one
+/// The merged Mutation root. Same convention as `QueryRoot`: one
 /// struct per family.
 #[derive(MergedObject, Default)]
 #[graphql(name = "Mutation")]
@@ -166,8 +166,8 @@ mod tests {
 
     /// Build a schema without any DB connection — the root-level
     /// smoke tests don't touch the pool. They cover the
-    /// IntrospectionQueries portion only; BrowseQueries tests live
-    /// in `tests/browse.rs` against a real SQLite fixture.
+    /// `IntrospectionQueries` portion only; `BrowseQueries` tests live
+    /// in `tests/browse.rs` against a real `SQLite` fixture.
     fn schema_for_tests() -> MydiaSchema {
         Schema::build(
             QueryRoot::default(),

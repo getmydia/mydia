@@ -45,7 +45,7 @@ impl SearchQueries {
             });
         }
         let state = ctx.data::<GraphqlAppState>()?;
-        let kind = type_filter_to_db(&types);
+        let kind = type_filter_to_db(types.as_ref());
         let limit = first.clamp(0, MAX_FIRST) as usize;
 
         let opts = media::ListMediaItemsOpts {
@@ -75,18 +75,17 @@ impl SearchQueries {
 /// when `:types` is `nil` or `[]`, no filter. Mixing `movie` and
 /// `tv_show` also yields no filter. A single-kind list narrows to that
 /// kind.
-fn type_filter_to_db(types: &Option<Vec<MediaType>>) -> Option<&'static str> {
-    let Some(types) = types else { return None };
+fn type_filter_to_db(types: Option<&Vec<MediaType>>) -> Option<&'static str> {
+    let types = types?;
     if types.is_empty() {
         return None;
     }
     let has_movie = types.contains(&MediaType::Movie);
     let has_tv = types.contains(&MediaType::TvShow);
     match (has_movie, has_tv) {
-        (true, true) => None,
         (true, false) => Some("movie"),
         (false, true) => Some("tv_show"),
-        (false, false) => None,
+        (true, true) | (false, false) => None,
     }
 }
 
@@ -117,12 +116,12 @@ fn build_artwork(row: &mydia_rs_models::MediaItem) -> Option<Artwork> {
         .0
         .get("poster_path")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
     let backdrop_path = metadata
         .0
         .get("backdrop_path")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
     if poster_path.is_none() && backdrop_path.is_none() {
         return None;
     }

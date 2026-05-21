@@ -74,7 +74,7 @@ impl MediaFile {
 
     /// Encode this file's global node ID for the rare cases where it
     /// appears as a Node interface implementor. Phoenix doesn't
-    /// expose MediaFile through the Node interface today, but the
+    /// expose `MediaFile` through the Node interface today, but the
     /// helper keeps the encoding consistent if that changes.
     pub fn node_id(&self) -> String {
         NodeId::Movie(NodeRef::Str(self.id.clone())).encode()

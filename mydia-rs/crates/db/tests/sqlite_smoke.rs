@@ -1,5 +1,5 @@
-//! End-to-end SQLite tests: pool open, smoke query, schema-check probe,
-//! and the UUID/datetime sqlx::Type round-trip against Ecto's on-disk format.
+//! End-to-end `SQLite` tests: pool open, smoke query, schema-check probe,
+//! and the UUID/datetime `sqlx::Type` round-trip against Ecto's on-disk format.
 //!
 //! The Postgres counterpart lives in `tests/postgres_smoke.rs` and is
 //! gated on `DATABASE_URL` so local runs without a Postgres service skip
@@ -18,7 +18,7 @@ use sqlx::Row;
 use tempfile::TempDir;
 use uuid::Uuid;
 
-/// Build a Config pointing at a fresh SQLite file inside a temp dir.
+/// Build a Config pointing at a fresh `SQLite` file inside a temp dir.
 /// The temp dir is returned so the caller keeps it alive for the test.
 fn sqlite_config() -> (Config, TempDir, PathBuf) {
     let tmp = tempfile::tempdir().expect("tempdir");

@@ -1,6 +1,6 @@
 //! U11 integration tests — search, streaming, and playback resolvers.
 //!
-//! Each test builds an in-process SQLite DB matching the relevant
+//! Each test builds an in-process `SQLite` DB matching the relevant
 //! Phoenix tables, seeds rows, and executes operations through the
 //! merged schema. Auth context is attached when the resolver requires
 //! it; the schema's own auth gating is exercised via the unauthenticated
@@ -420,11 +420,11 @@ async fn start_streaming_session_returns_session_id_and_duration() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation S($id: ID!) {
+        r"mutation S($id: ID!) {
             startStreamingSession(fileId: $id, strategy: TRANSCODE) {
                 sessionId duration
             }
-        }"#,
+        }",
         Variables::from_json(json!({"id": file_id.0.to_string()})),
     )
     .await;
@@ -465,7 +465,7 @@ async fn start_streaming_session_file_not_found_errors() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation S($id: ID!) { startStreamingSession(fileId: $id, strategy: HLS_COPY) { sessionId } }"#,
+        r"mutation S($id: ID!) { startStreamingSession(fileId: $id, strategy: HLS_COPY) { sessionId } }",
         Variables::from_json(json!({"id": missing_id})),
     )
     .await;
@@ -512,11 +512,11 @@ async fn update_movie_progress_writes_and_broadcasts_on_node_id_topic() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) {
+        r"mutation M($id: ID!) {
             updateMovieProgress(movieId: $id, positionSeconds: 60, durationSeconds: 600) {
                 positionSeconds durationSeconds percentage watched
             }
-        }"#,
+        }",
         Variables::from_json(json!({"id": movie_id.0.to_string()})),
     )
     .await;
@@ -548,11 +548,11 @@ async fn update_movie_progress_at_90_percent_auto_marks_watched() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) {
+        r"mutation M($id: ID!) {
             updateMovieProgress(movieId: $id, positionSeconds: 540, durationSeconds: 600) {
                 watched percentage
             }
-        }"#,
+        }",
         Variables::from_json(json!({"id": movie_id.0.to_string()})),
     )
     .await;
@@ -574,9 +574,9 @@ async fn update_movie_progress_negative_position_rejects() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) {
+        r"mutation M($id: ID!) {
             updateMovieProgress(movieId: $id, positionSeconds: -1, durationSeconds: 600) { positionSeconds }
-        }"#,
+        }",
         Variables::from_json(json!({"id": movie_id.0.to_string()})),
     )
     .await;
@@ -604,11 +604,11 @@ async fn update_episode_progress_writes_and_broadcasts_on_episode_topic() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) {
+        r"mutation M($id: ID!) {
             updateEpisodeProgress(episodeId: $id, positionSeconds: 120, durationSeconds: 1200) {
                 positionSeconds percentage watched
             }
-        }"#,
+        }",
         Variables::from_json(json!({"id": ep_id.0.to_string()})),
     )
     .await;
@@ -636,7 +636,7 @@ async fn mark_movie_watched_creates_progress_when_none_exists() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) { markMovieWatched(movieId: $id) { title } }"#,
+        r"mutation M($id: ID!) { markMovieWatched(movieId: $id) { title } }",
         Variables::from_json(json!({"id": movie_id.0.to_string()})),
     )
     .await;
@@ -658,14 +658,14 @@ async fn mark_movie_unwatched_deletes_progress() {
     let _ = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) { markMovieWatched(movieId: $id) { title } }"#,
+        r"mutation M($id: ID!) { markMovieWatched(movieId: $id) { title } }",
         Variables::from_json(json!({"id": movie_id.0.to_string()})),
     )
     .await;
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) { markMovieUnwatched(movieId: $id) { title } }"#,
+        r"mutation M($id: ID!) { markMovieUnwatched(movieId: $id) { title } }",
         Variables::from_json(json!({"id": movie_id.0.to_string()})),
     )
     .await;
@@ -692,7 +692,7 @@ async fn mark_season_watched_creates_progress_for_every_episode() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) { markSeasonWatched(showId: $id, seasonNumber: 1) { title } }"#,
+        r"mutation M($id: ID!) { markSeasonWatched(showId: $id, seasonNumber: 1) { title } }",
         Variables::from_json(json!({"id": show_id.0.to_string()})),
     )
     .await;
@@ -729,9 +729,9 @@ async fn toggle_favorite_adds_then_removes() {
     let resp1 = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) {
+        r"mutation M($id: ID!) {
             toggleFavorite(mediaItemId: $id) { isFavorite mediaItemId }
-        }"#,
+        }",
         Variables::from_json(json!({"id": movie_str.clone()})),
     )
     .await;
@@ -743,9 +743,9 @@ async fn toggle_favorite_adds_then_removes() {
     let resp2 = execute_authed(
         &schema,
         &user,
-        r#"mutation M($id: ID!) {
+        r"mutation M($id: ID!) {
             toggleFavorite(mediaItemId: $id) { isFavorite }
-        }"#,
+        }",
         Variables::from_json(json!({"id": movie_str.clone()})),
     )
     .await;
@@ -762,7 +762,7 @@ async fn playback_mutations_require_authentication() {
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = execute_anon(
         &schema,
-        r#"mutation M($id: ID!) { updateMovieProgress(movieId: $id, positionSeconds: 1, durationSeconds: 100) { watched } }"#,
+        r"mutation M($id: ID!) { updateMovieProgress(movieId: $id, positionSeconds: 1, durationSeconds: 100) { watched } }",
         Variables::from_json(json!({"id": movie_id.0.to_string()})),
     )
     .await;

@@ -61,7 +61,7 @@ async fn replay_against_committed_fixture() {
     // that the classifier recognizes — Phoenix returned a stub list,
     // but the harness deliberately distinguishes deliberate stubs
     // from regressions.
-    assert_eq!(totals.matches, 4, "totals: {:?}", totals);
+    assert_eq!(totals.matches, 4, "totals: {totals:?}");
     assert_eq!(totals.not_implemented, 1);
     assert_eq!(totals.unexpected_errors, 0);
     assert_eq!(totals.mismatches, 0);

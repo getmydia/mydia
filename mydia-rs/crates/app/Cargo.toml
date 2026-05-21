@@ -30,3 +30,6 @@ mydia-rs-db = { path = "../db" }
 
 [dev-dependencies]
 tempfile = "3"
+
+[lints]
+workspace = true

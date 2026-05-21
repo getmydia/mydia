@@ -2,7 +2,7 @@
 //! remote-access, download, subtitle resolvers.
 //!
 //! Real DB-backed branches (auth login, api-key CRUD, collection list /
-//! get / items) exercise SQLite fixtures shaped like Phoenix's
+//! get / items) exercise `SQLite` fixtures shaped like Phoenix's
 //! migrations. Stubbed branches (download, device revoke, remote-access
 //! mutations) assert the schema returns the expected `not implemented`
 //! error so the parity replay harness in U13 can categorize them
@@ -189,11 +189,11 @@ async fn login_with_valid_username_and_password_returns_token() {
     let schema = build_schema_with_signer(GraphqlAppState::new(db), signer.clone());
     let resp = execute_anon(
         &schema,
-        r#"mutation L($input: LoginInput!) {
+        r"mutation L($input: LoginInput!) {
             login(input: $input) {
                 token expiresIn user { id username email }
             }
-        }"#,
+        }",
         Variables::from_json(json!({
             "input": {
                 "username": "alice",
@@ -231,9 +231,9 @@ async fn login_with_email_also_works() {
     let schema = build_schema_with_signer(GraphqlAppState::new(db), signer);
     let resp = execute_anon(
         &schema,
-        r#"mutation L($input: LoginInput!) {
+        r"mutation L($input: LoginInput!) {
             login(input: $input) { token }
-        }"#,
+        }",
         Variables::from_json(json!({
             "input": {
                 "username": "alice@example.com",
@@ -264,7 +264,7 @@ async fn login_with_wrong_password_rejects_without_timing_leak() {
     let schema = build_schema_with_signer(GraphqlAppState::new(db), signer);
     let resp = execute_anon(
         &schema,
-        r#"mutation L($input: LoginInput!) { login(input: $input) { token } }"#,
+        r"mutation L($input: LoginInput!) { login(input: $input) { token } }",
         Variables::from_json(json!({
             "input": {
                 "username": "alice",
@@ -289,7 +289,7 @@ async fn login_with_unknown_user_rejects() {
     let schema = build_schema_with_signer(GraphqlAppState::new(db), signer);
     let resp = execute_anon(
         &schema,
-        r#"mutation L($input: LoginInput!) { login(input: $input) { token } }"#,
+        r"mutation L($input: LoginInput!) { login(input: $input) { token } }",
         Variables::from_json(json!({
             "input": {
                 "username": "nope",
@@ -313,7 +313,7 @@ async fn login_without_signer_returns_clear_error() {
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = execute_anon(
         &schema,
-        r#"mutation L($input: LoginInput!) { login(input: $input) { token } }"#,
+        r"mutation L($input: LoginInput!) { login(input: $input) { token } }",
         Variables::from_json(json!({
             "input": {
                 "username": "alice",
@@ -407,7 +407,7 @@ async fn list_api_keys_returns_only_callers_own() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"{ apiKeys { name } }"#,
+        r"{ apiKeys { name } }",
         Variables::default(),
     )
     .await;
@@ -447,7 +447,7 @@ async fn revoke_api_key_marks_row_and_blocks_other_users() {
     let resp_bob = execute_authed(
         &schema,
         &bob_user,
-        r#"mutation R($id: ID!) { revokeApiKey(id: $id) { revokedAt } }"#,
+        r"mutation R($id: ID!) { revokeApiKey(id: $id) { revokedAt } }",
         Variables::from_json(json!({"id": key_id.0.to_string()})),
     )
     .await;
@@ -459,7 +459,7 @@ async fn revoke_api_key_marks_row_and_blocks_other_users() {
     let resp_alice = execute_authed(
         &schema,
         &alice_user,
-        r#"mutation R($id: ID!) { revokeApiKey(id: $id) { revokedAt } }"#,
+        r"mutation R($id: ID!) { revokeApiKey(id: $id) { revokedAt } }",
         Variables::from_json(json!({"id": key_id.0.to_string()})),
     )
     .await;
@@ -498,7 +498,7 @@ async fn delete_api_key_removes_row() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation D($id: ID!) { deleteApiKey(id: $id) }"#,
+        r"mutation D($id: ID!) { deleteApiKey(id: $id) }",
         Variables::from_json(json!({"id": key_id.0.to_string()})),
     )
     .await;
@@ -552,7 +552,7 @@ async fn list_collections_excludes_system_favorites() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"{ collections { name itemCount posterPaths } }"#,
+        r"{ collections { name itemCount posterPaths } }",
         Variables::default(),
     )
     .await;
@@ -574,7 +574,7 @@ async fn list_collections_excludes_system_favorites() {
 async fn list_collections_returns_empty_for_anonymous() {
     let (db, _tmp) = fresh_db().await;
     let schema = build_schema(GraphqlAppState::new(db));
-    let resp = execute_anon(&schema, r#"{ collections { name } }"#, Variables::default()).await;
+    let resp = execute_anon(&schema, r"{ collections { name } }", Variables::default()).await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     assert_eq!(
         resp.data.into_json().unwrap()["collections"]
@@ -611,11 +611,11 @@ async fn collection_items_returns_recently_added_shape() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"query C($id: ID!) {
+        r"query C($id: ID!) {
             collectionItems(collectionId: $id) {
                 title type id artwork { posterUrl }
             }
-        }"#,
+        }",
         Variables::from_json(json!({"id": collection_id.0.to_string()})),
     )
     .await;
@@ -641,7 +641,7 @@ async fn remote_access_status_is_disabled_stub() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"{ remoteAccessStatus { enabled endpointAddr connectedPeers } }"#,
+        r"{ remoteAccessStatus { enabled endpointAddr connectedPeers } }",
         Variables::default(),
     )
     .await;
@@ -662,7 +662,7 @@ async fn devices_query_returns_empty_stub_for_now() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"{ devices { id deviceName } }"#,
+        r"{ devices { id deviceName } }",
         Variables::default(),
     )
     .await;
@@ -695,7 +695,7 @@ async fn generate_claim_code_is_stubbed_for_authed_user() {
     let resp = execute_authed(
         &schema,
         &user,
-        r#"mutation { generateClaimCode { code } }"#,
+        r"mutation { generateClaimCode { code } }",
         Variables::default(),
     )
     .await;

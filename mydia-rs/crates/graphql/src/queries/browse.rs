@@ -104,7 +104,7 @@ impl BrowseQueries {
         let state = ctx.data::<GraphqlAppState>()?;
         let opts = media::ListMediaItemsOpts {
             kind: Some("movie"),
-            category: category.map(|c| c.as_db_str()),
+            category: category.map(MediaCategory::as_db_str),
             has_files: true,
             added_since: None,
             search: None,
@@ -141,7 +141,7 @@ impl BrowseQueries {
         let state = ctx.data::<GraphqlAppState>()?;
         let opts = media::ListMediaItemsOpts {
             kind: Some("tv_show"),
-            category: category.map(|c| c.as_db_str()),
+            category: category.map(MediaCategory::as_db_str),
             has_files: true,
             added_since: None,
             search: None,
@@ -294,23 +294,20 @@ fn sort_media_items(
 fn media_item_rating(row: &mydia_rs_models::MediaItem) -> f64 {
     row.metadata
         .as_ref()
-        .and_then(|m| m.0.get("vote_average").and_then(|v| v.as_f64()))
+        .and_then(|m| m.0.get("vote_average").and_then(serde_json::Value::as_f64))
         .unwrap_or(0.0)
 }
 
 /// Apply Phoenix's offset-based pagination + cursor encoding.
 /// Returns the page slice paired with cursor strings and the
-/// connection-level PageInfo.
+/// connection-level `PageInfo`.
 fn paginate(
     items: &[mydia_rs_models::MediaItem],
     first: i32,
     after: Option<&str>,
 ) -> (Vec<(mydia_rs_models::MediaItem, String)>, PageInfo) {
     let first = first.clamp(0, MAX_FIRST) as usize;
-    let offset = after
-        .and_then(decode_offset_cursor)
-        .map(|o| o + 1)
-        .unwrap_or(0);
+    let offset = after.and_then(decode_offset_cursor).map_or(0, |o| o + 1);
 
     let total = items.len();
     let end = (offset + first).min(total);
@@ -355,8 +352,7 @@ fn resolve_id(input: &str, expected_tag: Option<&str>) -> async_graphql::Result<
             if let Some(expected) = expected_tag {
                 if node.type_tag() != expected {
                     return Err(async_graphql::Error::new(format!(
-                        "Invalid {} id: expected `{expected}:<id>`",
-                        expected
+                        "Invalid {expected} id: expected `{expected}:<id>`"
                     )));
                 }
             }
@@ -459,7 +455,7 @@ async fn check_any_episode_has_files(
 /// Polymorphic Node-interface stand-in until the full `Interface`
 /// enum lands in U10.c. Each variant wraps the concrete type; the
 /// `node(id)` resolver returns `Option<NodeBlob>` and async-graphql
-/// renders the inner SimpleObject.
+/// renders the inner `SimpleObject`.
 #[derive(async_graphql::Union)]
 #[graphql(name = "NodeUnion")]
 pub enum NodeBlob {

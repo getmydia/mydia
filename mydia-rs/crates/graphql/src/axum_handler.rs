@@ -6,7 +6,7 @@
 //! - `POST /api/graphql` — HTTP query/mutation execution
 //! - `GET  /api/graphql/socket` — WebSocket subscriptions
 //!   (`graphql-transport-ws` and legacy `graphql-ws` both supported)
-//! - `GET  /api/graphql/graphiql` — GraphiQL playground (dev/admin)
+//! - `GET  /api/graphql/graphiql` — `GraphiQL` playground (dev/admin)
 //!
 //! The per-request context (current user, API key, media token) is
 //! added on `GraphQLRequest::data` once the auth middleware lands;

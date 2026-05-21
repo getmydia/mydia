@@ -1,6 +1,6 @@
 //! Configuration schema mirroring the boot-essential subset of
 //! `Mydia.Config.Schema`. Fields the Phoenix schema treats as DB-driven
-//! (download_clients, indexers, media_servers) live in the database at
+//! (`download_clients`, indexers, `media_servers`) live in the database at
 //! runtime and are intentionally not mirrored here.
 
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,7 @@ pub struct DatabaseConfig {
     /// SQLite-only knobs; ignored when `db_type = postgres`.
     pub journal_mode: SqliteJournalMode,
     pub synchronous: SqliteSynchronous,
-    /// Negative values are SQLite's "kibibytes of cache" convention
+    /// Negative values are `SQLite`'s "kibibytes of cache" convention
     /// (e.g. `-64000` -> 64 MiB). Default mirrors Phoenix.
     pub cache_size_kib: i64,
 }

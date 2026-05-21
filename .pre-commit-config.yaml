@@ -9,19 +9,36 @@ repos:
         files: '\.(?:ex|exs|heex)$'
         pass_filenames: false
 
-      # Rust (native NIFs)
+      # Rust (native NIFs) — only the Rustler crate; mydia-rs has its own hooks below.
       - id: cargo-fmt
-        name: cargo fmt
+        name: cargo fmt (native NIFs)
         entry: cargo fmt --manifest-path native/mydia_p2p/Cargo.toml -- --check
         language: system
-        files: '\.rs$'
+        files: '^native/.*\.rs$'
         pass_filenames: false
 
       - id: cargo-clippy
-        name: cargo clippy
+        name: cargo clippy (native NIFs)
         entry: cargo clippy --manifest-path native/mydia_p2p/Cargo.toml -- -D warnings
         language: system
-        files: '\.rs$'
+        files: '^native/.*\.rs$'
+        pass_filenames: false
+
+      # Rust (mydia-rs backend) — workspace-wide pedantic clippy. Matches
+      # the CI gate: `--workspace --all-targets -- -D warnings`. Pedantic
+      # preset + allow-list lives in mydia-rs/Cargo.toml's `[workspace.lints]`.
+      - id: mydia-rs-fmt
+        name: mydia-rs cargo fmt
+        entry: cargo fmt --manifest-path mydia-rs/Cargo.toml --all -- --check
+        language: system
+        files: '^mydia-rs/.*\.rs$'
+        pass_filenames: false
+
+      - id: mydia-rs-clippy
+        name: mydia-rs cargo clippy
+        entry: cargo clippy --manifest-path mydia-rs/Cargo.toml --workspace --all-targets -- -D warnings
+        language: system
+        files: '^mydia-rs/.*\.rs$'
         pass_filenames: false
 
       # Flutter / Dart

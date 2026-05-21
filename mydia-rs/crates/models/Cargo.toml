@@ -24,3 +24,6 @@ tokio.workspace = true
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 mydia-rs-config = { path = "../config" }
+
+[lints]
+workspace = true

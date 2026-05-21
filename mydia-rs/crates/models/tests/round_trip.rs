@@ -1,7 +1,7 @@
 //! Round-trip integration tests for the first batch of models.
 //!
 //! Each test:
-//!   1. Spins up an in-process SQLite pool.
+//!   1. Spins up an in-process `SQLite` pool.
 //!   2. `CREATE TABLE` mirroring the columns of the model under test
 //!      (subset of the Phoenix schema — the columns this struct exposes).
 //!   3. Inserts a Rust-built row through the type wrappers.

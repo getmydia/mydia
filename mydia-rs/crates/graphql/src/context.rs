@@ -7,7 +7,7 @@
 //! per-request additions the axum handler attaches before executing
 //! each operation ([`GraphqlRequestContext`]).
 //!
-//! Today the long-lived state is just the database handle. PubSub
+//! Today the long-lived state is just the database handle. `PubSub`
 //! (U15), the metadata-relay client (U18), and the JWT signer (U6
 //! follow-up) are added through the same seam as those units land.
 
@@ -85,7 +85,7 @@ impl GraphqlRequestContext {
 
 /// Trait-object handle for the future `DataLoader<Foo>` family.
 ///
-/// async-graphql's DataLoader is generic over its loader type, so
+/// async-graphql's `DataLoader` is generic over its loader type, so
 /// loaders are added one-per-type in later units. This re-export is
 /// the documented entry point for those units.
 pub type LoaderHandle<L> = Arc<DataLoader<L>>;

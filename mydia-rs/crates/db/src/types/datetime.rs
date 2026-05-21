@@ -4,7 +4,7 @@
 //! Two flavors:
 //!
 //! - [`DateTimeSecs`] -> Ecto `:utc_datetime`. Second precision, RFC3339
-//!   with `T` and trailing `Z` on SQLite (e.g. `2026-05-21T12:34:56Z`).
+//!   with `T` and trailing `Z` on `SQLite` (e.g. `2026-05-21T12:34:56Z`).
 //! - [`DateTimeMicros`] -> Ecto `:utc_datetime_usec`. Same format with
 //!   `.NNNNNN` microsecond suffix (e.g. `2026-05-21T12:34:56.123456Z`).
 //!   Used by `release_blacklist.expires_at`,

@@ -2,7 +2,7 @@
 //! `{:array, :string}` column shape.
 //!
 //! Phoenix stores these as native `text[]` on Postgres and as JSON-text
-//! on SQLite. See `priv/repo/migrations/20260223100000_fix_array_columns_for_postgres.exs`
+//! on `SQLite`. See `priv/repo/migrations/20260223100000_fix_array_columns_for_postgres.exs`
 //! for the four columns this applies to: `api_keys.permissions`,
 //! `indexer_configs.indexer_ids`, `indexer_configs.categories`,
 //! `remote_access_config.direct_urls`.

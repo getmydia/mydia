@@ -131,7 +131,9 @@ pub fn apply_oidc_env(config: &mut Config) {
     let client_id = std::env::var("OIDC_CLIENT_ID").ok();
     let client_secret = std::env::var("OIDC_CLIENT_SECRET").ok();
     let redirect_uri = std::env::var("OIDC_REDIRECT_URI").ok();
-    let disable_par = std::env::var("OIDC_DISABLE_PAR").ok().and_then(parse_bool);
+    let disable_par = std::env::var("OIDC_DISABLE_PAR")
+        .ok()
+        .and_then(|s| parse_bool(&s));
 
     let any_set = issuer.is_some()
         || discovery.is_some()
@@ -180,7 +182,7 @@ pub fn apply_oidc_env(config: &mut Config) {
     }
 }
 
-fn parse_bool(s: String) -> Option<bool> {
+fn parse_bool(s: &str) -> Option<bool> {
     match s.trim().to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Some(true),
         "0" | "false" | "no" | "off" => Some(false),

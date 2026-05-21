@@ -35,9 +35,11 @@ pub fn verify_password(plaintext: &str, stored_hash: &str) -> Result<(), Passwor
     match bcrypt::verify(plaintext, stored_hash) {
         Ok(true) => Ok(()),
         Ok(false) => Err(PasswordError::Mismatch),
-        Err(bcrypt::BcryptError::InvalidHash(msg)) => Err(PasswordError::Malformed(msg)),
-        Err(bcrypt::BcryptError::InvalidPrefix(msg)) => Err(PasswordError::Malformed(msg)),
-        Err(bcrypt::BcryptError::InvalidCost(msg)) => Err(PasswordError::Malformed(msg)),
+        Err(
+            bcrypt::BcryptError::InvalidHash(msg)
+            | bcrypt::BcryptError::InvalidPrefix(msg)
+            | bcrypt::BcryptError::InvalidCost(msg),
+        ) => Err(PasswordError::Malformed(msg)),
         Err(err) => Err(PasswordError::Hash(err.to_string())),
     }
 }

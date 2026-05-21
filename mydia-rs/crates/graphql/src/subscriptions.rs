@@ -44,9 +44,11 @@ pub enum DeviceEventType {
 
 impl DeviceEventType {
     fn from_str(value: &str) -> Self {
+        // Known event variants are explicit; "disconnected" and any
+        // unknown event variant fall through to `Disconnected` — graceful
+        // degradation if Phoenix adds a new event during the parallel window.
         match value {
             "connected" => Self::Connected,
-            "disconnected" => Self::Disconnected,
             "revoked" => Self::Revoked,
             "deleted" => Self::Deleted,
             _ => Self::Disconnected,
@@ -242,7 +244,7 @@ fn require_user<'a>(ctx: &'a Context<'_>) -> async_graphql::Result<&'a CurrentUs
         .ok_or_else(|| async_graphql::Error::new("Authentication required"))
 }
 
-/// Permit admins to watch any user; otherwise the user_id must match
+/// Permit admins to watch any user; otherwise the `user_id` must match
 /// the subscriber's. Phoenix's resolver doesn't enforce this — we add
 /// the check so subscribing to someone else's device status by guessing
 /// the user ID is rejected with a clear error.

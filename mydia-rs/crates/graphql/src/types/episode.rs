@@ -32,7 +32,8 @@ pub struct Episode {
 #[ComplexObject]
 impl Episode {
     async fn overview(&self) -> Option<String> {
-        metadata::get_str(self.raw_metadata.as_ref(), "overview").map(|s| s.to_owned())
+        metadata::get_str(self.raw_metadata.as_ref(), "overview")
+            .map(std::borrow::ToOwned::to_owned)
     }
 
     async fn runtime(&self) -> Option<i32> {
@@ -64,7 +65,7 @@ impl Episode {
         None
     }
 
-    /// Parent show — full TvShow object. The Phoenix resolver loads
+    /// Parent show — full `TvShow` object. The Phoenix resolver loads
     /// the show by `episode.media_item_id`.
     async fn show(&self, ctx: &Context<'_>) -> async_graphql::Result<Option<TvShow>> {
         let state = ctx.data::<GraphqlAppState>()?;

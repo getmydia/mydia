@@ -15,12 +15,12 @@
 //!   mydia-rs refuses when another mydia-rs is alive, but does not
 //!   yet refuse against a running Phoenix.
 //!
-//! - **SQLite**: `mydia_runtime_lock` table with a single row keyed
+//! - **`SQLite`**: `mydia_runtime_lock` table with a single row keyed
 //!   on `LOCK_KEY_NAME`. INSERT-with-PRIMARY-KEY is the atomic claim;
 //!   if it fails because the row exists, we check the recorded
 //!   `heartbeat_at` against `STALE_AFTER` and either give up or
 //!   reclaim. A background task heartbeats every `HEARTBEAT_EVERY`;
-//!   on clean `release().await`, the row is DELETEd. This is the one
+//!   on clean `release().await`, the row is `DELETEd`. This is the one
 //!   schema write mydia-rs performs against the shared database, and
 //!   only via `CREATE TABLE IF NOT EXISTS` (idempotent, doesn't
 //!   collide with anything Phoenix owns).
@@ -36,11 +36,11 @@ use tokio::time::interval;
 use mydia_rs_db::Db;
 
 /// Postgres advisory-lock key. Constant so every mydia-rs build
-/// competes for the same slot. The high bits are ASCII "mydia_rs"
+/// competes for the same slot. The high bits are ASCII "`mydia_rs`"
 /// for human readability in `pg_locks`.
 const LOCK_KEY: i64 = 0x6d79_6469_615f_7273;
 
-/// SQLite lock-row primary key.
+/// `SQLite` lock-row primary key.
 const LOCK_KEY_NAME: &str = "mydia-rs-singleton";
 
 /// Heartbeat cadence and staleness threshold. Three missed heartbeats
@@ -69,11 +69,11 @@ impl From<sqlx::Error> for RuntimeLockError {
 }
 
 /// Handle owning the acquired lock. Holds the backing connection
-/// (Postgres) or the heartbeat task (SQLite) until either
+/// (Postgres) or the heartbeat task (`SQLite`) until either
 /// [`Self::release`] is awaited or it is dropped.
 ///
 /// `release().await` is the clean path. On `Drop` we best-effort
-/// abort the heartbeat task / drop the connection; the SQLite row
+/// abort the heartbeat task / drop the connection; the `SQLite` row
 /// remains until the next process times it out via `STALE_AFTER`.
 #[must_use = "lock is released on drop; bind it to a variable for the lifetime of the process"]
 pub struct RuntimeLockHandle {
@@ -225,7 +225,7 @@ async fn sweep_stale(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(), 
 
 async fn insert_claim(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(), RuntimeLockError> {
     let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let pid = std::process::id() as i64;
+    let pid = i64::from(std::process::id());
     let hostname = hostname();
 
     let result = sqlx::query(
@@ -251,8 +251,7 @@ async fn insert_claim(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(),
             if dberr
                 .code()
                 .as_deref()
-                .map(|c| c.starts_with("2067") || c.starts_with("1555"))
-                .unwrap_or(false)
+                .is_some_and(|c| c.starts_with("2067") || c.starts_with("1555"))
                 || dberr.message().contains("UNIQUE")
                 || dberr.message().contains("PRIMARY KEY")
             {

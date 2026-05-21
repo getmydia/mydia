@@ -38,6 +38,34 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"]
 thiserror = "2"
 anyhow = "1"
 
+# Workspace-wide lint configuration. Default clippy presets stay at the
+# `warn` level (CI escalates to error via `-D warnings`); `pedantic` is
+# enabled with a small allow-list for the lints that nag without paying
+# for themselves.
+#
+# Priority -1 on `pedantic` so individual allows below win the precedence
+# fight even though they're at the default priority 0.
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+# Allowed pedantic lints — these flag idiomatic patterns we use widely
+# and the noise/value ratio doesn't justify suppressing per-call-site.
+missing_errors_doc = "allow"             # every `-> Result` would need a # Errors section
+missing_panics_doc = "allow"             # every fn calling `.unwrap()` would need a # Panics section
+module_name_repetitions = "allow"        # `models::ApiKey` -> `ApiKeyObject` is fine
+must_use_candidate = "allow"             # extremely noisy; needs case-by-case judgment
+cast_possible_truncation = "allow"       # `as i32` on validated counts is fine
+cast_possible_wrap = "allow"             # u64 -> i64 for DB columns
+cast_sign_loss = "allow"                 # i32 -> u32 for known-positive values
+cast_precision_loss = "allow"            # f64 from u64 for progress percentages
+similar_names = "allow"                  # `user_id` / `user_uuid` etc. are intentional
+too_many_lines = "allow"                 # arbitrary line-count threshold
+struct_excessive_bools = "allow"         # config / settings structs naturally have many bools
+unused_self = "allow"                    # async-graphql resolver structs are stateless by design
+unused_async = "allow"                   # async-graphql `#[Object]` resolvers must be async fn even without awaits
+return_self_not_must_use = "allow"       # builder patterns are obvious without the annotation
+items_after_statements = "allow"         # test helpers and inline structs near use sites read clearer
+
 [profile.release]
 opt-level = 3
 lto = "thin"

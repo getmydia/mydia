@@ -94,7 +94,7 @@ async fn recently_added_returns_items_within_30_day_window() {
 
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ recentlyAdded(first: 10) { id type title year addedAt } }"#)
+        .execute(r"{ recentlyAdded(first: 10) { id type title year addedAt } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -114,7 +114,7 @@ async fn recently_added_sorts_newest_first() {
 
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ recentlyAdded(first: 10) { title } }"#)
+        .execute(r"{ recentlyAdded(first: 10) { title } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -136,7 +136,7 @@ async fn recently_added_respects_first_argument() {
 
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ recentlyAdded(first: 2) { title } }"#)
+        .execute(r"{ recentlyAdded(first: 2) { title } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -183,7 +183,7 @@ async fn recently_added_filters_by_type_argument() {
 
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ recentlyAdded(first: 10, types: [MOVIE]) { title type } }"#)
+        .execute(r"{ recentlyAdded(first: 10, types: [MOVIE]) { title type } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -229,7 +229,7 @@ async fn recently_added_with_both_types_returns_both() {
 
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ recentlyAdded(first: 10, types: [MOVIE, TV_SHOW]) { type } }"#)
+        .execute(r"{ recentlyAdded(first: 10, types: [MOVIE, TV_SHOW]) { type } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -256,7 +256,7 @@ async fn recently_added_carries_artwork_when_metadata_has_paths() {
 
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ recentlyAdded(first: 10) { title artwork { posterUrl backdropUrl } } }"#)
+        .execute(r"{ recentlyAdded(first: 10) { title artwork { posterUrl backdropUrl } } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -270,7 +270,7 @@ async fn anonymous_continue_watching_returns_empty_list() {
     let (db, _tmp) = fresh_schema().await;
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ continueWatching(first: 10) { id } }"#)
+        .execute(r"{ continueWatching(first: 10) { id } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -282,7 +282,7 @@ async fn anonymous_up_next_returns_empty_list() {
     let (db, _tmp) = fresh_schema().await;
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ upNext(first: 10) { progressState } }"#)
+        .execute(r"{ upNext(first: 10) { progressState } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -293,7 +293,7 @@ async fn anonymous_up_next_returns_empty_list() {
 async fn anonymous_favorites_returns_empty_list() {
     let (db, _tmp) = fresh_schema().await;
     let schema = build_schema(GraphqlAppState::new(db));
-    let resp = schema.execute(r#"{ favorites(first: 10) { id } }"#).await;
+    let resp = schema.execute(r"{ favorites(first: 10) { id } }").await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
     assert!(data["favorites"].as_array().unwrap().is_empty());
@@ -303,7 +303,7 @@ async fn anonymous_favorites_returns_empty_list() {
 async fn anonymous_unwatched_returns_empty_list() {
     let (db, _tmp) = fresh_schema().await;
     let schema = build_schema(GraphqlAppState::new(db));
-    let resp = schema.execute(r#"{ unwatched(first: 10) { id } }"#).await;
+    let resp = schema.execute(r"{ unwatched(first: 10) { id } }").await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
     assert!(data["unwatched"].as_array().unwrap().is_empty());

@@ -153,142 +153,139 @@ pub async fn upsert_progress(
     let now = Utc::now();
     let last_watched_at = update.last_watched_at.unwrap_or(now);
 
-    match existing {
-        Some(row) => {
-            let pos = update.position_seconds.unwrap_or(row.position_seconds);
-            let dur = update.duration_seconds.unwrap_or(row.duration_seconds);
-            if dur <= 0 {
-                return Err(ProgressError::NonPositiveDuration);
-            }
-            let percentage = (pos as f64) / (dur as f64) * 100.0;
-            let watched = update
-                .watched_override
-                .unwrap_or(row.watched || percentage >= 90.0);
-
-            let row_id = row.id.0.to_string();
-            let last_watched = DateTimeSecs::from(last_watched_at);
-            let updated_at = DateTimeSecs::from(now);
-
-            match db {
-                Db::Sqlite(pool) => {
-                    sqlx::query(
-                        "UPDATE playback_progress SET \
-                            position_seconds = ?, duration_seconds = ?, \
-                            completion_percentage = ?, watched = ?, \
-                            last_watched_at = ?, updated_at = ? \
-                         WHERE id = ?",
-                    )
-                    .bind(pos)
-                    .bind(dur)
-                    .bind(percentage)
-                    .bind(watched)
-                    .bind(last_watched)
-                    .bind(updated_at)
-                    .bind(&row_id)
-                    .execute(pool)
-                    .await?;
-                }
-                Db::Postgres(pool) => {
-                    sqlx::query(
-                        "UPDATE playback_progress SET \
-                            position_seconds = $1, duration_seconds = $2, \
-                            completion_percentage = $3, watched = $4, \
-                            last_watched_at = $5, updated_at = $6 \
-                         WHERE id = $7",
-                    )
-                    .bind(pos)
-                    .bind(dur)
-                    .bind(percentage)
-                    .bind(watched)
-                    .bind(last_watched)
-                    .bind(updated_at)
-                    .bind(&row_id)
-                    .execute(pool)
-                    .await?;
-                }
-            }
-
-            get_progress(db, user_id, parent)
-                .await?
-                .ok_or(ProgressError::Db(sqlx::Error::RowNotFound))
+    if let Some(row) = existing {
+        let pos = update.position_seconds.unwrap_or(row.position_seconds);
+        let dur = update.duration_seconds.unwrap_or(row.duration_seconds);
+        if dur <= 0 {
+            return Err(ProgressError::NonPositiveDuration);
         }
-        None => {
-            let pos = update
-                .position_seconds
-                .ok_or(ProgressError::MissingPosition)?;
-            let dur = update
-                .duration_seconds
-                .ok_or(ProgressError::MissingDuration)?;
-            let percentage = (pos as f64) / (dur as f64) * 100.0;
-            let watched = update.watched_override.unwrap_or(percentage >= 90.0);
-            let id = UuidText::new_v4();
-            let movie_id = parent
-                .as_movie_id()
-                .map(|s| Uuid::parse_str(s).map(UuidText::from))
-                .transpose()
-                .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
-            let episode_id = parent
-                .as_episode_id()
-                .map(|s| Uuid::parse_str(s).map(UuidText::from))
-                .transpose()
-                .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
-            let user_uuid = Uuid::parse_str(user_id)
-                .map(UuidText::from)
-                .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
-            let last_watched = DateTimeSecs::from(last_watched_at);
-            let timestamps = DateTimeSecs::from(now);
+        let percentage = f64::from(pos) / f64::from(dur) * 100.0;
+        let watched = update
+            .watched_override
+            .unwrap_or(row.watched || percentage >= 90.0);
 
-            match db {
-                Db::Sqlite(pool) => {
-                    sqlx::query(
-                        "INSERT INTO playback_progress \
-                         (id, user_id, media_item_id, episode_id, position_seconds, \
-                          duration_seconds, completion_percentage, watched, \
-                          last_watched_at, inserted_at, updated_at) \
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    )
-                    .bind(id)
-                    .bind(user_uuid)
-                    .bind(movie_id)
-                    .bind(episode_id)
-                    .bind(pos)
-                    .bind(dur)
-                    .bind(percentage)
-                    .bind(watched)
-                    .bind(last_watched)
-                    .bind(timestamps)
-                    .bind(timestamps)
-                    .execute(pool)
-                    .await?;
-                }
-                Db::Postgres(pool) => {
-                    sqlx::query(
-                        "INSERT INTO playback_progress \
-                         (id, user_id, media_item_id, episode_id, position_seconds, \
-                          duration_seconds, completion_percentage, watched, \
-                          last_watched_at, inserted_at, updated_at) \
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
-                    )
-                    .bind(id)
-                    .bind(user_uuid)
-                    .bind(movie_id)
-                    .bind(episode_id)
-                    .bind(pos)
-                    .bind(dur)
-                    .bind(percentage)
-                    .bind(watched)
-                    .bind(last_watched)
-                    .bind(timestamps)
-                    .bind(timestamps)
-                    .execute(pool)
-                    .await?;
-                }
+        let row_id = row.id.0.to_string();
+        let last_watched = DateTimeSecs::from(last_watched_at);
+        let updated_at = DateTimeSecs::from(now);
+
+        match db {
+            Db::Sqlite(pool) => {
+                sqlx::query(
+                    "UPDATE playback_progress SET \
+                        position_seconds = ?, duration_seconds = ?, \
+                        completion_percentage = ?, watched = ?, \
+                        last_watched_at = ?, updated_at = ? \
+                     WHERE id = ?",
+                )
+                .bind(pos)
+                .bind(dur)
+                .bind(percentage)
+                .bind(watched)
+                .bind(last_watched)
+                .bind(updated_at)
+                .bind(&row_id)
+                .execute(pool)
+                .await?;
             }
-
-            get_progress(db, user_id, parent)
-                .await?
-                .ok_or(ProgressError::Db(sqlx::Error::RowNotFound))
+            Db::Postgres(pool) => {
+                sqlx::query(
+                    "UPDATE playback_progress SET \
+                        position_seconds = $1, duration_seconds = $2, \
+                        completion_percentage = $3, watched = $4, \
+                        last_watched_at = $5, updated_at = $6 \
+                     WHERE id = $7",
+                )
+                .bind(pos)
+                .bind(dur)
+                .bind(percentage)
+                .bind(watched)
+                .bind(last_watched)
+                .bind(updated_at)
+                .bind(&row_id)
+                .execute(pool)
+                .await?;
+            }
         }
+
+        get_progress(db, user_id, parent)
+            .await?
+            .ok_or(ProgressError::Db(sqlx::Error::RowNotFound))
+    } else {
+        let pos = update
+            .position_seconds
+            .ok_or(ProgressError::MissingPosition)?;
+        let dur = update
+            .duration_seconds
+            .ok_or(ProgressError::MissingDuration)?;
+        let percentage = f64::from(pos) / f64::from(dur) * 100.0;
+        let watched = update.watched_override.unwrap_or(percentage >= 90.0);
+        let id = UuidText::new_v4();
+        let movie_id = parent
+            .as_movie_id()
+            .map(|s| Uuid::parse_str(s).map(UuidText::from))
+            .transpose()
+            .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
+        let episode_id = parent
+            .as_episode_id()
+            .map(|s| Uuid::parse_str(s).map(UuidText::from))
+            .transpose()
+            .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
+        let user_uuid = Uuid::parse_str(user_id)
+            .map(UuidText::from)
+            .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
+        let last_watched = DateTimeSecs::from(last_watched_at);
+        let timestamps = DateTimeSecs::from(now);
+
+        match db {
+            Db::Sqlite(pool) => {
+                sqlx::query(
+                    "INSERT INTO playback_progress \
+                     (id, user_id, media_item_id, episode_id, position_seconds, \
+                      duration_seconds, completion_percentage, watched, \
+                      last_watched_at, inserted_at, updated_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(id)
+                .bind(user_uuid)
+                .bind(movie_id)
+                .bind(episode_id)
+                .bind(pos)
+                .bind(dur)
+                .bind(percentage)
+                .bind(watched)
+                .bind(last_watched)
+                .bind(timestamps)
+                .bind(timestamps)
+                .execute(pool)
+                .await?;
+            }
+            Db::Postgres(pool) => {
+                sqlx::query(
+                    "INSERT INTO playback_progress \
+                     (id, user_id, media_item_id, episode_id, position_seconds, \
+                      duration_seconds, completion_percentage, watched, \
+                      last_watched_at, inserted_at, updated_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                )
+                .bind(id)
+                .bind(user_uuid)
+                .bind(movie_id)
+                .bind(episode_id)
+                .bind(pos)
+                .bind(dur)
+                .bind(percentage)
+                .bind(watched)
+                .bind(last_watched)
+                .bind(timestamps)
+                .bind(timestamps)
+                .execute(pool)
+                .await?;
+            }
+        }
+
+        get_progress(db, user_id, parent)
+            .await?
+            .ok_or(ProgressError::Db(sqlx::Error::RowNotFound))
     }
 }
 

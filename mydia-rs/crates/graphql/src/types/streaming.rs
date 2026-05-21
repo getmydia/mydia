@@ -13,7 +13,7 @@
 use async_graphql::{Enum, SimpleObject, ID};
 
 /// Input enum for `startStreamingSession.strategy`. The Phoenix
-/// `:streaming_strategy` GraphQL enum maps `:hls_copy` → "HLS_COPY"
+/// `:streaming_strategy` GraphQL enum maps `:hls_copy` → "`HLS_COPY`"
 /// and `:transcode` → "TRANSCODE" by default. async-graphql's enum
 /// rendering matches when we annotate with `rename_items = "SCREAMING_SNAKE_CASE"`
 /// (the default for Rust enums in async-graphql).
@@ -49,7 +49,7 @@ pub enum StreamingCandidateStrategy {
 
 impl StreamingCandidateStrategy {
     /// Parse Phoenix's internal string representation
-    /// ("DIRECT_PLAY", "REMUX", "HLS_COPY", "TRANSCODE") into the
+    /// ("`DIRECT_PLAY`", "REMUX", "`HLS_COPY`", "TRANSCODE") into the
     /// enum. Returns `None` for unrecognized strings.
     pub fn from_phoenix_str(value: &str) -> Option<Self> {
         match value {

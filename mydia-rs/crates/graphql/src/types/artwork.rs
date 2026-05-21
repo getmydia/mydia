@@ -2,7 +2,7 @@
 //!
 //! All three fields are derived from metadata blobs (TMDB/TVDB image
 //! paths). The resolver in U10.c populates them via the metadata
-//! provider's `ImageUrl` helpers; for now the type is plain SimpleObject
+//! provider's `ImageUrl` helpers; for now the type is plain `SimpleObject`
 //! so list-level queries can return artwork structs constructed
 //! directly.
 

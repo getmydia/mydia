@@ -1,4 +1,4 @@
-//! Port of `Mydia.Accounts` slice the auth/api_key resolvers consume.
+//! Port of `Mydia.Accounts` slice the `auth/api_key` resolvers consume.
 
 use chrono::Utc;
 use mydia_rs_db::types::{DateTimeSecs, UuidText};

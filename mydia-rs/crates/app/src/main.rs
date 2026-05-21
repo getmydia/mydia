@@ -139,7 +139,7 @@ fn main() -> ExitCode {
 }
 
 /// Block until SIGTERM (docker stop) or SIGINT (Ctrl-C) arrives.
-/// On non-unix targets falls back to ctrl_c only.
+/// On non-unix targets falls back to `ctrl_c` only.
 #[cfg(unix)]
 async fn wait_for_shutdown_signal() {
     use tokio::signal::unix::{signal, SignalKind};

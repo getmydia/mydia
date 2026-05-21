@@ -1,7 +1,7 @@
 //! Port of `Mydia.Accounts.User` (`lib/mydia/accounts/user.ex`).
 //!
 //! Phoenix table: `users`. Primary key is a UUID stored as TEXT on
-//! SQLite (`:binary_id_type = :string`) and `uuid` on Postgres. The
+//! `SQLite` (`:binary_id_type = :string`) and `uuid` on Postgres. The
 //! `password` / `password_confirmation` virtual fields exist only on
 //! the Ecto changeset side and are intentionally not modelled here.
 

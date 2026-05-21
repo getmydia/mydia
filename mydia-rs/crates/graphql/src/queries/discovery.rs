@@ -61,7 +61,7 @@ impl DiscoveryQueries {
         types: Option<Vec<MediaType>>,
     ) -> async_graphql::Result<Vec<RecentlyAddedItem>> {
         let state = ctx.data::<GraphqlAppState>()?;
-        let kind = type_filter_to_db(&types);
+        let kind = type_filter_to_db(types.as_ref());
 
         let cutoff = Utc::now() - Duration::days(RECENTLY_ADDED_WINDOW_DAYS);
         let cutoff_str = cutoff.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
@@ -141,19 +141,18 @@ fn maybe_current_user<'a>(ctx: &'a Context<'_>) -> Option<&'a CurrentUser> {
 
 /// Map a `Vec<MediaType>` from the GraphQL surface to the single
 /// `type` filter Phoenix accepts. Phoenix's logic: if both Movie and
-/// TvShow are included, no filter; otherwise return the lone kind.
-fn type_filter_to_db(types: &Option<Vec<MediaType>>) -> Option<&'static str> {
-    let Some(types) = types else { return None };
+/// `TvShow` are included, no filter; otherwise return the lone kind.
+fn type_filter_to_db(types: Option<&Vec<MediaType>>) -> Option<&'static str> {
+    let types = types?;
     if types.is_empty() {
         return None;
     }
     let has_movie = types.contains(&MediaType::Movie);
     let has_tv = types.contains(&MediaType::TvShow);
     match (has_movie, has_tv) {
-        (true, true) => None,
         (true, false) => Some("movie"),
         (false, true) => Some("tv_show"),
-        (false, false) => None,
+        (true, true) | (false, false) => None,
     }
 }
 
@@ -188,17 +187,14 @@ fn build_artwork(row: &mydia_rs_models::MediaItem) -> Option<Artwork> {
         // U10.c will route these through the metadata-relay-aware
         // ImageUrl helpers. For U10.b we surface the raw paths so
         // the field is non-empty without misrepresenting the URL.
-        poster_url: poster_path.map(|p| p.to_owned()),
-        backdrop_url: backdrop_path.map(|p| p.to_owned()),
+        poster_url: poster_path.map(std::borrow::ToOwned::to_owned),
+        backdrop_url: backdrop_path.map(std::borrow::ToOwned::to_owned),
         thumbnail_url: None,
     })
 }
 
 fn paginate_simple<T: Clone>(items: &[T], first: i32, after: Option<&str>) -> Vec<T> {
     let first = first.clamp(0, 200) as usize;
-    let offset = after
-        .and_then(decode_offset_cursor)
-        .map(|o| o + 1)
-        .unwrap_or(0);
+    let offset = after.and_then(decode_offset_cursor).map_or(0, |o| o + 1);
     items.iter().skip(offset).take(first).cloned().collect()
 }

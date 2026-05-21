@@ -27,7 +27,7 @@ pub struct StreamingQueries;
 
 #[Object]
 impl StreamingQueries {
-    /// Resolve a media file from a (content_type, id) pair and return
+    /// Resolve a media file from a (`content_type`, id) pair and return
     /// the streaming-strategy candidates plus source metadata. Calls
     /// fail with `Authentication required` when no user is in context.
     async fn streaming_candidates(
@@ -90,12 +90,20 @@ async fn resolve_media_file(
 fn build_metadata(file: &mydia_rs_models::MediaFile) -> StreamingMetadata {
     let raw = file.metadata.as_ref().map(|m| &m.0);
     StreamingMetadata {
-        duration: raw.and_then(|m| m.get("duration").and_then(|v| v.as_f64())),
-        width: raw.and_then(|m| m.get("width").and_then(|v| v.as_i64()).map(|n| n as i32)),
-        height: raw.and_then(|m| m.get("height").and_then(|v| v.as_i64()).map(|n| n as i32)),
+        duration: raw.and_then(|m| m.get("duration").and_then(serde_json::Value::as_f64)),
+        width: raw.and_then(|m| {
+            m.get("width")
+                .and_then(serde_json::Value::as_i64)
+                .map(|n| n as i32)
+        }),
+        height: raw.and_then(|m| {
+            m.get("height")
+                .and_then(serde_json::Value::as_i64)
+                .map(|n| n as i32)
+        }),
         bitrate: file
             .bitrate
-            .or_else(|| raw.and_then(|m| m.get("bit_rate").and_then(|v| v.as_i64()))),
+            .or_else(|| raw.and_then(|m| m.get("bit_rate").and_then(serde_json::Value::as_i64))),
         resolution: file.resolution.clone(),
         hdr_format: file.hdr_format.clone(),
         original_codec: file.codec.clone(),
@@ -103,7 +111,7 @@ fn build_metadata(file: &mydia_rs_models::MediaFile) -> StreamingMetadata {
         container: raw.and_then(|m| {
             m.get("container")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_owned())
+                .map(std::borrow::ToOwned::to_owned)
         }),
     }
 }

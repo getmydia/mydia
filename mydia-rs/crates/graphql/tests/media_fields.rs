@@ -1,6 +1,6 @@
 //! U10.c integration tests — derived media field resolvers.
 //!
-//! Covers the `#[ComplexObject]` impls on Movie / TvShow / Episode
+//! Covers the `#[ComplexObject]` impls on Movie / `TvShow` / Episode
 //! that pull derived fields out of the metadata JSON blob, prefix
 //! image URLs with the TMDB CDN, and run extra DB queries for
 //! `files`, `seasons`, `show`, and `hasFile`.
@@ -108,7 +108,7 @@ async fn movie_derived_fields_resolve_from_metadata() {
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
         .execute(
-            r#"{
+            r"{
                 movies(first: 10) {
                     edges {
                         node {
@@ -118,7 +118,7 @@ async fn movie_derived_fields_resolve_from_metadata() {
                         }
                     }
                 }
-            }"#,
+            }",
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -150,7 +150,7 @@ async fn movie_artwork_returns_null_when_paths_absent() {
 
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
-        .execute(r#"{ movies(first: 10) { edges { node { artwork { posterUrl } } } } }"#)
+        .execute(r"{ movies(first: 10) { edges { node { artwork { posterUrl } } } } }")
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
@@ -165,7 +165,7 @@ async fn movie_files_returns_seeded_media_file() {
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
         .execute(
-            r#"{
+            r"{
                 movies(first: 10) {
                     edges {
                         node {
@@ -173,7 +173,7 @@ async fn movie_files_returns_seeded_media_file() {
                         }
                     }
                 }
-            }"#,
+            }",
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -199,7 +199,7 @@ async fn movie_progress_and_is_favorite_anonymous_fallback() {
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
         .execute(
-            r#"{ movies(first: 10) { edges { node { progress { positionSeconds } isFavorite } } } }"#,
+            r"{ movies(first: 10) { edges { node { progress { positionSeconds } isFavorite } } } }",
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -251,10 +251,10 @@ async fn tv_show_derived_fields_resolve_from_metadata() {
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
         .execute(
-            r#"{ tvShows(first: 10) { edges { node {
+            r"{ tvShows(first: 10) { edges { node {
                 title status overview rating category genres
                 artwork { posterUrl }
-            } } } }"#,
+            } } } }",
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -323,11 +323,11 @@ async fn tv_show_aggregates_seasons_and_counts() {
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = schema
         .execute(
-            r#"{ tvShows(first: 10) { edges { node {
+            r"{ tvShows(first: 10) { edges { node {
                 seasonCount episodeCount
                 seasons { seasonNumber episodeCount }
                 nextEpisode { id }
-            } } } }"#,
+            } } } }",
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -401,13 +401,12 @@ async fn episode_derived_fields_and_show_resolver() {
     let ep_global_id = format!("episode:{}", ep_id.0);
     let query = format!(
         r#"{{
-            episode(id: "{}") {{
+            episode(id: "{ep_global_id}") {{
                 title overview runtime thumbnailUrl hasFile
                 files {{ codec }}
                 show {{ title }}
             }}
-        }}"#,
-        ep_global_id
+        }}"#
     );
     let resp = schema.execute(&*query).await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);

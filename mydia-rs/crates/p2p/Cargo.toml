@@ -8,3 +8,6 @@ publish = false
 [dependencies]
 # native/mydia_p2p_core is consumed as a path dep when U29 ports the p2p seam.
 # Intentionally not wired in U1 to keep the workspace independently buildable.
+
+[lints]
+workspace = true

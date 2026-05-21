@@ -12,11 +12,11 @@
 //!   per-request additions ([`GraphqlRequestContext`]).
 //! - [`axum_handler`] — mount points (`/api/graphql`,
 //!   `/api/graphql/socket`, `/api/graphql/graphiql`).
-//! - [`types`] — GraphQL type definitions (Movie, TvShow, Episode,
-//!   Season, LibraryPath, MediaFile, Artwork, Progress, PageInfo
+//! - [`types`] — GraphQL type definitions (Movie, `TvShow`, Episode,
+//!   Season, `LibraryPath`, `MediaFile`, Artwork, Progress, `PageInfo`
 //!   and the *Connection / *Edge wrappers).
-//! - [`queries`] — per-family resolver structs (BrowseQueries,
-//!   DiscoveryQueries, ...). Each lands in a U10/U11/U14 unit.
+//! - [`queries`] — per-family resolver structs (`BrowseQueries`,
+//!   `DiscoveryQueries`, ...). Each lands in a U10/U11/U14 unit.
 //! - [`repos`] — DB query helpers ported from Phoenix's
 //!   `Mydia.Media`, `Mydia.Settings`, `Mydia.Library`,
 //!   `Mydia.Playback` context modules.

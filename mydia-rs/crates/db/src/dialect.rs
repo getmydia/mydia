@@ -1,6 +1,6 @@
 //! Dialect-aware SQL helpers mirroring the macros in `lib/mydia/db.ex`.
 //!
-//! Phoenix picks SQLite vs Postgres at compile time and inlines the
+//! Phoenix picks `SQLite` vs Postgres at compile time and inlines the
 //! correct SQL fragment at every call site. mydia-rs ships one binary
 //! that selects at runtime, so each helper takes the [`Dialect`] and
 //! returns the equivalent SQL fragment.
@@ -21,7 +21,7 @@ pub enum Dialect {
 impl Dialect {
     /// Extract a JSON value at the given SQLite-style `$.key.sub` path.
     ///
-    /// - SQLite: `json_extract(<field>, '<path>')` -> TEXT/NULL
+    /// - `SQLite`: `json_extract(<field>, '<path>')` -> TEXT/NULL
     /// - Postgres: `(<field>)::jsonb ->> '<key>'` -> TEXT/NULL
     pub fn json_extract(self, field: &str, path: &str) -> String {
         match self {
@@ -35,7 +35,7 @@ impl Dialect {
 
     /// Extract a JSON value at the path and cast to INTEGER.
     ///
-    /// - SQLite: `CAST(json_extract(<field>, '<path>') AS INTEGER)`
+    /// - `SQLite`: `CAST(json_extract(<field>, '<path>') AS INTEGER)`
     /// - Postgres: `((<field>)::jsonb ->> '<key>')::integer`
     pub fn json_extract_integer(self, field: &str, path: &str) -> String {
         match self {
@@ -53,7 +53,7 @@ impl Dialect {
         }
     }
 
-    /// Extract a JSON boolean. SQLite stores JSON booleans as 1/0 or the
+    /// Extract a JSON boolean. `SQLite` stores JSON booleans as 1/0 or the
     /// strings "true"/"false"; Postgres stores them as native booleans.
     ///
     /// Returns a boolean SQL expression suitable for `WHERE`.
@@ -92,7 +92,7 @@ impl Dialect {
 
     /// Cast an expression to a floating-point number.
     ///
-    /// - SQLite: `CAST(<expr> AS REAL)`
+    /// - `SQLite`: `CAST(<expr> AS REAL)`
     /// - Postgres: `(<expr>)::float`
     pub fn cast_to_real(self, expr: &str) -> String {
         match self {
@@ -111,7 +111,7 @@ impl Dialect {
 
     /// Average of (end - start) in seconds, computed across rows.
     ///
-    /// - SQLite: `AVG((julianday(end) - julianday(start)) * 86400)`
+    /// - `SQLite`: `AVG((julianday(end) - julianday(start)) * 86400)`
     /// - Postgres: `AVG(EXTRACT(EPOCH FROM (end - start)))`
     pub fn avg_timestamp_diff_seconds(self, end_field: &str, start_field: &str) -> String {
         match self {

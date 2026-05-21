@@ -2,7 +2,7 @@
 //! `lib/mydia_web/schema/media_types.ex` and the shared types in
 //! `lib/mydia_web/schema/common_types.ex`.
 //!
-//! Each type lives in its own module. SimpleObject fields are
+//! Each type lives in its own module. `SimpleObject` fields are
 //! direct shape; resolvers that compute derived fields (metadata
 //! access, files, progress) live alongside in `#[ComplexObject]`
 //! impls.

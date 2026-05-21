@@ -32,7 +32,7 @@ impl Db {
         }
     }
 
-    /// Borrow the SQLite pool. Returns `None` when the active backend is
+    /// Borrow the `SQLite` pool. Returns `None` when the active backend is
     /// Postgres. Use this only in code paths that genuinely need the
     /// concrete `SqlitePool` (e.g. SQLite-specific PRAGMAs).
     pub fn as_sqlite(&self) -> Option<&SqlitePool> {
@@ -43,7 +43,7 @@ impl Db {
     }
 
     /// Borrow the Postgres pool. Returns `None` when the active backend
-    /// is SQLite.
+    /// is `SQLite`.
     pub fn as_postgres(&self) -> Option<&PgPool> {
         match self {
             Self::Postgres(p) => Some(p),
@@ -72,7 +72,7 @@ impl Db {
 }
 
 /// Open a pool from the loaded configuration. Validates the chosen
-/// driver is compiled in, applies SQLite PRAGMAs matching the
+/// driver is compiled in, applies `SQLite` PRAGMAs matching the
 /// Phoenix-side production tuning, runs the smoke query, and returns
 /// the ready [`Db`].
 pub async fn connect_from_config(config: &Config) -> Result<Db, DbError> {

@@ -2,7 +2,7 @@
 //! (`lib/mydia/settings/library_path.ex`).
 //!
 //! Phoenix table: `library_paths`. `category_paths` is a `:map`
-//! column (JSONB on Postgres, JSON-text on SQLite); modeled as a
+//! column (JSONB on Postgres, JSON-text on `SQLite`); modeled as a
 //! `JsonMap<HashMap<String, String>>` since the Phoenix usage is
 //! `%{category => relative_path}`.
 

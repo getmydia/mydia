@@ -3,7 +3,7 @@
 //! Two Ecto column shapes both fit this type:
 //!
 //! 1. `:map` columns (e.g. `library_paths.category_paths`). Postgres
-//!    stores them as `JSONB`; SQLite stores them as TEXT containing a
+//!    stores them as `JSONB`; `SQLite` stores them as TEXT containing a
 //!    JSON object.
 //! 2. Custom Ecto types holding Jason-encoded payloads (e.g.
 //!    `Mydia.Library.FileMetadataType`). Postgres stores those as TEXT
@@ -11,7 +11,7 @@
 //!    same wrapper works for both — `JsonMap<T>` just means "this
 //!    column is JSON we round-trip via serde".
 //!
-//! The wrapper uses serde_json's default key ordering on the way out.
+//! The wrapper uses `serde_json`'s default key ordering on the way out.
 //! Phoenix and mydia-rs need not produce byte-identical JSON because
 //! every read happens via `json_extract` / `->>`, never by string
 //! equality.

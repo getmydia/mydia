@@ -29,7 +29,10 @@ use crate::pool::Db;
 ///
 /// Migrations live under `priv/repo/migrations/` and follow Ecto's
 /// `YYYYMMDDHHMMSS_*.exs` naming, with the prefix being the version.
-pub const MAX_KNOWN_MIGRATION: i64 = 20260516152731;
+// The Y_M_D_H_M_S grouping mirrors the migration filename shape, which
+// reads clearer than the pedantic-preferred groups-of-three.
+#[allow(clippy::inconsistent_digit_grouping)]
+pub const MAX_KNOWN_MIGRATION: i64 = 2026_05_16_15_27_31;
 
 /// Result of [`schema_check`]. The caller decides whether to exit
 /// non-zero based on the variant.
@@ -94,22 +97,26 @@ pub async fn schema_check(db: &Db) -> Result<SchemaCheckOutcome, DbError> {
         return Ok(SchemaCheckOutcome::SchemaMissing);
     };
 
-    if version == MAX_KNOWN_MIGRATION {
-        tracing::info!(version, "schema_migrations matches expected version");
-        Ok(SchemaCheckOutcome::Match { version })
-    } else if version > MAX_KNOWN_MIGRATION {
-        tracing::warn!(
-            version,
-            expected = MAX_KNOWN_MIGRATION,
-            "Phoenix has migrated past this mydia-rs build; some queries may surprise. Pull a newer mydia-rs image when convenient.",
-        );
-        Ok(SchemaCheckOutcome::SchemaAhead { version })
-    } else {
-        tracing::error!(
-            version,
-            expected = MAX_KNOWN_MIGRATION,
-            "DB is older than this mydia-rs build expects; boot Phoenix once to run pending migrations, then try again.",
-        );
-        Ok(SchemaCheckOutcome::SchemaTooOld { version })
+    match version.cmp(&MAX_KNOWN_MIGRATION) {
+        std::cmp::Ordering::Equal => {
+            tracing::info!(version, "schema_migrations matches expected version");
+            Ok(SchemaCheckOutcome::Match { version })
+        }
+        std::cmp::Ordering::Greater => {
+            tracing::warn!(
+                version,
+                expected = MAX_KNOWN_MIGRATION,
+                "Phoenix has migrated past this mydia-rs build; some queries may surprise. Pull a newer mydia-rs image when convenient.",
+            );
+            Ok(SchemaCheckOutcome::SchemaAhead { version })
+        }
+        std::cmp::Ordering::Less => {
+            tracing::error!(
+                version,
+                expected = MAX_KNOWN_MIGRATION,
+                "DB is older than this mydia-rs build expects; boot Phoenix once to run pending migrations, then try again.",
+            );
+            Ok(SchemaCheckOutcome::SchemaTooOld { version })
+        }
     }
 }

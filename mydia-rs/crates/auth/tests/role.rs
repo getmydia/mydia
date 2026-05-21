@@ -1,4 +1,4 @@
-//! Role hierarchy + require_role check.
+//! Role hierarchy + `require_role` check.
 
 use mydia_rs_auth::role::{rank, require_role, satisfies};
 use mydia_rs_auth::Role;

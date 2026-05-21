@@ -32,17 +32,17 @@ pub struct Movie {
     pub monitored: bool,
     pub added_at: DateTime<Utc>,
 
-    /// Plain UUID of the underlying row — used by the ComplexObject
+    /// Plain UUID of the underlying row — used by the `ComplexObject`
     /// resolvers to run DB queries (e.g. for `files`).
     #[graphql(skip)]
     pub plain_id: String,
 
-    /// Raw metadata JSON blob. The ComplexObject resolvers pull
+    /// Raw metadata JSON blob. The `ComplexObject` resolvers pull
     /// overview, runtime, genres, rating, artwork paths out of this.
     #[graphql(skip)]
     pub raw_metadata: Option<Value>,
 
-    /// `media_items.category` column. The ComplexObject `category`
+    /// `media_items.category` column. The `ComplexObject` `category`
     /// resolver maps it to the [`MediaCategory`] enum.
     #[graphql(skip)]
     pub raw_category: Option<String>,
@@ -52,7 +52,8 @@ pub struct Movie {
 impl Movie {
     /// `metadata.overview`
     async fn overview(&self) -> Option<String> {
-        metadata::get_str(self.raw_metadata.as_ref(), "overview").map(|s| s.to_owned())
+        metadata::get_str(self.raw_metadata.as_ref(), "overview")
+            .map(std::borrow::ToOwned::to_owned)
     }
 
     /// `metadata.runtime`
