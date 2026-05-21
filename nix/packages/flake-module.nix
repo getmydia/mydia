@@ -20,7 +20,7 @@
       };
       torrentCargoDeps = pkgs.rustPlatform.fetchCargoVendor {
         src = ../../native/mydia_torrent;
-        hash = "sha256-1JW7Lwf8jl0jJn+7hGikoV90VeUrPUivY0kSR4LkiR0=";
+        hash = "sha256-PH/QyUa2LpNOcW65Rriv3EffBfQItyayKZOSjlVGYxY=";
       };
 
       # Import Mix dependencies from deps.nix with overrides for Nix sandbox builds

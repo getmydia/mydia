@@ -104,4 +104,110 @@ defmodule Mydia.Streaming.TorrentContextTest do
       assert reloaded.state == :cancelled
     end
   end
+
+  describe "start_session/1 validation guards" do
+    test "returns {:error, :streaming_disabled} when embedded streaming is off (default)" do
+      # No streaming.embedded_enabled row in DB and runtime_config default
+      # is false — this is the test env's baseline.
+      user = Mydia.AccountsFixtures.user_fixture()
+      media_item = Mydia.MediaFixtures.media_item_fixture()
+
+      assert {:error, :streaming_disabled} =
+               Torrent.start_session(%{
+                 user_id: user.id,
+                 media_item_id: media_item.id,
+                 magnet: "magnet:?xt=urn:btih:disabled",
+                 release_title: "Disabled Streaming",
+                 state: :initializing
+               })
+    end
+
+    test "returns {:error, :already_streaming, existing_id} when the infohash is already active" do
+      # Flip the persisted toggle so we get past ensure_streaming_enabled and
+      # into ensure_infohash_available. This is the actual guard under test.
+      enable_embedded_streaming!()
+
+      user = Mydia.AccountsFixtures.user_fixture()
+      media_item = Mydia.MediaFixtures.media_item_fixture()
+      infohash = "duplicateguardhash"
+
+      {:ok, existing} =
+        Repo.insert(%SessionSchema{
+          user_id: user.id,
+          media_item_id: media_item.id,
+          magnet: "magnet:?xt=urn:btih:#{infohash}",
+          infohash: infohash,
+          release_title: "Already Streaming",
+          state: :downloading,
+          started_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert {:error, :already_streaming, existing_id} =
+               Torrent.start_session(%{
+                 user_id: user.id,
+                 media_item_id: media_item.id,
+                 magnet: "magnet:?xt=urn:btih:#{String.upcase(infohash)}",
+                 release_title: "Duplicate Attempt",
+                 state: :initializing
+               })
+
+      assert existing_id == existing.id
+
+      # And the guard must have run *before* create_session_record/1 — no
+      # extra SessionSchema row should have been written.
+      assert Repo.aggregate(SessionSchema, :count, :id) == 1
+    end
+
+    test "non-active sessions with the same infohash don't trip the duplicate guard" do
+      # A :completed session for the same hash represents an already-finished
+      # promotion. The user should be allowed to start a fresh session — but
+      # we can only assert this far without the NIF, so we stop at "guard
+      # didn't fire". When the engine is wired the next step is the supervisor.
+      enable_embedded_streaming!()
+
+      user = Mydia.AccountsFixtures.user_fixture()
+      media_item = Mydia.MediaFixtures.media_item_fixture()
+      infohash = "completedguardhash"
+
+      {:ok, _completed} =
+        Repo.insert(%SessionSchema{
+          user_id: user.id,
+          media_item_id: media_item.id,
+          magnet: "magnet:?xt=urn:btih:#{infohash}",
+          infohash: infohash,
+          release_title: "Already Finished",
+          state: :completed,
+          started_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      result =
+        Torrent.start_session(%{
+          user_id: user.id,
+          media_item_id: media_item.id,
+          magnet: "magnet:?xt=urn:btih:#{infohash}",
+          release_title: "Retry After Completion",
+          state: :initializing
+        })
+
+      # The :already_streaming guard must not fire. Anything past the guard
+      # is fair game — on a host without the NIF the supervisor start may
+      # error out, but it must not be the duplicate-guard error.
+      refute match?({:error, :already_streaming, _}, result)
+    end
+  end
+
+  defp enable_embedded_streaming! do
+    attrs = %{
+      "key" => "streaming.embedded_enabled",
+      "value" => "true",
+      "category" => "streaming"
+    }
+
+    case Mydia.Settings.get_config_setting_by_key("streaming.embedded_enabled") do
+      nil -> Mydia.Settings.create_config_setting(attrs)
+      setting -> Mydia.Settings.update_config_setting(setting, attrs)
+    end
+
+    :ok
+  end
 end
