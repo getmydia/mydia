@@ -30,6 +30,7 @@ sqlx = { version = "0.8", default-features = false, features = [
 mydia-rs-db = { path = "../db" }
 mydia-rs-models = { path = "../models" }
 mydia-rs-auth = { path = "../auth" }
+mydia-rs-pubsub = { path = "../pubsub" }
 
 [dev-dependencies]
 tokio = { workspace = true }

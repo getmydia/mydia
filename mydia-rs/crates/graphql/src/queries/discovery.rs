@@ -71,6 +71,7 @@ impl DiscoveryQueries {
             category: None,
             has_files: true,
             added_since: Some(&cutoff_str),
+            search: None,
         };
         let rows = media::list_media_items(&state.db, &opts).await?;
 

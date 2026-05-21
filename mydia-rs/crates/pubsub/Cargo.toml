@@ -6,3 +6,11 @@ license.workspace = true
 publish = false
 
 [dependencies]
+tokio = { workspace = true, features = ["sync", "rt"] }
+dashmap = "6"
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

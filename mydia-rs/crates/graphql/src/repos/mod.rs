@@ -9,5 +9,7 @@
 //! string SQL with `?` parameter binding, which sqlx rewrites to the
 //! right placeholder syntax per pool.
 
+pub mod collections;
 pub mod media;
+pub mod playback;
 pub mod settings;

@@ -17,7 +17,10 @@ pub mod media_file;
 pub mod movie;
 pub mod page_info;
 pub mod progress;
+pub mod search_result;
 pub mod season;
+pub mod streaming;
+pub mod toggle_favorite_result;
 pub mod tv_show;
 
 pub use artwork::Artwork;
@@ -28,5 +31,11 @@ pub use media_file::MediaFile;
 pub use movie::{Movie, MovieConnection, MovieEdge};
 pub use page_info::PageInfo;
 pub use progress::Progress;
+pub use search_result::{SearchResult, SearchResults};
 pub use season::Season;
+pub use streaming::{
+    StreamingCandidate, StreamingCandidateStrategy, StreamingCandidatesResult, StreamingMetadata,
+    StreamingSessionResult, StreamingStrategy,
+};
+pub use toggle_favorite_result::ToggleFavoriteResult;
 pub use tv_show::{TvShow, TvShowConnection, TvShowEdge};

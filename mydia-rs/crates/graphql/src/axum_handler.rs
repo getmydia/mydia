@@ -74,7 +74,12 @@ mod tests {
     fn schema() -> MydiaSchema {
         // The handler tests don't touch the DB; build a bare schema
         // using the default merged QueryRoot.
-        Schema::build(QueryRoot::default(), MutationRoot, EmptySubscription).finish()
+        Schema::build(
+            QueryRoot::default(),
+            MutationRoot::default(),
+            EmptySubscription,
+        )
+        .finish()
     }
 
     #[tokio::test]

@@ -9,6 +9,8 @@
 //! - [`media`] — derived field resolvers (overview, runtime, genres,
 //!   artwork, files, progress) attached via `#[ComplexObject]`
 //!   (U10.c).
+//! - [`search`] — substring title search across media items (U11).
+//! - [`streaming`] — `streamingCandidates(contentType, id)` (U11).
 //!
 //! The resolvers are exposed as `#[Object]` structs; the top-level
 //! schema combines them via `MergedObject` (see [`crate::schema`]).
@@ -16,3 +18,5 @@
 pub mod browse;
 pub mod discovery;
 pub mod media;
+pub mod search;
+pub mod streaming;

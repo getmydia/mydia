@@ -2,19 +2,25 @@
 //!
 //! The schema's actual `Query` type is a `MergedObject` composed of
 //! one resolver struct per family — `IntrospectionQueries` (this
-//! file), `BrowseQueries` (U10.a), `DiscoveryQueries` (U10.b), and
-//! later units' own structs. async-graphql merges them at
-//! schema-build time, so each unit lands a new struct without
-//! touching this file.
+//! file), `BrowseQueries` (U10.a), `DiscoveryQueries` (U10.b),
+//! `SearchQueries`/`StreamingQueries` (U11), and later units' own
+//! structs. async-graphql merges them at schema-build time, so each
+//! unit lands a new struct without touching this file beyond adding
+//! it to the tuple.
 //!
-//! Mutations follow the same pattern; lands in U11+.
+//! `MutationRoot` follows the same pattern with one merged struct per
+//! mutation family.
 
 use async_graphql::{EmptySubscription, MergedObject, Object, Schema, SchemaBuilder, ID};
 
 use crate::context::GraphqlAppState;
+use crate::mutations::playback::PlaybackMutations;
+use crate::mutations::streaming::StreamingMutations;
 use crate::node_id::NodeId;
 use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
 use crate::queries::discovery::DiscoveryQueries;
+use crate::queries::search::SearchQueries;
+use crate::queries::streaming::StreamingQueries;
 
 /// Introspection + utility queries that aren't tied to a specific
 /// Phoenix resolver family.
@@ -54,7 +60,13 @@ impl IntrospectionQueries {
 /// here as the corresponding U10/U11/U14 units land.
 #[derive(MergedObject, Default)]
 #[graphql(name = "Query")]
-pub struct QueryRoot(IntrospectionQueries, BrowseQueries, DiscoveryQueries);
+pub struct QueryRoot(
+    IntrospectionQueries,
+    BrowseQueries,
+    DiscoveryQueries,
+    SearchQueries,
+    StreamingQueries,
+);
 
 impl Default for IntrospectionQueries {
     fn default() -> Self {
@@ -62,17 +74,38 @@ impl Default for IntrospectionQueries {
     }
 }
 
-/// Root Mutation type. Populated in U11+ (playback, streaming, auth,
-/// API keys, devices, downloads, remote access).
-pub struct MutationRoot;
+/// Placeholder mutation surface used until U14 lands its remaining
+/// families. Kept separate so the future `ApiKeyMutations`,
+/// `AuthMutations`, `DeviceMutations`, etc. can merge in without
+/// modifying this struct.
+pub struct IntrospectionMutations;
 
-#[Object(name = "Mutation")]
-impl MutationRoot {
-    /// Placeholder so the Mutation root is non-empty until U11 lands.
+#[Object(name = "_IntrospectionMutation")]
+impl IntrospectionMutations {
+    /// Keeps the mutation root non-empty when the merged set has
+    /// nothing else to expose (e.g. in U13's parity harness when it
+    /// builds a schema without DB-backed resolvers). Once U14 lands
+    /// auth/api_key/device mutations, this can be dropped.
     async fn ping(&self) -> &'static str {
         "pong"
     }
 }
+
+impl Default for IntrospectionMutations {
+    fn default() -> Self {
+        Self
+    }
+}
+
+/// The merged Mutation root. Same convention as QueryRoot: one
+/// struct per family.
+#[derive(MergedObject, Default)]
+#[graphql(name = "Mutation")]
+pub struct MutationRoot(
+    IntrospectionMutations,
+    PlaybackMutations,
+    StreamingMutations,
+);
 
 /// The wired schema type alias resolvers and the axum handler
 /// reference. Subscriptions land in U12.
@@ -89,7 +122,12 @@ pub fn build_schema(state: GraphqlAppState) -> MydiaSchema {
 pub fn schema_builder(
     state: GraphqlAppState,
 ) -> SchemaBuilder<QueryRoot, MutationRoot, EmptySubscription> {
-    Schema::build(QueryRoot::default(), MutationRoot, EmptySubscription).data(state)
+    Schema::build(
+        QueryRoot::default(),
+        MutationRoot::default(),
+        EmptySubscription,
+    )
+    .data(state)
 }
 
 #[cfg(test)]
@@ -101,7 +139,12 @@ mod tests {
     /// IntrospectionQueries portion only; BrowseQueries tests live
     /// in `tests/browse.rs` against a real SQLite fixture.
     fn schema_for_tests() -> MydiaSchema {
-        Schema::build(QueryRoot::default(), MutationRoot, EmptySubscription).finish()
+        Schema::build(
+            QueryRoot::default(),
+            MutationRoot::default(),
+            EmptySubscription,
+        )
+        .finish()
     }
 
     #[tokio::test]
@@ -183,6 +226,12 @@ mod tests {
         assert!(sdl.contains("schemaVersion"));
         assert!(sdl.contains("movies"));
         assert!(sdl.contains("tvShows"));
+        assert!(sdl.contains("search"));
+        assert!(sdl.contains("streamingCandidates"));
+        assert!(sdl.contains("updateMovieProgress"));
+        assert!(sdl.contains("toggleFavorite"));
+        assert!(sdl.contains("startStreamingSession"));
+        assert!(sdl.contains("endStreamingSession"));
         assert!(!sdl.contains("schema_version"));
     }
 }

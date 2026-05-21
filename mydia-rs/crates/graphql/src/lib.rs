@@ -24,6 +24,7 @@
 pub mod axum_handler;
 pub mod context;
 pub mod metadata;
+pub mod mutations;
 pub mod node_id;
 pub mod queries;
 pub mod relay;

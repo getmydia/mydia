@@ -47,6 +47,10 @@ pub struct ListMediaItemsOpts<'a> {
     /// the given datetime (RFC3339 string). Used by the discovery
     /// "recently added" rail to apply the 30-day window.
     pub added_since: Option<&'a str>,
+    /// Case-insensitive substring search across `title`. Mirrors
+    /// `Mydia.Media.list_media_items(search: term)` at
+    /// `lib/mydia/media.ex:1557` — `LIKE` against `lower(title)`.
+    pub search: Option<&'a str>,
 }
 
 /// List media items, ordered by title ASC. Pagination and sort
@@ -79,6 +83,10 @@ pub async fn list_media_items(
             if let Some(since) = opts.added_since {
                 qb.push(" AND inserted_at >= ").push_bind(since);
             }
+            if let Some(term) = opts.search {
+                let pattern = format!("%{}%", term.to_lowercase());
+                qb.push(" AND lower(title) LIKE ").push_bind(pattern);
+            }
             qb.push(" ORDER BY title COLLATE NOCASE ASC");
             qb.build_query_as::<MediaItem>().fetch_all(pool).await
         }
@@ -103,6 +111,10 @@ pub async fn list_media_items(
             }
             if let Some(since) = opts.added_since {
                 qb.push(" AND inserted_at >= ").push_bind(since);
+            }
+            if let Some(term) = opts.search {
+                let pattern = format!("%{}%", term.to_lowercase());
+                qb.push(" AND lower(title) LIKE ").push_bind(pattern);
             }
             qb.push(" ORDER BY lower(title) ASC");
             qb.build_query_as::<MediaItem>().fetch_all(pool).await
@@ -224,6 +236,84 @@ pub async fn list_media_files_for_movie(
             sqlx::query_as::<_, MediaFile>(&sql)
                 .bind(media_item_id)
                 .fetch_all(pool)
+                .await
+        }
+    }
+}
+
+/// Fetch a single media file by ID. Used by the streaming resolvers
+/// to resolve `file_id` arguments to a `MediaFile` row before
+/// computing candidates or starting a session.
+pub async fn get_media_file(db: &Db, id: &str) -> Result<Option<MediaFile>, sqlx::Error> {
+    let sql = format!("SELECT {MEDIA_FILE_COLUMNS} FROM media_files WHERE id = $1");
+    match db {
+        Db::Sqlite(pool) => {
+            let sql = sql.replace("$1", "?");
+            sqlx::query_as::<_, MediaFile>(&sql)
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+        }
+        Db::Postgres(pool) => {
+            sqlx::query_as::<_, MediaFile>(&sql)
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+        }
+    }
+}
+
+/// Fetch the first media file associated with a media item (used for
+/// `streamingCandidates(contentType: "movie", id: ...)` lookup).
+pub async fn first_media_file_for_movie(
+    db: &Db,
+    media_item_id: &str,
+) -> Result<Option<MediaFile>, sqlx::Error> {
+    let sql = format!(
+        "SELECT {MEDIA_FILE_COLUMNS} FROM media_files \
+         WHERE media_item_id = $1 AND episode_id IS NULL AND trashed_at IS NULL \
+         ORDER BY inserted_at ASC LIMIT 1"
+    );
+    match db {
+        Db::Sqlite(pool) => {
+            let sql = sql.replace("$1", "?");
+            sqlx::query_as::<_, MediaFile>(&sql)
+                .bind(media_item_id)
+                .fetch_optional(pool)
+                .await
+        }
+        Db::Postgres(pool) => {
+            sqlx::query_as::<_, MediaFile>(&sql)
+                .bind(media_item_id)
+                .fetch_optional(pool)
+                .await
+        }
+    }
+}
+
+/// Fetch the first media file for an episode (analog of
+/// `first_media_file_for_movie` but for episodes).
+pub async fn first_media_file_for_episode(
+    db: &Db,
+    episode_id: &str,
+) -> Result<Option<MediaFile>, sqlx::Error> {
+    let sql = format!(
+        "SELECT {MEDIA_FILE_COLUMNS} FROM media_files \
+         WHERE episode_id = $1 AND trashed_at IS NULL \
+         ORDER BY inserted_at ASC LIMIT 1"
+    );
+    match db {
+        Db::Sqlite(pool) => {
+            let sql = sql.replace("$1", "?");
+            sqlx::query_as::<_, MediaFile>(&sql)
+                .bind(episode_id)
+                .fetch_optional(pool)
+                .await
+        }
+        Db::Postgres(pool) => {
+            sqlx::query_as::<_, MediaFile>(&sql)
+                .bind(episode_id)
+                .fetch_optional(pool)
                 .await
         }
     }
