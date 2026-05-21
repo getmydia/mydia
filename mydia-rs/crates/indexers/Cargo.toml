@@ -6,6 +6,27 @@ license.workspace = true
 publish = false
 
 [dependencies]
+mydia-rs-pubsub = { path = "../pubsub" }
+async-trait = "0.1"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+dashmap = "6"
+futures = "0.3"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+scraper = "0.20"
+serde = { workspace = true }
+serde_json = "1"
+serde_yaml = "0.9"
+strsim = "0.11"
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+unicode-normalization = "0.1"
+url = "2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"
 
 [lints]
 workspace = true

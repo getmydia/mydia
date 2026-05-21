@@ -1,0 +1,299 @@
+---
+id: nyaasi
+name: Nyaa.si
+description: "Nyaa is a Public torrent site focused on Eastern ASIAN media including anime, manga, literature and music"
+language: en-US
+type: public
+encoding: UTF-8
+requestDelay: 2
+links:
+  - https://nyaa.si/
+  - https://nyaa.iss.ink/
+  - https://nyaa.land/
+  - https://nyaa.unblockninja.com/ # for magnets only
+legacylinks:
+  - https://nyaa.black-mirror.xyz/
+  - https://nyaa.unblocked.casa/
+  - https://nyaa.proxyportal.fun/
+  - https://nyaa.uk-unblock.xyz/
+  - https://nyaa.ind-unblock.xyz/
+  - https://nyaa.unblocked.bar/
+  - https://nyaa.proxyportal.pw/
+  - https://nyaa.uk-unblock.pro/
+  - https://nyaa.root.yt/
+  - https://nyaa.lol/ # dropped at request of owner
+  - https://nyaa.mrunblock.bond/ # for magnets only
+  - https://nyaa.nocensor.cloud/
+
+caps:
+  categorymappings:
+    - {id: 1_0, cat: TV/Anime, desc: "Anime"}
+    - {id: 1_1, cat: TV/Anime, desc: "Anime - Anime Music Video"}
+    - {id: 1_2, cat: TV/Anime, desc: "Anime - English-translated"}
+    - {id: 1_3, cat: TV/Anime, desc: "Anime - Non-English-translated"}
+    - {id: 1_4, cat: TV/Anime, desc: "Anime - Raw"}
+    # Anime as Movies (Radarr uses t=movie):
+    - {id: 1_0, cat: Movies/Other, desc: "Anime"}
+    - {id: 1_1, cat: Movies/Other, desc: "Anime - Anime Music Video"}
+    - {id: 1_2, cat: Movies/Other, desc: "Anime - English-translated"}
+    - {id: 1_3, cat: Movies/Other, desc: "Anime - Non-English-translated"}
+    - {id: 1_4, cat: Movies/Other, desc: "Anime - Raw"}
+    - {id: 2_0, cat: Audio, desc: "Audio"}
+    - {id: 2_1, cat: Audio, desc: "Audio - Lossless"}
+    - {id: 2_2, cat: Audio, desc: "Audio - Lossy"}
+    - {id: 3_0, cat: Books, desc: "Literature"}
+    - {id: 3_1, cat: Books, desc: "Literature  English-translated"}
+    - {id: 3_2, cat: Books, desc: "Literature - Non-English-translated"}
+    - {id: 3_3, cat: Books, desc: "Literature - Raw"}
+    - {id: 4_0, cat: TV, desc: "Live Action"}
+    - {id: 4_1, cat: TV, desc: "Live Action - English-translated"}
+    - {id: 4_2, cat: TV, desc: "Live Action - Idol/Promotional Video"}
+    - {id: 4_3, cat: TV, desc: "Live Action - Non-English-translated"}
+    - {id: 4_4, cat: TV, desc: "Live Action - Raw"}
+    - {id: 5_0, cat: Other, desc: "Pictures"}
+    - {id: 5_1, cat: Other, desc: "Pictures - Graphics"}
+    - {id: 5_2, cat: Other, desc: "Pictures - Photos"}
+    - {id: 6_0, cat: PC, desc: "Software"}
+    - {id: 6_1, cat: PC/ISO, desc: "Software - Applications"}
+    - {id: 6_2, cat: PC/Games, desc: "Software - Games"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+    music-search: [q]
+    book-search: [q]
+  allowrawsearch: true
+
+settings:
+  - name: prefer_magnet_links
+    type: checkbox
+    label: Prefer Magnet Links
+    default: true
+  - name: sonarr_compatibility
+    type: checkbox
+    label: Improve Sonarr compatibility by trying to add Season information into Release Titles
+    default: false
+  - name: strip_s01
+    type: checkbox
+    label: Remove first season keywords (S1/S01/Season 1), as some results do not include this for first/single season releases
+    default: false
+  - name: radarr_compatibility
+    type: checkbox
+    label: Improve Radarr compatibility by removing year information from keywords and adding it to Release Titles
+    default: false
+  - name: filter-id
+    type: select
+    label: Filter
+    default: 0
+    options:
+      0: No filter
+      1: No remakes
+      2: Trusted only
+  - name: cat-id
+    type: select
+    label: Category
+    default: 0_0
+    options:
+      0_0: "All categories"
+      1_0: "Anime"
+      1_1: "Anime - Anime Music Video"
+      1_2: "Anime - English-translated"
+      1_3: "Anime - Non-English-translated"
+      1_4: "Anime - Raw"
+      2_0: "Audio"
+      2_1: "Audio - Lossless"
+      2_2: "Audio - Lossy"
+      3_0: "Literature"
+      3_1: "Literature - English-translated"
+      3_2: "Literature - Non-English-translated"
+      3_3: "Literature - Lossy"
+      4_0: "Live Action"
+      4_1: "Live Action - English"
+      4_2: "Live Action - Idol/PV"
+      4_3: "Live Action - Non-English"
+      4_4: "Live Action - Raw"
+      5_0: "Pictures"
+      5_1: "Pictures  - Graphics"
+      5_2: "Pictures  - Photos"
+      6_0: "Software"
+      6_1: "Software - Applications"
+      6_2: "Software - Games"
+  - name: sort
+    type: select
+    label: Sort requested from site
+    default: id
+    options:
+      id: created
+      seeders: seeders
+      size: size
+  - name: type
+    type: select
+    label: Order requested from site
+    default: desc
+    options:
+      desc: desc
+      asc: asc
+
+search:
+  paths:
+    - path: /
+      inputs:
+        q: "{{ .Keywords }}"
+    # strip 0 from start of episode number - #11019, or fetch page 2 for keywordless
+    - path: /
+      inputs:
+        q: "{{ if .Keywords }}{{ re_replace .Keywords \"\\b0(\\d{1})\\b\" \"$1\" }}{{ else }}{{ end }}"
+        p: "{{ if .Keywords }}{{ else }}2{{ end }}"
+  inputs:
+    # 0 all, 1 no remakes, 2 trusted only
+    f: "{{ .Config.filter-id }}"
+    c: "{{ .Config.cat-id }}"
+    s: "{{ .Config.sort }}"
+    o: "{{ .Config.type }}"
+
+  keywordsfilters:
+    - name: re_replace
+      args: [" *\\b((?:19|20)\\d{2})\\b", "{{ if .Config.radarr_compatibility }}{{ else }} $1{{ end }}"]
+    - name: re_replace
+      args: ["(?i) *\\b(S(?:0|eason *)?1)\\b", "{{ if .Config.strip_s01 }}{{ else }} $1{{ end }}"]
+
+  rows:
+    selector: tr.default,tr.danger,tr.success
+
+  fields:
+    category:
+      selector: td:nth-child(1) a
+      attribute: href
+      filters:
+        - name: split
+          args: ["=", -1]
+    category_group_id:
+      selector: td:nth-child(1) a
+      attribute: href
+      filters:
+        - name: split
+          args: ["=", -1]
+        - name: split
+          args: ["_", 0]
+    title_default:
+      selector: td:nth-child(2) a:last-of-type
+    title_phase1:
+      selector: td:nth-child(2) a:last-of-type:contains("[PuyaSubs!] ")
+      optional: true
+      filters:
+        - name: append
+          args: " Spanish"
+    title_keyword_year:
+      text: "{{ .Query.Keywords }}"
+      filters:
+        - name: regexp
+          args: "\\b((19|20)\\d{2})\\b"
+    title_phase2:
+      text: "{{ or (.Result.title_phase1) (.Result.title_default) }}"
+      filters:
+        - name: re_replace
+          args: ["^(\\[.+?\\] ?)?(\\[.+?\\] ?)?(.+?)(\\[)", "$1$2$3{{ if and (.Config.radarr_compatibility) (.Result.title_keyword_year) }} {{ .Result.title_keyword_year }} $4{{ else }}$4{{ end }}"]
+    title_phase3:
+      text: "{{ .Result.title_phase2 }}"
+      filters:
+        - name: re_replace
+          args: ["(?i)\\b((?:S|Seasons?|EP?|Episodes?)\\s?)(\\d+)(?:\\-|[\\s~\\+àa&]+)(\\d+)\\b", "$1$2-$3"]
+        - name: re_replace
+          args: ["(?i)\\b(?:S|Seasons?)\\s?(\\d+(?:-\\d+)?)[\\s\\-]+(?:EP|Episodes?)\\s?(\\d+(?:-\\d+)?)\\b", "S$1E$2"]
+        - name: re_replace
+          args: ["(?i)\\b(?:S|Seasons?)\\s?(\\d+(?:-\\d+)?)(?:.+?)(?:EP|Episodes?)\\s?(\\d+(?:-\\d+)?)\\b(?!(?:-\\d+)?\\sS\\d+(?:-\\d+)?E\\d+(?:-\\d+)?)", "S$1E$2"]
+        - name: re_replace
+          args: ["\\b (II) - (\\d+)[\\s\\-~\\+àa&]+(\\d+)", " $1 S02 - $2-$3"]
+        - name: re_replace
+          args: ["\\b (II) - (\\d+)", " $1 S02 - $2"]
+        - name: re_replace
+          args: ["\\b (III) - (\\d+)[\\s\\-~\\+àa&]+(\\d+)", " $1 S03 - $2-$3"]
+        - name: re_replace
+          args: ["\\b (III) - (\\d+)", " $1 S03 - $2"]
+        - name: re_replace
+          args: ["(?i)\\b(\\d+)(st|nd|rd|th) Season\\b", "$0 S$1"]
+        - name: re_replace
+          args: ["(?i)_(\\d+)(st|nd|rd|th)_season_(\\d+)_", "$0S$1E$3_"]
+        - name: re_replace
+          args: ["(?i)_(\\d+)(st|nd|rd|th)_season_", "$0S$1_"]
+        - name: re_replace
+          args: ["(?i)\\b(S\\d+(?:-\\d+)?) - (\\d+)[\\s\\-~\\+àa&]+(\\d+)\\b", "$1E$2-$3"]
+        - name: re_replace
+          args: ["(?i)\\b(S\\d+(?:-\\d+)?) - (\\d+)\\b", "$1E$2"]
+        - name: re_replace
+          args: ["(?i)\\b(?:S\\s|Seasons?\\s?)(\\d+(?:-\\d+)?)\\b(?!(?:-\\d+)?\\s(?:EP|Episodes?)?\\s?(?:\\d+(?:-\\d+)?)?\\s?S\\d+(?:E\\d+(?:-\\d+)?)?)", "S$1"]
+        - name: re_replace
+          args: ["(?i)\\b(?:EP|Episodes?)\\s?(\\d+(?:-\\d+)?)\\b(?!(?:-\\d+)?\\sS\\d+(?:-\\d+)?(?:E\\d+(?:-\\d+)?)?)", "S01E$1"]
+        - name: re_replace
+          args: ["\\s+", " "]
+        - name: trim
+    title_has_season:
+      text: "{{ .Result.title_phase3 }}"
+      filters:
+        - name: regexp
+          args: "(?i)(S\\d{1,3}(E\\d+)?)"
+        - name: append
+          args: "NULL"
+    title_has_episode:
+      text: "{{ .Result.title_phase3 }}"
+      filters:
+        - name: regexp
+          args: "\\b(.+? - ?)(\\d+(-\\d+)?) ([\\[\\(])\\b"
+        - name: append
+          args: "NULL"
+    title_has_movie_ova:
+      text: "{{ .Result.title_phase3 }}"
+      filters:
+        - name: regexp
+          args: "(?i)(?<![A-Za-z0-9])(Movies?|OVA|OAV)(?![A-Za-z0-9])"
+        - name: re_replace
+          args: ["(?i)(Movies?|OVA|OAV)", "YES"]
+    title_optional:
+      text: "{{ .Result.title_phase3 }}"
+      filters:
+        - name: re_replace
+          args: ["^(\\[.+?].+?)\\s*(?<![\\]\\)])((?:\\[|\\(| - ).+)", "{{ if and (and (eq .Result.category_group_id \"1\") (ne .Result.title_has_movie_ova \"YES\")) (and (eq .Result.title_has_season \"NULL\") (eq .Result.title_has_episode \"NULL\")) }}$1 S01 $2{{ else }}$1 $2{{ end }}"]
+    title:
+      text: "{{ if .Config.sonarr_compatibility }}{{ .Result.title_optional }}{{ else }}{{ .Result.title_phase2 }}{{ end }}"
+    details:
+      selector: td:nth-child(2) a:last-of-type
+      attribute: href
+    download_optional:
+      selector: td:nth-child(3) a[href$=".torrent"]
+      attribute: href
+      optional: true
+    download:
+      text: "{{ if .Config.prefer_magnet_links }}{{ else }}{{ .Result.download_optional }}{{ end }}"
+      optional: true
+    magnet:
+      selector: td:nth-child(3) a[href^="magnet:?"]
+      attribute: href
+    size:
+      selector: td:nth-child(4)
+    date:
+      selector: td:nth-child(5)
+      filters:
+        - name: append
+          args: " -00:00" # GMT
+        - name: dateparse
+          args: "yyyy-MM-dd HH:mm zzz"
+    seeders:
+      selector: td:nth-child(6):not(:empty)
+      optional: true
+      default: 0
+    leechers:
+      selector: td:nth-child(7):not(:empty)
+      optional: true
+      default: 0
+    grabs:
+      selector: td:nth-child(8):not(:empty)
+      optional: true
+      default: 0
+    downloadvolumefactor:
+      text: 0
+    uploadvolumefactor:
+      text: 1
+    description:
+      selector: td:nth-child(2) a:last-of-type
+# engine n/a
