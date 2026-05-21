@@ -905,9 +905,13 @@ dependencies = [
 name = "mydia-rs-app"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "mydia-rs-config",
  "mydia-rs-db",
+ "sqlx",
+ "tempfile",
+ "thiserror",
  "tokio",
  "tracing",
 ]

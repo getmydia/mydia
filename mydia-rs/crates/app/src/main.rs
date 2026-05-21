@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
+use mydia_rs_app::runtime_lock::{self, RuntimeLockError};
 use mydia_rs_config::{tracing_setup, Config};
 use mydia_rs_db::{connect_from_config, schema_check, SchemaCheckOutcome};
 
@@ -83,10 +84,9 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             Ok(SchemaCheckOutcome::SchemaMissing) => {
-                // U4 ships against fresh test DBs; bare smoke against an
-                // un-migrated file is acceptable today. Once the
-                // mutual-exclusion lock and a real supervision tree land,
-                // tighten this to a hard failure for non-test runs.
+                // Bare smoke against an un-migrated file is acceptable
+                // for the current bring-up phase. Tighten this to a
+                // hard failure once a real supervision tree exists.
                 tracing::warn!("schema_migrations missing; this may not be a mydia database");
             }
             Err(err) => {
@@ -95,7 +95,26 @@ fn main() -> ExitCode {
             }
         }
 
-        tracing::info!("mydia-rs boot ok (U4: db pool + schema check); exiting");
+        let lock = match runtime_lock::acquire(&db).await {
+            Ok(lock) => lock,
+            Err(RuntimeLockError::Held) => {
+                tracing::error!(
+                    "another mydia instance is running against this database; refusing to start"
+                );
+                return ExitCode::FAILURE;
+            }
+            Err(err) => {
+                tracing::error!(%err, "failed to acquire runtime lock");
+                return ExitCode::FAILURE;
+            }
+        };
+
+        tracing::info!("mydia-rs boot ok (U34: runtime lock held); exiting");
+
+        if let Err(err) = lock.release().await {
+            tracing::warn!(%err, "runtime lock release failed; row will time out");
+        }
+
         ExitCode::SUCCESS
     })
 }

@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[lib]
+name = "mydia_rs_app"
+path = "src/lib.rs"
+
 [[bin]]
 name = "mydia-rs"
 path = "src/main.rs"
@@ -13,5 +17,16 @@ path = "src/main.rs"
 tokio.workspace = true
 clap.workspace = true
 tracing.workspace = true
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "postgres",
+    "chrono",
+] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+thiserror.workspace = true
 mydia-rs-config = { path = "../config" }
 mydia-rs-db = { path = "../db" }
+
+[dev-dependencies]
+tempfile = "3"
