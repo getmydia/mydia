@@ -2013,6 +2013,22 @@ dependencies = [
 [[package]]
 name = "mydia-rs-streaming"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dashmap",
+ "mydia-rs-db",
+ "mydia-rs-models",
+ "mydia-rs-pubsub",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "mydia-rs-subtitles"
