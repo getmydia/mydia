@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1.4
+#
+# mydia-rs production image, Postgres-tagged variant.
+#
+# Identical to the sister Dockerfile in this directory: the Rust binary
+# already ships both sqlx drivers (the workspace compiles with both the
+# "sqlite" and "postgres" sqlx features). The two-Dockerfile / two-tag
+# scheme is preserved purely to mirror the operator-facing convention
+# from the Phoenix image set, where `:latest` and `:latest-pg` are
+# distinct images. mydia-rs operators select the backend at runtime
+# via `database.type`; the driver-presence guard refuses to start when
+# the configured driver isn't compiled in (it always is here).
+#
+# This file deliberately re-uses every line from Dockerfile so the
+# release CI can build both tags from the same context with one
+# stage definition. If a future Postgres-only optimisation is wanted
+# (e.g., excluding the SQLite driver from one variant to shave bytes),
+# the divergence happens here.
+
+ARG RUST_VERSION=1.86
+ARG ALPINE_VERSION=3.20
+
+FROM rust:${RUST_VERSION}-alpine AS builder
+
+RUN apk add --no-cache \
+    build-base \
+    musl-dev \
+    pkgconfig \
+    openssl-dev \
+    openssl-libs-static
+
+WORKDIR /build
+
+COPY mydia-rs/Cargo.toml mydia-rs/Cargo.lock mydia-rs/rust-toolchain.toml ./
+COPY mydia-rs/crates ./crates
+COPY mydia-rs/bin ./bin
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release --bin mydia-rs --bin mydia-rs-cli \
+    && cp target/release/mydia-rs /tmp/mydia-rs \
+    && cp target/release/mydia-rs-cli /tmp/mydia-rs-cli
+
+FROM alpine:${ALPINE_VERSION}
+
+RUN apk add --no-cache \
+    ca-certificates \
+    ffmpeg \
+    tini
+
+WORKDIR /app
+
+COPY --from=builder /tmp/mydia-rs /usr/local/bin/mydia-rs
+COPY --from=builder /tmp/mydia-rs-cli /usr/local/bin/mydia-rs-cli
+COPY mydia-rs/config.example.toml /app/config.example.toml
+
+ENV MYDIA_CONFIG=/etc/mydia/mydia.toml
+
+RUN addgroup -S mydia && adduser -S -G mydia mydia \
+    && mkdir -p /etc/mydia /var/lib/mydia /tmp/mydia-hls \
+    && chown -R mydia:mydia /etc/mydia /var/lib/mydia /tmp/mydia-hls
+
+USER mydia
+
+EXPOSE 4001
+
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/mydia-rs"]

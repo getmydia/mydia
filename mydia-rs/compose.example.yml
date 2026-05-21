@@ -1,0 +1,73 @@
+# mydia-rs compose example.
+#
+# Two services are pre-defined; pick the one matching your database
+# choice and remove the other (or comment it out). Both share the same
+# image tag conventions as the Phoenix sister project, so the same
+# `mydia/mydia` family lives in your `docker compose pull` cycle.
+#
+# Migrate from Phoenix by swapping `mydia/mydia:latest` ->
+# `mydia/mydia-rs:latest` (or `:latest-pg`) in your existing
+# compose.yml. Your bind-mounted data dir, library mounts, OIDC_*
+# environment block, and ffmpeg-capable image all carry over. Browser
+# sessions reset on the swap; API keys, paired devices, JWT media
+# tokens, Trakt OAuth tokens, and the on-disk media all survive.
+
+version: "3.9"
+
+services:
+  mydia-rs:
+    image: ghcr.io/getmydia/mydia/mydia-rs:latest
+    container_name: mydia-rs
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    environment:
+      # Override config inline or point MYDIA_CONFIG at a mounted file.
+      MYDIA_CONFIG: /etc/mydia/mydia.toml
+      MYDIA_DATABASE__TYPE: sqlite
+      MYDIA_DATABASE__PATH: /var/lib/mydia/mydia.db
+      # Keep the existing OIDC_* names so the compose block you already
+      # have on Phoenix works unchanged at cutover.
+      # OIDC_ISSUER: https://auth.example.com
+      # OIDC_CLIENT_ID: mydia-client
+      # OIDC_CLIENT_SECRET: change-me
+      # OIDC_REDIRECT_URI: https://m.example.com/auth/oidc/callback
+    volumes:
+      - ./mydia-data:/var/lib/mydia
+      - ./mydia-config:/etc/mydia
+      - /path/to/media:/media:ro
+
+  mydia-rs-pg:
+    image: ghcr.io/getmydia/mydia/mydia-rs:latest-pg
+    container_name: mydia-rs-pg
+    restart: unless-stopped
+    profiles: ["postgres"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4001:4001"
+    environment:
+      MYDIA_CONFIG: /etc/mydia/mydia.toml
+      MYDIA_DATABASE__TYPE: postgres
+      MYDIA_DATABASE__URL: postgres://mydia:change-me@postgres:5432/mydia
+    volumes:
+      - ./mydia-config:/etc/mydia
+      - /path/to/media:/media:ro
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: mydia-postgres
+    restart: unless-stopped
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: mydia
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: mydia
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mydia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

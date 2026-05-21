@@ -1,0 +1,115 @@
+name: Release / mydia-rs
+
+# Publishes mydia-rs container images on every push to master. The CI
+# image lane in ci-mydia-rs.yml verifies builds on PR; this workflow
+# pushes the production tags once they merge.
+#
+# Two tags per build, mirroring the Phoenix two-tag convention:
+#   - ghcr.io/getmydia/mydia/mydia-rs:latest        (SQLite-default)
+#   - ghcr.io/getmydia/mydia/mydia-rs:latest-pg     (Postgres-default)
+#   - ghcr.io/getmydia/mydia/mydia-rs:sha-<commit>{,-pg}
+#
+# amd64-only on PR (sanity build verified in ci-mydia-rs.yml). On master
+# we build amd64 here; an arm64 lane lands when the native arm64 runner
+# is wired up (matching the pattern from the docker-ci-speed plan).
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "mydia-rs/**"
+      - "native/**"
+      - ".github/workflows/release-mydia-rs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: release-mydia-rs-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/mydia-rs
+
+jobs:
+  build-and-push:
+    name: Build and push (${{ matrix.variant.tag_suffix || 'sqlite' }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - dockerfile: mydia-rs/Dockerfile
+            primary_tag: latest
+            tag_suffix: ""
+          - dockerfile: mydia-rs/Dockerfile.pg
+            primary_tag: latest-pg
+            tag_suffix: "-pg"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute tags
+        id: tags
+        run: |
+          sha_short="${GITHUB_SHA::7}"
+          {
+            echo "${REGISTRY}/${IMAGE_NAME}:${{ matrix.variant.primary_tag }}"
+            echo "${REGISTRY}/${IMAGE_NAME}:sha-${sha_short}${{ matrix.variant.tag_suffix }}"
+          } > /tmp/tags.txt
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/tags.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.variant.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=mydia-rs-${{ matrix.variant.primary_tag }}
+          cache-to: type=gha,scope=mydia-rs-${{ matrix.variant.primary_tag }},mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Attest provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  status:
+    name: mydia-rs release status
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: always()
+    steps:
+      - name: Aggregate
+        run: |
+          if [ "${{ needs.build-and-push.result }}" != "success" ]; then
+            echo "::error::mydia-rs release pipeline failed"
+            exit 1
+          fi
+          echo "mydia-rs images published successfully"
