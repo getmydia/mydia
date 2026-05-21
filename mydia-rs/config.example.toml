@@ -1,0 +1,91 @@
+# mydia-rs example configuration.
+#
+# Load order (lowest to highest precedence):
+#   1. Built-in defaults
+#   2. This file (point to it with `mydia-rs --config /path/to/mydia.toml`)
+#   3. MYDIA_* environment variables (nest with double-underscore,
+#      e.g. MYDIA_DATABASE__TYPE=postgres)
+#   4. OIDC_* environment variables (same names Phoenix consumes today;
+#      lets your existing compose `environment:` block carry over at
+#      cutover without edits)
+#
+# Required fields and validation rules live in
+# `mydia-rs/crates/config/src/lib.rs` (`Config::validate`).
+
+[server]
+port = 4001
+host = "0.0.0.0"
+url_scheme = "http"
+url_host = "localhost"
+# Origins allowed for CORS and WebSocket. Empty list defaults to
+# "only the configured url_host", mirroring Phoenix's `PHX_CHECK_ORIGIN`
+# default.
+allowed_origins = []
+# Required in production for signing session cookies and JWTs.
+# Generate with: openssl rand -base64 64
+# secret_key_base = "..."
+# Shared with Phoenix so media-token JWTs cross-verify during cutover.
+# guardian_secret_key = "..."
+
+[database]
+# One of "sqlite" or "postgres". The sqlite-only Docker image refuses to
+# boot when this is set to "postgres" (and vice versa) per the
+# driver-presence guard.
+type = "sqlite"
+path = "mydia_dev.db"
+# url is required when type = "postgres". For sqlite it is ignored.
+# url = "postgres://mydia:secret@db.example.com:5432/mydia"
+pool_size = 5
+timeout_ms = 60000
+busy_timeout_ms = 30000
+journal_mode = "wal"
+synchronous = "normal"
+cache_size_kib = -64000
+
+[auth]
+local_enabled = true
+oidc_enabled = false
+oidc_scopes = "openid profile email"
+oidc_disable_par = false
+jwt_ttl_days = 30
+jwt_allowed_drift_ms = 2000
+# When oidc_enabled = true the following are required, but the
+# recommended way to provide them is via OIDC_* env vars so the same
+# compose-file environment block Phoenix uses works unchanged:
+#   OIDC_ISSUER, OIDC_DISCOVERY_DOCUMENT_URI, OIDC_CLIENT_ID,
+#   OIDC_CLIENT_SECRET, OIDC_REDIRECT_URI, OIDC_DISABLE_PAR
+
+[metadata]
+relay_url = "https://relay.mydia.dev"
+language = "en-US"
+
+[logging]
+# One of "debug", "info", "warning", "error".
+level = "info"
+# One of "text" (human-friendly, default in dev) or "json" (structured,
+# default in production).
+format = "text"
+
+[p2p]
+enabled = true
+# Persistent libp2p keypair. The p2p Host refuses to start without it.
+# keypair_path = "/var/lib/mydia/p2p.key"
+
+[library]
+# Paths to watch for media. Empty list is allowed: the scanner is a no-op.
+paths = []
+scan_interval_seconds = 3600
+monitor_by_default = true
+
+[hls]
+temp_dir = "/tmp/mydia-hls"
+idle_timeout_seconds = 1800
+# Boot-time cleanup removes session dirs older than this. Matches
+# Phoenix's @stale_threshold_hours 24.
+stale_threshold_hours = 24
+
+[features]
+playback_enabled = true
+cardigann_enabled = false
+import_lists_enabled = false
+remote_access_enabled = false

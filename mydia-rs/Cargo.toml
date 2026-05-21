@@ -30,7 +30,13 @@ publish = false
 
 [workspace.dependencies]
 tokio = { version = "1.49", features = ["full"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+figment = { version = "0.10", features = ["toml", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+thiserror = "2"
+anyhow = "1"
 
 [profile.release]
 opt-level = 3
