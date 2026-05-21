@@ -56,8 +56,16 @@ impl Db {
     /// [`connect_from_config`] right after opening.
     pub async fn smoke_query(&self) -> Result<i32, DbError> {
         let value = match self {
-            Self::Sqlite(p) => sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(p).await?,
-            Self::Postgres(p) => sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(p).await?,
+            Self::Sqlite(p) => {
+                sqlx::query_scalar::<_, i32>("SELECT 1")
+                    .fetch_one(p)
+                    .await?
+            }
+            Self::Postgres(p) => {
+                sqlx::query_scalar::<_, i32>("SELECT 1")
+                    .fetch_one(p)
+                    .await?
+            }
         };
         Ok(value)
     }
@@ -81,12 +89,14 @@ async fn open_pool(cfg: &DatabaseConfig) -> Result<Db, DbError> {
 }
 
 async fn open_sqlite(cfg: &DatabaseConfig) -> Result<Db, DbError> {
-    let path = cfg.path.as_deref().filter(|p| !p.is_empty()).ok_or(
-        DbError::Misconfigured {
+    let path = cfg
+        .path
+        .as_deref()
+        .filter(|p| !p.is_empty())
+        .ok_or(DbError::Misconfigured {
             kind: "type",
             required: "sqlite (database.path)",
-        },
-    )?;
+        })?;
 
     let opts = SqliteConnectOptions::new()
         .filename(path)
@@ -108,12 +118,14 @@ async fn open_sqlite(cfg: &DatabaseConfig) -> Result<Db, DbError> {
 }
 
 async fn open_postgres(cfg: &DatabaseConfig) -> Result<Db, DbError> {
-    let url = cfg.url.as_deref().filter(|u| !u.is_empty()).ok_or(
-        DbError::Misconfigured {
+    let url = cfg
+        .url
+        .as_deref()
+        .filter(|u| !u.is_empty())
+        .ok_or(DbError::Misconfigured {
             kind: "type",
             required: "postgres (database.url)",
-        },
-    )?;
+        })?;
 
     let pool = PgPoolOptions::new()
         .max_connections(cfg.pool_size)

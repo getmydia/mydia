@@ -165,7 +165,10 @@ async fn api_key_round_trips_with_permissions_array() {
 
     assert_eq!(key.id, id);
     assert_eq!(key.user_id, user_id);
-    assert_eq!(key.permissions.as_ref().map(|p| p.0.clone()), Some(perms.0.clone()));
+    assert_eq!(
+        key.permissions.as_ref().map(|p| p.0.clone()),
+        Some(perms.0.clone())
+    );
     assert!(!key.is_revoked());
     // VALID_PERMISSIONS constant is exposed for caller-side validation.
     assert!(VALID_PERMISSIONS.contains(&"read"));
@@ -383,10 +386,7 @@ async fn media_file_round_trips() {
     assert_eq!(f.codec.as_deref(), Some("h264"));
     assert_eq!(f.analyzed_at, Some(now));
     assert_eq!(f.analysis_attempts, 1);
-    assert_eq!(
-        f.metadata.unwrap().0["container"].as_str(),
-        Some("mkv")
-    );
+    assert_eq!(f.metadata.unwrap().0["container"].as_str(), Some("mkv"));
     assert!(f.trashed_at.is_none());
 }
 

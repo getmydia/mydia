@@ -51,7 +51,9 @@ async fn second_acquire_against_same_db_refuses() {
     let lock = runtime_lock::acquire(&db1).await.expect("first acquire");
 
     let db2 = pool_for(&path).await;
-    let err = runtime_lock::acquire(&db2).await.expect_err("second must fail");
+    let err = runtime_lock::acquire(&db2)
+        .await
+        .expect_err("second must fail");
     assert!(matches!(err, RuntimeLockError::Held));
 
     lock.release().await.expect("release");
@@ -101,7 +103,9 @@ async fn drop_without_release_leaves_row_until_stale() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let db2 = pool_for(&path).await;
-    let err = runtime_lock::acquire(&db2).await.expect_err("row still fresh");
+    let err = runtime_lock::acquire(&db2)
+        .await
+        .expect_err("row still fresh");
     assert!(matches!(err, RuntimeLockError::Held));
 }
 
@@ -137,16 +141,24 @@ async fn postgres_pool() -> Option<Db> {
 
 #[tokio::test]
 async fn postgres_advisory_lock_held_then_released() {
-    let Some(db1) = postgres_pool().await else { return };
+    let Some(db1) = postgres_pool().await else {
+        return;
+    };
     let lock = runtime_lock::acquire(&db1).await.expect("first acquire");
 
-    let Some(db2) = postgres_pool().await else { return };
-    let err = runtime_lock::acquire(&db2).await.expect_err("second must fail");
+    let Some(db2) = postgres_pool().await else {
+        return;
+    };
+    let err = runtime_lock::acquire(&db2)
+        .await
+        .expect_err("second must fail");
     assert!(matches!(err, RuntimeLockError::Held));
 
     lock.release().await.expect("release");
 
-    let Some(db3) = postgres_pool().await else { return };
+    let Some(db3) = postgres_pool().await else {
+        return;
+    };
     let third = runtime_lock::acquire(&db3).await.expect("after release");
     third.release().await.expect("release");
 }

@@ -11,8 +11,8 @@ use std::str::FromStr;
 use chrono::{TimeZone, Utc};
 use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
 use mydia_rs_db::{
-    connect_from_config, schema_check, types::DateTimeMicros, types::DateTimeSecs,
-    types::UuidText, Db, SchemaCheckOutcome, MAX_KNOWN_MIGRATION,
+    connect_from_config, schema_check, types::DateTimeMicros, types::DateTimeSecs, types::UuidText,
+    Db, SchemaCheckOutcome, MAX_KNOWN_MIGRATION,
 };
 use sqlx::Row;
 use tempfile::TempDir;
@@ -61,7 +61,12 @@ async fn schema_check_match_when_version_equals_const() {
     insert_version(&db, MAX_KNOWN_MIGRATION).await;
 
     let outcome = schema_check(&db).await.expect("probe");
-    assert_eq!(outcome, SchemaCheckOutcome::Match { version: MAX_KNOWN_MIGRATION });
+    assert_eq!(
+        outcome,
+        SchemaCheckOutcome::Match {
+            version: MAX_KNOWN_MIGRATION
+        }
+    );
 }
 
 #[tokio::test]

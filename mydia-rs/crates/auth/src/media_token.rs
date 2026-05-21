@@ -241,13 +241,15 @@ impl MediaTokenCache {
     /// Use during admin device-revoke so the next request from a
     /// revoked device fails immediately instead of after the cache TTL.
     pub fn evict_device(&self, device_id: &str) {
-        self.entries.retain(|_, entry| entry.claims.sub != device_id);
+        self.entries
+            .retain(|_, entry| entry.claims.sub != device_id);
     }
 
     /// Synchronously evict every cached entry for the given user id.
     /// Useful when a user is disabled / role-changed.
     pub fn evict_user(&self, user_id: &str) {
-        self.entries.retain(|_, entry| entry.claims.user_id != user_id);
+        self.entries
+            .retain(|_, entry| entry.claims.user_id != user_id);
     }
 
     /// Number of entries currently cached. Visible mostly for tests.

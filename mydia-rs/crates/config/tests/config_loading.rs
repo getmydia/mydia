@@ -8,9 +8,7 @@
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use mydia_rs_config::{
-    apply_oidc_env, AuthConfig, Config, ConfigError, DatabaseType, LogLevel,
-};
+use mydia_rs_config::{apply_oidc_env, AuthConfig, Config, ConfigError, DatabaseType, LogLevel};
 use tempfile::NamedTempFile;
 
 fn env_lock() -> MutexGuard<'static, ()> {
@@ -183,12 +181,18 @@ fn oidc_env_vars_overlay_implicitly_enable_oidc() {
         std::env::set_var("OIDC_ISSUER", "https://auth.example.com");
         std::env::set_var("OIDC_CLIENT_ID", "mydia-client");
         std::env::set_var("OIDC_CLIENT_SECRET", "supersecret");
-        std::env::set_var("OIDC_REDIRECT_URI", "https://m.example.com/auth/oidc/callback");
+        std::env::set_var(
+            "OIDC_REDIRECT_URI",
+            "https://m.example.com/auth/oidc/callback",
+        );
     }
 
     let cfg = Config::load(None).expect("oidc env load");
     assert!(cfg.auth.oidc_enabled);
-    assert_eq!(cfg.auth.oidc_issuer.as_deref(), Some("https://auth.example.com"));
+    assert_eq!(
+        cfg.auth.oidc_issuer.as_deref(),
+        Some("https://auth.example.com")
+    );
     assert_eq!(cfg.auth.oidc_client_id.as_deref(), Some("mydia-client"));
     assert_eq!(
         cfg.auth.oidc_redirect_uri.as_deref(),
@@ -219,7 +223,10 @@ fn oidc_discovery_uri_derives_issuer_when_empty() {
     }
 
     apply_oidc_env(&mut cfg);
-    assert_eq!(cfg.auth.oidc_issuer.as_deref(), Some("https://auth.example.com"));
+    assert_eq!(
+        cfg.auth.oidc_issuer.as_deref(),
+        Some("https://auth.example.com")
+    );
     assert!(cfg.auth.oidc_enabled);
 }
 

@@ -50,7 +50,9 @@ const STALE_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeLockError {
-    #[error("another mydia or mydia-rs instance is running against this database; refusing to start")]
+    #[error(
+        "another mydia or mydia-rs instance is running against this database; refusing to start"
+    )]
     Held,
 
     #[error("database error while acquiring runtime lock: {0}")]
@@ -81,7 +83,10 @@ pub struct RuntimeLockHandle {
 impl std::fmt::Debug for RuntimeLockHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.inner {
-            Inner::Postgres(_) => f.debug_struct("RuntimeLockHandle").field("backend", &"postgres").finish(),
+            Inner::Postgres(_) => f
+                .debug_struct("RuntimeLockHandle")
+                .field("backend", &"postgres")
+                .finish(),
             Inner::Sqlite { released, .. } => f
                 .debug_struct("RuntimeLockHandle")
                 .field("backend", &"sqlite")
@@ -218,10 +223,7 @@ async fn sweep_stale(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(), 
     Ok(())
 }
 
-async fn insert_claim(
-    pool: &sqlx::SqlitePool,
-    now: DateTime<Utc>,
-) -> Result<(), RuntimeLockError> {
+async fn insert_claim(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(), RuntimeLockError> {
     let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let pid = std::process::id() as i64;
     let hostname = hostname();
@@ -274,13 +276,12 @@ fn spawn_heartbeat(pool: sqlx::SqlitePool) -> JoinHandle<()> {
         loop {
             ticker.tick().await;
             let now_iso = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-            if let Err(err) = sqlx::query(
-                "UPDATE mydia_runtime_lock SET heartbeat_at = ? WHERE lock_key = ?",
-            )
-            .bind(&now_iso)
-            .bind(LOCK_KEY_NAME)
-            .execute(&pool)
-            .await
+            if let Err(err) =
+                sqlx::query("UPDATE mydia_runtime_lock SET heartbeat_at = ? WHERE lock_key = ?")
+                    .bind(&now_iso)
+                    .bind(LOCK_KEY_NAME)
+                    .execute(&pool)
+                    .await
             {
                 tracing::warn!(%err, "runtime-lock heartbeat update failed");
             }
@@ -294,4 +295,3 @@ fn hostname() -> Option<String> {
     // for the lock row.
     std::env::var("HOSTNAME").ok().filter(|s| !s.is_empty())
 }
-

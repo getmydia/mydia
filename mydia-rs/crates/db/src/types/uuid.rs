@@ -20,9 +20,7 @@ use uuid::Uuid;
 
 /// Newtype wrapper around [`uuid::Uuid`] that encodes as TEXT on SQLite
 /// and as the native `uuid` type on Postgres.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct UuidText(pub Uuid);
 

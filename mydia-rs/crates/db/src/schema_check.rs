@@ -58,7 +58,9 @@ pub async fn schema_check(db: &Db) -> Result<SchemaCheckOutcome, DbError> {
             .await?;
 
             if exists.is_none() {
-                tracing::error!("schema_migrations table missing; this doesn't look like a mydia database");
+                tracing::error!(
+                    "schema_migrations table missing; this doesn't look like a mydia database"
+                );
                 return Ok(SchemaCheckOutcome::SchemaMissing);
             }
 
@@ -68,14 +70,15 @@ pub async fn schema_check(db: &Db) -> Result<SchemaCheckOutcome, DbError> {
                 .try_get::<Option<i64>, _>("v")?
         }
         Db::Postgres(pool) => {
-            let exists: Option<String> = sqlx::query_scalar(
-                "SELECT to_regclass('public.schema_migrations')::text",
-            )
-            .fetch_one(pool)
-            .await?;
+            let exists: Option<String> =
+                sqlx::query_scalar("SELECT to_regclass('public.schema_migrations')::text")
+                    .fetch_one(pool)
+                    .await?;
 
             if exists.is_none() {
-                tracing::error!("schema_migrations table missing; this doesn't look like a mydia database");
+                tracing::error!(
+                    "schema_migrations table missing; this doesn't look like a mydia database"
+                );
                 return Ok(SchemaCheckOutcome::SchemaMissing);
             }
 

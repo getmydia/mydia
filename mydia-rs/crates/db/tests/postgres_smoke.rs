@@ -13,8 +13,8 @@ use std::env;
 use chrono::{TimeZone, Utc};
 use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
 use mydia_rs_db::{
-    connect_from_config, schema_check, types::DateTimeMicros, types::DateTimeSecs,
-    types::UuidText, Db, SchemaCheckOutcome, MAX_KNOWN_MIGRATION,
+    connect_from_config, schema_check, types::DateTimeMicros, types::DateTimeSecs, types::UuidText,
+    Db, SchemaCheckOutcome, MAX_KNOWN_MIGRATION,
 };
 use sqlx::Row;
 use uuid::Uuid;
@@ -89,7 +89,12 @@ async fn schema_check_match_when_version_equals_const() {
         .expect("insert");
 
     let outcome = schema_check(&db).await.expect("probe");
-    assert_eq!(outcome, SchemaCheckOutcome::Match { version: MAX_KNOWN_MIGRATION });
+    assert_eq!(
+        outcome,
+        SchemaCheckOutcome::Match {
+            version: MAX_KNOWN_MIGRATION
+        }
+    );
 }
 
 #[tokio::test]

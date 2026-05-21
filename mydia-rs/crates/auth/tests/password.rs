@@ -37,10 +37,7 @@ fn produced_hash_starts_with_2b_prefix_phoenix_writes() {
     // 0.16 crate writes "$2b$" too, so cross-backend writes stay
     // string-equal modulo cost + salt + hash bytes.
     let hash = hash_password("anything").unwrap();
-    assert!(
-        hash.starts_with("$2b$"),
-        "expected $2b$ prefix, got {hash}"
-    );
+    assert!(hash.starts_with("$2b$"), "expected $2b$ prefix, got {hash}");
 }
 
 #[test]

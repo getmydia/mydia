@@ -115,9 +115,9 @@ impl Dialect {
     /// - Postgres: `AVG(EXTRACT(EPOCH FROM (end - start)))`
     pub fn avg_timestamp_diff_seconds(self, end_field: &str, start_field: &str) -> String {
         match self {
-            Self::Sqlite => format!(
-                "AVG((julianday({end_field}) - julianday({start_field})) * 86400)"
-            ),
+            Self::Sqlite => {
+                format!("AVG((julianday({end_field}) - julianday({start_field})) * 86400)")
+            }
             Self::Postgres => {
                 format!("AVG(EXTRACT(EPOCH FROM ({end_field} - {start_field})))")
             }

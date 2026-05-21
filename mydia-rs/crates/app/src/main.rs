@@ -88,7 +88,10 @@ fn main() -> ExitCode {
                 tracing::warn!(version, "schema ahead of binary; continuing");
             }
             Ok(SchemaCheckOutcome::SchemaTooOld { version }) => {
-                tracing::error!(version, "schema older than binary expects; refusing to start");
+                tracing::error!(
+                    version,
+                    "schema older than binary expects; refusing to start"
+                );
                 return ExitCode::FAILURE;
             }
             Ok(SchemaCheckOutcome::SchemaMissing) => {

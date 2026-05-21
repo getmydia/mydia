@@ -2,9 +2,7 @@
 
 use std::time::Duration;
 
-use mydia_rs_auth::{
-    MediaTokenCache, MediaTokenError, MediaTokenPermission, MediaTokenSigner,
-};
+use mydia_rs_auth::{MediaTokenCache, MediaTokenError, MediaTokenPermission, MediaTokenSigner};
 
 const SECRET: &str = "shared-with-phoenix-via-guardian-config-secret-key";
 
@@ -19,7 +17,10 @@ fn issue_and_verify_round_trips() {
         .issue(
             "device-123",
             "user-456",
-            &[MediaTokenPermission::Stream, MediaTokenPermission::Thumbnails],
+            &[
+                MediaTokenPermission::Stream,
+                MediaTokenPermission::Thumbnails,
+            ],
             Duration::from_secs(60),
         )
         .expect("issue");
@@ -36,7 +37,12 @@ fn issue_and_verify_round_trips() {
 #[test]
 fn verify_rejects_wrong_secret() {
     let token = signer()
-        .issue("d", "u", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "d",
+            "u",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
     let other = MediaTokenSigner::new("different secret", 0);
     let err = other.verify(&token).expect_err("must reject");
@@ -49,7 +55,12 @@ fn verify_rejects_expired_token() {
     // ttl = 0 -> exp == iat. Sleep 2s to push the verifier past the
     // expiry without going through real wall-clock dependencies.
     let token = signer
-        .issue("d", "u", &[MediaTokenPermission::Stream], Duration::from_secs(0))
+        .issue(
+            "d",
+            "u",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(0),
+        )
         .unwrap();
     std::thread::sleep(Duration::from_secs(2));
     let err = signer.verify(&token).expect_err("must reject");
@@ -61,7 +72,12 @@ fn cache_returns_same_claims_on_hit() {
     let signer = signer();
     let cache = MediaTokenCache::new(Duration::from_secs(300));
     let token = signer
-        .issue("d", "u", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "d",
+            "u",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
 
     let first = cache.lookup_or_verify(&signer, &token).unwrap();
@@ -77,10 +93,20 @@ fn evict_device_drops_only_that_devices_entries() {
     let cache = MediaTokenCache::new(Duration::from_secs(300));
 
     let token_a = signer
-        .issue("dev-a", "user", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-a",
+            "user",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
     let token_b = signer
-        .issue("dev-b", "user", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-b",
+            "user",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
 
     cache.lookup_or_verify(&signer, &token_a).unwrap();
@@ -101,13 +127,28 @@ fn evict_user_drops_every_device_for_that_user() {
     let cache = MediaTokenCache::new(Duration::from_secs(300));
 
     let alice_a = signer
-        .issue("dev-a", "alice", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-a",
+            "alice",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
     let alice_b = signer
-        .issue("dev-b", "alice", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-b",
+            "alice",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
     let bob = signer
-        .issue("dev-c", "bob", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-c",
+            "bob",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
 
     cache.lookup_or_verify(&signer, &alice_a).unwrap();
@@ -132,13 +173,23 @@ fn cache_does_not_use_bearer_token_as_key() {
     let cache = MediaTokenCache::new(Duration::from_secs(300));
 
     let token1 = signer
-        .issue("dev-a", "user", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-a",
+            "user",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
     // Re-issue after a 1s wait so iat/exp differ, guaranteeing the
     // signature differs even with identical scope.
     std::thread::sleep(Duration::from_millis(1100));
     let token2 = signer
-        .issue("dev-a", "user", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-a",
+            "user",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
     assert_ne!(token1, token2);
 
@@ -152,7 +203,12 @@ fn ttl_expires_cache_entries() {
     let signer = signer();
     let cache = MediaTokenCache::new(Duration::from_millis(100));
     let token = signer
-        .issue("dev-a", "user", &[MediaTokenPermission::Stream], Duration::from_secs(60))
+        .issue(
+            "dev-a",
+            "user",
+            &[MediaTokenPermission::Stream],
+            Duration::from_secs(60),
+        )
         .unwrap();
     cache.lookup_or_verify(&signer, &token).unwrap();
     std::thread::sleep(Duration::from_millis(150));

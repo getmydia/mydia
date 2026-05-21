@@ -134,7 +134,9 @@ impl<'q> Encode<'q, Postgres> for DateTimeSecs {
 
 impl<'r> Decode<'r, Postgres> for DateTimeSecs {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        Ok(Self(<DateTime<Utc> as Decode<'r, Postgres>>::decode(value)?))
+        Ok(Self(<DateTime<Utc> as Decode<'r, Postgres>>::decode(
+            value,
+        )?))
     }
 }
 
@@ -158,7 +160,9 @@ impl<'q> Encode<'q, Postgres> for DateTimeMicros {
 
 impl<'r> Decode<'r, Postgres> for DateTimeMicros {
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        Ok(Self(<DateTime<Utc> as Decode<'r, Postgres>>::decode(value)?))
+        Ok(Self(<DateTime<Utc> as Decode<'r, Postgres>>::decode(
+            value,
+        )?))
     }
 }
 
