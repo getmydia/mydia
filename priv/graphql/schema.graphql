@@ -32,6 +32,12 @@ type RootQueryType {
   "Get items the user is currently watching (in-progress)"
   continueWatching(first: Int, after: String): [ContinueWatchingItem]
 
+  "Get trending media items"
+  trending(type: MediaType): [SearchResult]
+
+  "Get curated media list"
+  curatedList(listType: CuratedListType!, mediaType: MediaType, page: Int): SearchResults
+
   "Get recently added content"
   recentlyAdded(first: Int, after: String, types: [MediaType]): [RecentlyAddedItem]
 
@@ -45,7 +51,7 @@ type RootQueryType {
   unwatched(first: Int, after: String, types: [MediaType]): [RecentlyAddedItem]
 
   "Search across movies and TV shows"
-  search(query: String!, types: [MediaType], first: Int): SearchResults
+  search(query: String!, types: [MediaType], first: Int, includeExternal: Boolean): SearchResults
 
   "List all API keys for the current user"
   apiKeys: [ApiKey]
@@ -61,6 +67,9 @@ type RootQueryType {
 
   "Get torrent candidates for instant streaming"
   torrentCandidates(contentType: String!, id: ID!): [TorrentCandidate]
+
+  "List active torrent streaming sessions (admin only)"
+  activeTorrentSessions: [TorrentSession]
 
   "List user's collections (excluding system collections)"
   collections(first: Int): [Collection]
@@ -132,7 +141,9 @@ type RootMutationType {
   endStreamingSession(sessionId: String!): Boolean
 
   "Start a torrent streaming session"
-  startTorrentSession(magnetLink: String!, releaseTitle: String!, mediaItemId: ID, episodeId: ID): TorrentSession
+  startTorrentSession(
+    magnetLink: String!, releaseTitle: String!, mediaItemId: ID, episodeId: ID, tmdbId: Int, tvdbId: Int
+  ): TorrentSession
 
   "End a torrent streaming session"
   endTorrentSession(sessionId: ID!): Boolean
@@ -833,6 +844,9 @@ type TorrentSession {
   "The session UUID"
   id: ID!
 
+  "The selected torrent file index (nil until metadata is resolved)"
+  fileId: Int
+
   "The magnet link being streamed"
   magnetLink: String!
 
@@ -1123,6 +1137,27 @@ enum StreamingCandidateStrategy {
 
   "Full transcoding"
   TRANSCODE
+}
+
+"Types of curated media lists"
+enum CuratedListType {
+  "Trending items"
+  TRENDING
+
+  "Popular items"
+  POPULAR
+
+  "Upcoming items"
+  UPCOMING
+
+  "Items currently in theaters"
+  NOW_PLAYING
+
+  "TV shows currently airing"
+  ON_THE_AIR
+
+  "TV shows airing today"
+  AIRING_TODAY
 }
 
 """

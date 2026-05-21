@@ -110,10 +110,11 @@ defmodule Mydia.Streaming do
     |> Enum.map(fn session ->
       {title, type, episode_info} =
         case session do
-          %{episode: %{season_number: s, episode_number: e, title: ep_title}, media_item: show} ->
+          %{episode: %{season_number: s, episode_number: e, title: ep_title}, media_item: show}
+          when not is_nil(show) ->
             {show.title, :tv_show, "S#{pad(s)}E#{pad(e)} - #{ep_title}"}
 
-          %{media_item: movie} ->
+          %{media_item: movie} when not is_nil(movie) ->
             {movie.title, :movie, nil}
 
           %{release_title: release_title} ->

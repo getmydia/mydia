@@ -4,9 +4,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   """
 
   alias Mydia.{Library, Media, Playback}
-
-  alias Mydia.Metadata.Access, as: MetadataAccess
-  alias Mydia.Metadata.ImageUrl
+  alias MydiaWeb.Schema.Resolvers.MediaHelpers
 
   @spec continue_watching(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
@@ -136,6 +134,47 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
     end
   end
 
+  @spec trending(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
+  def trending(_parent, args, _info) do
+    type = Map.get(args, :type, :movie)
+
+    results =
+      case type do
+        :movie -> Media.trending_movies()
+        :tv_show -> Media.trending_tv_shows()
+        _ -> {:ok, []}
+      end
+
+    case results do
+      {:ok, items} ->
+        mapped = Enum.map(items, &MediaHelpers.map_external_to_search_result(&1, type))
+        {:ok, mapped}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @spec curated_list(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
+  def curated_list(_parent, args, _info) do
+    list_type = Map.get(args, :list_type)
+    media_type = Map.get(args, :media_type, :movie)
+    page = Map.get(args, :page, 1)
+
+    case Mydia.Metadata.fetch_curated_list(list_type, media_type: media_type, page: page) do
+      {:ok, %{results: items, total_results: total_count}} ->
+        mapped = Enum.map(items, &MediaHelpers.map_external_to_search_result(&1, media_type))
+        {:ok, %{results: mapped, total_count: total_count}}
+
+      {:ok, items} when is_list(items) ->
+        mapped = Enum.map(items, &MediaHelpers.map_external_to_search_result(&1, media_type))
+        {:ok, %{results: mapped, total_count: length(mapped)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @spec unwatched(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
   def unwatched(_parent, args, %{context: context}) do
     first = Map.get(args, :first, 50)
@@ -218,7 +257,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
           id: media_item.id,
           type: String.to_existing_atom(media_item.type),
           title: media_item.title,
-          artwork: build_artwork(media_item),
+          artwork: MediaHelpers.build_artwork(media_item),
           progress: format_progress(progress),
           show_title: nil,
           season_number: nil,
@@ -264,47 +303,24 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       type: String.to_existing_atom(media_item.type),
       title: media_item.title,
       year: media_item.year,
-      artwork: build_artwork(media_item),
+      artwork: MediaHelpers.build_artwork(media_item),
       added_at: media_item.inserted_at
     }
   end
 
-  defp build_artwork(%{metadata: nil}), do: nil
-
-  defp build_artwork(%{metadata: metadata}) do
-    poster_path = MetadataAccess.get(metadata, :poster_path)
-    backdrop_path = MetadataAccess.get(metadata, :backdrop_path)
-
-    %{
-      poster_url: ImageUrl.poster_url(poster_path),
-      backdrop_url: ImageUrl.backdrop_url(backdrop_path),
-      thumbnail_url: nil
-    }
-  end
-
-  defp build_artwork(_), do: nil
-
   defp build_episode_artwork(%{metadata: metadata}, show) when not is_nil(metadata) do
-    still_path = MetadataAccess.get(metadata, :still_path)
-    show_artwork = build_artwork(show)
+    still_path = Mydia.Metadata.Access.get(metadata, :still_path)
+    show_artwork = MediaHelpers.build_artwork(show)
 
     # Always include show's poster/backdrop, plus episode thumbnail if available
     %{
       poster_url: show_artwork && show_artwork.poster_url,
       backdrop_url: show_artwork && show_artwork.backdrop_url,
-      thumbnail_url: ImageUrl.still_url(still_path)
+      thumbnail_url: Mydia.Metadata.ImageUrl.still_url(still_path)
     }
   end
 
-  defp build_episode_artwork(_episode, show), do: build_artwork(show)
+  defp build_episode_artwork(_episode, show), do: MediaHelpers.build_artwork(show)
 
-  defp format_progress(progress) do
-    %{
-      position_seconds: progress.position_seconds || 0,
-      duration_seconds: progress.duration_seconds,
-      percentage: progress.completion_percentage,
-      watched: progress.watched || false,
-      last_watched_at: progress.last_watched_at
-    }
-  end
+  defp format_progress(progress), do: MediaHelpers.format_progress(progress)
 end

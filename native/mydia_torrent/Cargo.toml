@@ -9,10 +9,18 @@ name = "mydia_torrent"
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 
+# We deliberately keep the default `panic = "unwind"` policy here (NOT abort)
+# because the BEAM loads this cdylib in-process, and `panic = "abort"`
+# tears down the entire OS process for one bad torrent. With unwind + the
+# `std::panic::catch_unwind` wrappers in src/lib.rs, a Rust panic at a NIF
+# boundary surfaces to Elixir as `{:error, "librqbit panic"}` instead of
+# killing the node. Note that the sibling `mydia_torrent_core` crate sets
+# `panic = "abort"` for its own standalone builds; that profile does not
+# propagate into this NIF.
+
 [dependencies]
 rustler = "0.34.0"
 mydia_torrent_core = { path = "../mydia_torrent_core" }
-librqbit = { version = "8", default-features = false, features = ["rust-tls"] }
 tokio = { version = "1.49", features = ["rt-multi-thread", "sync"] }
 anyhow = "1.0"
 serde_json = "1.0"

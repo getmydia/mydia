@@ -590,6 +590,20 @@ defmodule Mydia.Media do
     end)
   end
 
+  @doc """
+  Fetches trending movies from the metadata relay.
+  """
+  def trending_movies do
+    Mydia.Metadata.fetch_trending(Mydia.Metadata.default_relay_config(), media_type: :movie)
+  end
+
+  @doc """
+  Fetches trending TV shows from the metadata relay.
+  """
+  def trending_tv_shows do
+    Mydia.Metadata.fetch_trending(Mydia.Metadata.default_relay_config(), media_type: :tv_show)
+  end
+
   ## Episodes
 
   @doc """

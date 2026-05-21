@@ -170,8 +170,14 @@ defmodule Mydia.Accounts do
 
   @doc """
   Deletes a user.
+
+  Stops any active torrent streaming sessions for the user before deleting,
+  so the supervised Session GenServers terminate cleanly. The DB cascade on
+  `torrent_streaming_sessions.user_id` would otherwise drop the rows out from
+  under live processes, leaving them to crash on their next progress write.
   """
   def delete_user(%User{} = user) do
+    Mydia.Streaming.Torrent.stop_user_sessions(user.id)
     Repo.delete(user)
   end
 

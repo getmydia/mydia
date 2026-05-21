@@ -28,15 +28,37 @@ defmodule Mydia.Settings.RuntimeConfig do
   end
 
   def create_config_setting(attrs) do
-    %ConfigSetting{}
-    |> ConfigSetting.changeset(attrs)
-    |> Repo.insert()
+    case %ConfigSetting{}
+         |> ConfigSetting.changeset(attrs)
+         |> Repo.insert() do
+      {:ok, inserted} = ok ->
+        broadcast_setting_changed(inserted)
+        ok
+
+      other ->
+        other
+    end
   end
 
   def update_config_setting(%ConfigSetting{} = config_setting, attrs) do
-    config_setting
-    |> ConfigSetting.changeset(attrs)
-    |> Repo.update()
+    case config_setting
+         |> ConfigSetting.changeset(attrs)
+         |> Repo.update() do
+      {:ok, updated} = ok ->
+        broadcast_setting_changed(updated)
+        ok
+
+      other ->
+        other
+    end
+  end
+
+  defp broadcast_setting_changed(%ConfigSetting{key: key, value: value}) do
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      "settings:changed",
+      {:setting_changed, key, value}
+    )
   end
 
   def delete_config_setting(%ConfigSetting{} = config_setting) do

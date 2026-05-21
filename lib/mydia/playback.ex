@@ -81,30 +81,26 @@ defmodule Mydia.Playback do
 
   defp maybe_promote_torrent(user_id, content_id, progress) do
     if progress.completion_percentage >= 90.0 do
-      query =
-        cond do
-          content_id[:media_item_id] ->
-            from s in Mydia.Streaming.Torrent.SessionSchema,
-              where:
-                s.user_id == ^user_id and s.media_item_id == ^content_id[:media_item_id] and
-                  s.state != :completed
+      sessions = Mydia.Streaming.Torrent.find_promotable_sessions(user_id, content_id)
 
-          content_id[:episode_id] ->
-            from s in Mydia.Streaming.Torrent.SessionSchema,
-              where:
-                s.user_id == ^user_id and s.episode_id == ^content_id[:episode_id] and
-                  s.state != :completed
+      Enum.each(sessions, fn session ->
+        # Fire-and-forget so a multi-GB cross-device copy doesn't block the
+        # progress-save HTTP request. Promotion already runs under its own
+        # rollback logic.
+        Task.start(fn ->
+          try do
+            Mydia.Streaming.Torrent.check_and_promote(session.id)
+          rescue
+            e ->
+              require Logger
 
-          true ->
-            nil
-        end
-
-      if query do
-        Repo.all(query)
-        |> Enum.each(fn session ->
-          Mydia.Streaming.Torrent.check_and_promote(session.id)
+              Logger.error(
+                "Torrent promotion task crashed for session #{session.id}: " <>
+                  Exception.format(:error, e, __STACKTRACE__)
+              )
+          end
         end)
-      end
+      end)
     end
   end
 

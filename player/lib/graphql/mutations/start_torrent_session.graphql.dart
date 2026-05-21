@@ -6,12 +6,17 @@ class Variables$Mutation$StartTorrentSession {
     required String releaseTitle,
     String? mediaItemId,
     String? episodeId,
-  }) => Variables$Mutation$StartTorrentSession._({
-    r'magnetLink': magnetLink,
-    r'releaseTitle': releaseTitle,
-    if (mediaItemId != null) r'mediaItemId': mediaItemId,
-    if (episodeId != null) r'episodeId': episodeId,
-  });
+    int? tmdbId,
+    int? tvdbId,
+  }) =>
+      Variables$Mutation$StartTorrentSession._({
+        r'magnetLink': magnetLink,
+        r'releaseTitle': releaseTitle,
+        if (mediaItemId != null) r'mediaItemId': mediaItemId,
+        if (episodeId != null) r'episodeId': episodeId,
+        if (tmdbId != null) r'tmdbId': tmdbId,
+        if (tvdbId != null) r'tvdbId': tvdbId,
+      });
 
   Variables$Mutation$StartTorrentSession._(this._$data);
 
@@ -31,6 +36,14 @@ class Variables$Mutation$StartTorrentSession {
       final l$episodeId = data['episodeId'];
       result$data['episodeId'] = (l$episodeId as String?);
     }
+    if (data.containsKey('tmdbId')) {
+      final l$tmdbId = data['tmdbId'];
+      result$data['tmdbId'] = (l$tmdbId as int?);
+    }
+    if (data.containsKey('tvdbId')) {
+      final l$tvdbId = data['tvdbId'];
+      result$data['tvdbId'] = (l$tvdbId as int?);
+    }
     return Variables$Mutation$StartTorrentSession._(result$data);
   }
 
@@ -43,6 +56,10 @@ class Variables$Mutation$StartTorrentSession {
   String? get mediaItemId => (_$data['mediaItemId'] as String?);
 
   String? get episodeId => (_$data['episodeId'] as String?);
+
+  int? get tmdbId => (_$data['tmdbId'] as int?);
+
+  int? get tvdbId => (_$data['tvdbId'] as int?);
 
   Map<String, dynamic> toJson() {
     final result$data = <String, dynamic>{};
@@ -58,14 +75,21 @@ class Variables$Mutation$StartTorrentSession {
       final l$episodeId = episodeId;
       result$data['episodeId'] = l$episodeId;
     }
+    if (_$data.containsKey('tmdbId')) {
+      final l$tmdbId = tmdbId;
+      result$data['tmdbId'] = l$tmdbId;
+    }
+    if (_$data.containsKey('tvdbId')) {
+      final l$tvdbId = tvdbId;
+      result$data['tvdbId'] = l$tvdbId;
+    }
     return result$data;
   }
 
   CopyWith$Variables$Mutation$StartTorrentSession<
-    Variables$Mutation$StartTorrentSession
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$StartTorrentSession(this, (i) => i);
+          Variables$Mutation$StartTorrentSession>
+      get copyWith =>
+          CopyWith$Variables$Mutation$StartTorrentSession(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -104,6 +128,22 @@ class Variables$Mutation$StartTorrentSession {
     if (l$episodeId != lOther$episodeId) {
       return false;
     }
+    final l$tmdbId = tmdbId;
+    final lOther$tmdbId = other.tmdbId;
+    if (_$data.containsKey('tmdbId') != other._$data.containsKey('tmdbId')) {
+      return false;
+    }
+    if (l$tmdbId != lOther$tmdbId) {
+      return false;
+    }
+    final l$tvdbId = tvdbId;
+    final lOther$tvdbId = other.tvdbId;
+    if (_$data.containsKey('tvdbId') != other._$data.containsKey('tvdbId')) {
+      return false;
+    }
+    if (l$tvdbId != lOther$tvdbId) {
+      return false;
+    }
     return true;
   }
 
@@ -113,11 +153,15 @@ class Variables$Mutation$StartTorrentSession {
     final l$releaseTitle = releaseTitle;
     final l$mediaItemId = mediaItemId;
     final l$episodeId = episodeId;
+    final l$tmdbId = tmdbId;
+    final l$tvdbId = tvdbId;
     return Object.hashAll([
       l$magnetLink,
       l$releaseTitle,
       _$data.containsKey('mediaItemId') ? l$mediaItemId : const {},
       _$data.containsKey('episodeId') ? l$episodeId : const {},
+      _$data.containsKey('tmdbId') ? l$tmdbId : const {},
+      _$data.containsKey('tvdbId') ? l$tvdbId : const {},
     ]);
   }
 }
@@ -136,6 +180,8 @@ abstract class CopyWith$Variables$Mutation$StartTorrentSession<TRes> {
     String? releaseTitle,
     String? mediaItemId,
     String? episodeId,
+    int? tmdbId,
+    int? tvdbId,
   });
 }
 
@@ -157,17 +203,23 @@ class _CopyWithImpl$Variables$Mutation$StartTorrentSession<TRes>
     Object? releaseTitle = _undefined,
     Object? mediaItemId = _undefined,
     Object? episodeId = _undefined,
-  }) => _then(
-    Variables$Mutation$StartTorrentSession._({
-      ..._instance._$data,
-      if (magnetLink != _undefined && magnetLink != null)
-        'magnetLink': (magnetLink as String),
-      if (releaseTitle != _undefined && releaseTitle != null)
-        'releaseTitle': (releaseTitle as String),
-      if (mediaItemId != _undefined) 'mediaItemId': (mediaItemId as String?),
-      if (episodeId != _undefined) 'episodeId': (episodeId as String?),
-    }),
-  );
+    Object? tmdbId = _undefined,
+    Object? tvdbId = _undefined,
+  }) =>
+      _then(
+        Variables$Mutation$StartTorrentSession._({
+          ..._instance._$data,
+          if (magnetLink != _undefined && magnetLink != null)
+            'magnetLink': (magnetLink as String),
+          if (releaseTitle != _undefined && releaseTitle != null)
+            'releaseTitle': (releaseTitle as String),
+          if (mediaItemId != _undefined)
+            'mediaItemId': (mediaItemId as String?),
+          if (episodeId != _undefined) 'episodeId': (episodeId as String?),
+          if (tmdbId != _undefined) 'tmdbId': (tmdbId as int?),
+          if (tvdbId != _undefined) 'tvdbId': (tvdbId as int?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$StartTorrentSession<TRes>
@@ -181,7 +233,10 @@ class _CopyWithStubImpl$Variables$Mutation$StartTorrentSession<TRes>
     String? releaseTitle,
     String? mediaItemId,
     String? episodeId,
-  }) => _res;
+    int? tmdbId,
+    int? tvdbId,
+  }) =>
+      _res;
 }
 
 class Mutation$StartTorrentSession {
@@ -249,7 +304,7 @@ class Mutation$StartTorrentSession {
 extension UtilityExtension$Mutation$StartTorrentSession
     on Mutation$StartTorrentSession {
   CopyWith$Mutation$StartTorrentSession<Mutation$StartTorrentSession>
-  get copyWith => CopyWith$Mutation$StartTorrentSession(this, (i) => i);
+      get copyWith => CopyWith$Mutation$StartTorrentSession(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$StartTorrentSession<TRes> {
@@ -266,7 +321,7 @@ abstract class CopyWith$Mutation$StartTorrentSession<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$StartTorrentSession$startTorrentSession<TRes>
-  get startTorrentSession;
+      get startTorrentSession;
 }
 
 class _CopyWithImpl$Mutation$StartTorrentSession<TRes>
@@ -282,20 +337,21 @@ class _CopyWithImpl$Mutation$StartTorrentSession<TRes>
   TRes call({
     Object? startTorrentSession = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$StartTorrentSession(
-      startTorrentSession: startTorrentSession == _undefined
-          ? _instance.startTorrentSession
-          : (startTorrentSession
-                as Mutation$StartTorrentSession$startTorrentSession?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$StartTorrentSession(
+          startTorrentSession: startTorrentSession == _undefined
+              ? _instance.startTorrentSession
+              : (startTorrentSession
+                  as Mutation$StartTorrentSession$startTorrentSession?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$StartTorrentSession$startTorrentSession<TRes>
-  get startTorrentSession {
+      get startTorrentSession {
     final local$startTorrentSession = _instance.startTorrentSession;
     return local$startTorrentSession == null
         ? CopyWith$Mutation$StartTorrentSession$startTorrentSession.stub(
@@ -317,11 +373,12 @@ class _CopyWithStubImpl$Mutation$StartTorrentSession<TRes>
   call({
     Mutation$StartTorrentSession$startTorrentSession? startTorrentSession,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$StartTorrentSession$startTorrentSession<TRes>
-  get startTorrentSession =>
-      CopyWith$Mutation$StartTorrentSession$startTorrentSession.stub(_res);
+      get startTorrentSession =>
+          CopyWith$Mutation$StartTorrentSession$startTorrentSession.stub(_res);
 }
 
 const documentNodeMutationStartTorrentSession = DocumentNode(
@@ -354,6 +411,18 @@ const documentNodeMutationStartTorrentSession = DocumentNode(
           defaultValue: DefaultValueNode(value: null),
           directives: [],
         ),
+        VariableDefinitionNode(
+          variable: VariableNode(name: NameNode(value: 'tmdbId')),
+          type: NamedTypeNode(name: NameNode(value: 'Int'), isNonNull: false),
+          defaultValue: DefaultValueNode(value: null),
+          directives: [],
+        ),
+        VariableDefinitionNode(
+          variable: VariableNode(name: NameNode(value: 'tvdbId')),
+          type: NamedTypeNode(name: NameNode(value: 'Int'), isNonNull: false),
+          defaultValue: DefaultValueNode(value: null),
+          directives: [],
+        ),
       ],
       directives: [],
       selectionSet: SelectionSetNode(
@@ -378,12 +447,27 @@ const documentNodeMutationStartTorrentSession = DocumentNode(
                 name: NameNode(value: 'episodeId'),
                 value: VariableNode(name: NameNode(value: 'episodeId')),
               ),
+              ArgumentNode(
+                name: NameNode(value: 'tmdbId'),
+                value: VariableNode(name: NameNode(value: 'tmdbId')),
+              ),
+              ArgumentNode(
+                name: NameNode(value: 'tvdbId'),
+                value: VariableNode(name: NameNode(value: 'tvdbId')),
+              ),
             ],
             directives: [],
             selectionSet: SelectionSetNode(
               selections: [
                 FieldNode(
                   name: NameNode(value: 'id'),
+                  alias: null,
+                  arguments: [],
+                  directives: [],
+                  selectionSet: null,
+                ),
+                FieldNode(
+                  name: NameNode(value: 'fileId'),
                   alias: null,
                   arguments: [],
                   directives: [],
@@ -429,6 +513,7 @@ const documentNodeMutationStartTorrentSession = DocumentNode(
 class Mutation$StartTorrentSession$startTorrentSession {
   Mutation$StartTorrentSession$startTorrentSession({
     required this.id,
+    this.fileId,
     required this.magnetLink,
     required this.releaseTitle,
     this.$__typename = 'TorrentSession',
@@ -438,11 +523,13 @@ class Mutation$StartTorrentSession$startTorrentSession {
     Map<String, dynamic> json,
   ) {
     final l$id = json['id'];
+    final l$fileId = json['fileId'];
     final l$magnetLink = json['magnetLink'];
     final l$releaseTitle = json['releaseTitle'];
     final l$$__typename = json['__typename'];
     return Mutation$StartTorrentSession$startTorrentSession(
       id: (l$id as String),
+      fileId: (l$fileId as int?),
       magnetLink: (l$magnetLink as String),
       releaseTitle: (l$releaseTitle as String),
       $__typename: (l$$__typename as String),
@@ -450,6 +537,8 @@ class Mutation$StartTorrentSession$startTorrentSession {
   }
 
   final String id;
+
+  final int? fileId;
 
   final String magnetLink;
 
@@ -461,6 +550,8 @@ class Mutation$StartTorrentSession$startTorrentSession {
     final _resultData = <String, dynamic>{};
     final l$id = id;
     _resultData['id'] = l$id;
+    final l$fileId = fileId;
+    _resultData['fileId'] = l$fileId;
     final l$magnetLink = magnetLink;
     _resultData['magnetLink'] = l$magnetLink;
     final l$releaseTitle = releaseTitle;
@@ -473,10 +564,17 @@ class Mutation$StartTorrentSession$startTorrentSession {
   @override
   int get hashCode {
     final l$id = id;
+    final l$fileId = fileId;
     final l$magnetLink = magnetLink;
     final l$releaseTitle = releaseTitle;
     final l$$__typename = $__typename;
-    return Object.hashAll([l$id, l$magnetLink, l$releaseTitle, l$$__typename]);
+    return Object.hashAll([
+      l$id,
+      l$fileId,
+      l$magnetLink,
+      l$releaseTitle,
+      l$$__typename,
+    ]);
   }
 
   @override
@@ -491,6 +589,11 @@ class Mutation$StartTorrentSession$startTorrentSession {
     final l$id = id;
     final lOther$id = other.id;
     if (l$id != lOther$id) {
+      return false;
+    }
+    final l$fileId = fileId;
+    final lOther$fileId = other.fileId;
+    if (l$fileId != lOther$fileId) {
       return false;
     }
     final l$magnetLink = magnetLink;
@@ -515,10 +618,9 @@ class Mutation$StartTorrentSession$startTorrentSession {
 extension UtilityExtension$Mutation$StartTorrentSession$startTorrentSession
     on Mutation$StartTorrentSession$startTorrentSession {
   CopyWith$Mutation$StartTorrentSession$startTorrentSession<
-    Mutation$StartTorrentSession$startTorrentSession
-  >
-  get copyWith =>
-      CopyWith$Mutation$StartTorrentSession$startTorrentSession(this, (i) => i);
+          Mutation$StartTorrentSession$startTorrentSession>
+      get copyWith => CopyWith$Mutation$StartTorrentSession$startTorrentSession(
+          this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$StartTorrentSession$startTorrentSession<TRes> {
@@ -533,6 +635,7 @@ abstract class CopyWith$Mutation$StartTorrentSession$startTorrentSession<TRes> {
 
   TRes call({
     String? id,
+    int? fileId,
     String? magnetLink,
     String? releaseTitle,
     String? $__typename,
@@ -554,23 +657,26 @@ class _CopyWithImpl$Mutation$StartTorrentSession$startTorrentSession<TRes>
 
   TRes call({
     Object? id = _undefined,
+    Object? fileId = _undefined,
     Object? magnetLink = _undefined,
     Object? releaseTitle = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$StartTorrentSession$startTorrentSession(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      magnetLink: magnetLink == _undefined || magnetLink == null
-          ? _instance.magnetLink
-          : (magnetLink as String),
-      releaseTitle: releaseTitle == _undefined || releaseTitle == null
-          ? _instance.releaseTitle
-          : (releaseTitle as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$StartTorrentSession$startTorrentSession(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          fileId: fileId == _undefined ? _instance.fileId : (fileId as int?),
+          magnetLink: magnetLink == _undefined || magnetLink == null
+              ? _instance.magnetLink
+              : (magnetLink as String),
+          releaseTitle: releaseTitle == _undefined || releaseTitle == null
+              ? _instance.releaseTitle
+              : (releaseTitle as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$StartTorrentSession$startTorrentSession<TRes>
@@ -581,8 +687,10 @@ class _CopyWithStubImpl$Mutation$StartTorrentSession$startTorrentSession<TRes>
 
   call({
     String? id,
+    int? fileId,
     String? magnetLink,
     String? releaseTitle,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

@@ -70,4 +70,14 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:hls_copy, description: "HLS with stream copy")
     value(:transcode, description: "Full transcoding")
   end
+
+  @desc "Types of curated media lists"
+  enum :curated_list_type do
+    value(:trending, description: "Trending items")
+    value(:popular, description: "Popular items")
+    value(:upcoming, description: "Upcoming items")
+    value(:now_playing, description: "Items currently in theaters")
+    value(:on_the_air, description: "TV shows currently airing")
+    value(:airing_today, description: "TV shows airing today")
+  end
 end

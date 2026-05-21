@@ -27,6 +27,7 @@ final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
 /// Example: /hls/abc123/index.m3u8
 /// Example: /hls/abc123/segment_001.ts
 ///
+/// Torrent stream: /torrent/{session_id}/file/{file_id}/data
 /// Direct stream: /direct/{file_id}/stream
 /// Download: /download/{job_id}/file
 class LocalProxyService {
@@ -123,6 +124,14 @@ class LocalProxyService {
     return 'http://127.0.0.1:${_server!.port}/download/$jobId/file';
   }
 
+  /// Build a byte-stream URL for a torrent-backed file.
+  String buildTorrentStreamUrl(String sessionId, int fileId) {
+    if (_server == null) {
+      throw StateError('LocalProxyService is not started');
+    }
+    return 'http://127.0.0.1:${_server!.port}/torrent/$sessionId/file/$fileId/data';
+  }
+
   // Handle incoming HTTP requests
   Future<void> _handleRequest(HttpRequest request) async {
     final path = request.uri.path;
@@ -131,6 +140,8 @@ class LocalProxyService {
 
     if (path.startsWith('/hls/')) {
       await _handleHlsRequest(request);
+    } else if (path.startsWith('/torrent/')) {
+      await _handleTorrentRequest(request);
     } else if (path.startsWith('/direct/')) {
       await _handleDirectRequest(request);
     } else if (path.startsWith('/download/')) {
@@ -140,6 +151,52 @@ class LocalProxyService {
       _setCorsHeaders(request.response);
       request.response.write('Not Found');
       await request.response.close();
+    }
+  }
+
+  Future<void> _handleTorrentRequest(HttpRequest request) async {
+    try {
+      final pathParts =
+          request.uri.path.substring('/torrent/'.length).split('/');
+      if (pathParts.length < 4) {
+        request.response.statusCode = HttpStatus.badRequest;
+        _setCorsHeaders(request.response);
+        request.response.write(
+            'Invalid torrent path format. Expected: /torrent/{session_id}/file/{file_id}/data');
+        await request.response.close();
+        return;
+      }
+
+      final sessionId = pathParts[0];
+      final torrentPath = pathParts.sublist(1).join('/');
+
+      if (sessionId.isEmpty || torrentPath.isEmpty) {
+        request.response.statusCode = HttpStatus.badRequest;
+        _setCorsHeaders(request.response);
+        request.response.write('Session ID and path are required');
+        await request.response.close();
+        return;
+      }
+
+      await _forwardRangeRequest(
+        request: request,
+        sessionId: 'torrent:$sessionId',
+        path: torrentPath,
+        logLabel: 'torrent:$sessionId',
+      );
+    } catch (e, stack) {
+      debugPrint('[LocalProxy] Error handling torrent request: $e');
+      debugPrint('[LocalProxy] Stack: $stack');
+
+      try {
+        request.response.statusCode = HttpStatus.internalServerError;
+        _setCorsHeaders(request.response);
+        request.response.write('Error: $e');
+      } catch (_) {
+        // Response may already be started or closed, best-effort cleanup below.
+      } finally {
+        await request.response.close();
+      }
     }
   }
 

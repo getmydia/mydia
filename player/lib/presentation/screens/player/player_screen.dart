@@ -14,7 +14,6 @@ import '../../../core/auth/auth_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/streaming/torrent_stream_providers.dart';
-import '../../../core/streaming/torrent_stream_service.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;

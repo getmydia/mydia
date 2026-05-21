@@ -1,7 +1,7 @@
 #import '../fragments/artwork_fragment.graphql'
 
 query Search($query: String!, $types: [MediaType], $first: Int) {
-  search(query: $query, types: $types, first: $first) {
+  search(query: $query, types: $types, first: $first, includeExternal: true) {
     results {
       id
       type

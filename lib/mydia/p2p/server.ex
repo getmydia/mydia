@@ -433,7 +433,7 @@ defmodule Mydia.P2p.Server do
 
           String.starts_with?(req.session_id, "torrent:") ->
             session_id = String.replace_prefix(req.session_id, "torrent:", "")
-            handle_torrent_stream(resource, stream_id, session_id, req)
+            handle_torrent_stream(resource, stream_id, session_id, user, req)
 
           true ->
             handle_hls_session_stream(resource, stream_id, req)
@@ -542,60 +542,140 @@ defmodule Mydia.P2p.Server do
   # Maximum chunk size for torrent reads — prevents OOM/DoS when no Range header is present
   @torrent_max_chunk_bytes 4 * 1024 * 1024
 
-  defp handle_torrent_stream(resource, stream_id, session_id, req) do
+  defp handle_torrent_stream(resource, stream_id, session_id, user, req) do
     # For torrent streaming, we expect req.path to be something like "file/0/chunk"
     # or just a direct read.
     # The flutter client will call this with a path that indicates what it wants.
     # Pattern: "file/<index>/data"
     case String.split(req.path, "/", trim: true) do
       ["file", file_index_str, "data"] ->
-        file_index = String.to_integer(file_index_str)
+        with {:ok, session} <- lookup_torrent_session(session_id),
+             :ok <- check_torrent_session_ownership(session, user),
+             {file_index, ""} <- Integer.parse(file_index_str),
+             {:ok, offset, length, is_partial} <-
+               compute_torrent_read_window(req.range_start, req.range_end),
+             {:ok, %{resource: resource_arc, torrent_id: torrent_id}} <-
+               Mydia.Streaming.Torrent.get_torrent_info(session_id) do
+          # Call the DirtyIo NIF in the caller process so two concurrent
+          # readers of the same session do not serialize through the Session
+          # GenServer's mailbox. The Session is still the lifecycle owner.
+          case Mydia.Torrent.read_chunk(resource_arc, torrent_id, file_index, offset, length) do
+            {:ok, data} ->
+              actual_length = byte_size(data)
+              end_byte = offset + actual_length - 1
+              total_bytes_str = total_bytes_str(session)
 
-        # Parse range if present; default to a safe bounded read from offset 0
-        {offset, length, is_partial} =
-          case parse_range(req.range_start, req.range_end, @torrent_max_chunk_bytes) do
-            {:full, _} ->
-              # No Range header — serve first chunk up to the cap
-              {0, @torrent_max_chunk_bytes, false}
+              {status, content_range} =
+                if is_partial do
+                  {206, "bytes #{offset}-#{end_byte}/#{total_bytes_str}"}
+                else
+                  {200, nil}
+                end
 
-            {:partial, start, _end, len} ->
-              # Clamp the requested length to the cap
-              {start, min(len, @torrent_max_chunk_bytes), true}
-          end
+              header = %P2p.HlsResponseHeader{
+                status: status,
+                content_type: "application/octet-stream",
+                content_length: actual_length,
+                content_range: content_range,
+                cache_control: "no-cache"
+              }
 
-        case Mydia.Streaming.Torrent.read_chunk(session_id, file_index, offset, length) do
-          {:ok, data} ->
-            actual_length = byte_size(data)
-            end_byte = offset + actual_length - 1
-
-            {status, content_range} =
-              if is_partial do
-                {206, "bytes #{offset}-#{end_byte}/*"}
-              else
-                {200, nil}
+              if P2p.send_hls_header(resource, stream_id, header) == "ok" do
+                P2p.send_hls_chunk(resource, stream_id, data)
+                P2p.finish_hls_stream(resource, stream_id)
               end
 
-            header = %P2p.HlsResponseHeader{
-              status: status,
-              content_type: "application/octet-stream",
-              content_length: actual_length,
-              content_range: content_range,
-              cache_control: "no-cache"
-            }
+            {:error, reason} ->
+              Logger.warning("Torrent read failed for session #{session_id}: #{inspect(reason)}")
+              send_hls_error(resource, stream_id, 500, "Torrent read failed: #{inspect(reason)}")
+          end
+        else
+          {:error, :session_not_found} ->
+            Logger.warning("Torrent session not found: #{session_id}")
+            send_hls_error(resource, stream_id, 404, "Session not found")
 
-            if P2p.send_hls_header(resource, stream_id, header) == "ok" do
-              P2p.send_hls_chunk(resource, stream_id, data)
-              P2p.finish_hls_stream(resource, stream_id)
-            end
+          {:error, :not_found} ->
+            Logger.warning("Torrent session not running: #{session_id}")
+            send_hls_error(resource, stream_id, 404, "Session not found")
 
-          {:error, reason} ->
-            Logger.warning("Torrent read failed for session #{session_id}: #{inspect(reason)}")
-            send_hls_error(resource, stream_id, 500, "Torrent read failed: #{inspect(reason)}")
+          {:error, :not_ready} ->
+            Logger.info("Torrent session #{session_id} metadata not ready yet")
+            send_hls_error(resource, stream_id, 503, "Torrent not ready")
+
+          {:error, :forbidden} ->
+            Logger.warning(
+              "Torrent stream forbidden for user #{inspect(user && user.id)} session=#{session_id}"
+            )
+
+            send_hls_error(resource, stream_id, 403, "Forbidden")
+
+          {:error, :invalid_range} ->
+            Logger.warning("Invalid range request for torrent session #{session_id}")
+            send_hls_error(resource, stream_id, 416, "Range Not Satisfiable")
+
+          {_int_or_err, _rest} ->
+            Logger.warning("Invalid torrent file index: #{inspect(file_index_str)}")
+            send_hls_error(resource, stream_id, 400, "Invalid torrent file index")
+
+          :error ->
+            Logger.warning("Invalid torrent file index: #{inspect(file_index_str)}")
+            send_hls_error(resource, stream_id, 400, "Invalid torrent file index")
         end
 
       _ ->
         Logger.warning("Invalid torrent stream path: #{req.path}")
         send_hls_error(resource, stream_id, 400, "Invalid path")
+    end
+  end
+
+  defp lookup_torrent_session(session_id) do
+    case Mydia.Repo.get(Mydia.Streaming.Torrent.SessionSchema, session_id) do
+      nil -> {:error, :session_not_found}
+      session -> {:ok, session}
+    end
+  end
+
+  defp check_torrent_session_ownership(session, user) do
+    cond do
+      is_nil(user) -> {:error, :forbidden}
+      session.user_id == user.id -> :ok
+      Map.get(user, :role) == :admin -> :ok
+      true -> {:error, :forbidden}
+    end
+  end
+
+  defp total_bytes_str(%{total_bytes: total}) when is_integer(total) and total > 0,
+    do: Integer.to_string(total)
+
+  defp total_bytes_str(_), do: "*"
+
+  # Compute a safe (offset, length, is_partial) tuple for the torrent read.
+  #
+  # Differs from the HLS parse_range/3 path because for torrents we don't
+  # know `file_size` up front — the cap (4 MB) acts as the bound. We have
+  # to validate the range explicitly, otherwise a request with range_end
+  # past the cap produces a negative content_length which crashes the NIF.
+  defp compute_torrent_read_window(nil, nil) do
+    {:ok, 0, @torrent_max_chunk_bytes, false}
+  end
+
+  defp compute_torrent_read_window(range_start, range_end) do
+    start_byte = range_start || 0
+
+    cond do
+      start_byte < 0 ->
+        {:error, :invalid_range}
+
+      is_integer(range_end) and range_end < start_byte ->
+        {:error, :invalid_range}
+
+      is_integer(range_end) and range_end >= 0 ->
+        length = min(range_end - start_byte + 1, @torrent_max_chunk_bytes)
+        {:ok, start_byte, length, true}
+
+      true ->
+        # Range with start only — serve up to the chunk cap from the offset.
+        {:ok, start_byte, @torrent_max_chunk_bytes, true}
     end
   end
 

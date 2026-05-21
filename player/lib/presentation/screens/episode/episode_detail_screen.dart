@@ -677,6 +677,22 @@ class EpisodeDetailScreen extends ConsumerWidget {
           if (result != null && context.mounted) {
             final sessionId = result['sessionId'] as String;
             final title = result['title'] as String;
+            final fileId = result['fileId'] as int?;
+
+            if (fileId == null) {
+              // file_id is populated asynchronously after the torrent engine
+              // emits :metadata_ready. Surface a friendly retry prompt.
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Stream is preparing. Tap Stream again in a moment.',
+                    ),
+                  ),
+                );
+              }
+              return;
+            }
 
             // Get local proxy URL
             final localProxy = ref.read(localProxyServiceProvider);
@@ -688,8 +704,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text(
-                        'Torrent streaming requires a P2P connection.'),
+                    content:
+                        Text('Torrent streaming requires a P2P connection.'),
                   ),
                 );
               }
@@ -703,7 +719,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
               );
             }
 
-            final streamUrl = localProxy.buildHlsUrl(sessionId);
+            final streamUrl =
+                localProxy.buildTorrentStreamUrl(sessionId, fileId);
 
             if (context.mounted) {
               context.push(

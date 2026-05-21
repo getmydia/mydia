@@ -7,6 +7,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
+  alias MydiaWeb.Schema.Resolvers.MediaHelpers
 
   # Movie and TVShow field resolvers
 
@@ -56,20 +57,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   def resolve_category(_parent, _args, _info), do: {:ok, nil}
 
   @spec resolve_artwork(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def resolve_artwork(%{metadata: metadata} = _parent, _args, _info) do
-    poster_path = MetadataAccess.get(metadata, :poster_path)
-    backdrop_path = MetadataAccess.get(metadata, :backdrop_path)
-
-    artwork = %{
-      poster_url: ImageUrl.poster_url(poster_path),
-      backdrop_url: ImageUrl.backdrop_url(backdrop_path),
-      thumbnail_url: nil
-    }
-
-    {:ok, artwork}
-  end
-
-  def resolve_artwork(_parent, _args, _info), do: {:ok, nil}
+  def resolve_artwork(parent, _args, _info), do: {:ok, MediaHelpers.build_artwork(parent)}
 
   # Movie-specific resolvers
 
@@ -101,63 +89,136 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   # TV Show-specific resolvers
 
   @spec resolve_seasons(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def resolve_seasons(%{id: media_item_id}, _args, _info) do
-    # Get all episodes and group by season
-    episodes = Media.list_episodes(media_item_id)
+  def resolve_seasons(%{id: media_item_id} = parent, _args, _info) do
+    case MydiaWeb.Schema.Resolvers.NodeId.decode(media_item_id) do
+      {:tmdb, tmdb_id} ->
+        # Fetch from relay
+        case Mydia.Metadata.fetch_by_id_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tmdb_id),
+               media_type: :tv_show
+             ) do
+          {:ok, metadata} ->
+            # Get season information from metadata
+            seasons =
+              MetadataAccess.get(metadata, :seasons) ||
+                [
+                  %{
+                    season_number: 1,
+                    episode_count: MetadataAccess.get(metadata, :episode_count) || 0
+                  }
+                ]
 
-    seasons =
-      episodes
-      |> Enum.group_by(& &1.season_number)
-      |> Enum.map(fn {season_number, season_episodes} ->
-        # Check if any episode has files
-        has_files =
-          Enum.any?(season_episodes, fn ep ->
-            files = Library.get_media_files_for_episode(ep.id)
-            length(files) > 0
+            formatted_seasons =
+              Enum.map(seasons, fn s ->
+                %{
+                  season_number: s.season_number,
+                  episode_count: s.episode_count || 0,
+                  aired_episode_count: s.episode_count || 0,
+                  has_files: false,
+                  _episodes: nil,
+                  _media_item_id: media_item_id
+                }
+              end)
+              |> Enum.sort_by(& &1.season_number)
+
+            {:ok, formatted_seasons}
+
+          _ ->
+            {:ok, []}
+        end
+
+      _ ->
+        # Get all episodes and group by season
+        episodes = Media.list_episodes(media_item_id)
+
+        seasons =
+          episodes
+          |> Enum.group_by(& &1.season_number)
+          |> Enum.map(fn {season_number, season_episodes} ->
+            # Check if any episode has files
+            has_files =
+              Enum.any?(season_episodes, fn ep ->
+                files = Library.get_media_files_for_episode(ep.id)
+                length(files) > 0
+              end)
+
+            # Count aired episodes (air_date is in the past)
+            today = Date.utc_today()
+
+            aired_count =
+              Enum.count(season_episodes, fn ep ->
+                ep.air_date != nil and Date.compare(ep.air_date, today) != :gt
+              end)
+
+            %{
+              season_number: season_number,
+              episode_count: length(season_episodes),
+              aired_episode_count: aired_count,
+              has_files: has_files,
+              # Store episodes for nested resolution
+              _episodes: season_episodes,
+              _media_item_id: media_item_id
+            }
           end)
+          |> Enum.sort_by(& &1.season_number)
 
-        # Count aired episodes (air_date is in the past)
-        today = Date.utc_today()
-
-        aired_count =
-          Enum.count(season_episodes, fn ep ->
-            ep.air_date != nil and Date.compare(ep.air_date, today) != :gt
-          end)
-
-        %{
-          season_number: season_number,
-          episode_count: length(season_episodes),
-          aired_episode_count: aired_count,
-          has_files: has_files,
-          # Store episodes for nested resolution
-          _episodes: season_episodes,
-          _media_item_id: media_item_id
-        }
-      end)
-      |> Enum.sort_by(& &1.season_number)
-
-    {:ok, seasons}
+        {:ok, seasons}
+    end
   end
 
   @spec resolve_season_count(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
   def resolve_season_count(%{id: media_item_id}, _args, _info) do
-    episodes = Media.list_episodes(media_item_id)
+    case MydiaWeb.Schema.Resolvers.NodeId.decode(media_item_id) do
+      {:tmdb, tmdb_id} ->
+        case Mydia.Metadata.fetch_by_id_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tmdb_id),
+               media_type: :tv_show
+             ) do
+          {:ok, metadata} ->
+            seasons = MetadataAccess.get(metadata, :seasons) || []
+            {:ok, length(seasons)}
 
-    season_count =
-      episodes
-      |> Enum.map(& &1.season_number)
-      |> Enum.uniq()
-      |> length()
+          _ ->
+            {:ok, 0}
+        end
 
-    {:ok, season_count}
+      _ ->
+        episodes = Media.list_episodes(media_item_id)
+
+        season_count =
+          episodes
+          |> Enum.map(& &1.season_number)
+          |> Enum.uniq()
+          |> length()
+
+        {:ok, season_count}
+    end
   end
 
   @spec resolve_episode_count(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
   def resolve_episode_count(%{id: media_item_id}, _args, _info) do
-    episodes = Media.list_episodes(media_item_id)
-    {:ok, length(episodes)}
+    case MydiaWeb.Schema.Resolvers.NodeId.decode(media_item_id) do
+      {:tmdb, tmdb_id} ->
+        case Mydia.Metadata.fetch_by_id_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tmdb_id),
+               media_type: :tv_show
+             ) do
+          {:ok, metadata} ->
+            {:ok, MetadataAccess.get(metadata, :episode_count) || 0}
+
+          _ ->
+            {:ok, 0}
+        end
+
+      _ ->
+        episodes = Media.list_episodes(media_item_id)
+        {:ok, length(episodes)}
+    end
   end
 
   @spec resolve_next_episode(map(), map(), Absinthe.Resolution.t()) ::
@@ -274,15 +335,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   # Helper functions
 
-  defp format_progress(progress) do
-    %{
-      position_seconds: progress.position_seconds || 0,
-      duration_seconds: progress.duration_seconds,
-      percentage: progress.completion_percentage,
-      watched: progress.watched || false,
-      last_watched_at: progress.last_watched_at
-    }
-  end
+  defp format_progress(progress), do: MediaHelpers.format_progress(progress)
 
   # Favorites resolver
 

@@ -231,6 +231,9 @@ defmodule MydiaWeb.Schema.CommonTypes do
   object :torrent_session do
     field :id, non_null(:id), description: "The session UUID"
 
+    field :file_id, :integer,
+      description: "The selected torrent file index (nil until metadata is resolved)"
+
     field :magnet_link, non_null(:string), description: "The magnet link being streamed" do
       resolve(fn session, _args, _info -> {:ok, session.magnet} end)
     end

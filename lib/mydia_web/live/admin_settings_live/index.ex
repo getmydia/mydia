@@ -387,6 +387,26 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
             )
         }
       ],
+      "Streaming" => [
+        %{
+          key: "streaming.embedded_enabled",
+          label: "Embedded torrent streaming",
+          description:
+            "Allow the server to stream torrents from instant playback candidates. " <>
+              "When off, startTorrentSession is rejected and any active sessions are stopped.",
+          type: :boolean,
+          value: streaming_embedded_enabled?(config, all_db_settings),
+          source: get_source(nil, "streaming.embedded_enabled", all_db_settings)
+        },
+        %{
+          key: "streaming.concurrent_cap",
+          label: "Concurrent stream cap",
+          description: "Maximum number of simultaneous torrent streams.",
+          type: :integer,
+          value: streaming_concurrent_cap(config, all_db_settings),
+          source: get_source(nil, "streaming.concurrent_cap", all_db_settings)
+        }
+      ],
       "FlareSolverr" => [
         %{
           key: "flaresolverr.enabled",
@@ -544,7 +564,37 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Notifications" -> :notifications
       "FlareSolverr" -> :flaresolverr
       "Library" -> :library
+      "Streaming" -> :streaming
       _ -> :general
+    end
+  end
+
+  defp streaming_embedded_enabled?(config, all_db_settings) do
+    case Map.get(all_db_settings, "streaming.embedded_enabled") do
+      nil ->
+        case config do
+          %{streaming: %{embedded_enabled: value}} when is_boolean(value) -> value
+          _ -> false
+        end
+
+      setting ->
+        parse_boolean_value(setting.value)
+    end
+  end
+
+  defp streaming_concurrent_cap(config, all_db_settings) do
+    case Map.get(all_db_settings, "streaming.concurrent_cap") do
+      nil ->
+        case config do
+          %{streaming: %{concurrent_cap: cap}} when is_integer(cap) -> cap
+          _ -> 3
+        end
+
+      setting ->
+        case Integer.parse(setting.value || "") do
+          {int, ""} -> int
+          _ -> 3
+        end
     end
   end
 

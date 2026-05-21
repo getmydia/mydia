@@ -22,14 +22,12 @@ defmodule Mydia.Streaming.Torrent.SessionSupervisor do
   Starts a new torrent session for a given session ID.
   """
   def start_session(session_id) do
-    session_key = session_id
-
-    case Registry.lookup(@registry_name, session_key) do
+    case Registry.lookup(@registry_name, session_id) do
       [{pid, _}] ->
         {:ok, pid}
 
       [] ->
-        name = {:via, Registry, {@registry_name, session_key}}
+        name = {:via, Registry, {@registry_name, session_id}}
         session_opts = [session_id: session_id, name: name]
 
         child_spec = %{

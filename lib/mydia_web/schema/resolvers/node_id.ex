@@ -77,6 +77,36 @@ defmodule MydiaWeb.Schema.Resolvers.NodeId do
     end
   end
 
+  def decode("tmdb:" <> rest) do
+    case String.split(rest, ":") do
+      [id, season_str, episode_str] ->
+        with {season, ""} <- Integer.parse(season_str),
+             {episode, ""} <- Integer.parse(episode_str) do
+          {:tmdb_episode, id, season, episode}
+        else
+          _ -> {:tmdb, rest}
+        end
+
+      _ ->
+        {:tmdb, rest}
+    end
+  end
+
+  def decode("tvdb:" <> rest) do
+    case String.split(rest, ":") do
+      [id, season_str, episode_str] ->
+        with {season, ""} <- Integer.parse(season_str),
+             {episode, ""} <- Integer.parse(episode_str) do
+          {:tvdb_episode, id, season, episode}
+        else
+          _ -> {:tvdb, rest}
+        end
+
+      _ ->
+        {:tvdb, rest}
+    end
+  end
+
   def decode(_), do: {:error, :invalid_node_id}
 
   # Parse ID - handles both integer strings and UUIDs (or any string ID)

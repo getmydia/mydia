@@ -138,6 +138,8 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:release_title, non_null(:string))
       arg(:media_item_id, :id)
       arg(:episode_id, :id)
+      arg(:tmdb_id, :integer)
+      arg(:tvdb_id, :integer)
       resolve(&StreamingResolver.start_torrent_session/3)
     end
 

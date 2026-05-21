@@ -45,11 +45,13 @@ class TorrentStreamService {
         .toList();
   }
 
-  Future<Map<String, String>> startSession({
+  Future<Map<String, dynamic>> startSession({
     required String magnetLink,
     required String releaseTitle,
     String? mediaItemId,
     String? episodeId,
+    int? tmdbId,
+    int? tvdbId,
   }) async {
     final result = await _client.mutate(
       MutationOptions(
@@ -59,6 +61,8 @@ class TorrentStreamService {
           releaseTitle: releaseTitle,
           mediaItemId: mediaItemId,
           episodeId: episodeId,
+          tmdbId: tmdbId,
+          tvdbId: tvdbId,
         ).toJson(),
       ),
     );
@@ -72,9 +76,13 @@ class TorrentStreamService {
     if (session == null) {
       throw Exception('No session data returned from server');
     }
+    // fileId is async on the server (populated after :metadata_ready), so it
+    // may be null on the first response. Return it as a nullable int rather
+    // than forcing toString() which would mask the null.
     return {
       'id': session.id,
       'title': session.releaseTitle,
+      'fileId': session.fileId,
     };
   }
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -56,6 +57,29 @@ class TestP2pService extends P2pService {
 
     return handler(call);
   }
+
+  @override
+  Stream<FlutterHlsStreamEvent> sendHlsRequestStreaming({
+    required String peer,
+    required String sessionId,
+    required String path,
+    int? rangeStart,
+    int? rangeEnd,
+    String? authToken,
+  }) async* {
+    final response = await sendHlsRequest(
+      peer: peer,
+      sessionId: sessionId,
+      path: path,
+      rangeStart: rangeStart,
+      rangeEnd: rangeEnd,
+      authToken: authToken,
+    );
+
+    yield FlutterHlsStreamEvent.header(response.header);
+    yield FlutterHlsStreamEvent.chunk(response.data);
+    yield const FlutterHlsStreamEvent.end();
+  }
 }
 
 class HttpResult {
@@ -90,8 +114,8 @@ void main() {
       final client = HttpClient();
 
       try {
-        final request =
-            await client.getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$path'));
+        final request = await client
+            .getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$path'));
         if (rangeHeader != null) {
           request.headers.set(HttpHeaders.rangeHeader, rangeHeader);
         }
@@ -142,11 +166,20 @@ void main() {
       });
 
       test('throws when not started and buildHlsUrl called', () {
-        expect(() => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
+        expect(
+            () => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
       });
 
       test('throws when not started and buildBaseUrl called', () {
-        expect(() => proxy.buildBaseUrl('session123'), throwsA(isA<StateError>()));
+        expect(
+            () => proxy.buildBaseUrl('session123'), throwsA(isA<StateError>()));
+      });
+
+      test('throws when not started and buildTorrentStreamUrl called', () {
+        expect(
+          () => proxy.buildTorrentStreamUrl('session123', 4),
+          throwsA(isA<StateError>()),
+        );
       });
 
       test('can update target peer when already running', () async {
@@ -176,7 +209,8 @@ void main() {
 
         expect(response.statusCode, equals(HttpStatus.notFound));
         expect(response.body, contains('Not Found'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
       test('returns 400 for invalid HLS path format with CORS', () async {
@@ -186,7 +220,8 @@ void main() {
 
         expect(response.statusCode, equals(HttpStatus.badRequest));
         expect(response.body, contains('Invalid HLS path format'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
       test('forwards HLS request to P2P and serves payload', () async {
@@ -208,8 +243,10 @@ void main() {
         expect(response.body, contains('#EXTM3U'));
         expect(response.headers.contentType?.mimeType,
             equals('application/vnd.apple.mpegurl'));
-        expect(response.headers.value(HttpHeaders.cacheControlHeader), equals('no-cache'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(response.headers.value(HttpHeaders.cacheControlHeader),
+            equals('no-cache'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
 
         expect(p2p.calls, hasLength(1));
         final call = p2p.calls.single;
@@ -243,6 +280,34 @@ void main() {
         expect(call.rangeEnd, equals(1023));
       });
 
+      test('forwards torrent requests with torrent-prefixed session ids',
+          () async {
+        await proxy.start(
+          targetPeer: 'target-peer-id',
+          authToken: 'test-auth-token',
+        );
+
+        p2p.onSendHlsRequest = (_) async => hlsResponse(
+              status: HttpStatus.partialContent,
+              contentType: 'application/octet-stream',
+              data: [1, 2, 3, 4],
+              contentRange: 'bytes 100-103/*',
+            );
+
+        final response = await makeRequest(
+          '/torrent/session123/file/4/data',
+          rangeHeader: 'bytes=100-200',
+        );
+
+        expect(response.statusCode, equals(HttpStatus.partialContent));
+        expect(p2p.calls, hasLength(1));
+        final call = p2p.calls.single;
+        expect(call.sessionId, equals('torrent:session123'));
+        expect(call.path, equals('file/4/data'));
+        expect(call.rangeStart, equals(100));
+        expect(call.rangeEnd, equals(200));
+      });
+
       test('invalid range header forwards null range values', () async {
         await proxy.start(
           targetPeer: 'target-peer-id',
@@ -270,16 +335,19 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => throw Exception('p2p transport failure');
+        p2p.onSendHlsRequest =
+            (_) async => throw Exception('p2p transport failure');
 
         final response = await makeRequest('/hls/session123/index.m3u8');
 
         expect(response.statusCode, equals(HttpStatus.internalServerError));
         expect(response.body, contains('p2p transport failure'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
-      test('recovers after write error and serves subsequent requests', () async {
+      test('recovers after write error and serves subsequent requests',
+          () async {
         await proxy.start(
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',

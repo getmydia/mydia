@@ -48,4 +48,14 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
       }
     }
   }
+
+  trending(type: MOVIE) {
+    id
+    type
+    title
+    year
+    artwork {
+      ...ArtworkFragment
+    }
+  }
 }

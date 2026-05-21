@@ -12,6 +12,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   alias Mydia.Streaming.Candidates
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
+  alias Mydia.Streaming.Torrent.CandidateCache
 
   @doc """
   Returns streaming candidates for a media item.
@@ -70,8 +71,63 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       nil ->
         {:error, "Authentication required"}
 
-      _user ->
-        Mydia.Streaming.Torrent.Candidates.list_candidates(content_type, id)
+      user ->
+        result =
+          case MydiaWeb.Schema.Resolvers.NodeId.decode(id) do
+            {:tmdb, tmdb_id} ->
+              Mydia.Streaming.Torrent.Candidates.list_candidates_by_external_id(
+                content_type,
+                "tmdb",
+                tmdb_id
+              )
+
+            {:tmdb_episode, tmdb_id, season, episode} ->
+              Mydia.Streaming.Torrent.Candidates.list_candidates_by_external_id(
+                content_type,
+                "tmdb",
+                tmdb_id,
+                season: season,
+                episode: episode
+              )
+
+            {:tvdb, tvdb_id} ->
+              Mydia.Streaming.Torrent.Candidates.list_candidates_by_external_id(
+                content_type,
+                "tvdb",
+                tvdb_id
+              )
+
+            {:tvdb_episode, tvdb_id, season, episode} ->
+              Mydia.Streaming.Torrent.Candidates.list_candidates_by_external_id(
+                content_type,
+                "tvdb",
+                tvdb_id,
+                season: season,
+                episode: episode
+              )
+
+            _ ->
+              Mydia.Streaming.Torrent.Candidates.list_candidates(content_type, id)
+          end
+
+        # Remember the magnets we returned to this user so startTorrentSession
+        # can refuse magnets we didn't surface ourselves. This is the interim
+        # guard for the candidate-id-based hardening; the long-term plan is
+        # to return opaque server-issued candidate ids.
+        case result do
+          {:ok, candidates} ->
+            magnets =
+              candidates
+              |> Enum.map(fn c -> Map.get(c, :magnet_link) end)
+              |> Enum.reject(&is_nil/1)
+
+            CandidateCache.remember(user.id, magnets)
+
+            {:ok, candidates}
+
+          other ->
+            other
+        end
     end
   end
 
@@ -142,42 +198,135 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       user ->
         %{magnet_link: magnet_link, release_title: release_title} = args
 
-        # Enforce that exactly one of media_item_id or episode_id is provided
-        case {args[:media_item_id], args[:episode_id]} do
-          {nil, nil} ->
-            {:error, "Either media_item_id or episode_id must be provided"}
+        # Extract IDs from arguments
+        media_item_id = args[:media_item_id]
+        episode_id = args[:episode_id]
+        tmdb_id = args[:tmdb_id]
+        tvdb_id = args[:tvdb_id]
 
-          _ ->
-            attrs = %{
-              user_id: user.id,
-              magnet: magnet_link,
-              release_title: release_title,
-              media_item_id: args[:media_item_id],
-              episode_id: args[:episode_id],
-              state: :initializing
-            }
+        # Handle virtual IDs passed in media_item_id or episode_id
+        {media_item_id, episode_id, tmdb_id, tvdb_id} =
+          cond do
+            not is_nil(media_item_id) ->
+              case MydiaWeb.Schema.Resolvers.NodeId.decode(media_item_id) do
+                {:tmdb, id} -> {nil, nil, id, tvdb_id}
+                {:tvdb, id} -> {nil, nil, tmdb_id, id}
+                _ -> {media_item_id, nil, tmdb_id, tvdb_id}
+              end
 
-            case Mydia.Streaming.Torrent.start_session(attrs) do
-              {:ok, %{session: session}} ->
-                # Automatically add the torrent to the session
-                case Mydia.Streaming.Torrent.add_torrent(session.id, magnet_link) do
-                  :ok ->
-                    {:ok, session}
+            not is_nil(episode_id) ->
+              case MydiaWeb.Schema.Resolvers.NodeId.decode(episode_id) do
+                {:tmdb_episode, id, _s, _e} -> {nil, nil, id, tvdb_id}
+                {:tvdb_episode, id, _s, _e} -> {nil, nil, tmdb_id, id}
+                _ -> {nil, episode_id, tmdb_id, tvdb_id}
+              end
 
-                  {:error, reason} ->
-                    # Clean up the session so we don't leak a DB row + supervised process
-                    Logger.warning(
-                      "add_torrent failed for session #{session.id}, cleaning up: #{inspect(reason)}"
-                    )
+            true ->
+              {nil, nil, tmdb_id, tvdb_id}
+          end
 
-                    Mydia.Streaming.Torrent.stop_session(session.id)
-                    {:error, "Failed to add torrent: #{inspect(reason)}"}
-                end
+        with :ok <- validate_torrent_session_target(media_item_id, episode_id, tmdb_id, tvdb_id),
+             :ok <- ensure_local_media_item_present(media_item_id, episode_id),
+             :ok <- ensure_magnet_from_candidate_cache(user.id, magnet_link) do
+          attrs = %{
+            user_id: user.id,
+            magnet: magnet_link,
+            release_title: release_title,
+            media_item_id: media_item_id,
+            episode_id: episode_id,
+            state: :initializing
+          }
 
-              {:error, reason} ->
-                Logger.error("Failed to start torrent session: #{inspect(reason)}")
-                {:error, "Failed to start torrent session"}
-            end
+          # If it's an external item, we might want to store the provider ID
+          # but for now the SessionSchema doesn't support it.
+          # We'll just start the session without a DB link for now.
+
+          case Mydia.Streaming.Torrent.start_session(attrs) do
+            {:ok, %{session: session}} ->
+              # Automatically add the torrent to the session
+              case Mydia.Streaming.Torrent.add_torrent(session.id, magnet_link) do
+                {:ok, updated_session} ->
+                  {:ok, updated_session}
+
+                {:error, reason} ->
+                  # Clean up the session so we don't leak a DB row + supervised process
+                  Logger.warning(
+                    "add_torrent failed for session #{session.id}, cleaning up: #{inspect(reason)}"
+                  )
+
+                  Mydia.Streaming.Torrent.stop_session(session.id)
+                  {:error, "Failed to add torrent: #{inspect(reason)}"}
+              end
+
+            {:error, :streaming_disabled} ->
+              {:error, "Embedded torrent streaming is disabled by the operator"}
+
+            {:error, :cap_reached} ->
+              {:error, "Too many concurrent streams. Try again in a moment."}
+
+            {:error, :already_streaming, existing_id} ->
+              # A non-terminal session for this infohash already exists.
+              # Return the existing session record so the player can attach
+              # to it rather than fail the playback start.
+              case Mydia.Repo.get(Mydia.Streaming.Torrent.SessionSchema, existing_id) do
+                nil ->
+                  # The cap-checking row vanished between the lookup and now;
+                  # surface a clean error rather than a stale id.
+                  {:error, "Another session for this torrent is already active"}
+
+                existing_session ->
+                  {:ok, existing_session}
+              end
+
+            {:error, reason} ->
+              Logger.error("Failed to start torrent session: #{inspect(reason)}")
+              {:error, "Failed to start torrent session"}
+          end
+        end
+    end
+  end
+
+  # Reject magnets that weren't returned to this user from torrentCandidates.
+  # Interim guard for the candidate-id-based hardening (#13).
+  defp ensure_magnet_from_candidate_cache(user_id, magnet) do
+    if CandidateCache.member?(user_id, magnet) do
+      :ok
+    else
+      {:error,
+       "Magnet does not match any recent torrentCandidates result for this user. " <>
+         "Re-run torrentCandidates and select a returned candidate."}
+    end
+  end
+
+  # External-ID-only sessions silently orphan today: validation passes, the
+  # row is created with media_item_id: nil, and the playback promotion hook
+  # never matches (it keys on media_item_id). Reject the mutation explicitly
+  # until the import-first-then-stream flow lands.
+  defp ensure_local_media_item_present(media_item_id, episode_id)
+       when is_binary(media_item_id) or is_binary(episode_id),
+       do: :ok
+
+  defp ensure_local_media_item_present(nil, nil) do
+    {:error,
+     "Streaming with only a TMDb/TVDb id is not supported yet. " <>
+       "Import the title into your library first, then stream."}
+  end
+
+  defp ensure_local_media_item_present(_, _), do: :ok
+
+  @doc """
+  Lists active torrent streaming sessions. Admin only.
+  """
+  def active_torrent_sessions(_parent, _args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:error, "Authentication required"}
+
+      user ->
+        if Map.get(user, :role) == :admin do
+          {:ok, Mydia.Streaming.Torrent.list_active_sessions()}
+        else
+          {:error, "Not authorized"}
         end
     end
   end
@@ -190,9 +339,26 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       nil ->
         {:error, "Authentication required"}
 
-      _user ->
-        Mydia.Streaming.Torrent.stop_session(session_id)
-        {:ok, true}
+      user ->
+        case Mydia.Repo.get(Mydia.Streaming.Torrent.SessionSchema, session_id) do
+          nil ->
+            # Idempotent: session may have already been stopped/timed out.
+            {:ok, true}
+
+          session ->
+            cond do
+              session.user_id == user.id ->
+                Mydia.Streaming.Torrent.stop_session(session_id)
+                {:ok, true}
+
+              Map.get(user, :role) == :admin ->
+                Mydia.Streaming.Torrent.stop_session(session_id)
+                {:ok, true}
+
+              true ->
+                {:error, "Not authorized"}
+            end
+        end
     end
   end
 
@@ -239,6 +405,24 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   rescue
     Ecto.NoResultsError ->
       {:error, :not_found}
+  end
+
+  defp validate_torrent_session_target(media_item_id, episode_id, tmdb_id, tvdb_id) do
+    provided_targets =
+      [media_item_id, episode_id, tmdb_id, tvdb_id]
+      |> Enum.reject(&is_nil/1)
+      |> length()
+
+    cond do
+      provided_targets == 0 ->
+        {:error, "Either media_item_id, episode_id, tmdb_id, or tvdb_id must be provided"}
+
+      provided_targets > 1 ->
+        {:error, "Exactly one of media_item_id, episode_id, tmdb_id, or tvdb_id must be provided"}
+
+      true ->
+        :ok
+    end
   end
 
   defp strategy_to_mode(:hls_copy), do: :copy

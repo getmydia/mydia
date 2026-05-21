@@ -36,11 +36,34 @@ defmodule Mydia.TorrentTest do
         assert Torrent.add_torrent(resource, self(), "magnet:?xt=urn:btih:dummy") == :ok
 
         # Assert the async callback message arrives within a reasonable timeout.
-        # The Rust side will send {:ok, type, torrent_id, infohash} or {:error, reason}.
+        # The Rust side will send
+        # {:ok, type, torrent_id, infohash, file_id, staging_path, total_bytes}
+        # or {:error, reason}.
         assert_receive result, 5_000
 
-        assert match?({:ok, _, _, _}, result) or match?({:error, _}, result),
-               "Expected async torrent response, got: #{inspect(result)}"
+        # Tighten the assertion: in the success case the tuple's fields must
+        # match the documented shapes. The previous over-broad pattern would
+        # pass even if every field came back nil.
+        case result do
+          {:ok, type, torrent_id, infohash, file_id, staging_path, total_bytes} ->
+            assert type in ["added", "already_exists"]
+            assert is_integer(torrent_id) and torrent_id >= 0
+            assert is_binary(infohash) and byte_size(infohash) > 0
+            assert is_integer(file_id) and file_id >= 0
+            assert is_binary(staging_path)
+            assert String.starts_with?(staging_path, staging_dir)
+            assert is_integer(total_bytes) and total_bytes >= 0
+
+          {:error, reason} ->
+            # A dummy magnet without peers is expected to time out or fail in
+            # the test environment. Just confirm we got a non-empty error
+            # reason rather than a crash.
+            assert (is_binary(reason) and byte_size(reason) > 0) or is_atom(reason),
+                   "Expected non-empty error reason, got: #{inspect(reason)}"
+
+          other ->
+            flunk("Unexpected async torrent response shape: #{inspect(other)}")
+        end
 
       {:error, _reason} ->
         # Engine unavailable in this environment — skip add_torrent exercise.

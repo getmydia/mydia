@@ -29,6 +29,15 @@ defmodule Mydia.Torrent do
   """
   def cancel_torrent(_resource, _torrent_id, _delete_files),
     do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
+  Cancel a torrent by its infohash (40-char hex). Used when the torrent never
+  completed metadata resolution and we therefore never received a numeric
+  torrent_id. Returns `:ok` whether or not the torrent was actually present
+  in librqbit's session.
+  """
+  def cancel_torrent_by_infohash(_resource, _info_hash, _delete_files),
+    do: :erlang.nif_error(:nif_not_loaded)
 end
 
 defmodule Mydia.Torrent.AddTorrentResponse do

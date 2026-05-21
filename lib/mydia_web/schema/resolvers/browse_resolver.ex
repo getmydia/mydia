@@ -34,30 +34,97 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   end
 
   def get_movie(_parent, %{id: id}, _info) do
-    media_item = Media.get_media_item!(id)
+    case NodeId.decode(id) do
+      {:tmdb, tmdb_id} ->
+        # Fetch from relay
+        case Mydia.Metadata.fetch_by_id_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tmdb_id),
+               media_type: :movie
+             ) do
+          {:ok, metadata} ->
+            {:ok, map_external_to_virtual_item(metadata, :movie)}
 
-    case media_item.type do
-      "movie" -> {:ok, Map.put(media_item, :added_at, media_item.inserted_at)}
-      _ -> {:error, "Not a movie"}
+          _ ->
+            {:error, "Movie not found"}
+        end
+
+      _ ->
+        media_item = Media.get_media_item!(id)
+
+        case media_item.type do
+          "movie" -> {:ok, Map.put(media_item, :added_at, media_item.inserted_at)}
+          _ -> {:error, "Not a movie"}
+        end
     end
   rescue
     Ecto.NoResultsError -> {:error, "Movie not found"}
   end
 
   def get_tv_show(_parent, %{id: id}, _info) do
-    media_item = Media.get_media_item!(id)
+    case NodeId.decode(id) do
+      {:tmdb, tmdb_id} ->
+        case Mydia.Metadata.fetch_by_id_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tmdb_id),
+               media_type: :tv_show
+             ) do
+          {:ok, metadata} ->
+            {:ok, map_external_to_virtual_item(metadata, :tv_show)}
 
-    case media_item.type do
-      "tv_show" -> {:ok, Map.put(media_item, :added_at, media_item.inserted_at)}
-      _ -> {:error, "Not a TV show"}
+          _ ->
+            {:error, "TV show not found"}
+        end
+
+      {:tvdb, tvdb_id} ->
+        case Mydia.Metadata.fetch_by_id_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tvdb_id),
+               media_type: :tv_show
+             ) do
+          {:ok, metadata} ->
+            {:ok, map_external_to_virtual_item(metadata, :tv_show)}
+
+          _ ->
+            {:error, "TV show not found"}
+        end
+
+      _ ->
+        media_item = Media.get_media_item!(id)
+
+        case media_item.type do
+          "tv_show" -> {:ok, Map.put(media_item, :added_at, media_item.inserted_at)}
+          _ -> {:error, "Not a TV show"}
+        end
     end
   rescue
     Ecto.NoResultsError -> {:error, "TV show not found"}
   end
 
   def get_episode(_parent, %{id: id}, _info) do
-    episode = Media.get_episode!(id)
-    {:ok, episode}
+    case NodeId.decode(id) do
+      {:tmdb_episode, tmdb_id, season_number, episode_number} ->
+        # Fetch show first to ensure it exists and get its metadata if needed
+        # But we can also just fetch the episode directly from relay if supported
+        case Mydia.Metadata.fetch_season_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tmdb_id),
+               season_number
+             ) do
+          {:ok, %{episodes: episodes}} ->
+            case Enum.find(episodes, &(&1.episode_number == episode_number)) do
+              nil -> {:error, "Episode not found"}
+              episode -> {:ok, map_external_to_virtual_episode(episode, tmdb_id, season_number)}
+            end
+
+          _ ->
+            {:error, "Episode not found"}
+        end
+
+      _ ->
+        episode = Media.get_episode!(id)
+        {:ok, episode}
+    end
   rescue
     Ecto.NoResultsError -> {:error, "Episode not found"}
   end
@@ -149,12 +216,30 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   end
 
   def list_season_episodes(_parent, %{show_id: show_id, season_number: season_number}, _info) do
-    episodes =
-      Media.list_episodes(show_id)
-      |> Enum.filter(&(&1.season_number == season_number))
-      |> Enum.sort_by(& &1.episode_number)
+    case NodeId.decode(show_id) do
+      {:tmdb, tmdb_id} ->
+        # Fetch from relay
+        case Mydia.Metadata.fetch_season_cached(
+               Mydia.Metadata.default_relay_config(),
+               to_string(tmdb_id),
+               season_number
+             ) do
+          {:ok, %{episodes: episodes}} ->
+            {:ok,
+             Enum.map(episodes, &map_external_to_virtual_episode(&1, tmdb_id, season_number))}
 
-    {:ok, episodes}
+          _ ->
+            {:error, "Season not found"}
+        end
+
+      _ ->
+        episodes =
+          Media.list_episodes(show_id)
+          |> Enum.filter(&(&1.season_number == season_number))
+          |> Enum.sort_by(& &1.episode_number)
+
+        {:ok, episodes}
+    end
   end
 
   # Helper functions
@@ -215,6 +300,46 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     }
 
     {paginated, page_info}
+  end
+
+  defp map_external_to_virtual_item(metadata, type) do
+    %{
+      id: "tmdb:#{metadata.provider_id}",
+      type: to_string(type),
+      title: metadata.title,
+      original_title: metadata.original_title,
+      year: metadata.year,
+      tmdb_id: metadata.tmdb_id,
+      imdb_id: metadata.imdb_id,
+      overview: metadata.overview,
+      runtime: metadata.runtime,
+      genres: metadata.genres,
+      content_rating: metadata.content_rating,
+      rating: metadata.vote_average,
+      monitored: false,
+      added_at: nil,
+      metadata: metadata,
+      is_favorite: false,
+      files: [],
+      playback_progress: []
+    }
+  end
+
+  defp map_external_to_virtual_episode(episode, tmdb_id, season_number) do
+    %{
+      id: "tmdb:#{tmdb_id}:#{season_number}:#{episode.episode_number}",
+      show_id: "tmdb:#{tmdb_id}",
+      season_number: season_number,
+      episode_number: episode.episode_number,
+      title: episode.name,
+      overview: episode.overview,
+      air_date: episode.air_date,
+      runtime: episode.runtime,
+      monitored: false,
+      metadata: episode,
+      files: [],
+      playback_progress: []
+    }
   end
 
   defp encode_cursor(offset) do

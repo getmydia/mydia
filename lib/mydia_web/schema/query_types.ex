@@ -131,6 +131,11 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:id, non_null(:id))
       resolve(&StreamingResolver.torrent_candidates/3)
     end
+
+    @desc "List active torrent streaming sessions (admin only)"
+    field :active_torrent_sessions, list_of(:torrent_session) do
+      resolve(&StreamingResolver.active_torrent_sessions/3)
+    end
   end
 
   # Discovery queries - for home screen rails
@@ -140,6 +145,20 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:first, :integer, default_value: 10)
       arg(:after, :string)
       resolve(&DiscoveryResolver.continue_watching/3)
+    end
+
+    @desc "Get trending media items"
+    field :trending, list_of(:search_result) do
+      arg(:type, :media_type, default_value: :movie)
+      resolve(&DiscoveryResolver.trending/3)
+    end
+
+    @desc "Get curated media list"
+    field :curated_list, :search_results do
+      arg(:list_type, non_null(:curated_list_type))
+      arg(:media_type, :media_type, default_value: :movie)
+      arg(:page, :integer, default_value: 1)
+      resolve(&DiscoveryResolver.curated_list/3)
     end
 
     @desc "Get recently added content"
@@ -181,6 +200,7 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:query, non_null(:string))
       arg(:types, list_of(:media_type))
       arg(:first, :integer, default_value: 20)
+      arg(:include_external, :boolean, default_value: false)
       resolve(&SearchResolver.search/3)
     end
   end

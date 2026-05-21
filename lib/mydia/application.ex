@@ -44,9 +44,7 @@ defmodule Mydia.Application do
         Mydia.Hooks.Manager,
         {Registry, keys: :unique, name: Mydia.Streaming.HlsSessionRegistry},
         Mydia.Streaming.HlsSessionSupervisor,
-        {Registry, keys: :unique, name: Mydia.Streaming.TorrentSessionRegistry},
-        Mydia.Streaming.Torrent.Engine,
-        Mydia.Streaming.Torrent.SessionSupervisor,
+        Mydia.Streaming.Torrent.Supervisor,
         {Registry, keys: :unique, name: Mydia.Downloads.TranscodeRegistry},
         {Registry, keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry},
         {DynamicSupervisor,
@@ -122,6 +120,11 @@ defmodule Mydia.Application do
         Mydia.Library.DatabaseHealthCheck.run()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
+        # Reap torrent streaming sessions left in non-terminal states by the
+        # previous run (server crash / OOM kill / SIGKILL). Without this the
+        # partial unique index on infohash blocks any retry of the same
+        # content, and the admin dashboard shows phantom active sessions.
+        cleanup_stale_torrent_sessions()
       end
 
       {:ok, pid}
@@ -371,6 +374,63 @@ defmodule Mydia.Application do
         # Don't fail startup on cleanup errors
         :ok
     end
+  end
+
+  defp cleanup_stale_torrent_sessions do
+    import Ecto.Query
+
+    alias Mydia.Repo
+    alias Mydia.Streaming.Torrent.SessionSchema
+
+    non_terminal = [:initializing, :downloading, :ready, :watching]
+
+    stale =
+      Repo.all(
+        from s in SessionSchema,
+          where: s.state in ^non_terminal,
+          select: %{id: s.id, staging_path: s.staging_path}
+      )
+
+    if stale != [] do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      ids = Enum.map(stale, & &1.id)
+
+      {count, _} =
+        Repo.update_all(
+          from(s in SessionSchema, where: s.id in ^ids),
+          set: [state: :failed, last_progress_at: now, updated_at: now]
+        )
+
+      Enum.each(stale, fn %{staging_path: path} ->
+        if is_binary(path) and File.exists?(path) do
+          case File.rm(path) do
+            :ok ->
+              :ok
+
+            {:error, reason} ->
+              Logger.warning(
+                "Failed to remove stale torrent staging file #{path}: #{inspect(reason)}"
+              )
+          end
+        end
+      end)
+
+      unless cli_mode?() do
+        IO.puts("✓ Reaped #{count} stale torrent streaming session(s)")
+      end
+    end
+
+    :ok
+  rescue
+    e ->
+      # Don't fail startup on cleanup errors.
+      Logger.warning(
+        "Torrent session cleanup failed at boot: " <>
+          Exception.format(:error, e, __STACKTRACE__)
+      )
+
+      :ok
   end
 
   defp reset_stale_jobs do

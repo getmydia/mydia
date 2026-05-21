@@ -219,5 +219,6 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   defp category_icon("Notifications"), do: "hero-bell"
   defp category_icon("FlareSolverr"), do: "hero-shield-check"
   defp category_icon("Library"), do: "hero-folder-open"
+  defp category_icon("Streaming"), do: "hero-play"
   defp category_icon(_), do: "hero-cog-6-tooth"
 end

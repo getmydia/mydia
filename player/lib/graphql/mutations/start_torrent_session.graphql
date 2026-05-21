@@ -1,6 +1,21 @@
-mutation StartTorrentSession($magnetLink: String!, $releaseTitle: String!, $mediaItemId: ID, $episodeId: ID) {
-  startTorrentSession(magnetLink: $magnetLink, releaseTitle: $releaseTitle, mediaItemId: $mediaItemId, episodeId: $episodeId) {
+mutation StartTorrentSession(
+  $magnetLink: String!
+  $releaseTitle: String!
+  $mediaItemId: ID
+  $episodeId: ID
+  $tmdbId: Int
+  $tvdbId: Int
+) {
+  startTorrentSession(
+    magnetLink: $magnetLink
+    releaseTitle: $releaseTitle
+    mediaItemId: $mediaItemId
+    episodeId: $episodeId
+    tmdbId: $tmdbId
+    tvdbId: $tvdbId
+  ) {
     id
+    fileId
     magnetLink
     releaseTitle
   }

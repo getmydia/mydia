@@ -141,6 +141,7 @@ class _TorrentStreamPickerState extends ConsumerState<TorrentStreamPicker> {
         final isSelected = _selectedCandidate == candidate;
 
         return InkWell(
+          key: ValueKey(candidate.magnetLink),
           onTap: () => setState(() => _selectedCandidate = candidate),
           borderRadius: BorderRadius.circular(12),
           child: Container(
@@ -283,9 +284,19 @@ class _TorrentStreamPickerState extends ConsumerState<TorrentStreamPicker> {
       );
 
       if (mounted) {
+        // `fileId` is server-side async: it's only populated once the engine
+        // emits :metadata_ready, which happens after this mutation returns.
+        // Pop a null `fileId` rather than crashing; the caller should
+        // refetch the session shortly after to pick up the real value.
+        final rawFileId = sessionData['fileId'];
+        final int? parsedFileId = rawFileId is int
+            ? rawFileId
+            : (rawFileId is String ? int.tryParse(rawFileId) : null);
+
         Navigator.pop(context, {
           'sessionId': sessionData['id'],
           'title': sessionData['title'],
+          'fileId': parsedFileId,
         });
       }
     } catch (e) {
