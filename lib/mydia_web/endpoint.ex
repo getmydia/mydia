@@ -86,6 +86,12 @@ defmodule MydiaWeb.Endpoint do
   plug Plug.Head
   plug Plug.Session, @session_options
 
+  # Optional GraphQL parity capture (U9). No-op when MYDIA_PARITY_CAPTURE
+  # is unset. Placed after Plug.Parsers so the parsed GraphQL body is
+  # available, and before the router so register_before_send fires for
+  # the resolver's response.
+  plug MydiaWeb.Plugs.ParityCapture
+
   # CORS support for cross-origin API requests (standalone player, native apps)
   # Must be before the router so OPTIONS preflight requests are handled before authentication
   plug Corsica,

@@ -1691,6 +1691,15 @@ version = "0.1.0"
 [[package]]
 name = "mydia-rs-parity-harness"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
+]
 
 [[package]]
 name = "mydia-rs-pubsub"
