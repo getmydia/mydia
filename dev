@@ -96,6 +96,16 @@ ${YELLOW}Player Android (Native, uses player/flake.nix):${NC}
   player android run   Build and run on connected Android device
   player android shell Open nix develop shell in player directory
 
+${YELLOW}Rust Backend (mydia-rs, Native, uses repo flake.nix):${NC}
+  rs build             Build the Rust workspace (cargo build)
+  rs run               Run the app binary (cargo run -p mydia-rs-app)
+  rs test              Run all tests (cargo test)
+  rs check             Type-check without building (cargo check)
+  rs fmt               Format code (cargo fmt)
+  rs clippy            Run clippy lints (cargo clippy)
+  rs sqlx-prepare      Refresh sqlx offline query cache
+  rs <args>            Forward args verbatim to cargo
+
 ${YELLOW}Player E2E Options:${NC}
   --build              Rebuild Docker images before running tests
   --target <path>      Test file to run (default: pairing_flow_test.dart)
@@ -743,6 +753,55 @@ case "$COMMAND" in
                 exit 1
                 ;;
         esac
+        ;;
+
+    # Rust backend (mydia-rs) - runs natively via nix develop, not Docker
+    rs)
+        if ! command -v nix &> /dev/null; then
+            echo -e "${RED}Error: nix is not installed${NC}"
+            echo "The mydia-rs Rust workspace runs outside Docker via Nix (same model as 'player android')."
+            echo "Install from: https://nixos.org/download.html"
+            exit 1
+        fi
+
+        if [ $# -eq 0 ]; then
+            cat <<EOF
+${YELLOW}mydia-rs (Rust backend) commands:${NC}
+  ./dev rs build         Build the workspace (cargo build)
+  ./dev rs run           Run the app binary (cargo run -p mydia-rs-app)
+  ./dev rs test          Run all tests (cargo test)
+  ./dev rs check         Type-check without building (cargo check)
+  ./dev rs fmt           Format code (cargo fmt)
+  ./dev rs clippy        Run clippy lints (cargo clippy)
+  ./dev rs sqlx-prepare  Refresh sqlx offline query cache (--workspace)
+  ./dev rs <args>        Forward args verbatim to cargo
+
+All commands enter a 'nix develop' shell with the Rust toolchain
+and run from the mydia-rs/ directory.
+EOF
+            exit 0
+        fi
+
+        rs_subcmd="$1"
+        shift
+
+        case "$rs_subcmd" in
+            run)
+                rs_cmd="cargo run -p mydia-rs-app $*"
+                ;;
+            sqlx-prepare)
+                rs_cmd="cargo sqlx prepare --workspace $*"
+                ;;
+            build|test|check|fmt|clippy)
+                rs_cmd="cargo $rs_subcmd $*"
+                ;;
+            *)
+                rs_cmd="cargo $rs_subcmd $*"
+                ;;
+        esac
+
+        echo -e "${GREEN}[mydia-rs] $rs_cmd${NC}"
+        nix develop --command bash -c "cd mydia-rs && $rs_cmd"
         ;;
 
     # Forward everything else to docker compose

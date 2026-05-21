@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/app",
+    "crates/auth",
+    "crates/config",
+    "crates/db",
+    "crates/downloads",
+    "crates/graphql",
+    "crates/indexers",
+    "crates/jobs",
+    "crates/library",
+    "crates/metadata",
+    "crates/models",
+    "crates/p2p",
+    "crates/parity-harness",
+    "crates/pubsub",
+    "crates/streaming",
+    "crates/subtitles",
+    "crates/web",
+    "bin/mydia-rs-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/getmydia/mydia"
+publish = false
+
+[workspace.dependencies]
+tokio = { version = "1.49", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true

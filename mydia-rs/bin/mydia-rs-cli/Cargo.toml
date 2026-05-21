@@ -1,0 +1,13 @@
+[package]
+name = "mydia-rs-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "mydia-rs-cli"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true

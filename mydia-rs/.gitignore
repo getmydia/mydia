@@ -1,0 +1,12 @@
+/target/
+**/*.rs.bk
+*.pdb
+
+# sqlx offline query cache state - the .sqlx/ dir itself is committed,
+# but local DB files used during cargo sqlx prepare are not.
+*.db
+*.db-shm
+*.db-wal
+
+# Editor noise
+.DS_Store

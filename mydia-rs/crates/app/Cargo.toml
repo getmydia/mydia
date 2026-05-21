@@ -1,0 +1,13 @@
+[package]
+name = "mydia-rs-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "mydia-rs"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true

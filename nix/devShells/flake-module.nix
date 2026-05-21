@@ -34,6 +34,22 @@
 
         # Useful development utilities
         pkgs.curl
+
+        # Rust toolchain for the mydia-rs workspace.
+        # rust-toolchain.toml under mydia-rs/ is treated as aspirational here -
+        # nix provides whichever stable toolchain nixpkgs has. Switch to fenix
+        # or rust-overlay if exact pinning becomes important.
+        pkgs.rustc
+        pkgs.cargo
+        pkgs.rustfmt
+        pkgs.clippy
+        pkgs.sqlx-cli
+        pkgs.dioxus-cli
+
+        # Native Rust build deps (sqlx, ring, reqwest, etc.)
+        pkgs.openssl
+        pkgs.openssl.dev
+        pkgs.postgresql.dev
       ];
 
       shellHook = ''
