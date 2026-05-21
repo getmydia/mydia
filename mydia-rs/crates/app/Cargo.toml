@@ -14,3 +14,4 @@ tokio.workspace = true
 clap.workspace = true
 tracing.workspace = true
 mydia-rs-config = { path = "../config" }
+mydia-rs-db = { path = "../db" }

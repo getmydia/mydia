@@ -9,6 +9,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use mydia_rs_config::{tracing_setup, Config};
+use mydia_rs_db::{connect_from_config, schema_check, SchemaCheckOutcome};
 
 /// CLI surface for the mydia-rs binary.
 #[derive(Debug, Parser)]
@@ -59,9 +60,42 @@ fn main() -> ExitCode {
             db_type = ?config.database.db_type,
             host = %config.server.host,
             port = config.server.port,
-            "mydia-rs boot ok (U3: config + tracing); exiting"
+            "mydia-rs boot starting"
         );
-    });
 
-    ExitCode::SUCCESS
+        let db = match connect_from_config(&config).await {
+            Ok(db) => db,
+            Err(err) => {
+                tracing::error!(%err, "failed to open database");
+                return ExitCode::FAILURE;
+            }
+        };
+
+        match schema_check(&db).await {
+            Ok(SchemaCheckOutcome::Match { version }) => {
+                tracing::info!(version, "schema check passed");
+            }
+            Ok(SchemaCheckOutcome::SchemaAhead { version }) => {
+                tracing::warn!(version, "schema ahead of binary; continuing");
+            }
+            Ok(SchemaCheckOutcome::SchemaTooOld { version }) => {
+                tracing::error!(version, "schema older than binary expects; refusing to start");
+                return ExitCode::FAILURE;
+            }
+            Ok(SchemaCheckOutcome::SchemaMissing) => {
+                // U4 ships against fresh test DBs; bare smoke against an
+                // un-migrated file is acceptable today. Once the
+                // mutual-exclusion lock and a real supervision tree land,
+                // tighten this to a hard failure for non-test runs.
+                tracing::warn!("schema_migrations missing; this may not be a mydia database");
+            }
+            Err(err) => {
+                tracing::error!(%err, "schema check failed");
+                return ExitCode::FAILURE;
+            }
+        }
+
+        tracing::info!("mydia-rs boot ok (U4: db pool + schema check); exiting");
+        ExitCode::SUCCESS
+    })
 }
