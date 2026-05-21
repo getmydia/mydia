@@ -14,11 +14,20 @@
 use async_graphql::{MergedObject, Object, Schema, SchemaBuilder, ID};
 
 use crate::context::GraphqlAppState;
+use crate::mutations::api_key::ApiKeyMutations;
+use crate::mutations::auth::AuthMutations;
+use crate::mutations::device::DeviceMutations;
+use crate::mutations::download::DownloadMutations;
 use crate::mutations::playback::PlaybackMutations;
+use crate::mutations::remote_access::RemoteAccessMutations;
 use crate::mutations::streaming::StreamingMutations;
 use crate::node_id::NodeId;
+use crate::queries::api_key::ApiKeyQueries;
 use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
+use crate::queries::collection::CollectionQueries;
+use crate::queries::device::DeviceQueries;
 use crate::queries::discovery::DiscoveryQueries;
+use crate::queries::remote_access::RemoteAccessQueries;
 use crate::queries::search::SearchQueries;
 use crate::queries::streaming::StreamingQueries;
 use crate::subscriptions::SubscriptionRoot;
@@ -67,6 +76,10 @@ pub struct QueryRoot(
     DiscoveryQueries,
     SearchQueries,
     StreamingQueries,
+    ApiKeyQueries,
+    DeviceQueries,
+    CollectionQueries,
+    RemoteAccessQueries,
 );
 
 impl Default for IntrospectionQueries {
@@ -106,6 +119,11 @@ pub struct MutationRoot(
     IntrospectionMutations,
     PlaybackMutations,
     StreamingMutations,
+    AuthMutations,
+    ApiKeyMutations,
+    DeviceMutations,
+    DownloadMutations,
+    RemoteAccessMutations,
 );
 
 /// The wired schema type alias resolvers and the axum handler
@@ -115,6 +133,17 @@ pub type MydiaSchema = Schema<QueryRoot, MutationRoot, SubscriptionRoot>;
 /// Build the schema with the supplied long-lived state attached.
 pub fn build_schema(state: GraphqlAppState) -> MydiaSchema {
     schema_builder(state).finish()
+}
+
+/// Build the schema with state + a JWT signer for the `login`
+/// mutation. The signer is optional; when omitted, `login` returns a
+/// clear "Token signer not configured" error rather than silently
+/// issuing tokens with a random key.
+pub fn build_schema_with_signer(
+    state: GraphqlAppState,
+    signer: mydia_rs_auth::AccessTokenSigner,
+) -> MydiaSchema {
+    schema_builder(state).data(signer).finish()
 }
 
 /// Lower-level builder hook — exposed so the parity harness (U13) and
@@ -236,6 +265,20 @@ mod tests {
         assert!(sdl.contains("endStreamingSession"));
         assert!(sdl.contains("progressUpdated"));
         assert!(sdl.contains("deviceStatusChanged"));
+        assert!(sdl.contains("login"));
+        assert!(sdl.contains("createApiKey"));
+        assert!(sdl.contains("revokeApiKey"));
+        assert!(sdl.contains("deleteApiKey"));
+        assert!(sdl.contains("revokeDevice"));
+        assert!(sdl.contains("downloadOptions"));
+        assert!(sdl.contains("prepareDownload"));
+        assert!(sdl.contains("cancelDownloadJob"));
+        assert!(sdl.contains("generateClaimCode"));
+        assert!(sdl.contains("refreshMediaToken"));
+        assert!(sdl.contains("apiKeys"));
+        assert!(sdl.contains("devices"));
+        assert!(sdl.contains("collections"));
+        assert!(sdl.contains("remoteAccessStatus"));
         assert!(!sdl.contains("schema_version"));
     }
 }

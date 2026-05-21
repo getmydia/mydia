@@ -1645,6 +1645,7 @@ dependencies = [
  "mydia-rs-db",
  "mydia-rs-models",
  "mydia-rs-pubsub",
+ "rand 0.8.6",
  "serde",
  "serde_json",
  "sqlx",

@@ -36,4 +36,6 @@ pub mod types;
 pub use axum_handler::router;
 pub use context::{CurrentUser, GraphqlAppState, GraphqlRequestContext};
 pub use node_id::{InvalidNodeId, NodeId, NodeRef};
-pub use schema::{build_schema, schema_builder, MutationRoot, MydiaSchema, QueryRoot};
+pub use schema::{
+    build_schema, build_schema_with_signer, schema_builder, MutationRoot, MydiaSchema, QueryRoot,
+};

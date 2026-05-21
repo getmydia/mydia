@@ -13,6 +13,7 @@
 use async_graphql::{ComplexObject, SimpleObject};
 
 use crate::node_id::{NodeId, NodeRef};
+use crate::types::SubtitleTrack;
 
 #[derive(Debug, Clone, SimpleObject)]
 #[graphql(name = "MediaFile", complex)]
@@ -45,6 +46,13 @@ impl MediaFile {
     /// Direct play URL.
     async fn direct_play_url(&self) -> String {
         format!("/api/v1/stream/file/{}?strategy=DIRECT_PLAY", self.id)
+    }
+
+    /// Available subtitle tracks (embedded + external). U21 lights up
+    /// the real extractor; U14 returns an empty list so the schema
+    /// contract holds for the parity replay harness.
+    async fn subtitles(&self) -> Vec<SubtitleTrack> {
+        Vec::new()
     }
 }
 

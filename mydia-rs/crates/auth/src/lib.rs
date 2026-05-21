@@ -18,11 +18,13 @@
 //! (U22) exists to mount them. The primitives in this crate are the
 //! load-bearing parts; the middleware is glue around them.
 
+pub mod access_token;
 pub mod api_key;
 pub mod media_token;
 pub mod password;
 pub mod role;
 
+pub use access_token::{AccessTokenClaims, AccessTokenError, AccessTokenSigner, IssuedToken};
 pub use api_key::{verify_api_key_hash, ApiKeyAuthError};
 pub use media_token::{
     MediaTokenCache, MediaTokenClaims, MediaTokenError, MediaTokenPermission, MediaTokenSigner,

@@ -9,7 +9,8 @@
 //! Argon2 verify in this crate is constant-time on the comparator
 //! side. Callers must not branch on the timing of the result.
 
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use argon2::password_hash::{rand_core::OsRng, SaltString};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiKeyAuthError {
@@ -18,6 +19,21 @@ pub enum ApiKeyAuthError {
 
     #[error("stored api key hash is malformed: {0}")]
     Malformed(String),
+
+    #[error("hashing failed: {0}")]
+    HashFailed(String),
+}
+
+/// Hash a plaintext API key using Argon2id with the default
+/// parameters, producing a PHC-encoded string a Phoenix verifier
+/// (`argon2_elixir 4.1.3`) round-trips against.
+pub fn hash_api_key(plaintext: &str) -> Result<String, ApiKeyAuthError> {
+    let salt = SaltString::generate(&mut OsRng);
+    let argon = Argon2::default();
+    let hash = argon
+        .hash_password(plaintext.as_bytes(), &salt)
+        .map_err(|err| ApiKeyAuthError::HashFailed(err.to_string()))?;
+    Ok(hash.to_string())
 }
 
 /// Verify a plaintext API key against a Phoenix-shaped Argon2id PHC hash.

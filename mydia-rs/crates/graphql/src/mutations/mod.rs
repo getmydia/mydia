@@ -5,14 +5,18 @@
 //!   mark_season_watched, toggle_favorite (U11).
 //! - [`streaming`] — start_streaming_session, end_streaming_session
 //!   (U11; the HLS supervisor itself lands in U19).
-//!
-//! Remaining mutation families (auth, api_key, device, download,
-//! remote_access) port in U14.
-//!
-//! Each resolver family lives in its own struct (e.g.
-//! [`playback::PlaybackMutations`]); the top-level
-//! [`crate::schema::MutationRoot`] combines them via
-//! `MergedObject`.
+//! - [`auth`] — `login` (U14; password verify + Guardian-shaped JWT).
+//! - [`api_key`] — create / revoke / delete (U14).
+//! - [`device`] — `revokeDevice` (U14 stub; U29 real).
+//! - [`download`] — download_options / prepare / status / cancel
+//!   (U14 stubs; U20 real).
+//! - [`remote_access`] — generate_claim_code / refresh_media_token
+//!   (U14 stubs; U29 real).
 
+pub mod api_key;
+pub mod auth;
+pub mod device;
+pub mod download;
 pub mod playback;
+pub mod remote_access;
 pub mod streaming;

@@ -20,6 +20,7 @@ chrono = { version = "0.4", default-features = false, features = ["serde", "cloc
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = { workspace = true }
 base64 = "0.22"
+rand = "0.8"
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio",
     "sqlite",
