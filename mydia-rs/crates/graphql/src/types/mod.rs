@@ -10,6 +10,7 @@
 //! types are pinned to Absinthe's emission.
 
 pub mod artwork;
+pub mod discovery;
 pub mod episode;
 pub mod library_path;
 pub mod media_file;
@@ -20,6 +21,7 @@ pub mod season;
 pub mod tv_show;
 
 pub use artwork::Artwork;
+pub use discovery::{ContinueWatchingItem, MediaType, RecentlyAddedItem, UpNextItem};
 pub use episode::Episode;
 pub use library_path::{LibraryPath, LibraryType};
 pub use media_file::MediaFile;

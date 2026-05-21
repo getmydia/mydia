@@ -43,6 +43,10 @@ pub struct ListMediaItemsOpts<'a> {
     /// associated `media_files` row (either via `media_item_id` or
     /// via an episode). Mirrors `filter_by_has_files/1`.
     pub has_files: bool,
+    /// When set, restricts to rows whose `inserted_at` is at or after
+    /// the given datetime (RFC3339 string). Used by the discovery
+    /// "recently added" rail to apply the 30-day window.
+    pub added_since: Option<&'a str>,
 }
 
 /// List media items, ordered by title ASC. Pagination and sort
@@ -72,6 +76,9 @@ pub async fn list_media_items(
                                   JOIN episodes e ON mf.episode_id = e.id))",
                 );
             }
+            if let Some(since) = opts.added_since {
+                qb.push(" AND inserted_at >= ").push_bind(since);
+            }
             qb.push(" ORDER BY title COLLATE NOCASE ASC");
             qb.build_query_as::<MediaItem>().fetch_all(pool).await
         }
@@ -93,6 +100,9 @@ pub async fn list_media_items(
                         OR id IN (SELECT DISTINCT e.media_item_id FROM media_files mf \
                                   JOIN episodes e ON mf.episode_id = e.id))",
                 );
+            }
+            if let Some(since) = opts.added_since {
+                qb.push(" AND inserted_at >= ").push_bind(since);
             }
             qb.push(" ORDER BY lower(title) ASC");
             qb.build_query_as::<MediaItem>().fetch_all(pool).await

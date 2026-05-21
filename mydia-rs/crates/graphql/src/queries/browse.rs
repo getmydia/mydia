@@ -106,6 +106,7 @@ impl BrowseQueries {
             kind: Some("movie"),
             category: category.map(|c| c.as_db_str()),
             has_files: true,
+            added_since: None,
         };
         let rows = media::list_media_items(&state.db, &opts).await?;
         let sort = sort.unwrap_or_default();
@@ -141,6 +142,7 @@ impl BrowseQueries {
             kind: Some("tv_show"),
             category: category.map(|c| c.as_db_str()),
             has_files: true,
+            added_since: None,
         };
         let rows = media::list_media_items(&state.db, &opts).await?;
         let sort = sort.unwrap_or_default();
