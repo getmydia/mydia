@@ -37,6 +37,8 @@ const MYDIA_ENV_KEYS: &[&str] = &[
     "MYDIA_DATABASE__POOL_SIZE",
     "MYDIA_LOGGING__LEVEL",
     "MYDIA_SERVER__PORT",
+    "MYDIA_CONFIG",
+    "MYDIA_KEEP_ALIVE",
 ];
 
 fn clear_env() {
@@ -219,6 +221,21 @@ fn oidc_discovery_uri_derives_issuer_when_empty() {
     apply_oidc_env(&mut cfg);
     assert_eq!(cfg.auth.oidc_issuer.as_deref(), Some("https://auth.example.com"));
     assert!(cfg.auth.oidc_enabled);
+}
+
+#[test]
+fn process_level_env_vars_dont_pollute_config() {
+    // Regression: MYDIA_CONFIG and MYDIA_KEEP_ALIVE are clap-level
+    // CLI overrides, not Config fields. figment would reject them as
+    // unknown top-level keys if we let its MYDIA_-prefix scan see
+    // them. The loader explicitly ignores those two names.
+    let _guard = env_lock();
+    clear_env();
+    unsafe {
+        std::env::set_var("MYDIA_CONFIG", "/etc/mydia/mydia.toml");
+        std::env::set_var("MYDIA_KEEP_ALIVE", "true");
+    }
+    Config::load(None).expect("must load despite process-level env vars");
 }
 
 #[test]
