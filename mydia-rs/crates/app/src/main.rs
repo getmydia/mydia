@@ -24,6 +24,14 @@ struct Cli {
     /// and environment variables alone are used.
     #[arg(long, env = "MYDIA_CONFIG", value_name = "PATH")]
     config: Option<PathBuf>,
+
+    /// After the boot checks pass, hold the runtime lock and wait for
+    /// SIGTERM / SIGINT instead of exiting. The container compose
+    /// service uses this so the image doesn't restart-loop until the
+    /// real supervision tree (U22+) replaces the wait with the actual
+    /// server loop.
+    #[arg(long, env = "MYDIA_KEEP_ALIVE", default_value_t = false)]
+    keep_alive: bool,
 }
 
 fn main() -> ExitCode {
@@ -109,7 +117,15 @@ fn main() -> ExitCode {
             }
         };
 
-        tracing::info!("mydia-rs boot ok (U34: runtime lock held); exiting");
+        tracing::info!("mydia-rs boot ok (U34: runtime lock held)");
+
+        if cli.keep_alive {
+            tracing::info!(
+                "--keep-alive set; waiting for SIGTERM/SIGINT (supervision tree lands in U22+)"
+            );
+            wait_for_shutdown_signal().await;
+            tracing::info!("shutdown signal received; releasing lock and exiting");
+        }
 
         if let Err(err) = lock.release().await {
             tracing::warn!(%err, "runtime lock release failed; row will time out");
@@ -117,4 +133,28 @@ fn main() -> ExitCode {
 
         ExitCode::SUCCESS
     })
+}
+
+/// Block until SIGTERM (docker stop) or SIGINT (Ctrl-C) arrives.
+/// On non-unix targets falls back to ctrl_c only.
+#[cfg(unix)]
+async fn wait_for_shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut sigterm = match signal(SignalKind::terminate()) {
+        Ok(s) => s,
+        Err(err) => {
+            tracing::warn!(%err, "could not install SIGTERM handler; falling back to ctrl_c only");
+            let _ = tokio::signal::ctrl_c().await;
+            return;
+        }
+    };
+    tokio::select! {
+        _ = sigterm.recv() => {}
+        _ = tokio::signal::ctrl_c() => {}
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }

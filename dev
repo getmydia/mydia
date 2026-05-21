@@ -96,7 +96,7 @@ ${YELLOW}Player Android (Native, uses player/flake.nix):${NC}
   player android run   Build and run on connected Android device
   player android shell Open nix develop shell in player directory
 
-${YELLOW}Rust Backend (mydia-rs, Native, uses repo flake.nix):${NC}
+${YELLOW}Rust Backend (mydia-rs, native via Nix):${NC}
   rs build             Build the Rust workspace (cargo build)
   rs run               Run the app binary (cargo run -p mydia-rs-app)
   rs test              Run all tests (cargo test)
@@ -105,6 +105,14 @@ ${YELLOW}Rust Backend (mydia-rs, Native, uses repo flake.nix):${NC}
   rs clippy            Run clippy lints (cargo clippy)
   rs sqlx-prepare      Refresh sqlx offline query cache
   rs <args>            Forward args verbatim to cargo
+
+${YELLOW}Rust Backend (mydia-rs, Docker compose - parallel to Phoenix):${NC}
+  rs up                Bring up mydia-rs container on host port 4002
+  rs down              Stop and remove the container
+  rs restart           Restart the container
+  rs rebuild           Rebuild the image from mydia-rs/Dockerfile
+  rs logs [-f]         Tail container logs
+  rs shell             Open a shell inside the container
 
 ${YELLOW}Player E2E Options:${NC}
   --build              Rebuild Docker images before running tests
@@ -755,18 +763,18 @@ case "$COMMAND" in
         esac
         ;;
 
-    # Rust backend (mydia-rs) - runs natively via nix develop, not Docker
+    # Rust backend (mydia-rs)
+    #
+    # Two transports under one namespace:
+    #   - Native cargo via `nix develop` for build/run/test/check/fmt/
+    #     clippy/sqlx-prepare (fast feedback loop, no Docker round-trip)
+    #   - Docker compose for up/down/logs/restart/rebuild/shell (a
+    #     long-running container that sits parallel to the Phoenix
+    #     `app` service, on host port 4002)
     rs)
-        if ! command -v nix &> /dev/null; then
-            echo -e "${RED}Error: nix is not installed${NC}"
-            echo "The mydia-rs Rust workspace runs outside Docker via Nix (same model as 'player android')."
-            echo "Install from: https://nixos.org/download.html"
-            exit 1
-        fi
-
         if [ $# -eq 0 ]; then
             cat <<EOF
-${YELLOW}mydia-rs (Rust backend) commands:${NC}
+${YELLOW}mydia-rs Rust backend - native (nix develop):${NC}
   ./dev rs build         Build the workspace (cargo build)
   ./dev rs run           Run the app binary (cargo run -p mydia-rs-app)
   ./dev rs test          Run all tests (cargo test)
@@ -776,14 +784,56 @@ ${YELLOW}mydia-rs (Rust backend) commands:${NC}
   ./dev rs sqlx-prepare  Refresh sqlx offline query cache (--workspace)
   ./dev rs <args>        Forward args verbatim to cargo
 
-All commands enter a 'nix develop' shell with the Rust toolchain
-and run from the mydia-rs/ directory.
+${YELLOW}mydia-rs Rust backend - Docker (long-running, parallel to Phoenix):${NC}
+  ./dev rs up            Bring up the container (host port 4002)
+  ./dev rs down          Stop and remove the container
+  ./dev rs restart       Restart the container
+  ./dev rs rebuild       Rebuild the image from mydia-rs/Dockerfile
+  ./dev rs logs [-f]     Tail container logs
+  ./dev rs shell         Open a shell inside the container
+
+Native commands enter 'nix develop' and run from the mydia-rs/ directory.
+Docker commands wrap 'docker compose -f compose.yml -f compose.mydia-rs.yml'.
 EOF
             exit 0
         fi
 
         rs_subcmd="$1"
         shift
+
+        rs_compose="-f compose.yml -f compose.mydia-rs.yml"
+
+        case "$rs_subcmd" in
+            up)
+                exec docker compose $rs_compose up -d mydia-rs "$@"
+                ;;
+            down)
+                # `down` would tear down every service in the merged
+                # compose; `stop` + `rm` is the surgical option.
+                docker compose $rs_compose stop mydia-rs "$@"
+                exec docker compose $rs_compose rm -f mydia-rs
+                ;;
+            restart)
+                exec docker compose $rs_compose restart mydia-rs "$@"
+                ;;
+            rebuild)
+                exec docker compose $rs_compose build mydia-rs "$@"
+                ;;
+            logs)
+                exec docker compose $rs_compose logs mydia-rs "$@"
+                ;;
+            shell)
+                exec docker compose $rs_compose exec mydia-rs sh "$@"
+                ;;
+        esac
+
+        # Everything else is a native cargo command via nix develop.
+        if ! command -v nix &> /dev/null; then
+            echo -e "${RED}Error: nix is not installed${NC}"
+            echo "Native ./dev rs commands run outside Docker via Nix (same model as 'player android')."
+            echo "Install from: https://nixos.org/download.html"
+            exit 1
+        fi
 
         case "$rs_subcmd" in
             run)
