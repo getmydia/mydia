@@ -11,7 +11,7 @@
 //! `MutationRoot` follows the same pattern with one merged struct per
 //! mutation family.
 
-use async_graphql::{EmptySubscription, MergedObject, Object, Schema, SchemaBuilder, ID};
+use async_graphql::{MergedObject, Object, Schema, SchemaBuilder, ID};
 
 use crate::context::GraphqlAppState;
 use crate::mutations::playback::PlaybackMutations;
@@ -21,6 +21,7 @@ use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
 use crate::queries::discovery::DiscoveryQueries;
 use crate::queries::search::SearchQueries;
 use crate::queries::streaming::StreamingQueries;
+use crate::subscriptions::SubscriptionRoot;
 
 /// Introspection + utility queries that aren't tied to a specific
 /// Phoenix resolver family.
@@ -108,8 +109,8 @@ pub struct MutationRoot(
 );
 
 /// The wired schema type alias resolvers and the axum handler
-/// reference. Subscriptions land in U12.
-pub type MydiaSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
+/// reference.
+pub type MydiaSchema = Schema<QueryRoot, MutationRoot, SubscriptionRoot>;
 
 /// Build the schema with the supplied long-lived state attached.
 pub fn build_schema(state: GraphqlAppState) -> MydiaSchema {
@@ -121,11 +122,11 @@ pub fn build_schema(state: GraphqlAppState) -> MydiaSchema {
 /// before finishing the schema.
 pub fn schema_builder(
     state: GraphqlAppState,
-) -> SchemaBuilder<QueryRoot, MutationRoot, EmptySubscription> {
+) -> SchemaBuilder<QueryRoot, MutationRoot, SubscriptionRoot> {
     Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
-        EmptySubscription,
+        SubscriptionRoot,
     )
     .data(state)
 }
@@ -142,7 +143,7 @@ mod tests {
         Schema::build(
             QueryRoot::default(),
             MutationRoot::default(),
-            EmptySubscription,
+            SubscriptionRoot,
         )
         .finish()
     }
@@ -223,6 +224,7 @@ mod tests {
         let sdl = schema.sdl();
         assert!(sdl.contains("type Query"));
         assert!(sdl.contains("type Mutation"));
+        assert!(sdl.contains("type Subscription"));
         assert!(sdl.contains("schemaVersion"));
         assert!(sdl.contains("movies"));
         assert!(sdl.contains("tvShows"));
@@ -232,6 +234,8 @@ mod tests {
         assert!(sdl.contains("toggleFavorite"));
         assert!(sdl.contains("startStreamingSession"));
         assert!(sdl.contains("endStreamingSession"));
+        assert!(sdl.contains("progressUpdated"));
+        assert!(sdl.contains("deviceStatusChanged"));
         assert!(!sdl.contains("schema_version"));
     }
 }

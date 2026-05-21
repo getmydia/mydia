@@ -6,19 +6,19 @@
 //!   camelCase field names.
 //! - `node_type` round-trips every encoded ID class.
 //! - The axum router constructs without panic over the schema.
-//! - Subscription endpoint registration via `EmptySubscription` does
-//!   not fail at schema-build time (the WS protocol upgrade itself is
-//!   covered by manual probes until U12 lands a real subscription).
+//! - Subscription endpoint registration over the real
+//!   `SubscriptionRoot` does not fail at schema-build time (U12+).
 
-use async_graphql::{EmptySubscription, Schema};
+use async_graphql::Schema;
 use mydia_rs_graphql::schema::{MutationRoot, QueryRoot};
+use mydia_rs_graphql::subscriptions::SubscriptionRoot;
 use mydia_rs_graphql::{router, NodeId, NodeRef};
 
-fn schema() -> Schema<QueryRoot, MutationRoot, EmptySubscription> {
+fn schema() -> Schema<QueryRoot, MutationRoot, SubscriptionRoot> {
     Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
-        EmptySubscription,
+        SubscriptionRoot,
     )
     .finish()
 }
@@ -41,13 +41,10 @@ async fn sdl_contains_expected_root_types() {
     let sdl = schema.sdl();
     assert!(sdl.contains("type Query"));
     assert!(sdl.contains("type Mutation"));
+    assert!(sdl.contains("type Subscription"));
     assert!(sdl.contains("schemaVersion"));
     assert!(sdl.contains("nodeType"));
     assert!(sdl.contains("ping"));
-    // The plan calls out subscription endpoint registration; the
-    // root subscription type lands in U12, but EmptySubscription
-    // here should not leak a Subscription type into the SDL.
-    assert!(!sdl.contains("type Subscription"));
 }
 
 #[tokio::test]

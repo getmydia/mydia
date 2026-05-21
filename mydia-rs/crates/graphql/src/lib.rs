@@ -30,6 +30,7 @@ pub mod queries;
 pub mod relay;
 pub mod repos;
 pub mod schema;
+pub mod subscriptions;
 pub mod types;
 
 pub use axum_handler::router;
