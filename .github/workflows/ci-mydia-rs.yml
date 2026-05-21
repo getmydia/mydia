@@ -1,0 +1,216 @@
+name: CI / mydia-rs
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: mydia-rs
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.should.outputs.run }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect relevant changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant:
+              - 'mydia-rs/**'
+              - 'native/**'
+              - '.github/workflows/ci-mydia-rs.yml'
+
+      - name: Decide whether to run
+        id: should
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relevant }}" = "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No mydia-rs/native/workflow changes; skipping Rust CI."
+          fi
+
+  lint:
+    name: Format + Clippy
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mydia-rs
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test-sqlite:
+    name: Test / SQLite
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    env:
+      MYDIA_RS_TEST_DB: sqlite
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mydia-rs
+
+      - name: cargo test
+        run: cargo test --workspace --all-targets
+
+  test-postgres:
+    name: Test / PostgreSQL
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    env:
+      MYDIA_RS_TEST_DB: postgres
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mydia_rs_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mydia_rs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mydia-rs
+
+      - name: cargo test
+        run: cargo test --workspace --all-targets
+
+  sqlx-prepare-check:
+    name: sqlx prepare --check
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mydia_rs_prepare
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mydia_rs_prepare
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mydia-rs
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres,rustls --locked
+
+      - name: cargo sqlx prepare --check
+        run: |
+          # `--check` validates that the committed offline cache matches the
+          # queries in the source tree. Until U4 lands sqlx queries this is
+          # a no-op: no queries -> empty cache -> nothing to verify. The job
+          # stays in CI from day one so the cache discipline never goes stale.
+          cargo sqlx prepare --workspace --check
+
+  mydia-rs-ci-status:
+    name: mydia-rs CI Status
+    runs-on: ubuntu-latest
+    needs: [changes, lint, test-sqlite, test-postgres, sqlx-prepare-check]
+    if: always()
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Aggregate results
+        run: |
+          # When the path filter skipped work, every downstream job reports
+          # "skipped" and we report green so required-status-check gating
+          # doesn't sit Pending forever.
+          if [ "${{ needs.changes.outputs.run }}" != "true" ]; then
+            echo "Path filter skipped Rust CI; reporting green."
+            exit 0
+          fi
+          fail=0
+          for pair in \
+            "lint:${{ needs.lint.result }}" \
+            "test-sqlite:${{ needs.test-sqlite.result }}" \
+            "test-postgres:${{ needs.test-postgres.result }}" \
+            "sqlx-prepare-check:${{ needs.sqlx-prepare-check.result }}"; do
+            name="${pair%%:*}"
+            result="${pair##*:}"
+            if [ "$result" != "success" ]; then
+              echo "::error::$name reported $result"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+          echo "All mydia-rs CI jobs passed."

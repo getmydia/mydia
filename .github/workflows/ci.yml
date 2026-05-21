@@ -5,9 +5,15 @@ on:
     branches:
       - master
       - main
+    paths-ignore:
+      - "mydia-rs/**"
+      - "mydia-rs/Cargo.lock"
   pull_request:
     branches:
       - "**"
+    paths-ignore:
+      - "mydia-rs/**"
+      - "mydia-rs/Cargo.lock"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
