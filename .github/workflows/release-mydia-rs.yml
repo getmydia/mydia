@@ -1,13 +1,17 @@
 name: Release / mydia-rs
 
-# Publishes mydia-rs container images on every push to master. The CI
+# Publishes the mydia-rs container image on every push to master. The CI
 # image lane in ci-mydia-rs.yml verifies builds on PR; this workflow
 # pushes the production tags once they merge.
 #
-# Two tags per build, mirroring the Phoenix two-tag convention:
-#   - ghcr.io/getmydia/mydia/mydia-rs:latest        (SQLite-default)
-#   - ghcr.io/getmydia/mydia/mydia-rs:latest-pg     (Postgres-default)
-#   - ghcr.io/getmydia/mydia/mydia-rs:sha-<commit>{,-pg}
+# Single image — the Rust binary links both sqlx drivers (SQLite bundled,
+# Postgres pure-Rust), and `database.type` picks the engine at runtime.
+# No `:latest-pg` variant; that split only exists on the Phoenix image
+# because Ecto's adapter is compiled into the BEAM release.
+#
+# Tags published:
+#   - ghcr.io/getmydia/mydia/mydia-rs:latest
+#   - ghcr.io/getmydia/mydia/mydia-rs:sha-<commit>
 #
 # amd64-only on PR (sanity build verified in ci-mydia-rs.yml). On master
 # we build amd64 here; an arm64 lane lands when the native arm64 runner
@@ -32,24 +36,13 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and push (${{ matrix.variant.tag_suffix || 'sqlite' }})
+    name: Build and push
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       attestations: write
       id-token: write
-
-    strategy:
-      fail-fast: false
-      matrix:
-        variant:
-          - dockerfile: mydia-rs/Dockerfile
-            primary_tag: latest
-            tag_suffix: ""
-          - dockerfile: mydia-rs/Dockerfile.pg
-            primary_tag: latest-pg
-            tag_suffix: "-pg"
 
     steps:
       - name: Checkout
@@ -70,8 +63,8 @@ jobs:
         run: |
           sha_short="${GITHUB_SHA::7}"
           {
-            echo "${REGISTRY}/${IMAGE_NAME}:${{ matrix.variant.primary_tag }}"
-            echo "${REGISTRY}/${IMAGE_NAME}:sha-${sha_short}${{ matrix.variant.tag_suffix }}"
+            echo "${REGISTRY}/${IMAGE_NAME}:latest"
+            echo "${REGISTRY}/${IMAGE_NAME}:sha-${sha_short}"
           } > /tmp/tags.txt
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           cat /tmp/tags.txt >> "$GITHUB_OUTPUT"
@@ -82,12 +75,12 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.variant.dockerfile }}
+          file: mydia-rs/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha,scope=mydia-rs-${{ matrix.variant.primary_tag }}
-          cache-to: type=gha,scope=mydia-rs-${{ matrix.variant.primary_tag }},mode=max
+          cache-from: type=gha,scope=mydia-rs
+          cache-to: type=gha,scope=mydia-rs,mode=max
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -112,4 +105,4 @@ jobs:
             echo "::error::mydia-rs release pipeline failed"
             exit 1
           fi
-          echo "mydia-rs images published successfully"
+          echo "mydia-rs image published successfully"

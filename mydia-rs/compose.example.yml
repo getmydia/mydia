@@ -1,16 +1,17 @@
 # mydia-rs compose example.
 #
-# Two services are pre-defined; pick the one matching your database
-# choice and remove the other (or comment it out). Both share the same
-# image tag conventions as the Phoenix sister project, so the same
-# `mydia/mydia` family lives in your `docker compose pull` cycle.
+# One mydia-rs image, both SQLite and Postgres at runtime. The default
+# below uses SQLite — to switch to Postgres, uncomment the postgres
+# service (or run with `--profile postgres`) and swap the two
+# MYDIA_DATABASE__* env vars. No image-tag change needed; the same
+# `mydia/mydia-rs:latest` supports both engines.
 #
-# Migrate from Phoenix by swapping `mydia/mydia:latest` ->
-# `mydia/mydia-rs:latest` (or `:latest-pg`) in your existing
-# compose.yml. Your bind-mounted data dir, library mounts, OIDC_*
-# environment block, and ffmpeg-capable image all carry over. Browser
-# sessions reset on the swap; API keys, paired devices, JWT media
-# tokens, Trakt OAuth tokens, and the on-disk media all survive.
+# Migrate from Phoenix by swapping `mydia/mydia:latest` (or
+# `mydia/mydia:latest-pg` if you're on Postgres) -> `mydia/mydia-rs:latest`
+# in your existing compose.yml. Your bind-mounted data dir, library
+# mounts, OIDC_* environment block, and ffmpeg-capable image all carry
+# over. Browser sessions reset on the swap; API keys, paired devices,
+# JWT media tokens, Trakt OAuth tokens, and the on-disk media all survive.
 
 version: "3.9"
 
@@ -24,8 +25,12 @@ services:
     environment:
       # Override config inline or point MYDIA_CONFIG at a mounted file.
       MYDIA_CONFIG: /etc/mydia/mydia.toml
+      # --- SQLite (default) ---
       MYDIA_DATABASE__TYPE: sqlite
       MYDIA_DATABASE__PATH: /var/lib/mydia/mydia.db
+      # --- Postgres (uncomment + comment out the two SQLite lines above) ---
+      # MYDIA_DATABASE__TYPE: postgres
+      # MYDIA_DATABASE__URL: postgres://mydia:change-me@postgres:5432/mydia
       # Keep the existing OIDC_* names so the compose block you already
       # have on Phoenix works unchanged at cutover.
       # OIDC_ISSUER: https://auth.example.com
@@ -36,24 +41,10 @@ services:
       - ./mydia-data:/var/lib/mydia
       - ./mydia-config:/etc/mydia
       - /path/to/media:/media:ro
-
-  mydia-rs-pg:
-    image: ghcr.io/getmydia/mydia/mydia-rs:latest-pg
-    container_name: mydia-rs-pg
-    restart: unless-stopped
-    profiles: ["postgres"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "4001:4001"
-    environment:
-      MYDIA_CONFIG: /etc/mydia/mydia.toml
-      MYDIA_DATABASE__TYPE: postgres
-      MYDIA_DATABASE__URL: postgres://mydia:change-me@postgres:5432/mydia
-    volumes:
-      - ./mydia-config:/etc/mydia
-      - /path/to/media:/media:ro
+    # Uncomment when running with the postgres profile.
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
 
   postgres:
     image: postgres:16-alpine

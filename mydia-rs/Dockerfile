@@ -2,15 +2,13 @@
 #
 # mydia-rs production image.
 #
-# The Rust binary ships both the SQLite and Postgres sqlx drivers; the
-# operator selects at runtime via `database.type` in mydia.toml or
-# MYDIA_DATABASE__TYPE. The release CI tags this same image as both
-# `mydia/mydia-rs:latest` (intended for SQLite-backed deployments) and
-# `mydia/mydia-rs:latest-pg` (intended for Postgres-backed deployments)
-# to mirror the operator-facing convention from the Phoenix image set.
-# The driver-presence guard in the config layer refuses to start when
-# the configured driver isn't compiled in; both are, so the runtime
-# selection always works.
+# The Rust binary links both sqlx drivers: SQLite is statically compiled
+# in via libsqlite3-sys's `bundled` feature (no system libsqlite needed
+# at runtime), and Postgres uses sqlx's pure-Rust driver (no libpq
+# needed). The operator selects the engine at runtime via `database.type`
+# in mydia.toml (or `MYDIA_DATABASE__TYPE`). One image, both engines —
+# no separate `:latest-pg` variant; that split only made sense for the
+# Phoenix image because Ecto's adapter is compiled into the BEAM release.
 
 ARG RUST_VERSION=1.86
 ARG ALPINE_VERSION=3.20

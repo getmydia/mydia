@@ -94,8 +94,10 @@ impl Config {
         }
 
         // Database: exactly one of url/path must be set, matching the chosen
-        // driver. The full driver-presence check (which sqlx feature is
-        // compiled into this binary) lands in U4 once sqlx is wired in.
+        // driver. Both sqlx drivers are compiled into the single mydia-rs
+        // binary (SQLite bundled via libsqlite3-sys, Postgres pure-Rust),
+        // so no driver-presence check is needed — the enum here is the
+        // whole guard.
         match self.database.db_type {
             DatabaseType::Sqlite => {
                 if self.database.path.as_deref().unwrap_or("").is_empty() {

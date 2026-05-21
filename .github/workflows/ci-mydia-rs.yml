@@ -180,21 +180,13 @@ jobs:
           cargo sqlx prepare --workspace --check
 
   docker-build:
-    name: Docker build verify (${{ matrix.variant.label }})
+    name: Docker build verify
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.run == 'true'
     defaults:
       run:
         working-directory: .
-    strategy:
-      fail-fast: false
-      matrix:
-        variant:
-          - label: sqlite
-            dockerfile: mydia-rs/Dockerfile
-          - label: postgres
-            dockerfile: mydia-rs/Dockerfile.pg
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -206,12 +198,12 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.variant.dockerfile }}
+          file: mydia-rs/Dockerfile
           platforms: linux/amd64
           push: false
-          tags: mydia-rs:ci-${{ matrix.variant.label }}
-          cache-from: type=gha,scope=mydia-rs-ci-${{ matrix.variant.label }}
-          cache-to: type=gha,scope=mydia-rs-ci-${{ matrix.variant.label }},mode=max
+          tags: mydia-rs:ci
+          cache-from: type=gha,scope=mydia-rs-ci
+          cache-to: type=gha,scope=mydia-rs-ci,mode=max
 
   mydia-rs-ci-status:
     name: mydia-rs CI Status

@@ -64,10 +64,13 @@ pub enum UrlScheme {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DatabaseConfig {
-    /// Selects the runtime driver. The driver-presence check at startup
-    /// (see `Config::validate`) rejects values whose sqlx feature is not
-    /// compiled into this binary, replacing Phoenix's compile-time guard
-    /// at `config/runtime.exs:30-54`.
+    /// Selects the runtime driver. Both sqlx drivers (sqlite via the
+    /// bundled libsqlite3-sys, postgres via the pure-Rust driver) are
+    /// always compiled into the mydia-rs binary, so this is the only
+    /// switch the operator needs — no separate `:latest-pg` image, no
+    /// driver-presence guard, just one binary that picks at startup.
+    /// Phoenix's compile-time guard at `config/runtime.exs:30-54` exists
+    /// because Ecto's adapter is compiled in; that constraint is gone here.
     #[serde(rename = "type")]
     pub db_type: DatabaseType,
     /// Connection URL when `db_type = postgres`; ignored for sqlite.

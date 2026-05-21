@@ -28,9 +28,9 @@ allowed_origins = []
 # guardian_secret_key = "..."
 
 [database]
-# One of "sqlite" or "postgres". The sqlite-only Docker image refuses to
-# boot when this is set to "postgres" (and vice versa) per the
-# driver-presence guard.
+# One of "sqlite" or "postgres". The single mydia-rs Docker image ships
+# both drivers (SQLite bundled, Postgres pure-Rust), so this switch is
+# all that's needed — no separate `:latest-pg` image.
 type = "sqlite"
 path = "mydia_dev.db"
 # url is required when type = "postgres". For sqlite it is ignored.
