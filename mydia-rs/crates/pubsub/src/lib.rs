@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(received_a.payload["v"], "a");
         // topic:b should still be empty.
         let timeout_result = recv_with_timeout(&mut rx_b, Duration::from_millis(20)).await;
-        assert!(matches!(timeout_result, Err(_)));
+        assert!(timeout_result.is_err());
     }
 
     #[tokio::test]

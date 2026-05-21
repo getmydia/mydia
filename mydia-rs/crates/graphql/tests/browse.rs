@@ -378,14 +378,14 @@ async fn movie_by_id_handles_both_encoded_and_raw_uuid() {
 
     let schema = build_test_schema(db).await;
 
+    const MOVIE_QUERY: &str = r#"query M($id: ID!) { movie(id: $id) { title } }"#;
+
     // Encoded form.
     let encoded = format!("movie:{movie_uuid}");
     let resp = schema
         .execute(
-            Request::new(format!(
-                r#"query M($id: ID!) {{ movie(id: $id) {{ title }} }}"#
-            ))
-            .variables(Variables::from_json(json!({"id": encoded}))),
+            Request::new(MOVIE_QUERY)
+                .variables(Variables::from_json(json!({"id": encoded}))),
         )
         .await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
@@ -394,10 +394,8 @@ async fn movie_by_id_handles_both_encoded_and_raw_uuid() {
     // Raw UUID form.
     let resp_raw = schema
         .execute(
-            Request::new(format!(
-                r#"query M($id: ID!) {{ movie(id: $id) {{ title }} }}"#
-            ))
-            .variables(Variables::from_json(json!({"id": movie_uuid.to_string()}))),
+            Request::new(MOVIE_QUERY)
+                .variables(Variables::from_json(json!({"id": movie_uuid.to_string()}))),
         )
         .await;
     assert!(resp_raw.errors.is_empty(), "errors: {:?}", resp_raw.errors);

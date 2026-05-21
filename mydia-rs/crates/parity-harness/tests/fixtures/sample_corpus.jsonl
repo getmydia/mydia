@@ -1,0 +1,5 @@
+{"operation":"SchemaVersion","query":"{ schemaVersion }","variables":null,"response":{"data":{"schemaVersion":"0.1.0"},"errors":[]},"status":200,"elapsed_ms":1,"ts":"2024-01-01T00:00:00Z"}
+{"operation":"NodeType","query":"{ nodeType(id: \"movie:abc\") }","variables":null,"response":{"data":{"nodeType":"movie"},"errors":[]},"status":200,"elapsed_ms":1,"ts":"2024-01-01T00:00:01Z"}
+{"operation":"NodeTypeInvalid","query":"{ nodeType(id: \"not-real\") }","variables":null,"response":{"data":{"nodeType":null},"errors":[]},"status":200,"elapsed_ms":1,"ts":"2024-01-01T00:00:02Z"}
+{"operation":"Ping","query":"mutation { ping }","variables":null,"response":{"data":{"ping":"pong"},"errors":[]},"status":200,"elapsed_ms":1,"ts":"2024-01-01T00:00:03Z"}
+{"operation":"DownloadOptionsStub","query":"mutation { downloadOptions(contentType: \"movie\", id: \"x\") { resolution } }","variables":null,"response":{"data":{"downloadOptions":[{"resolution":"720p"}]},"errors":[]},"status":200,"elapsed_ms":1,"ts":"2024-01-01T00:00:04Z"}

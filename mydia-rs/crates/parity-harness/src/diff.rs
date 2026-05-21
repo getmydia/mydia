@@ -105,6 +105,25 @@ impl RedactionSet {
             apply_path(value, path);
         }
     }
+
+    /// Re-serialise the registered paths to their dotted-string
+    /// form. Used by [`crate::replay`] to merge an extra redaction
+    /// set into the defaults.
+    pub fn into_paths(self) -> Vec<String> {
+        self.paths
+            .into_iter()
+            .map(|segments| {
+                segments
+                    .into_iter()
+                    .map(|seg| match seg {
+                        Segment::Wildcard => "*".to_owned(),
+                        Segment::Key(k) => k,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(".")
+            })
+            .collect()
+    }
 }
 
 fn apply_path(value: &mut Value, path: &[Segment]) {

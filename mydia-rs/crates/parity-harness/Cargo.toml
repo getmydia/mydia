@@ -13,13 +13,24 @@ path = "src/lib.rs"
 name = "parity-review"
 path = "src/bin/capture_review.rs"
 
+[[bin]]
+name = "parity-replay"
+path = "src/bin/replay.rs"
+
 [dependencies]
 serde = { workspace = true }
 serde_json = "1"
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+async-graphql = { version = "7", features = ["chrono", "uuid"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+mydia-rs-graphql = { path = "../graphql" }
+mydia-rs-config = { path = "../config" }
+mydia-rs-db = { path = "../db" }
+anyhow = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

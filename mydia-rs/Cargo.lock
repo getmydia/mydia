@@ -1698,13 +1698,20 @@ version = "0.1.0"
 name = "mydia-rs-parity-harness"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "async-graphql",
  "chrono",
  "clap",
+ "mydia-rs-config",
+ "mydia-rs-db",
+ "mydia-rs-graphql",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
