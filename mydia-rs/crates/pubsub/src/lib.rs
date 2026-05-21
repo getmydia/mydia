@@ -14,11 +14,11 @@
 //! ## Scope
 //!
 //! This crate ships in U11 (graphql playback mutations need somewhere
-//! to publish) and U12 (subscriptions need somewhere to subscribe). The
-//! load-bearing surface — canonical topic constants, worker fan-out
-//! integration, structured event types — lands in U15. The shape here
-//! is deliberately minimal so U15 can add structure without rewriting
-//! call sites.
+//! to publish) and U12 (subscriptions need somewhere to subscribe).
+//! U15 adds the canonical topic constants in [`topics`] so producers
+//! and subscribers share one source of truth.
+
+pub mod topics;
 
 use std::sync::Arc;
 use std::time::Duration;
