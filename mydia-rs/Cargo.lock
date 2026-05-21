@@ -978,6 +978,17 @@ version = "0.1.0"
 [[package]]
 name = "mydia-rs-models"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "mydia-rs-config",
+ "mydia-rs-db",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "mydia-rs-p2p"
