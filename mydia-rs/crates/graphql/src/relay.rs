@@ -1,37 +1,43 @@
 //! Relay cursor helpers.
 //!
-//! async-graphql's [`async_graphql::connection`] module supplies the
-//! Connection / Edge / PageInfo machinery. The cursor encoding it uses
-//! by default is opaque, so this module exposes a thin compatibility
-//! layer that emits cursors in the shape Absinthe Relay produces —
-//! base64 of `arrayconnection:<offset>` for the common offset case,
-//! base64 of the underlying ID for cursor-on-ID style connections.
+//! mydia's Phoenix resolvers emit cursors as
+//! `Base.encode64("cursor:#{offset}")` — NOT the Absinthe-Relay
+//! default `arrayconnection:<offset>` shape. The Flutter player
+//! round-trips these cursors as opaque strings, so the parity-replay
+//! harness in U13 will surface any drift in the byte sequence.
+//! `offset_cursor` here emits the exact shape Phoenix does.
 //!
-//! Cursor parity matters because the Flutter player ships paginated
-//! browse queries with `after` cursors plucked from prior responses;
-//! drifting the cursor encoding would break pagination silently mid-
-//! session. The parity replay harness in U13 catches drift, but the
-//! cheaper guarantee is to emit Absinthe's exact bytes here.
+//! `id_cursor` exists for keyset-style cursors where the cursor
+//! position is the last-seen node's global ID. No Phoenix resolver
+//! uses this today, but discovery rails (U10) and search (U11) may
+//! switch to it as scale grows.
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-/// Encode an opaque array-index cursor in the shape Absinthe Relay
-/// emits for offset-paginated connections.
-pub fn array_cursor(offset: usize) -> String {
-    STANDARD.encode(format!("arrayconnection:{offset}"))
+const OFFSET_PREFIX: &str = "cursor:";
+
+/// Encode an offset cursor in the shape Phoenix's `BrowseResolver`
+/// emits — base64 of `cursor:<offset>`. Pinning the prefix to
+/// `cursor:` (not Absinthe-Relay's default `arrayconnection:`) is
+/// what makes player-saved cursors round-trip across the two
+/// backends.
+pub fn offset_cursor(offset: usize) -> String {
+    STANDARD.encode(format!("{OFFSET_PREFIX}{offset}"))
 }
 
-/// Decode an array-index cursor produced by [`array_cursor`].
-pub fn decode_array_cursor(raw: &str) -> Option<usize> {
+/// Decode an offset cursor produced by [`offset_cursor`]. Returns
+/// `None` for malformed cursors (matching Phoenix's behavior of
+/// treating malformed cursors as "no cursor / start at zero" —
+/// callers translate `None` to 0).
+pub fn decode_offset_cursor(raw: &str) -> Option<usize> {
     let bytes = STANDARD.decode(raw).ok()?;
     let s = std::str::from_utf8(&bytes).ok()?;
-    let offset = s.strip_prefix("arrayconnection:")?;
+    let offset = s.strip_prefix(OFFSET_PREFIX)?;
     offset.parse::<usize>().ok()
 }
 
 /// Encode a node-ID cursor — base64 of the underlying global ID
-/// string. Use this for keyset-style cursors where the cursor
-/// position is the last-seen node's global ID.
+/// string. Used for keyset-style cursors.
 pub fn id_cursor(node_id: &str) -> String {
     STANDARD.encode(node_id)
 }
@@ -47,21 +53,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn array_cursor_round_trip() {
-        let encoded = array_cursor(42);
-        assert_eq!(decode_array_cursor(&encoded), Some(42));
+    fn offset_cursor_round_trip() {
+        let encoded = offset_cursor(42);
+        assert_eq!(decode_offset_cursor(&encoded), Some(42));
     }
 
     #[test]
-    fn array_cursor_matches_absinthe_relay_shape() {
-        // Absinthe Relay's offset-cursor for offset=0 is the base64 of
-        // the string "arrayconnection:0". Pin the byte sequence.
-        assert_eq!(array_cursor(0), "YXJyYXljb25uZWN0aW9uOjA=");
-    }
-
-    #[test]
-    fn array_cursor_offset_one() {
-        assert_eq!(array_cursor(1), "YXJyYXljb25uZWN0aW9uOjE=");
+    fn offset_cursor_matches_phoenix_byte_shape() {
+        // Phoenix: `Base.encode64("cursor:0")` produces `Y3Vyc29yOjA=`.
+        // Pin the byte sequence for offset 0 (smallest) and 99 (with
+        // multi-digit numerals).
+        assert_eq!(offset_cursor(0), "Y3Vyc29yOjA=");
+        assert_eq!(offset_cursor(99), "Y3Vyc29yOjk5");
     }
 
     #[test]
@@ -71,15 +74,13 @@ mod tests {
     }
 
     #[test]
-    fn decode_array_cursor_rejects_garbage() {
-        assert_eq!(decode_array_cursor("not-base64!"), None);
+    fn decode_offset_cursor_rejects_garbage() {
+        assert_eq!(decode_offset_cursor("not-base64!"), None);
     }
 
     #[test]
-    fn decode_array_cursor_rejects_wrong_prefix() {
-        // Decodes as valid base64 of "garbage:0" — should still reject
-        // because the prefix isn't "arrayconnection:".
-        let encoded = STANDARD.encode("garbage:0");
-        assert_eq!(decode_array_cursor(&encoded), None);
+    fn decode_offset_cursor_rejects_wrong_prefix() {
+        let encoded = STANDARD.encode("arrayconnection:0");
+        assert_eq!(decode_offset_cursor(&encoded), None);
     }
 }

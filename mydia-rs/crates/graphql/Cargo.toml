@@ -19,6 +19,14 @@ chrono = { version = "0.4", default-features = false, features = ["serde", "cloc
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = { workspace = true }
 base64 = "0.22"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "postgres",
+    "chrono",
+    "uuid",
+    "json",
+] }
 mydia-rs-db = { path = "../db" }
 mydia-rs-models = { path = "../models" }
 mydia-rs-auth = { path = "../auth" }
@@ -26,3 +34,5 @@ mydia-rs-auth = { path = "../auth" }
 [dev-dependencies]
 tokio = { workspace = true }
 serde_json = "1"
+tempfile = "3"
+mydia-rs-config = { path = "../config" }

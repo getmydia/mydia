@@ -1,30 +1,27 @@
 //! Root Query / Mutation / Subscription types.
 //!
-//! Today the roots are minimal stubs: a `__typename`-bearing root that
-//! exposes a `schemaVersion` field. The actual resolver families ship
-//! in later units (browse + discovery + media-detail at U10,
-//! search + streaming + playback mutations at U11, subscriptions at
-//! U12, remaining resolvers at U14).
+//! The schema's actual `Query` type is a `MergedObject` composed of
+//! one resolver struct per family — `IntrospectionQueries` (this
+//! file), `BrowseQueries` (U10.a), `DiscoveryQueries` (U10.b), and
+//! later units' own structs. async-graphql merges them at
+//! schema-build time, so each unit lands a new struct without
+//! touching this file.
 //!
-//! The shape here is deliberately the boring one — every later unit
-//! adds methods to these structs rather than restructuring the root.
+//! Mutations follow the same pattern; lands in U11+.
 
-use async_graphql::{EmptySubscription, Object, Schema, SchemaBuilder, ID};
+use async_graphql::{EmptySubscription, MergedObject, Object, Schema, SchemaBuilder, ID};
 
 use crate::context::GraphqlAppState;
 use crate::node_id::NodeId;
+use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
+use crate::queries::discovery::DiscoveryQueries;
 
-/// Root Query type.
-///
-/// Resolver units (U10, U11, U14) extend this via additional `impl`
-/// blocks; async-graphql merges them at schema-build time. The
-/// `name = "Query"` rename matches the Absinthe shape — Relay
-/// clients look for a top-level `Query` type by name, not
-/// `QueryRoot`.
-pub struct QueryRoot;
+/// Introspection + utility queries that aren't tied to a specific
+/// Phoenix resolver family.
+pub struct IntrospectionQueries;
 
-#[Object(name = "Query")]
-impl QueryRoot {
+#[Object(name = "_Introspection")]
+impl IntrospectionQueries {
     /// Stable string identifying the GraphQL schema build. Useful for
     /// the parity replay harness in U13 and for smoke tests asserting
     /// the schema is wired correctly.
@@ -33,19 +30,35 @@ impl QueryRoot {
     }
 
     /// Decode a global ID and report its type tag, without resolving
-    /// the underlying node. The concrete `node(id: ID!): Node` field
-    /// that returns the polymorphic type lands in U10 alongside the
-    /// first node-implementing types; until then, this is the
-    /// smoke-test entry point that exercises [`NodeId::decode`] over
-    /// the GraphQL surface.
-    ///
-    /// Returns `null` for malformed IDs (mirrors Phoenix's
-    /// `BrowseResolver.get_node/3` returning `{:error, :invalid_node_id}`,
-    /// surfaced as a top-level error in U10).
+    /// the underlying node. Convenience field for the parity harness
+    /// — useful when a corpus record's `id` argument fails to round-
+    /// trip and you want to know whether the encoding or the lookup
+    /// is the culprit.
     async fn node_type(&self, id: ID) -> Option<String> {
         NodeId::decode(id.as_str())
             .ok()
             .map(|n| n.type_tag().to_owned())
+    }
+
+    /// Polymorphic node lookup — port of `BrowseResolver.get_node/3`.
+    async fn node(
+        &self,
+        ctx: &async_graphql::Context<'_>,
+        id: ID,
+    ) -> async_graphql::Result<Option<NodeBlob>> {
+        resolve_node(ctx, id).await
+    }
+}
+
+/// The merged Query root type. New resolver families add themselves
+/// here as the corresponding U10/U11/U14 units land.
+#[derive(MergedObject, Default)]
+#[graphql(name = "Query")]
+pub struct QueryRoot(IntrospectionQueries, BrowseQueries, DiscoveryQueries);
+
+impl Default for IntrospectionQueries {
+    fn default() -> Self {
+        Self
     }
 }
 
@@ -55,26 +68,17 @@ pub struct MutationRoot;
 
 #[Object(name = "Mutation")]
 impl MutationRoot {
-    /// Mutations land in U11+. This placeholder keeps the root
-    /// non-empty (async-graphql requires at least one field on
-    /// each registered type) and asserts the mutation pipeline
-    /// is wired through to the schema builder.
+    /// Placeholder so the Mutation root is non-empty until U11 lands.
     async fn ping(&self) -> &'static str {
         "pong"
     }
 }
 
 /// The wired schema type alias resolvers and the axum handler
-/// reference. Subscriptions land in U12; until then,
-/// [`EmptySubscription`] keeps the WebSocket endpoint healthy
-/// without registering any subscription fields.
+/// reference. Subscriptions land in U12.
 pub type MydiaSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
 /// Build the schema with the supplied long-lived state attached.
-///
-/// Per-request data (CurrentUser, anything depending on the inbound
-/// HTTP request) is attached by the axum handler via
-/// `async_graphql::Request::data`, not here.
 pub fn build_schema(state: GraphqlAppState) -> MydiaSchema {
     schema_builder(state).finish()
 }
@@ -85,7 +89,7 @@ pub fn build_schema(state: GraphqlAppState) -> MydiaSchema {
 pub fn schema_builder(
     state: GraphqlAppState,
 ) -> SchemaBuilder<QueryRoot, MutationRoot, EmptySubscription> {
-    Schema::build(QueryRoot, MutationRoot, EmptySubscription).data(state)
+    Schema::build(QueryRoot::default(), MutationRoot, EmptySubscription).data(state)
 }
 
 #[cfg(test)]
@@ -93,9 +97,11 @@ mod tests {
     use super::*;
 
     /// Build a schema without any DB connection — the root-level
-    /// smoke tests don't touch the pool.
+    /// smoke tests don't touch the pool. They cover the
+    /// IntrospectionQueries portion only; BrowseQueries tests live
+    /// in `tests/browse.rs` against a real SQLite fixture.
     fn schema_for_tests() -> MydiaSchema {
-        Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish()
+        Schema::build(QueryRoot::default(), MutationRoot, EmptySubscription).finish()
     }
 
     #[tokio::test]
@@ -118,15 +124,9 @@ mod tests {
 
     #[tokio::test]
     async fn snake_case_field_resolves_as_camel_case() {
-        // schema_version → schemaVersion conversion is async-graphql's
-        // default; this asserts it explicitly because the plan's U8
-        // test scenarios call it out as a load-bearing behavior.
         let schema = schema_for_tests();
         let response = schema.execute("{ snake: schemaVersion }").await;
         assert!(response.errors.is_empty());
-        // The query above uses an alias proving the camelCased name
-        // is what the server accepts; a query for `{ schema_version }`
-        // would fail with "unknown field".
         let bad = schema.execute("{ schema_version }").await;
         assert!(
             !bad.errors.is_empty(),
@@ -178,18 +178,11 @@ mod tests {
     fn schema_sdl_is_non_empty_and_parses() {
         let schema = schema_for_tests();
         let sdl = schema.sdl();
-        assert!(!sdl.is_empty());
         assert!(sdl.contains("type Query"));
         assert!(sdl.contains("type Mutation"));
         assert!(sdl.contains("schemaVersion"));
-        // Defensive — the camelCase conversion lands here too.
+        assert!(sdl.contains("movies"));
+        assert!(sdl.contains("tvShows"));
         assert!(!sdl.contains("schema_version"));
-    }
-
-    #[test]
-    fn node_ref_helpers_compile() {
-        // Lightweight assertion that NodeRef integration with the
-        // schema module is reachable. Concrete uses arrive in U10.
-        let _ = crate::node_id::NodeRef::Int(1);
     }
 }

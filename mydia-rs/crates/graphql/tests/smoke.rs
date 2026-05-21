@@ -15,7 +15,7 @@ use mydia_rs_graphql::schema::{MutationRoot, QueryRoot};
 use mydia_rs_graphql::{router, NodeId, NodeRef};
 
 fn schema() -> Schema<QueryRoot, MutationRoot, EmptySubscription> {
-    Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish()
+    Schema::build(QueryRoot::default(), MutationRoot, EmptySubscription).finish()
 }
 
 #[tokio::test]

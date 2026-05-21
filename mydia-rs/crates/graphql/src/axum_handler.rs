@@ -68,17 +68,13 @@ async fn graphiql() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{build_schema, MydiaSchema};
+    use crate::schema::{build_schema, MutationRoot, MydiaSchema, QueryRoot};
     use async_graphql::{EmptySubscription, Schema};
 
     fn schema() -> MydiaSchema {
-        // The handler tests don't touch the DB; build a bare schema.
-        Schema::build(
-            crate::schema::QueryRoot,
-            crate::schema::MutationRoot,
-            EmptySubscription,
-        )
-        .finish()
+        // The handler tests don't touch the DB; build a bare schema
+        // using the default merged QueryRoot.
+        Schema::build(QueryRoot::default(), MutationRoot, EmptySubscription).finish()
     }
 
     #[tokio::test]
