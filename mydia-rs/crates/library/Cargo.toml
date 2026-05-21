@@ -6,6 +6,26 @@ license.workspace = true
 publish = false
 
 [dependencies]
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+regex = "1.10"
+walkdir = "2"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+mydia-rs-pubsub = { path = "../pubsub" }
+mydia-rs-metadata = { path = "../metadata" }
+mydia-rs-models = { path = "../models" }
+mydia-rs-db = { path = "../db" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
+async-trait = "0.1"
+wiremock = "0.6"
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
 
 [lints]
 workspace = true
