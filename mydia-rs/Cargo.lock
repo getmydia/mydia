@@ -2146,13 +2146,25 @@ name = "mydia-rs-jobs"
 version = "0.1.0"
 dependencies = [
  "apalis",
+ "apalis-core",
  "apalis-cron",
  "apalis-sql",
+ "async-trait",
  "chrono",
  "cron",
  "futures",
+ "mydia-rs-config",
  "mydia-rs-db",
+ "mydia-rs-downloads",
+ "mydia-rs-events",
+ "mydia-rs-indexers",
+ "mydia-rs-integrations",
+ "mydia-rs-library",
+ "mydia-rs-metadata",
+ "mydia-rs-models",
  "mydia-rs-pubsub",
+ "mydia-rs-streaming",
+ "mydia-rs-subtitles",
  "serde",
  "serde_json",
  "sqlx",
@@ -2160,7 +2172,9 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tower",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

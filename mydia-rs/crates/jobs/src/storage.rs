@@ -47,6 +47,32 @@ pub enum JobsError {
     /// Enqueue / fetch / update against the storage failed.
     #[error("apalis storage operation failed: {0}")]
     Storage(#[source] sqlx::Error),
+
+    /// A row required by the worker (library path, media item, ...)
+    /// could not be found. Mirrors Phoenix's `Ecto.NoResultsError`
+    /// rescue at every worker entry point.
+    #[error("required record not found: {0}")]
+    NotFound(String),
+
+    /// Sqlx error surfaced from a worker's DB call (not from the
+    /// apalis storage). Distinct from `Storage` so callers can tell
+    /// whether the job machinery or the worker's business logic
+    /// broke.
+    #[error("worker database error: {0}")]
+    Db(#[from] sqlx::Error),
+
+    /// Per-worker business error wrapped as a string. Workers wrap
+    /// `IntegrationError`, `IndexerError`, etc. into this when they
+    /// don't care to preserve the inner type for the supervisor.
+    #[error("worker error: {0}")]
+    WorkerError(String),
+
+    /// The worker requested apalis-style retry-with-backoff. apalis
+    /// 0.7's `Retry` layer handles this transparently when the worker
+    /// `Result::Err`s; this variant is a clearer call site for
+    /// "transient — retry, don't error-page the operator".
+    #[error("transient worker error (retryable): {0}")]
+    Retryable(String),
 }
 
 impl<T> JobStorage<T>
