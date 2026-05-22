@@ -207,6 +207,133 @@ async fn security_headers_are_present_on_responses() {
 }
 
 #[tokio::test]
+async fn profile_route_serves_app_shell() {
+    // U24.d — `/profile` lives under AppShell. Anonymous SSR can't
+    // resolve current_user, so it returns the loading shell (same
+    // shape as the home page test). The profile content itself is
+    // gated by hydration's session check; the SSR pass just proves
+    // the route is registered and the AppShell renders.
+    let router = build().await;
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/profile")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("serve request");
+
+    assert_eq!(response.status(), StatusCode::OK, "profile page should 200");
+
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("collect body");
+    let body = String::from_utf8_lossy(&body);
+
+    assert!(
+        body.contains("loading-spinner") || body.contains("drawer"),
+        "expected AppShell guard shell:\n{body}"
+    );
+}
+
+#[tokio::test]
+async fn discover_route_serves_app_shell() {
+    // U24.f — `/discover` likewise lives under AppShell; an anonymous
+    // SSR pass renders the loading shell. The discover form itself
+    // (media-type toggle, category dropdown, etc.) hydrates after
+    // the session check succeeds.
+    let router = build().await;
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/discover")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("serve request");
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "discover page should 200"
+    );
+
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("collect body");
+    let body = String::from_utf8_lossy(&body);
+
+    assert!(
+        body.contains("loading-spinner") || body.contains("drawer"),
+        "expected AppShell guard shell:\n{body}"
+    );
+}
+
+#[tokio::test]
+async fn oidc_login_redirects_to_disabled_marker_when_oidc_off() {
+    // U24.c — when no OidcContext is plumbed into WebState (the
+    // stub fixture's default), GET /auth/oidc/login must return a
+    // clean redirect to /login?error=oidc_disabled rather than
+    // panicking or hanging on a missing client.
+    let router = build().await;
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/auth/oidc/login")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("serve request");
+
+    // axum::response::Redirect emits 303 See Other by default for
+    // Redirect::to(...). Accept either 302 or 303 — the user-visible
+    // behavior is identical.
+    let status = response.status();
+    assert!(
+        status.is_redirection(),
+        "expected redirect status, got {status}"
+    );
+
+    let location = response
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .expect("Location header on redirect");
+    assert_eq!(location, "/login?error=oidc_disabled");
+}
+
+#[tokio::test]
+async fn oidc_callback_redirects_to_disabled_marker_when_oidc_off() {
+    // Symmetric to the login test: hitting /auth/oidc/callback with
+    // OIDC disabled must not 500 or panic.
+    let router = build().await;
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/auth/oidc/callback?code=xyz&state=abc")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("serve request");
+
+    let status = response.status();
+    assert!(
+        status.is_redirection(),
+        "expected redirect status, got {status}"
+    );
+    let location = response
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .expect("Location header on redirect");
+    assert_eq!(location, "/login?error=oidc_disabled");
+}
+
+#[tokio::test]
 async fn request_id_header_propagates() {
     let router = build().await;
     let response = router
