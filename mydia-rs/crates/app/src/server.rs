@@ -24,6 +24,7 @@ use std::time::Duration;
 use axum::{Extension, Router};
 use http::{HeaderName, HeaderValue};
 use mydia_rs_config::Config;
+use mydia_rs_web::session::SessionLayer;
 use mydia_rs_web::{security, WebState};
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
@@ -37,9 +38,12 @@ const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 ///
 /// `state` is wrapped in an `axum::Extension` so server functions and
 /// WebSocket upgrade handlers in `mydia-rs-web` can pull it via
-/// `FullstackContext::extension::<WebState>()`.
-pub fn build_router(state: WebState) -> Router {
+/// `FullstackContext::extension::<WebState>()`. `session_layer`
+/// attaches the tower-sessions middleware so server fns can call
+/// `Session::get/insert` for the authenticated user's id.
+pub fn build_router(state: WebState, session_layer: SessionLayer) -> Router {
     let router = dioxus::server::router(mydia_rs_web::app);
+    let router = session_layer.attach(router);
 
     // CSP picks dev or prod variant at build time. The dev variant
     // loosens script-src and style-src so dx serve's injected dev
@@ -145,15 +149,16 @@ mod tests {
             .enable_all()
             .build()
             .expect("build runtime");
-        let state = runtime.block_on(test_state());
-        let _router = build_router(state);
+        let (state, session_layer) = runtime.block_on(test_state_and_session());
+        let _router = build_router(state, session_layer);
     }
 
-    async fn test_state() -> WebState {
+    async fn test_state_and_session() -> (WebState, SessionLayer) {
         use mydia_rs_db::Db;
         use mydia_rs_jobs::storage::JobStorage;
         use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
         use mydia_rs_pubsub::Pubsub;
+        use mydia_rs_web::session;
         use sqlx::sqlite::SqlitePoolOptions;
 
         let pool = SqlitePoolOptions::new()
@@ -162,10 +167,13 @@ mod tests {
             .await
             .expect("open in-memory sqlite");
         let db = Db::Sqlite(pool);
+        // Migration is required so the session layer can write rows;
+        // safe on an in-memory DB.
+        session::migrate(&db).await.expect("tower-sessions migrate");
         let pubsub = Pubsub::new();
-        // Migration not needed for build_router_compiles — we never push.
         let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
-        WebState::new(db, pubsub, storage)
+        let session_layer = session::layer(&db, false);
+        (WebState::new(db, pubsub, storage), session_layer)
     }
 
     #[test]

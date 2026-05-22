@@ -50,6 +50,8 @@ use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 #[cfg(feature = "server")]
 use mydia_rs_pubsub::Pubsub;
 #[cfg(feature = "server")]
+use mydia_rs_web::session as web_session;
+#[cfg(feature = "server")]
 use mydia_rs_web::WebState;
 
 /// CLI surface for the mydia-rs binary.
@@ -212,14 +214,26 @@ fn main() -> ExitCode {
             tracing::error!(%err, "apalis storage setup failed");
             return ExitCode::FAILURE;
         }
+
+        // U24.a — create the `tower_sessions` table if absent. This is
+        // one of the two mydia-rs-owned tables (the other is U34's
+        // runtime-lock). Phoenix's Ecto schemas don't model it, so the
+        // "no migrations from mydia-rs" rule's explicit exceptions
+        // cover it.
+        if let Err(err) = web_session::migrate(&db).await {
+            tracing::error!(%err, "tower-sessions table migration failed");
+            return ExitCode::FAILURE;
+        }
+
         let pubsub = Pubsub::new();
         let library_scanner_storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
 
         let web_state = WebState::new(db.clone(), pubsub.clone(), library_scanner_storage);
+        let session_layer = web_session::layer(&db, !cfg!(debug_assertions));
 
-        tracing::info!("mydia-rs boot ok (U23 admin/library_paths pilot mounted)");
+        tracing::info!("mydia-rs boot ok (U24.a auth surface + U23 admin pilot mounted)");
 
-        let router = server::build_router(web_state);
+        let router = server::build_router(web_state, session_layer);
         let serve_result = server::serve(&config, router, wait_for_shutdown_signal()).await;
 
         if let Some(lock) = lock {

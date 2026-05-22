@@ -5,5 +5,6 @@
 //! `hello` to prove the router + layout chain works.
 
 pub mod admin;
+pub mod auth;
 pub mod hello;
 pub mod home;

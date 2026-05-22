@@ -13,13 +13,26 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::layout::AppShell;
+use crate::layout::{AppShell, AuthShell};
 use crate::pages::admin::library_paths::LibraryPaths;
+use crate::pages::auth::login::Login;
+use crate::pages::auth::setup::Setup;
 use crate::pages::{hello::Hello, home::Home};
 
 #[derive(Clone, Routable, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[rustfmt::skip]
 pub enum Route {
+    // Auth pages live outside the AppShell so an unauthenticated
+    // user can reach /login and /setup without being bounced.
+    #[layout(AuthShell)]
+        #[route("/login")]
+        Login {},
+
+        #[route("/setup")]
+        Setup {},
+
+    #[end_layout]
+
     #[layout(AppShell)]
         #[route("/")]
         Home {},

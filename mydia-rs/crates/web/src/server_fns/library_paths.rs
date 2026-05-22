@@ -118,6 +118,7 @@ pub async fn trigger_scan(id: String) -> Result<TriggerScanAck, ServerFnError> {
 #[cfg(feature = "server")]
 mod server {
     use super::{LibraryPathRow, NewLibraryPath, TriggerScanAck};
+    use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
@@ -159,6 +160,7 @@ mod server {
     );
 
     pub(super) async fn list() -> Result<Vec<LibraryPathRow>, ServerFnError> {
+        let _user_id = require_session_user_id().await?;
         let state = state().await?;
         let rows: Vec<LibraryPathTuple> = match &state.db {
             Db::Sqlite(pool) => sqlx::query_as(
@@ -198,6 +200,7 @@ mod server {
     }
 
     pub(super) async fn create(new_path: NewLibraryPath) -> Result<LibraryPathRow, ServerFnError> {
+        let _user_id = require_session_user_id().await?;
         if new_path.path.trim().is_empty() {
             return Err(ServerFnError::new("path cannot be blank".to_owned()));
         }
@@ -258,6 +261,7 @@ mod server {
     }
 
     pub(super) async fn delete(id: String) -> Result<(), ServerFnError> {
+        let _user_id = require_session_user_id().await?;
         let state = state().await?;
         let affected = match &state.db {
             Db::Sqlite(pool) => sqlx::query("DELETE FROM library_paths WHERE id = ?")
@@ -280,6 +284,7 @@ mod server {
     }
 
     pub(super) async fn trigger_scan(id: String) -> Result<TriggerScanAck, ServerFnError> {
+        let _user_id = require_session_user_id().await?;
         let mut state = state().await?;
         let exists: Option<(String,)> = match &state.db {
             Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM library_paths WHERE id = ?")
