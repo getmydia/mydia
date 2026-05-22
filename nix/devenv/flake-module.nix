@@ -113,7 +113,15 @@
           # an unrecognized name like MYDIA_RUNTIME_LOCK_ENABLED.
           export MYDIA_RS_DEV_SKIP_LOCK=true
           export MYDIA_DATABASE__TYPE=sqlite
-          export MYDIA_DATABASE__PATH=mydia_rs_dev.db
+          # Point at the repo-root SQLite file Phoenix maintains (see
+          # `config/dev.exs:30` — `Path.expand("../mydia_dev.db",
+          # __DIR__)`). The rewrite plan is explicit that mydia-rs
+          # reads the schema Phoenix created; pointing at a separate
+          # empty `mydia_rs_dev.db` leaves the `users` table missing,
+          # and every server fn that touches it 500s. Run
+          # `./dev mix ecto.migrate` once (in the Phoenix container)
+          # to create / advance this file.
+          export MYDIA_DATABASE__PATH=../mydia_dev.db
           export MYDIA_SERVER__HOST=0.0.0.0
           export MYDIA_SERVER__PORT=4002
           export MYDIA_LOGGING__LEVEL=info
