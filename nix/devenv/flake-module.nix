@@ -105,6 +105,7 @@
         # Exporting inline is the load-bearing fix.
         exec = ''
           mkdir -p /tmp/mydia-rs-devenv-public/assets
+          mkdir -p /tmp/mydia-rs-devenv-public/wasm
           export DIOXUS_PUBLIC_PATH=/tmp/mydia-rs-devenv-public
           # Lock-skip env intentionally doesn't start with MYDIA_
           # because figment grabs all MYDIA_* env vars as Config
@@ -119,6 +120,40 @@
           export MYDIA_LOGGING__FORMAT=text
 
           cd "$DEVENV_ROOT/mydia-rs"
+
+          # Bootstrap the public asset tree dioxus_server reads at boot:
+          #   1. `index.html` — load-bearing for standards-mode rendering
+          #      AND for the wasm hydration <script> tag. Without it,
+          #      dioxus-server falls back to the bare `ssr_only()`
+          #      template which has no <title> placeholder, causing the
+          #      document::Title { ... } component to be emitted BEFORE
+          #      <!DOCTYPE html> and triggering quirks mode.
+          #   2. `wasm/` — populated by `dx build --platform web` (run
+          #      manually via `./dev rs build-wasm`). When the bundle is
+          #      present, the page hydrates and onsubmit / onclick
+          #      handlers fire. When absent, the page is SSR-only and
+          #      forms don't work — but the meta-refresh redirect
+          #      fallback in AppShell still lets the operator at least
+          #      reach /login.
+          if [ -f "$DEVENV_ROOT/mydia-rs/crates/web/assets/index.html" ]; then
+            cp "$DEVENV_ROOT/mydia-rs/crates/web/assets/index.html" \
+               "$DIOXUS_PUBLIC_PATH/index.html"
+          fi
+          if [ -d "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/wasm" ]; then
+            cp -r "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/wasm/." \
+                  "$DIOXUS_PUBLIC_PATH/wasm/"
+            # The dx-built index.html ships the right `<script type=
+            # "module" src="/wasm/mydia-rs.js">` tag too — prefer it
+            # over the hand-written placeholder if available.
+            if [ -f "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/index.html" ]; then
+              cp "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/index.html" \
+                 "$DIOXUS_PUBLIC_PATH/index.html"
+            fi
+            echo "[devenv] wasm bundle present in DIOXUS_PUBLIC_PATH; forms will be interactive"
+          else
+            echo "[devenv] no wasm bundle yet — run './dev rs build-wasm' to enable interactive forms"
+          fi
+
           # -s mode (shell command) instead of -x (cargo subcmd) so
           # we can `exec` the built binary directly. With `cargo run`
           # the binary is spawned in its own process group and never

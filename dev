@@ -107,6 +107,7 @@ ${YELLOW}Rust Backend (mydia-rs, native via Nix devenv):${NC}
   rs fmt               Format code (cargo fmt)
   rs clippy            Run clippy lints (cargo clippy)
   rs sqlx-prepare      Refresh sqlx offline query cache
+  rs build-wasm        Build the client-side wasm bundle (interactive forms)
   rs <args>            Forward args verbatim to cargo
 
 ${YELLOW}Player E2E Options:${NC}
@@ -780,12 +781,25 @@ ${YELLOW}mydia-rs Rust backend (native via nix devenv):${NC}
   ./dev rs fmt           Format code (cargo fmt)
   ./dev rs clippy        Run clippy lints (cargo clippy)
   ./dev rs sqlx-prepare  Refresh sqlx offline query cache (--workspace)
+  ./dev rs build-wasm    Build the client wasm bundle (run after
+                         editing RSX, components, or anything reachable
+                         from the wasm side of the dual-target build).
+                         Without it, the dev server is SSR-only and
+                         interactive forms (login, profile, etc.) won't
+                         submit.
   ./dev rs <args>        Forward args verbatim to cargo
 
 Hot reload runs cargo-watch under devenv's process-compose, which
 rebuilds + restarts the binary in ~5s on Rust source change. The
 MYDIA_RS_DEV_SKIP_LOCK env var disables the U34 lock so the rapid
 restart cycle doesn't trip the staleness window.
+
+After cloning (or after a `target/` wipe), run './dev rs build-wasm'
+once to populate the client-side wasm bundle. The cargo-watch loop
+copies it into DIOXUS_PUBLIC_PATH on each restart; the server then
+serves /wasm/mydia-rs.js + /wasm/mydia-rs_bg.wasm and the page
+hydrates. Without the bundle the page renders SSR-only and form
+submits are no-ops.
 EOF
             exit 0
         fi
@@ -872,6 +886,16 @@ EOF
                 ;;
             sqlx-prepare)
                 rs_cmd="cargo sqlx prepare --workspace $*"
+                ;;
+            build-wasm)
+                # Build the client-side wasm bundle (and matching
+                # index.html) into target/dx/mydia-rs/debug/web/public/.
+                # The devenv `cargo-watch` startup hook copies that
+                # output into DIOXUS_PUBLIC_PATH so hydration works on
+                # next server restart. Run this once after cloning, and
+                # again whenever you change RSX, components, or any
+                # code on the wasm side of the dual-target build.
+                rs_cmd="dx build --platform web --package mydia-rs-app $*"
                 ;;
             build|test|check|fmt|clippy)
                 rs_cmd="cargo $rs_subcmd $*"
