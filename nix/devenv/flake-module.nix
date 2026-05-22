@@ -104,7 +104,7 @@
         # (figment ends up reading config defaults instead).
         # Exporting inline is the load-bearing fix.
         exec = ''
-          mkdir -p /tmp/mydia-rs-devenv-public
+          mkdir -p /tmp/mydia-rs-devenv-public/assets
           export DIOXUS_PUBLIC_PATH=/tmp/mydia-rs-devenv-public
           # Lock-skip env intentionally doesn't start with MYDIA_
           # because figment grabs all MYDIA_* env vars as Config
@@ -113,7 +113,7 @@
           export MYDIA_RS_DEV_SKIP_LOCK=true
           export MYDIA_DATABASE__TYPE=sqlite
           export MYDIA_DATABASE__PATH=mydia_rs_dev.db
-          export MYDIA_SERVER__HOST=127.0.0.1
+          export MYDIA_SERVER__HOST=0.0.0.0
           export MYDIA_SERVER__PORT=4002
           export MYDIA_LOGGING__LEVEL=info
           export MYDIA_LOGGING__FORMAT=text
@@ -127,12 +127,22 @@
           # to bind. With `cargo build && exec ./target/debug/mydia-rs`
           # the binary replaces the shell in cargo-watch's process
           # group, so SIGTERM kills it directly.
+          #
+          # `dx tools assets` is the link-time post-processing step
+          # `dx build` does internally: it patches the binary's
+          # embedded asset metadata (replacing the "should be replaced
+          # by dx" placeholders with fingerprinted filenames) and
+          # copies the referenced files into DIOXUS_PUBLIC_PATH. Without
+          # it, `<link rel=stylesheet href=/assets/...>` renders the
+          # placeholder string verbatim and the browser 404s on it.
           exec ${pkgs.cargo-watch}/bin/cargo-watch \
             -q -c \
             -w crates -w bin -w Cargo.toml -w Cargo.lock \
             --ignore 'target/**' \
             --ignore 'crates/web/assets/app.built.css' \
-            -s 'cargo build -p mydia-rs-app && exec ./target/debug/mydia-rs'
+            -s 'cargo build -p mydia-rs-app \
+                && dx tools assets target/debug/mydia-rs "$DIOXUS_PUBLIC_PATH/assets" \
+                && exec ./target/debug/mydia-rs'
         '';
       };
 
