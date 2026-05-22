@@ -21,10 +21,10 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use axum::Router;
+use axum::{Extension, Router};
 use http::{HeaderName, HeaderValue};
 use mydia_rs_config::Config;
-use mydia_rs_web::security;
+use mydia_rs_web::{security, WebState};
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -34,7 +34,11 @@ use tower_http::trace::TraceLayer;
 const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 
 /// Build the axum Router for the running app.
-pub fn build_router() -> Router {
+///
+/// `state` is wrapped in an `axum::Extension` so server functions and
+/// WebSocket upgrade handlers in `mydia-rs-web` can pull it via
+/// `FullstackContext::extension::<WebState>()`.
+pub fn build_router(state: WebState) -> Router {
     let router = dioxus::server::router(mydia_rs_web::app);
 
     // CSP picks dev or prod variant at build time. The dev variant
@@ -49,6 +53,7 @@ pub fn build_router() -> Router {
     };
 
     router
+        .layer(Extension(state))
         .layer(SetResponseHeaderLayer::if_not_present(
             HeaderName::from_static("content-security-policy"),
             HeaderValue::from_static(csp),
@@ -134,7 +139,33 @@ mod tests {
     #[test]
     fn build_router_compiles() {
         ensure_empty_public_dir();
-        let _router = build_router();
+        // We construct a stub state in-memory; the router is built but
+        // not served, so no DB / pubsub traffic flows.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build runtime");
+        let state = runtime.block_on(test_state());
+        let _router = build_router(state);
+    }
+
+    async fn test_state() -> WebState {
+        use mydia_rs_db::Db;
+        use mydia_rs_jobs::storage::JobStorage;
+        use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
+        use mydia_rs_pubsub::Pubsub;
+        use sqlx::sqlite::SqlitePoolOptions;
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        let db = Db::Sqlite(pool);
+        let pubsub = Pubsub::new();
+        // Migration not needed for build_router_compiles — we never push.
+        let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
+        WebState::new(db, pubsub, storage)
     }
 
     #[test]

@@ -10,11 +10,11 @@ name = "mydia_rs_web"
 path = "src/lib.rs"
 
 # Per Dioxus 0.7's dual-target model, this crate must compile to both
-# wasm32-unknown-unknown (client / hydration) and the native server target.
-# That means: no sqlx, no mydia-rs-db, no tokio features that aren't
-# wasm-safe. Server-only logic (resolvers, DB, jobs, p2p) lives in the
-# parent crate that hosts the axum router and is gated behind the `server`
-# feature of `mydia-rs-app`. This crate carries only the UI surface.
+# wasm32-unknown-unknown (client / hydration) and the native server
+# target. Server-only logic (sqlx, tokio, pubsub, jobs) is gated behind
+# the `server` feature so the wasm build never sees those deps; client-
+# side `#[server]` callers still compile against the same signatures
+# because the macro stubs them out on the wasm target.
 [dependencies]
 # The `dioxus` umbrella crate is the only Dioxus dep we touch directly per
 # the 0.7 convention. `fullstack` pulls in dioxus-fullstack, `router` pulls
@@ -25,10 +25,47 @@ serde = { workspace = true }
 serde_json = "1"
 tracing = { workspace = true }
 
+# Server-only deps for U23 pilot (admin library-paths page + scan
+# progress WebSocket). All gated behind the `server` feature so the
+# wasm hydration build doesn't try to compile them.
+mydia-rs-db        = { path = "../db",        optional = true }
+mydia-rs-pubsub    = { path = "../pubsub",    optional = true }
+mydia-rs-jobs      = { path = "../jobs",      optional = true }
+sqlx               = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "chrono", "uuid"], optional = true }
+tokio              = { workspace = true, optional = true }
+chrono             = { version = "0.4", default-features = false, features = ["serde", "clock"], optional = true }
+futures            = { version = "0.3", optional = true }
+tokio-stream       = { version = "0.1", optional = true }
+uuid               = { version = "1", features = ["v4", "serde"], optional = true }
+thiserror          = { workspace = true, optional = true }
+
 [features]
 default = []
-server = ["dioxus/server"]
+server = [
+    "dioxus/server",
+    "dep:mydia-rs-db",
+    "dep:mydia-rs-pubsub",
+    "dep:mydia-rs-jobs",
+    "dep:sqlx",
+    "dep:tokio",
+    "dep:chrono",
+    "dep:futures",
+    "dep:tokio-stream",
+    "dep:uuid",
+    "dep:thiserror",
+]
 web    = ["dioxus/web"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "chrono", "uuid"] }
+mydia-rs-db = { path = "../db" }
+mydia-rs-pubsub = { path = "../pubsub" }
+mydia-rs-jobs = { path = "../jobs" }
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+serde_json = "1"
+tempfile = "3"
 
 [lints]
 workspace = true

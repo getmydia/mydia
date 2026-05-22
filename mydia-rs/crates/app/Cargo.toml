@@ -37,11 +37,14 @@ server = [
     "dep:thiserror",
     "dep:mydia-rs-config",
     "dep:mydia-rs-db",
+    "dep:mydia-rs-pubsub",
+    "dep:mydia-rs-jobs",
     "dep:axum",
     "dep:tower",
     "dep:tower-http",
     "dep:http",
     "dioxus/server",
+    "mydia-rs-web/server",
 ]
 
 web = ["dioxus/web"]
@@ -68,6 +71,8 @@ chrono = { version = "0.4", optional = true, default-features = false, features 
 thiserror = { workspace = true, optional = true }
 mydia-rs-config = { path = "../config", optional = true }
 mydia-rs-db = { path = "../db", optional = true }
+mydia-rs-pubsub = { path = "../pubsub", optional = true }
+mydia-rs-jobs = { path = "../jobs", optional = true }
 axum = { version = "0.8", optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", optional = true, features = [

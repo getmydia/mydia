@@ -13,6 +13,12 @@ use std::sync::Once;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use mydia_rs_app::server::build_router;
+use mydia_rs_db::Db;
+use mydia_rs_jobs::storage::JobStorage;
+use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
+use mydia_rs_pubsub::Pubsub;
+use mydia_rs_web::WebState;
+use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
 
 /// `dioxus::server::router(app)` reads the `public/` directory next to
@@ -29,14 +35,26 @@ fn ensure_empty_public_dir() {
     });
 }
 
-fn build() -> axum::Router {
+async fn stub_state() -> WebState {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("in-memory sqlite");
+    let db = Db::Sqlite(pool);
+    let pubsub = Pubsub::new();
+    let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
+    WebState::new(db, pubsub, storage)
+}
+
+async fn build() -> axum::Router {
     ensure_empty_public_dir();
-    build_router()
+    build_router(stub_state().await)
 }
 
 #[tokio::test]
 async fn home_page_renders_layout_chrome() {
-    let router = build();
+    let router = build().await;
     let response = router
         .oneshot(
             Request::builder()
@@ -71,7 +89,7 @@ async fn home_page_renders_layout_chrome() {
 
 #[tokio::test]
 async fn hello_page_renders_dynamic_param() {
-    let router = build();
+    let router = build().await;
     let response = router
         .oneshot(
             Request::builder()
@@ -101,7 +119,7 @@ async fn hello_page_renders_dynamic_param() {
 
 #[tokio::test]
 async fn security_headers_are_present_on_responses() {
-    let router = build();
+    let router = build().await;
     let response = router
         .oneshot(
             Request::builder()
@@ -147,7 +165,7 @@ async fn security_headers_are_present_on_responses() {
 
 #[tokio::test]
 async fn request_id_header_propagates() {
-    let router = build();
+    let router = build().await;
     let response = router
         .oneshot(
             Request::builder()

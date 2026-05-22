@@ -43,6 +43,14 @@ use mydia_rs_app::server;
 use mydia_rs_config::{tracing_setup, Config};
 #[cfg(feature = "server")]
 use mydia_rs_db::{connect_from_config, schema_check, SchemaCheckOutcome};
+#[cfg(feature = "server")]
+use mydia_rs_jobs::storage::{self as jobs_storage, JobStorage};
+#[cfg(feature = "server")]
+use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
+#[cfg(feature = "server")]
+use mydia_rs_pubsub::Pubsub;
+#[cfg(feature = "server")]
+use mydia_rs_web::WebState;
 
 /// CLI surface for the mydia-rs binary.
 #[cfg(feature = "server")]
@@ -196,9 +204,22 @@ fn main() -> ExitCode {
             None
         };
 
-        tracing::info!("mydia-rs boot ok (U22 SSR mount next)");
+        // Wire the in-process pubsub bus + the apalis storage for
+        // the LibraryScanner worker. U23 only needs the one worker's
+        // storage; U24-U28 admin pages that trigger jobs will pull
+        // their storages into WebState the same way.
+        if let Err(err) = jobs_storage::setup(&db).await {
+            tracing::error!(%err, "apalis storage setup failed");
+            return ExitCode::FAILURE;
+        }
+        let pubsub = Pubsub::new();
+        let library_scanner_storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
 
-        let router = server::build_router();
+        let web_state = WebState::new(db.clone(), pubsub.clone(), library_scanner_storage);
+
+        tracing::info!("mydia-rs boot ok (U23 admin/library_paths pilot mounted)");
+
+        let router = server::build_router(web_state);
         let serve_result = server::serve(&config, router, wait_for_shutdown_signal()).await;
 
         if let Some(lock) = lock {
