@@ -55,13 +55,15 @@ impl Config {
         }
 
         // MYDIA_CONFIG and MYDIA_KEEP_ALIVE are CLI/process-level
-        // controls, not config keys; ignore them so figment doesn't
-        // try to slot them into the Config struct as unknown fields.
-        figment = figment.merge(
-            Env::prefixed("MYDIA_")
-                .split("__")
-                .ignore(&["CONFIG", "KEEP_ALIVE"]),
-        );
+        // controls, not config keys; MYDIA_RS_DEV_SKIP_LOCK is a
+        // dev-loop runtime-lock kill-switch read directly by main.rs.
+        // ignore them so figment doesn't try to slot them into the
+        // Config struct as unknown fields.
+        figment = figment.merge(Env::prefixed("MYDIA_").split("__").ignore(&[
+            "CONFIG",
+            "KEEP_ALIVE",
+            "RS_DEV_SKIP_LOCK",
+        ]));
 
         let mut config: Config = figment.extract()?;
         apply_oidc_env(&mut config);

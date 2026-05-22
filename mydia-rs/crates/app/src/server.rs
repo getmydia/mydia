@@ -25,7 +25,6 @@ use axum::Router;
 use http::{HeaderName, HeaderValue};
 use mydia_rs_config::Config;
 use mydia_rs_web::security;
-use tokio::net::TcpListener;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -38,10 +37,21 @@ const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 pub fn build_router() -> Router {
     let router = dioxus::server::router(mydia_rs_web::app);
 
+    // CSP picks dev or prod variant at build time. The dev variant
+    // loosens script-src and style-src so dx serve's injected dev
+    // HTML (which pulls Inter from fonts.googleapis.com and inlines
+    // its dev-tool JS) doesn't trip a CSP violation that kills the
+    // wasm client at startup. Release builds keep the strict CSP.
+    let csp = if cfg!(debug_assertions) {
+        security::CONTENT_SECURITY_POLICY_DEV
+    } else {
+        security::CONTENT_SECURITY_POLICY_BASELINE
+    };
+
     router
         .layer(SetResponseHeaderLayer::if_not_present(
             HeaderName::from_static("content-security-policy"),
-            HeaderValue::from_static(security::CONTENT_SECURITY_POLICY_BASELINE),
+            HeaderValue::from_static(csp),
         ))
         .layer(SetResponseHeaderLayer::if_not_present(
             HeaderName::from_static("referrer-policy"),
@@ -76,7 +86,19 @@ where
         .parse()
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidInput, err))?;
 
-    let listener = TcpListener::bind(addr).await?;
+    // Bind via TcpSocket so we can set SO_REUSEADDR before listen.
+    // Without it, a hot-rebuild restart hits the kernel's TIME_WAIT
+    // window for ~60s and the new binary fails with "Address already
+    // in use". With it, the port is reusable immediately. Safe in
+    // production too — SO_REUSEADDR doesn't allow two listeners on
+    // the same port simultaneously, only reuse of TIME_WAIT sockets.
+    let socket = match addr {
+        SocketAddr::V4(_) => tokio::net::TcpSocket::new_v4()?,
+        SocketAddr::V6(_) => tokio::net::TcpSocket::new_v6()?,
+    };
+    socket.set_reuseaddr(true)?;
+    socket.bind(addr)?;
+    let listener = socket.listen(1024)?;
     let local_addr = listener.local_addr()?;
     tracing::info!(
         addr = %local_addr,

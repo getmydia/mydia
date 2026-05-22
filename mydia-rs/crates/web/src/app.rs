@@ -6,12 +6,20 @@
 //! `document::Stylesheet { href: APP_CSS }` emits a `<link>` tag in
 //! `<head>` so the same file is served from the hashed path the bundle
 //! exposes.
+//!
+//! The CSS asset path points at `app.built.css`, NOT the
+//! `app.css` source. The source is Tailwind v4 + `DaisyUI` directives
+//! that the browser can't parse; the standalone `tailwindcss` binary
+//! compiles it into the `.built.css` file the asset macro picks up.
+//! In dev, `docker/dev-entrypoint.sh` runs `tailwindcss --watch`
+//! alongside `dx serve` so saving an RSX file with new utility
+//! classes auto-rebuilds the stylesheet.
 
 use dioxus::prelude::*;
 
 use crate::routes::Route;
 
-const APP_CSS: Asset = asset!("/assets/app.css");
+const APP_CSS: Asset = asset!("/assets/app.built.css");
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 
 #[component]

@@ -96,23 +96,18 @@ ${YELLOW}Player Android (Native, uses player/flake.nix):${NC}
   player android run   Build and run on connected Android device
   player android shell Open nix develop shell in player directory
 
-${YELLOW}Rust Backend (mydia-rs, native via Nix):${NC}
-  rs build             Build the Rust workspace (cargo build)
-  rs run               Run the app binary (cargo run -p mydia-rs-app)
+${YELLOW}Rust Backend (mydia-rs, native via Nix devenv):${NC}
+  rs up                Start cargo-watch + tailwindcss --watch (hot reload, host port 4002)
+  rs down              Stop the devenv processes
+  rs shell             Open the devenv shell (toolchain + dx + tailwindcss)
+  rs build             Build the workspace (cargo build)
+  rs run               Run the app binary once (no watcher)
   rs test              Run all tests (cargo test)
   rs check             Type-check without building (cargo check)
   rs fmt               Format code (cargo fmt)
   rs clippy            Run clippy lints (cargo clippy)
   rs sqlx-prepare      Refresh sqlx offline query cache
   rs <args>            Forward args verbatim to cargo
-
-${YELLOW}Rust Backend (mydia-rs, Docker compose - parallel to Phoenix):${NC}
-  rs up                Bring up mydia-rs container on host port 4002
-  rs down              Stop and remove the container
-  rs restart           Restart the container
-  rs rebuild           Rebuild the image from mydia-rs/Dockerfile
-  rs logs [-f]         Tail container logs
-  rs shell             Open a shell inside the container
 
 ${YELLOW}Player E2E Options:${NC}
   --build              Rebuild Docker images before running tests
@@ -774,9 +769,12 @@ case "$COMMAND" in
     rs)
         if [ $# -eq 0 ]; then
             cat <<EOF
-${YELLOW}mydia-rs Rust backend - native (nix develop):${NC}
+${YELLOW}mydia-rs Rust backend (native via nix devenv):${NC}
+  ./dev rs up            Start cargo-watch + tailwindcss --watch (hot reload, host port 4002)
+  ./dev rs down          Stop the running processes
+  ./dev rs shell         Open the devenv shell (toolchain + dx + tailwindcss)
   ./dev rs build         Build the workspace (cargo build)
-  ./dev rs run           Run the app binary (cargo run -p mydia-rs-app)
+  ./dev rs run           Run the app binary once (no watcher)
   ./dev rs test          Run all tests (cargo test)
   ./dev rs check         Type-check without building (cargo check)
   ./dev rs fmt           Format code (cargo fmt)
@@ -784,16 +782,10 @@ ${YELLOW}mydia-rs Rust backend - native (nix develop):${NC}
   ./dev rs sqlx-prepare  Refresh sqlx offline query cache (--workspace)
   ./dev rs <args>        Forward args verbatim to cargo
 
-${YELLOW}mydia-rs Rust backend - Docker (long-running, parallel to Phoenix):${NC}
-  ./dev rs up            Bring up the container (host port 4002)
-  ./dev rs down          Stop and remove the container
-  ./dev rs restart       Restart the container
-  ./dev rs rebuild       Rebuild the image from mydia-rs/Dockerfile
-  ./dev rs logs [-f]     Tail container logs
-  ./dev rs shell         Open a shell inside the container
-
-Native commands enter 'nix develop' and run from the mydia-rs/ directory.
-Docker commands wrap 'docker compose -f compose.yml -f compose.mydia-rs.yml'.
+Hot reload runs cargo-watch under devenv's process-compose, which
+rebuilds + restarts the binary in ~5s on Rust source change. The
+MYDIA_RS_DEV_SKIP_LOCK env var disables the U34 lock so the rapid
+restart cycle doesn't trip the staleness window.
 EOF
             exit 0
         fi
@@ -801,40 +793,79 @@ EOF
         rs_subcmd="$1"
         shift
 
-        rs_compose="-f compose.yml -f compose.mydia-rs.yml"
-
-        case "$rs_subcmd" in
-            up)
-                exec docker compose $rs_compose up -d mydia-rs "$@"
-                ;;
-            down)
-                # `down` would tear down every service in the merged
-                # compose; `stop` + `rm` is the surgical option.
-                docker compose $rs_compose stop mydia-rs "$@"
-                exec docker compose $rs_compose rm -f mydia-rs
-                ;;
-            restart)
-                exec docker compose $rs_compose restart mydia-rs "$@"
-                ;;
-            rebuild)
-                exec docker compose $rs_compose build mydia-rs "$@"
-                ;;
-            logs)
-                exec docker compose $rs_compose logs mydia-rs "$@"
-                ;;
-            shell)
-                exec docker compose $rs_compose exec mydia-rs sh "$@"
-                ;;
-        esac
-
-        # Everything else is a native cargo command via nix develop.
         if ! command -v nix &> /dev/null; then
             echo -e "${RED}Error: nix is not installed${NC}"
-            echo "Native ./dev rs commands run outside Docker via Nix (same model as 'player android')."
+            echo "./dev rs commands run natively via Nix devenv."
             echo "Install from: https://nixos.org/download.html"
             exit 1
         fi
 
+        case "$rs_subcmd" in
+            up)
+                # Build the devenv-up artifact, then exec it. devenv
+                # reads DEVENV_ROOT to know which working directory
+                # to bind processes to; --impure is required because
+                # devenv needs runtime info that flake purity rejects.
+                DEVENV_UP=$(DEVENV_ROOT="$(pwd)" nix build --impure \
+                    .#mydia-rs-dev-devenv-up --no-link --print-out-paths 2>&1 \
+                    | grep -v '^warning' | tail -1)
+                if [ -z "$DEVENV_UP" ] || [ ! -x "$DEVENV_UP" ]; then
+                    echo -e "${RED}Failed to build devenv-up artifact${NC}"
+                    exit 1
+                fi
+                # Stash the process-group leader's pid for `./dev rs
+                # down`. setsid puts us in a fresh session whose pgid
+                # equals the leader's pid — that lets `down` send a
+                # group-wide signal that reaches process-compose and
+                # every process it spawned (cargo-watch, tailwindcss,
+                # the running binary).
+                mkdir -p .devenv
+                exec setsid sh -c '
+                    echo $$ > .devenv/dev-rs-up.pid
+                    echo -e "\033[0;32m[mydia-rs] devenv up — Ctrl-C / ./dev rs down to stop\033[0m"
+                    exec env DEVENV_ROOT="'"$(pwd)"'" "'"$DEVENV_UP"'" "$@"
+                ' setsid-sh "$@"
+                ;;
+            down)
+                pid_file=".devenv/dev-rs-up.pid"
+                if [ -f "$pid_file" ]; then
+                    pid=$(cat "$pid_file")
+                    rm -f "$pid_file"
+                    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                        # kill -TERM -<pid> sends SIGTERM to the
+                        # entire process group whose pgid equals
+                        # <pid>. `./dev rs up` setsid'd to make pgid
+                        # = leader pid, so this reaches every
+                        # descendant: process-compose, cargo-watch,
+                        # tailwindcss, the running binary.
+                        kill -TERM -"$pid" 2>/dev/null
+                        for _ in 1 2 3 4 5; do
+                            sleep 1
+                            kill -0 -"$pid" 2>/dev/null || break
+                        done
+                        kill -KILL -"$pid" 2>/dev/null
+                    fi
+                fi
+                # Belt + suspenders: catch anything from a previous
+                # session that didn't go through ./dev rs up (e.g.
+                # `nix run` invocations directly).
+                pkill -KILL -f 'process-compose .*devenv-' 2>/dev/null
+                pkill -KILL -f 'cargo-watch.*mydia-rs-app' 2>/dev/null
+                pkill -KILL -f '/target/debug/mydia-rs$' 2>/dev/null
+                pkill -KILL -f 'tailwindcss .*--watch' 2>/dev/null
+                echo -e "${GREEN}[mydia-rs] devenv processes stopped${NC}"
+                exit 0
+                ;;
+            shell)
+                echo -e "${GREEN}[mydia-rs] entering devenv shell${NC}"
+                exec env DEVENV_ROOT="$(pwd)" \
+                    nix develop --impure .#mydia-rs-dev "$@"
+                ;;
+        esac
+
+        # Remaining subcommands are one-shot cargo invocations via
+        # the existing nix devShell. They don't need the devenv
+        # processes (cargo-watch / tailwindcss) — just the toolchain.
         case "$rs_subcmd" in
             run)
                 rs_cmd="cargo run -p mydia-rs-app $*"

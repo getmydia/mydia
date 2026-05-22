@@ -47,6 +47,28 @@ pub const CONTENT_SECURITY_POLICY_BASELINE: &str = "default-src 'self'; \
     base-uri 'self'; \
     form-action 'self'";
 
+/// Loosened CSP used by `cfg(debug_assertions)` builds (cargo run,
+/// dx serve). The dev-mode dx wrapper injects:
+///   - an inline `<style>` block that `@import`s Inter from
+///     `fonts.googleapis.com`, so we need that origin on style-src
+///     and the corresponding `fonts.gstatic.com` origin on font-src
+///   - inline `<script>` blocks for dev-tools (toasts, hot-reload
+///     bootstrapping), so script-src needs `'unsafe-inline'`
+///   - the wasm hot-reload client connects to `ws://localhost:<dx_port>`,
+///     which the existing `connect-src ws: wss:` already permits
+///
+/// Strict CSP returns in release builds via `CONTENT_SECURITY_POLICY_BASELINE`.
+pub const CONTENT_SECURITY_POLICY_DEV: &str = "default-src 'self'; \
+    script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' 'unsafe-eval'; \
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+    img-src 'self' data: https: blob:; \
+    media-src 'self' blob:; \
+    font-src 'self' data: https://fonts.gstatic.com; \
+    connect-src 'self' ws: wss:; \
+    frame-ancestors 'self'; \
+    base-uri 'self'; \
+    form-action 'self'";
+
 /// `Returns` the default origin policy when the operator hasn't
 /// configured one: trust only the configured `url_host` (Phoenix's
 /// `check_origin` semantics — see `config/runtime.exs:125`).

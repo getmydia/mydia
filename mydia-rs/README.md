@@ -19,17 +19,33 @@ The shared p2p networking core (`native/mydia_p2p_core` at the repo root) is con
 
 ## Two ways to run it
 
-The Rust workspace has two transports, both under the `./dev rs` namespace.
+All `./dev rs` commands run natively via Nix devenv. No Docker layer for development — file watching uses real inotify, signals propagate correctly to the running binary, and `cargo build`'s incremental compile cache lives on the host filesystem so rebuilds are seconds.
 
-### Native (fast feedback loop)
+Nix must be installed on the host. The Phoenix dev path still uses Docker; the Rust path runs natively the same way the Android player build does.
 
-`./dev rs build|run|test|check|fmt|clippy|sqlx-prepare` enter a `nix develop` shell with the Rust toolchain and run `cargo` from the `mydia-rs/` directory. No Docker round-trip; rebuilds are incremental and immediate.
-
-Nix must be installed on the host (the Phoenix dev path uses Docker; the Rust path uses Nix the same way the Android player build does).
+### Hot-reload dev loop
 
 ```
-./dev rs build         # cargo build
-./dev rs run           # cargo run -p mydia-rs-app
+./dev rs up            # start cargo-watch + tailwindcss --watch, host port 4002
+./dev rs down          # stop everything cleanly
+./dev rs shell         # enter the devenv shell (toolchain + dx + tailwindcss)
+```
+
+`./dev rs up` launches a devenv-managed `process-compose` session with two processes:
+
+- **cargo-watch** runs `cargo build -p mydia-rs-app && exec ./target/debug/mydia-rs`. On any Rust source change under `crates/` or `bin/`, the running binary gets SIGTERM, cargo rebuilds incrementally, and `exec` replaces the shell with the fresh binary so it lands in cargo-watch's own process group (signals propagate cleanly on the next restart). End-to-end edit-to-served time is around 5 seconds for a small change.
+- **tailwindcss --watch** compiles `crates/web/assets/app.css` (Tailwind v4 + DaisyUI source) into `app.built.css` whenever an RSX file introduces a new utility class. The asset macro in `crates/web/src/app.rs` references `app.built.css`, so the SSR response always serves the latest stylesheet.
+
+Two dev-only knobs make this work:
+
+- `MYDIA_RS_DEV_SKIP_LOCK=true` — disables the U34 boot-time mutual-exclusion lock, because cargo-watch restarts faster than the lock's 30-second stale-after window. Production must never set this.
+- `SO_REUSEADDR` is set on the listener (in `crates/app/src/server.rs`) so the rebuilt binary can immediately rebind port 4002 without waiting for the kernel's TIME_WAIT.
+
+### One-shot cargo commands
+
+```
+./dev rs build         # cargo build (full workspace)
+./dev rs run           # cargo run -p mydia-rs-app (no watcher)
 ./dev rs test          # cargo test
 ./dev rs check         # cargo check
 ./dev rs fmt           # cargo fmt
@@ -37,35 +53,30 @@ Nix must be installed on the host (the Phoenix dev path uses Docker; the Rust pa
 ./dev rs sqlx-prepare  # refresh sqlx offline query cache
 ```
 
-### Docker (long-running container, parallel to Phoenix)
+Each enters a `nix develop` shell with the Rust toolchain and runs `cargo` from the `mydia-rs/` directory. Useful for CI-equivalent checks or one-off builds outside the watcher loop.
 
-`./dev rs up|down|restart|rebuild|logs|shell` wrap `docker compose -f compose.yml -f compose.mydia-rs.yml`. The container runs on host port `4002` so it sits beside the Phoenix `app` service (port `4000`) and the dev `metadata-relay` (port `4001`) without colliding.
+### dx (Dioxus CLI)
 
-```
-./dev rs up            # bring up the container in the background
-./dev rs logs -f       # tail container logs
-./dev rs shell         # exec into the container
-./dev rs restart       # restart after a code change + rebuild
-./dev rs rebuild       # rebuild the image (slow; do this after substantive changes)
-./dev rs down          # stop and remove
-```
-
-The container holds its own SQLite database under the `mydia_rs_dev_data` volume by default. Sharing Phoenix's `mydia_dev.db` is allowed (the runtime-lock guard from U34 doesn't refuse against Phoenix), but two SQLite writers against the same WAL file gets fragile under load — override `MYDIA_DATABASE__PATH` and bind-mount the file if you want to try anyway.
-
-Until the supervision tree lands in U22+, the container boots, runs the schema and lock checks, then idles on `MYDIA_KEEP_ALIVE=true` waiting for SIGTERM. That gives `./dev rs logs -f` something useful to show while you iterate on the web UI work.
+`dx 0.7.9` is installed into `~/.cargo/bin` by the devenv shell's `enterShell` hook (nixpkgs ships 0.7.3 which is too old for our dioxus crate dep at 0.7.9). It's available inside `./dev rs shell` for manual experimentation with the wasm asset pipeline, but `./dev rs up` doesn't use it — dx 0.7's hot-reload mechanism is RSX-patching against a connected browser client, not server rebuild, and our SSR-first use case wants the latter.
 
 ## Web UI (U22 scaffolding)
 
 `crates/web` carries the Dioxus 0.7 full-stack UI: layout (DaisyUI drawer + sidebar), core components (button, input, modal, icon, flash), router skeleton (`/`, `/hello/:name`), and the CSP / security-header constants the server middleware reads. `crates/app/src/server.rs` mounts the Dioxus router on axum with security middleware, request-id propagation, compression, panic-catch, and trace layers.
 
-### Known follow-up: `dx`-driven asset pipeline
+### Dual-target binary layout
 
-Plain `./dev rs run` invokes `cargo run`, which doesn't run the `dx` CLI's asset processing. Consequence:
+`crates/app/Cargo.toml` declares two features:
 
-- `asset!()` paths resolve to absolute filesystem paths (`/home/.../crates/web/assets/app.css`) instead of hashed `/assets/<hash>.css` URLs.
-- The wasm hydration bundle isn't built, so the page renders SSR-only — interactive `use_signal`, server functions, and `use_websocket` need the wasm side, which is the follow-up commit that adds a wasm-targeted bin and updates `./dev rs run` to use `dx serve`.
+- `server` (the cargo default) builds the native axum binary with the config / DB / lock / SSR bootstrap. All server-only deps (`sqlx`, `tokio`, `axum`, `tower-http`, `mydia-rs-db`, ...) are gated behind this feature.
+- `web` builds a wasm binary that calls `dioxus::launch(mydia_rs_web::app)`. The wasm tree has none of the server deps — only `dioxus` (with the `web` feature) and the wasm-compatible `mydia-rs-web` library.
 
-For U22, the structural pieces (layout chrome, security headers, router) are wired and verified end-to-end. The hydration follow-up doesn't change any of this code; it adds a thin wasm bin that calls `dioxus::launch(mydia_rs_web::app)`.
+Operators don't see this split: `./dev rs build` and `./dev rs run` use the default `server` feature; `dx serve` orchestrates both compiles. The split is what lets `mydia-rs-app` be a single binary crate that compiles cleanly for `wasm32-unknown-unknown` (client) and `x86_64-unknown-linux-gnu` (server).
+
+### Known follow-up: wasm hydration + RSX hot-patching
+
+`./dev rs up` rebuilds and restarts the server binary on every Rust edit. That's the right shape for SSR-first development but doesn't deliver Dioxus's sub-second RSX hot-patching — the wasm bundle isn't being built and served as part of the dev loop, so there's no wasm browser client to hot-patch against.
+
+Wiring the wasm side is a separate follow-up: build the wasm target alongside the server, deliver the bundle via the asset pipeline, and have the wasm client connect to dx's hot-reload WebSocket. The dual-target crate shape is already in place (`server` / `web` features on `mydia-rs-app`); what's missing is the orchestration that builds both targets and bridges dx's RSX patches into the live browser. Once that lands, RSX-only edits will update the browser in under a second without rebuilding the server.
 
 ## See also
 

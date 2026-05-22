@@ -23,7 +23,25 @@ RUN apk add --no-cache \
     musl-dev \
     pkgconfig \
     openssl-dev \
-    openssl-libs-static
+    openssl-libs-static \
+    curl
+
+# Tailwind v4 standalone binary — same minor pin as the dev image and
+# the Phoenix `:tailwind` package. Compiles `crates/web/assets/app.css`
+# (Tailwind + DaisyUI source) into `app.built.css`, which the asset!()
+# macro in crates/web/src/app.rs references. Without this step the
+# Rust compile fails (asset! verifies file existence at compile time).
+ARG TAILWIND_VERSION=4.1.18
+RUN set -eux; \
+    arch="$(apk --print-arch)"; \
+    case "$arch" in \
+        x86_64)  tw_arch="linux-x64-musl" ;; \
+        aarch64) tw_arch="linux-arm64-musl" ;; \
+        *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/tailwindcss \
+        "https://github.com/tailwindlabs/tailwindcss/releases/download/v${TAILWIND_VERSION}/tailwindcss-${tw_arch}"; \
+    chmod +x /usr/local/bin/tailwindcss
 
 WORKDIR /build
 
@@ -37,6 +55,13 @@ COPY mydia-rs/bin ./bin
 # Reference path-dep for the p2p core lives outside mydia-rs/ so the
 # directory layout in the image mirrors the repo's directory layout.
 # Copy it in once we wire crates/p2p (U29).
+
+# Compile Tailwind once before the Rust build — asset!() needs the
+# output file present at cargo-build time.
+RUN /usr/local/bin/tailwindcss \
+        --input crates/web/assets/app.css \
+        --output crates/web/assets/app.built.css \
+        --minify
 
 # Build the release binary.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

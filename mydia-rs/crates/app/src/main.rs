@@ -1,6 +1,6 @@
-//! mydia-rs app entrypoint.
+//! mydia-rs app entrypoint — dual-target per Dioxus 0.7's `dx serve` model.
 //!
-//! Boot order:
+//! Server build (`--features server`, the cargo default):
 //!   1. Parse CLI / config (figment loads `mydia.toml` + `MYDIA_*` env).
 //!   2. Install the tracing subscriber per the logging config.
 //!   3. Build the multi-thread tokio runtime.
@@ -9,23 +9,43 @@
 //!   6. Acquire the boot-time mutual-exclusion lock (U34).
 //!   7. Mount the axum + Dioxus router (U22) and serve until shutdown.
 //!
-//! `--keep-alive` (used by the docker-compose service so the image
-//! doesn't restart-loop during pre-U22 testing) is now a no-op: the
-//! HTTP server holds the runtime open until SIGTERM / SIGINT. The
-//! flag stays in the CLI for compose compatibility but doesn't change
-//! behavior — the loop runs unconditionally because there's a real
-//! server to host now.
+//! Web build (`--features web --no-default-features`, used by `dx serve`
+//! when targeting wasm32-unknown-unknown):
+//!   Just `dioxus::launch(mydia_rs_web::app)`. All hydration plumbing
+//!   is handled by Dioxus internals; this file does nothing else on
+//!   that target.
+//!
+//! `--keep-alive` is a no-op kept for compose compatibility.
 
+// ============================================================
+// Web (wasm) target — hydration client.
+// ============================================================
+#[cfg(all(feature = "web", not(feature = "server")))]
+fn main() {
+    dioxus::launch(mydia_rs_web::app);
+}
+
+// ============================================================
+// Server target — axum + Dioxus SSR.
+// ============================================================
+#[cfg(feature = "server")]
 use std::path::PathBuf;
+#[cfg(feature = "server")]
 use std::process::ExitCode;
 
+#[cfg(feature = "server")]
 use clap::Parser;
+#[cfg(feature = "server")]
 use mydia_rs_app::runtime_lock::{self, RuntimeLockError};
+#[cfg(feature = "server")]
 use mydia_rs_app::server;
+#[cfg(feature = "server")]
 use mydia_rs_config::{tracing_setup, Config};
+#[cfg(feature = "server")]
 use mydia_rs_db::{connect_from_config, schema_check, SchemaCheckOutcome};
 
 /// CLI surface for the mydia-rs binary.
+#[cfg(feature = "server")]
 #[derive(Debug, Parser)]
 #[command(
     name = "mydia-rs",
@@ -44,10 +64,11 @@ struct Cli {
     keep_alive: bool,
 }
 
+#[cfg(feature = "server")]
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    let config = match Config::load(cli.config.as_deref()) {
+    let mut config = match Config::load(cli.config.as_deref()) {
         Ok(cfg) => cfg,
         Err(err) => {
             // Tracing is not installed yet; surface the failure on stderr
@@ -56,6 +77,22 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    // dx serve owns the user-facing port (--port flag) and spawns
+    // our binary as a subprocess, expecting it to bind a different
+    // port that dx then proxies to. dx passes that port via the
+    // standard PORT / IP env vars. Honor them on top of config so
+    // the dev-container hot-reload path works without operator
+    // config changes; native `cargo run` doesn't set these, so the
+    // config values still apply there.
+    if let Ok(port_str) = std::env::var("PORT") {
+        if let Ok(port) = port_str.parse::<u16>() {
+            config.server.port = port;
+        }
+    }
+    if let Ok(host) = std::env::var("IP") {
+        config.server.host = host;
+    }
 
     if let Err(err) = tracing_setup::install(&config.logging) {
         eprintln!("mydia-rs: failed to install tracing subscriber: {err}");
@@ -117,27 +154,57 @@ fn main() -> ExitCode {
             }
         }
 
-        let lock = match runtime_lock::acquire(&db).await {
-            Ok(lock) => lock,
-            Err(RuntimeLockError::Held) => {
-                tracing::error!(
-                    "another mydia instance is running against this database; refusing to start"
-                );
-                return ExitCode::FAILURE;
+        // MYDIA_RS_DEV_SKIP_LOCK=true skips the U34 mutual-
+        // exclusion check. ONLY for dev hot-reload loops where
+        // cargo-watch SIGKILLs the old binary before its lock-
+        // release path runs, leaving a 30-second-fresh lock row
+        // that blocks the new binary from starting. Production
+        // must not set this — the lock is the only thing keeping
+        // two backends off the same DB.
+        //
+        // Note: this env var deliberately doesn't start with
+        // `MYDIA_` because figment consumes that prefix as Config
+        // schema overrides and `deny_unknown_fields` would reject
+        // an unrecognized name.
+        let lock_enabled = !matches!(
+            std::env::var("MYDIA_RS_DEV_SKIP_LOCK")
+                .unwrap_or_default()
+                .to_lowercase()
+                .as_str(),
+            "true" | "1" | "yes" | "on"
+        );
+
+        let lock = if lock_enabled {
+            match runtime_lock::acquire(&db).await {
+                Ok(lock) => Some(lock),
+                Err(RuntimeLockError::Held) => {
+                    tracing::error!(
+                        "another mydia instance is running against this database; refusing to start"
+                    );
+                    return ExitCode::FAILURE;
+                }
+                Err(err) => {
+                    tracing::error!(%err, "failed to acquire runtime lock");
+                    return ExitCode::FAILURE;
+                }
             }
-            Err(err) => {
-                tracing::error!(%err, "failed to acquire runtime lock");
-                return ExitCode::FAILURE;
-            }
+        } else {
+            tracing::warn!(
+                "MYDIA_RS_DEV_SKIP_LOCK=true — boot-time mutual-exclusion lock skipped. \
+                 DEV ONLY; production must not set this."
+            );
+            None
         };
 
-        tracing::info!("mydia-rs boot ok (U34 lock held; U22 SSR mount next)");
+        tracing::info!("mydia-rs boot ok (U22 SSR mount next)");
 
         let router = server::build_router();
         let serve_result = server::serve(&config, router, wait_for_shutdown_signal()).await;
 
-        if let Err(err) = lock.release().await {
-            tracing::warn!(%err, "runtime lock release failed; row will time out");
+        if let Some(lock) = lock {
+            if let Err(err) = lock.release().await {
+                tracing::warn!(%err, "runtime lock release failed; row will time out");
+            }
         }
 
         match serve_result {
@@ -155,7 +222,7 @@ fn main() -> ExitCode {
 
 /// Block until SIGTERM (docker stop) or SIGINT (Ctrl-C) arrives.
 /// On non-unix targets falls back to `ctrl_c` only.
-#[cfg(unix)]
+#[cfg(all(feature = "server", unix))]
 async fn wait_for_shutdown_signal() {
     use tokio::signal::unix::{signal, SignalKind};
     let mut sigterm = match signal(SignalKind::terminate()) {
@@ -172,7 +239,7 @@ async fn wait_for_shutdown_signal() {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(all(feature = "server", not(unix)))]
 async fn wait_for_shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
 }

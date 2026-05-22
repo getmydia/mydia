@@ -10,3 +10,10 @@
 
 # Editor noise
 .DS_Store
+
+# Tailwind v4 build output. `crates/web/assets/app.css` is the source
+# of truth (Tailwind + DaisyUI directives); the `tailwindcss` binary
+# compiles it into `app.built.css` which is what the asset!() macro
+# in crates/web/src/app.rs references. The dev container rebuilds it
+# on every save; the production image compiles it once at build time.
+crates/web/assets/app.built.css
