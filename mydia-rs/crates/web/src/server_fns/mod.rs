@@ -15,3 +15,4 @@
 
 pub mod auth;
 pub mod library_paths;
+pub mod profile;

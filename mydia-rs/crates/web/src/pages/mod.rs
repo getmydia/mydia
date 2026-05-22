@@ -8,3 +8,4 @@ pub mod admin;
 pub mod auth;
 pub mod hello;
 pub mod home;
+pub mod profile;

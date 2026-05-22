@@ -175,6 +175,13 @@ fn Sidebar(user_label: String) -> Element {
                                 "Library paths"
                             }
                         }
+                        li {
+                            Link {
+                                to: Route::Profile {},
+                                Icon { name: "user", class: "w-5 h-5" }
+                                "Profile"
+                            }
+                        }
                     }
                 }
                 div { class: "px-4 py-3 border-t border-base-content/10 flex flex-col gap-2",
