@@ -11,6 +11,7 @@
 //! is visible on the hello page without depending on data plumbing
 //! that isn't wired yet.
 
+use dioxus::document;
 use dioxus::prelude::*;
 
 use crate::components::core::Icon;
@@ -33,57 +34,55 @@ pub fn AuthShell() -> Element {
 
 #[component]
 pub fn AppShell() -> Element {
-    // Resolve the current user (server-fn round trip). On SSR this
-    // runs once; on hydration the resource also reruns client-side
-    // and surfaces the same answer. When the resource resolves to
-    // `None` the guard navigates to /login.
-    let user = use_resource(|| async move { current_user().await });
+    // Resolve the current user server-side so SSR has the answer
+    // baked into the HTML before it ships. `use_server_future` is
+    // the load-bearing primitive here — `use_resource` does not
+    // suspend during SSR, so its `None` initial value would force
+    // the page to render an empty loading shell that never resolves
+    // in the cargo-watch dev pipeline (no wasm bundle to take over).
+    //
+    // We collapse Err into None so the "no session" and "session
+    // lookup failed" branches share one redirect path. Both should
+    // bounce to /login; rendering a separate error card would only
+    // be useful with a wasm client we don't currently ship.
+    let user = use_server_future(|| async move { current_user().await.ok().flatten() })?;
     let nav = navigator();
 
-    match &*user.read_unchecked() {
-        Some(Ok(Some(_))) => {
-            // happy path — render the chrome below
-        }
-        Some(Ok(None)) => {
-            // Anonymous request. Push to /login; the navigator runs
-            // on the client only, so SSR still produces the chrome
-            // (the wasm hydration triggers the bounce).
-            nav.push(Route::Login {});
-            return rsx! {
-                div { class: "min-h-screen bg-base-200 flex items-center justify-center",
-                    span { class: "loading loading-spinner loading-md" }
-                }
-            };
-        }
-        Some(Err(err)) => {
-            // server-fn failed. Best we can do is show a generic
-            // error rather than a stuck spinner — operators reload
-            // or open the dev console for the underlying cause.
-            return rsx! {
-                div { class: "min-h-screen bg-base-200 flex items-center justify-center",
-                    div { class: "alert alert-error max-w-md",
-                        span { "Could not load session: {err}" }
-                    }
-                }
-            };
-        }
-        None => {
-            return rsx! {
-                div { class: "min-h-screen bg-base-200 flex items-center justify-center",
-                    span { class: "loading loading-spinner loading-md" }
-                }
-            };
-        }
-    }
-
-    let current_user_label = match &*user.read_unchecked() {
-        Some(Ok(Some(AuthAck { username, role, .. }))) => format!(
-            "{} ({})",
-            username.clone().unwrap_or_else(|| "user".to_owned()),
-            role
-        ),
-        _ => String::new(),
+    // `Resource<T>::read()` exposes a `ReadableRef<'_, Option<T>>` —
+    // the outer Option signals "is the future resolved yet?". The `?`
+    // above already guaranteed it is, so the outer `Some` is always
+    // present here; we flatten to drop it, leaving the Option<AuthAck>
+    // that means "is there a logged-in user?".
+    let authenticated_user: Option<AuthAck> = user.read().clone().flatten();
+    let Some(authenticated_user) = authenticated_user else {
+        // Anonymous request. We emit BOTH a `<meta http-equiv=
+        // "refresh">` for the SSR-only dev pipeline AND a
+        // navigator push for the wasm-hydrated path. The meta
+        // refresh wins instantly when wasm isn't present (which
+        // is the case in the cargo-watch dev loop — `dx tools
+        // assets` only ships CSS, not the wasm bundle), while
+        // the nav.push gives smooth client-side routing once
+        // hydration lands. Either way the user reaches /login;
+        // login is a full-document transition anyway, so the
+        // meta-refresh approach is correct semantically.
+        nav.push(Route::Login {});
+        return rsx! {
+            document::Meta {
+                http_equiv: "refresh",
+                content: "0;url=/login",
+            }
+            div { class: "min-h-screen bg-base-200 flex items-center justify-center",
+                span { class: "loading loading-spinner loading-md" }
+            }
+        };
     };
+
+    let AuthAck { username, role, .. } = authenticated_user;
+    let current_user_label = format!(
+        "{} ({})",
+        username.unwrap_or_else(|| "user".to_owned()),
+        role
+    );
 
     rsx! {
         div { class: "drawer lg:drawer-open",

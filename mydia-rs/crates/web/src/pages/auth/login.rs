@@ -12,6 +12,7 @@
 //! state into the session and returns a 302 to the provider's
 //! authorization URL.
 
+use dioxus::document;
 use dioxus::prelude::*;
 
 use crate::components::core::{Button, ButtonVariant, Input};
@@ -26,9 +27,13 @@ pub fn Login() -> Element {
     let mut submitting = use_signal(|| false);
     let nav = navigator();
 
-    // Bounce to /setup if the DB is empty (no admin yet).
+    // Bounce to /setup if the DB is empty (no admin yet). Both the
+    // navigator push and the meta-refresh fire — see AppShell for the
+    // rationale (SSR-only dev mode has no wasm to act on the
+    // navigator).
     let setup_state = use_resource(|| async move { setup_required().await });
-    if let Some(Ok(true)) = &*setup_state.read_unchecked() {
+    let setup_needed = matches!(&*setup_state.read_unchecked(), Some(Ok(true)));
+    if setup_needed {
         nav.push(Route::Setup {});
     }
 
@@ -63,6 +68,12 @@ pub fn Login() -> Element {
     };
 
     rsx! {
+        if setup_needed {
+            document::Meta {
+                http_equiv: "refresh",
+                content: "0;url=/setup",
+            }
+        }
         div { class: "card bg-base-100 shadow-xl",
             div { class: "card-body",
                 h1 { class: "card-title text-2xl", "Sign in to mydia" }

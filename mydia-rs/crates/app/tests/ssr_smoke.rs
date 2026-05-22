@@ -57,41 +57,75 @@ async fn build() -> axum::Router {
 }
 
 #[tokio::test]
-async fn home_page_serves_a_session_loading_shell() {
-    // U24.a: AppShell guards the home page. An anonymous SSR pass
-    // can't resolve current_user(), so it renders a small loading
-    // shell server-side; the wasm hydration then bounces to /login.
-    // This test pins the SSR shape so a future regression (white
-    // page on cold load) gets caught even though the bounce itself
-    // is a wasm-only behavior we can't reach from a tower oneshot.
+async fn home_page_redirects_to_login_when_anonymous() {
+    // U24.a: AppShell guards `/`. An anonymous SSR pass has no
+    // `mydia_rs_session` cookie, so `current_user()` resolves to
+    // `Ok(None)`. The guard then emits both a navigator push (which
+    // re-routes the dioxus router server-side so SSR ends up
+    // rendering the Login page directly) AND a `<meta http-equiv=
+    // "refresh">` (the wasm-free fallback for browsers that
+    // ignore the router state but follow the meta tag).
+    //
+    // The meta-refresh is the load-bearing piece for the
+    // cargo-watch dev loop — `dx tools assets` ships only CSS, so
+    // without it the user would sit on a spinner forever. The
+    // re-routed Login page is the bonus.
+    assert_anonymous_landing_redirects_to_login("/").await;
+}
+
+#[tokio::test]
+async fn profile_route_redirects_anonymous_to_login() {
+    // U24.d — `/profile` lives under AppShell with the same guard.
+    assert_anonymous_landing_redirects_to_login("/profile").await;
+}
+
+#[tokio::test]
+async fn discover_route_redirects_anonymous_to_login() {
+    // U24.f — `/discover` lives under AppShell with the same guard.
+    assert_anonymous_landing_redirects_to_login("/discover").await;
+}
+
+async fn assert_anonymous_landing_redirects_to_login(path: &str) {
     let router = build().await;
     let response = router
         .oneshot(
             Request::builder()
-                .uri("/")
+                .uri(path)
                 .body(Body::empty())
                 .expect("build request"),
         )
         .await
         .expect("serve request");
 
-    assert_eq!(response.status(), StatusCode::OK, "home page should 200");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "{path} should 200 (meta-refresh handles the redirect, not the response code)"
+    );
 
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("collect body");
     let body = String::from_utf8_lossy(&body);
 
-    // The AppShell guard renders one of these markers on SSR:
-    //   - loading spinner (current_user resolving),
-    //   - the drawer chrome (authenticated, won't happen on anon SSR).
-    assert!(
-        body.contains("loading-spinner") || body.contains("drawer"),
-        "expected guard shell or drawer chrome:\n{body}"
-    );
     assert!(
         body.contains("<title>mydia</title>"),
-        "expected page title:\n{body}"
+        "expected page title for {path}:\n{body}"
+    );
+
+    // Two paths both count as a successful anonymous redirect:
+    //   1. The meta-refresh is in the head — the wasm-free fallback.
+    //   2. The dioxus router re-rendered into the Login page after
+    //      `nav.push(Route::Login{})` — which is what happens server-
+    //      side because dioxus walks the router during SSR.
+    // We assert that at least one is present. The meta-refresh is
+    // the strictly load-bearing one; the re-render is icing.
+    let has_meta_refresh =
+        body.contains(r#"http-equiv="refresh""#) && body.contains(r#"content="0;url=/login""#);
+    let has_login_form = body.contains(r#"id="login-form""#);
+    assert!(
+        has_meta_refresh || has_login_form,
+        "expected meta-refresh OR login form on {path}:\n{body}"
     );
 }
 
@@ -203,71 +237,6 @@ async fn security_headers_are_present_on_responses() {
     assert!(
         csp.contains("frame-ancestors 'self'"),
         "CSP must restrict frame-ancestors: {csp}"
-    );
-}
-
-#[tokio::test]
-async fn profile_route_serves_app_shell() {
-    // U24.d — `/profile` lives under AppShell. Anonymous SSR can't
-    // resolve current_user, so it returns the loading shell (same
-    // shape as the home page test). The profile content itself is
-    // gated by hydration's session check; the SSR pass just proves
-    // the route is registered and the AppShell renders.
-    let router = build().await;
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/profile")
-                .body(Body::empty())
-                .expect("build request"),
-        )
-        .await
-        .expect("serve request");
-
-    assert_eq!(response.status(), StatusCode::OK, "profile page should 200");
-
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("collect body");
-    let body = String::from_utf8_lossy(&body);
-
-    assert!(
-        body.contains("loading-spinner") || body.contains("drawer"),
-        "expected AppShell guard shell:\n{body}"
-    );
-}
-
-#[tokio::test]
-async fn discover_route_serves_app_shell() {
-    // U24.f — `/discover` likewise lives under AppShell; an anonymous
-    // SSR pass renders the loading shell. The discover form itself
-    // (media-type toggle, category dropdown, etc.) hydrates after
-    // the session check succeeds.
-    let router = build().await;
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/discover")
-                .body(Body::empty())
-                .expect("build request"),
-        )
-        .await
-        .expect("serve request");
-
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "discover page should 200"
-    );
-
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("collect body");
-    let body = String::from_utf8_lossy(&body);
-
-    assert!(
-        body.contains("loading-spinner") || body.contains("drawer"),
-        "expected AppShell guard shell:\n{body}"
     );
 }
 

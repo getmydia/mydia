@@ -8,6 +8,7 @@
 //! provides a password themselves at U24.a. This is the simpler
 //! single-mode case the Phoenix `LiveView` treats as default.
 
+use dioxus::document;
 use dioxus::prelude::*;
 
 use crate::components::core::{Button, ButtonVariant, Input};
@@ -25,8 +26,11 @@ pub fn Setup() -> Element {
     let nav = navigator();
 
     // If users already exist, /setup is closed — bounce to /login.
+    // Both nav.push and a meta-refresh fire (see AppShell for the
+    // dev-mode SSR-only rationale).
     let setup_state = use_resource(|| async move { setup_required().await });
-    if let Some(Ok(false)) = &*setup_state.read_unchecked() {
+    let setup_closed = matches!(&*setup_state.read_unchecked(), Some(Ok(false)));
+    if setup_closed {
         nav.push(Route::Login {});
     }
 
@@ -62,6 +66,12 @@ pub fn Setup() -> Element {
     };
 
     rsx! {
+        if setup_closed {
+            document::Meta {
+                http_equiv: "refresh",
+                content: "0;url=/login",
+            }
+        }
         div { class: "card bg-base-100 shadow-xl",
             div { class: "card-body",
                 h1 { class: "card-title text-2xl", "Welcome to mydia" }
