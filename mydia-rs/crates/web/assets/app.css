@@ -1,0 +1,32 @@
+/* Tailwind v4 + DaisyUI 4.x source roots for the mydia-rs Dioxus UI.
+ *
+ * Mirrors the Phoenix `assets/css/app.css` shape (no tailwind.config.js
+ * in v4; sources are declared inline). The `source` paths are relative
+ * to this file so `dx build` picks up class names from every Rust file
+ * in the web crate.
+ *
+ * To rebuild the daisyui.js plugin to the latest:
+ *   curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
+ *   mv daisyui.js mydia-rs/crates/web/vendor/daisyui.js
+ *
+ * U22 pulls daisyui via the npm distribution path (`@plugin "daisyui"`);
+ * the vendored copy goes in once the asset-pipeline writeup confirms
+ * the shape we want.
+ */
+
+@import "tailwindcss";
+@source "../src";
+
+@plugin "daisyui" {
+    themes: light --default, dark --prefersdark, dracula, business, corporate;
+}
+
+/* Make sure modals don't fight scroll behavior on hydration. */
+html, body {
+    height: 100%;
+}
+
+body {
+    background-color: oklch(var(--b2) / 1);
+    color: oklch(var(--bc) / 1);
+}

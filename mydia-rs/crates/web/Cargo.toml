@@ -5,7 +5,30 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[lib]
+name = "mydia_rs_web"
+path = "src/lib.rs"
+
+# Per Dioxus 0.7's dual-target model, this crate must compile to both
+# wasm32-unknown-unknown (client / hydration) and the native server target.
+# That means: no sqlx, no mydia-rs-db, no tokio features that aren't
+# wasm-safe. Server-only logic (resolvers, DB, jobs, p2p) lives in the
+# parent crate that hosts the axum router and is gated behind the `server`
+# feature of `mydia-rs-app`. This crate carries only the UI surface.
 [dependencies]
+# The `dioxus` umbrella crate is the only Dioxus dep we touch directly per
+# the 0.7 convention. `fullstack` pulls in dioxus-fullstack, `router` pulls
+# in dioxus-router. Feature flags `server` / `web` are forwarded by the
+# parent app crate so the same `app()` function compiles for both targets.
+dioxus = { version = "0.7", features = ["fullstack", "router"] }
+serde = { workspace = true }
+serde_json = "1"
+tracing = { workspace = true }
+
+[features]
+default = []
+server = ["dioxus/server"]
+web    = ["dioxus/web"]
 
 [lints]
 workspace = true

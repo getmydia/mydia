@@ -13,6 +13,12 @@ path = "src/lib.rs"
 name = "mydia-rs"
 path = "src/main.rs"
 
+# Server-side binary that hosts the axum router, runtime lock,
+# DB connection pool, and the Dioxus SSR mount. The wasm client
+# (hydration) is a follow-up binary that lands when the `dx`-driven
+# dual-build flow is wired into ./dev rs; for U22 we ship SSR-only,
+# which the plan's verification (rendered page + DaisyUI styles +
+# layout chrome) covers.
 [dependencies]
 tokio.workspace = true
 clap.workspace = true
@@ -27,9 +33,31 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 thiserror.workspace = true
 mydia-rs-config = { path = "../config" }
 mydia-rs-db = { path = "../db" }
+mydia-rs-web = { path = "../web" }
+
+# Dioxus 0.7 — we enable the `server`, `fullstack`, and `router`
+# features so we can call `dioxus::server::router(mydia_rs_web::app)`
+# to build the axum router with SSR + asset serving baked in.
+dioxus = { version = "0.7", features = ["fullstack", "router", "server"] }
+
+# axum + tower stack. `dioxus::server::axum` re-exports axum 0.8;
+# we pin to the same version so the router type lines up.
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = [
+    "cors",
+    "trace",
+    "compression-gzip",
+    "fs",
+    "request-id",
+    "catch-panic",
+    "set-header",
+] }
+http = "1"
 
 [dev-dependencies]
 tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
 
 [lints]
 workspace = true

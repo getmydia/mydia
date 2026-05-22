@@ -1,0 +1,35 @@
+# Dioxus 0.7 CLI configuration for the mydia-rs full-stack workspace.
+#
+# Most settings are optional in 0.7 — the `dx` CLI infers sensible
+# defaults from the workspace. This file pins the operator-visible
+# bits: app name, page title, the package the `dx` CLI builds when
+# invoked from the workspace root.
+#
+# Build orchestration:
+#   - `dx build --release --package mydia-rs-app` produces the server
+#     binary plus the wasm bundle. The wasm bundle is built from the
+#     same crate with `--features web`; the server side from the
+#     default `server` feature.
+#   - `dx serve --package mydia-rs-app` is the dev loop with hot reload.
+#
+# Asset pipeline:
+#   - CSS referenced via `asset!()` is minified and injected into <head>
+#     automatically. The `assets/` directory under `crates/web/` is
+#     picked up via the `asset!("/assets/app.css")` macro in app.rs.
+
+[application]
+name = "mydia-rs"
+
+[web.app]
+title = "mydia"
+default_platform = "web"
+
+[web.watcher]
+watch_path = ["crates/web/src", "crates/web/assets"]
+
+[web.resource]
+# Additional static resources beyond what `asset!()` registers. For
+# U22 we rely on the macro path only — extra `style` / `script`
+# entries land if the layout grows to need them.
+style = []
+script = []

@@ -1,14 +1,27 @@
 //! mydia-rs app entrypoint.
 //!
-//! Today's binary loads config, installs the tracing subscriber, logs a
-//! "boot ok" line, and exits. The supervision tree (DB pool, HTTP server,
-//! P2P host, background workers) lands in subsequent units.
+//! Boot order:
+//!   1. Parse CLI / config (figment loads `mydia.toml` + `MYDIA_*` env).
+//!   2. Install the tracing subscriber per the logging config.
+//!   3. Build the multi-thread tokio runtime.
+//!   4. Open the DB pool (sqlx, `SQLite` or Postgres per `database.type`).
+//!   5. Schema-drift probe (warns on DB ahead, refuses on DB behind).
+//!   6. Acquire the boot-time mutual-exclusion lock (U34).
+//!   7. Mount the axum + Dioxus router (U22) and serve until shutdown.
+//!
+//! `--keep-alive` (used by the docker-compose service so the image
+//! doesn't restart-loop during pre-U22 testing) is now a no-op: the
+//! HTTP server holds the runtime open until SIGTERM / SIGINT. The
+//! flag stays in the CLI for compose compatibility but doesn't change
+//! behavior — the loop runs unconditionally because there's a real
+//! server to host now.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
 use mydia_rs_app::runtime_lock::{self, RuntimeLockError};
+use mydia_rs_app::server;
 use mydia_rs_config::{tracing_setup, Config};
 use mydia_rs_db::{connect_from_config, schema_check, SchemaCheckOutcome};
 
@@ -25,11 +38,8 @@ struct Cli {
     #[arg(long, env = "MYDIA_CONFIG", value_name = "PATH")]
     config: Option<PathBuf>,
 
-    /// After the boot checks pass, hold the runtime lock and wait for
-    /// SIGTERM / SIGINT instead of exiting. The container compose
-    /// service uses this so the image doesn't restart-loop until the
-    /// real supervision tree (U22+) replaces the wait with the actual
-    /// server loop.
+    /// Retained for compose compatibility; the HTTP server holds the
+    /// runtime open by itself, so this is now a no-op.
     #[arg(long, env = "MYDIA_KEEP_ALIVE", default_value_t = false)]
     keep_alive: bool,
 }
@@ -63,12 +73,13 @@ fn main() -> ExitCode {
         }
     };
 
-    runtime.block_on(async {
+    runtime.block_on(async move {
         tracing::info!(
             version = env!("CARGO_PKG_VERSION"),
             db_type = ?config.database.db_type,
             host = %config.server.host,
             port = config.server.port,
+            keep_alive = cli.keep_alive,
             "mydia-rs boot starting"
         );
 
@@ -120,21 +131,25 @@ fn main() -> ExitCode {
             }
         };
 
-        tracing::info!("mydia-rs boot ok (U34: runtime lock held)");
+        tracing::info!("mydia-rs boot ok (U34 lock held; U22 SSR mount next)");
 
-        if cli.keep_alive {
-            tracing::info!(
-                "--keep-alive set; waiting for SIGTERM/SIGINT (supervision tree lands in U22+)"
-            );
-            wait_for_shutdown_signal().await;
-            tracing::info!("shutdown signal received; releasing lock and exiting");
-        }
+        let router = server::build_router();
+        let serve_result = server::serve(&config, router, wait_for_shutdown_signal()).await;
 
         if let Err(err) = lock.release().await {
             tracing::warn!(%err, "runtime lock release failed; row will time out");
         }
 
-        ExitCode::SUCCESS
+        match serve_result {
+            Ok(()) => {
+                tracing::info!("shutdown complete");
+                ExitCode::SUCCESS
+            }
+            Err(err) => {
+                tracing::error!(%err, "axum server exited with error");
+                ExitCode::FAILURE
+            }
+        }
     })
 }
 
