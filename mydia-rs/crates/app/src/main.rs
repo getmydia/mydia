@@ -50,9 +50,13 @@ use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 #[cfg(feature = "server")]
 use mydia_rs_pubsub::Pubsub;
 #[cfg(feature = "server")]
+use mydia_rs_web::oidc::{OidcContext, OidcSettings};
+#[cfg(feature = "server")]
 use mydia_rs_web::session as web_session;
 #[cfg(feature = "server")]
 use mydia_rs_web::WebState;
+#[cfg(feature = "server")]
+use std::sync::Arc;
 
 /// CLI surface for the mydia-rs binary.
 #[cfg(feature = "server")]
@@ -228,7 +232,13 @@ fn main() -> ExitCode {
         let pubsub = Pubsub::new();
         let library_scanner_storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
 
-        let web_state = WebState::new(db.clone(), pubsub.clone(), library_scanner_storage);
+        // OIDC discovery happens once at boot. Failure is logged but
+        // not fatal — the rest of the app boots with password auth
+        // only, and the login page hides the OIDC button via
+        // `WebState::oidc_available`.
+        let oidc = build_oidc_context(&config).await.map(Arc::new);
+
+        let web_state = WebState::new(db.clone(), pubsub.clone(), library_scanner_storage, oidc);
         let session_layer = web_session::layer(&db, !cfg!(debug_assertions));
 
         tracing::info!("mydia-rs boot ok (U24.a auth surface + U23 admin pilot mounted)");
@@ -277,4 +287,52 @@ async fn wait_for_shutdown_signal() {
 #[cfg(all(feature = "server", not(unix)))]
 async fn wait_for_shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
+}
+
+/// Translate the `AuthConfig` OIDC fields into the web crate's
+/// [`OidcSettings`] shape and run discovery. Returns `None` when
+/// OIDC is disabled in config (the common case for self-hosters
+/// who only run password auth) or when discovery fails (logged).
+#[cfg(feature = "server")]
+async fn build_oidc_context(config: &Config) -> Option<OidcContext> {
+    let auth = &config.auth;
+    if !auth.oidc_enabled {
+        tracing::debug!("OIDC disabled in config; skipping discovery");
+        return None;
+    }
+
+    let (Some(client_id), Some(client_secret), Some(redirect_uri)) = (
+        auth.oidc_client_id.clone(),
+        auth.oidc_client_secret.clone(),
+        auth.oidc_redirect_uri.clone(),
+    ) else {
+        tracing::error!(
+            "OIDC enabled but client_id / client_secret / redirect_uri missing — skipping"
+        );
+        return None;
+    };
+
+    let settings = OidcSettings {
+        issuer: auth.oidc_issuer.clone(),
+        discovery_document_uri: auth.oidc_discovery_document_uri.clone(),
+        client_id,
+        client_secret,
+        redirect_uri,
+        scopes: auth.oidc_scopes.clone(),
+        disable_par: auth.oidc_disable_par,
+    };
+
+    match OidcContext::try_build(&settings).await {
+        Some(ctx) => {
+            tracing::info!(
+                issuer = ?settings.issuer,
+                "OIDC provider discovered; PKCE flow available at /auth/oidc/login"
+            );
+            Some(ctx)
+        }
+        None => {
+            // try_build already logged the underlying cause.
+            None
+        }
+    }
 }

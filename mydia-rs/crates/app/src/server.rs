@@ -24,6 +24,7 @@ use std::time::Duration;
 use axum::{Extension, Router};
 use http::{HeaderName, HeaderValue};
 use mydia_rs_config::Config;
+use mydia_rs_web::oidc as web_oidc;
 use mydia_rs_web::session::SessionLayer;
 use mydia_rs_web::{security, WebState};
 use tower_http::catch_panic::CatchPanicLayer;
@@ -43,6 +44,13 @@ const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 /// `Session::get/insert` for the authenticated user's id.
 pub fn build_router(state: WebState, session_layer: SessionLayer) -> Router {
     let router = dioxus::server::router(mydia_rs_web::app);
+    // The OIDC routes are raw axum GET handlers (302 redirects) —
+    // they can't be Dioxus server fns because the login leg writes
+    // PKCE state into the session before returning a redirect, and
+    // the callback leg reads `code`/`state` from the query string.
+    // Merge them in before the layers are attached so the trace +
+    // catch-panic + request-id layers cover them too.
+    let router = router.merge(web_oidc::router());
     let router = session_layer.attach(router);
 
     // CSP picks dev or prod variant at build time. The dev variant
@@ -173,7 +181,7 @@ mod tests {
         let pubsub = Pubsub::new();
         let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
         let session_layer = session::layer(&db, false);
-        (WebState::new(db, pubsub, storage), session_layer)
+        (WebState::new(db, pubsub, storage, None), session_layer)
     }
 
     #[test]

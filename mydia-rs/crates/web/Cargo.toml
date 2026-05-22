@@ -46,6 +46,13 @@ time               = { version = "0.3", optional = true }
 axum               = { version = "0.8", optional = true }
 tower              = { version = "0.5", optional = true }
 http               = { version = "1", optional = true }
+# OIDC PKCE flow (U24.c). `openidconnect` 3.x is the stable API line —
+# 4.x still in flux on the http-client integration. `reqwest` is pulled
+# here for the OIDC backchannel; it's a shared transitive dep with the
+# metadata / integrations crates so no extra binary size.
+openidconnect      = { version = "3", optional = true, default-features = false, features = ["reqwest", "rustls-tls"] }
+reqwest            = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls"] }
+url                = { version = "2", optional = true }
 
 [features]
 default = []
@@ -69,6 +76,9 @@ server = [
     "dep:axum",
     "dep:tower",
     "dep:http",
+    "dep:openidconnect",
+    "dep:reqwest",
+    "dep:url",
 ]
 web    = ["dioxus/web"]
 

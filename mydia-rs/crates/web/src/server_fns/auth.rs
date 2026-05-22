@@ -68,6 +68,26 @@ pub async fn setup_required() -> Result<bool, ServerFnError> {
     server::setup_required().await
 }
 
+/// Client-side check used by the login page to decide whether to
+/// render the OIDC button. Returns `true` iff [`WebState::oidc`] was
+/// successfully discovered at boot.
+#[get("/api/auth/oidc-available")]
+pub async fn oidc_available() -> Result<bool, ServerFnError> {
+    server::oidc_available().await
+}
+
+/// Server-side helper used by [`crate::oidc::callback_handler`] to
+/// upsert a user freshly authenticated via OIDC. Exposed at the
+/// module boundary so the raw axum callback doesn't need to reach
+/// into the server-fn private module path.
+#[cfg(feature = "server")]
+pub async fn upsert_oidc_user(
+    db: &mydia_rs_db::Db,
+    payload: &crate::oidc::OidcUserPayload,
+) -> Result<String, ServerFnError> {
+    server::upsert_oidc_user(db, payload).await
+}
+
 /// Server-side helper: pull the logged-in user's id out of the
 /// session, or surface a 401-shaped `ServerFnError` if the request
 /// is anonymous. Every server fn that mutates user-owned state (e.g.
@@ -206,6 +226,156 @@ mod server {
     pub(super) async fn setup_required() -> Result<bool, ServerFnError> {
         let st = state().await?;
         Ok(count_users(&st.db).await? == 0)
+    }
+
+    pub(super) async fn oidc_available() -> Result<bool, ServerFnError> {
+        let st = state().await?;
+        Ok(st.oidc_available())
+    }
+
+    /// Upsert an OIDC-authenticated user.
+    ///
+    /// Mirrors `Mydia.Accounts.upsert_user_from_oidc/3`:
+    ///   1. If a user already exists with the same `(oidc_sub,
+    ///      oidc_issuer)` pair, update the mutable identity fields
+    ///      (`email`, `display_name`, `avatar_url`) and return their id.
+    ///   2. Otherwise insert a fresh row keyed by a new UUID.
+    ///
+    /// The role assignment falls back to `"user"` (see
+    /// `oidc::extract_user_payload`); group/role-claim mapping is a
+    /// follow-up tied to a `MydiaAdditionalClaims` shape.
+    pub(crate) async fn upsert_oidc_user(
+        db: &mydia_rs_db::Db,
+        payload: &crate::oidc::OidcUserPayload,
+    ) -> Result<String, ServerFnError> {
+        let existing = lookup_oidc_user(db, &payload.sub, &payload.issuer).await?;
+        let now = chrono::Utc::now();
+
+        if let Some(existing_id) = existing {
+            update_oidc_user(db, &existing_id, payload, now).await?;
+            return Ok(existing_id);
+        }
+
+        let id = uuid::Uuid::new_v4().to_string();
+        insert_oidc_user(db, &id, payload, now).await?;
+        Ok(id)
+    }
+
+    async fn lookup_oidc_user(
+        db: &mydia_rs_db::Db,
+        sub: &str,
+        issuer: &str,
+    ) -> Result<Option<String>, ServerFnError> {
+        let row: Option<(String,)> = match db {
+            mydia_rs_db::Db::Sqlite(pool) => sqlx::query_as(
+                "SELECT id FROM users WHERE oidc_sub = ? AND oidc_issuer = ? LIMIT 1",
+            )
+            .bind(sub)
+            .bind(issuer)
+            .fetch_optional(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("lookup oidc user: {err}")))?,
+            mydia_rs_db::Db::Postgres(pool) => sqlx::query_as(
+                "SELECT id FROM users WHERE oidc_sub = $1 AND oidc_issuer = $2 LIMIT 1",
+            )
+            .bind(sub)
+            .bind(issuer)
+            .fetch_optional(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("lookup oidc user: {err}")))?,
+        };
+        Ok(row.map(|(id,)| id))
+    }
+
+    async fn insert_oidc_user(
+        db: &mydia_rs_db::Db,
+        id: &str,
+        payload: &crate::oidc::OidcUserPayload,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), ServerFnError> {
+        match db {
+            mydia_rs_db::Db::Sqlite(pool) => {
+                sqlx::query(
+                    "INSERT INTO users (id, email, display_name, avatar_url, oidc_sub, oidc_issuer, role, last_login_at, inserted_at, updated_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(id)
+                .bind(payload.email.as_deref())
+                .bind(payload.display_name.as_deref())
+                .bind(payload.avatar_url.as_deref())
+                .bind(&payload.sub)
+                .bind(&payload.issuer)
+                .bind(&payload.role)
+                .bind(now.to_rfc3339())
+                .bind(now.to_rfc3339())
+                .bind(now.to_rfc3339())
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("insert oidc user: {err}")))?;
+            }
+            mydia_rs_db::Db::Postgres(pool) => {
+                sqlx::query(
+                    "INSERT INTO users (id, email, display_name, avatar_url, oidc_sub, oidc_issuer, role, last_login_at, inserted_at, updated_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                )
+                .bind(id)
+                .bind(payload.email.as_deref())
+                .bind(payload.display_name.as_deref())
+                .bind(payload.avatar_url.as_deref())
+                .bind(&payload.sub)
+                .bind(&payload.issuer)
+                .bind(&payload.role)
+                .bind(now)
+                .bind(now)
+                .bind(now)
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("insert oidc user: {err}")))?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn update_oidc_user(
+        db: &mydia_rs_db::Db,
+        id: &str,
+        payload: &crate::oidc::OidcUserPayload,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), ServerFnError> {
+        // last_login_at is bumped here as well so OIDC users see a
+        // current timestamp on the profile page — touch_last_login
+        // is bcrypt-path only.
+        match db {
+            mydia_rs_db::Db::Sqlite(pool) => {
+                sqlx::query(
+                    "UPDATE users SET email = ?, display_name = ?, avatar_url = ?, last_login_at = ?, updated_at = ? WHERE id = ?",
+                )
+                .bind(payload.email.as_deref())
+                .bind(payload.display_name.as_deref())
+                .bind(payload.avatar_url.as_deref())
+                .bind(now.to_rfc3339())
+                .bind(now.to_rfc3339())
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("update oidc user: {err}")))?;
+            }
+            mydia_rs_db::Db::Postgres(pool) => {
+                sqlx::query(
+                    "UPDATE users SET email = $1, display_name = $2, avatar_url = $3, last_login_at = $4, updated_at = $5 WHERE id = $6",
+                )
+                .bind(payload.email.as_deref())
+                .bind(payload.display_name.as_deref())
+                .bind(payload.avatar_url.as_deref())
+                .bind(now)
+                .bind(now)
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("update oidc user: {err}")))?;
+            }
+        }
+        Ok(())
     }
 
     pub(super) async fn setup(payload: SetupPayload) -> Result<AuthAck, ServerFnError> {

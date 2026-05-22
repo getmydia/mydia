@@ -5,14 +5,18 @@
 //! so the operator can create the initial admin instead of staring
 //! at a useless login form.
 //!
-//! OIDC button is rendered disabled at U24.a; U24.b wires the PKCE
-//! redirect.
+//! OIDC button activates when [`oidc_available`] returns `true` —
+//! mirrors the Phoenix `auth_controller.ex` `oidc_configured?/0`
+//! gate. Clicking the button is a full-page GET to
+//! `/auth/oidc/login`, NOT a server fn: the handler writes PKCE
+//! state into the session and returns a 302 to the provider's
+//! authorization URL.
 
 use dioxus::prelude::*;
 
 use crate::components::core::{Button, ButtonVariant, Input};
 use crate::routes::Route;
-use crate::server_fns::auth::{login_with_password, setup_required, LoginPayload};
+use crate::server_fns::auth::{login_with_password, oidc_available, setup_required, LoginPayload};
 
 #[component]
 pub fn Login() -> Element {
@@ -27,6 +31,12 @@ pub fn Login() -> Element {
     if let Some(Ok(true)) = &*setup_state.read_unchecked() {
         nav.push(Route::Setup {});
     }
+
+    // Show the OIDC button only when the boot-time discovery
+    // succeeded. None = still loading, Some(true) = render button,
+    // Some(false) = hide entirely.
+    let oidc_state = use_resource(|| async move { oidc_available().await });
+    let show_oidc = matches!(&*oidc_state.read_unchecked(), Some(Ok(true)));
 
     let submit = move |evt: FormEvent| {
         evt.prevent_default();
@@ -87,12 +97,18 @@ pub fn Login() -> Element {
                     }
                 }
 
-                div { class: "divider text-xs opacity-50", "OR" }
-                button {
-                    r#type: "button",
-                    class: "btn btn-outline btn-disabled",
-                    title: "OIDC sign-in lands in U24.b",
-                    "Sign in with OIDC (coming soon)"
+                if show_oidc {
+                    div { class: "divider text-xs opacity-50", "OR" }
+                    // Plain anchor — full-page GET to the axum handler
+                    // that writes PKCE state into the session before
+                    // 302ing to the provider. A server fn would not
+                    // be able to set redirect + cookies in one round
+                    // trip the way this does.
+                    a {
+                        href: "/auth/oidc/login",
+                        class: "btn btn-outline",
+                        "Sign in with OIDC"
+                    }
                 }
             }
         }

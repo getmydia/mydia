@@ -47,7 +47,7 @@ async fn stub_state_and_session() -> (WebState, SessionLayer) {
     let pubsub = Pubsub::new();
     let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
     let session_layer = web_session::layer(&db, false);
-    (WebState::new(db, pubsub, storage), session_layer)
+    (WebState::new(db, pubsub, storage, None), session_layer)
 }
 
 async fn build() -> axum::Router {

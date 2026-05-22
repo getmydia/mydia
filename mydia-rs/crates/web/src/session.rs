@@ -18,8 +18,9 @@
 //! name `mydia_rs_session`. Server-fn CSRF defense rests on the
 //! Lax cookie + POST-only mutation surface (Dioxus' server fns are
 //! POST by default).
-
-#![cfg(feature = "server")]
+//!
+//! Gating: this module is declared `#[cfg(feature = "server")]` in
+//! `lib.rs`, so no inner `#![cfg(...)]` attribute is needed here.
 
 use axum::Router;
 use mydia_rs_db::Db;

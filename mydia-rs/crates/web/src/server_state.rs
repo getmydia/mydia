@@ -17,10 +17,14 @@
 // Module-level cfg gate lives in `lib.rs` (`pub mod server_state` under
 // `#[cfg(feature = "server")]`); no need to repeat it here.
 
+use std::sync::Arc;
+
 use mydia_rs_db::Db;
 use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 use mydia_rs_pubsub::Pubsub;
+
+use crate::oidc::OidcContext;
 
 /// Cheap-to-clone bundle of shared, server-side handles. Held inside
 /// an `axum::Extension<WebState>` so a request can pull it without
@@ -43,6 +47,13 @@ pub struct WebState {
     /// clicks "Scan now"; cloning is cheap and `push` only needs
     /// `&mut self` on a fresh clone.
     pub library_scanner_storage: JobStorage<LibraryScannerArgs>,
+
+    /// OIDC client and discovered provider metadata, built once at
+    /// boot. `None` when OIDC is disabled in config or discovery
+    /// failed at startup (logged with the underlying cause). Pages
+    /// query [`Self::oidc_available`] to decide whether to render
+    /// the "Sign in with OIDC" button.
+    pub oidc: Option<Arc<OidcContext>>,
 }
 
 impl WebState {
@@ -59,11 +70,21 @@ impl WebState {
         db: Db,
         pubsub: Pubsub,
         library_scanner_storage: JobStorage<LibraryScannerArgs>,
+        oidc: Option<Arc<OidcContext>>,
     ) -> Self {
         Self {
             db,
             pubsub,
             library_scanner_storage,
+            oidc,
         }
+    }
+
+    /// Server-side check used by the login page to decide whether to
+    /// render the OIDC button. Reads through a fresh clone so the
+    /// page can ask this without holding any internal handles.
+    #[must_use]
+    pub fn oidc_available(&self) -> bool {
+        self.oidc.is_some()
     }
 }

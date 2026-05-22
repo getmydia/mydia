@@ -26,6 +26,9 @@ pub mod server_state;
 #[cfg(feature = "server")]
 pub mod session;
 
+#[cfg(feature = "server")]
+pub mod oidc;
+
 pub use app::App;
 pub use routes::Route;
 
