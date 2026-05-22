@@ -14,6 +14,7 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::layout::AppShell;
+use crate::pages::admin::library_paths::LibraryPaths;
 use crate::pages::{hello::Hello, home::Home};
 
 #[derive(Clone, Routable, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,4 +26,8 @@ pub enum Route {
 
         #[route("/hello/:name")]
         Hello { name: String },
+
+        // U23 pilot — admin library paths.
+        #[route("/admin/library_paths")]
+        LibraryPaths {},
 }

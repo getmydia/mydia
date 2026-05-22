@@ -85,6 +85,13 @@ fn Sidebar() -> Element {
                                 "Hello"
                             }
                         }
+                        li {
+                            Link {
+                                to: Route::LibraryPaths {},
+                                Icon { name: "home", class: "w-5 h-5" }
+                                "Library paths"
+                            }
+                        }
                     }
                 }
                 div { class: "px-4 py-3 border-t border-base-content/10 text-xs opacity-60",

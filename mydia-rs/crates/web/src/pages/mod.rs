@@ -4,5 +4,6 @@
 //! (e.g., `media`, `admin`, `music`, ...). U22 ships only `home` and
 //! `hello` to prove the router + layout chain works.
 
+pub mod admin;
 pub mod hello;
 pub mod home;
