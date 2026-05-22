@@ -14,5 +14,6 @@
 //! the natural single-call shape of these handlers.
 
 pub mod auth;
+pub mod dashboard;
 pub mod library_paths;
 pub mod profile;

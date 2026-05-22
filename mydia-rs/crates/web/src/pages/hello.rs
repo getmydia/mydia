@@ -25,7 +25,7 @@ pub fn Hello(name: String) -> Element {
                     }
                     div { class: "card-actions justify-end mt-2",
                         Link {
-                            to: Route::Home {},
+                            to: Route::Dashboard {},
                             class: "btn btn-ghost",
                             "Back home"
                         }

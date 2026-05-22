@@ -148,7 +148,7 @@ fn Sidebar(user_label: String) -> Element {
             aside { class: "min-h-full w-64 bg-base-300 text-base-content border-r border-base-content/10 flex flex-col",
                 div { class: "px-4 py-4 border-b border-base-content/10",
                     Link {
-                        to: Route::Home {},
+                        to: Route::Dashboard {},
                         class: "text-xl font-bold tracking-tight hover:text-primary transition-colors",
                         "mydia"
                     }
@@ -156,9 +156,9 @@ fn Sidebar(user_label: String) -> Element {
                 nav { class: "flex-1 overflow-y-auto px-2 py-2",
                     ul { class: "menu menu-md",
                         li {
-                            Link { to: Route::Home {},
+                            Link { to: Route::Dashboard {},
                                 Icon { name: "home", class: "w-5 h-5" }
-                                "Home"
+                                "Dashboard"
                             }
                         }
                         li {

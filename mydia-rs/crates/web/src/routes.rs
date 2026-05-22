@@ -17,8 +17,9 @@ use crate::layout::{AppShell, AuthShell};
 use crate::pages::admin::library_paths::LibraryPaths;
 use crate::pages::auth::login::Login;
 use crate::pages::auth::setup::Setup;
+use crate::pages::dashboard::Dashboard;
+use crate::pages::hello::Hello;
 use crate::pages::profile::Profile;
-use crate::pages::{hello::Hello, home::Home};
 
 #[derive(Clone, Routable, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[rustfmt::skip]
@@ -35,8 +36,9 @@ pub enum Route {
     #[end_layout]
 
     #[layout(AppShell)]
+        // U24.e — dashboard replaces the U22 placeholder Home page.
         #[route("/")]
-        Home {},
+        Dashboard {},
 
         #[route("/hello/:name")]
         Hello { name: String },

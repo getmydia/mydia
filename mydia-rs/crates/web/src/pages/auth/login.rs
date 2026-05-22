@@ -52,7 +52,7 @@ pub fn Login() -> Element {
         spawn(async move {
             match login_with_password(payload).await {
                 Ok(_ack) => {
-                    nav.push(Route::Home {});
+                    nav.push(Route::Dashboard {});
                 }
                 Err(err) => {
                     error.set(Some(err.to_string()));
