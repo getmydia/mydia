@@ -3857,6 +3857,7 @@ dependencies = [
  "mydia-rs-auth",
  "mydia-rs-db",
  "mydia-rs-jobs",
+ "mydia-rs-metadata",
  "mydia-rs-models",
  "mydia-rs-pubsub",
  "openidconnect",

@@ -163,9 +163,9 @@ fn Sidebar(user_label: String) -> Element {
                         }
                         li {
                             Link {
-                                to: Route::Hello { name: "world".into() },
+                                to: Route::Discover {},
                                 Icon { name: "sparkles", class: "w-5 h-5" }
-                                "Hello"
+                                "Discover"
                             }
                         }
                         li {

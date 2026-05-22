@@ -33,6 +33,7 @@ mydia-rs-pubsub    = { path = "../pubsub",    optional = true }
 mydia-rs-jobs      = { path = "../jobs",      optional = true }
 mydia-rs-auth      = { path = "../auth",      optional = true }
 mydia-rs-models    = { path = "../models",    optional = true }
+mydia-rs-metadata  = { path = "../metadata",  optional = true }
 sqlx               = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "chrono", "uuid"], optional = true }
 tokio              = { workspace = true, optional = true }
 chrono             = { version = "0.4", default-features = false, features = ["serde", "clock"], optional = true }
@@ -63,6 +64,7 @@ server = [
     "dep:mydia-rs-jobs",
     "dep:mydia-rs-auth",
     "dep:mydia-rs-models",
+    "dep:mydia-rs-metadata",
     "dep:sqlx",
     "dep:tokio",
     "dep:chrono",

@@ -63,6 +63,68 @@ impl Relay {
             str::to_string,
         )
     }
+
+    /// Fetch a curated TMDB list — one of `trending`, `popular`,
+    /// `upcoming`, `now_playing`, `on_the_air`, `airing_today`. Not
+    /// part of the [`Provider`] trait because no other adapter
+    /// currently surfaces these endpoints; lifting it into the trait
+    /// would force every adapter to either implement or stub it.
+    ///
+    /// `category` strings match the Phoenix-side `fetch_curated/3`
+    /// `list_type` atoms (`"trending"`, `"popular"`, etc.). An unknown
+    /// category falls back to `"trending"` so caller bugs degrade
+    /// gracefully rather than 404 at the relay.
+    pub async fn fetch_curated(
+        &self,
+        config: &ProviderConfig,
+        category: &str,
+        opts: &TrendingOpts,
+    ) -> Result<CuratedPage, MetadataError> {
+        let endpoint = curated_endpoint(category, opts.media_type);
+        let language = Self::resolved_language(config, opts.language.as_deref());
+        let page = opts.page.unwrap_or(1);
+        let params = vec![
+            ("language".to_string(), language),
+            ("page".to_string(), page.to_string()),
+        ];
+
+        let client = HttpClient::new(config)?;
+        let body: Value = client
+            .get_value(endpoint, &string_params(&params), config)
+            .await?;
+        let total_pages = body
+            .get("total_pages")
+            .and_then(serde_json::Value::as_u64)
+            .map_or(1, |v| u32::try_from(v).unwrap_or(1));
+        Ok(CuratedPage {
+            results: parse_search_results(&body, opts.media_type),
+            page,
+            total_pages,
+        })
+    }
+}
+
+/// Single page of a curated/trending fetch. Mirrors the shape Phoenix
+/// returns from `fetch_curated/3` so the UI doesn't have to invent a
+/// new pagination wrapper.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CuratedPage {
+    pub results: Vec<SearchResult>,
+    pub page: u32,
+    pub total_pages: u32,
+}
+
+fn curated_endpoint(category: &str, media_type: Option<MediaType>) -> &'static str {
+    match (category, media_type) {
+        ("popular", Some(MediaType::TvShow)) => "/tmdb/tv/popular",
+        ("popular", _) => "/tmdb/movies/popular",
+        ("upcoming", _) => "/tmdb/movies/upcoming",
+        ("now_playing", _) => "/tmdb/movies/now_playing",
+        ("on_the_air", _) => "/tmdb/tv/on_the_air",
+        ("airing_today", _) => "/tmdb/tv/airing_today",
+        // "trending" plus any unknown category.
+        _ => trending_endpoint(media_type),
+    }
 }
 
 #[async_trait]

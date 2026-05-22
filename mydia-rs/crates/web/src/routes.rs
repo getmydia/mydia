@@ -18,6 +18,7 @@ use crate::pages::admin::library_paths::LibraryPaths;
 use crate::pages::auth::login::Login;
 use crate::pages::auth::setup::Setup;
 use crate::pages::dashboard::Dashboard;
+use crate::pages::discover::Discover;
 use crate::pages::hello::Hello;
 use crate::pages::profile::Profile;
 
@@ -46,6 +47,10 @@ pub enum Route {
         // U24.d — profile and account settings.
         #[route("/profile")]
         Profile {},
+
+        // U24.f — TMDB curated discover grid.
+        #[route("/discover")]
+        Discover {},
 
         // U23 pilot — admin library paths.
         #[route("/admin/library_paths")]

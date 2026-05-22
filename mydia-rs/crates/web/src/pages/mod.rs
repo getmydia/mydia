@@ -8,5 +8,6 @@
 pub mod admin;
 pub mod auth;
 pub mod dashboard;
+pub mod discover;
 pub mod hello;
 pub mod profile;
