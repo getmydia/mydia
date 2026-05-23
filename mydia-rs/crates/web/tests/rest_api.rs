@@ -160,6 +160,28 @@ CREATE TABLE IF NOT EXISTS subtitles (
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS transcode_jobs (
+    id TEXT PRIMARY KEY,
+    media_file_id TEXT NOT NULL,
+    resolution TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'download',
+    status TEXT NOT NULL,
+    progress REAL,
+    output_path TEXT,
+    file_size INTEGER,
+    error TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    last_accessed_at TEXT,
+    user_id TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS transcode_jobs_media_file_id_resolution_index
+    ON transcode_jobs (media_file_id, resolution)
+    WHERE type = 'download';
 ";
 
 /// Write `len` deterministic bytes (`i % 251`) to a tempfile so the
@@ -377,9 +399,24 @@ async fn auth_fixture() -> AuthFixture {
     };
     let supervisor = mydia_rs_streaming::Supervisor::new(supervisor_cfg, pubsub.clone());
 
+    // The download service holds a JobManager + ffmpeg path. We point
+    // ffmpeg at a non-existent binary so any test that accidentally
+    // triggers a real transcode gets an internal error rather than
+    // spawning a real subprocess.
+    let download_service = mydia_rs_downloads::DownloadService::new(
+        db.clone(),
+        mydia_rs_downloads::JobManager::new(2),
+        pubsub.clone(),
+        mydia_rs_downloads::ServiceConfig {
+            transcode_cache_dir: hls_temp.path().join("downloads"),
+            ffmpeg_path: std::path::PathBuf::from("/nonexistent/ffmpeg-rest-api-tests"),
+        },
+    );
+
     let state = WebState::new(db, pubsub, storage, None)
         .with_media_signer(media_signer.clone(), media_cache)
-        .with_streaming_supervisor(supervisor);
+        .with_streaming_supervisor(supervisor)
+        .with_download_service(download_service);
     // Leak the tempdir so it outlives the function (the supervisor
     // holds paths into it via the per-session temp dirs).
     std::mem::forget(hls_temp);
@@ -489,12 +526,15 @@ async fn protected_route_returns_401_with_invalid_api_key() {
 }
 
 #[tokio::test]
-async fn protected_route_accepts_valid_api_key_and_returns_501_marker() {
+async fn protected_route_accepts_valid_api_key_and_returns_handler_404() {
     let fx = auth_fixture().await;
     let router = router_with_state(fx.state);
-    // download/job/.../status is still a 501-stub adapter — used here
-    // so the test stays meaningful even as siblings (indexer, etc.)
-    // get fully wired.
+    // download/job/.../status is now a real handler (U33 follow-up port
+    // of `Mydia.Downloads.DownloadService.get_job_status/1`). The
+    // unknown job id falls through the service and surfaces as a 404
+    // with the Phoenix-shaped `{"error":"Job not found"}` body, which
+    // proves both the auth layer accepted the key and the service was
+    // wired into `WebState`.
     let response = router
         .oneshot(
             Request::builder()
@@ -506,16 +546,7 @@ async fn protected_route_accepts_valid_api_key_and_returns_501_marker() {
         .await
         .expect("router oneshot");
 
-    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-    let body = collect(response.into_body()).await;
-    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
-    assert!(
-        parsed
-            .get("todo")
-            .and_then(|v| v.as_str())
-            .is_some_and(|s| s.starts_with("U33.")),
-        "missing U33 todo marker: {parsed}"
-    );
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -528,7 +559,7 @@ async fn protected_route_accepts_api_key_via_query_param() {
         .await
         .expect("router oneshot");
 
-    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
