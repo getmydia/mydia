@@ -44,6 +44,7 @@ server = [
     "dep:mydia-rs-pubsub",
     "dep:mydia-rs-jobs",
     "dep:mydia-rs-streaming",
+    "dep:mydia-rs-downloads",
     "dep:axum",
     "dep:tower",
     "dep:tower-http",
@@ -86,6 +87,7 @@ mydia-rs-p2p = { path = "../p2p", optional = true }
 mydia-rs-pubsub = { path = "../pubsub", optional = true }
 mydia-rs-jobs = { path = "../jobs", optional = true }
 mydia-rs-streaming = { path = "../streaming", optional = true }
+mydia-rs-downloads = { path = "../downloads", optional = true }
 axum = { version = "0.8", optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", optional = true, features = [

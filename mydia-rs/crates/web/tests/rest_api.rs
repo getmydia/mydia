@@ -1896,3 +1896,291 @@ async fn indexer_reset_failures_returns_401_without_auth() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+// ---------------------------------------------------------------------
+// /api/v1/download/* — U33 follow-up port of
+// `MydiaWeb.Api.DownloadController`.
+// ---------------------------------------------------------------------
+
+async fn insert_media_file_for_download(db: &Db, parent_id: &str, abs_path: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO media_files (id, media_item_id, episode_id, path, size, resolution, \
+             analysis_attempts, inserted_at, updated_at) \
+             VALUES (?, ?, NULL, ?, ?, '1080p', 0, ?, ?)",
+        )
+        .bind(&id)
+        .bind(parent_id)
+        .bind(abs_path)
+        .bind(100_i64)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert media_file");
+    }
+    id
+}
+
+#[tokio::test]
+async fn download_route_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/download/movie/abc/options")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn download_options_returns_quality_list_for_movie() {
+    let fx = auth_fixture().await;
+    insert_media_file_for_download(&fx.state.db, "movie-1", "/tmp/movie-1.mkv").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/download/movie/movie-1/options")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let options = parsed["options"].as_array().expect("options array");
+    // Original + 1080p + 720p + 480p for a 1080p source.
+    assert_eq!(options.len(), 4);
+    assert_eq!(options[0]["resolution"], "original");
+}
+
+#[tokio::test]
+async fn download_options_404s_for_unknown_movie() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/download/movie/does-not-exist/options")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn download_options_400s_for_invalid_content_type() {
+    // The Phoenix service maps an invalid content_type to `{:error,
+    // :not_found}` (i.e. media not found) — the controller renders
+    // that as 404. We mirror that exact wire shape.
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/download/garbage/foo/options")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn download_prepare_original_returns_ready_job() {
+    let fx = auth_fixture().await;
+    insert_media_file_for_download(&fx.state.db, "movie-prep", "/tmp/movie-prep.mkv").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/download/movie/movie-prep/prepare")
+                .header("X-API-Key", &fx.api_key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"resolution":"original"}"#))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["status"], "ready");
+    assert!((parsed["progress"].as_f64().unwrap_or(0.0) - 1.0).abs() < f64::EPSILON);
+    assert!(parsed["job_id"].is_string());
+}
+
+#[tokio::test]
+async fn download_prepare_invalid_resolution_returns_400() {
+    let fx = auth_fixture().await;
+    insert_media_file_for_download(&fx.state.db, "movie-inv", "/tmp/movie-inv.mkv").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/download/movie/movie-inv/prepare")
+                .header("X-API-Key", &fx.api_key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"resolution":"9000p"}"#))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn download_prepare_is_idempotent() {
+    let fx = auth_fixture().await;
+    insert_media_file_for_download(&fx.state.db, "movie-idem", "/tmp/movie-idem.mkv").await;
+    let api_key = fx.api_key.clone();
+
+    let router = router_with_state(fx.state.clone());
+    let first = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/download/movie/movie-idem/prepare")
+                .header("X-API-Key", &api_key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"resolution":"original"}"#))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    let first_body = collect(first.into_body()).await;
+    let first_parsed: serde_json::Value = serde_json::from_slice(&first_body).expect("json");
+    let first_id = first_parsed["job_id"].as_str().expect("first job id");
+
+    let router = router_with_state(fx.state);
+    let second = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/download/movie/movie-idem/prepare")
+                .header("X-API-Key", &api_key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"resolution":"original"}"#))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    let second_body = collect(second.into_body()).await;
+    let second_parsed: serde_json::Value = serde_json::from_slice(&second_body).expect("json");
+    let second_id = second_parsed["job_id"].as_str().expect("second job id");
+
+    assert_eq!(first_id, second_id, "prepare must be idempotent");
+}
+
+#[tokio::test]
+async fn download_job_status_returns_404_for_unknown_id() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/download/job/no-such-job/status")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["error"], "Job not found");
+}
+
+#[tokio::test]
+async fn download_cancel_deletes_job_row() {
+    let fx = auth_fixture().await;
+    insert_media_file_for_download(&fx.state.db, "movie-cancel", "/tmp/movie-cancel.mkv").await;
+    let api_key = fx.api_key.clone();
+
+    // Prepare an "original" job (no real ffmpeg involved).
+    let router = router_with_state(fx.state.clone());
+    let prep = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/download/movie/movie-cancel/prepare")
+                .header("X-API-Key", &api_key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"resolution":"original"}"#))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    let prep_body = collect(prep.into_body()).await;
+    let prep_parsed: serde_json::Value = serde_json::from_slice(&prep_body).expect("json");
+    let job_id = prep_parsed["job_id"].as_str().expect("job_id").to_owned();
+
+    // Cancel it.
+    let router = router_with_state(fx.state.clone());
+    let cancel = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/download/job/{job_id}"))
+                .header("X-API-Key", &api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(cancel.status(), StatusCode::OK);
+    let cancel_body = collect(cancel.into_body()).await;
+    let cancel_parsed: serde_json::Value = serde_json::from_slice(&cancel_body).expect("json");
+    assert_eq!(cancel_parsed["status"], "cancelled");
+
+    // Status should now 404.
+    let router = router_with_state(fx.state);
+    let status = router
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/download/job/{job_id}/status"))
+                .header("X-API-Key", &api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(status.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn download_cancel_returns_404_for_unknown_id() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/download/job/no-such-job")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

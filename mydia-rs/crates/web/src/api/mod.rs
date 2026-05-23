@@ -37,8 +37,11 @@
 //! - `:media_api_auth` — [`auth_layer::media_token_auth`]: stream, hls.
 //! - `:require_admin` — [`auth_layer::require_admin`] *after*
 //!   `api_key_auth`: config (read and write both).
-
-#![cfg(feature = "server")]
+//!
+//! The `#[cfg(feature = "server")]` gate lives on the parent module in
+//! `lib.rs` so the wasm hydration build never sees this tree; no need
+//! to repeat the cfg at the inner `mod.rs` level (clippy flags the
+//! duplicate).
 
 pub mod auth_layer;
 pub mod player;

@@ -53,6 +53,9 @@ use mydia_rs_app::server;
 use mydia_rs_config::{tracing_setup, Config};
 #[cfg(feature = "server")]
 use mydia_rs_db::{connect_from_config, schema_check, Db, SchemaCheckOutcome};
+
+#[cfg(feature = "server")]
+use mydia_rs_downloads::{DownloadService, JobManager, ServiceConfig as DownloadServiceConfig};
 #[cfg(feature = "server")]
 use mydia_rs_jobs::storage::{self as jobs_storage, JobStorage};
 #[cfg(feature = "server")]
@@ -286,8 +289,24 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
         mydia_rs_graphql::GraphqlAppState::with_pubsub(db.clone(), pubsub.clone()),
     );
 
+    // U33 follow-up: construct the player-driven transcode-download
+    // orchestrator. The service is `Clone` (Arc-backed) so any worker
+    // that needs to read jobs / update progress later can hold its own
+    // handle. Two concurrent transcodes by default — same cap as the
+    // Phoenix `JobManager`. `MYDIA_TRANSCODE_CACHE_DIR` /
+    // `MYDIA_FFMPEG_PATH` env vars match the HLS supervisor's knobs so
+    // operators set the binary path once for both subsystems.
+    let download_job_manager = JobManager::new(2);
+    let download_service = DownloadService::new(
+        db.clone(),
+        download_job_manager,
+        pubsub.clone(),
+        download_service_config(),
+    );
+
     let mut web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc)
-        .with_streaming_supervisor(streaming_supervisor.clone());
+        .with_streaming_supervisor(streaming_supervisor.clone())
+        .with_download_service(download_service);
 
     // U33 follow-up: wire the media-token signer + verified-claims cache
     // into WebState so the REST media-token auth pipeline can verify
@@ -426,6 +445,25 @@ fn streaming_config() -> mydia_rs_streaming::SupervisorConfig {
     let mut cfg = mydia_rs_streaming::SupervisorConfig::default();
     if let Ok(dir) = std::env::var("MYDIA_HLS_TEMP_DIR") {
         cfg.temp_base_dir = std::path::PathBuf::from(dir);
+    }
+    if let Ok(path) = std::env::var("MYDIA_FFMPEG_PATH") {
+        cfg.ffmpeg_path = std::path::PathBuf::from(path);
+    }
+    cfg
+}
+
+/// Build the [`DownloadService`] config from env. Phoenix sources both
+/// values via `Application.get_env(:mydia, :transcode_cache_dir, ...)`
+/// alongside the PATH-resolved `ffmpeg` binary; the Rust port keeps
+/// the same pair plus a sensible default (`/tmp/mydia/transcodes`)
+/// so the self-hosted operator doesn't have to set anything for the
+/// happy path. The `MYDIA_FFMPEG_PATH` knob is shared with the HLS
+/// supervisor so the binary path lives in one place per host.
+#[cfg(feature = "server")]
+fn download_service_config() -> DownloadServiceConfig {
+    let mut cfg = DownloadServiceConfig::default();
+    if let Ok(dir) = std::env::var("MYDIA_TRANSCODE_CACHE_DIR") {
+        cfg.transcode_cache_dir = std::path::PathBuf::from(dir);
     }
     if let Ok(path) = std::env::var("MYDIA_FFMPEG_PATH") {
         cfg.ffmpeg_path = std::path::PathBuf::from(path);

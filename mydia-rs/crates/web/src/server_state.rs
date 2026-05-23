@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use mydia_rs_auth::{MediaTokenCache, MediaTokenSigner};
 use mydia_rs_db::Db;
+use mydia_rs_downloads::DownloadService;
 use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 use mydia_rs_p2p::ServerHandle as P2pServerHandle;
@@ -109,6 +110,14 @@ pub struct WebState {
     /// endpoint can target one indexer without touching the rest of
     /// the cache.
     pub indexer_probes: IndexerProbeCache,
+
+    /// Player-driven transcode-download orchestrator (U33 follow-up).
+    /// Backs the `/api/v1/download/*` REST endpoints — mirrors the
+    /// Phoenix `Mydia.Downloads.DownloadService`. `None` only when the
+    /// boot path (or a test fixture) elects not to attach one; the
+    /// production boot path always constructs it. Cheap to clone;
+    /// internal state is `Arc<Inner>`.
+    pub download_service: Option<DownloadService>,
 }
 
 impl WebState {
@@ -139,6 +148,7 @@ impl WebState {
             p2p_server: None,
             download_probes: ProbeCache::new(),
             indexer_probes: IndexerProbeCache::new(),
+            download_service: None,
         }
     }
 
@@ -189,6 +199,18 @@ impl WebState {
     #[must_use]
     pub fn with_streaming_supervisor(mut self, supervisor: StreamingSupervisor) -> Self {
         self.streaming_supervisor = Some(supervisor);
+        self
+    }
+
+    /// Attach the player-driven transcode download service. Called by
+    /// the boot path so the `/api/v1/download/*` REST handlers can
+    /// reach the orchestrator. Without this, those endpoints return
+    /// `500 Internal Server Error` with a diagnostic message — same
+    /// posture the streaming supervisor uses when the boot path
+    /// forgets to attach it.
+    #[must_use]
+    pub fn with_download_service(mut self, service: DownloadService) -> Self {
+        self.download_service = Some(service);
         self
     }
 

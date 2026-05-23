@@ -47,6 +47,7 @@ pub mod clients;
 pub mod error;
 pub mod job_manager;
 pub mod registry;
+pub mod service;
 pub mod torrent_matcher;
 pub mod transcoder;
 
@@ -58,5 +59,8 @@ pub use blacklist::{Blacklist, BlacklistEntry, MemoryStore as MemoryBlacklistSto
 pub use error::DownloadError;
 pub use job_manager::{JobManager, JobStatus, TranscodeJobHandle};
 pub use registry::ClientRegistry;
+pub use service::{
+    DownloadService, Job, JobInfo, MediaFileRow, QualityOption, ServiceConfig, ServiceError,
+};
 pub use torrent_matcher::{MatchResult, TorrentMatcher};
 pub use transcoder::{Resolution, TranscodeOptions, Transcoder};
