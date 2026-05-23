@@ -6,8 +6,48 @@ license.workspace = true
 publish = false
 
 [dependencies]
-# native/mydia_p2p_core is consumed as a path dep when U29 ports the p2p seam.
-# Intentionally not wired in U1 to keep the workspace independently buildable.
+# native/mydia_p2p_core is the shared iroh-based host. We consume it as
+# a path dep so backend (mydia-rs) and player (Flutter) ship the same
+# wire protocol. The crate is scope-locked in U29; we wrap, never modify.
+mydia_p2p_core = { path = "../../../native/mydia_p2p_core" }
+
+# Workspace crates we touch directly. Auth's MediaTokenCache is the
+# canonical token cache (U6); we wrap it with DB-revoke checking.
+# Models supply the RemoteDevice / PairingClaim row structs.
+mydia-rs-auth = { path = "../auth" }
+mydia-rs-config = { path = "../config" }
+mydia-rs-db = { path = "../db" }
+mydia-rs-models = { path = "../models" }
+
+# Async + concurrency primitives.
+tokio.workspace = true
+async-trait = "0.1"
+dashmap = "6"
+
+# Crypto for device-token hashing + claim-code RNG.
+rand = "0.8"
+sha2 = "0.10"
+argon2 = "0.5"
+base64 = "0.22"
+
+# DB / time / serialisation.
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "macros",
+] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde.workspace = true
+serde_json = "1"
+uuid = { version = "1.20", features = ["v4", "serde"] }
+
+# Errors + tracing.
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+tempfile = "3"
 
 [lints]
 workspace = true

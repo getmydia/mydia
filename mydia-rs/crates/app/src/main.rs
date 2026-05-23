@@ -58,6 +58,10 @@ use mydia_rs_jobs::storage::{self as jobs_storage, JobStorage};
 #[cfg(feature = "server")]
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 #[cfg(feature = "server")]
+use mydia_rs_p2p::{
+    server::Server as P2pServer, server::ServerConfig as P2pServerConfig, MinimalRouter,
+};
+#[cfg(feature = "server")]
 use mydia_rs_pubsub::Pubsub;
 #[cfg(feature = "server")]
 use mydia_rs_web::oidc::{OidcContext, OidcSettings};
@@ -96,10 +100,16 @@ struct BootState {
     db: Db,
     /// Held for the lifetime of the process so the lock row stays
     /// claimed. `RuntimeLockHandle` releases on `Drop`, which only
-    /// fires on clean shutdown — dx's full-rebuild SIGTERM gives us
+    /// fires on clean shutdown. dx's full-rebuild SIGTERM gives us
     /// that, and the `SQLite` row's `STALE_AFTER` covers the SIGKILL
     /// case. `None` when `MYDIA_RS_DEV_SKIP_LOCK=true`.
     _lock: Option<RuntimeLockHandle>,
+    /// The p2p Server (iroh Host wrapper + event drain task). Held
+    /// here so it lives as long as the process; dropping it aborts
+    /// the drain task and shuts the Host down (its iroh Endpoint owns
+    /// the graceful-close handshake). `None` when p2p is disabled in
+    /// config or when no keypair path is set.
+    _p2p_server: Option<P2pServer>,
 }
 
 #[cfg(feature = "server")]
@@ -267,13 +277,79 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
 
     let web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc);
 
+    // U29: boot the p2p Server (iroh Host wrapper) when remote-access
+    // is enabled and a keypair path is configured. The Phoenix backend
+    // raises without `p2p_keypair_path`; we mirror the gate but soften
+    // it to a config-driven skip so the parallel window is forgiving.
+    let p2p_server = maybe_boot_p2p(config, &db);
+
     tracing::info!("mydia-rs boot ok");
 
     Ok(BootState {
         web_state,
         db,
         _lock: lock,
+        _p2p_server: p2p_server,
     })
+}
+
+/// Conditionally boot the p2p Server.
+///
+/// Returns `None` when remote-access is disabled in config or the
+/// operator hasn't set a `keypair_path`. The Server holds an iroh
+/// Endpoint which owns its tokio runtime, so dropping the returned
+/// value cleanly shuts everything down.
+#[cfg(feature = "server")]
+fn maybe_boot_p2p(config: &Config, db: &Db) -> Option<P2pServer> {
+    if !config.features.remote_access_enabled {
+        tracing::info!("remote access disabled in config; skipping p2p Server");
+        return None;
+    }
+    let Some(keypair_path) = config.p2p.keypair_path.clone() else {
+        tracing::warn!(
+            "remote access enabled but config.p2p.keypair_path is unset; \
+             skipping p2p Server (paired devices would not reconnect across restarts)"
+        );
+        return None;
+    };
+
+    // Boot the JWT signers from the shared Guardian secret. Required
+    // for the pairing flow's token-issue step.
+    let Some(guardian_secret) = config.server.guardian_secret_key.clone() else {
+        tracing::error!(
+            "remote access enabled but config.server.guardian_secret_key is unset; \
+             refusing to boot p2p (issued tokens would be unverifiable by Phoenix)"
+        );
+        return None;
+    };
+
+    let leeway_secs = u64::from(config.auth.jwt_allowed_drift_ms) / 1000;
+    let media_signer = mydia_rs_auth::MediaTokenSigner::new(&guardian_secret, leeway_secs);
+    let access_signer = mydia_rs_auth::AccessTokenSigner::new(&guardian_secret, leeway_secs);
+    let rate_limiter = mydia_rs_p2p::ClaimRateLimiter::new_default();
+
+    let router = std::sync::Arc::new(MinimalRouter::new(
+        db.clone(),
+        media_signer,
+        access_signer,
+        rate_limiter,
+    ));
+
+    let server_config = P2pServerConfig {
+        relay_url: std::env::var("IROH_RELAY_URL").ok(),
+        bind_port: std::env::var("MYDIA_P2P_BIND_PORT")
+            .ok()
+            .and_then(|s| s.parse().ok()),
+        keypair_path: Some(keypair_path.clone()),
+    };
+
+    tracing::info!(
+        keypair_path = %keypair_path,
+        "booting p2p server"
+    );
+    let server = P2pServer::spawn(server_config, router);
+    tracing::info!(node_id = %server.handle().node_id(), "p2p server up");
+    Some(server)
 }
 
 /// Translate the `AuthConfig` OIDC fields into the web crate's

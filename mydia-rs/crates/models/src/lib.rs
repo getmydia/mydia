@@ -29,6 +29,8 @@ pub mod episode;
 pub mod library_path;
 pub mod media_file;
 pub mod media_item;
+pub mod pairing_claim;
+pub mod remote_device;
 pub mod user;
 
 pub use api_key::ApiKey;
@@ -36,4 +38,6 @@ pub use episode::Episode;
 pub use library_path::LibraryPath;
 pub use media_file::MediaFile;
 pub use media_item::MediaItem;
+pub use pairing_claim::PairingClaim;
+pub use remote_device::RemoteDevice;
 pub use user::User;

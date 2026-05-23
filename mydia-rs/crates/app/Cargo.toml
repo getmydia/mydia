@@ -36,8 +36,10 @@ server = [
     "dep:chrono",
     "dep:thiserror",
     "dep:anyhow",
+    "dep:mydia-rs-auth",
     "dep:mydia-rs-config",
     "dep:mydia-rs-db",
+    "dep:mydia-rs-p2p",
     "dep:mydia-rs-pubsub",
     "dep:mydia-rs-jobs",
     "dep:axum",
@@ -74,8 +76,10 @@ thiserror = { workspace = true, optional = true }
 # adopt anyhow in the boot path so figment / sqlx / runtime-lock errors
 # coerce cleanly via `?`. Server-only — wasm bin never sees it.
 anyhow = { workspace = true, optional = true }
+mydia-rs-auth = { path = "../auth", optional = true }
 mydia-rs-config = { path = "../config", optional = true }
 mydia-rs-db = { path = "../db", optional = true }
+mydia-rs-p2p = { path = "../p2p", optional = true }
 mydia-rs-pubsub = { path = "../pubsub", optional = true }
 mydia-rs-jobs = { path = "../jobs", optional = true }
 axum = { version = "0.8", optional = true }
