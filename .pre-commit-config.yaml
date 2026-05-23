@@ -27,9 +27,15 @@ repos:
       # Rust (mydia-rs backend) — workspace-wide pedantic clippy. Matches
       # the CI gate: `--workspace --all-targets -- -D warnings`. Pedantic
       # preset + allow-list lives in mydia-rs/Cargo.toml's `[workspace.lints]`.
+      # Use a shell wrapper so we can enumerate the workspace via
+      # `cargo metadata` and pass `-p <name>` for each member. This is
+      # equivalent to `--all` for workspace packages but does NOT walk
+      # into path-based dependencies that live outside the workspace
+      # (e.g. native/mydia_p2p_core, which has its own style and is
+      # gated by the native/* hooks above).
       - id: mydia-rs-fmt
         name: mydia-rs cargo fmt
-        entry: cargo fmt --manifest-path mydia-rs/Cargo.toml --all -- --check
+        entry: bash -c 'set -euo pipefail; pkgs=$(cargo metadata --manifest-path mydia-rs/Cargo.toml --format-version=1 --no-deps | python3 -c "import sys,json; print(\" \".join(\"-p \" + p[\"name\"] for p in json.load(sys.stdin)[\"packages\"]))"); cargo fmt --manifest-path mydia-rs/Cargo.toml $pkgs -- --check'
         language: system
         files: '^mydia-rs/.*\.rs$'
         pass_filenames: false
