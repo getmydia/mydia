@@ -213,6 +213,21 @@ fn DetailHeader(detail: MediaDetail, on_changed: EventHandler<()>) -> Element {
                         }
                     }
                     div { class: "flex flex-wrap gap-2 pt-1",
+                        // The Play button only makes sense for movies
+                        // here — episode play happens from the seasons
+                        // tree (U25.d follow-up). TV shows surface no
+                        // headline Play button; navigate to an episode
+                        // row instead.
+                        if detail.kind == "movie" {
+                            Link {
+                                to: Route::Play {
+                                    kind: "movie".to_string(),
+                                    id: detail.id.clone(),
+                                },
+                                class: "btn btn-primary btn-sm",
+                                "Play"
+                            }
+                        }
                         Button {
                             variant: if detail.monitored { ButtonVariant::Ghost } else { ButtonVariant::Primary },
                             size: ButtonSize::Sm,
@@ -561,6 +576,11 @@ fn EpisodeRow(episode: EpisodeView, on_changed: EventHandler<()>) -> Element {
         });
     };
 
+    let play_route = Route::Play {
+        kind: "episode".to_string(),
+        id: episode.id.clone(),
+    };
+
     rsx! {
         div { class: "flex items-center gap-3 px-4 py-2 hover:bg-base-200",
             span { class: "font-mono text-xs opacity-60 w-16", "{label}" }
@@ -569,7 +589,11 @@ fn EpisodeRow(episode: EpisodeView, on_changed: EventHandler<()>) -> Element {
                 span { class: "text-xs opacity-60", "{air_date}" }
             }
             if has_files {
-                span { class: "badge badge-success badge-xs", "Local" }
+                Link {
+                    to: play_route,
+                    class: "btn btn-xs btn-primary",
+                    "Play"
+                }
             }
             button {
                 r#type: "button",

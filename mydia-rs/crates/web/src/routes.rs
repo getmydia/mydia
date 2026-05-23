@@ -22,6 +22,7 @@ use crate::pages::discover::Discover;
 use crate::pages::hello::Hello;
 use crate::pages::media::index::{Movies, TvShows};
 use crate::pages::media::show::MediaShow;
+use crate::pages::play::Play;
 use crate::pages::profile::Profile;
 
 #[derive(Clone, Routable, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,9 +62,15 @@ pub enum Route {
         #[route("/tv")]
         TvShows {},
 
-        // U25.b placeholder — media detail page.
+        // U25.b — media detail page.
         #[route("/media/:id")]
         MediaShow { id: String },
+
+        // U25.d — immersive playback. Lives inside AppShell for auth
+        // gating; the page renders a fixed-position overlay so the
+        // sidebar chrome is hidden under the playback surface.
+        #[route("/play/:kind/:id")]
+        Play { kind: String, id: String },
 
         // U23 pilot — admin library paths.
         #[route("/admin/library_paths")]

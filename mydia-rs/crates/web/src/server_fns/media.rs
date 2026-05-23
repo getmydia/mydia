@@ -266,6 +266,50 @@ pub async fn delete_media(id: String) -> Result<(), ServerFnError> {
     server::delete_media(&id).await
 }
 
+// ---------- U25.d: playback page wire types ----------
+
+/// Resolved playback source for `/play/:type/:id`. Mirrors the
+/// fields `PlaybackLive.Show.mount/3` derives before handing off to
+/// the `<video_player>` component on the Phoenix side. Direct file
+/// playback against this `source_path` is deferred to U33 (REST API)
+/// — the page surfaces the resolution so the wiring exists and a
+/// future commit can swap in the streaming URL without restructuring
+/// the page.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlayableSource {
+    /// `"movie"` or `"episode"`; mirrors the URL segment.
+    pub kind: String,
+    /// Underlying UUID — for episodes this is the episode id, for
+    /// movies the `media_item` id.
+    pub id: String,
+    /// `media_item.id` for a movie; for an episode, the parent show's id.
+    pub parent_media_item_id: String,
+    /// Display headline (show or movie title).
+    pub title: String,
+    /// `"S01E03"` for episodes, year-or-runtime string for movies.
+    pub subtitle: String,
+    /// First non-trashed media file we'd play. `None` when nothing is
+    /// available locally — the page then surfaces the empty state.
+    pub media_file: Option<PlayableFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlayableFile {
+    pub id: String,
+    pub path: String,
+    pub resolution: Option<String>,
+    pub codec: Option<String>,
+    pub audio_codec: Option<String>,
+    /// Seconds — read from `media_files.metadata.duration` (populated
+    /// by ffprobe during scan). `None` means we don't have it yet.
+    pub duration_seconds: Option<f64>,
+}
+
+#[post("/api/media/playable")]
+pub async fn resolve_playable(kind: String, id: String) -> Result<PlayableSource, ServerFnError> {
+    server::resolve_playable(&kind, &id).await
+}
+
 #[cfg(feature = "server")]
 pub mod server {
     //! Server-only SQL helpers powering `list_media`. The inner
@@ -275,7 +319,8 @@ pub mod server {
 
     use super::{
         EpisodeView, MediaDetail, MediaFileSummary, MediaListItem, MediaListPage, MediaQuery,
-        MediaSort, MonitorToggleAck, MonitoredFilter, SeasonView, FIRST_PAGE_SIZE, NEXT_PAGE_SIZE,
+        MediaSort, MonitorToggleAck, MonitoredFilter, PlayableFile, PlayableSource, SeasonView,
+        FIRST_PAGE_SIZE, NEXT_PAGE_SIZE,
     };
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
@@ -1078,5 +1123,210 @@ pub mod server {
     #[allow(clippy::needless_pass_by_value)]
     fn into_err(err: sqlx::Error) -> ServerFnError {
         ServerFnError::new(format!("delete media: {err}"))
+    }
+
+    // ---------- U25.d: playback source resolution ----------
+
+    pub(super) async fn resolve_playable(
+        kind: &str,
+        id: &str,
+    ) -> Result<PlayableSource, ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        match kind {
+            "movie" => resolve_movie_playable(&st.db, id).await,
+            "episode" => resolve_episode_playable(&st.db, id).await,
+            _ => Err(ServerFnError::new(
+                "Unsupported playable kind — expected 'movie' or 'episode'",
+            )),
+        }
+    }
+
+    pub async fn resolve_movie_playable(
+        db: &Db,
+        id: &str,
+    ) -> Result<PlayableSource, ServerFnError> {
+        let detail = fetch_media_detail(db, id).await?;
+        if detail.kind != "movie" {
+            return Err(ServerFnError::new("Not a movie"));
+        }
+        let file = first_movie_file(db, id).await?;
+        let subtitle = movie_subtitle(detail.year, detail.runtime);
+        Ok(PlayableSource {
+            kind: "movie".to_owned(),
+            id: detail.id.clone(),
+            parent_media_item_id: detail.id,
+            title: detail.title,
+            subtitle,
+            media_file: file,
+        })
+    }
+
+    pub async fn resolve_episode_playable(
+        db: &Db,
+        id: &str,
+    ) -> Result<PlayableSource, ServerFnError> {
+        // Single join — pull the show title alongside the episode row.
+        let row_sqlite = "SELECT e.media_item_id, e.season_number, e.episode_number, e.title, \
+                          m.title \
+                          FROM episodes e \
+                          JOIN media_items m ON e.media_item_id = m.id \
+                          WHERE e.id = ?";
+        let row_pg = "SELECT e.media_item_id, e.season_number, e.episode_number, e.title, \
+                      m.title \
+                      FROM episodes e \
+                      JOIN media_items m ON e.media_item_id = m.id \
+                      WHERE e.id = $1";
+        type Row = (
+            String,
+            Option<i32>,
+            Option<i32>,
+            Option<String>,
+            Option<String>,
+        );
+        let row: Option<Row> = match db {
+            Db::Sqlite(pool) => sqlx::query_as(row_sqlite)
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("episode playable: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as(row_pg)
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("episode playable: {err}")))?,
+        };
+        let (parent, season, episode_num, ep_title, show_title) =
+            row.ok_or_else(|| ServerFnError::new("Episode not found"))?;
+        let file = first_episode_file(db, id).await?;
+        let subtitle = episode_subtitle(season, episode_num, ep_title.as_deref());
+        Ok(PlayableSource {
+            kind: "episode".to_owned(),
+            id: id.to_owned(),
+            parent_media_item_id: parent,
+            title: show_title.unwrap_or_default(),
+            subtitle,
+            media_file: file,
+        })
+    }
+
+    async fn first_movie_file(
+        db: &Db,
+        movie_id: &str,
+    ) -> Result<Option<PlayableFile>, ServerFnError> {
+        let sql_sqlite = "SELECT id, path, resolution, codec, audio_codec, metadata \
+                          FROM media_files \
+                          WHERE media_item_id = ? AND trashed_at IS NULL \
+                          ORDER BY CASE resolution \
+                                     WHEN '2160p' THEN 0 \
+                                     WHEN '1080p' THEN 1 \
+                                     WHEN '720p' THEN 2 \
+                                     ELSE 3 END ASC \
+                          LIMIT 1";
+        let sql_pg = "SELECT id, path, resolution, codec, audio_codec, metadata \
+                      FROM media_files \
+                      WHERE media_item_id = $1 AND trashed_at IS NULL \
+                      ORDER BY CASE resolution \
+                                 WHEN '2160p' THEN 0 \
+                                 WHEN '1080p' THEN 1 \
+                                 WHEN '720p' THEN 2 \
+                                 ELSE 3 END ASC \
+                      LIMIT 1";
+        fetch_first_playable_file(db, sql_sqlite, sql_pg, movie_id).await
+    }
+
+    async fn first_episode_file(
+        db: &Db,
+        episode_id: &str,
+    ) -> Result<Option<PlayableFile>, ServerFnError> {
+        let sql_sqlite = "SELECT id, path, resolution, codec, audio_codec, metadata \
+                          FROM media_files \
+                          WHERE episode_id = ? AND trashed_at IS NULL \
+                          LIMIT 1";
+        let sql_pg = "SELECT id, path, resolution, codec, audio_codec, metadata \
+                      FROM media_files \
+                      WHERE episode_id = $1 AND trashed_at IS NULL \
+                      LIMIT 1";
+        fetch_first_playable_file(db, sql_sqlite, sql_pg, episode_id).await
+    }
+
+    async fn fetch_first_playable_file(
+        db: &Db,
+        sql_sqlite: &str,
+        sql_pg: &str,
+        bind: &str,
+    ) -> Result<Option<PlayableFile>, ServerFnError> {
+        type Row = (
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        );
+        let row: Option<Row> = match db {
+            Db::Sqlite(pool) => sqlx::query_as(sql_sqlite)
+                .bind(bind)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("playable file: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as(sql_pg)
+                .bind(bind)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("playable file: {err}")))?,
+        };
+        Ok(
+            row.map(|(id, path, resolution, codec, audio_codec, metadata)| {
+                let duration_seconds = metadata
+                    .as_deref()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+                    .and_then(|v| v.get("duration").and_then(serde_json::Value::as_f64));
+                PlayableFile {
+                    id,
+                    path: path.unwrap_or_default(),
+                    resolution,
+                    codec,
+                    audio_codec,
+                    duration_seconds,
+                }
+            }),
+        )
+    }
+
+    fn movie_subtitle(year: Option<i32>, runtime: Option<i32>) -> String {
+        // Mirrors PlaybackLive.Show.get_subtitle/2 for movies — year +
+        // formatted runtime joined by " • ".
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(y) = year {
+            parts.push(format!("{y}"));
+        }
+        if let Some(r) = runtime {
+            let hours = r / 60;
+            let minutes = r % 60;
+            let runtime_str = if hours > 0 && minutes > 0 {
+                format!("{hours}h {minutes}m")
+            } else if hours > 0 {
+                format!("{hours}h")
+            } else {
+                format!("{minutes}m")
+            };
+            parts.push(runtime_str);
+        }
+        parts.join(" • ")
+    }
+
+    fn episode_subtitle(season: Option<i32>, episode: Option<i32>, title: Option<&str>) -> String {
+        let head = match (season, episode) {
+            (Some(s), Some(e)) => format!("S{s:02}E{e:02}"),
+            (None, Some(e)) => format!("E{e:02}"),
+            _ => "—".to_owned(),
+        };
+        if let Some(t) = title {
+            if !t.is_empty() {
+                return format!("{head} — {t}");
+            }
+        }
+        head
     }
 }
