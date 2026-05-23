@@ -20,6 +20,12 @@ pub mod routes;
 pub mod security;
 pub mod server_fns;
 
+// U33 REST API surface — axum handlers mounted alongside the Dioxus
+// full-stack router. Server-only (no wasm); kept off the wasm tree
+// because the handlers depend on tokio::fs, sqlx, and tokio-util.
+#[cfg(feature = "server")]
+pub mod api;
+
 #[cfg(feature = "server")]
 pub mod server_state;
 

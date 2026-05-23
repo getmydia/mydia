@@ -4721,10 +4721,13 @@ name = "mydia-rs-web"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "bytes",
  "chrono",
  "dioxus",
  "futures",
  "http 1.4.0",
+ "http-body-util",
+ "mime_guess",
  "mydia-rs-auth",
  "mydia-rs-db",
  "mydia-rs-jobs",
@@ -4741,6 +4744,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tower",
  "tower-sessions",
  "tower-sessions-sqlx-store",

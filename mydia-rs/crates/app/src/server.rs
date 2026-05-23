@@ -20,6 +20,7 @@
 
 use axum::{Extension, Router};
 use http::{HeaderName, HeaderValue};
+use mydia_rs_web::api as web_api;
 use mydia_rs_web::oidc as web_oidc;
 use mydia_rs_web::session::SessionLayer;
 use mydia_rs_web::{security, WebState};
@@ -47,6 +48,12 @@ pub fn build_router(state: WebState, session_layer: SessionLayer) -> Router {
     // Merge them in before the layers are attached so the trace +
     // catch-panic + request-id layers cover them too.
     let router = router.merge(web_oidc::router());
+    // U33 REST API surface — `/api/v1/*` and `/api/player/v1/*`.
+    // Mounted before the session layer attaches so the same trace +
+    // request-id + catch-panic layers wrap every REST request, and so
+    // the API key / media token extractor middleware (U33 follow-up)
+    // can be hung off the same router level as the session layer.
+    let router = router.merge(web_api::router(state.clone()));
     let router = session_layer.attach(router);
 
     // CSP picks dev or prod variant at build time. The dev variant
