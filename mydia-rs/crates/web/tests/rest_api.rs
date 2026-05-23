@@ -1258,3 +1258,127 @@ async fn hls_terminate_started_session_returns_terminated() {
     assert_eq!(parsed["status"], "terminated");
     assert_eq!(parsed["session_id"], session_id);
 }
+
+// ---------------------------------------------------------------------
+// Operator probe-cache REST endpoints — download-clients (Slice 1) and
+// indexers (Slice 2). The cache mock in `WebState` uses the default
+// `ClientRegistry::with_defaults()` registry but the probe path will
+// fail-fast in this test env (no real backend listening) so we only
+// assert the wire shape, not the verdict.
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn download_client_test_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let id = insert_download_client(&fx.state.db, "qb-test", "qbittorrent").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/downloads/clients/{id}/test"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn download_client_test_returns_404_for_missing_id() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/downloads/clients/00000000-0000-0000-0000-000000000000/test")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["error"], "Download client not found");
+}
+
+#[tokio::test]
+async fn download_client_test_returns_phoenix_shaped_health_payload() {
+    let fx = auth_fixture().await;
+    // `host=localhost:8080` (the insert helper) will fail to connect
+    // since no qbittorrent is running. We only assert the wire shape
+    // (status + checked_at + error fields all present).
+    let id = insert_download_client(&fx.state.db, "qb-test", "qbittorrent").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/downloads/clients/{id}/test"))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let data = &parsed["data"];
+    let status = data["status"].as_str().unwrap_or("");
+    assert!(
+        status == "healthy" || status == "unhealthy",
+        "status must be healthy/unhealthy, got {status:?}"
+    );
+    assert!(data["checked_at"].is_string(), "checked_at must be set");
+    // The probe ran against a non-existent backend; expect unhealthy.
+    assert_eq!(status, "unhealthy");
+    assert!(data["error"].is_string(), "error must be set on failure");
+}
+
+#[tokio::test]
+async fn download_clients_refresh_returns_202() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/downloads/clients/refresh")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["message"], "Health check refresh initiated");
+}
+
+#[tokio::test]
+async fn download_clients_refresh_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/downloads/clients/refresh")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
