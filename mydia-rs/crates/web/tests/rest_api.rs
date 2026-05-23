@@ -97,6 +97,36 @@ CREATE TABLE IF NOT EXISTS indexer_configs (
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS media_files (
+    id TEXT PRIMARY KEY,
+    media_item_id TEXT NOT NULL,
+    episode_id TEXT,
+    quality_profile_id TEXT,
+    library_path_id TEXT,
+    path TEXT,
+    relative_path TEXT,
+    size INTEGER,
+    resolution TEXT,
+    codec TEXT,
+    hdr_format TEXT,
+    audio_codec TEXT,
+    bitrate INTEGER,
+    verified_at TEXT,
+    analyzed_at TEXT,
+    analysis_attempts INTEGER NOT NULL DEFAULT 0,
+    last_analysis_error TEXT,
+    metadata TEXT,
+    cover_blob TEXT,
+    sprite_blob TEXT,
+    vtt_blob TEXT,
+    preview_blob TEXT,
+    phash TEXT,
+    generated_at TEXT,
+    trashed_at TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ";
 
 /// Write `len` deterministic bytes (`i % 251`) to a tempfile so the
@@ -298,8 +328,28 @@ async fn auth_fixture() -> AuthFixture {
     let storage: JobStorage<mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs> =
         JobStorage::from_db(&db);
 
+    // Anchor the streaming supervisor under a per-test tempdir so
+    // parallel test runs don't collide on `/tmp/mydia-hls`. The
+    // tempdir lives for the duration of the process — long enough
+    // since each `auth_fixture` builds its own.
+    let hls_temp = tempfile::Builder::new()
+        .prefix("rest-api-hls-")
+        .tempdir()
+        .expect("hls temp dir");
+    let supervisor_cfg = mydia_rs_streaming::SupervisorConfig {
+        temp_base_dir: hls_temp.path().to_path_buf(),
+        idle_check_interval: std::time::Duration::from_millis(50),
+        idle_timeout: std::time::Duration::from_secs(60),
+        ..Default::default()
+    };
+    let supervisor = mydia_rs_streaming::Supervisor::new(supervisor_cfg, pubsub.clone());
+
     let state = WebState::new(db, pubsub, storage, None)
-        .with_media_signer(media_signer.clone(), media_cache);
+        .with_media_signer(media_signer.clone(), media_cache)
+        .with_streaming_supervisor(supervisor);
+    // Leak the tempdir so it outlives the function (the supervisor
+    // holds paths into it via the per-session temp dirs).
+    std::mem::forget(hls_temp);
 
     AuthFixture {
         state,
@@ -975,4 +1025,236 @@ async fn revoked_api_key_returns_401() {
         .expect("router oneshot");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// ---------------------------------------------------------------------
+// HLS REST surface — U33 follow-up.
+//
+// The handlers delegate to `mydia_rs_streaming::Supervisor`, which the
+// fixture builds once per test against a per-fixture tempdir. The
+// happy-path tests use the DirectPlay branch (h264/aac inputs) so the
+// runner exits immediately without invoking ffmpeg — production HLS
+// transcoding is exercised by the streaming crate's own tests.
+// ---------------------------------------------------------------------
+
+async fn insert_media_file(db: &Db, h264_aac: bool) -> (String, tempfile::NamedTempFile) {
+    use std::io::Write;
+    let id = uuid::Uuid::new_v4().to_string();
+    let media_item_id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    // Tempfile that lives for the test duration so the streaming
+    // supervisor's input-path check passes.
+    let mut file = tempfile::Builder::new()
+        .prefix("u33-hls-input-")
+        .suffix(".mp4")
+        .tempfile()
+        .expect("input fixture");
+    file.write_all(b"fake-mp4-bytes").expect("write fixture");
+    file.flush().expect("flush fixture");
+    let path = file.path().to_string_lossy().into_owned();
+    let (codec, audio_codec) = if h264_aac {
+        ("h264", "aac")
+    } else {
+        ("hevc", "ac3")
+    };
+
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO media_files (id, media_item_id, path, codec, audio_codec, \
+             analysis_attempts, inserted_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&media_item_id)
+        .bind(&path)
+        .bind(codec)
+        .bind(audio_codec)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert media_file");
+    }
+    (id, file)
+}
+
+#[tokio::test]
+async fn hls_start_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/hls/start")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"media_file_id":"abc"}"#))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn hls_start_returns_404_for_unknown_media_file() {
+    let fx = auth_fixture().await;
+    let token = fx
+        .media_signer
+        .issue(
+            "device-1",
+            &fx.user_id,
+            &[MediaTokenPermission::Stream],
+            std::time::Duration::from_secs(3600),
+        )
+        .expect("issue media token");
+    let router = router_with_state(fx.state);
+    let body = serde_json::json!({
+        "media_file_id": "00000000-0000-0000-0000-000000000000",
+    });
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/hls/start")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn hls_start_happy_path_returns_session_and_playlist_url() {
+    let fx = auth_fixture().await;
+    let (media_file_id, _input_keepalive) = insert_media_file(&fx.state.db, true).await;
+    let token = fx
+        .media_signer
+        .issue(
+            "device-1",
+            &fx.user_id,
+            &[MediaTokenPermission::Stream],
+            std::time::Duration::from_secs(3600),
+        )
+        .expect("issue media token");
+
+    let router = router_with_state(fx.state);
+    let body = serde_json::json!({ "media_file_id": media_file_id });
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/hls/start")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let session_id = parsed["session_id"].as_str().expect("session_id");
+    assert!(
+        uuid::Uuid::parse_str(session_id).is_ok(),
+        "session_id is a valid uuid: {session_id}"
+    );
+    let url = parsed["master_playlist_url"]
+        .as_str()
+        .expect("master_playlist_url");
+    assert_eq!(url, format!("/api/v1/hls/{session_id}/index.m3u8"));
+    assert_eq!(parsed["status"], "ready");
+}
+
+#[tokio::test]
+async fn hls_terminate_unknown_session_returns_200_not_found() {
+    let fx = auth_fixture().await;
+    let token = fx
+        .media_signer
+        .issue(
+            "device-1",
+            &fx.user_id,
+            &[MediaTokenPermission::Stream],
+            std::time::Duration::from_secs(3600),
+        )
+        .expect("issue media token");
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/hls/00000000-0000-0000-0000-000000000000")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    // Phoenix shape: 200 with `status: "not_found"` so the player's
+    // teardown path is idempotent (matches `HlsController.terminate_session`).
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["status"], "not_found");
+}
+
+#[tokio::test]
+async fn hls_terminate_started_session_returns_terminated() {
+    let fx = auth_fixture().await;
+    let (media_file_id, _input_keepalive) = insert_media_file(&fx.state.db, true).await;
+    let token = fx
+        .media_signer
+        .issue(
+            "device-1",
+            &fx.user_id,
+            &[MediaTokenPermission::Stream],
+            std::time::Duration::from_secs(3600),
+        )
+        .expect("issue media token");
+    let router = router_with_state(fx.state.clone());
+    let body = serde_json::json!({ "media_file_id": media_file_id });
+    let start = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/hls/start")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(start.status(), StatusCode::OK);
+    let start_body = collect(start.into_body()).await;
+    let start_parsed: serde_json::Value = serde_json::from_slice(&start_body).expect("json");
+    let session_id = start_parsed["session_id"].as_str().expect("session_id");
+
+    // Fresh router (the previous one was consumed by oneshot).
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/hls/{session_id}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["status"], "terminated");
+    assert_eq!(parsed["session_id"], session_id);
 }

@@ -24,6 +24,7 @@ use mydia_rs_db::Db;
 use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 use mydia_rs_pubsub::Pubsub;
+use mydia_rs_streaming::Supervisor as StreamingSupervisor;
 
 use crate::oidc::OidcContext;
 
@@ -76,6 +77,13 @@ pub struct WebState {
     /// to `priv/generated` when nothing is configured. Stored as
     /// `Arc<PathBuf>` so clones stay cheap.
     pub generated_media_path: Arc<std::path::PathBuf>,
+
+    /// In-process HLS streaming supervisor (U33 follow-up). Backs the
+    /// `/api/v1/hls/*` REST endpoints. `None` only when the boot path
+    /// (or a test fixture) elects not to attach one — production boots
+    /// always construct it. Cheap to clone; internal state is
+    /// `Arc<DashMap>`.
+    pub streaming_supervisor: Option<StreamingSupervisor>,
 }
 
 impl WebState {
@@ -102,6 +110,7 @@ impl WebState {
             media_signer: None,
             media_token_cache: None,
             generated_media_path: Arc::new(default_generated_media_path()),
+            streaming_supervisor: None,
         }
     }
 
@@ -122,6 +131,16 @@ impl WebState {
     #[must_use]
     pub fn with_generated_media_path(mut self, path: std::path::PathBuf) -> Self {
         self.generated_media_path = Arc::new(path);
+        self
+    }
+
+    /// Attach the HLS streaming supervisor. Called by the boot path
+    /// after constructing the supervisor so the `/api/v1/hls/*` REST
+    /// handlers can dispatch session start / terminate / playlist /
+    /// segment requests against the shared in-process state.
+    #[must_use]
+    pub fn with_streaming_supervisor(mut self, supervisor: StreamingSupervisor) -> Self {
+        self.streaming_supervisor = Some(supervisor);
         self
     }
 

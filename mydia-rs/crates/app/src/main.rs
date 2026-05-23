@@ -286,7 +286,8 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
         mydia_rs_graphql::GraphqlAppState::with_pubsub(db.clone(), pubsub.clone()),
     );
 
-    let mut web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc);
+    let mut web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc)
+        .with_streaming_supervisor(streaming_supervisor.clone());
 
     // U33 follow-up: wire the media-token signer + verified-claims cache
     // into WebState so the REST media-token auth pipeline can verify

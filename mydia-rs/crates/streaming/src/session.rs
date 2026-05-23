@@ -200,6 +200,59 @@ impl SessionHandle {
     pub fn watch(&self) -> watch::Receiver<SessionInfo> {
         self.inner.info_rx.clone()
     }
+
+    /// Wait up to `timeout` for the session to transition to
+    /// `ready = true`. Returns `Ok(())` once the runner reports the
+    /// first playlist appeared (or the session is already ready when
+    /// called). Returns `Err(Cancelled)` if the session ended while
+    /// waiting, or `Err(IdleTimeout)` if the wait elapsed first.
+    ///
+    /// Mirrors Phoenix's `HlsSession.await_ready/2`; the REST master-
+    /// playlist handler blocks on this so the first request for a
+    /// freshly-spawned session does not race ffmpeg's first segment.
+    pub async fn await_ready(&self, timeout: Duration) -> Result<(), StreamingError> {
+        let mut rx = self.inner.info_rx.clone();
+        // Fast path: already ready.
+        {
+            let snap = rx.borrow();
+            if snap.ended {
+                return Err(StreamingError::Cancelled {
+                    reason: "session already ended".to_string(),
+                });
+            }
+            if snap.ready {
+                return Ok(());
+            }
+        }
+
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let wait = tokio::time::timeout_at(deadline, rx.changed()).await;
+            match wait {
+                Ok(Ok(())) => {
+                    let snap = rx.borrow();
+                    if snap.ended {
+                        return Err(StreamingError::Cancelled {
+                            reason: "session ended before ready".to_string(),
+                        });
+                    }
+                    if snap.ready {
+                        return Ok(());
+                    }
+                }
+                Ok(Err(_)) => {
+                    return Err(StreamingError::Cancelled {
+                        reason: "session sender dropped".to_string(),
+                    });
+                }
+                Err(_) => {
+                    return Err(StreamingError::FfmpegReadyTimeout {
+                        seconds: timeout.as_secs(),
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// Spawn the per-session task and return its handle. The supervisor

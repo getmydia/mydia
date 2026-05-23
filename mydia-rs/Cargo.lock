@@ -4740,6 +4740,7 @@ dependencies = [
  "mydia-rs-metadata",
  "mydia-rs-models",
  "mydia-rs-pubsub",
+ "mydia-rs-streaming",
  "mydia-rs-subtitles",
  "openidconnect",
  "reqwest 0.12.28",
