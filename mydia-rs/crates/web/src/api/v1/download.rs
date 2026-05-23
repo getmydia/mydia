@@ -2,11 +2,31 @@
 //!
 //! Port of `MydiaWeb.Api.DownloadController` from
 //! `lib/mydia_web/controllers/api/download_controller.ex`. The Phoenix
-//! handler orchestrates search across `Mydia.Downloads.Releases`, then
-//! enqueues an apalis-equivalent oban job for the chosen release.
-//! `crates/downloads` ports the underlying primitives; the REST entry
-//! point is wired here but the body is scaffolded with a TODO marker
-//! until the job dispatch glue lands.
+//! handler orchestrates transcode-for-download — `options` runs the
+//! resolution detector, `prepare` enqueues a transcode job, the
+//! `job_status` + `job_file` endpoints read from `transcode_jobs` plus
+//! the transcoder service.
+//!
+//! Architectural gap (left as 501 + TODO):
+//! - The Phoenix `Mydia.Downloads.DownloadService` orchestrator is not
+//!   yet ported. `mydia_rs_downloads::transcoder` covers the worker
+//!   side but the "pick a resolution from the source file" + "look up
+//!   an existing job by media id" entry points haven't grown a
+//!   service-shaped wrapper.
+//! - `options` needs `ffprobe`-driven inspection of the source file
+//!   plus a quality-profile resolver to compute available outputs.
+//! - `prepare` needs an idempotent job-enqueue (return existing job
+//!   if one is already pending / running for the same media id +
+//!   resolution combination).
+//! - `job_status` + `job_file` would query the `transcode_jobs` row
+//!   directly; the row layout matches the Phoenix schema so the read
+//!   path is reachable today but the write path isn't.
+//!
+//! TODO(U33-follow-up.download): land `DownloadService` in
+//! `mydia_rs_downloads` first (mirroring
+//! `lib/mydia/downloads/download_service.ex`), then point the REST
+//! handlers at it. Mirror the Phoenix response shapes for the
+//! single-resolution + multi-resolution job paths.
 
 use axum::{
     middleware::from_fn,

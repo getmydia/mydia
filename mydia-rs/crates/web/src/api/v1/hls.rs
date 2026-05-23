@@ -6,9 +6,25 @@
 //! `::session` and is functional today; this REST surface is the
 //! external HTTP entry point.
 //!
-//! TODO(U33-follow-up): wire the supervisor handle into `WebState` and
-//! port the `start_session` / playlist / segment handlers. Until then
-//! the routes are mounted and return `501 Not Implemented`.
+//! Architectural gap (left as 501 + TODO):
+//! - `mydia_rs_streaming::Supervisor` is not yet attached to
+//!   `WebState`. The session-start handler needs a handle to call
+//!   `supervisor.start_session(&request)`; the playlist + segment
+//!   handlers need it to look up the session's HLS output directory
+//!   and stream files off disk.
+//! - Wiring the supervisor through `WebState` is its own commit
+//!   (boot path needs to construct it once, share with the candidates
+//!   resolver, and plumb its config from `Config::hls`). Adding the
+//!   field now without the boot wire-up would surface as
+//!   `Option::None` at runtime — same 501 the operator sees today —
+//!   so this is deferred to a focused commit.
+//!
+//! TODO(U33-follow-up.hls): attach `mydia_rs_streaming::Supervisor`
+//! to `WebState` and port the `start_session` / playlist / segment
+//! handlers per Phoenix's `HlsController`. Mirror the Phoenix
+//! response shapes: 201 with `{ session_id, urls }` for start, 200
+//! with `Content-Type: application/vnd.apple.mpegurl` for the
+//! playlists, 200 with `video/MP2T` for the segments.
 
 use axum::{
     middleware::from_fn,
