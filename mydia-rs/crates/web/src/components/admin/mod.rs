@@ -18,9 +18,17 @@
 //! release blacklist) share. Quality profiles uses the same
 //! primitive at the outer level even though its inner "form driving
 //! forms" is page-private.
+//!
+//! The quality-profiles CRUD follow-up adds [`nested_form_array`] —
+//! a minimal "ordered list of editable items" primitive (add /
+//! remove / move-up / move-down + caller-supplied row renderer).
+//! Quality profiles is the first consumer; the shape is generic
+//! enough to fit any future page that wants the same priority-
+//! ordered editable list pattern.
 
 mod config_form;
 mod filter_bar;
+mod nested_form_array;
 mod page_header;
 mod status_pill;
 
@@ -29,5 +37,6 @@ pub use config_form::{
     SourcePillProps, StatRow, StatRowProps,
 };
 pub use filter_bar::{FilterBar, FilterOption};
+pub use nested_form_array::{ItemRenderer, OrderedItemList, OrderedItemListProps};
 pub use page_header::{AdminPageHeader, AdminPageHeaderProps};
 pub use status_pill::{status_pill_class, StatusPill};

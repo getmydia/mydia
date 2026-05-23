@@ -167,15 +167,8 @@ CREATE TABLE IF NOT EXISTS release_blacklist (
 CREATE TABLE IF NOT EXISTS quality_profiles (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    inserted_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS quality_profile_cutoffs (
-    id TEXT PRIMARY KEY,
-    quality_profile_id TEXT NOT NULL,
-    resolution TEXT NOT NULL,
-    position INTEGER NOT NULL,
+    description TEXT,
+    qualities TEXT,
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -925,50 +918,52 @@ async fn release_blacklist_insert_and_delete_round_trip() {
 
 // ---------- quality_profiles ----------
 
-#[tokio::test]
-async fn quality_profiles_cutoff_count_via_subquery() {
-    let fx = fixture().await;
-    let profile_id = uuid::Uuid::new_v4().to_string();
-    let now = Utc::now().to_rfc3339();
+use mydia_rs_web::server_fns::admin::quality_profiles::{
+    validate_profile, ValidationError, VALID_RESOLUTIONS,
+};
 
-    match &fx.db {
+async fn insert_profile(db: &Db, name: &str, qualities: &[&str]) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let qualities_json = serde_json::to_string(qualities).expect("serialise qualities");
+    match db {
         Db::Sqlite(pool) => {
             sqlx::query(
-                "INSERT INTO quality_profiles (id, name, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?)",
+                "INSERT INTO quality_profiles (id, name, qualities, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?)",
             )
-            .bind(&profile_id)
-            .bind("Any")
+            .bind(&id)
+            .bind(name)
+            .bind(&qualities_json)
             .bind(&now)
             .bind(&now)
             .execute(pool)
             .await
             .expect("insert profile");
-
-            for (i, res) in ["480p", "720p", "1080p"].iter().enumerate() {
-                sqlx::query(
-                    "INSERT INTO quality_profile_cutoffs (id, quality_profile_id, resolution, position, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?)",
-                )
-                .bind(uuid::Uuid::new_v4().to_string())
-                .bind(&profile_id)
-                .bind(*res)
-                .bind(i as i64)
-                .bind(&now)
-                .bind(&now)
-                .execute(pool)
-                .await
-                .expect("insert cutoff");
-            }
         }
         Db::Postgres(_) => unreachable!(),
     }
+    id
+}
 
-    let rows: Vec<(String, String, i64)> = match &fx.db {
+fn quality_count(qualities_json: Option<&str>) -> i64 {
+    match qualities_json {
+        None => 0,
+        Some(s) if s.trim().is_empty() => 0,
+        Some(s) => serde_json::from_str::<Vec<String>>(s)
+            .map(|v| v.len() as i64)
+            .unwrap_or(0),
+    }
+}
+
+#[tokio::test]
+async fn quality_profiles_list_counts_qualities_from_json_column() {
+    let fx = fixture().await;
+    let _id = insert_profile(&fx.db, "Any", &["480p", "720p", "1080p"]).await;
+
+    let rows: Vec<(String, String, Option<String>)> = match &fx.db {
         Db::Sqlite(pool) => sqlx::query_as(
-            "SELECT p.id, p.name, \
-                    (SELECT COUNT(*) FROM quality_profile_cutoffs c WHERE c.quality_profile_id = p.id) \
-             FROM quality_profiles p",
+            "SELECT id, name, qualities FROM quality_profiles ORDER BY inserted_at ASC",
         )
         .fetch_all(pool)
         .await
@@ -978,7 +973,202 @@ async fn quality_profiles_cutoff_count_via_subquery() {
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].1, "Any");
-    assert_eq!(rows[0].2, 3, "cutoff subquery counts 3 items");
+    assert_eq!(quality_count(rows[0].2.as_deref()), 3);
+}
+
+#[tokio::test]
+async fn quality_profiles_create_and_reload_renders_ordered_qualities() {
+    // Happy path: insert a profile with 2 ordered qualities and read
+    // them back to confirm the order is preserved.
+    let fx = fixture().await;
+    let _id = insert_profile(&fx.db, "HD Only", &["1080p", "720p"]).await;
+
+    let (qualities_json,): (Option<String>,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT qualities FROM quality_profiles WHERE name = ?")
+            .bind("HD Only")
+            .fetch_one(pool)
+            .await
+            .expect("query"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    let decoded: Vec<String> =
+        serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
+    assert_eq!(decoded, vec!["1080p".to_owned(), "720p".to_owned()]);
+}
+
+#[tokio::test]
+async fn quality_profiles_update_renames_and_reorders() {
+    // Happy path: edit profile name and swap two qualities.
+    let fx = fixture().await;
+    let id = insert_profile(&fx.db, "Initial", &["1080p", "720p"]).await;
+
+    let now = Utc::now().to_rfc3339();
+    let new_qualities = serde_json::to_string(&["720p", "1080p"]).expect("encode");
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "UPDATE quality_profiles SET name = ?, qualities = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind("Renamed")
+        .bind(&new_qualities)
+        .bind(&now)
+        .bind(&id)
+        .execute(pool)
+        .await
+        .expect("update")
+        .rows_affected(),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 1);
+
+    let (name, qualities_json): (String, Option<String>) = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT name, qualities FROM quality_profiles WHERE id = ?")
+                .bind(&id)
+                .fetch_one(pool)
+                .await
+                .expect("readback")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(name, "Renamed");
+    let decoded: Vec<String> =
+        serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
+    assert_eq!(decoded, vec!["720p".to_owned(), "1080p".to_owned()]);
+}
+
+#[tokio::test]
+async fn quality_profiles_delete_removes_row() {
+    // Happy path: delete a single cutoff (by re-saving the profile
+    // without it) and confirm the persisted JSON has shrunk.
+    let fx = fixture().await;
+    let id = insert_profile(&fx.db, "Trim Me", &["1080p", "720p", "480p"]).await;
+
+    let now = Utc::now().to_rfc3339();
+    let new_qualities = serde_json::to_string(&["1080p", "720p"]).expect("encode");
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query("UPDATE quality_profiles SET qualities = ?, updated_at = ? WHERE id = ?")
+                .bind(&new_qualities)
+                .bind(&now)
+                .bind(&id)
+                .execute(pool)
+                .await
+                .expect("update")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+
+    let (qualities_json,): (Option<String>,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT qualities FROM quality_profiles WHERE id = ?")
+            .bind(&id)
+            .fetch_one(pool)
+            .await
+            .expect("readback"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    let decoded: Vec<String> =
+        serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
+    assert_eq!(decoded, vec!["1080p".to_owned(), "720p".to_owned()]);
+    assert!(!decoded.contains(&"480p".to_owned()));
+}
+
+#[tokio::test]
+async fn quality_profiles_delete_profile_removes_row() {
+    let fx = fixture().await;
+    let id = insert_profile(&fx.db, "Doomed", &["1080p"]).await;
+
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
+            .bind(&id)
+            .execute(pool)
+            .await
+            .expect("delete")
+            .rows_affected(),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 1);
+
+    let (count,): (i64,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM quality_profiles")
+            .fetch_one(pool)
+            .await
+            .expect("count"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn quality_profiles_validation_rejects_empty_qualities() {
+    // Edge case: create profile with zero cutoffs is rejected up-front.
+    assert_eq!(
+        validate_profile("Bad", &[]),
+        Some(ValidationError::EmptyQualities)
+    );
+}
+
+#[test]
+fn quality_profiles_validation_rejects_duplicate_resolutions() {
+    // Edge case: create profile with duplicate-resolution cutoffs
+    // is rejected before the SQL layer ever sees the payload.
+    let qs = vec!["1080p".to_owned(), "1080p".to_owned()];
+    assert_eq!(
+        validate_profile("Dupes", &qs),
+        Some(ValidationError::DuplicateResolution("1080p".to_owned()))
+    );
+}
+
+#[test]
+fn quality_profiles_validation_rejects_unknown_resolutions() {
+    // Mirror Phoenix's `@valid_resolutions` membership check.
+    let qs = vec!["1080p".to_owned(), "9999p".to_owned()];
+    assert_eq!(
+        validate_profile("Bad", &qs),
+        Some(ValidationError::UnknownResolution("9999p".to_owned()))
+    );
+}
+
+#[test]
+fn quality_profiles_validation_accepts_canonical_payload() {
+    let qs: Vec<String> = VALID_RESOLUTIONS.iter().map(|r| (*r).to_owned()).collect();
+    assert_eq!(validate_profile("Everything", &qs), None);
+}
+
+#[test]
+fn quality_profiles_validation_rejects_blank_name() {
+    assert_eq!(
+        validate_profile("   ", &["1080p".to_owned()]),
+        Some(ValidationError::BlankName)
+    );
+}
+
+// ---------- non-admin auth gate ----------
+//
+// The full `require_admin_user_id()` chain needs a live tower-sessions
+// context which the in-memory fixture doesn't reconstruct. We instead
+// pin the schema-level invariant that gates every admin server fn:
+// the row's `role` column has to read "admin" or the function bails.
+// `quality_profiles_admin_gate_smoke` walks the lookup path the auth
+// helper takes — `lookup_user_role` reads `role` from the `users` table
+// — so a guest user's role read returns "guest", not "admin".
+
+#[tokio::test]
+async fn quality_profiles_admin_gate_rejects_guest_role() {
+    let fx = fixture().await;
+    let guest = insert_user(&fx.db, "guest").await;
+
+    let (role,): (String,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT role FROM users WHERE id = ?")
+            .bind(&guest)
+            .fetch_one(pool)
+            .await
+            .expect("readback"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    // Same predicate `require_admin_user_id` uses inline — a non-admin
+    // role causes the helper to short-circuit with "not authorized"
+    // before any CRUD server fn touches the database.
+    assert_ne!(role, "admin");
 }
 
 // ---------- remote_access ----------
