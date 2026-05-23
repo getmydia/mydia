@@ -16,5 +16,6 @@ pub mod core;
 pub mod discover;
 pub mod feedback;
 pub mod library;
+pub mod media;
 pub mod playlist;
 pub mod scan_progress;

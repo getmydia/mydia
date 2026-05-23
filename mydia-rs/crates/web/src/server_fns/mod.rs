@@ -17,4 +17,5 @@ pub mod auth;
 pub mod dashboard;
 pub mod discover;
 pub mod library_paths;
+pub mod media;
 pub mod profile;

@@ -169,6 +169,20 @@ fn Sidebar(user_label: String) -> Element {
                         }
                         li {
                             Link {
+                                to: Route::Movies {},
+                                Icon { name: "film", class: "w-5 h-5" }
+                                "Movies"
+                            }
+                        }
+                        li {
+                            Link {
+                                to: Route::TvShows {},
+                                Icon { name: "tv", class: "w-5 h-5" }
+                                "TV Shows"
+                            }
+                        }
+                        li {
+                            Link {
                                 to: Route::LibraryPaths {},
                                 Icon { name: "home", class: "w-5 h-5" }
                                 "Library paths"

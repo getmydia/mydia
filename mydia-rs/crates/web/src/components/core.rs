@@ -27,6 +27,12 @@ pub struct ButtonProps {
     pub disabled: bool,
     #[props(default)]
     pub onclick: Option<EventHandler<MouseEvent>>,
+    // `button` by default — set to `"submit"` when the button must
+    // trigger the surrounding form's onsubmit handler. HTML defaults
+    // form-nested buttons to submit, but Dioxus renders the attribute
+    // explicitly, so we keep parity by being explicit here too.
+    #[props(default = String::from("button"))]
+    pub r#type: String,
     pub children: Element,
 }
 
@@ -80,10 +86,11 @@ pub fn Button(props: ButtonProps) -> Element {
     let size = props.size.class();
     let extra = props.class.clone();
     let onclick = props.onclick;
+    let btn_type = props.r#type.clone();
 
     rsx! {
         button {
-            r#type: "button",
+            r#type: "{btn_type}",
             class: "btn {variant} {size} {extra}",
             disabled: props.disabled,
             onclick: move |evt| {
@@ -117,6 +124,11 @@ pub struct InputProps {
     pub disabled: bool,
     #[props(default)]
     pub required: bool,
+    // Without this, the rendered `<input>` is purely one-way (signal →
+    // DOM) and callers can't observe what the user typed. Most pages
+    // pair this with `move |e| my_signal.set(e.value())`.
+    #[props(default)]
+    pub oninput: Option<EventHandler<FormEvent>>,
 }
 
 /// Text/email/password input with `DaisyUI` `input-bordered` styling. The
@@ -133,6 +145,7 @@ pub fn Input(props: InputProps) -> Element {
     } else {
         "input input-bordered w-full"
     };
+    let oninput = props.oninput;
 
     rsx! {
         label { class: "form-control w-full {props.class}",
@@ -148,7 +161,12 @@ pub fn Input(props: InputProps) -> Element {
                 placeholder: props.placeholder.as_deref().unwrap_or(""),
                 disabled: props.disabled,
                 required: props.required,
-                class: "{input_class}"
+                class: "{input_class}",
+                oninput: move |evt| {
+                    if let Some(handler) = oninput.as_ref() {
+                        handler.call(evt);
+                    }
+                },
             }
             if let Some(err) = props.error.as_ref() {
                 div { class: "label",
@@ -222,6 +240,8 @@ pub fn Icon(props: IconProps) -> Element {
         "exclamation-circle" => "M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z",
         "information-circle" => "m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z",
         "user" => "M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z",
+        "film" => "M3 4.5h18M3 9h18M3 13.5h18M3 18h18M7.5 4.5v15m9-15v15M4.5 4.5h15a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V6a1.5 1.5 0 0 1 1.5-1.5Z",
+        "tv" => "M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125Z",
         _ => {
             tracing::warn!(name = %props.name, "unknown icon");
             ""

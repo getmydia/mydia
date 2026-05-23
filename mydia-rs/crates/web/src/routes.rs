@@ -20,6 +20,8 @@ use crate::pages::auth::setup::Setup;
 use crate::pages::dashboard::Dashboard;
 use crate::pages::discover::Discover;
 use crate::pages::hello::Hello;
+use crate::pages::media::index::{Movies, TvShows};
+use crate::pages::media::show::MediaShow;
 use crate::pages::profile::Profile;
 
 #[derive(Clone, Routable, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,6 +53,17 @@ pub enum Route {
         // U24.f — TMDB curated discover grid.
         #[route("/discover")]
         Discover {},
+
+        // U25.a — paginated movie and TV grids.
+        #[route("/movies")]
+        Movies {},
+
+        #[route("/tv")]
+        TvShows {},
+
+        // U25.b placeholder — media detail page.
+        #[route("/media/:id")]
+        MediaShow { id: String },
 
         // U23 pilot — admin library paths.
         #[route("/admin/library_paths")]
