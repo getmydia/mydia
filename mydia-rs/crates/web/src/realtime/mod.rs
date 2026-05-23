@@ -9,6 +9,7 @@
 //! following the same pattern (subscribe-on-connect, fan out the
 //! `mydia-rs-pubsub` topic events to typed wire events).
 
+pub mod downloads;
 pub mod jobs_status;
 pub mod library_scanner;
 pub mod transcodes;

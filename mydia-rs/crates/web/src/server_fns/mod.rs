@@ -13,10 +13,15 @@
 //! layer — the surface is small and adding one would just paper over
 //! the natural single-call shape of these handlers.
 
+pub mod activity;
+pub mod add_media;
 pub mod admin;
 pub mod auth;
+pub mod calendar;
 pub mod dashboard;
 pub mod discover;
+pub mod downloads;
 pub mod library_paths;
 pub mod media;
 pub mod profile;
+pub mod requests;

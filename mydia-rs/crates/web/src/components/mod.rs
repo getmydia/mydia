@@ -10,12 +10,16 @@
 //! - Page-private components live under `pages/<family>/components.rs`
 //!   and aren't re-exported here.
 
+pub mod activity_event;
 pub mod admin;
+pub mod calendar_grid;
 pub mod collection;
 pub mod core;
 pub mod discover;
+pub mod download_row;
 pub mod feedback;
 pub mod library;
 pub mod media;
 pub mod playlist;
+pub mod request_form;
 pub mod scan_progress;

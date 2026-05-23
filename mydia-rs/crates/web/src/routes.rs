@@ -14,6 +14,8 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::layout::{AppShell, AuthShell};
+use crate::pages::activity::Activity;
+use crate::pages::add_media::AddMedia;
 use crate::pages::admin::devices::Devices;
 use crate::pages::admin::jobs::Jobs;
 use crate::pages::admin::library_paths::LibraryPaths;
@@ -22,12 +24,17 @@ use crate::pages::admin::transcodes::Transcodes;
 use crate::pages::admin::users::Users;
 use crate::pages::auth::login::Login;
 use crate::pages::auth::setup::Setup;
+use crate::pages::calendar::Calendar;
 use crate::pages::dashboard::Dashboard;
 use crate::pages::discover::Discover;
+use crate::pages::downloads::Downloads;
 use crate::pages::hello::Hello;
+use crate::pages::import_media::ImportMedia;
 use crate::pages::media::index::{Movies, TvShows};
 use crate::pages::media::show::MediaShow;
+use crate::pages::my_requests::MyRequests;
 use crate::pages::profile::Profile;
+use crate::pages::request_media::{RequestMovie, RequestSeries};
 
 #[derive(Clone, Routable, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[rustfmt::skip]
@@ -89,4 +96,29 @@ pub enum Route {
 
         #[route("/admin/requests")]
         Requests {},
+
+        // U27 — operational user-facing pages.
+        #[route("/calendar")]
+        Calendar {},
+
+        #[route("/activity")]
+        Activity {},
+
+        #[route("/downloads")]
+        Downloads {},
+
+        #[route("/add")]
+        AddMedia {},
+
+        #[route("/import")]
+        ImportMedia {},
+
+        #[route("/request/movie")]
+        RequestMovie {},
+
+        #[route("/request/series")]
+        RequestSeries {},
+
+        #[route("/requests")]
+        MyRequests {},
 }

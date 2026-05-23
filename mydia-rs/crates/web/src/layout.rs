@@ -247,33 +247,39 @@ fn Sidebar(props: SidebarProps) -> Element {
                         }
 
                         if !is_guest {
-                            SectionTitle { label: "Management".to_string() }
+                            SectionTitle { label: "Library".to_string() }
+                            NavItem {
+                                to: Route::Calendar {},
+                                icon: "calendar".to_string(),
+                                label: "Calendar".to_string(),
+                            }
+                            NavItem {
+                                to: Route::Activity {},
+                                icon: "clock".to_string(),
+                                label: "Activity".to_string(),
+                            }
 
-                            // Downloads / Calendar / Search / Activity /
-                            // Collections — TODO U26+: replace these
-                            // anchor fallbacks with `Link { to: Route::… }`
-                            // once the routes land.
-                            LinkPlaceholder {
-                                href: "/downloads".to_string(),
+                            SectionTitle { label: "Management".to_string() }
+                            NavItem {
+                                to: Route::Downloads {},
                                 icon: "arrow-down-tray".to_string(),
                                 label: "Downloads".to_string(),
                                 badge: data.downloads_count,
-                                badge_class: "badge badge-primary badge-sm".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/calendar".to_string(),
-                                icon: "calendar".to_string(),
-                                label: "Calendar".to_string(),
+                            NavItem {
+                                to: Route::AddMedia {},
+                                icon: "plus-circle".to_string(),
+                                label: "Add media".to_string(),
+                            }
+                            NavItem {
+                                to: Route::ImportMedia {},
+                                icon: "arrow-down-on-square-stack".to_string(),
+                                label: "Import library".to_string(),
                             }
                             LinkPlaceholder {
                                 href: "/search".to_string(),
                                 icon: "magnifying-glass".to_string(),
                                 label: "Search".to_string(),
-                            }
-                            LinkPlaceholder {
-                                href: "/activity".to_string(),
-                                icon: "clock".to_string(),
-                                label: "Activity".to_string(),
                             }
                             LinkPlaceholder {
                                 href: "/collections".to_string(),
@@ -334,18 +340,18 @@ fn Sidebar(props: SidebarProps) -> Element {
 
                         if is_guest {
                             SectionTitle { label: "Requests".to_string() }
-                            LinkPlaceholder {
-                                href: "/request/movie".to_string(),
+                            NavItem {
+                                to: Route::RequestMovie {},
                                 icon: "film".to_string(),
                                 label: "Request Movie".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/request/series".to_string(),
+                            NavItem {
+                                to: Route::RequestSeries {},
                                 icon: "tv".to_string(),
                                 label: "Request Series".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/requests".to_string(),
+                            NavItem {
+                                to: Route::MyRequests {},
                                 icon: "queue-list".to_string(),
                                 label: "My Requests".to_string(),
                             }
@@ -631,13 +637,13 @@ fn MobileDock(props: MobileDockProps) -> Element {
             }
 
             if is_guest {
-                DockExternalLink {
-                    href: "/request/movie".to_string(),
+                DockLink {
+                    to: Route::RequestMovie {},
                     icon: "film".to_string(),
                     label: "Request".to_string(),
                 }
-                DockExternalLink {
-                    href: "/requests".to_string(),
+                DockLink {
+                    to: Route::MyRequests {},
                     icon: "queue-list".to_string(),
                     label: "Requests".to_string(),
                 }
@@ -674,25 +680,6 @@ fn DockLink(props: DockLinkProps) -> Element {
     rsx! {
         Link {
             to: props.to,
-            class: "flex flex-col items-center justify-center min-w-[52px] py-1.5 rounded-xl opacity-60 hover:opacity-100 transition-opacity",
-            Icon { name: props.icon, class: "size-5".to_string() }
-            span { class: "text-[10px] mt-0.5", "{props.label}" }
-        }
-    }
-}
-
-#[derive(Props, Clone, PartialEq)]
-struct DockExternalLinkProps {
-    href: String,
-    icon: String,
-    label: String,
-}
-
-#[component]
-fn DockExternalLink(props: DockExternalLinkProps) -> Element {
-    rsx! {
-        a {
-            href: "{props.href}",
             class: "flex flex-col items-center justify-center min-w-[52px] py-1.5 rounded-xl opacity-60 hover:opacity-100 transition-opacity",
             Icon { name: props.icon, class: "size-5".to_string() }
             span { class: "text-[10px] mt-0.5", "{props.label}" }
