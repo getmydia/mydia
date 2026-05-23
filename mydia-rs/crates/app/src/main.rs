@@ -329,6 +329,15 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
         graphql_schema.clone(),
     );
 
+    // U28 follow-up: surface the live Server handle through `WebState`
+    // so the admin remote-access page can read the Iroh node id,
+    // network stats, and relay state instead of stubbing them out.
+    // The Server itself stays in `BootState` (its Drop aborts the
+    // event-drain task); the handle is cheap to clone.
+    if let Some(server) = p2p_server.as_ref() {
+        web_state = web_state.with_p2p_server(server.handle());
+    }
+
     tracing::info!("mydia-rs boot ok");
 
     Ok(BootState {

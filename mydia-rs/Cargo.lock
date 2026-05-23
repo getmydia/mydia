@@ -4739,6 +4739,7 @@ dependencies = [
  "mydia-rs-jobs",
  "mydia-rs-metadata",
  "mydia-rs-models",
+ "mydia-rs-p2p",
  "mydia-rs-pubsub",
  "mydia-rs-streaming",
  "mydia-rs-subtitles",

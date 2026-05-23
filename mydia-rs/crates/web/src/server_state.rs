@@ -23,6 +23,7 @@ use mydia_rs_auth::{MediaTokenCache, MediaTokenSigner};
 use mydia_rs_db::Db;
 use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
+use mydia_rs_p2p::ServerHandle as P2pServerHandle;
 use mydia_rs_pubsub::Pubsub;
 use mydia_rs_streaming::Supervisor as StreamingSupervisor;
 
@@ -84,6 +85,13 @@ pub struct WebState {
     /// always construct it. Cheap to clone; internal state is
     /// `Arc<DashMap>`.
     pub streaming_supervisor: Option<StreamingSupervisor>,
+
+    /// Handle to the running p2p Server (iroh Host wrapper). `None`
+    /// when remote access is disabled in config or the operator did
+    /// not configure a keypair path. The admin remote-access page
+    /// reads node id + network stats off this handle so the operator
+    /// sees the live Iroh state (not just DB-counted devices).
+    pub p2p_server: Option<P2pServerHandle>,
 }
 
 impl WebState {
@@ -111,6 +119,7 @@ impl WebState {
             media_token_cache: None,
             generated_media_path: Arc::new(default_generated_media_path()),
             streaming_supervisor: None,
+            p2p_server: None,
         }
     }
 
@@ -141,6 +150,17 @@ impl WebState {
     #[must_use]
     pub fn with_streaming_supervisor(mut self, supervisor: StreamingSupervisor) -> Self {
         self.streaming_supervisor = Some(supervisor);
+        self
+    }
+
+    /// Attach the live p2p Server handle. Called by the boot path
+    /// after `maybe_boot_p2p` constructs the Server so the admin
+    /// remote-access page can render the Iroh node id, direct
+    /// addresses, peer counts, and relay state alongside the DB-
+    /// counted paired/revoked device totals.
+    #[must_use]
+    pub fn with_p2p_server(mut self, handle: P2pServerHandle) -> Self {
+        self.p2p_server = Some(handle);
         self
     }
 

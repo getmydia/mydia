@@ -27,18 +27,45 @@ pub struct PairedDeviceRow {
 }
 
 /// Snapshot of the local p2p node — node id, listen addresses,
-/// discovery counts. Sourced from the cached
-/// [`crate::server_state::WebState`]; we don't poke the live core
-/// crate here because the live state-machine is held by the app
-/// boot path and exposing it through Dioxus context is U29's job.
+/// discovery counts. The DB-counted device totals are always set; the
+/// live fields (`node_id`, `connected_peers`, `relay_*`, `node_addr`)
+/// stay at their defaults when the p2p Server is not running (remote
+/// access disabled in config, or boot path skipped it because no
+/// keypair was configured).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct P2pStatus {
-    /// Stable identifier (Iroh node id, formatted hex).
+    /// Stable identifier (Iroh node id, formatted hex). Empty when
+    /// the p2p Server is not running.
     pub node_id: String,
     pub paired_devices: i64,
     pub revoked_devices: i64,
     #[serde(default)]
     pub last_seen_summary: Option<String>,
+    /// `true` when the p2p Server is constructed and the drain loop
+    /// is running. The admin page conditionally renders the "Live
+    /// host status" section on this flag.
+    #[serde(default)]
+    pub running: bool,
+    /// Number of currently connected p2p peers (from the Host's
+    /// network stats).
+    #[serde(default)]
+    pub connected_peers: i64,
+    /// `true` when the Host has dialled a relay successfully.
+    #[serde(default)]
+    pub relay_connected: bool,
+    /// Relay URL currently in use, if any.
+    #[serde(default)]
+    pub relay_url: Option<String>,
+    /// Cached `EndpointAddr` JSON returned by the Host. Pasteable into
+    /// the player's "manual dial" field when DHT/mDNS discovery is
+    /// unavailable.
+    #[serde(default)]
+    pub node_addr: Option<String>,
+    /// Connection type of the first connected peer (per the Host's
+    /// `PeerConnectionType`). Useful diagnostic for "are we relayed
+    /// or direct?".
+    #[serde(default)]
+    pub peer_connection_type: Option<String>,
 }
 
 #[get("/api/admin/remote_access/devices")]
@@ -174,10 +201,6 @@ mod server {
     pub(super) async fn status() -> Result<P2pStatus, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        // The live p2p Host handle isn't part of WebState yet; until
-        // U29 wires it through, we surface the persisted-device
-        // counts so the page renders something useful out of the
-        // box.
         let (paired,): (i64,) = match &st.db {
             Db::Sqlite(pool) => {
                 sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NULL")
@@ -207,11 +230,56 @@ mod server {
             }
         };
 
-        Ok(P2pStatus {
-            node_id: "(p2p host handle not yet wired into WebState — U29 follow-up)".to_owned(),
+        // The live p2p Server handle (U28 follow-up) — when present,
+        // ask it for the Iroh node id, connection counts, and relay
+        // state. When absent, the live fields stay at their defaults
+        // and the page hides the "Live host status" section.
+        let mut out = P2pStatus {
+            node_id: String::new(),
             paired_devices: paired,
             revoked_devices: revoked,
             last_seen_summary: None,
-        })
+            ..Default::default()
+        };
+
+        if let Some(handle) = st.p2p_server.as_ref() {
+            // The Server's drain loop maintains a cached `ServerStatus`
+            // we can read without blocking; the more-detailed
+            // `network_stats()` and `get_node_addr()` calls wrap the
+            // blocking Host APIs in `spawn_blocking` per the U29
+            // discipline.
+            let cached = handle.status().await;
+            out.running = cached.running;
+            out.node_id = cached.node_id.clone();
+            out.relay_connected = cached.relay_connected;
+            // The cached `connected_peers` count is updated from the
+            // drain loop; freshen with a live network_stats read so the
+            // operator sees the same number the host's own view of
+            // peers reports.
+            match handle.network_stats().await {
+                Ok(stats) => {
+                    out.connected_peers = stats.connected_peers as i64;
+                    out.relay_connected = stats.relay_connected;
+                    out.relay_url.clone_from(&stats.relay_url);
+                    out.peer_connection_type = Some(stats.peer_connection_type.as_str().into());
+                }
+                Err(err) => {
+                    tracing::warn!(error = %err, "p2p network_stats lookup failed; falling back to cached counts");
+                    out.connected_peers = cached.connected_peers as i64;
+                    out.relay_url.clone_from(&cached.relay_url);
+                    out.peer_connection_type
+                        .clone_from(&cached.peer_connection_type);
+                }
+            }
+            match handle.get_node_addr().await {
+                Ok(addr) => out.node_addr = Some(addr),
+                Err(err) => {
+                    tracing::warn!(error = %err, "p2p get_node_addr lookup failed");
+                    out.node_addr = cached.node_addr.clone();
+                }
+            }
+        }
+
+        Ok(out)
     }
 }

@@ -1202,3 +1202,43 @@ async fn remote_access_status_counts_active_vs_revoked() {
     assert_eq!(paired, 2, "two paired devices stay live");
     assert_eq!(revoked, 1, "one revoked device is counted separately");
 }
+
+#[test]
+fn p2p_status_default_is_not_running() {
+    // The page reads `running` to decide whether to render the "Live
+    // host status" section. When the p2p Server isn't booted (no
+    // keypair configured, or remote access disabled), the server fn
+    // returns the default P2pStatus shape — the live section must
+    // stay hidden.
+    use mydia_rs_web::server_fns::admin::remote_access::P2pStatus;
+    let s = P2pStatus::default();
+    assert!(!s.running, "default p2p status must report not-running");
+    assert_eq!(s.node_id, "");
+    assert_eq!(s.connected_peers, 0);
+    assert!(s.relay_url.is_none());
+    assert!(s.node_addr.is_none());
+}
+
+#[test]
+fn p2p_status_round_trips_through_serde() {
+    // The page receives this shape via Dioxus's server-fn JSON wire,
+    // so it must survive `serde_json::to_string` + `from_str`. This
+    // pins the wasm-compat contract: no `chrono::DateTime`, no
+    // `sqlx` types, no `Uuid` — pure strings + ints + bools.
+    use mydia_rs_web::server_fns::admin::remote_access::P2pStatus;
+    let s = P2pStatus {
+        node_id: "abcdef0123456789".to_owned(),
+        paired_devices: 3,
+        revoked_devices: 1,
+        last_seen_summary: Some("3 active in the last hour".to_owned()),
+        running: true,
+        connected_peers: 2,
+        relay_connected: true,
+        relay_url: Some("https://relay.example.com".to_owned()),
+        node_addr: Some(r#"{"node_id":"abcdef","direct_addresses":[]}"#.to_owned()),
+        peer_connection_type: Some("direct".to_owned()),
+    };
+    let encoded = serde_json::to_string(&s).expect("serialize");
+    let round: P2pStatus = serde_json::from_str(&encoded).expect("deserialize");
+    assert_eq!(round, s);
+}

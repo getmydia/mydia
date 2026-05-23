@@ -124,11 +124,50 @@ fn StatusCard(props: StatusCardProps) -> Element {
         ConfigSection {
             id: "admin-remote-access-status".to_string(),
             title: "P2P node".to_string(),
-            StatRow { label: "Node identifier".to_string(), value: s.node_id.clone() }
             StatRow { label: "Paired devices".to_string(), value: s.paired_devices.to_string() }
             StatRow { label: "Revoked devices".to_string(), value: s.revoked_devices.to_string() }
             if let Some(summary) = s.last_seen_summary.as_ref() {
                 StatRow { label: "Last activity".to_string(), value: summary.clone() }
+            }
+        }
+
+        // The live host status section renders only when the p2p
+        // Server is actually running. When `running == false` the
+        // backend either skipped p2p boot (no keypair configured) or
+        // remote access is disabled outright; either way there's no
+        // Iroh state to show, so we omit the section to avoid
+        // confusing empty rows.
+        if s.running {
+            LiveHostStatusCard { status: s.clone() }
+        }
+    }
+}
+
+#[component]
+fn LiveHostStatusCard(props: StatusCardProps) -> Element {
+    let s = props.status.clone();
+    rsx! {
+        ConfigSection {
+            id: "admin-remote-access-live-status".to_string(),
+            title: "Live host status".to_string(),
+            StatRow { label: "Node identifier".to_string(), value: s.node_id.clone() }
+            StatRow {
+                label: "Connected peers".to_string(),
+                value: s.connected_peers.to_string(),
+            }
+            StatRow {
+                label: "Relay".to_string(),
+                value: format!(
+                    "{} ({})",
+                    if s.relay_connected { "connected" } else { "disconnected" },
+                    s.relay_url.clone().unwrap_or_else(|| "iroh default".to_owned()),
+                ),
+            }
+            if let Some(kind) = s.peer_connection_type.as_ref() {
+                StatRow { label: "Peer connection type".to_string(), value: kind.clone() }
+            }
+            if let Some(addr) = s.node_addr.as_ref() {
+                StatRow { label: "Node address".to_string(), value: addr.clone() }
             }
         }
     }

@@ -36,6 +36,7 @@ mydia-rs-models    = { path = "../models",    optional = true }
 mydia-rs-metadata  = { path = "../metadata",  optional = true }
 mydia-rs-subtitles = { path = "../subtitles", optional = true }
 mydia-rs-streaming = { path = "../streaming", optional = true }
+mydia-rs-p2p       = { path = "../p2p",       optional = true }
 sqlx               = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "chrono", "uuid"], optional = true }
 tokio              = { workspace = true, optional = true }
 chrono             = { version = "0.4", default-features = false, features = ["serde", "clock"], optional = true }
@@ -74,6 +75,7 @@ server = [
     "dep:mydia-rs-metadata",
     "dep:mydia-rs-subtitles",
     "dep:mydia-rs-streaming",
+    "dep:mydia-rs-p2p",
     "dep:sqlx",
     "dep:tokio",
     "dep:chrono",
