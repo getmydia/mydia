@@ -39,9 +39,11 @@ server = [
     "dep:mydia-rs-auth",
     "dep:mydia-rs-config",
     "dep:mydia-rs-db",
+    "dep:mydia-rs-graphql",
     "dep:mydia-rs-p2p",
     "dep:mydia-rs-pubsub",
     "dep:mydia-rs-jobs",
+    "dep:mydia-rs-streaming",
     "dep:axum",
     "dep:tower",
     "dep:tower-http",
@@ -79,9 +81,11 @@ anyhow = { workspace = true, optional = true }
 mydia-rs-auth = { path = "../auth", optional = true }
 mydia-rs-config = { path = "../config", optional = true }
 mydia-rs-db = { path = "../db", optional = true }
+mydia-rs-graphql = { path = "../graphql", optional = true }
 mydia-rs-p2p = { path = "../p2p", optional = true }
 mydia-rs-pubsub = { path = "../pubsub", optional = true }
 mydia-rs-jobs = { path = "../jobs", optional = true }
+mydia-rs-streaming = { path = "../streaming", optional = true }
 axum = { version = "0.8", optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", optional = true, features = [

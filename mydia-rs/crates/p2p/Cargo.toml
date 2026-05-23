@@ -18,6 +18,17 @@ mydia-rs-auth = { path = "../auth" }
 mydia-rs-config = { path = "../config" }
 mydia-rs-db = { path = "../db" }
 mydia-rs-models = { path = "../models" }
+# U29 follow-up: GraphQL + HLS dispatch adapters. The GraphQL crate
+# owns the async-graphql schema; we hand it a verified user context
+# and execute requests against it. The streaming crate owns the HLS
+# session supervisor; we look up sessions by id and stream files via
+# the Host's zero-copy file-range path.
+mydia-rs-graphql = { path = "../graphql" }
+mydia-rs-streaming = { path = "../streaming" }
+
+# async-graphql comes in via mydia-rs-graphql, but we touch its Request /
+# Variables types directly to build the executable request body.
+async-graphql = { version = "7", features = ["chrono", "uuid"] }
 
 # Async + concurrency primitives.
 tokio.workspace = true
@@ -48,6 +59,17 @@ tracing.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 tempfile = "3"
+# Dispatch-arm integration tests need a real pubsub bus + sqlite pool
+# to drive the supervisor and graphql adapter through a realistic boot
+# shape. The `sqlite` feature on sqlx is enabled transitively via
+# `mydia-rs-db`; we just need the in-process bus and a direct sqlx
+# pool builder for the in-memory schema test helper.
+mydia-rs-pubsub = { path = "../pubsub" }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "macros",
+    "sqlite",
+] }
 
 [lints]
 workspace = true

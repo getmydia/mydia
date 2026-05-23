@@ -275,13 +275,29 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
     // the login page hides the OIDC button via `WebState::oidc_available`.
     let oidc = build_oidc_context(config).await.map(Arc::new);
 
+    // U29 follow-up: build the streaming supervisor + GraphQL schema
+    // ahead of the p2p boot so the router can dispatch GraphQL and HLS
+    // requests against the real in-process state. The supervisor is
+    // shared with the HTTP REST surface as it lands; the schema is
+    // shared with the HTTP `/api/graphql` mount when it lands.
+    let streaming_supervisor =
+        mydia_rs_streaming::Supervisor::new(streaming_config(), pubsub.clone());
+    let graphql_schema = mydia_rs_graphql::build_schema(
+        mydia_rs_graphql::GraphqlAppState::with_pubsub(db.clone(), pubsub.clone()),
+    );
+
     let web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc);
 
     // U29: boot the p2p Server (iroh Host wrapper) when remote-access
     // is enabled and a keypair path is configured. The Phoenix backend
     // raises without `p2p_keypair_path`; we mirror the gate but soften
     // it to a config-driven skip so the parallel window is forgiving.
-    let p2p_server = maybe_boot_p2p(config, &db);
+    let p2p_server = maybe_boot_p2p(
+        config,
+        &db,
+        streaming_supervisor.clone(),
+        graphql_schema.clone(),
+    );
 
     tracing::info!("mydia-rs boot ok");
 
@@ -300,7 +316,12 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
 /// Endpoint which owns its tokio runtime, so dropping the returned
 /// value cleanly shuts everything down.
 #[cfg(feature = "server")]
-fn maybe_boot_p2p(config: &Config, db: &Db) -> Option<P2pServer> {
+fn maybe_boot_p2p(
+    config: &Config,
+    db: &Db,
+    streaming_supervisor: mydia_rs_streaming::Supervisor,
+    graphql_schema: mydia_rs_graphql::MydiaSchema,
+) -> Option<P2pServer> {
     if !config.features.remote_access_enabled {
         tracing::info!("remote access disabled in config; skipping p2p Server");
         return None;
@@ -327,13 +348,15 @@ fn maybe_boot_p2p(config: &Config, db: &Db) -> Option<P2pServer> {
     let media_signer = mydia_rs_auth::MediaTokenSigner::new(&guardian_secret, leeway_secs);
     let access_signer = mydia_rs_auth::AccessTokenSigner::new(&guardian_secret, leeway_secs);
     let rate_limiter = mydia_rs_p2p::ClaimRateLimiter::new_default();
+    // 5 minutes matches the Phoenix `Mydia.Media.TokenCache` TTL.
+    let media_token_cache =
+        mydia_rs_auth::MediaTokenCache::new(std::time::Duration::from_secs(5 * 60));
 
-    let router = std::sync::Arc::new(MinimalRouter::new(
-        db.clone(),
-        media_signer,
-        access_signer,
-        rate_limiter,
-    ));
+    let router = std::sync::Arc::new(
+        MinimalRouter::new(db.clone(), media_signer, access_signer, rate_limiter)
+            .with_graphql_schema(graphql_schema)
+            .with_streaming(streaming_supervisor, media_token_cache),
+    );
 
     let server_config = P2pServerConfig {
         relay_url: std::env::var("IROH_RELAY_URL").ok(),
@@ -350,6 +373,25 @@ fn maybe_boot_p2p(config: &Config, db: &Db) -> Option<P2pServer> {
     let server = P2pServer::spawn(server_config, router);
     tracing::info!(node_id = %server.handle().node_id(), "p2p server up");
     Some(server)
+}
+
+/// Build the streaming-supervisor config from environment overrides plus
+/// defaults. Mirrors the Phoenix `:streaming` shape: temp dir under
+/// `/tmp/mydia-hls` by default, `ffmpeg` binary discovered from `PATH`.
+///
+/// The supervisor is shared with the p2p HLS dispatch arm and (when
+/// it lands) the REST HLS surface. Constructing it once at boot keeps
+/// the per-session `DashMap` visible across both surfaces.
+#[cfg(feature = "server")]
+fn streaming_config() -> mydia_rs_streaming::SupervisorConfig {
+    let mut cfg = mydia_rs_streaming::SupervisorConfig::default();
+    if let Ok(dir) = std::env::var("MYDIA_HLS_TEMP_DIR") {
+        cfg.temp_base_dir = std::path::PathBuf::from(dir);
+    }
+    if let Ok(path) = std::env::var("MYDIA_FFMPEG_PATH") {
+        cfg.ffmpeg_path = std::path::PathBuf::from(path);
+    }
+    cfg
 }
 
 /// Translate the `AuthConfig` OIDC fields into the web crate's
