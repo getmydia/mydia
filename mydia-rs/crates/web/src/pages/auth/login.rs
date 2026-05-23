@@ -21,8 +21,8 @@ use crate::server_fns::auth::{login_with_password, oidc_available, setup_require
 
 #[component]
 pub fn Login() -> Element {
-    let username = use_signal(String::new);
-    let password = use_signal(String::new);
+    let mut username = use_signal(String::new);
+    let mut password = use_signal(String::new);
     let mut error: Signal<Option<String>> = use_signal(|| None);
     let mut submitting = use_signal(|| false);
     let nav = navigator();
@@ -89,6 +89,7 @@ pub fn Login() -> Element {
                         name: "username".to_string(),
                         label: "Username".to_string(),
                         value: "{username}",
+                        oninput: move |e: FormEvent| username.set(e.value()),
                         required: true,
                     }
                     Input {
@@ -96,6 +97,7 @@ pub fn Login() -> Element {
                         label: "Password".to_string(),
                         r#type: "password".to_string(),
                         value: "{password}",
+                        oninput: move |e: FormEvent| password.set(e.value()),
                         required: true,
                     }
                     if let Some(err) = error.read().clone() {
@@ -103,6 +105,7 @@ pub fn Login() -> Element {
                     }
                     Button {
                         variant: ButtonVariant::Primary,
+                        r#type: "submit".to_string(),
                         disabled: *submitting.read(),
                         "Sign in"
                     }

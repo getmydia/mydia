@@ -17,10 +17,10 @@ use crate::server_fns::auth::{setup_admin, setup_required, SetupPayload};
 
 #[component]
 pub fn Setup() -> Element {
-    let username = use_signal(String::new);
-    let email = use_signal(String::new);
-    let password = use_signal(String::new);
-    let password_confirm = use_signal(String::new);
+    let mut username = use_signal(String::new);
+    let mut email = use_signal(String::new);
+    let mut password = use_signal(String::new);
+    let mut password_confirm = use_signal(String::new);
     let mut error: Signal<Option<String>> = use_signal(|| None);
     let mut submitting = use_signal(|| false);
     let nav = navigator();
@@ -87,6 +87,7 @@ pub fn Setup() -> Element {
                         name: "username".to_string(),
                         label: "Username".to_string(),
                         value: "{username}",
+                        oninput: move |e: FormEvent| username.set(e.value()),
                         required: true,
                         placeholder: "admin".to_string(),
                     }
@@ -95,6 +96,7 @@ pub fn Setup() -> Element {
                         label: "Email".to_string(),
                         r#type: "email".to_string(),
                         value: "{email}",
+                        oninput: move |e: FormEvent| email.set(e.value()),
                         required: true,
                     }
                     Input {
@@ -102,6 +104,7 @@ pub fn Setup() -> Element {
                         label: "Password (min 8 chars)".to_string(),
                         r#type: "password".to_string(),
                         value: "{password}",
+                        oninput: move |e: FormEvent| password.set(e.value()),
                         required: true,
                     }
                     Input {
@@ -109,6 +112,7 @@ pub fn Setup() -> Element {
                         label: "Confirm password".to_string(),
                         r#type: "password".to_string(),
                         value: "{password_confirm}",
+                        oninput: move |e: FormEvent| password_confirm.set(e.value()),
                         required: true,
                     }
                     if let Some(err) = error.read().clone() {
@@ -116,6 +120,7 @@ pub fn Setup() -> Element {
                     }
                     Button {
                         variant: ButtonVariant::Primary,
+                        r#type: "submit".to_string(),
                         disabled: *submitting.read(),
                         "Create admin account"
                     }

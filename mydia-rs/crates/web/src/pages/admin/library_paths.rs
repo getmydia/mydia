@@ -156,6 +156,7 @@ pub fn LibraryPaths() -> Element {
                             label: "Filesystem path".to_string(),
                             placeholder: "/media/movies".to_string(),
                             value: "{form_path}",
+                            oninput: move |e: FormEvent| form_path.set(e.value()),
                             required: true,
                         }
                         label { class: "form-control w-full",
@@ -188,6 +189,7 @@ pub fn LibraryPaths() -> Element {
                         }
                         Button {
                             variant: ButtonVariant::Primary,
+                            r#type: "submit".to_string(),
                             class: "self-end".to_string(),
                             "Add"
                         }

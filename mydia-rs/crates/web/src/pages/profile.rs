@@ -81,8 +81,8 @@ fn AccountSummary(profile: ProfileView) -> Element {
 
 #[component]
 fn ProfileForm(profile: ProfileView, on_saved: EventHandler<()>) -> Element {
-    let display_name = use_signal(|| profile.display_name.clone().unwrap_or_default());
-    let avatar_url = use_signal(|| profile.avatar_url.clone().unwrap_or_default());
+    let mut display_name = use_signal(|| profile.display_name.clone().unwrap_or_default());
+    let mut avatar_url = use_signal(|| profile.avatar_url.clone().unwrap_or_default());
     let mut error: Signal<Option<String>> = use_signal(|| None);
     let mut info: Signal<Option<String>> = use_signal(|| None);
     let mut submitting = use_signal(|| false);
@@ -130,6 +130,7 @@ fn ProfileForm(profile: ProfileView, on_saved: EventHandler<()>) -> Element {
                         name: "display_name".to_string(),
                         label: "Display name".to_string(),
                         value: "{display_name}",
+                        oninput: move |e: FormEvent| display_name.set(e.value()),
                         placeholder: "Up to 100 characters".to_string(),
                     }
                     Input {
@@ -137,6 +138,7 @@ fn ProfileForm(profile: ProfileView, on_saved: EventHandler<()>) -> Element {
                         label: "Avatar URL".to_string(),
                         r#type: "url".to_string(),
                         value: "{avatar_url}",
+                        oninput: move |e: FormEvent| avatar_url.set(e.value()),
                         placeholder: "https://...".to_string(),
                     }
                     if let Some(err) = error.read().clone() {
@@ -148,6 +150,7 @@ fn ProfileForm(profile: ProfileView, on_saved: EventHandler<()>) -> Element {
                     div { class: "card-actions justify-end",
                         Button {
                             variant: ButtonVariant::Primary,
+                            r#type: "submit".to_string(),
                             disabled: *submitting.read(),
                             "Save"
                         }
@@ -160,9 +163,9 @@ fn ProfileForm(profile: ProfileView, on_saved: EventHandler<()>) -> Element {
 
 #[component]
 fn PasswordCard() -> Element {
-    let current_password = use_signal(String::new);
-    let new_password = use_signal(String::new);
-    let confirm_password = use_signal(String::new);
+    let mut current_password = use_signal(String::new);
+    let mut new_password = use_signal(String::new);
+    let mut confirm_password = use_signal(String::new);
     let mut error: Signal<Option<String>> = use_signal(|| None);
     let mut info: Signal<Option<String>> = use_signal(|| None);
     let mut submitting = use_signal(|| false);
@@ -232,6 +235,7 @@ fn PasswordCard() -> Element {
                         label: "Current password".to_string(),
                         r#type: "password".to_string(),
                         value: "{current_password}",
+                        oninput: move |e: FormEvent| current_password.set(e.value()),
                         required: true,
                     }
                     Input {
@@ -239,6 +243,7 @@ fn PasswordCard() -> Element {
                         label: "New password (min 8 chars)".to_string(),
                         r#type: "password".to_string(),
                         value: "{new_password}",
+                        oninput: move |e: FormEvent| new_password.set(e.value()),
                         required: true,
                     }
                     Input {
@@ -246,6 +251,7 @@ fn PasswordCard() -> Element {
                         label: "Confirm new password".to_string(),
                         r#type: "password".to_string(),
                         value: "{confirm_password}",
+                        oninput: move |e: FormEvent| confirm_password.set(e.value()),
                         required: true,
                     }
                     if let Some(err) = error.read().clone() {
@@ -257,6 +263,7 @@ fn PasswordCard() -> Element {
                     div { class: "card-actions justify-end",
                         Button {
                             variant: ButtonVariant::Primary,
+                            r#type: "submit".to_string(),
                             disabled: *submitting.read(),
                             "Change password"
                         }
