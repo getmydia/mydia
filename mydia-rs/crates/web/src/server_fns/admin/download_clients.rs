@@ -13,6 +13,13 @@
 //! - `url` non-blank; we don't enforce a scheme here because
 //!   downstream clients accept paths (blackhole) and bare hostnames
 //!   (transmission RPC).
+//!
+//! The "Test connection" surface dispatches a live probe through
+//! [`crate::download_probes::ProbeCache`] — the cache reuses
+//! `crates/downloads/`'s adapter trait so each kind runs its own
+//! protocol-specific check (qBittorrent API auth, Transmission RPC
+//! ping, etc.). Probe results cache for 60s by default to keep the
+//! admin "click around" UX cheap.
 
 use dioxus::fullstack::ServerFnError;
 use dioxus::prelude::*;
@@ -236,6 +243,7 @@ mod server {
                 "no download_client with id {id}"
             )));
         }
+        st.download_probes.invalidate(&id);
         Ok(())
     }
 
@@ -270,6 +278,12 @@ mod server {
                 "no download_client with id {id}"
             )));
         }
+        // Toggling enabled doesn't change connectivity, but the
+        // operator's intent on this surface is "I changed something"
+        // — drop the cached entry so the next Test reflects the
+        // current state without the user wondering whether they're
+        // seeing a stale 60s-old result.
+        st.download_probes.invalidate(&id);
         list()
             .await?
             .into_iter()
@@ -282,50 +296,67 @@ mod server {
     pub(super) async fn test(id: String) -> Result<ConnectionTest, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let row: Option<(String, String, String)> = match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT kind, url, name FROM download_clients WHERE id = ? LIMIT 1")
-                    .bind(&id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT kind, url, name FROM download_clients WHERE id = $1 LIMIT 1")
-                    .bind(&id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?
-            }
+        type Row = (String, String, String, Option<String>, Option<String>);
+        let row: Option<Row> = match &st.db {
+            Db::Sqlite(pool) => sqlx::query_as(
+                "SELECT kind, url, name, username, password FROM download_clients \
+                 WHERE id = ? LIMIT 1",
+            )
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as(
+                "SELECT kind, url, name, username, password FROM download_clients \
+                 WHERE id = $1 LIMIT 1",
+            )
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?,
         };
-        let Some((kind, url, name)) = row else {
+        let Some((kind, url, _name, username, password)) = row else {
             return Err(ServerFnError::new(format!(
                 "no download_client with id {id}"
             )));
         };
 
-        // Live connectivity probes against arbitrary URLs are
-        // expensive and depend on out-of-process daemons. We do a
-        // shape check (URL parses, kind is known) so the page can
-        // tell the operator they at least typed something valid;
-        // the deeper liveness check is a TODO once the
-        // downloads-crate registry exposes an `is_reachable`
-        // shape.
         if !VALID_KINDS.contains(&kind.as_str()) {
             return Ok(ConnectionTest {
                 ok: false,
                 message: format!("unknown client kind {kind:?}"),
             });
         }
-        if reqwest::Url::parse(&url).is_err() && !url.starts_with('/') {
+
+        // Blackhole + similar "drop into a folder" adapters use an
+        // absolute path rather than an HTTP URL. They don't have a
+        // meaningful network probe; surface a configuration-OK
+        // message and short-circuit.
+        if url.starts_with('/') {
             return Ok(ConnectionTest {
-                ok: false,
-                message: format!("url {url:?} does not parse as URL or absolute path"),
+                ok: true,
+                message: format!("{kind}: watch folder configured at {url:?}"),
             });
         }
+
+        let config = match crate::download_probes::config_from_url(
+            &url,
+            username.as_deref(),
+            password.as_deref(),
+        ) {
+            Ok(cfg) => cfg,
+            Err(err) => {
+                return Ok(ConnectionTest {
+                    ok: false,
+                    message: format!("invalid url: {err}"),
+                });
+            }
+        };
+
+        let entry = st.download_probes.probe(&id, &kind, config).await;
         Ok(ConnectionTest {
-            ok: true,
-            message: format!("{name} ({kind}) configuration looks valid"),
+            ok: entry.ok,
+            message: entry.message,
         })
     }
 

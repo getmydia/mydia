@@ -4726,9 +4726,11 @@ dependencies = [
 name = "mydia-rs-web"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "bytes",
  "chrono",
+ "dashmap",
  "dioxus",
  "futures",
  "http 1.4.0",
@@ -4736,6 +4738,7 @@ dependencies = [
  "mime_guess",
  "mydia-rs-auth",
  "mydia-rs-db",
+ "mydia-rs-downloads",
  "mydia-rs-jobs",
  "mydia-rs-metadata",
  "mydia-rs-models",

@@ -27,6 +27,9 @@ pub mod server_fns;
 pub mod api;
 
 #[cfg(feature = "server")]
+pub mod download_probes;
+
+#[cfg(feature = "server")]
 pub mod server_state;
 
 #[cfg(feature = "server")]

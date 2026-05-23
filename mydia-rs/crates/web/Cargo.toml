@@ -37,6 +37,8 @@ mydia-rs-metadata  = { path = "../metadata",  optional = true }
 mydia-rs-subtitles = { path = "../subtitles", optional = true }
 mydia-rs-streaming = { path = "../streaming", optional = true }
 mydia-rs-p2p       = { path = "../p2p",       optional = true }
+mydia-rs-downloads = { path = "../downloads", optional = true }
+dashmap            = { version = "6",           optional = true }
 sqlx               = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "chrono", "uuid"], optional = true }
 tokio              = { workspace = true, optional = true }
 chrono             = { version = "0.4", default-features = false, features = ["serde", "clock"], optional = true }
@@ -76,6 +78,8 @@ server = [
     "dep:mydia-rs-subtitles",
     "dep:mydia-rs-streaming",
     "dep:mydia-rs-p2p",
+    "dep:mydia-rs-downloads",
+    "dep:dashmap",
     "dep:sqlx",
     "dep:tokio",
     "dep:chrono",
@@ -100,6 +104,8 @@ web    = ["dioxus/web"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+async-trait = "0.1"
+mydia-rs-downloads = { path = "../downloads" }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "chrono", "uuid"] }
 mydia-rs-db = { path = "../db" }
 mydia-rs-pubsub = { path = "../pubsub" }

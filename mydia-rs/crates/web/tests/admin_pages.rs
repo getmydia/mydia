@@ -741,6 +741,139 @@ async fn download_clients_toggle_flips_enabled() {
     assert!(!enabled, "toggle flipped enabled to false");
 }
 
+// ---------- download_clients: probe cache ----------
+//
+// These tests exercise the `crate::download_probes::ProbeCache` surface
+// directly with a stub adapter — no real network IO. The cache is what
+// `test_download_client` reaches into, so pinning its TTL + invalidation
+// behaviour here gives us confidence the admin "Test" button does the
+// right thing across the live-probe / cached-result / refresh flows.
+
+use mydia_rs_downloads::adapter::{
+    AddOpts, ClientConfig, ClientInfo, DownloadClient, DownloadStatus, ListOpts, Protocol,
+    TorrentInput,
+};
+use mydia_rs_downloads::error::DownloadError;
+use mydia_rs_downloads::registry::ClientRegistry;
+use mydia_rs_web::download_probes::{config_from_url, ProbeCache};
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::Arc as StdArc;
+
+struct StubAdapter {
+    name: &'static str,
+    calls: StdArc<AtomicUsize>,
+    ok: bool,
+}
+
+#[async_trait::async_trait]
+impl DownloadClient for StubAdapter {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+    fn supported_protocols(&self) -> &'static [Protocol] {
+        &[Protocol::Torrent]
+    }
+    async fn test_connection(&self, _: &ClientConfig) -> Result<ClientInfo, DownloadError> {
+        self.calls.fetch_add(1, AtomicOrdering::SeqCst);
+        if self.ok {
+            Ok(ClientInfo {
+                version: "stub-1.0".into(),
+                ..Default::default()
+            })
+        } else {
+            Err(DownloadError::Network("simulated".into()))
+        }
+    }
+    async fn add(
+        &self,
+        _: &ClientConfig,
+        _: TorrentInput,
+        _: AddOpts,
+    ) -> Result<String, DownloadError> {
+        unimplemented!()
+    }
+    async fn list_active(
+        &self,
+        _: &ClientConfig,
+        _: ListOpts,
+    ) -> Result<Vec<DownloadStatus>, DownloadError> {
+        unimplemented!()
+    }
+    async fn cancel(&self, _: &ClientConfig, _: &str, _: bool) -> Result<(), DownloadError> {
+        unimplemented!()
+    }
+    async fn get_files(&self, _: &ClientConfig, _: &str) -> Result<Vec<String>, DownloadError> {
+        unimplemented!()
+    }
+    async fn get_save_path(&self, _: &ClientConfig, _: &str) -> Result<String, DownloadError> {
+        unimplemented!()
+    }
+}
+
+fn probe_cache_with_stub(ok: bool) -> (ProbeCache, StdArc<AtomicUsize>) {
+    let calls = StdArc::new(AtomicUsize::new(0));
+    let registry = ClientRegistry::new();
+    registry.register(StdArc::new(StubAdapter {
+        name: "qbittorrent",
+        calls: calls.clone(),
+        ok,
+    }));
+    let cache = ProbeCache::new()
+        .with_registry(registry)
+        .with_ttl(std::time::Duration::from_millis(50));
+    (cache, calls)
+}
+
+#[tokio::test]
+async fn probe_cache_returns_reachable_for_known_adapter() {
+    let (cache, calls) = probe_cache_with_stub(true);
+    let cfg = config_from_url("http://localhost:8080", None, None).expect("parse url");
+    let entry = cache.probe("client-1", "qbittorrent", cfg).await;
+    assert!(entry.ok, "stub adapter reports reachable");
+    assert!(entry.message.contains("qbittorrent"));
+    assert!(entry.message.contains("stub-1.0"));
+    assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn probe_cache_records_network_failure() {
+    let (cache, _calls) = probe_cache_with_stub(false);
+    let cfg = config_from_url("http://localhost:8080", None, None).expect("parse url");
+    let entry = cache.probe("client-1", "qbittorrent", cfg).await;
+    assert!(!entry.ok, "stub adapter reports unreachable");
+    assert!(
+        entry.message.contains("simulated"),
+        "underlying error threaded into message"
+    );
+}
+
+#[tokio::test]
+async fn probe_cache_serves_cached_entry_within_ttl() {
+    let (cache, calls) = probe_cache_with_stub(true);
+    let cfg = config_from_url("http://localhost:8080", None, None).expect("parse url");
+    cache.probe("client-1", "qbittorrent", cfg.clone()).await;
+    cache.probe("client-1", "qbittorrent", cfg).await;
+    assert_eq!(
+        calls.load(AtomicOrdering::SeqCst),
+        1,
+        "second call hits cache, not network"
+    );
+}
+
+#[tokio::test]
+async fn probe_cache_invalidate_drops_entry() {
+    let (cache, calls) = probe_cache_with_stub(true);
+    let cfg = config_from_url("http://localhost:8080", None, None).expect("parse url");
+    cache.probe("client-1", "qbittorrent", cfg.clone()).await;
+    cache.invalidate("client-1");
+    cache.probe("client-1", "qbittorrent", cfg).await;
+    assert_eq!(
+        calls.load(AtomicOrdering::SeqCst),
+        2,
+        "invalidate forces a fresh probe"
+    );
+}
+
 // ---------- indexers ----------
 
 #[tokio::test]

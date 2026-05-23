@@ -27,6 +27,7 @@ use mydia_rs_p2p::ServerHandle as P2pServerHandle;
 use mydia_rs_pubsub::Pubsub;
 use mydia_rs_streaming::Supervisor as StreamingSupervisor;
 
+use crate::download_probes::ProbeCache;
 use crate::oidc::OidcContext;
 
 /// Cheap-to-clone bundle of shared, server-side handles. Held inside
@@ -92,6 +93,12 @@ pub struct WebState {
     /// reads node id + network stats off this handle so the operator
     /// sees the live Iroh state (not just DB-counted devices).
     pub p2p_server: Option<P2pServerHandle>,
+
+    /// In-process probe cache for the download-client "Test
+    /// connection" surface. Holds the [`ClientRegistry`] used to
+    /// dispatch probes plus a TTL'd cache of recent results. Cheap to
+    /// clone; the inner state is `Arc<DashMap>`.
+    pub download_probes: ProbeCache,
 }
 
 impl WebState {
@@ -120,7 +127,18 @@ impl WebState {
             generated_media_path: Arc::new(default_generated_media_path()),
             streaming_supervisor: None,
             p2p_server: None,
+            download_probes: ProbeCache::new(),
         }
+    }
+
+    /// Override the probe cache. Test callers swap in stub registries
+    /// and pinned TTLs via [`ProbeCache::with_registry`] /
+    /// [`ProbeCache::with_ttl`]; the production boot path keeps the
+    /// default constructed in [`Self::new`].
+    #[must_use]
+    pub fn with_download_probes(mut self, probes: ProbeCache) -> Self {
+        self.download_probes = probes;
+        self
     }
 
     /// Attach a media-token signer + cache. Called by the boot path
