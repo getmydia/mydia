@@ -4739,6 +4739,7 @@ dependencies = [
  "mydia-rs-auth",
  "mydia-rs-db",
  "mydia-rs-downloads",
+ "mydia-rs-indexers",
  "mydia-rs-jobs",
  "mydia-rs-metadata",
  "mydia-rs-models",

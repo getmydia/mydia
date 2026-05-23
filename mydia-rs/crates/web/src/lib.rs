@@ -30,6 +30,9 @@ pub mod api;
 pub mod download_probes;
 
 #[cfg(feature = "server")]
+pub mod indexer_probes;
+
+#[cfg(feature = "server")]
 pub mod server_state;
 
 #[cfg(feature = "server")]

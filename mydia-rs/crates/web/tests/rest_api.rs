@@ -1382,3 +1382,211 @@ async fn download_clients_refresh_returns_401_without_auth() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+
+// ---------- indexer probe-cache REST endpoints (Slice 2) ----------
+
+#[tokio::test]
+async fn indexer_test_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let id = insert_indexer(&fx.state.db, "cardigann-1", "cardigann").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/indexers/{id}/test"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn indexer_test_returns_404_for_missing_id() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/indexers/00000000-0000-0000-0000-000000000000/test")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["error"], "Indexer not found");
+}
+
+#[tokio::test]
+async fn indexer_test_returns_phoenix_shaped_health_for_unsupported_kind() {
+    let fx = auth_fixture().await;
+    // The seed helper inserts `type: "newznab"`, which doesn't map to
+    // any AdapterKind variant; the probe path short-circuits with an
+    // "unsupported kind" verdict (still 200, but `status: "unhealthy"`).
+    let id = insert_indexer(&fx.state.db, "newznab-1", "newznab").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/indexers/{id}/test"))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let data = &parsed["data"];
+    assert_eq!(data["status"], "unhealthy");
+    assert!(data["checked_at"].is_string(), "checked_at must be set");
+    let err = data["error"].as_str().unwrap_or("");
+    assert!(
+        err.contains("unsupported indexer kind"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn indexer_test_known_kind_falls_through_to_probe_cache() {
+    let fx = auth_fixture().await;
+    // `cardigann` maps to a known kind; the cache has no adapter
+    // registered (default registry is empty) so the probe returns
+    // "no adapter registered" — still a Phoenix-shaped 200/unhealthy.
+    let id = insert_indexer(&fx.state.db, "cardigann-1", "cardigann").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/indexers/{id}/test"))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let data = &parsed["data"];
+    assert_eq!(data["status"], "unhealthy");
+    assert!(data["error"]
+        .as_str()
+        .unwrap_or("")
+        .contains("no adapter registered"));
+}
+
+#[tokio::test]
+async fn indexers_refresh_returns_202() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/indexers/refresh")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["message"], "Health check refresh initiated");
+}
+
+#[tokio::test]
+async fn indexers_refresh_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/indexers/refresh")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn indexer_reset_failures_returns_200() {
+    let fx = auth_fixture().await;
+    let id = insert_indexer(&fx.state.db, "cardigann-1", "cardigann").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/indexers/{id}/reset-failures"))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["message"], "Failure counter reset successfully");
+}
+
+#[tokio::test]
+async fn indexer_reset_failures_returns_404_for_missing_id() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/indexers/00000000-0000-0000-0000-000000000000/reset-failures")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn indexer_reset_failures_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let id = insert_indexer(&fx.state.db, "cardigann-1", "cardigann").await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/indexers/{id}/reset-failures"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}

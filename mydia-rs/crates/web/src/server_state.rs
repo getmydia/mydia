@@ -28,6 +28,7 @@ use mydia_rs_pubsub::Pubsub;
 use mydia_rs_streaming::Supervisor as StreamingSupervisor;
 
 use crate::download_probes::ProbeCache;
+use crate::indexer_probes::IndexerProbeCache;
 use crate::oidc::OidcContext;
 
 /// Cheap-to-clone bundle of shared, server-side handles. Held inside
@@ -99,6 +100,15 @@ pub struct WebState {
     /// dispatch probes plus a TTL'd cache of recent results. Cheap to
     /// clone; the inner state is `Arc<DashMap>`.
     pub download_probes: ProbeCache,
+
+    /// In-process probe cache for the indexer "Test connection" +
+    /// REST `/api/v1/indexers/:id/test` surface. Same shape as
+    /// [`download_probes`] (`Arc<DashMap>` under the hood) but
+    /// dispatches through the `IndexerRegistry` and tracks consecutive
+    /// failures inline on the entry so the REST `/reset-failures`
+    /// endpoint can target one indexer without touching the rest of
+    /// the cache.
+    pub indexer_probes: IndexerProbeCache,
 }
 
 impl WebState {
@@ -128,6 +138,7 @@ impl WebState {
             streaming_supervisor: None,
             p2p_server: None,
             download_probes: ProbeCache::new(),
+            indexer_probes: IndexerProbeCache::new(),
         }
     }
 
@@ -138,6 +149,16 @@ impl WebState {
     #[must_use]
     pub fn with_download_probes(mut self, probes: ProbeCache) -> Self {
         self.download_probes = probes;
+        self
+    }
+
+    /// Override the indexer probe cache. Mirrors
+    /// [`Self::with_download_probes`]: test callers register stub
+    /// adapters and pin TTLs, the boot path replaces the default
+    /// (empty-registry) cache once the Cardigann adapter is wired.
+    #[must_use]
+    pub fn with_indexer_probes(mut self, probes: IndexerProbeCache) -> Self {
+        self.indexer_probes = probes;
         self
     }
 

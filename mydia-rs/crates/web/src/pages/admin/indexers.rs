@@ -14,7 +14,8 @@ use dioxus::prelude::*;
 use crate::components::admin::{AdminPageHeader, ConfigSection, StatusPill};
 use crate::components::core::{Button, ButtonSize, ButtonVariant, Input, Modal, ModalSize};
 use crate::server_fns::admin::indexers::{
-    create_indexer, delete_indexer, list_indexers, toggle_indexer, IndexerRow, NewIndexer,
+    create_indexer, delete_indexer, list_indexers, test_indexer, toggle_indexer, IndexerRow,
+    NewIndexer,
 };
 
 #[component]
@@ -123,8 +124,10 @@ struct IndexerRowProps {
 #[component]
 fn IndexerRowView(props: IndexerRowProps) -> Element {
     let mut acting = use_signal(|| false);
+    let mut test_message: Signal<Option<(bool, String)>> = use_signal(|| None);
     let id_for_toggle = props.row.id.clone();
     let id_for_delete = props.row.id.clone();
+    let id_for_test = props.row.id.clone();
 
     let toggle = move |_| {
         if *acting.read() {
@@ -154,6 +157,22 @@ fn IndexerRowView(props: IndexerRowProps) -> Element {
         });
     };
 
+    let test = move |_| {
+        if *acting.read() {
+            return;
+        }
+        acting.set(true);
+        test_message.set(None);
+        let id = id_for_test.clone();
+        spawn(async move {
+            match test_indexer(id).await {
+                Ok(ack) => test_message.set(Some((ack.ok, ack.message))),
+                Err(err) => test_message.set(Some((false, err.to_string()))),
+            }
+            acting.set(false);
+        });
+    };
+
     let status = if props.row.enabled {
         "active"
     } else {
@@ -161,7 +180,14 @@ fn IndexerRowView(props: IndexerRowProps) -> Element {
     };
     rsx! {
         tr {
-            td { class: "font-medium", "{props.row.name}" }
+            td {
+                div { class: "font-medium", "{props.row.name}" }
+                if let Some((ok, msg)) = test_message.read().clone() {
+                    div { class: if ok { "text-xs text-success mt-1" } else { "text-xs text-error mt-1" },
+                        "{msg}"
+                    }
+                }
+            }
             td { class: "font-mono text-xs", "{props.row.definition}" }
             td { class: "font-mono text-xs", "{props.row.base_url}" }
             td {
@@ -171,6 +197,13 @@ fn IndexerRowView(props: IndexerRowProps) -> Element {
                 }
             }
             td { class: "text-right whitespace-nowrap",
+                Button {
+                    variant: ButtonVariant::Outline,
+                    size: ButtonSize::Sm,
+                    onclick: test,
+                    "Test"
+                }
+                span { class: "mx-1" }
                 Button {
                     variant: ButtonVariant::Ghost,
                     size: ButtonSize::Sm,

@@ -9,6 +9,13 @@
 //! - `name` non-blank.
 //! - `definition` non-blank (the cardigann definition name).
 //! - `base_url` parses as URL.
+//!
+//! The "Test connection" surface dispatches a live probe through
+//! [`crate::indexer_probes::IndexerProbeCache`] — the cache reuses
+//! `crates/indexers/`'s adapter trait so each kind runs its own
+//! protocol-specific check. Probe results cache for 60s by default
+//! to keep the admin "click around" UX cheap and to mirror the
+//! download-client side.
 
 use dioxus::fullstack::ServerFnError;
 use dioxus::prelude::*;
@@ -39,6 +46,16 @@ const fn default_enabled() -> bool {
     true
 }
 
+/// Result of a "Test connection" probe through
+/// [`crate::indexer_probes::IndexerProbeCache`]. The admin page
+/// renders the message either way; success is just a checkmark next
+/// to it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConnectionTest {
+    pub ok: bool,
+    pub message: String,
+}
+
 #[get("/api/admin/indexers")]
 pub async fn list_indexers() -> Result<Vec<IndexerRow>, ServerFnError> {
     server::list().await
@@ -59,14 +76,20 @@ pub async fn toggle_indexer(id: String) -> Result<IndexerRow, ServerFnError> {
     server::toggle(id).await
 }
 
+#[post("/api/admin/indexers/test")]
+pub async fn test_indexer(id: String) -> Result<ConnectionTest, ServerFnError> {
+    server::test(id).await
+}
+
 #[cfg(feature = "server")]
 mod server {
-    use super::{IndexerRow, NewIndexer};
+    use super::{ConnectionTest, IndexerRow, NewIndexer};
     use crate::server_fns::auth::require_admin_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
     use mydia_rs_db::Db;
+    use mydia_rs_indexers::adapter::{AdapterConfig, AdapterKind};
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -191,6 +214,7 @@ mod server {
         if affected == 0 {
             return Err(ServerFnError::new(format!("no indexer with id {id}")));
         }
+        st.indexer_probes.invalidate(&id);
         Ok(())
     }
 
@@ -221,6 +245,12 @@ mod server {
         if affected == 0 {
             return Err(ServerFnError::new(format!("no indexer with id {id}")));
         }
+        // Operator-intent invalidation: toggling enabled doesn't change
+        // connectivity, but the operator's intent on this surface is "I
+        // changed something" — drop the cached entry so the next Test
+        // reflects the current state without the user wondering whether
+        // they're seeing a stale 60s-old result.
+        st.indexer_probes.invalidate(&id);
         list()
             .await?
             .into_iter()
@@ -228,6 +258,57 @@ mod server {
             .ok_or_else(|| {
                 ServerFnError::new("indexer disappeared between update and read".to_owned())
             })
+    }
+
+    pub(super) async fn test(id: String) -> Result<ConnectionTest, ServerFnError> {
+        let _ = require_admin_user_id().await?;
+        let st = state().await?;
+        type Row = (String, String, String, Option<String>);
+        let row: Option<Row> = match &st.db {
+            Db::Sqlite(pool) => sqlx::query_as(
+                "SELECT name, definition, base_url, api_key FROM indexers \
+                 WHERE id = ? LIMIT 1",
+            )
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read indexer: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as(
+                "SELECT name, definition, base_url, api_key FROM indexers \
+                 WHERE id = $1 LIMIT 1",
+            )
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read indexer: {err}")))?,
+        };
+        let Some((name, _definition, base_url, api_key)) = row else {
+            return Err(ServerFnError::new(format!("no indexer with id {id}")));
+        };
+
+        // The admin page treats every row as Cardigann-backed (the
+        // page is explicitly named the "Cardigann-backed sources"
+        // surface in its description); the per-row `definition`
+        // identifies which YAML drives the engine, not a different
+        // adapter kind.
+        let config = AdapterConfig {
+            r#type: AdapterKind::Cardigann,
+            name,
+            base_url,
+            api_key,
+            options: serde_json::Value::Null,
+            id: id.clone(),
+            rate_limit: None,
+        };
+
+        let entry = st
+            .indexer_probes
+            .probe(&id, AdapterKind::Cardigann, config)
+            .await;
+        Ok(ConnectionTest {
+            ok: entry.ok,
+            message: entry.message,
+        })
     }
 
     fn validate(payload: &NewIndexer) -> Result<(), ServerFnError> {
