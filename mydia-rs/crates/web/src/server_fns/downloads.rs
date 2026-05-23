@@ -25,13 +25,29 @@ pub const PAGE_SIZE: i64 = 50;
 /// A row in the downloads queue. Mirrors the fields the Phoenix
 /// template renders directly — title, status, progress, the few
 /// metadata-derived bytes (size, seeders, leechers).
+///
+/// Migration 20251105033610 dropped the `status` and `progress`
+/// columns from `downloads`; Phoenix now derives them in-memory from
+/// each download-client adapter's live state. The Rust port hasn't
+/// wired the adapter probes into the server-fn layer yet, so `status`
+/// is populated server-side from the surviving columns (a coarse
+/// "active" / "completed" / "failed" tri-state) and `progress` is
+/// always `None`. The wire field names stay so the SPA components
+/// don't have to flex.
+///
+/// TODO(U27.downloads-followup): once the adapter-probe layer lands,
+/// populate `status` with the full Phoenix vocabulary (downloading /
+/// seeding / checking / paused / queued / missing / unknown) and
+/// populate `progress` from the client's report.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DownloadRow {
     pub id: String,
     pub title: String,
+    /// Coarse derived status, populated server-side. One of "active",
+    /// "completed", "failed", or "imported".
     pub status: String,
-    /// 0.0..=1.0 (matches Phoenix's `progress` column). The UI scales
-    /// to 0..=100 for the progress bar.
+    /// 0.0..=1.0 when the column existed. Always `None` until the
+    /// adapter-probe layer is ported.
     pub progress: Option<f64>,
     pub indexer: Option<String>,
     pub download_client: Option<String>,
@@ -162,27 +178,34 @@ mod server {
     pub(super) async fn cancel(payload: CancelDownload) -> Result<(), ServerFnError> {
         require_session_user_id().await?;
         let st = state()?;
-        let now = chrono::Utc::now();
 
+        // Phoenix's `Mydia.Downloads.Queue.cancel_download/2` removes the
+        // torrent from the configured client adapter and then deletes
+        // the database row (see `lib/mydia/downloads/queue.ex:68-87`).
+        // The adapter call isn't wired into the Rust server-fn layer
+        // yet — without it, the operator's "Cancel" click would leave a
+        // ghost torrent in qbittorrent / transmission / etc. We delete
+        // the row anyway so the UI moves forward; the orphan torrent
+        // will surface as "missing" once the probe layer lands.
+        //
+        // TODO(U27.downloads-followup): once the adapter probe surface
+        // exists, wrap this in the full
+        //   Client.remove_download(adapter, config, client_id, opts)
+        //   |> History.delete_download
+        // sequence so cancelling here also stops the underlying client.
         let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE downloads SET status = 'cancelled', updated_at = ? WHERE id = ?",
-            )
-            .bind(now.to_rfc3339())
-            .bind(&payload.id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("cancel download: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE downloads SET status = 'cancelled', updated_at = $1 WHERE id = $2",
-            )
-            .bind(now)
-            .bind(&payload.id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("cancel download: {err}")))?
-            .rows_affected(),
+            Db::Sqlite(pool) => sqlx::query("DELETE FROM downloads WHERE id = ?")
+                .bind(&payload.id)
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("cancel download: {err}")))?
+                .rows_affected(),
+            Db::Postgres(pool) => sqlx::query("DELETE FROM downloads WHERE id = $1")
+                .bind(&payload.id)
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("cancel download: {err}")))?
+                .rows_affected(),
         };
 
         if affected == 0 {
@@ -270,22 +293,21 @@ mod server {
         Ok(())
     }
 
-    /// Internal SQL row shape — sqlx only derives `FromRow` for tuples
-    /// up to 16 columns and we need 17 (downloads + the joined
-    /// `media_item` / episode columns), so the row is materialized
-    /// into a named struct instead. The decoder transposes it into a
-    /// [`DownloadRow`] on the way out.
+    /// Internal SQL row shape. The `status` and `progress` columns
+    /// dropped in migration 20251105033610 are NOT selected — `status`
+    /// is derived in [`decode_row`] from `imported_at` / `completed_at`
+    /// / `import_failed_at`, and `progress` is left as `None` until the
+    /// adapter-probe layer is ported.
     #[derive(sqlx::FromRow)]
     struct CoreRow {
         id: String,
         title: String,
-        status: String,
-        progress: Option<f64>,
         indexer: Option<String>,
         download_client: Option<String>,
         error_message: Option<String>,
         inserted_at: chrono::DateTime<chrono::Utc>,
         completed_at: Option<chrono::DateTime<chrono::Utc>>,
+        imported_at: Option<chrono::DateTime<chrono::Utc>>,
         bytes_pulled: Option<i64>,
         import_failed_at: Option<chrono::DateTime<chrono::Utc>>,
         match_status: Option<String>,
@@ -305,25 +327,35 @@ mod server {
         // Column aliases lift the joined columns into stable names so
         // the `FromRow` derive can find them regardless of the join
         // shape.
-        const SELECT_COLS: &str = "d.id AS id, d.title AS title, d.status AS status, \
-             d.progress AS progress, d.indexer AS indexer, \
-             d.download_client AS download_client, d.error_message AS error_message, \
-             d.inserted_at AS inserted_at, d.completed_at AS completed_at, \
+        //
+        // Without the dropped `status` column we can't filter the Queue
+        // / Issues tabs purely in SQL — Phoenix filters in-memory after
+        // hydrating each row from the adapter (see
+        // `Mydia.Downloads.History.apply_status_filters/2`). We mirror
+        // that by selecting the candidate set in SQL and finishing the
+        // tab filter in Rust against the derived status.
+        const SELECT_COLS: &str = "d.id AS id, d.title AS title, \
+             d.indexer AS indexer, d.download_client AS download_client, \
+             d.error_message AS error_message, d.inserted_at AS inserted_at, \
+             d.completed_at AS completed_at, d.imported_at AS imported_at, \
              d.bytes_pulled AS bytes_pulled, d.import_failed_at AS import_failed_at, \
              d.match_status AS match_status, \
              m.title AS media_item_title, m.id AS media_item_id, m.type AS media_item_type, \
              e.season_number AS episode_season, e.episode_number AS episode_number";
 
+        // SQL pre-filter narrows the candidate set as much as the
+        // remaining columns allow. Each tab adds a Rust-side post-filter
+        // on the derived status below.
         let where_clause = match tab {
             DownloadsTab::Queue => {
                 " WHERE d.imported_at IS NULL \
-                  AND d.status IN ('downloading', 'seeding', 'checking', 'paused', 'queued') "
+                  AND d.completed_at IS NULL \
+                  AND d.import_failed_at IS NULL "
             }
             DownloadsTab::Completed => " WHERE d.imported_at IS NOT NULL ",
             DownloadsTab::Issues => {
-                " WHERE d.status IN ('failed', 'missing') \
-                  OR d.match_status IN ('unmatched', 'unresolved_files') \
-                  OR d.import_failed_at IS NOT NULL "
+                " WHERE d.import_failed_at IS NOT NULL \
+                  OR d.match_status IN ('unmatched', 'unresolved_files') "
             }
         };
 
@@ -365,12 +397,39 @@ mod server {
         Ok(rows.into_iter().map(decode_row).collect())
     }
 
+    /// Coarse status derived from the surviving columns. Mirrors the
+    /// in-memory branch in `Mydia.Downloads.History` for the case
+    /// where the adapter is unreachable (no live torrent state), which
+    /// is the only state the Rust port can observe today.
+    fn derive_status(
+        completed_at: Option<&chrono::DateTime<chrono::Utc>>,
+        imported_at: Option<&chrono::DateTime<chrono::Utc>>,
+        import_failed_at: Option<&chrono::DateTime<chrono::Utc>>,
+    ) -> &'static str {
+        if imported_at.is_some() {
+            "imported"
+        } else if import_failed_at.is_some() {
+            "failed"
+        } else if completed_at.is_some() {
+            "completed"
+        } else {
+            "active"
+        }
+    }
+
     fn decode_row(r: CoreRow) -> DownloadRow {
+        let status = derive_status(
+            r.completed_at.as_ref(),
+            r.imported_at.as_ref(),
+            r.import_failed_at.as_ref(),
+        );
         DownloadRow {
             id: r.id,
             title: r.title,
-            status: r.status,
-            progress: r.progress,
+            status: status.to_owned(),
+            // TODO(U27.downloads-followup): populate from the adapter
+            // probe's `progress` field once that layer lands.
+            progress: None,
             indexer: r.indexer,
             download_client: r.download_client,
             error_message: r.error_message,

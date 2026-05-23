@@ -40,9 +40,16 @@ pub fn DownloadRowView(props: DownloadRowProps) -> Element {
     let progress_pct = (row.progress.unwrap_or(0.0).clamp(0.0, 1.0) * 100.0) as f32;
     let id_for_cancel = row.id.clone();
     let row_for_match = row.clone();
+    // While the adapter-probe layer is missing, the server fn only
+    // ships the coarse "active" derived status. Keep the full Phoenix
+    // vocabulary listed so the UI keeps showing the Cancel control
+    // once the probes land.
+    // TODO(U27.downloads-followup): collapse to the Phoenix vocabulary
+    // once `Mydia.Downloads.History.list_downloads_with_status/1` is
+    // ported.
     let is_active = matches!(
         row.status.as_str(),
-        "downloading" | "checking" | "queued" | "paused" | "seeding"
+        "active" | "downloading" | "checking" | "queued" | "paused" | "seeding"
     );
     let needs_match = is_unmatched(&row);
 
