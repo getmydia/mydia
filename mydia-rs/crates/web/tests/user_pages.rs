@@ -94,12 +94,11 @@ CREATE TABLE IF NOT EXISTS downloads (
     id TEXT PRIMARY KEY,
     media_item_id TEXT,
     episode_id TEXT,
-    status TEXT NOT NULL,
     title TEXT NOT NULL,
     indexer TEXT,
     download_client TEXT,
+    download_client_id TEXT,
     download_url TEXT,
-    progress REAL,
     error_message TEXT,
     completed_at TEXT,
     metadata TEXT,
@@ -107,7 +106,10 @@ CREATE TABLE IF NOT EXISTS downloads (
     imported_at TEXT,
     import_failed_at TEXT,
     import_last_error TEXT,
+    import_retry_count INTEGER DEFAULT 0,
+    import_next_retry_at TEXT,
     match_status TEXT,
+    library_path_id TEXT,
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -481,18 +483,44 @@ async fn activity_empty_state_returns_nothing() {
 
 // ---------- downloads ----------
 
-async fn insert_download(db: &Db, status: &str, title: &str) -> String {
+/// Terminal-state shape for a test download row. The `status` and
+/// `progress` columns dropped in migration 20251105033610 are no
+/// longer in the schema; tests model the equivalent state via the
+/// surviving terminal-state timestamps.
+#[derive(Clone, Copy)]
+enum DownloadState {
+    /// `imported_at IS NULL AND completed_at IS NULL AND
+    /// import_failed_at IS NULL` — derives "active".
+    Active,
+    /// `completed_at` populated, the rest null — derives "completed".
+    Completed,
+    /// `import_failed_at` populated — derives "failed".
+    Failed,
+    /// `imported_at` populated — derives "imported".
+    Imported,
+}
+
+async fn insert_download(db: &Db, state: DownloadState, title: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
+    let (completed_at, import_failed_at, imported_at) = match state {
+        DownloadState::Active => (None, None, None),
+        DownloadState::Completed => (Some(now.clone()), None, None),
+        DownloadState::Failed => (None, Some(now.clone()), None),
+        DownloadState::Imported => (Some(now.clone()), None, Some(now.clone())),
+    };
     match db {
         Db::Sqlite(pool) => {
             sqlx::query(
-                "INSERT INTO downloads (id, status, title, progress, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, 0.25, ?, ?)",
+                "INSERT INTO downloads (id, title, completed_at, import_failed_at, imported_at, \
+                        inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&id)
-            .bind(status)
             .bind(title)
+            .bind(&completed_at)
+            .bind(&import_failed_at)
+            .bind(&imported_at)
             .bind(&now)
             .bind(&now)
             .execute(pool)
@@ -507,53 +535,58 @@ async fn insert_download(db: &Db, status: &str, title: &str) -> String {
 #[tokio::test]
 async fn downloads_queue_tab_returns_active_rows() {
     let fx = fixture().await;
-    let _active = insert_download(&fx.db, "downloading", "Active.mkv").await;
-    let _cancelled = insert_download(&fx.db, "cancelled", "Cancelled.mkv").await;
+    // The Queue tab's SQL pre-filter narrows to rows that have no
+    // terminal-state timestamps set. Mirror what `fetch_rows` issues.
+    let active = insert_download(&fx.db, DownloadState::Active, "Active.mkv").await;
+    let _done = insert_download(&fx.db, DownloadState::Completed, "Done.mkv").await;
+    let _failed = insert_download(&fx.db, DownloadState::Failed, "Failed.mkv").await;
+    let _imported = insert_download(&fx.db, DownloadState::Imported, "Imported.mkv").await;
 
-    let rows: Vec<(String, String)> = match &fx.db {
+    let rows: Vec<(String,)> = match &fx.db {
         Db::Sqlite(pool) => sqlx::query_as(
-            "SELECT id, status FROM downloads \
+            "SELECT id FROM downloads \
              WHERE imported_at IS NULL \
-             AND status IN ('downloading', 'seeding', 'checking', 'paused', 'queued')",
+               AND completed_at IS NULL \
+               AND import_failed_at IS NULL",
         )
         .fetch_all(pool)
         .await
         .expect("query"),
         Db::Postgres(_) => unreachable!(),
     };
-    assert_eq!(rows.len(), 1, "queue tab excludes cancelled rows");
-    assert_eq!(rows[0].1, "downloading");
+    assert_eq!(rows.len(), 1, "queue tab returns only the active row");
+    assert_eq!(rows[0].0, active);
 }
 
 #[tokio::test]
-async fn downloads_cancel_updates_status() {
+async fn downloads_cancel_deletes_row() {
+    // The cancel server fn mirrors Phoenix's
+    // `Mydia.Downloads.Queue.cancel_download/2` fallback: with no
+    // adapter probe wired in yet, the Rust port deletes the row so
+    // the UI moves forward. Pin that contract here.
     let fx = fixture().await;
-    let id = insert_download(&fx.db, "downloading", "Active.mkv").await;
+    let id = insert_download(&fx.db, DownloadState::Active, "Active.mkv").await;
 
-    let now = Utc::now().to_rfc3339();
     let affected = match &fx.db {
-        Db::Sqlite(pool) => {
-            sqlx::query("UPDATE downloads SET status = 'cancelled', updated_at = ? WHERE id = ?")
-                .bind(&now)
-                .bind(&id)
-                .execute(pool)
-                .await
-                .expect("update")
-                .rows_affected()
-        }
+        Db::Sqlite(pool) => sqlx::query("DELETE FROM downloads WHERE id = ?")
+            .bind(&id)
+            .execute(pool)
+            .await
+            .expect("delete")
+            .rows_affected(),
         Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(affected, 1);
 
-    let (status,): (String,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT status FROM downloads WHERE id = ?")
+    let row: Option<(String,)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM downloads WHERE id = ?")
             .bind(&id)
-            .fetch_one(pool)
+            .fetch_optional(pool)
             .await
             .expect("readback"),
         Db::Postgres(_) => unreachable!(),
     };
-    assert_eq!(status, "cancelled");
+    assert!(row.is_none(), "cancel removes the row");
 }
 
 #[tokio::test]
@@ -600,7 +633,7 @@ async fn downloads_manual_match_links_media_item() {
     // FK and match_status flips to "matched".
     let fx = fixture().await;
     let show = insert_show(&fx.db, "Inception").await;
-    let dl = insert_download(&fx.db, "downloading", "Inception.2010.1080p.mkv").await;
+    let dl = insert_download(&fx.db, DownloadState::Active, "Inception.2010.1080p.mkv").await;
 
     // Pre-condition: download row has no media_item_id (insert_download
     // doesn't set one).
@@ -654,7 +687,7 @@ async fn downloads_manual_match_rejects_missing_media_item() {
     // mutate the download. The server fn's `media_present` check
     // refuses the update before issuing the SQL.
     let fx = fixture().await;
-    let dl = insert_download(&fx.db, "downloading", "Mystery.mkv").await;
+    let dl = insert_download(&fx.db, DownloadState::Active, "Mystery.mkv").await;
     let bogus_media_id = "no-such-id";
 
     let present: Option<(String,)> = match &fx.db {
