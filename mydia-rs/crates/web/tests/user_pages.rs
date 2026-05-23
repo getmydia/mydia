@@ -743,6 +743,54 @@ fn import_candidate_serializes_with_filtered_media_types() {
 }
 
 #[test]
+fn import_candidate_details_serializes_with_tv_specific_fields() {
+    use mydia_rs_web::server_fns::import_media::ImportCandidateDetails;
+    // The match-step payload carries TV-specific fields
+    // (number_of_seasons, number_of_episodes). Pin the wire shape so
+    // a refactor that drops them surfaces here.
+    let d = ImportCandidateDetails {
+        provider: "tmdb".to_owned(),
+        external_id: "1399".to_owned(),
+        title: "Game of Thrones".to_owned(),
+        original_title: None,
+        year: Some(2011),
+        overview: None,
+        tagline: None,
+        poster_path: None,
+        backdrop_path: None,
+        release_date: None,
+        runtime: None,
+        genres: vec!["Drama".to_owned()],
+        production_countries: vec!["US".to_owned()],
+        original_language: Some("en".to_owned()),
+        alternative_titles: vec!["GoT".to_owned()],
+        homepage: None,
+        media_type: "tv_show".to_owned(),
+        number_of_seasons: Some(8),
+        number_of_episodes: Some(73),
+    };
+    let json = serde_json::to_string(&d).expect("serialize");
+    assert!(json.contains("\"number_of_seasons\":8"));
+    assert!(json.contains("\"number_of_episodes\":73"));
+    assert!(json.contains("\"media_type\":\"tv_show\""));
+}
+
+#[test]
+fn import_candidate_ref_roundtrips_through_json() {
+    use mydia_rs_web::server_fns::import_media::ImportCandidateRef;
+    let payload = ImportCandidateRef {
+        provider: "tmdb".to_owned(),
+        external_id: "603".to_owned(),
+        media_type: "movie".to_owned(),
+    };
+    let json = serde_json::to_string(&payload).expect("serialize");
+    let decoded: ImportCandidateRef = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(decoded.provider, "tmdb");
+    assert_eq!(decoded.external_id, "603");
+    assert_eq!(decoded.media_type, "movie");
+}
+
+#[test]
 fn import_finalize_accepts_only_movie_or_tv_show_categories() {
     // The category_override boundary mirrors the add_media check —
     // any other category string is rejected before the row insert,

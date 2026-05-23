@@ -1,5 +1,5 @@
-//! Import media — search the metadata catalog for a candidate to
-//! attach to the library.
+//! Import media — search the metadata catalog, pick a candidate,
+//! confirm an import.
 //!
 //! Phoenix counterpart: `MydiaWeb.ImportMediaLive.Index` (~4.7k LOC
 //! across the `LiveView`, its components, and the matching pipeline).
@@ -11,8 +11,8 @@
 //!   3. Confirm → finalize writes the `media_items` row, optionally
 //!      associates a file, and dispatches a metadata-refresh job.
 //!
-//! Step 1 lives in this commit. Steps 2 + 3 follow in the next two
-//! commits behind the same page-level state machine.
+//! Steps 1 + 2 live in this file. Step 3 lands in the next commit
+//! behind the same page-level state machine.
 //!
 //! TODO(U27.import-followup): the Phoenix `LiveView` also surfaces
 //! "skip", "blacklist", "manual rename", and a bulk
@@ -26,24 +26,27 @@ use crate::components::admin::{AdminPageHeader, FilterBar, FilterOption};
 use crate::components::core::{Button, ButtonVariant, Input};
 use crate::components::request_form::CandidateCard;
 use crate::server_fns::add_media::AddMediaCandidate;
-use crate::server_fns::import_media::{search_candidates, ImportCandidate, ImportSearchQuery};
+use crate::server_fns::import_media::{
+    fetch_candidate_details, search_candidates, ImportCandidate, ImportCandidateDetails,
+    ImportCandidateRef, ImportSearchQuery,
+};
 
 const MEDIA_TYPE_OPTIONS: &[(&str, &str)] = &[("movie", "Movies"), ("tv_show", "TV Shows")];
 
-/// One step in the page-level state machine. Slice 1 only ever holds
-/// `Search`; the match + finalize steps unlock the other variants in
-/// the next two commits.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One step in the page-level state machine. The `Search` variant
+/// holds no extra data — query + media-type + result list are kept
+/// in their own signals so the search results don't get lost when
+/// the operator advances to the match step and back. The
+/// `Match` variant carries the candidate the operator picked so the
+/// match-step UI knows which detail card to render.
+#[derive(Debug, Clone, PartialEq)]
 enum Step {
     Search,
+    Match { candidate: ImportCandidate },
 }
 
 #[component]
 pub fn ImportMedia() -> Element {
-    // The step signal is the spine of the state machine; today it
-    // never transitions because the match-step UI lands in the next
-    // commit, but threading it through here keeps the page shape
-    // stable across slices.
     let step = use_signal(|| Step::Search);
     let media_type = use_signal(|| "movie".to_owned());
     let query = use_signal(String::new);
@@ -81,6 +84,24 @@ pub fn ImportMedia() -> Element {
         submitted_query.set(query.read().clone());
     };
 
+    // Advance the state machine when the operator clicks "Match" on
+    // a candidate card. The candidate is moved into the Step variant
+    // so the match-step component can render the right detail card
+    // without re-reading the search results.
+    let on_pick_candidate = {
+        let mut step = step;
+        Callback::new(move |c: ImportCandidate| {
+            step.set(Step::Match { candidate: c });
+        })
+    };
+
+    let on_back_to_search = {
+        let mut step = step;
+        Callback::new(move |(): ()| {
+            step.set(Step::Search);
+        })
+    };
+
     rsx! {
         div { class: "max-w-4xl mx-auto",
             AdminPageHeader {
@@ -92,7 +113,7 @@ pub fn ImportMedia() -> Element {
                 actions: None,
             }
 
-            match *step.read() {
+            match step.read().clone() {
                 Step::Search => rsx! {
                     SearchStep {
                         media_type: media_type.read().clone(),
@@ -103,6 +124,13 @@ pub fn ImportMedia() -> Element {
                         on_media_type: on_media_type,
                         on_query_input: on_query_input,
                         on_submit: on_submit_search,
+                        on_pick: on_pick_candidate,
+                    }
+                },
+                Step::Match { candidate } => rsx! {
+                    MatchStep {
+                        candidate: candidate,
+                        on_back: on_back_to_search,
                     }
                 },
             }
@@ -120,6 +148,7 @@ fn SearchStep(
     on_media_type: Callback<String>,
     on_query_input: Callback<FormEvent>,
     on_submit: Callback<FormEvent>,
+    on_pick: Callback<ImportCandidate>,
 ) -> Element {
     rsx! {
         div { class: "mb-3",
@@ -168,22 +197,27 @@ fn SearchStep(
                         "No results for that query."
                     }
                 },
-                Some(Ok(items)) => rsx! {
-                    for candidate in items.iter().cloned() {
-                        CandidateCard {
-                            key: "{candidate.provider}-{candidate.external_id}",
-                            candidate: to_card_candidate(&candidate),
-                            cta_label: "Match".to_string(),
-                            // TODO(U27.import-match-step): advance the
-                            // state machine to `Step::Match { candidate }`
-                            // here. Today the CTA is a no-op while the
-                            // match-step UI lands in the next commit.
-                            on_cta: Callback::new(|_: AddMediaCandidate| {}),
-                            busy: false,
-                            already_added: false,
+                Some(Ok(items)) => {
+                    let candidates: Vec<ImportCandidate> = items.clone();
+                    rsx! {
+                        for candidate in candidates.into_iter() {
+                            CandidateCard {
+                                key: "{candidate.provider}-{candidate.external_id}",
+                                candidate: to_card_candidate(&candidate),
+                                cta_label: "Match".to_string(),
+                                on_cta: {
+                                    let picked = candidate.clone();
+                                    let on_pick = on_pick;
+                                    Callback::new(move |_: AddMediaCandidate| {
+                                        on_pick.call(picked.clone());
+                                    })
+                                },
+                                busy: false,
+                                already_added: false,
+                            }
                         }
                     }
-                },
+                }
                 Some(Err(err)) => rsx! {
                     div { class: "alert alert-error", "Search failed: {err}" }
                 },
@@ -197,6 +231,187 @@ fn SearchStep(
                         "Enter a title above to search the metadata catalog."
                     }
                 },
+            }
+        }
+    }
+}
+
+#[component]
+fn MatchStep(candidate: ImportCandidate, on_back: Callback<()>) -> Element {
+    // Fetch the full metadata for the chosen candidate. This is a
+    // separate round-trip (rather than reusing the search result)
+    // because the search payload only carries the fields the grid
+    // renders; the detail card needs runtime, genres, country, and
+    // alternative titles to help the operator disambiguate.
+    let details = {
+        let candidate = candidate.clone();
+        use_resource(move || {
+            let payload = ImportCandidateRef {
+                provider: candidate.provider.clone(),
+                external_id: candidate.external_id.clone(),
+                media_type: candidate.media_type.clone(),
+            };
+            async move { fetch_candidate_details(payload).await }
+        })
+    };
+
+    let candidate_for_fallback = candidate.clone();
+
+    rsx! {
+        div { id: "import-media-match", class: "space-y-4",
+            div { id: "import-media-back-row", class: "flex items-center gap-2",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    onclick: move |_| on_back.call(()),
+                    "← Back to results"
+                }
+                span { class: "text-sm text-base-content/60",
+                    "Confirm the metadata match for this title."
+                }
+            }
+
+            match &*details.read_unchecked() {
+                Some(Ok(d)) => rsx! {
+                    MatchCard { details: d.clone() }
+                    // TODO(U27.import-finalize-step): replace this
+                    // placeholder with a Confirm button that calls
+                    // finalize_import and navigates to /media/<id> on
+                    // success.
+                    div { class: "card bg-base-100 shadow-sm border border-base-content/5",
+                        div { class: "card-body py-4",
+                            div { class: "flex items-center justify-between gap-3",
+                                p { class: "text-sm text-base-content/70",
+                                    "Confirm + add lands in the next commit."
+                                }
+                                div { id: "import-media-confirm-wrap",
+                                    Button {
+                                        variant: ButtonVariant::Primary,
+                                        disabled: true,
+                                        "Confirm import"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                Some(Err(err)) => rsx! {
+                    div { class: "alert alert-error", "Failed to load details: {err}" }
+                    // Operator still sees a thin fallback summary so
+                    // the page never strands them on a bare error.
+                    MatchCard { details: details_from_candidate(&candidate_for_fallback) }
+                },
+                None => rsx! {
+                    div { class: "py-8 text-center",
+                        span { class: "loading loading-spinner loading-md" }
+                    }
+                },
+            }
+        }
+    }
+}
+
+#[component]
+fn MatchCard(details: ImportCandidateDetails) -> Element {
+    let year = details.year.map(|y| y.to_string());
+    let runtime = details.runtime.map(|r| format!("{r} min"));
+    let media_type_label = match details.media_type.as_str() {
+        "movie" => "Movie",
+        "tv_show" => "TV",
+        other => other,
+    };
+
+    rsx! {
+        article { id: "import-media-match-card", class: "card card-side bg-base-100 shadow-sm border border-base-content/5",
+            if let Some(path) = details.poster_path.as_ref() {
+                figure { class: "w-40 shrink-0",
+                    img {
+                        src: "https://image.tmdb.org/t/p/w300{path}",
+                        alt: "{details.title}",
+                        class: "object-cover w-full h-full",
+                    }
+                }
+            } else {
+                figure { class: "w-40 shrink-0 bg-base-200 flex items-center justify-center text-xs text-base-content/40",
+                    "No poster"
+                }
+            }
+            div { class: "card-body p-5 gap-2",
+                div { class: "flex items-center gap-2 flex-wrap",
+                    h3 { class: "card-title text-lg", "{details.title}" }
+                    span { class: "badge badge-ghost", "{media_type_label}" }
+                    if let Some(year) = year.as_deref() {
+                        span { class: "text-sm text-base-content/70", "{year}" }
+                    }
+                    if let Some(runtime) = runtime.as_deref() {
+                        span { class: "badge badge-outline badge-sm", "{runtime}" }
+                    }
+                }
+
+                if let Some(original_title) = details.original_title.as_deref() {
+                    if Some(original_title) != Some(details.title.as_str()) {
+                        p { class: "text-xs text-base-content/60",
+                            "Original title: "
+                            em { "{original_title}" }
+                        }
+                    }
+                }
+
+                if let Some(tagline) = details.tagline.as_deref() {
+                    p { class: "text-sm italic text-base-content/80", "{tagline}" }
+                }
+
+                if let Some(overview) = details.overview.as_deref() {
+                    p { class: "text-sm text-base-content/80 line-clamp-4", "{overview}" }
+                }
+
+                if !details.genres.is_empty() {
+                    div { class: "flex gap-1 flex-wrap mt-1",
+                        for genre in details.genres.iter() {
+                            span { class: "badge badge-sm", "{genre}" }
+                        }
+                    }
+                }
+
+                if details.media_type == "tv_show" {
+                    if details.number_of_seasons.is_some() || details.number_of_episodes.is_some() {
+                        p { class: "text-xs text-base-content/70",
+                            if let Some(s) = details.number_of_seasons {
+                                "{s} seasons"
+                            }
+                            if details.number_of_seasons.is_some() && details.number_of_episodes.is_some() {
+                                " · "
+                            }
+                            if let Some(e) = details.number_of_episodes {
+                                "{e} episodes"
+                            }
+                        }
+                    }
+                }
+
+                if !details.production_countries.is_empty() {
+                    p { class: "text-xs text-base-content/60",
+                        "Country: {details.production_countries.join(\", \")}"
+                    }
+                }
+
+                if let Some(lang) = details.original_language.as_deref() {
+                    p { class: "text-xs text-base-content/60",
+                        "Language: {lang}"
+                    }
+                }
+
+                if !details.alternative_titles.is_empty() {
+                    details {
+                        summary { class: "text-xs text-base-content/60 cursor-pointer",
+                            "Alternate titles ({details.alternative_titles.len()})"
+                        }
+                        ul { class: "text-xs text-base-content/70 mt-1 ml-3 list-disc",
+                            for alt in details.alternative_titles.iter().take(10) {
+                                li { "{alt}" }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -217,5 +432,33 @@ fn to_card_candidate(c: &ImportCandidate) -> AddMediaCandidate {
         poster_path: c.poster_path.clone(),
         release_date: c.release_date.clone(),
         media_type: c.media_type.clone(),
+    }
+}
+
+/// Synthesize a `details`-shaped struct from the lightweight
+/// candidate when the details fetch fails. Lets the page stay useful
+/// (operator can still see what they picked) instead of stranding
+/// them on a bare error.
+fn details_from_candidate(c: &ImportCandidate) -> ImportCandidateDetails {
+    ImportCandidateDetails {
+        provider: c.provider.clone(),
+        external_id: c.external_id.clone(),
+        title: c.title.clone(),
+        original_title: c.original_title.clone(),
+        year: c.year,
+        overview: c.overview.clone(),
+        tagline: None,
+        poster_path: c.poster_path.clone(),
+        backdrop_path: None,
+        release_date: c.release_date.clone(),
+        runtime: None,
+        genres: Vec::new(),
+        production_countries: Vec::new(),
+        original_language: None,
+        alternative_titles: Vec::new(),
+        homepage: None,
+        media_type: c.media_type.clone(),
+        number_of_seasons: None,
+        number_of_episodes: None,
     }
 }
