@@ -26,7 +26,10 @@
 #![cfg(feature = "server")]
 
 use mydia_rs_db::Db;
-use mydia_rs_web::server_fns::media::server::{count_media, fetch_media, row_has_files};
+use mydia_rs_web::server_fns::media::server::{
+    count_media, fetch_media, fetch_media_detail, fetch_movie_files, fetch_show_seasons,
+    row_has_files,
+};
 use mydia_rs_web::server_fns::media::{MediaSort, MonitoredFilter, FIRST_PAGE_SIZE};
 use sqlx::sqlite::SqlitePoolOptions;
 use uuid::Uuid;
@@ -497,4 +500,319 @@ async fn count_matches_fetch_size_under_filters() {
         .await
         .unwrap();
     assert_eq!(unmonitored, 5);
+}
+
+// ---------- U25.b: detail page tests ----------
+
+async fn insert_movie_with_metadata(
+    db: &Db,
+    id: &str,
+    title: &str,
+    year: Option<i32>,
+    metadata_json: &str,
+) {
+    let Db::Sqlite(pool) = db else { unreachable!() };
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    sqlx::query(
+        "INSERT INTO media_items (id, type, title, year, metadata, monitored, monitoring_preset, \
+         category_override, inserted_at, updated_at) \
+         VALUES (?, 'movie', ?, ?, ?, 1, 'all', 0, ?, ?)",
+    )
+    .bind(id)
+    .bind(title)
+    .bind(year)
+    .bind(metadata_json)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .expect("insert movie with metadata");
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_full_movie_file(
+    db: &Db,
+    id: &str,
+    movie_id: &str,
+    path: &str,
+    resolution: Option<&str>,
+    codec: Option<&str>,
+    audio_codec: Option<&str>,
+    size: Option<i64>,
+) {
+    let Db::Sqlite(pool) = db else { unreachable!() };
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    sqlx::query(
+        "INSERT INTO media_files (id, media_item_id, path, resolution, codec, audio_codec, size, \
+         inserted_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(movie_id)
+    .bind(path)
+    .bind(resolution)
+    .bind(codec)
+    .bind(audio_codec)
+    .bind(size)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .expect("insert movie file with details");
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_full_episode(
+    db: &Db,
+    id: &str,
+    show_id: &str,
+    season: i32,
+    episode: i32,
+    title: Option<&str>,
+    air_date: Option<&str>,
+    monitored: bool,
+) {
+    let Db::Sqlite(pool) = db else { unreachable!() };
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    sqlx::query(
+        "INSERT INTO episodes (id, media_item_id, season_number, episode_number, title, air_date, \
+         monitored, inserted_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(show_id)
+    .bind(season)
+    .bind(episode)
+    .bind(title)
+    .bind(air_date)
+    .bind(i64::from(monitored))
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .expect("insert full episode");
+}
+
+#[tokio::test]
+async fn detail_extracts_metadata_fields() {
+    let db = setup().await;
+    let id = uuid_for("detail_movie");
+    let metadata = r#"{
+        "overview": "A wholesome road trip story.",
+        "poster_path": "/abc.jpg",
+        "backdrop_path": "/xyz.jpg",
+        "runtime": 117,
+        "vote_average": 8.4,
+        "genres": ["Drama", "Comedy"]
+    }"#;
+    insert_movie_with_metadata(&db, &id, "Sample Movie", Some(2022), metadata).await;
+
+    let detail = fetch_media_detail(&db, &id).await.expect("fetch detail");
+    assert_eq!(detail.kind, "movie");
+    assert_eq!(detail.title, "Sample Movie");
+    assert_eq!(detail.year, Some(2022));
+    assert_eq!(
+        detail.overview.as_deref(),
+        Some("A wholesome road trip story.")
+    );
+    assert_eq!(detail.poster_path.as_deref(), Some("/abc.jpg"));
+    assert_eq!(detail.backdrop_path.as_deref(), Some("/xyz.jpg"));
+    assert_eq!(detail.runtime, Some(117));
+    assert!((detail.rating.unwrap() - 8.4).abs() < 0.001);
+    assert_eq!(detail.genres, vec!["Drama".to_owned(), "Comedy".to_owned()]);
+}
+
+#[tokio::test]
+async fn detail_with_null_metadata_returns_none_fields() {
+    let db = setup().await;
+    let id = uuid_for("naked_movie");
+    insert_movie(&db, &id, "Naked", None, true).await;
+
+    let detail = fetch_media_detail(&db, &id).await.unwrap();
+    assert!(detail.overview.is_none());
+    assert!(detail.poster_path.is_none());
+    assert!(detail.backdrop_path.is_none());
+    assert!(detail.runtime.is_none());
+    assert!(detail.rating.is_none());
+    assert!(detail.genres.is_empty());
+}
+
+#[tokio::test]
+async fn detail_missing_id_errors_not_panics() {
+    let db = setup().await;
+    let result = fetch_media_detail(&db, &uuid_for("ghost")).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn movie_files_sort_by_resolution_then_path() {
+    let db = setup().await;
+    let movie_id = uuid_for("movie");
+    insert_movie(&db, &movie_id, "Sample", None, true).await;
+    insert_full_movie_file(
+        &db,
+        &uuid_for("f1"),
+        &movie_id,
+        "/z_low.mkv",
+        Some("720p"),
+        Some("h264"),
+        Some("aac"),
+        Some(1_073_741_824),
+    )
+    .await;
+    insert_full_movie_file(
+        &db,
+        &uuid_for("f2"),
+        &movie_id,
+        "/a_hd.mkv",
+        Some("1080p"),
+        Some("h265"),
+        Some("eac3"),
+        Some(5_368_709_120),
+    )
+    .await;
+    insert_full_movie_file(
+        &db,
+        &uuid_for("f3"),
+        &movie_id,
+        "/b_uhd.mkv",
+        Some("2160p"),
+        Some("av1"),
+        Some("truehd"),
+        Some(15_032_385_536),
+    )
+    .await;
+
+    let files = fetch_movie_files(&db, &movie_id).await.unwrap();
+    let resolutions: Vec<_> = files.iter().map(|f| f.resolution.as_deref()).collect();
+    assert_eq!(
+        resolutions,
+        vec![Some("2160p"), Some("1080p"), Some("720p")]
+    );
+    assert_eq!(files[0].filename, "b_uhd.mkv");
+    assert_eq!(files[0].codec.as_deref(), Some("av1"));
+    assert_eq!(files[0].audio_codec.as_deref(), Some("truehd"));
+}
+
+#[tokio::test]
+async fn movie_files_exclude_trashed() {
+    let db = setup().await;
+    let movie_id = uuid_for("movie");
+    insert_movie(&db, &movie_id, "Sample", None, true).await;
+    insert_full_movie_file(
+        &db,
+        &uuid_for("kept"),
+        &movie_id,
+        "/kept.mkv",
+        Some("1080p"),
+        None,
+        None,
+        None,
+    )
+    .await;
+    // Insert a trashed file via the shorter helper (which writes
+    // trashed_at) — the row exists in the table but the list query
+    // must skip it.
+    insert_movie_file(&db, &uuid_for("trashed"), &movie_id, true).await;
+
+    let files = fetch_movie_files(&db, &movie_id).await.unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].filename, "kept.mkv");
+}
+
+#[tokio::test]
+async fn seasons_group_episodes_and_count_downloaded() {
+    let db = setup().await;
+    let show_id = uuid_for("show");
+    insert_tv(&db, &show_id, "My Show", None).await;
+
+    let s1e1 = uuid_for("s1e1");
+    let s1e2 = uuid_for("s1e2");
+    let s2e1 = uuid_for("s2e1");
+    insert_full_episode(
+        &db,
+        &s1e1,
+        &show_id,
+        1,
+        1,
+        Some("Pilot"),
+        Some("2020-01-01"),
+        true,
+    )
+    .await;
+    insert_full_episode(
+        &db,
+        &s1e2,
+        &show_id,
+        1,
+        2,
+        Some("Second"),
+        Some("2020-01-08"),
+        true,
+    )
+    .await;
+    insert_full_episode(
+        &db,
+        &s2e1,
+        &show_id,
+        2,
+        1,
+        Some("Return"),
+        Some("2021-03-15"),
+        false,
+    )
+    .await;
+
+    // Only s1e1 + s2e1 have files
+    insert_episode_file(&db, &uuid_for("f_s1e1"), &s1e1).await;
+    insert_episode_file(&db, &uuid_for("f_s2e1"), &s2e1).await;
+
+    let seasons = fetch_show_seasons(&db, &show_id).await.unwrap();
+    assert_eq!(seasons.len(), 2);
+
+    let s1 = &seasons[0];
+    assert_eq!(s1.season_number, 1);
+    assert_eq!(s1.episode_count, 2);
+    assert_eq!(s1.downloaded_count, 1);
+    assert_eq!(s1.episodes[0].episode_number, Some(1));
+    assert_eq!(s1.episodes[0].title.as_deref(), Some("Pilot"));
+    assert!(s1.episodes[0].has_files);
+    assert!(!s1.episodes[1].has_files);
+
+    let s2 = &seasons[1];
+    assert_eq!(s2.season_number, 2);
+    assert_eq!(s2.episode_count, 1);
+    assert_eq!(s2.downloaded_count, 1);
+    assert!(!s2.episodes[0].monitored);
+}
+
+#[tokio::test]
+async fn seasons_air_date_formats_as_iso() {
+    let db = setup().await;
+    let show_id = uuid_for("show");
+    insert_tv(&db, &show_id, "Dated", None).await;
+    insert_full_episode(
+        &db,
+        &uuid_for("ep"),
+        &show_id,
+        1,
+        1,
+        Some("Pilot"),
+        Some("2024-12-31"),
+        true,
+    )
+    .await;
+
+    let seasons = fetch_show_seasons(&db, &show_id).await.unwrap();
+    assert_eq!(seasons[0].episodes[0].air_date, "2024-12-31");
+}
+
+#[tokio::test]
+async fn seasons_empty_when_no_episodes() {
+    let db = setup().await;
+    let show_id = uuid_for("naked_show");
+    insert_tv(&db, &show_id, "Empty", None).await;
+
+    let seasons = fetch_show_seasons(&db, &show_id).await.unwrap();
+    assert!(seasons.is_empty());
 }

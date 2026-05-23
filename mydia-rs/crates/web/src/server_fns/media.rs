@@ -153,6 +153,90 @@ pub async fn list_media(query: MediaQuery) -> Result<MediaListPage, ServerFnErro
     server::list_media(query).await
 }
 
+// ---------- U25.b: detail page wire types ----------
+
+/// Headline view for `/media/:id`. Flattens the fields the detail page
+/// needs from `media_items` plus the JSON `metadata` blob so the
+/// component doesn't deserialize JSON itself. Matches the surface
+/// `MydiaWeb.MediaLive.Show` renders before its sub-components walk
+/// the file/episode tree.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MediaDetail {
+    pub id: String,
+    /// `"movie"` or `"tv_show"`. Drives the page's branch between
+    /// "single file" rendering (movie) and "seasons + episodes" tree
+    /// (tv).
+    pub kind: String,
+    pub title: String,
+    pub original_title: Option<String>,
+    pub year: Option<i32>,
+    pub overview: Option<String>,
+    /// TMDB-relative path; the component owns the base URL.
+    pub poster_path: Option<String>,
+    pub backdrop_path: Option<String>,
+    /// Minutes — for tv shows this is per-episode runtime.
+    pub runtime: Option<i32>,
+    /// TMDB-style 0..10 rating. `None` when the relay never returned
+    /// one (e.g. very new release).
+    pub rating: Option<f64>,
+    pub genres: Vec<String>,
+    pub monitored: bool,
+    pub tmdb_id: Option<i64>,
+    pub tvdb_id: Option<i64>,
+    pub imdb_id: Option<String>,
+}
+
+/// One row in the movie's "files available" list. Pruned compared to
+/// the full `MediaFile` model; only the fields the row renders.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MediaFileSummary {
+    pub id: String,
+    pub path: String,
+    /// Last segment of `path`, computed server-side so the component
+    /// renders without filesystem-aware helpers in wasm.
+    pub filename: String,
+    pub resolution: Option<String>,
+    pub codec: Option<String>,
+    pub audio_codec: Option<String>,
+    pub size: Option<i64>,
+}
+
+/// One episode in the tv show's seasons tree.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EpisodeView {
+    pub id: String,
+    pub season_number: Option<i32>,
+    pub episode_number: Option<i32>,
+    pub title: Option<String>,
+    /// `YYYY-MM-DD` or empty when unknown.
+    pub air_date: String,
+    pub monitored: bool,
+    pub has_files: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SeasonView {
+    pub season_number: i32,
+    pub episode_count: i32,
+    pub downloaded_count: i32,
+    pub episodes: Vec<EpisodeView>,
+}
+
+#[post("/api/media/detail")]
+pub async fn get_media_detail(id: String) -> Result<MediaDetail, ServerFnError> {
+    server::get_media_detail(&id).await
+}
+
+#[post("/api/media/files")]
+pub async fn list_media_files(id: String) -> Result<Vec<MediaFileSummary>, ServerFnError> {
+    server::list_media_files(&id).await
+}
+
+#[post("/api/media/seasons")]
+pub async fn list_media_seasons(id: String) -> Result<Vec<SeasonView>, ServerFnError> {
+    server::list_media_seasons(&id).await
+}
+
 #[cfg(feature = "server")]
 pub mod server {
     //! Server-only SQL helpers powering `list_media`. The inner
@@ -161,8 +245,8 @@ pub mod server {
     //! `FullstackContext` plumbing.
 
     use super::{
-        MediaListItem, MediaListPage, MediaQuery, MediaSort, MonitoredFilter, FIRST_PAGE_SIZE,
-        NEXT_PAGE_SIZE,
+        EpisodeView, MediaDetail, MediaFileSummary, MediaListItem, MediaListPage, MediaQuery,
+        MediaSort, MonitoredFilter, SeasonView, FIRST_PAGE_SIZE, NEXT_PAGE_SIZE,
     };
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
@@ -170,6 +254,7 @@ pub mod server {
     use mydia_rs_db::Db;
     use mydia_rs_models::MediaItem;
     use sqlx::{Postgres, QueryBuilder, Sqlite};
+    use std::collections::BTreeMap;
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -479,5 +564,282 @@ pub mod server {
             monitored: row.monitored,
             has_files,
         }
+    }
+
+    // ---------- U25.b: detail page server logic ----------
+
+    pub(super) async fn get_media_detail(id: &str) -> Result<MediaDetail, ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        fetch_media_detail(&st.db, id).await
+    }
+
+    pub(super) async fn list_media_files(id: &str) -> Result<Vec<MediaFileSummary>, ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        fetch_movie_files(&st.db, id).await
+    }
+
+    pub(super) async fn list_media_seasons(id: &str) -> Result<Vec<SeasonView>, ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        fetch_show_seasons(&st.db, id).await
+    }
+
+    pub async fn fetch_media_detail(db: &Db, id: &str) -> Result<MediaDetail, ServerFnError> {
+        const COLS: &str = "id, type, title, original_title, year, tmdb_id, tvdb_id, imdb_id, \
+                            metadata, monitored, monitoring_preset, category, category_override, \
+                            seasons_refreshed_at, quality_profile_id, inserted_at, updated_at";
+
+        let row: Option<MediaItem> = match db {
+            Db::Sqlite(pool) => {
+                let sql = format!("SELECT {COLS} FROM media_items WHERE id = ?");
+                sqlx::query_as::<_, MediaItem>(&sql)
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("detail: {err}")))?
+            }
+            Db::Postgres(pool) => {
+                let sql = format!("SELECT {COLS} FROM media_items WHERE id = $1");
+                sqlx::query_as::<_, MediaItem>(&sql)
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("detail: {err}")))?
+            }
+        };
+
+        let row = row.ok_or_else(|| ServerFnError::new("Media item not found"))?;
+        Ok(into_detail(&row))
+    }
+
+    fn into_detail(row: &MediaItem) -> MediaDetail {
+        // The metadata blob holds the bulk of the headline fields —
+        // overview, poster_path, backdrop_path, runtime, genres,
+        // vote_average. Phoenix's `Mydia.Metadata.Structs.MediaMetadata`
+        // typed struct is the source of truth; we read the JSON here
+        // because the typed mirror isn't ported yet (the metadata
+        // crate ships its own structs, separate from this page's
+        // wire shape).
+        let metadata = row.metadata.as_ref().map(|m| &m.0);
+        let get_str = |k: &str| -> Option<String> {
+            metadata
+                .and_then(|m| m.get(k))
+                .and_then(|v| v.as_str())
+                .map(std::borrow::ToOwned::to_owned)
+        };
+        let get_i32 = |k: &str| -> Option<i32> {
+            metadata
+                .and_then(|m| m.get(k))
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|n| i32::try_from(n).ok())
+        };
+        let get_f64 = |k: &str| -> Option<f64> {
+            metadata
+                .and_then(|m| m.get(k))
+                .and_then(serde_json::Value::as_f64)
+        };
+        let genres = metadata
+            .and_then(|m| m.get("genres"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(std::borrow::ToOwned::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        MediaDetail {
+            id: row.id.0.to_string(),
+            kind: row.r#type.clone().unwrap_or_default(),
+            title: row.title.clone().unwrap_or_default(),
+            original_title: row.original_title.clone(),
+            year: row.year,
+            overview: get_str("overview"),
+            poster_path: get_str("poster_path"),
+            backdrop_path: get_str("backdrop_path"),
+            runtime: get_i32("runtime"),
+            rating: get_f64("vote_average"),
+            genres,
+            monitored: row.monitored,
+            tmdb_id: row.tmdb_id,
+            tvdb_id: row.tvdb_id,
+            imdb_id: row.imdb_id.clone(),
+        }
+    }
+
+    pub async fn fetch_movie_files(
+        db: &Db,
+        movie_id: &str,
+    ) -> Result<Vec<MediaFileSummary>, ServerFnError> {
+        // Direct fk path only — episode files are surfaced via the
+        // seasons tree, not this list. Trashed files excluded to match
+        // the Phoenix `active_files_query` preload.
+        const COLS: &str = "id, path, resolution, codec, audio_codec, size";
+        type Row = (
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<i64>,
+        );
+        let rows: Vec<Row> = match db {
+            Db::Sqlite(pool) => sqlx::query_as(&format!(
+                "SELECT {COLS} FROM media_files \
+                          WHERE media_item_id = ? AND trashed_at IS NULL \
+                          ORDER BY \
+                            CASE resolution \
+                              WHEN '2160p' THEN 0 \
+                              WHEN '1080p' THEN 1 \
+                              WHEN '720p' THEN 2 \
+                              WHEN '480p' THEN 3 \
+                              ELSE 4 END ASC, \
+                            path ASC"
+            ))
+            .bind(movie_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("movie files: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as(&format!(
+                "SELECT {COLS} FROM media_files \
+                          WHERE media_item_id = $1 AND trashed_at IS NULL \
+                          ORDER BY \
+                            CASE resolution \
+                              WHEN '2160p' THEN 0 \
+                              WHEN '1080p' THEN 1 \
+                              WHEN '720p' THEN 2 \
+                              WHEN '480p' THEN 3 \
+                              ELSE 4 END ASC, \
+                            path ASC"
+            ))
+            .bind(movie_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("movie files: {err}")))?,
+        };
+
+        Ok(rows
+            .into_iter()
+            .map(|(id, path, resolution, codec, audio_codec, size)| {
+                let path = path.unwrap_or_default();
+                let filename = path.rsplit('/').next().unwrap_or(&path).to_owned();
+                MediaFileSummary {
+                    id,
+                    path,
+                    filename,
+                    resolution,
+                    codec,
+                    audio_codec,
+                    size,
+                }
+            })
+            .collect())
+    }
+
+    pub async fn fetch_show_seasons(
+        db: &Db,
+        show_id: &str,
+    ) -> Result<Vec<SeasonView>, ServerFnError> {
+        // Two queries: all episodes for the show, then all non-trashed
+        // media_files that reference any of those episodes. Group in
+        // Rust to avoid an N+1 EXISTS-per-episode loop on a long-running
+        // series. Keeps the wire payload small (one struct per episode
+        // with a boolean) rather than embedding the full file rows.
+        let episode_sql_sqlite =
+            "SELECT id, season_number, episode_number, title, air_date, monitored \
+                                  FROM episodes \
+                                  WHERE media_item_id = ? \
+                                  ORDER BY COALESCE(season_number, 0) ASC, \
+                                           COALESCE(episode_number, 0) ASC";
+        let episode_sql_pg =
+            "SELECT id, season_number, episode_number, title, air_date, monitored \
+                              FROM episodes \
+                              WHERE media_item_id = $1 \
+                              ORDER BY COALESCE(season_number, 0) ASC, \
+                                       COALESCE(episode_number, 0) ASC";
+
+        type EpisodeRow = (
+            String,
+            Option<i32>,
+            Option<i32>,
+            Option<String>,
+            Option<chrono::NaiveDate>,
+            bool,
+        );
+        let episode_rows: Vec<EpisodeRow> = match db {
+            Db::Sqlite(pool) => sqlx::query_as(episode_sql_sqlite)
+                .bind(show_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("seasons episodes: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as(episode_sql_pg)
+                .bind(show_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("seasons episodes: {err}")))?,
+        };
+
+        // Episode IDs that have at least one non-trashed media file.
+        let files_sql_sqlite = "SELECT DISTINCT mf.episode_id \
+                                FROM media_files mf \
+                                JOIN episodes e ON mf.episode_id = e.id \
+                                WHERE e.media_item_id = ? AND mf.trashed_at IS NULL \
+                                  AND mf.episode_id IS NOT NULL";
+        let files_sql_pg = "SELECT DISTINCT mf.episode_id \
+                            FROM media_files mf \
+                            JOIN episodes e ON mf.episode_id = e.id \
+                            WHERE e.media_item_id = $1 AND mf.trashed_at IS NULL \
+                              AND mf.episode_id IS NOT NULL";
+
+        let with_files: Vec<(Option<String>,)> = match db {
+            Db::Sqlite(pool) => sqlx::query_as(files_sql_sqlite)
+                .bind(show_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("seasons files: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as(files_sql_pg)
+                .bind(show_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("seasons files: {err}")))?,
+        };
+        let with_files: std::collections::HashSet<String> = with_files
+            .into_iter()
+            .filter_map(|(maybe_id,)| maybe_id)
+            .collect();
+
+        // Group episodes by season. BTreeMap so seasons render in order
+        // without an extra sort; Vec<EpisodeView> within each season
+        // is already in episode order from the SQL ORDER BY above.
+        let mut seasons: BTreeMap<i32, Vec<EpisodeView>> = BTreeMap::new();
+        for (id, season, episode, title, air_date, monitored) in episode_rows {
+            let season_key = season.unwrap_or(0);
+            let has_files = with_files.contains(&id);
+            let air_date_str = air_date
+                .map(|d| d.format("%Y-%m-%d").to_string())
+                .unwrap_or_default();
+            seasons.entry(season_key).or_default().push(EpisodeView {
+                id,
+                season_number: season,
+                episode_number: episode,
+                title,
+                air_date: air_date_str,
+                monitored,
+                has_files,
+            });
+        }
+
+        Ok(seasons
+            .into_iter()
+            .map(|(season_number, episodes)| SeasonView {
+                season_number,
+                episode_count: i32::try_from(episodes.len()).unwrap_or(0),
+                downloaded_count: i32::try_from(episodes.iter().filter(|e| e.has_files).count())
+                    .unwrap_or(0),
+                episodes,
+            })
+            .collect())
     }
 }
