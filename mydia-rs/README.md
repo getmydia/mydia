@@ -132,6 +132,58 @@ What each kind of edit triggers:
 
 Each runs inside the devenv shell, which pins `dioxus-cli 0.7.9` into `~/.cargo/bin` on first entry (nixpkgs only ships 0.7.3, which fails dx's cli vs crate version check). The shell also creates a placeholder `crates/web/assets/tailwind.built.css` if absent, so the `asset!()` macro resolves on a fresh checkout even before the first `dx serve` / `dx build` has compiled the real stylesheet.
 
+### Editing SQL queries
+
+`crates/db` exposes two tiers (see `crates/db/README.md` for the policy):
+
+- **Tier (a), portable SQL**: queries that run unchanged on both engines. Use the `sqlx::query!` / `sqlx::query_as!` macros. The Postgres arm is checked at compile time against the prepare DB and the result lands in `mydia-rs/.sqlx/`. `crates/graphql/src/repos/accounts.rs` is the reference shape.
+- **Tier (b), dialect-divergent SQL**: queries that need different SQL per engine (JSON extract, datetime arithmetic, casts). Compose with the helpers in `mydia_rs_db::dialect`; the runtime `sqlx::query` / `sqlx::query_as` forms are the right tool here. No compile-time check, the integration tests are the safety net.
+
+#### One-time setup for the prepare loop
+
+The compile-time check needs a Postgres DB shaped like the Phoenix-owned schema. The devenv flake stands up a Postgres 16 service for this, but it boots empty and the operator populates it once with Phoenix's `mix ecto.migrate`. The mydia-rs side never writes a migration.
+
+1. Start the devenv processes (boots Postgres on host port 5432 plus `dx serve` on 4002):
+
+   ```bash
+   ./dev rs up
+   ```
+
+   Postgres only really matters when editing a `query!` macro. Plain SQLite contributors can ignore it.
+
+2. From the Phoenix dev container, run the migrations against the prepare DB:
+
+   ```bash
+   ./dev shell
+   # inside the container:
+   DATABASE_TYPE=postgres \
+   DATABASE_HOST=localhost \
+   DATABASE_PORT=5432 \
+   DATABASE_NAME=mydia_rs_prepare \
+   DATABASE_USER=postgres \
+   DATABASE_PASSWORD= \
+   mix ecto.migrate
+   ```
+
+   Re-run whenever a Phoenix migration changes columns or types that mydia-rs reads. The DB is on the same host as `./dev rs up` so `localhost` reaches it from inside the container's `host` network mode.
+
+#### Day-to-day loop
+
+```
+# Edit a query somewhere under mydia-rs/crates/*/src/repos/...
+
+./dev rs sqlx-prepare    # regenerates .sqlx/ from live Postgres
+git add mydia-rs/.sqlx/  # commit the cache alongside the code change
+```
+
+The cache lives in the workspace root (`mydia-rs/.sqlx/`). CI runs `SQLX_OFFLINE=true cargo check --workspace --all-targets` so a stale cache fails the build (any `query!` macro without a matching cache entry fails to compile), which keeps the offline cache in sync with the source tree without needing a live Postgres in CI.
+
+If you're working without the Postgres service (no edits to compile-checked queries), `SQLX_OFFLINE=true cargo check` reads the committed cache and skips the live DB.
+
+#### Audit context
+
+A late-2026 audit identified ~322 runtime `sqlx::query*` calls and 0 compile-time-checked queries. Schema drift had landed twice already (e.g. `downloads.status` removed months before the Rust code stopped querying it). The conversion sweep is incremental: portable-SQL call sites become tier (a) on touch, dialect-divergent ones stay tier (b). The workspace clippy lint (`disallowed_methods` in `mydia-rs/clippy.toml`) is configured but kept at `allow` by default; converted modules opt in with `#![warn(clippy::disallowed_methods)]` so the lint surfaces backsliding without escalating to a workspace-wide block on the unconverted majority.
+
 ### Dual-target binary layout
 
 `crates/app/Cargo.toml` declares two features:

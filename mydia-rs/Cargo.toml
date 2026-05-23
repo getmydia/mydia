@@ -50,7 +50,17 @@ anyhow = "1"
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
-# Allowed pedantic lints — these flag idiomatic patterns we use widely
+# `disallowed_methods` is configured via the workspace `clippy.toml`
+# and flags runtime `sqlx::query` / `query_as` / `query_scalar` calls
+# so the tier-(a) macro conversion sweep can find them. Set to `allow`
+# at the workspace baseline because CI runs `clippy -- -D warnings`,
+# which would otherwise turn every existing runtime call into an
+# error and block unrelated work. Converted modules opt in with a
+# top-of-file `#![warn(clippy::disallowed_methods)]` so the lint
+# surfaces backsliding without escalating to a workspace-wide block.
+disallowed_methods = "allow"
+
+# Allowed pedantic lints, these flag idiomatic patterns we use widely
 # and the noise/value ratio doesn't justify suppressing per-call-site.
 missing_errors_doc = "allow"             # every `-> Result` would need a # Errors section
 missing_panics_doc = "allow"             # every fn calling `.unwrap()` would need a # Panics section

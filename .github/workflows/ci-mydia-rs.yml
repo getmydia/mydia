@@ -136,26 +136,10 @@ jobs:
         run: cargo test --workspace --all-targets
 
   sqlx-prepare-check:
-    name: sqlx prepare --check
+    name: sqlx offline cache covers every macro
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mydia_rs_prepare
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: mydia_rs_prepare
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -168,16 +152,19 @@ jobs:
         with:
           workspaces: mydia-rs
 
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres,rustls --locked
-
-      - name: cargo sqlx prepare --check
-        run: |
-          # `--check` validates that the committed offline cache matches the
-          # queries in the source tree. Until U4 lands sqlx queries this is
-          # a no-op: no queries -> empty cache -> nothing to verify. The job
-          # stays in CI from day one so the cache discipline never goes stale.
-          cargo sqlx prepare --workspace --check
+      - name: Verify .sqlx cache covers every query!/query_as! macro
+        # The committed cache under mydia-rs/.sqlx/ has to satisfy every
+        # query!/query_as! macro in the workspace; if a developer added
+        # or modified a macro without running `./dev rs sqlx-prepare` the
+        # offline check fails here. SQLX_OFFLINE forces the sqlx-macros
+        # crate to read from the cache instead of trying to connect to
+        # a live DB, which means CI doesn't have to populate a Postgres
+        # prepare DB on every run (the populate step is a one-time local
+        # workflow). The accounts.rs pilot landed the first four cache
+        # entries; every subsequent macro addition adds more.
+        env:
+          SQLX_OFFLINE: "true"
+        run: cargo check --workspace --all-targets
 
   docker-build:
     name: Docker build verify

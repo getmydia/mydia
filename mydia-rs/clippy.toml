@@ -1,0 +1,23 @@
+# Workspace-wide clippy configuration.
+#
+# `disallowed-methods` flags the runtime sqlx entry points so every new
+# call site is a clippy warning. The audit catalogued ~322 of these
+# already; the warning is deliberately not an error so the conversion
+# sweep can land tier-(a) macros one repo at a time without each step
+# fighting CI.
+#
+# Pair this with the policy doc in `crates/db/README.md`:
+#
+#   - Tier (a) portable SQL  -> sqlx::query! / sqlx::query_as! macros
+#                               (compile-time check + offline cache)
+#   - Tier (b) dialect SQL   -> sqlx::query / sqlx::query_as runtime
+#                               (composed via mydia_rs_db::dialect)
+#
+# When a new tier (b) call lands, suppress with `#[allow(clippy::
+# disallowed_methods)]` at the call site so the reason is recorded
+# alongside the code that needs it.
+disallowed-methods = [
+    { path = "sqlx::query", reason = "prefer sqlx::query! (tier a) or document the dialect-divergence reason via #[allow] (tier b). See crates/db/README.md." },
+    { path = "sqlx::query_as", reason = "prefer sqlx::query_as! (tier a) or document the dialect-divergence reason via #[allow] (tier b). See crates/db/README.md." },
+    { path = "sqlx::query_scalar", reason = "prefer sqlx::query_scalar! (tier a) or document the dialect-divergence reason via #[allow] (tier b). See crates/db/README.md." },
+]

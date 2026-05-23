@@ -1,3 +1,10 @@
+// Opt this converted module into the disallowed-methods lint so a
+// future patch that backslides into `sqlx::query_as` (instead of the
+// compile-time-checked `query_as!`) gets flagged. The workspace
+// baseline keeps the lint at `allow` so existing unconverted call
+// sites don't block clippy -D warnings.
+#![warn(clippy::disallowed_methods)]
+
 //! Port of `Mydia.Accounts` slice the `auth/api_key` resolvers consume.
 //!
 //! Tier-(a) pilot: every query in this file is portable SQL (no JSON
@@ -29,6 +36,10 @@ use uuid::Uuid;
 pub async fn get_user_by_username(db: &Db, username: &str) -> Result<Option<User>, sqlx::Error> {
     match db {
         Db::Sqlite(pool) => {
+            // sqlx::query_as! is single-dialect against the Postgres
+            // prepare DB; the SQLite arm uses the runtime form and
+            // mirrors the macro-checked SQL above byte-for-byte.
+            #[allow(clippy::disallowed_methods)]
             sqlx::query_as::<_, User>(
                 "SELECT id, username, email, password_hash, oidc_sub, oidc_issuer, role, \
                  display_name, avatar_url, last_login_at, inserted_at, updated_at \
@@ -67,6 +78,10 @@ pub async fn get_user_by_username(db: &Db, username: &str) -> Result<Option<User
 pub async fn get_user_by_email(db: &Db, email: &str) -> Result<Option<User>, sqlx::Error> {
     match db {
         Db::Sqlite(pool) => {
+            // sqlx::query_as! is single-dialect against the Postgres
+            // prepare DB; the SQLite arm uses the runtime form and
+            // mirrors the macro-checked SQL above byte-for-byte.
+            #[allow(clippy::disallowed_methods)]
             sqlx::query_as::<_, User>(
                 "SELECT id, username, email, password_hash, oidc_sub, oidc_issuer, role, \
                  display_name, avatar_url, last_login_at, inserted_at, updated_at \
@@ -108,6 +123,10 @@ pub async fn get_user_by_id(db: &Db, id: &str) -> Result<Option<User>, sqlx::Err
         .map_err(|_| sqlx::Error::RowNotFound)?;
     match db {
         Db::Sqlite(pool) => {
+            // sqlx::query_as! is single-dialect against the Postgres
+            // prepare DB; the SQLite arm uses the runtime form and
+            // mirrors the macro-checked SQL above byte-for-byte.
+            #[allow(clippy::disallowed_methods)]
             sqlx::query_as::<_, User>(
                 "SELECT id, username, email, password_hash, oidc_sub, oidc_issuer, role, \
                  display_name, avatar_url, last_login_at, inserted_at, updated_at \
@@ -150,6 +169,9 @@ pub async fn update_last_login(db: &Db, user_id: &str) -> Result<(), sqlx::Error
     let now = DateTimeSecs::from(Utc::now());
     match db {
         Db::Sqlite(pool) => {
+            // sqlx::query! is single-dialect against the Postgres prepare
+            // DB; the SQLite arm uses the runtime form with byte-equal SQL.
+            #[allow(clippy::disallowed_methods)]
             sqlx::query("UPDATE users SET last_login_at = $1, updated_at = $2 WHERE id = $3")
                 .bind(now)
                 .bind(now)
