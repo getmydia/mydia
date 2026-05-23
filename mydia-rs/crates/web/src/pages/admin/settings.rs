@@ -10,7 +10,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::admin::{AdminPageHeader, ConfigRow, ConfigSection, ConfigSource};
+use crate::components::admin::{ConfigRow, ConfigSection, ConfigSource};
 use crate::components::core::{Button, ButtonSize, ButtonVariant, Input};
 use crate::server_fns::admin::settings::{
     list_settings, update_setting, ConfigSettingRow, SettingsSnapshot, UpdateSetting,
@@ -24,22 +24,17 @@ pub fn Settings() -> Element {
         async move { list_settings().await }
     });
 
+    // Page-level header lives in `AdminConfigShell`. Per-tab chrome is
+    // just the action bar.
     rsx! {
         div { class: "max-w-5xl mx-auto",
-            AdminPageHeader {
-                title: "Settings".to_string(),
-                subtitle: Some(
-                    "Application-wide configuration. Env vars override database values."
-                        .to_string(),
-                ),
-                actions: rsx! {
-                    Button {
-                        variant: ButtonVariant::Ghost,
-                        size: ButtonSize::Sm,
-                        onclick: move |_| reload_token.with_mut(|t| *t += 1),
-                        "Refresh"
-                    }
-                },
+            div { class: "flex justify-end mb-4",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Sm,
+                    onclick: move |_| reload_token.with_mut(|t| *t += 1),
+                    "Refresh"
+                }
             }
 
             match &*snapshot.read_unchecked() {

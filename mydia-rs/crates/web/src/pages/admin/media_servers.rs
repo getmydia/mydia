@@ -8,7 +8,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::admin::{AdminPageHeader, ConfigSection, StatusPill};
+use crate::components::admin::{ConfigSection, StatusPill};
 use crate::components::core::{Button, ButtonSize, ButtonVariant, Input, Modal, ModalSize};
 use crate::server_fns::admin::media_servers::{
     create_media_server, delete_media_server, list_media_servers, toggle_media_server,
@@ -24,30 +24,26 @@ pub fn MediaServers() -> Element {
     });
     let show_create = use_signal(|| false);
 
+    // Page-level header lives in `AdminConfigShell`. Per-tab chrome is
+    // the right-aligned action bar.
     rsx! {
         div { class: "max-w-5xl mx-auto",
-            AdminPageHeader {
-                title: "Media servers".to_string(),
-                subtitle: Some(
-                    "Plex / Jellyfin / Emby adapters mydia syncs library data with.".to_string(),
-                ),
-                actions: rsx! {
-                    Button {
-                        variant: ButtonVariant::Ghost,
-                        size: ButtonSize::Sm,
-                        onclick: move |_| reload_token.with_mut(|t| *t += 1),
-                        "Refresh"
-                    }
-                    Button {
-                        variant: ButtonVariant::Primary,
-                        size: ButtonSize::Sm,
-                        onclick: {
-                            let mut show_create = show_create;
-                            move |_| show_create.set(true)
-                        },
-                        "Add server"
-                    }
-                },
+            div { class: "flex justify-end gap-2 mb-4",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Sm,
+                    onclick: move |_| reload_token.with_mut(|t| *t += 1),
+                    "Refresh"
+                }
+                Button {
+                    variant: ButtonVariant::Primary,
+                    size: ButtonSize::Sm,
+                    onclick: {
+                        let mut show_create = show_create;
+                        move |_| show_create.set(true)
+                    },
+                    "Add server"
+                }
             }
 
             ConfigSection {

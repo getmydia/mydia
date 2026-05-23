@@ -11,7 +11,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::admin::{AdminPageHeader, ConfigSection, StatRow, StatusPill};
+use crate::components::admin::{ConfigSection, StatRow, StatusPill};
 use crate::components::core::{Button, ButtonSize, ButtonVariant};
 use crate::server_fns::admin::remote_access::{
     list_paired_devices, remote_access_status, revoke_paired_device, P2pStatus, PairedDeviceRow,
@@ -29,21 +29,17 @@ pub fn RemoteAccess() -> Element {
         async move { remote_access_status().await }
     });
 
+    // Page-level header lives in `AdminConfigShell`. Per-tab chrome is
+    // the right-aligned refresh button.
     rsx! {
         div { class: "max-w-5xl mx-auto",
-            AdminPageHeader {
-                title: "Remote access".to_string(),
-                subtitle: Some(
-                    "Paired devices across the mesh. Revoke any row to evict it.".to_string(),
-                ),
-                actions: rsx! {
-                    Button {
-                        variant: ButtonVariant::Ghost,
-                        size: ButtonSize::Sm,
-                        onclick: move |_| reload_token.with_mut(|t| *t += 1),
-                        "Refresh"
-                    }
-                },
+            div { class: "flex justify-end mb-4",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Sm,
+                    onclick: move |_| reload_token.with_mut(|t| *t += 1),
+                    "Refresh"
+                }
             }
 
             match &*status.read_unchecked() {

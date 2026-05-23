@@ -11,7 +11,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::admin::{AdminPageHeader, ConfigSection, StatusPill};
+use crate::components::admin::{ConfigSection, StatusPill};
 use crate::components::core::{Button, ButtonSize, ButtonVariant, Input, Modal, ModalSize};
 use crate::server_fns::admin::indexers::{
     create_indexer, delete_indexer, list_indexers, test_indexer, toggle_indexer, IndexerRow,
@@ -27,30 +27,26 @@ pub fn Indexers() -> Element {
     });
     let show_create = use_signal(|| false);
 
+    // Page-level header lives in `AdminConfigShell`. Per-tab chrome is
+    // the right-aligned action bar.
     rsx! {
         div { class: "max-w-5xl mx-auto",
-            AdminPageHeader {
-                title: "Indexers".to_string(),
-                subtitle: Some(
-                    "Cardigann-backed sources mydia searches for releases.".to_string(),
-                ),
-                actions: rsx! {
-                    Button {
-                        variant: ButtonVariant::Ghost,
-                        size: ButtonSize::Sm,
-                        onclick: move |_| reload_token.with_mut(|t| *t += 1),
-                        "Refresh"
-                    }
-                    Button {
-                        variant: ButtonVariant::Primary,
-                        size: ButtonSize::Sm,
-                        onclick: {
-                            let mut show_create = show_create;
-                            move |_| show_create.set(true)
-                        },
-                        "Add indexer"
-                    }
-                },
+            div { class: "flex justify-end gap-2 mb-4",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Sm,
+                    onclick: move |_| reload_token.with_mut(|t| *t += 1),
+                    "Refresh"
+                }
+                Button {
+                    variant: ButtonVariant::Primary,
+                    size: ButtonSize::Sm,
+                    onclick: {
+                        let mut show_create = show_create;
+                        move |_| show_create.set(true)
+                    },
+                    "Add indexer"
+                }
             }
 
             ConfigSection {

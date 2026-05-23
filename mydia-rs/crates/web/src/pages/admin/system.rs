@@ -15,7 +15,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::admin::{AdminPageHeader, ConfigSection, StatRow, StatusPill};
+use crate::components::admin::{ConfigSection, StatRow, StatusPill};
 use crate::components::core::{Button, ButtonSize, ButtonVariant};
 use crate::server_fns::admin::system::{system_status, SystemStatus};
 
@@ -29,21 +29,18 @@ pub fn System() -> Element {
 
     let refresh = move |_| reload_token.with_mut(|t| *t += 1);
 
+    // Page-level header lives in `AdminConfigShell` ("Configuration" +
+    // subtitle + tab strip). The action bar below is the per-tab
+    // chrome — just the refresh button right-aligned.
     rsx! {
         div { class: "max-w-5xl mx-auto",
-            AdminPageHeader {
-                title: "System status".to_string(),
-                subtitle: Some(
-                    "Process, database, and pipeline health at a glance.".to_string(),
-                ),
-                actions: rsx! {
-                    Button {
-                        variant: ButtonVariant::Ghost,
-                        size: ButtonSize::Sm,
-                        onclick: refresh,
-                        "Refresh"
-                    }
-                },
+            div { class: "flex justify-end mb-4",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Sm,
+                    onclick: refresh,
+                    "Refresh"
+                }
             }
 
             match &*status.read_unchecked() {

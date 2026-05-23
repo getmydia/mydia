@@ -22,7 +22,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::components::admin::{AdminPageHeader, ConfigSection, ItemRenderer, OrderedItemList};
+use crate::components::admin::{ConfigSection, ItemRenderer, OrderedItemList};
 use crate::components::core::{Button, ButtonSize, ButtonVariant, Input, Modal, ModalSize};
 use crate::server_fns::admin::quality_profiles::{
     create_quality_profile, delete_quality_profile, get_quality_profile, list_quality_profiles,
@@ -41,17 +41,18 @@ pub fn QualityProfiles() -> Element {
 
     let on_changed: Callback<()> = Callback::new(move |()| reload_token.with_mut(|t| *t += 1));
 
+    // Page-level header lives in `AdminConfigShell`. The instructional
+    // note about ordering stays inline since it's load-bearing context
+    // for the ↑ / ↓ reorder buttons below.
     rsx! {
         div { class: "max-w-5xl mx-auto",
-            AdminPageHeader {
-                title: "Quality profiles".to_string(),
-                subtitle: Some(
+            div { class: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4",
+                p { class: "text-sm text-base-content/70 max-w-3xl",
                     "Ordered cutoff rules deciding which release qualities mydia accepts. \
                      Order is priority: the first cutoff is the most preferred quality, the \
                      last is the lowest acceptable. Use ↑ and ↓ to reorder."
-                        .to_string(),
-                ),
-                actions: rsx! {
+                }
+                div { class: "flex items-center gap-2",
                     Button {
                         variant: ButtonVariant::Ghost,
                         size: ButtonSize::Sm,
@@ -67,7 +68,7 @@ pub fn QualityProfiles() -> Element {
                         },
                         "New profile"
                     }
-                },
+                }
             }
 
             ConfigSection {

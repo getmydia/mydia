@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use dioxus::fullstack::{use_websocket, WebSocketOptions};
 use dioxus::prelude::*;
 
-use crate::components::core::{Button, ButtonSize, ButtonVariant, Icon, Input};
+use crate::components::core::{Button, ButtonSize, ButtonVariant, Input};
 use crate::components::scan_progress::ScanProgress;
 use crate::realtime::library_scanner::{library_scanner_ws, LibraryScanEvent};
 use crate::server_fns::library_paths::{
@@ -131,13 +131,10 @@ pub fn LibraryPaths() -> Element {
         });
     };
 
+    // Page-level header lives in `AdminConfigShell`. No per-tab action
+    // bar here — the "Add a path" form sits directly below.
     rsx! {
         div { class: "max-w-4xl mx-auto space-y-6",
-            header { class: "flex items-center justify-between",
-                h1 { class: "text-2xl font-bold", "Library paths" }
-                Icon { name: "home".to_string(), class: "w-6 h-6 opacity-30".to_string() }
-            }
-
             // Flash region — currently only success state from create.
             if let Some((kind, msg)) = flash.read().clone() {
                 FlashBanner { kind: kind, message: msg }
