@@ -2,6 +2,31 @@
 
 Overview of Mydia's system architecture and design decisions.
 
+## Two backends, one repository
+
+Mydia ships two backends from the same Git repository: the original Phoenix/Elixir backend in `lib/` and a Rust reimplementation in `mydia-rs/`. Both read and write the same database, the same on-disk media, and the same metadata-relay service. Both expose the same GraphQL contract for the Flutter player and the same REST API surface for paired remote devices. Self-hosters pick which backend they run by choosing a Docker image tag.
+
+| Backend | Code | Docker image (SQLite) | Docker image (Postgres) |
+|---|---|---|---|
+| Phoenix | `lib/` | `ghcr.io/getmydia/mydia:latest` | `ghcr.io/getmydia/mydia:latest-pg` |
+| Rust (mydia-rs) | `mydia-rs/` | `ghcr.io/getmydia/mydia/mydia-rs:latest` | (same image) |
+
+mydia-rs links both sqlx drivers into one binary and picks the engine at runtime via `database.type`. The Phoenix split exists because Ecto's adapter is compiled into the BEAM release; that constraint is gone on the Rust side.
+
+The two backends coexist on master. Every push publishes both images. Phoenix retains migration ownership: the schema source of truth is `priv/repo/migrations/` and mydia-rs never writes a migration. mydia-rs probes `schema_migrations` at startup and refuses to start against a database older than what its binary expects; if the database is newer, it logs a warning and continues.
+
+The Flutter player works against either backend unchanged. The GraphQL contract is frozen and snapshot-tested via a parity replay harness against captured player sessions.
+
+During the parallel window:
+
+- Cutover is a Docker tag change. See [Cutting over from Phoenix to mydia-rs](../operators/cutover-to-mydia-rs.md).
+- Rollback is a Docker tag change in reverse. See [Rolling back from mydia-rs to Phoenix](../operators/rollback-to-phoenix.md).
+- Operators should not run both backends at the same time. mydia-rs enforces this with a database advisory lock; Phoenix does not yet have a symmetric guard.
+
+The Rust workspace lives at `mydia-rs/Cargo.toml` and is split into per-domain crates: `app` (binary), `config`, `db`, `models`, `auth`, `web` (Dioxus full-stack UI + REST API), `graphql` (async-graphql), `jobs` (apalis), `pubsub`, `library`, `downloads`, `indexers`, `metadata`, `streaming`, `subtitles`, `p2p`, `events`, `integrations`, `parity-harness`. The shared p2p networking core (`native/mydia_p2p_core`) is a Cargo path dependency consumed by both backends (via Rustler from Phoenix, directly from `crates/p2p` on the Rust side, and via `flutter_rust_bridge` from the Flutter player).
+
+The rest of this page documents the Phoenix backend as it stands today. mydia-rs mirrors the same surface; for crate-level layout and dev-loop notes, see [`mydia-rs/README.md`](https://github.com/getmydia/mydia/blob/master/mydia-rs/README.md).
+
 ## Technology Stack
 
 - **Phoenix 1.8** - Web framework with LiveView

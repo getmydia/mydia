@@ -80,6 +80,10 @@ nav:
       - PostgreSQL: advanced/postgresql.md
       - SSO/OIDC: advanced/oidc.md
       - Cardigann Indexers: advanced/cardigann.md
+  - Operators:
+      - Cutting over to mydia-rs: operators/cutover-to-mydia-rs.md
+      - Rolling back to Phoenix: operators/rollback-to-phoenix.md
+      - mydia-rs known gotchas: operators/mydia-rs-known-gotchas.md
   - Development:
       - Setup: development/setup.md
       - Testing: development/testing.md
