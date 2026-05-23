@@ -131,16 +131,32 @@ mod server {
     }
 
     async fn count_active_downloads(db: &Db) -> Result<i64, ServerFnError> {
-        // Active is the predicate from `Mydia.Downloads.History`:
-        // imported_at IS NULL and status is in the active set.
-        // We compute it in SQL (rather than `list + len()`) because
-        // the dashboard widget reads it on every render and we don't
-        // want to materialize every row.
+        // Phoenix's `Mydia.Downloads.History.count_active_downloads/0`
+        // hydrates each row via the configured download-client adapter
+        // and counts the in-memory derived statuses (downloading /
+        // seeding / checking / paused / queued). The Rust port hasn't
+        // wired adapter probes into the server-fn layer yet, so we
+        // approximate the count from the columns that survived migration
+        // 20251105033610 (status / progress / estimated_completion got
+        // dropped that day):
+        //
+        //   active := imported_at IS NULL
+        //          AND completed_at IS NULL
+        //          AND import_failed_at IS NULL
+        //
+        // Over-counts when a configured client has gone offline (a
+        // proper status check would mark those rows "missing"), but it
+        // does not 500.
+        //
+        // TODO(U27.downloads-followup): port `list_downloads_with_status`
+        // and the per-adapter `Client.list_torrents` fan-out so this
+        // collapses back to the Phoenix predicate.
         let (n,): (i64,) = match db {
             Db::Sqlite(pool) => sqlx::query_as(
                 "SELECT COUNT(*) FROM downloads \
                  WHERE imported_at IS NULL \
-                 AND status IN ('downloading', 'seeding', 'checking', 'paused', 'queued')",
+                   AND completed_at IS NULL \
+                   AND import_failed_at IS NULL",
             )
             .fetch_one(pool)
             .await
@@ -148,7 +164,8 @@ mod server {
             Db::Postgres(pool) => sqlx::query_as(
                 "SELECT COUNT(*) FROM downloads \
                  WHERE imported_at IS NULL \
-                 AND status IN ('downloading', 'seeding', 'checking', 'paused', 'queued')",
+                   AND completed_at IS NULL \
+                   AND import_failed_at IS NULL",
             )
             .fetch_one(pool)
             .await
