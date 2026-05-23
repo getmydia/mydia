@@ -237,6 +237,35 @@ pub async fn list_media_seasons(id: String) -> Result<Vec<SeasonView>, ServerFnE
     server::list_media_seasons(&id).await
 }
 
+// ---------- U25.c: action endpoints (monitor toggle, delete) ----------
+
+/// Result of a monitor toggle — the new state plus a label the page can
+/// surface via flash without recomputing on the wire side.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MonitorToggleAck {
+    pub monitored: bool,
+}
+
+#[post("/api/media/monitor/toggle")]
+pub async fn toggle_media_monitored(id: String) -> Result<MonitorToggleAck, ServerFnError> {
+    server::toggle_media_monitored(&id).await
+}
+
+#[post("/api/media/episode/monitor/toggle")]
+pub async fn toggle_episode_monitored(id: String) -> Result<MonitorToggleAck, ServerFnError> {
+    server::toggle_episode_monitored(&id).await
+}
+
+/// Body for the delete-from-library action. Files-on-disk deletion is
+/// not yet wired (the Phoenix flow does it via `Mydia.Media.delete_media_item`
+/// which cascades to `Library.delete_files`); U25.c ships the DB-only
+/// path and a later commit adds the disk-deletion path under a
+/// `delete_files: true` opt once the worker queue side is ported.
+#[post("/api/media/delete")]
+pub async fn delete_media(id: String) -> Result<(), ServerFnError> {
+    server::delete_media(&id).await
+}
+
 #[cfg(feature = "server")]
 pub mod server {
     //! Server-only SQL helpers powering `list_media`. The inner
@@ -246,7 +275,7 @@ pub mod server {
 
     use super::{
         EpisodeView, MediaDetail, MediaFileSummary, MediaListItem, MediaListPage, MediaQuery,
-        MediaSort, MonitoredFilter, SeasonView, FIRST_PAGE_SIZE, NEXT_PAGE_SIZE,
+        MediaSort, MonitorToggleAck, MonitoredFilter, SeasonView, FIRST_PAGE_SIZE, NEXT_PAGE_SIZE,
     };
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
@@ -841,5 +870,213 @@ pub mod server {
                 episodes,
             })
             .collect())
+    }
+
+    // ---------- U25.c: action endpoints ----------
+
+    pub(super) async fn toggle_media_monitored(
+        id: &str,
+    ) -> Result<MonitorToggleAck, ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        let next = flip_media_monitored(&st.db, id).await?;
+        Ok(MonitorToggleAck { monitored: next })
+    }
+
+    pub(super) async fn toggle_episode_monitored(
+        id: &str,
+    ) -> Result<MonitorToggleAck, ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        let next = flip_episode_monitored(&st.db, id).await?;
+        Ok(MonitorToggleAck { monitored: next })
+    }
+
+    pub(super) async fn delete_media(id: &str) -> Result<(), ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        delete_media_item_db_only(&st.db, id).await
+    }
+
+    /// Read-then-write to determine the new monitored value. `SQLite`
+    /// doesn't have a `RETURNING ...` shape we can rely on in 3.x; we
+    /// pay one extra round-trip for symmetry. The race is benign — two
+    /// rapid taps cancel each other out, matching the Phoenix
+    /// click-debouncing behavior.
+    pub async fn flip_media_monitored(db: &Db, id: &str) -> Result<bool, ServerFnError> {
+        let current = read_media_monitored(db, id).await?;
+        let next = !current;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        match db {
+            Db::Sqlite(pool) => {
+                let res = sqlx::query(
+                    "UPDATE media_items SET monitored = ?, updated_at = ? WHERE id = ?",
+                )
+                .bind(i64::from(next))
+                .bind(&now)
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("flip media monitored: {err}")))?;
+                if res.rows_affected() == 0 {
+                    return Err(ServerFnError::new("Media item not found"));
+                }
+            }
+            Db::Postgres(pool) => {
+                let res = sqlx::query(
+                    "UPDATE media_items SET monitored = $1, updated_at = $2 WHERE id = $3",
+                )
+                .bind(next)
+                .bind(&now)
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("flip media monitored: {err}")))?;
+                if res.rows_affected() == 0 {
+                    return Err(ServerFnError::new("Media item not found"));
+                }
+            }
+        }
+        Ok(next)
+    }
+
+    async fn read_media_monitored(db: &Db, id: &str) -> Result<bool, ServerFnError> {
+        let row: Option<(bool,)> = match db {
+            Db::Sqlite(pool) => sqlx::query_as("SELECT monitored FROM media_items WHERE id = ?")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("read monitored: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as("SELECT monitored FROM media_items WHERE id = $1")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("read monitored: {err}")))?,
+        };
+        row.map(|(m,)| m)
+            .ok_or_else(|| ServerFnError::new("Media item not found"))
+    }
+
+    pub async fn flip_episode_monitored(db: &Db, id: &str) -> Result<bool, ServerFnError> {
+        let row: Option<(bool,)> = match db {
+            Db::Sqlite(pool) => sqlx::query_as("SELECT monitored FROM episodes WHERE id = ?")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("read episode monitored: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as("SELECT monitored FROM episodes WHERE id = $1")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("read episode monitored: {err}")))?,
+        };
+        let current = row
+            .map(|(m,)| m)
+            .ok_or_else(|| ServerFnError::new("Episode not found"))?;
+        let next = !current;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        match db {
+            Db::Sqlite(pool) => {
+                sqlx::query("UPDATE episodes SET monitored = ?, updated_at = ? WHERE id = ?")
+                    .bind(i64::from(next))
+                    .bind(&now)
+                    .bind(id)
+                    .execute(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("flip episode: {err}")))?;
+            }
+            Db::Postgres(pool) => {
+                sqlx::query("UPDATE episodes SET monitored = $1, updated_at = $2 WHERE id = $3")
+                    .bind(next)
+                    .bind(&now)
+                    .bind(id)
+                    .execute(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("flip episode: {err}")))?;
+            }
+        }
+        Ok(next)
+    }
+
+    /// DB-only delete. The Phoenix flow optionally also deletes the
+    /// on-disk files via `Library.delete_files`; that's deferred to
+    /// a later commit because it requires the file-deletion worker
+    /// path to be ported and dry-run tested first. Files remain on
+    /// disk; the operator can rescan to re-import.
+    ///
+    /// We delete child rows explicitly rather than relying on
+    /// `ON DELETE CASCADE` because the Phoenix schema doesn't always
+    /// declare cascade — Ecto handles the cascade in Elixir code
+    /// (`Mydia.Media.delete_media_item`), so the DB constraints are a
+    /// mix. Explicit deletes are safe regardless of cascade state.
+    pub async fn delete_media_item_db_only(db: &Db, id: &str) -> Result<(), ServerFnError> {
+        match db {
+            Db::Sqlite(pool) => {
+                let mut tx = pool.begin().await.map_err(into_err)?;
+                // Files first (FK to media_items / episodes), then
+                // episodes, then the media item itself.
+                sqlx::query(
+                    "DELETE FROM media_files WHERE media_item_id = ? OR episode_id IN \
+                     (SELECT id FROM episodes WHERE media_item_id = ?)",
+                )
+                .bind(id)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(into_err)?;
+                sqlx::query("DELETE FROM episodes WHERE media_item_id = ?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(into_err)?;
+                let res = sqlx::query("DELETE FROM media_items WHERE id = ?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(into_err)?;
+                if res.rows_affected() == 0 {
+                    tx.rollback().await.map_err(into_err)?;
+                    return Err(ServerFnError::new("Media item not found"));
+                }
+                tx.commit().await.map_err(into_err)?;
+            }
+            Db::Postgres(pool) => {
+                let mut tx = pool.begin().await.map_err(into_err)?;
+                sqlx::query(
+                    "DELETE FROM media_files WHERE media_item_id = $1 OR episode_id IN \
+                     (SELECT id FROM episodes WHERE media_item_id = $1)",
+                )
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(into_err)?;
+                sqlx::query("DELETE FROM episodes WHERE media_item_id = $1")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(into_err)?;
+                let res = sqlx::query("DELETE FROM media_items WHERE id = $1")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(into_err)?;
+                if res.rows_affected() == 0 {
+                    tx.rollback().await.map_err(into_err)?;
+                    return Err(ServerFnError::new("Media item not found"));
+                }
+                tx.commit().await.map_err(into_err)?;
+            }
+        }
+        Ok(())
+    }
+
+    // Function-pointer shape (vs `&sqlx::Error`) so the
+    // `map_err(into_err)` call sites read cleanly. Clippy lints
+    // needless-pass-by-value on this; the function exists for
+    // borrow-checker ergonomics with `map_err`, so the lint is wrong
+    // in this context.
+    #[allow(clippy::needless_pass_by_value)]
+    fn into_err(err: sqlx::Error) -> ServerFnError {
+        ServerFnError::new(format!("delete media: {err}"))
     }
 }

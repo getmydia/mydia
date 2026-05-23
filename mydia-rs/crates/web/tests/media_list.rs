@@ -27,8 +27,8 @@
 
 use mydia_rs_db::Db;
 use mydia_rs_web::server_fns::media::server::{
-    count_media, fetch_media, fetch_media_detail, fetch_movie_files, fetch_show_seasons,
-    row_has_files,
+    count_media, delete_media_item_db_only, fetch_media, fetch_media_detail, fetch_movie_files,
+    fetch_show_seasons, flip_episode_monitored, flip_media_monitored, row_has_files,
 };
 use mydia_rs_web::server_fns::media::{MediaSort, MonitoredFilter, FIRST_PAGE_SIZE};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -815,4 +815,134 @@ async fn seasons_empty_when_no_episodes() {
 
     let seasons = fetch_show_seasons(&db, &show_id).await.unwrap();
     assert!(seasons.is_empty());
+}
+
+// ---------- U25.c: action endpoint tests ----------
+
+async fn read_monitored(db: &Db, table: &str, id: &str) -> bool {
+    let Db::Sqlite(pool) = db else { unreachable!() };
+    let sql = format!("SELECT monitored FROM {table} WHERE id = ?");
+    let (m,): (bool,) = sqlx::query_as(&sql)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .expect("read monitored");
+    m
+}
+
+async fn row_exists(db: &Db, table: &str, id: &str) -> bool {
+    let Db::Sqlite(pool) = db else { unreachable!() };
+    let sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?)");
+    let (exists,): (bool,) = sqlx::query_as(&sql)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .expect("exists check");
+    exists
+}
+
+#[tokio::test]
+async fn flip_media_monitored_returns_new_state_and_persists() {
+    let db = setup().await;
+    let id = uuid_for("flip_movie");
+    insert_movie(&db, &id, "Flippable", None, true).await;
+    assert!(read_monitored(&db, "media_items", &id).await);
+
+    let next = flip_media_monitored(&db, &id).await.unwrap();
+    assert!(!next);
+    assert!(!read_monitored(&db, "media_items", &id).await);
+
+    let next = flip_media_monitored(&db, &id).await.unwrap();
+    assert!(next);
+    assert!(read_monitored(&db, "media_items", &id).await);
+}
+
+#[tokio::test]
+async fn flip_media_monitored_unknown_id_errors() {
+    let db = setup().await;
+    let result = flip_media_monitored(&db, &uuid_for("ghost")).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn flip_episode_monitored_round_trips() {
+    let db = setup().await;
+    let show_id = uuid_for("show");
+    let ep_id = uuid_for("ep");
+    insert_tv(&db, &show_id, "S", None).await;
+    insert_full_episode(&db, &ep_id, &show_id, 1, 1, Some("Pilot"), None, true).await;
+    assert!(read_monitored(&db, "episodes", &ep_id).await);
+
+    let next = flip_episode_monitored(&db, &ep_id).await.unwrap();
+    assert!(!next);
+    assert!(!read_monitored(&db, "episodes", &ep_id).await);
+}
+
+#[tokio::test]
+async fn delete_removes_media_episodes_and_files_in_one_transaction() {
+    let db = setup().await;
+    let show_id = uuid_for("show");
+    let ep1 = uuid_for("ep1");
+    let ep2 = uuid_for("ep2");
+    let mf1 = uuid_for("mf1");
+    let mf2 = uuid_for("mf2");
+
+    insert_tv(&db, &show_id, "Doomed", None).await;
+    insert_full_episode(&db, &ep1, &show_id, 1, 1, None, None, true).await;
+    insert_full_episode(&db, &ep2, &show_id, 1, 2, None, None, true).await;
+    insert_episode_file(&db, &mf1, &ep1).await;
+    insert_episode_file(&db, &mf2, &ep2).await;
+
+    delete_media_item_db_only(&db, &show_id).await.unwrap();
+
+    assert!(!row_exists(&db, "media_items", &show_id).await);
+    assert!(!row_exists(&db, "episodes", &ep1).await);
+    assert!(!row_exists(&db, "episodes", &ep2).await);
+    assert!(!row_exists(&db, "media_files", &mf1).await);
+    assert!(!row_exists(&db, "media_files", &mf2).await);
+}
+
+#[tokio::test]
+async fn delete_cleans_movie_files_via_direct_fk() {
+    let db = setup().await;
+    let movie_id = uuid_for("movie");
+    let mf_id = uuid_for("mf");
+    insert_movie(&db, &movie_id, "Doomed Movie", None, true).await;
+    insert_movie_file(&db, &mf_id, &movie_id, false).await;
+
+    delete_media_item_db_only(&db, &movie_id).await.unwrap();
+
+    assert!(!row_exists(&db, "media_items", &movie_id).await);
+    assert!(!row_exists(&db, "media_files", &mf_id).await);
+}
+
+#[tokio::test]
+async fn delete_leaves_unrelated_rows_alone() {
+    let db = setup().await;
+    let m1 = uuid_for("m1");
+    let m2 = uuid_for("m2");
+    let mf1 = uuid_for("mf1");
+    let mf2 = uuid_for("mf2");
+    insert_movie(&db, &m1, "Target", None, true).await;
+    insert_movie(&db, &m2, "Keeper", None, true).await;
+    insert_movie_file(&db, &mf1, &m1, false).await;
+    insert_movie_file(&db, &mf2, &m2, false).await;
+
+    delete_media_item_db_only(&db, &m1).await.unwrap();
+
+    assert!(row_exists(&db, "media_items", &m2).await);
+    assert!(row_exists(&db, "media_files", &mf2).await);
+}
+
+#[tokio::test]
+async fn delete_unknown_id_errors_without_writing() {
+    let db = setup().await;
+    let m1 = uuid_for("kept");
+    insert_movie(&db, &m1, "Bystander", None, true).await;
+
+    let result = delete_media_item_db_only(&db, &uuid_for("ghost")).await;
+    assert!(result.is_err());
+
+    // Bystander row must survive the failed transaction.
+    assert!(row_exists(&db, "media_items", &m1).await);
 }

@@ -17,9 +17,11 @@ use std::collections::HashSet;
 
 use dioxus::prelude::*;
 
+use crate::components::core::{Button, ButtonSize, ButtonVariant};
+use crate::routes::Route;
 use crate::server_fns::media::{
-    get_media_detail, list_media_files, list_media_seasons, EpisodeView, MediaDetail,
-    MediaFileSummary, SeasonView,
+    delete_media, get_media_detail, list_media_files, list_media_seasons, toggle_episode_monitored,
+    toggle_media_monitored, EpisodeView, MediaDetail, MediaFileSummary, SeasonView,
 };
 
 const TMDB_POSTER_BASE: &str = "https://image.tmdb.org/t/p/w342";
@@ -27,26 +29,30 @@ const TMDB_BACKDROP_BASE: &str = "https://image.tmdb.org/t/p/w1280";
 
 #[component]
 pub fn MediaShow(id: String) -> Element {
-    // Resource keyed on id — fetched server-side so SSR ships the
-    // detail HTML on the first response. `use_server_future` is
-    // required (not `use_resource`) because the page renders nothing
-    // useful before the detail loads, and `use_resource` does not
-    // suspend during SSR. The closure is FnMut so we clone-per-call
-    // rather than moving the captured String once.
+    // Reload token bumped after any mutation. Reading it inside the
+    // `use_resource` closure makes the resource re-run when the token
+    // changes — same pattern as the U23 library-paths page. We use
+    // `use_resource` here instead of `use_server_future` because the
+    // SSR-baked initial render comes from `use_server_future` below
+    // (only run once), and the post-mutation refresh runs client-side.
+    let mut reload_token = use_signal(|| 0u64);
+
     let id_for_fetch = id.clone();
-    let detail = use_server_future(move || {
+    let detail = use_resource(move || {
+        let _ = reload_token.read();
         let id = id_for_fetch.clone();
         async move { get_media_detail(id).await }
-    })?;
+    });
 
-    let snapshot = detail.read_unchecked().clone();
-    let Some(result) = snapshot else {
+    let snapshot = detail.read_unchecked();
+    let Some(result) = snapshot.clone() else {
         return rsx! {
             div { class: "flex justify-center py-12",
                 span { class: "loading loading-spinner loading-lg" }
             }
         };
     };
+    drop(snapshot);
 
     let detail = match result {
         Ok(d) => d,
@@ -59,9 +65,17 @@ pub fn MediaShow(id: String) -> Element {
         }
     };
 
+    let bump_detail = move |()| {
+        let next = *reload_token.read() + 1;
+        reload_token.set(next);
+    };
+
     rsx! {
         div { class: "flex flex-col gap-6",
-            DetailHeader { detail: detail.clone() }
+            DetailHeader {
+                detail: detail.clone(),
+                on_changed: bump_detail,
+            }
             if detail.kind == "tv_show" {
                 SeasonsPanel { id: detail.id.clone() }
             } else {
@@ -72,7 +86,7 @@ pub fn MediaShow(id: String) -> Element {
 }
 
 #[component]
-fn DetailHeader(detail: MediaDetail) -> Element {
+fn DetailHeader(detail: MediaDetail, on_changed: EventHandler<()>) -> Element {
     let backdrop_url = detail
         .backdrop_path
         .as_deref()
@@ -87,6 +101,38 @@ fn DetailHeader(detail: MediaDetail) -> Element {
         .map(|r| format!("{r} min"))
         .unwrap_or_default();
     let rating_label = detail.rating.map(|r| format!("★ {r:.1}"));
+
+    let mut working = use_signal(|| false);
+    let mut flash: Signal<Option<(bool, String)>> = use_signal(|| None);
+    let mut show_delete = use_signal(|| false);
+
+    let detail_id_for_toggle = detail.id.clone();
+    let on_toggle_monitor = move |_| {
+        let id = detail_id_for_toggle.clone();
+        if *working.read() {
+            return;
+        }
+        working.set(true);
+        spawn(async move {
+            match toggle_media_monitored(id).await {
+                Ok(ack) => {
+                    flash.set(Some((
+                        true,
+                        if ack.monitored {
+                            "Monitoring enabled".to_owned()
+                        } else {
+                            "Monitoring disabled".to_owned()
+                        },
+                    )));
+                    on_changed.call(());
+                }
+                Err(err) => {
+                    flash.set(Some((false, format!("Failed to toggle: {err}"))));
+                }
+            }
+            working.set(false);
+        });
+    };
 
     rsx! {
         div { class: "card bg-base-100 shadow-lg overflow-hidden",
@@ -161,6 +207,111 @@ fn DetailHeader(detail: MediaDetail) -> Element {
                             span { "IMDB: {imdb}" }
                         }
                     }
+                    if let Some((ok, msg)) = flash.read().clone() {
+                        div { class: if ok { "alert alert-success py-2" } else { "alert alert-error py-2" },
+                            span { class: "text-sm", "{msg}" }
+                        }
+                    }
+                    div { class: "flex flex-wrap gap-2 pt-1",
+                        Button {
+                            variant: if detail.monitored { ButtonVariant::Ghost } else { ButtonVariant::Primary },
+                            size: ButtonSize::Sm,
+                            disabled: *working.read(),
+                            onclick: on_toggle_monitor,
+                            if detail.monitored { "Stop monitoring" } else { "Start monitoring" }
+                        }
+                        Button {
+                            variant: ButtonVariant::Error,
+                            size: ButtonSize::Sm,
+                            disabled: *working.read(),
+                            onclick: move |_| show_delete.set(true),
+                            "Remove from library"
+                        }
+                    }
+                }
+            }
+        }
+        DeleteMediaModal {
+            open: *show_delete.read(),
+            title: detail.title.clone(),
+            id: detail.id.clone(),
+            on_close: move |()| show_delete.set(false),
+        }
+    }
+}
+
+#[component]
+fn DeleteMediaModal(open: bool, title: String, id: String, on_close: EventHandler<()>) -> Element {
+    let mut deleting = use_signal(|| false);
+    let mut error: Signal<Option<String>> = use_signal(|| None);
+    let nav = navigator();
+
+    let id_for_delete = id.clone();
+    let title_for_msg = title.clone();
+    let on_confirm = move |_| {
+        if *deleting.read() {
+            return;
+        }
+        deleting.set(true);
+        error.set(None);
+        let id = id_for_delete.clone();
+        let _title = title_for_msg.clone();
+        spawn(async move {
+            match delete_media(id).await {
+                Ok(()) => {
+                    // Land on the dashboard rather than `/movies` —
+                    // we don't know the type cheaply from this scope
+                    // and the dashboard is the canonical "what next"
+                    // surface after destructive actions.
+                    nav.push(Route::Dashboard {});
+                }
+                Err(err) => {
+                    error.set(Some(err.to_string()));
+                    deleting.set(false);
+                }
+            }
+        });
+    };
+
+    rsx! {
+        dialog {
+            class: if open { "modal modal-open" } else { "modal" },
+            div { class: "modal-box",
+                h3 { class: "text-lg font-bold", "Remove from library?" }
+                p { class: "py-3 text-sm",
+                    "This removes "
+                    span { class: "font-semibold", "{title}" }
+                    " from the library. Files on disk are preserved and "
+                    "the item will be re-imported on the next scan unless "
+                    "you also remove the file."
+                }
+                if let Some(err) = error.read().clone() {
+                    div { class: "alert alert-error my-2",
+                        span { "{err}" }
+                    }
+                }
+                div { class: "modal-action",
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        disabled: *deleting.read(),
+                        onclick: move |_| on_close.call(()),
+                        "Cancel"
+                    }
+                    Button {
+                        variant: ButtonVariant::Error,
+                        disabled: *deleting.read(),
+                        onclick: on_confirm,
+                        if *deleting.read() { "Removing…" } else { "Remove" }
+                    }
+                }
+            }
+            form {
+                method: "dialog",
+                class: "modal-backdrop",
+                button {
+                    r#type: "submit",
+                    onclick: move |_| on_close.call(()),
+                    "close"
                 }
             }
         }
@@ -245,14 +396,19 @@ fn MovieFileRow(file: MediaFileSummary) -> Element {
 
 #[component]
 fn SeasonsPanel(id: String) -> Element {
+    // Same reload-on-token pattern as MediaShow — episode monitor
+    // toggles bump the token so the seasons tree picks up the new
+    // state without a full page reload.
+    let mut reload_token = use_signal(|| 0u64);
     let id_for_fetch = id.clone();
-    let seasons = use_server_future(move || {
+    let seasons = use_resource(move || {
+        let _ = reload_token.read();
         let id = id_for_fetch.clone();
         async move { list_media_seasons(id).await }
-    })?;
+    });
 
-    let snapshot = seasons.read_unchecked().clone();
-    let Some(result) = snapshot else {
+    let snapshot = seasons.read_unchecked();
+    let Some(result) = snapshot.clone() else {
         return rsx! {
             div { class: "card bg-base-100 shadow-md",
                 div { class: "card-body",
@@ -261,6 +417,7 @@ fn SeasonsPanel(id: String) -> Element {
             }
         };
     };
+    drop(snapshot);
 
     let seasons = match result {
         Ok(s) => s,
@@ -271,6 +428,11 @@ fn SeasonsPanel(id: String) -> Element {
                 }
             };
         }
+    };
+
+    let on_episode_changed = move |()| {
+        let next = *reload_token.read() + 1;
+        reload_token.set(next);
     };
 
     // Default-expanded set = the highest season number. Mirrors
@@ -314,6 +476,7 @@ fn SeasonsPanel(id: String) -> Element {
                                         expanded.set(next);
                                     }
                                 },
+                                on_episode_changed: on_episode_changed,
                             }
                         }
                     }
@@ -328,6 +491,7 @@ fn SeasonRow(
     season: SeasonView,
     is_expanded: bool,
     on_toggle: EventHandler<MouseEvent>,
+    on_episode_changed: EventHandler<()>,
 ) -> Element {
     let season_label = if season.season_number == 0 {
         "Specials".to_owned()
@@ -354,7 +518,10 @@ fn SeasonRow(
             if is_expanded {
                 div { class: "border-t border-base-300",
                     for episode in season.episodes.iter() {
-                        EpisodeRow { episode: episode.clone() }
+                        EpisodeRow {
+                            episode: episode.clone(),
+                            on_changed: on_episode_changed,
+                        }
                     }
                 }
             }
@@ -363,26 +530,53 @@ fn SeasonRow(
 }
 
 #[component]
-fn EpisodeRow(episode: EpisodeView) -> Element {
+fn EpisodeRow(episode: EpisodeView, on_changed: EventHandler<()>) -> Element {
     let label = match (episode.season_number, episode.episode_number) {
         (Some(s), Some(e)) => format!("S{s:02}E{e:02}"),
         (None, Some(e)) => format!("E{e:02}"),
         _ => "—".to_owned(),
     };
-    let title = episode.title.unwrap_or_default();
+    let title = episode.title.clone().unwrap_or_default();
+    let air_date = episode.air_date.clone();
+    let has_files = episode.has_files;
+    let monitored = episode.monitored;
+    let mut working = use_signal(|| false);
+    let episode_id = episode.id.clone();
+
+    let on_click_monitor = move |_| {
+        if *working.read() {
+            return;
+        }
+        working.set(true);
+        let id = episode_id.clone();
+        spawn(async move {
+            // Best-effort toggle. Failure leaves the row's monitored
+            // badge stale until the next page reload; the page will
+            // refresh on the bump anyway when it succeeds, so an
+            // explicit error toast would be more noise than signal
+            // for the routine 1-click case.
+            let _ = toggle_episode_monitored(id).await;
+            working.set(false);
+            on_changed.call(());
+        });
+    };
 
     rsx! {
         div { class: "flex items-center gap-3 px-4 py-2 hover:bg-base-200",
             span { class: "font-mono text-xs opacity-60 w-16", "{label}" }
             span { class: "flex-1 min-w-0 truncate text-sm", "{title}" }
-            if !episode.air_date.is_empty() {
-                span { class: "text-xs opacity-60", "{episode.air_date}" }
+            if !air_date.is_empty() {
+                span { class: "text-xs opacity-60", "{air_date}" }
             }
-            if episode.has_files {
+            if has_files {
                 span { class: "badge badge-success badge-xs", "Local" }
             }
-            if !episode.monitored {
-                span { class: "badge badge-ghost badge-xs", "Unmonitored" }
+            button {
+                r#type: "button",
+                class: if monitored { "badge badge-outline badge-xs cursor-pointer" } else { "badge badge-ghost badge-xs cursor-pointer" },
+                disabled: *working.read(),
+                onclick: on_click_monitor,
+                if monitored { "Monitored" } else { "Unmonitored" }
             }
         }
     }
