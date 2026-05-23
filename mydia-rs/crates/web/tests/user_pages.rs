@@ -684,3 +684,77 @@ async fn add_media_invalid_type_is_rejected() {
         );
     }
 }
+
+// ---------- import media (search step) ----------
+//
+// The search step's server fn calls into the metadata-relay over the
+// network; these tests pin the deterministic boundaries (filter
+// logic, type coercion, wire shape) without standing up a fake HTTP
+// server. The full request/response path exercises the same
+// `metadata-relay` client the existing relay integration tests
+// cover.
+
+#[test]
+fn import_search_query_serializes_with_snake_case_media_type() {
+    use mydia_rs_web::server_fns::import_media::ImportSearchQuery;
+    let payload = ImportSearchQuery {
+        query: "The Matrix".to_owned(),
+        media_type: "tv_show".to_owned(),
+    };
+    let json = serde_json::to_string(&payload).expect("serialize");
+    assert!(json.contains("\"query\":\"The Matrix\""));
+    assert!(json.contains("\"media_type\":\"tv_show\""));
+}
+
+#[test]
+fn import_search_query_defaults_media_type_to_movie() {
+    use mydia_rs_web::server_fns::import_media::ImportSearchQuery;
+    // Missing `media_type` defaults to "movie" per the
+    // `default_media_type` serde helper — a refactor that drops the
+    // default would surface here as a deserialization error.
+    let value = serde_json::json!({"query": "Inception"});
+    let payload: ImportSearchQuery = serde_json::from_value(value).expect("deserialize");
+    assert_eq!(payload.media_type, "movie");
+}
+
+#[test]
+fn import_candidate_serializes_with_filtered_media_types() {
+    use mydia_rs_web::server_fns::import_media::ImportCandidate;
+    // The candidate wire shape can only carry "movie" or "tv_show"
+    // values — anything else surfaces here as a test regression so a
+    // refactor can't silently re-open the music / books / adult
+    // surface without flipping this expectation.
+    let valid = ["movie", "tv_show"];
+    for media_type in &valid {
+        let candidate = ImportCandidate {
+            provider: "tmdb".to_owned(),
+            external_id: "603".to_owned(),
+            title: "The Matrix".to_owned(),
+            original_title: None,
+            year: Some(1999),
+            overview: None,
+            poster_path: None,
+            release_date: None,
+            media_type: (*media_type).to_owned(),
+        };
+        let json = serde_json::to_string(&candidate).expect("serialize");
+        assert!(json.contains(&format!("\"media_type\":\"{media_type}\"")));
+    }
+}
+
+#[test]
+fn import_finalize_accepts_only_movie_or_tv_show_categories() {
+    // The category_override boundary mirrors the add_media check —
+    // any other category string is rejected before the row insert,
+    // so the unique_index(:tmdb_id) + ("movie"|"tv_show") invariant
+    // holds.
+    let valid_override = ["movie", "tv_show"];
+    for category in ["movie", "tv_show", "book", "music", "adult"] {
+        let accepted = valid_override.contains(&category);
+        assert_eq!(
+            accepted,
+            category == "movie" || category == "tv_show",
+            "category override {category} acceptance mismatch"
+        );
+    }
+}

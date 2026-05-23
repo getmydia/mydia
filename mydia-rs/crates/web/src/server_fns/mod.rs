@@ -22,6 +22,7 @@ pub mod collections;
 pub mod dashboard;
 pub mod discover;
 pub mod downloads;
+pub mod import_media;
 pub mod library_paths;
 pub mod media;
 pub mod profile;
