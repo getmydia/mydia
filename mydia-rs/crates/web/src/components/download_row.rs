@@ -18,6 +18,10 @@ pub struct DownloadRowProps {
     /// Called when the operator clicks "Cancel" — the page wires this
     /// to `cancel_download(...)` and refetches.
     pub on_cancel: Callback<String>,
+    /// Called when the operator clicks "Match" on an unmatched row.
+    /// The page opens its manual-match modal.
+    #[props(default)]
+    pub on_match: Option<Callback<DownloadRow>>,
     /// True iff the operator's role can manage downloads. Hides the
     /// cancel button when false (Phoenix `Authorization.authorize_manage_downloads`).
     #[props(default = true)]
@@ -28,16 +32,19 @@ pub struct DownloadRowProps {
 pub fn DownloadRowView(props: DownloadRowProps) -> Element {
     let row = props.row.clone();
     let on_cancel = props.on_cancel;
+    let on_match = props.on_match;
 
     let display_title = display_title(&row);
     let subtitle = subtitle(&row);
     #[allow(clippy::cast_possible_truncation)]
     let progress_pct = (row.progress.unwrap_or(0.0).clamp(0.0, 1.0) * 100.0) as f32;
     let id_for_cancel = row.id.clone();
+    let row_for_match = row.clone();
     let is_active = matches!(
         row.status.as_str(),
         "downloading" | "checking" | "queued" | "paused" | "seeding"
     );
+    let needs_match = is_unmatched(&row);
 
     rsx! {
         tr { id: "download-row-{row.id}",
@@ -66,6 +73,17 @@ pub fn DownloadRowView(props: DownloadRowProps) -> Element {
                 }
             }
             td { class: "text-right whitespace-nowrap",
+                if props.can_manage && needs_match {
+                    if let Some(on_match) = on_match {
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            size: ButtonSize::Sm,
+                            onclick: move |_| on_match.call(row_for_match.clone()),
+                            "Match"
+                        }
+                        span { class: "mx-1" }
+                    }
+                }
                 if props.can_manage && is_active {
                     Button {
                         variant: ButtonVariant::Error,
@@ -73,7 +91,7 @@ pub fn DownloadRowView(props: DownloadRowProps) -> Element {
                         onclick: move |_| on_cancel.call(id_for_cancel.clone()),
                         "Cancel"
                     }
-                } else if !row.status.is_empty() {
+                } else if !is_active && !needs_match && !row.status.is_empty() {
                     span { class: "text-xs text-base-content/60",
                         "{row.status}"
                     }
@@ -86,6 +104,17 @@ pub fn DownloadRowView(props: DownloadRowProps) -> Element {
             }
         }
     }
+}
+
+/// True when a download row needs an operator manual match. Phoenix
+/// flags this via `match_status = "unmatched"` after the auto-matcher
+/// fails to associate the release with a `media_items` row, and via
+/// `media_item_id IS NULL` for legacy rows that pre-date the column.
+fn is_unmatched(row: &DownloadRow) -> bool {
+    if row.media_item_id.is_some() {
+        return false;
+    }
+    matches!(row.match_status.as_deref(), Some("unmatched") | None)
 }
 
 fn display_title(row: &DownloadRow) -> String {
@@ -166,5 +195,32 @@ mod tests {
     fn format_progress_rounds_to_one_decimal() {
         assert_eq!(format_progress(Some(0.5)), "50.0%");
         assert_eq!(format_progress(None), "—");
+    }
+
+    #[test]
+    fn is_unmatched_when_no_media_item_and_unmatched_status() {
+        let mut row = make_row();
+        row.media_item_id = None;
+        row.match_status = Some("unmatched".to_owned());
+        assert!(is_unmatched(&row));
+    }
+
+    #[test]
+    fn is_unmatched_false_when_media_item_present() {
+        // A row with a media_item_id is matched even if match_status is
+        // somehow stale — the foreign-key truth wins over the cached
+        // string.
+        let mut row = make_row();
+        row.media_item_id = Some("m1".to_owned());
+        row.match_status = Some("unmatched".to_owned());
+        assert!(!is_unmatched(&row));
+    }
+
+    #[test]
+    fn is_unmatched_handles_legacy_null_match_status() {
+        let mut row = make_row();
+        row.media_item_id = None;
+        row.match_status = None;
+        assert!(is_unmatched(&row));
     }
 }

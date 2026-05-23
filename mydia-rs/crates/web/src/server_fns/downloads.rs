@@ -4,16 +4,15 @@
 //! page is the largest U27 surface — tabs (Queue / Completed / Issues),
 //! batch selection, retry/pause/resume/cancel mutations, library-search
 //! integration for unmatched downloads, file-resolution forms for
-//! ambiguous unpacks. The Rust port ships the read surface plus the
-//! cancel mutation; the richer authoring flows (manual match, file
-//! resolution) follow once `crates/downloads/` exposes those calls
-//! end-to-end.
+//! ambiguous unpacks. The Rust port ships the read surface, the cancel
+//! mutation, and the `manually_match_download` write path that pairs
+//! an unmatched download with a `media_items` row by id.
 //!
-//! TODO(U27.downloads-followup): port `manually_match_download`,
-//! `resolve_file_mappings`, batch-delete, batch-retry. The Phoenix
-//! file has 900+ LOC of event handlers; bringing them across in one
-//! commit would dwarf the rest of U27. Operators get the visibility
-//! shape — list + cancel + pubsub-driven progress — in this slice.
+//! TODO(U27.downloads-followup): port `resolve_file_mappings`,
+//! batch-delete, batch-retry. The Phoenix file has 900+ LOC of event
+//! handlers; this slice covers the operational visibility shape plus
+//! the manual-match affordance — the single most-clicked authoring
+//! flow on the Phoenix page.
 
 use dioxus::fullstack::ServerFnError;
 use dioxus::prelude::*;
@@ -110,10 +109,26 @@ pub async fn cancel_download(payload: CancelDownload) -> Result<(), ServerFnErro
     server::cancel(payload).await
 }
 
+/// Payload for [`manually_match_download`] — wires an existing
+/// `downloads` row to a `media_items` row by id, clearing the
+/// `unmatched` state. Phoenix calls this from a modal that opens
+/// when the operator clicks an unmatched download row.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ManuallyMatchDownload {
+    pub download_id: String,
+    pub media_item_id: String,
+}
+
+#[post("/api/downloads/manual_match")]
+pub async fn manually_match_download(payload: ManuallyMatchDownload) -> Result<(), ServerFnError> {
+    server::manually_match(payload).await
+}
+
 #[cfg(feature = "server")]
 mod server {
     use super::{
-        CancelDownload, DownloadRow, DownloadsPage, DownloadsQuery, DownloadsTab, PAGE_SIZE,
+        CancelDownload, DownloadRow, DownloadsPage, DownloadsQuery, DownloadsTab,
+        ManuallyMatchDownload, PAGE_SIZE,
     };
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
@@ -176,6 +191,82 @@ mod server {
                 payload.id
             )));
         }
+        Ok(())
+    }
+
+    /// Manual-match write path. Verifies the target `media_items` row
+    /// exists, then updates the download's `media_item_id` plus the
+    /// `match_status` column to `matched`, clearing any prior
+    /// `unmatched` state. The Phoenix flow also re-enqueues the
+    /// importer for `imported_at IS NULL` rows; that piece sits in
+    /// `crates/jobs/` and is intentionally not invoked here so the
+    /// admin's manual-match action stays a pure database update for
+    /// now. A TODO marker calls out the gap.
+    pub(super) async fn manually_match(
+        payload: ManuallyMatchDownload,
+    ) -> Result<(), ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        let now = chrono::Utc::now();
+
+        // Guard: the media_items row must exist before we wire it in.
+        // SQLite happily lets a FK violation through unless the FK
+        // pragma is on (it isn't on by default); we do the lookup
+        // explicitly so the operator gets a clear error.
+        let media_present: Option<(String,)> = match &st.db {
+            Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM media_items WHERE id = ? LIMIT 1")
+                .bind(&payload.media_item_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("verify media_item: {err}")))?,
+            Db::Postgres(pool) => {
+                sqlx::query_as("SELECT id FROM media_items WHERE id = $1 LIMIT 1")
+                    .bind(&payload.media_item_id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("verify media_item: {err}")))?
+            }
+        };
+        if media_present.is_none() {
+            return Err(ServerFnError::new(format!(
+                "no media_item with id {}",
+                payload.media_item_id
+            )));
+        }
+
+        let affected = match &st.db {
+            Db::Sqlite(pool) => sqlx::query(
+                "UPDATE downloads SET media_item_id = ?, match_status = 'matched', updated_at = ? \
+                 WHERE id = ?",
+            )
+            .bind(&payload.media_item_id)
+            .bind(now.to_rfc3339())
+            .bind(&payload.download_id)
+            .execute(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("manual match: {err}")))?
+            .rows_affected(),
+            Db::Postgres(pool) => sqlx::query(
+                "UPDATE downloads SET media_item_id = $1, match_status = 'matched', updated_at = $2 \
+                 WHERE id = $3",
+            )
+            .bind(&payload.media_item_id)
+            .bind(now)
+            .bind(&payload.download_id)
+            .execute(pool)
+            .await
+            .map_err(|err| ServerFnError::new(format!("manual match: {err}")))?
+            .rows_affected(),
+        };
+        if affected == 0 {
+            return Err(ServerFnError::new(format!(
+                "no download with id {}",
+                payload.download_id
+            )));
+        }
+        // TODO(U27.downloads-followup): once `crates/jobs/` exposes a
+        // re-import worker, enqueue it here so the Phoenix
+        // `manually_match_download → reimport` flow runs end-to-end.
         Ok(())
     }
 

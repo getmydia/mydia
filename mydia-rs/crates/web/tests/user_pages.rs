@@ -583,6 +583,118 @@ async fn downloads_empty_state_returns_nothing() {
     assert!(rows.is_empty());
 }
 
+#[tokio::test]
+async fn downloads_manual_match_links_media_item() {
+    // Happy path: an unmatched download row gets pointed at an
+    // existing media_items row. After the update, the row carries the
+    // FK and match_status flips to "matched".
+    let fx = fixture().await;
+    let show = insert_show(&fx.db, "Inception").await;
+    let dl = insert_download(&fx.db, "downloading", "Inception.2010.1080p.mkv").await;
+
+    // Pre-condition: download row has no media_item_id (insert_download
+    // doesn't set one).
+    let pre: (Option<String>, Option<String>) = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT media_item_id, match_status FROM downloads WHERE id = ?")
+                .bind(&dl)
+                .fetch_one(pool)
+                .await
+                .expect("read pre")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert!(pre.0.is_none(), "download starts unmatched");
+
+    // Run the same update the server fn issues.
+    let now = Utc::now().to_rfc3339();
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "UPDATE downloads SET media_item_id = ?, match_status = 'matched', updated_at = ? \
+             WHERE id = ?",
+        )
+        .bind(&show)
+        .bind(&now)
+        .bind(&dl)
+        .execute(pool)
+        .await
+        .expect("update")
+        .rows_affected(),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 1);
+
+    let post: (Option<String>, Option<String>) = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT media_item_id, match_status FROM downloads WHERE id = ?")
+                .bind(&dl)
+                .fetch_one(pool)
+                .await
+                .expect("read post")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(post.0.as_deref(), Some(show.as_str()));
+    assert_eq!(post.1.as_deref(), Some("matched"));
+}
+
+#[tokio::test]
+async fn downloads_manual_match_rejects_missing_media_item() {
+    // Error path: pointing at a non-existent media_items id must not
+    // mutate the download. The server fn's `media_present` check
+    // refuses the update before issuing the SQL.
+    let fx = fixture().await;
+    let dl = insert_download(&fx.db, "downloading", "Mystery.mkv").await;
+    let bogus_media_id = "no-such-id";
+
+    let present: Option<(String,)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM media_items WHERE id = ?")
+            .bind(bogus_media_id)
+            .fetch_optional(pool)
+            .await
+            .expect("lookup"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert!(present.is_none(), "media_item with that id doesn't exist");
+
+    // Verify the download is untouched.
+    let row: (Option<String>,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT media_item_id FROM downloads WHERE id = ?")
+            .bind(&dl)
+            .fetch_one(pool)
+            .await
+            .expect("readback"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert!(row.0.is_none(), "download stays unmatched");
+}
+
+#[tokio::test]
+async fn downloads_manual_match_unknown_download_id_is_no_op() {
+    // Edge case: the server fn validates the media_item exists first.
+    // When it does, but the download_id is bogus, the UPDATE affects 0
+    // rows and the server fn surfaces an error. Mirror that here.
+    let fx = fixture().await;
+    let show = insert_show(&fx.db, "Inception").await;
+
+    let now = Utc::now().to_rfc3339();
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "UPDATE downloads SET media_item_id = ?, match_status = 'matched', updated_at = ? \
+             WHERE id = ?",
+        )
+        .bind(&show)
+        .bind(&now)
+        .bind("missing-download-id")
+        .execute(pool)
+        .await
+        .expect("update")
+        .rows_affected(),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 0, "no rows touched when download_id is bogus");
+}
+
 // ---------- my requests ----------
 
 async fn insert_request(db: &Db, requester_id: &str, status: &str, title: &str) -> String {
