@@ -61,6 +61,42 @@ CREATE TABLE IF NOT EXISTS api_keys (
     revoked_at TEXT,
     inserted_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS download_client_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 1,
+    host TEXT,
+    port INTEGER,
+    use_ssl INTEGER NOT NULL DEFAULT 0,
+    url_base TEXT,
+    username TEXT,
+    password TEXT,
+    api_key TEXT,
+    category TEXT,
+    download_directory TEXT,
+    connection_settings TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS indexer_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 1,
+    base_url TEXT,
+    api_key TEXT,
+    indexer_ids TEXT,
+    categories TEXT,
+    rate_limit INTEGER,
+    connection_settings TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ";
 
 /// Write `len` deterministic bytes (`i % 251`) to a tempfile so the
@@ -373,10 +409,13 @@ async fn protected_route_returns_401_with_invalid_api_key() {
 async fn protected_route_accepts_valid_api_key_and_returns_501_marker() {
     let fx = auth_fixture().await;
     let router = router_with_state(fx.state);
+    // download/job/.../status is still a 501-stub adapter — used here
+    // so the test stays meaningful even as siblings (indexer, etc.)
+    // get fully wired.
     let response = router
         .oneshot(
             Request::builder()
-                .uri("/api/v1/indexers")
+                .uri("/api/v1/download/job/abc/status")
                 .header("X-API-Key", &fx.api_key)
                 .body(Body::empty())
                 .unwrap(),
@@ -384,8 +423,6 @@ async fn protected_route_accepts_valid_api_key_and_returns_501_marker() {
         .await
         .expect("router oneshot");
 
-    // The indexer handler is scaffolded; the route must still be
-    // reachable with a valid API key and carry the U33 TODO marker.
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     let body = collect(response.into_body()).await;
     let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
@@ -402,7 +439,7 @@ async fn protected_route_accepts_valid_api_key_and_returns_501_marker() {
 async fn protected_route_accepts_api_key_via_query_param() {
     let fx = auth_fixture().await;
     let router = router_with_state(fx.state);
-    let uri = format!("/api/v1/indexers?api_key={}", fx.api_key);
+    let uri = format!("/api/v1/download/job/abc/status?api_key={}", fx.api_key);
     let response = router
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await
@@ -668,6 +705,201 @@ async fn player_v1_subtitle_with_api_key_returns_501_marker() {
         parsed["todo"].as_str().unwrap_or(""),
         "U33.player.subtitles.index"
     );
+}
+
+// ---------- wired adapters: download_client + indexer ----------
+
+async fn insert_download_client(db: &Db, name: &str, kind: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO download_client_configs \
+             (id, name, type, enabled, priority, host, port, use_ssl, inserted_at, updated_at) \
+             VALUES (?, ?, ?, 1, 1, 'localhost', 8080, 0, ?, ?)",
+        )
+        .bind(&id)
+        .bind(name)
+        .bind(kind)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert download_client");
+    }
+    id
+}
+
+async fn insert_indexer(db: &Db, name: &str, kind: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO indexer_configs \
+             (id, name, type, enabled, priority, base_url, api_key, inserted_at, updated_at) \
+             VALUES (?, ?, ?, 1, 1, 'https://indexer.test', 'secret-key', ?, ?)",
+        )
+        .bind(&id)
+        .bind(name)
+        .bind(kind)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert indexer");
+    }
+    id
+}
+
+#[tokio::test]
+async fn download_clients_index_returns_seeded_rows() {
+    let fx = auth_fixture().await;
+    insert_download_client(&fx.state.db, "qb-main", "qbittorrent").await;
+    insert_download_client(&fx.state.db, "sab-main", "sabnzbd").await;
+
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/downloads/clients")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let data = parsed["data"].as_array().expect("data array");
+    assert_eq!(data.len(), 2);
+    let names: Vec<&str> = data.iter().filter_map(|r| r["name"].as_str()).collect();
+    assert!(names.contains(&"qb-main"));
+    assert!(names.contains(&"sab-main"));
+    assert_eq!(data[0]["health"]["status"], "unknown");
+}
+
+#[tokio::test]
+async fn download_client_show_returns_detail() {
+    let fx = auth_fixture().await;
+    let id = insert_download_client(&fx.state.db, "qb-main", "qbittorrent").await;
+
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/downloads/clients/{id}"))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["data"]["name"], "qb-main");
+    assert_eq!(parsed["data"]["type"], "qbittorrent");
+    assert_eq!(parsed["data"]["host"], "localhost");
+    assert_eq!(parsed["data"]["port"], 8080);
+}
+
+#[tokio::test]
+async fn download_client_show_returns_404_for_missing_id() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/downloads/clients/00000000-0000-0000-0000-000000000000")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn indexers_index_returns_seeded_rows() {
+    let fx = auth_fixture().await;
+    insert_indexer(&fx.state.db, "newznab-1", "newznab").await;
+
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/indexers")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let data = parsed["data"].as_array().expect("data array");
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["name"], "newznab-1");
+    assert_eq!(data[0]["health"]["status"], "unknown");
+    // Summary view doesn't redact api_key — it's only in the detail view.
+}
+
+#[tokio::test]
+async fn indexer_show_redacts_api_key() {
+    let fx = auth_fixture().await;
+    let id = insert_indexer(&fx.state.db, "newznab-1", "newznab").await;
+
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/indexers/{id}"))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["data"]["name"], "newznab-1");
+    assert_eq!(
+        parsed["data"]["api_key"], "***",
+        "indexer detail must redact api_key to mirror Phoenix"
+    );
+    // Confirm the raw secret never appears in the payload.
+    let raw = String::from_utf8_lossy(&body);
+    assert!(
+        !raw.contains("secret-key"),
+        "raw api key leaked in response: {raw}"
+    );
+}
+
+#[tokio::test]
+async fn indexer_show_returns_404_for_missing_id() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/indexers/00000000-0000-0000-0000-000000000000")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 // ---------- revoked / expired API key paths ----------
