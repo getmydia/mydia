@@ -26,7 +26,7 @@ use mydia_rs_models::{
     library_path::{LibraryPathKind, ScanStatus},
     media_item::{MediaKind, MonitoringPreset},
     user::UserRole,
-    ApiKey, Episode, LibraryPath, MediaFile, MediaItem, User,
+    ApiKey, Episode, LibraryPath, MediaFile, MediaItem, Subtitle, User,
 };
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -467,4 +467,76 @@ async fn library_path_round_trips_with_category_paths_map() {
     assert_eq!(lp.category_paths.0, category_paths);
     assert!(lp.auto_organize);
     assert!(lp.write_nfo);
+}
+
+#[tokio::test]
+async fn subtitle_round_trips() {
+    let (db, _tmp) = fresh_sqlite().await;
+    let pool = db.as_sqlite().unwrap();
+
+    sqlx::query(
+        "CREATE TABLE subtitles (
+            id TEXT PRIMARY KEY,
+            media_file_id TEXT NOT NULL,
+            language TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            subtitle_hash TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            sync_offset INTEGER NOT NULL DEFAULT 0,
+            format TEXT NOT NULL,
+            rating REAL,
+            download_count INTEGER,
+            hearing_impaired INTEGER NOT NULL DEFAULT 0,
+            inserted_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let id = sample_uuid();
+    let media_file_id = UuidText::new_v4();
+    let now = sample_dt();
+
+    sqlx::query(
+        "INSERT INTO subtitles
+            (id, media_file_id, language, provider, subtitle_hash, file_path,
+             sync_offset, format, rating, download_count, hearing_impaired,
+             inserted_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(media_file_id)
+    .bind("en")
+    .bind("opensubtitles")
+    .bind("deadbeefcafebabe")
+    .bind("/library/movies/Inception/Inception.en.srt")
+    .bind(0_i32)
+    .bind("srt")
+    .bind(9.4_f64)
+    .bind(123_i32)
+    .bind(false)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let s: Subtitle = sqlx::query_as("SELECT * FROM subtitles WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+
+    assert_eq!(s.id, id);
+    assert_eq!(s.media_file_id, media_file_id);
+    assert_eq!(s.language, "en");
+    assert_eq!(s.provider, "opensubtitles");
+    assert_eq!(s.format, "srt");
+    assert_eq!(s.rating, Some(9.4));
+    assert_eq!(s.download_count, Some(123));
+    assert!(!s.hearing_impaired);
+    assert_eq!(s.sync_offset, 0);
+    assert_eq!(Subtitle::supported_formats(), &["srt", "ass", "vtt"]);
 }

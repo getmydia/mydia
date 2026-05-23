@@ -31,6 +31,7 @@ pub mod media_file;
 pub mod media_item;
 pub mod pairing_claim;
 pub mod remote_device;
+pub mod subtitle;
 pub mod user;
 
 pub use api_key::ApiKey;
@@ -40,4 +41,5 @@ pub use media_file::MediaFile;
 pub use media_item::MediaItem;
 pub use pairing_claim::PairingClaim;
 pub use remote_device::RemoteDevice;
+pub use subtitle::Subtitle;
 pub use user::User;

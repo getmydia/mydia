@@ -23,6 +23,8 @@
 //!
 //! - [`downloader`] — Provider-agnostic download pipeline + hash check.
 //! - [`error`] — `SubtitleError` taxonomy.
+//! - [`external`] — DB queries for the `subtitles` table (operator-uploaded
+//!   sidecars + provider-downloaded files served by the REST endpoint).
 //! - [`extractor`] — ffprobe / ffmpeg embedded-track extraction.
 //! - [`feature_flags`] — `SUBTITLE_FEATURE_ENABLED` resolution.
 //! - [`hash`] — `OpenSubtitles` `moviehash` algorithm.
@@ -32,6 +34,7 @@
 
 pub mod downloader;
 pub mod error;
+pub mod external;
 pub mod extractor;
 pub mod feature_flags;
 pub mod hash;

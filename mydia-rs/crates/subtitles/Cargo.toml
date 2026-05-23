@@ -6,6 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+mydia-rs-db       = { path = "../db" }
 mydia-rs-metadata = { path = "../metadata" }
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
@@ -13,14 +14,24 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 serde = { workspace = true }
 serde_json = "1"
 sha2 = "0.10"
+# The `external` module shells DB queries against the runtime-dispatched
+# `Db` enum. Postgres + SQLite drivers are already pulled in transitively
+# via `mydia-rs-db`; declared here so sqlx::query/Row are in scope.
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "postgres",
+] }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util", "process"] }
+tokio = { workspace = true, features = ["fs", "io-util", "process", "time"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
+mydia-rs-config = { path = "../config" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"
 tempfile = "3"
+uuid = { version = "1", features = ["v4"] }
 
 [lints]
 workspace = true
