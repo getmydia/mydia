@@ -1,9 +1,17 @@
 //! Route enum mirroring the navigable Phoenix router surface.
 //!
-//! U22 ships a deliberately small enum — `Home` and `Hello` only —
+//! U22 shipped a deliberately small enum — `Home` and `Hello` only —
 //! sufficient to prove SSR + hydration + intra-app navigation work.
-//! U23 (admin library paths pilot) is the first real route addition;
-//! U24-U28 fill out the ~50 navigable routes from `lib/mydia_web/router.ex`.
+//! U23 (admin library paths pilot) was the first real route addition;
+//! U24-U28 filled out the ~50 navigable routes from
+//! `lib/mydia_web/router.ex`.
+//!
+//! Admin configuration tabs live under `/admin/config/*` and share an
+//! `AdminConfigShell` layout that renders the "Configuration" h1, the
+//! tab strip, and an outlet for the active tab. Mirrors Phoenix's
+//! `AdminComponents.admin_page` chrome and the kebab-case URLs at
+//! `lib/mydia_web/router.ex:187-195`. `/admin/config` itself redirects
+//! to `/admin/config/status` (Phoenix's `RedirectController :admin_config`).
 //!
 //! When you add a route here you also add a `#[route(...)]` attribute
 //! and a `#[component] fn` rendering it in `pages/`. The router is
@@ -13,7 +21,7 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::layout::{AppShell, AuthShell};
+use crate::layout::{AdminConfigShell, AppShell, AuthShell};
 use crate::pages::activity::Activity;
 use crate::pages::add_media::AddMedia;
 use crate::pages::admin::devices::Devices;
@@ -89,26 +97,6 @@ pub enum Route {
         #[route("/media/:id")]
         MediaShow { id: String },
 
-        // U23 pilot — admin library paths.
-        #[route("/admin/library_paths")]
-        LibraryPaths {},
-
-        // U28 — operational admin slice.
-        #[route("/admin/jobs")]
-        Jobs {},
-
-        #[route("/admin/transcodes")]
-        Transcodes {},
-
-        #[route("/admin/users")]
-        Users {},
-
-        #[route("/admin/devices")]
-        Devices {},
-
-        #[route("/admin/requests")]
-        Requests {},
-
         // U27 — operational user-facing pages.
         #[route("/calendar")]
         Calendar {},
@@ -144,31 +132,66 @@ pub enum Route {
         #[route("/search")]
         Search {},
 
-        // U28 follow-up — configuration-heavy admin pages.
-        #[route("/admin/system")]
-        System {},
+        // Admin standalone surfaces (kebab-case to match Phoenix's
+        // `lib/mydia_web/router.ex:196-202`). Transcodes and Devices
+        // stay routable as deep-links from Jobs / Users detail, but
+        // they drop out of the sidebar.
+        //
+        // The `#[redirect]` for /admin/config piggy-backs on Jobs as
+        // a host variant — the redirect path is independent of the
+        // variant's own route, and the macro requires every
+        // `#[redirect]` to be attached to a `#[route]` line. Mirrors
+        // Phoenix's `RedirectController :admin_config` at
+        // `lib/mydia_web/router.ex:173`.
+        #[redirect("/admin/config", || Route::System {})]
+        #[route("/admin/jobs")]
+        Jobs {},
 
-        #[route("/admin/settings")]
-        Settings {},
+        #[route("/admin/transcodes")]
+        Transcodes {},
 
-        #[route("/admin/download_clients")]
-        DownloadClients {},
+        #[route("/admin/users")]
+        Users {},
 
-        #[route("/admin/indexers")]
-        Indexers {},
+        #[route("/admin/devices")]
+        Devices {},
 
-        #[route("/admin/media_servers")]
-        MediaServers {},
+        #[route("/admin/requests")]
+        Requests {},
 
-        #[route("/admin/remote_access")]
-        RemoteAccess {},
-
-        #[route("/admin/import_lists")]
+        #[route("/admin/import-lists")]
         ImportLists {},
 
-        #[route("/admin/release_blacklist")]
+        #[route("/admin/release-blacklist")]
         ReleaseBlacklist {},
 
-        #[route("/admin/quality_profiles")]
-        QualityProfiles {},
+        // Configuration tabs — Phoenix's `RedirectController
+        // :admin_config` (`router.ex:173`) bounces /admin/config to
+        // the Status tab; that redirect is hosted on the Jobs variant
+        // above so the path stays outside this nest.
+        #[nest("/admin/config")]
+            #[layout(AdminConfigShell)]
+                #[route("/status")]
+                System {},
+
+                #[route("/settings")]
+                Settings {},
+
+                #[route("/quality")]
+                QualityProfiles {},
+
+                #[route("/clients")]
+                DownloadClients {},
+
+                #[route("/indexers")]
+                Indexers {},
+
+                #[route("/library-paths")]
+                LibraryPaths {},
+
+                #[route("/media-servers")]
+                MediaServers {},
+
+                #[route("/remote-access")]
+                RemoteAccess {},
 }
