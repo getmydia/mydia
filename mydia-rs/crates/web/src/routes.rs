@@ -14,7 +14,12 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::layout::{AppShell, AuthShell};
+use crate::pages::admin::devices::Devices;
+use crate::pages::admin::jobs::Jobs;
 use crate::pages::admin::library_paths::LibraryPaths;
+use crate::pages::admin::requests::Requests;
+use crate::pages::admin::transcodes::Transcodes;
+use crate::pages::admin::users::Users;
 use crate::pages::auth::login::Login;
 use crate::pages::auth::setup::Setup;
 use crate::pages::dashboard::Dashboard;
@@ -68,4 +73,20 @@ pub enum Route {
         // U23 pilot — admin library paths.
         #[route("/admin/library_paths")]
         LibraryPaths {},
+
+        // U28 — operational admin slice.
+        #[route("/admin/jobs")]
+        Jobs {},
+
+        #[route("/admin/transcodes")]
+        Transcodes {},
+
+        #[route("/admin/users")]
+        Users {},
+
+        #[route("/admin/devices")]
+        Devices {},
+
+        #[route("/admin/requests")]
+        Requests {},
 }

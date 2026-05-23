@@ -97,6 +97,17 @@ pub async fn require_session_user_id() -> Result<String, ServerFnError> {
     server::require_session_user_id().await
 }
 
+/// Server-side helper used by every admin server fn — pulls the
+/// session user, looks the row up, and verifies `role == "admin"`.
+/// Returns the user id on success; a `not authorized` `ServerFnError`
+/// otherwise (the page renders this inline). The 401-vs-403 distinction
+/// is collapsed for the same reason
+/// [`require_session_user_id`] collapses logged-out and session-expired.
+#[cfg(feature = "server")]
+pub async fn require_admin_user_id() -> Result<String, ServerFnError> {
+    server::require_admin_user_id().await
+}
+
 #[cfg(feature = "server")]
 mod server {
     use super::{AuthAck, LoginPayload, SetupPayload};
@@ -121,6 +132,33 @@ mod server {
             return Err(ServerFnError::new("not authenticated"));
         };
         Ok(user_id)
+    }
+
+    pub(crate) async fn require_admin_user_id() -> Result<String, ServerFnError> {
+        let user_id = require_session_user_id().await?;
+        let st = state().await?;
+        let role = lookup_user_role(&st.db, &user_id).await?;
+        if role.as_deref() == Some("admin") {
+            Ok(user_id)
+        } else {
+            Err(ServerFnError::new("not authorized"))
+        }
+    }
+
+    async fn lookup_user_role(db: &Db, id: &str) -> Result<Option<String>, ServerFnError> {
+        let row: Option<(String,)> = match db {
+            Db::Sqlite(pool) => sqlx::query_as("SELECT role FROM users WHERE id = ? LIMIT 1")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("lookup role: {err}")))?,
+            Db::Postgres(pool) => sqlx::query_as("SELECT role FROM users WHERE id = $1 LIMIT 1")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|err| ServerFnError::new(format!("lookup role: {err}")))?,
+        };
+        Ok(row.map(|(role,)| role))
     }
 
     /// Server-fn-helpers that the dual-target functions delegate to.

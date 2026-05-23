@@ -284,8 +284,8 @@ fn Sidebar(props: SidebarProps) -> Element {
 
                         if is_admin {
                             SectionTitle { label: "Administration".to_string() }
-                            LinkPlaceholder {
-                                href: "/admin/users".to_string(),
+                            NavItem {
+                                to: Route::Users {},
                                 icon: "users".to_string(),
                                 label: "Users".to_string(),
                             }
@@ -299,29 +299,36 @@ fn Sidebar(props: SidebarProps) -> Element {
                                 icon: "arrow-down-on-square-stack".to_string(),
                                 label: "Import Lists".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/admin/jobs".to_string(),
+                            NavItem {
+                                to: Route::Jobs {},
                                 icon: "queue-list".to_string(),
                                 label: "Background Jobs".to_string(),
+                            }
+                            NavItem {
+                                to: Route::Transcodes {},
+                                icon: "film".to_string(),
+                                label: "Transcodes".to_string(),
+                            }
+                            NavItem {
+                                to: Route::Devices {},
+                                icon: "signal".to_string(),
+                                label: "Devices".to_string(),
                             }
                             LinkPlaceholder {
                                 href: "/admin/release-blacklist".to_string(),
                                 icon: "no-symbol".to_string(),
                                 label: "Release Blacklist".to_string(),
                             }
-                            // Library paths is the only admin route that
-                            // exists today as a real `Route::` variant.
                             NavItem {
                                 to: Route::LibraryPaths {},
                                 icon: "folder".to_string(),
                                 label: "Library paths".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/admin/requests".to_string(),
+                            NavItem {
+                                to: Route::Requests {},
                                 icon: "inbox-stack".to_string(),
                                 label: "Requests".to_string(),
                                 badge: data.pending_requests_count,
-                                badge_class: "badge badge-primary badge-sm".to_string(),
                             }
                         }
 

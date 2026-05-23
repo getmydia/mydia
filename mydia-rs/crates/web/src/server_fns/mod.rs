@@ -13,6 +13,7 @@
 //! layer — the surface is small and adding one would just paper over
 //! the natural single-call shape of these handlers.
 
+pub mod admin;
 pub mod auth;
 pub mod dashboard;
 pub mod discover;
