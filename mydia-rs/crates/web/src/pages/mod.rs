@@ -11,5 +11,4 @@ pub mod dashboard;
 pub mod discover;
 pub mod hello;
 pub mod media;
-pub mod play;
 pub mod profile;

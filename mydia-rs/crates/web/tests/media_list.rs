@@ -28,8 +28,7 @@
 use mydia_rs_db::Db;
 use mydia_rs_web::server_fns::media::server::{
     count_media, delete_media_item_db_only, fetch_media, fetch_media_detail, fetch_movie_files,
-    fetch_show_seasons, flip_episode_monitored, flip_media_monitored, resolve_episode_playable,
-    resolve_movie_playable, row_has_files,
+    fetch_show_seasons, flip_episode_monitored, flip_media_monitored, row_has_files,
 };
 use mydia_rs_web::server_fns::media::{MediaSort, MonitoredFilter, FIRST_PAGE_SIZE};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -946,113 +945,4 @@ async fn delete_unknown_id_errors_without_writing() {
 
     // Bystander row must survive the failed transaction.
     assert!(row_exists(&db, "media_items", &m1).await);
-}
-
-// ---------- U25.d: playback resolution tests ----------
-
-#[tokio::test]
-async fn resolve_movie_returns_best_file_and_metadata() {
-    let db = setup().await;
-    let id = uuid_for("movie");
-    let metadata = r#"{"runtime": 142}"#;
-    insert_movie_with_metadata(&db, &id, "Sample Movie", Some(2010), metadata).await;
-    // Two files: 720p and 1080p. resolve should pick 1080p (higher
-    // priority in the sort).
-    insert_full_movie_file(
-        &db,
-        &uuid_for("lo"),
-        &id,
-        "/sd.mkv",
-        Some("720p"),
-        Some("h264"),
-        Some("aac"),
-        Some(1_073_741_824),
-    )
-    .await;
-    insert_full_movie_file(
-        &db,
-        &uuid_for("hi"),
-        &id,
-        "/hd.mkv",
-        Some("1080p"),
-        Some("h265"),
-        Some("eac3"),
-        Some(5_368_709_120),
-    )
-    .await;
-
-    let source = resolve_movie_playable(&db, &id).await.unwrap();
-    assert_eq!(source.kind, "movie");
-    assert_eq!(source.title, "Sample Movie");
-    assert_eq!(source.subtitle, "2010 • 2h 22m");
-    let file = source.media_file.unwrap();
-    assert_eq!(file.resolution.as_deref(), Some("1080p"));
-    assert_eq!(file.path, "/hd.mkv");
-}
-
-#[tokio::test]
-async fn resolve_movie_returns_none_file_when_naked() {
-    let db = setup().await;
-    let id = uuid_for("naked_movie");
-    insert_movie(&db, &id, "Lonely", None, true).await;
-
-    let source = resolve_movie_playable(&db, &id).await.unwrap();
-    assert!(source.media_file.is_none());
-    assert!(source.subtitle.is_empty());
-}
-
-#[tokio::test]
-async fn resolve_movie_rejects_tv_show() {
-    let db = setup().await;
-    let id = uuid_for("show");
-    insert_tv(&db, &id, "Wrong Kind", None).await;
-
-    let result = resolve_movie_playable(&db, &id).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn resolve_episode_pulls_show_title_via_join() {
-    let db = setup().await;
-    let show_id = uuid_for("show");
-    let ep_id = uuid_for("ep");
-    insert_tv(&db, &show_id, "My Series", None).await;
-    insert_full_episode(
-        &db,
-        &ep_id,
-        &show_id,
-        2,
-        5,
-        Some("The Big One"),
-        Some("2024-05-10"),
-        true,
-    )
-    .await;
-    insert_episode_file(&db, &uuid_for("f"), &ep_id).await;
-
-    let source = resolve_episode_playable(&db, &ep_id).await.unwrap();
-    assert_eq!(source.kind, "episode");
-    assert_eq!(source.title, "My Series");
-    assert_eq!(source.subtitle, "S02E05 — The Big One");
-    assert_eq!(source.parent_media_item_id, show_id);
-    assert!(source.media_file.is_some());
-}
-
-#[tokio::test]
-async fn resolve_episode_subtitle_omits_title_when_missing() {
-    let db = setup().await;
-    let show_id = uuid_for("show");
-    let ep_id = uuid_for("ep");
-    insert_tv(&db, &show_id, "Untitled", None).await;
-    insert_full_episode(&db, &ep_id, &show_id, 1, 1, None, None, true).await;
-
-    let source = resolve_episode_playable(&db, &ep_id).await.unwrap();
-    assert_eq!(source.subtitle, "S01E01");
-}
-
-#[tokio::test]
-async fn resolve_episode_unknown_id_errors() {
-    let db = setup().await;
-    let result = resolve_episode_playable(&db, &uuid_for("ghost")).await;
-    assert!(result.is_err());
 }
