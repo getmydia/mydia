@@ -276,13 +276,13 @@ fn Sidebar(props: SidebarProps) -> Element {
                                 icon: "arrow-down-on-square-stack".to_string(),
                                 label: "Import library".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/search".to_string(),
+                            NavItem {
+                                to: Route::Search {},
                                 icon: "magnifying-glass".to_string(),
                                 label: "Search".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/collections".to_string(),
+                            NavItem {
+                                to: Route::Collections {},
                                 icon: "folder".to_string(),
                                 label: "Collections".to_string(),
                             }

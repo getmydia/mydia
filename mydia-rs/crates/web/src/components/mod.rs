@@ -14,6 +14,7 @@ pub mod activity_event;
 pub mod admin;
 pub mod calendar_grid;
 pub mod collection;
+pub mod collection_card;
 pub mod core;
 pub mod discover;
 pub mod download_row;

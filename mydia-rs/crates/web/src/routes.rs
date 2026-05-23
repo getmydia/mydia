@@ -34,6 +34,8 @@ use crate::pages::admin::users::Users;
 use crate::pages::auth::login::Login;
 use crate::pages::auth::setup::Setup;
 use crate::pages::calendar::Calendar;
+use crate::pages::collections::index::Collections;
+use crate::pages::collections::show::CollectionShow;
 use crate::pages::dashboard::Dashboard;
 use crate::pages::discover::Discover;
 use crate::pages::downloads::Downloads;
@@ -44,6 +46,7 @@ use crate::pages::media::show::MediaShow;
 use crate::pages::my_requests::MyRequests;
 use crate::pages::profile::Profile;
 use crate::pages::request_media::{RequestMovie, RequestSeries};
+use crate::pages::search::Search;
 
 #[derive(Clone, Routable, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[rustfmt::skip]
@@ -130,6 +133,16 @@ pub enum Route {
 
         #[route("/requests")]
         MyRequests {},
+
+        // U26 — collections + library search.
+        #[route("/collections")]
+        Collections {},
+
+        #[route("/collections/:id")]
+        CollectionShow { id: String },
+
+        #[route("/search")]
+        Search {},
 
         // U28 follow-up — configuration-heavy admin pages.
         #[route("/admin/system")]
