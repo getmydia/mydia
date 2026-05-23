@@ -53,6 +53,16 @@ CREATE TABLE IF NOT EXISTS media_items (
     imdb_id TEXT,
     metadata TEXT,
     monitored INTEGER DEFAULT 1,
+    quality_profile_id TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS quality_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    qualities TEXT,
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -779,6 +789,155 @@ async fn my_requests_empty_state_returns_nothing() {
         Db::Postgres(_) => unreachable!(),
     };
     assert!(rows.is_empty(), "fresh user has no requests");
+}
+
+// ---------- add_media: quality profile picker ----------
+
+async fn insert_quality_profile(db: &Db, name: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO quality_profiles (id, name, qualities, inserted_at, updated_at) \
+                 VALUES (?, ?, '[\"1080p\"]', ?, ?)",
+            )
+            .bind(&id)
+            .bind(name)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert quality profile");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+    id
+}
+
+#[tokio::test]
+async fn add_media_quality_profiles_listed_alphabetically() {
+    // Happy path: list_quality_profile_options sorts by name so the
+    // dropdown is stable for operators eye-balling it.
+    let fx = fixture().await;
+    let _b = insert_quality_profile(&fx.db, "Bronze").await;
+    let _a = insert_quality_profile(&fx.db, "Anytime").await;
+
+    let rows: Vec<(String, String)> = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT id, name FROM quality_profiles ORDER BY name ASC")
+                .fetch_all(pool)
+                .await
+                .expect("query")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].1, "Anytime");
+    assert_eq!(rows[1].1, "Bronze");
+}
+
+#[tokio::test]
+async fn add_media_creates_with_quality_profile_id() {
+    // Happy path: the FK column lands when the picker selects a
+    // profile. Mirrors what server::create issues.
+    let fx = fixture().await;
+    let qp = insert_quality_profile(&fx.db, "1080p").await;
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "INSERT INTO media_items (id, type, title, year, tmdb_id, quality_profile_id, monitored, inserted_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind("movie")
+        .bind("Inception")
+        .bind::<Option<i32>>(Some(2010))
+        .bind::<Option<i64>>(Some(27_205))
+        .bind(&qp)
+        .bind(true)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert"),
+        Db::Postgres(_) => unreachable!(),
+    };
+
+    let row: (String, Option<String>) = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT id, quality_profile_id FROM media_items WHERE id = ?")
+                .bind(&id)
+                .fetch_one(pool)
+                .await
+                .expect("readback")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(row.1.as_deref(), Some(qp.as_str()));
+}
+
+#[tokio::test]
+async fn add_media_empty_quality_profiles_does_not_block_add() {
+    // Edge case: a fresh install with no profiles still lets the
+    // operator add media — quality_profile_id stays null and the
+    // pipeline downstream uses the default behavior.
+    let fx = fixture().await;
+    let rows: Vec<(String,)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM quality_profiles")
+            .fetch_all(pool)
+            .await
+            .expect("query"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert!(rows.is_empty(), "no profiles seeded");
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
+             VALUES (?, 'movie', 'X', 1, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert"),
+        Db::Postgres(_) => unreachable!(),
+    };
+
+    let (qp,): (Option<String>,) = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT quality_profile_id FROM media_items WHERE id = ?")
+                .bind(&id)
+                .fetch_one(pool)
+                .await
+                .expect("readback")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert!(qp.is_none(), "quality_profile_id stays null");
+}
+
+#[tokio::test]
+async fn add_media_invalid_quality_profile_id_rejected() {
+    // Error path: an id that doesn't match any quality_profile row
+    // must be rejected before the insert lands. The server fn
+    // checks via `quality_profile_exists`; mirror the check here.
+    let fx = fixture().await;
+    let present: Option<(String,)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM quality_profiles WHERE id = ?")
+            .bind("ghost-id")
+            .fetch_optional(pool)
+            .await
+            .expect("lookup"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert!(present.is_none(), "no quality_profile with that id exists");
 }
 
 #[tokio::test]

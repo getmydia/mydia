@@ -61,6 +61,16 @@ pub struct AddMediaAck {
     pub media_item_id: String,
 }
 
+/// One quality-profile picker option — id + display name, no inner
+/// detail. Surfaced to non-admin operators on the add-media page so
+/// they can pick a profile without needing admin access to the full
+/// quality-profile management surface.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct QualityProfileOption {
+    pub id: String,
+    pub name: String,
+}
+
 #[post("/api/add_media/search")]
 pub async fn search_metadata(query: SearchQuery) -> Result<Vec<AddMediaCandidate>, ServerFnError> {
     server::search(query).await
@@ -73,9 +83,16 @@ pub async fn add_media_to_library(
     server::create(payload).await
 }
 
+#[get("/api/add_media/quality_profiles")]
+pub async fn list_quality_profile_options() -> Result<Vec<QualityProfileOption>, ServerFnError> {
+    server::list_quality_profile_options().await
+}
+
 #[cfg(feature = "server")]
 mod server {
-    use super::{AddMediaAck, AddMediaCandidate, AddMediaSelection, SearchQuery};
+    use super::{
+        AddMediaAck, AddMediaCandidate, AddMediaSelection, QualityProfileOption, SearchQuery,
+    };
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
@@ -126,10 +143,11 @@ mod server {
             _ => return Err(ServerFnError::new("Invalid media type")),
         };
 
-        // TODO(U27.add-media-followup): require a quality_profile_id
-        // once the quality profiles crate exposes a list endpoint and
-        // the user-side picker has options to choose from. Today the
-        // changeset accepts the missing field.
+        // Quality profile is optional — Phoenix leaves the column null
+        // until the operator picks one. The picker on the add-media
+        // page now passes through a non-null id when the operator
+        // chose a profile; the pipeline downstream defaults to the
+        // system profile when this column is null.
 
         // De-duplicate by (tmdb_id, type) before inserting — the
         // Phoenix changeset has the same unique-index check via
@@ -146,19 +164,32 @@ mod server {
             });
         }
 
+        // Verify the picked quality profile exists before writing the
+        // FK. SQLite's default config doesn't enforce foreign keys so
+        // a bogus id would silently succeed otherwise.
+        let quality_profile_id = payload.quality_profile_id.as_deref();
+        if let Some(qp_id) = quality_profile_id {
+            if !quality_profile_exists(&st.db, qp_id).await? {
+                return Err(ServerFnError::new(format!(
+                    "no quality_profile with id {qp_id}"
+                )));
+            }
+        }
+
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now();
         match &st.db {
             Db::Sqlite(pool) => {
                 sqlx::query(
-                    "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO media_items (id, type, title, year, tmdb_id, quality_profile_id, monitored, inserted_at, updated_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(&id)
                 .bind(media_type)
                 .bind(&payload.title)
                 .bind(payload.year)
                 .bind(tmdb_id)
+                .bind(quality_profile_id)
                 .bind(true)
                 .bind(now.to_rfc3339())
                 .bind(now.to_rfc3339())
@@ -168,14 +199,15 @@ mod server {
             }
             Db::Postgres(pool) => {
                 sqlx::query(
-                    "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                    "INSERT INTO media_items (id, type, title, year, tmdb_id, quality_profile_id, monitored, inserted_at, updated_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
                 )
                 .bind(&id)
                 .bind(media_type)
                 .bind(&payload.title)
                 .bind(payload.year)
                 .bind(tmdb_id)
+                .bind(quality_profile_id)
                 .bind(true)
                 .bind(now)
                 .bind(now)
@@ -186,6 +218,56 @@ mod server {
         }
 
         Ok(AddMediaAck { media_item_id: id })
+    }
+
+    /// Verify a `quality_profile` row exists. Used by [`create`] to
+    /// reject bogus FK ids before the insert lands.
+    async fn quality_profile_exists(db: &Db, id: &str) -> Result<bool, ServerFnError> {
+        let row: Option<(String,)> = match db {
+            Db::Sqlite(pool) => {
+                sqlx::query_as("SELECT id FROM quality_profiles WHERE id = ? LIMIT 1")
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("verify quality_profile: {err}")))?
+            }
+            Db::Postgres(pool) => {
+                sqlx::query_as("SELECT id FROM quality_profiles WHERE id = $1 LIMIT 1")
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("verify quality_profile: {err}")))?
+            }
+        };
+        Ok(row.is_some())
+    }
+
+    /// Lightweight picker fetch — every quality profile's id + name,
+    /// in display order. Session-auth only; the full admin CRUD
+    /// surface is gated by admin auth via
+    /// `crate::server_fns::admin::quality_profiles::list_quality_profiles`.
+    pub(super) async fn list_quality_profile_options(
+    ) -> Result<Vec<QualityProfileOption>, ServerFnError> {
+        require_session_user_id().await?;
+        let st = state()?;
+        let rows: Vec<(String, String)> = match &st.db {
+            Db::Sqlite(pool) => {
+                sqlx::query_as("SELECT id, name FROM quality_profiles ORDER BY name ASC")
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("list quality_profiles: {err}")))?
+            }
+            Db::Postgres(pool) => {
+                sqlx::query_as("SELECT id, name FROM quality_profiles ORDER BY name ASC")
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("list quality_profiles: {err}")))?
+            }
+        };
+        Ok(rows
+            .into_iter()
+            .map(|(id, name)| QualityProfileOption { id, name })
+            .collect())
     }
 
     async fn find_by_tmdb(
