@@ -16,21 +16,31 @@
 use axum::{
     extract::Path,
     http::StatusCode,
+    middleware::from_fn,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
 use serde_json::json;
 
+use crate::api::auth_layer::{api_key_auth, require_admin};
 use crate::api::v1::{json_error, not_implemented};
 
 pub fn router() -> Router {
+    // Phoenix's router.ex:276-284 attaches both `:api_auth` and
+    // `:require_admin` to *all* config routes (read and write).
+    // The Phoenix Plug pipeline order is `api_auth` → `require_admin`,
+    // which axum's `layer` reverses (last applied runs first), so we
+    // layer `require_admin` first and `api_key_auth` second to keep
+    // the runtime order matching.
     Router::new()
         .route("/api/v1/config", get(index))
         .route("/api/v1/config/test-connection", post(test_connection))
         .route("/api/v1/config/{key}", get(show))
         .route("/api/v1/config/{key}", put(update))
         .route("/api/v1/config/{key}", delete(delete_setting))
+        .layer(from_fn(require_admin))
+        .layer(from_fn(api_key_auth))
 }
 
 /// Return the runtime-config map. Until `config_settings` ports, the

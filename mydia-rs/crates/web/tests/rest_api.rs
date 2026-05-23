@@ -1,7 +1,8 @@
 //! Integration tests for the U33 REST API surface.
 //!
 //! Covers the load-bearing properties of the byte-range streaming
-//! pipeline plus the scaffolded surface:
+//! pipeline plus the scaffolded surface plus the per-route auth
+//! pipeline attached in the U33 follow-up.
 //!
 //! - Full-body responses include `Accept-Ranges: bytes` + an
 //!   `x-streaming-mode` header so the player can detect direct play.
@@ -13,17 +14,11 @@
 //! - A malformed / out-of-bounds range returns `416 Range Not
 //!   Satisfiable` with a `Content-Range: bytes */N` header.
 //! - The router merges without panic and exposes the expected paths.
-//! - Scaffolded routes return `501 Not Implemented` with a JSON body
-//!   carrying the `todo` marker.
-//! - Thumbnail / sprite paths sharded by checksum tier (covered in the
-//!   unit tests of the thumbnail module).
-//!
-//! These tests deliberately avoid spinning up a database; they drive
-//! the streaming branch via the `serve_file_for_tests` shim and the
-//! scaffolded branches via the router merged through tower's
-//! `ServiceExt::oneshot`. The DB-backed handlers' branches are
-//! exercised by the broader integration smoke suite added in the
-//! follow-up slice that fully wires `WebState`.
+//! - Each route family rejects unauthenticated callers with 401.
+//! - Each route family accepts a valid API key (or media token, for
+//!   the streaming-tier endpoints) and falls through to the handler.
+//! - Admin-only routes (`/api/v1/config`) reject non-admin callers
+//!   with 403, even when the api-key auth is valid.
 
 #![cfg(feature = "server")]
 
@@ -31,9 +26,42 @@ use std::io::Write;
 
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
+use chrono::Utc;
 use http_body_util::BodyExt;
+use mydia_rs_auth::api_key::hash_api_key;
+use mydia_rs_auth::{MediaTokenCache, MediaTokenPermission, MediaTokenSigner};
+use mydia_rs_db::Db;
+use mydia_rs_jobs::storage::JobStorage;
+use mydia_rs_pubsub::Pubsub;
 use mydia_rs_web::api;
+use mydia_rs_web::WebState;
+use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
+
+const SETUP_SQL: &str = "
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT,
+    email TEXT,
+    password_hash TEXT,
+    role TEXT NOT NULL DEFAULT 'user',
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT,
+    key_hash TEXT NOT NULL,
+    key_prefix TEXT,
+    permissions TEXT,
+    last_used_at TEXT,
+    expires_at TEXT,
+    revoked_at TEXT,
+    inserted_at TEXT NOT NULL
+);
+";
 
 /// Write `len` deterministic bytes (`i % 251`) to a tempfile so the
 /// byte-range tests can assert exact body content. 251 is a prime
@@ -58,6 +86,11 @@ async fn collect(body: Body) -> Vec<u8> {
         .to_bytes()
         .to_vec()
 }
+
+// ---------------------------------------------------------------------
+// Byte-range / streaming pipeline — exercised via the test shim that
+// skips the router (no auth, no DB).
+// ---------------------------------------------------------------------
 
 #[tokio::test]
 async fn full_body_response_sets_accept_ranges_and_streaming_mode() {
@@ -121,7 +154,6 @@ async fn explicit_range_returns_206_with_bounded_body() {
 
     let body = collect(response.into_body()).await;
     assert_eq!(body.len(), 100);
-    // The fixture is `i % 251`; byte 100 == 100, byte 199 == 199.
     assert_eq!(body[0], 100);
     assert_eq!(body[99], 199);
 }
@@ -185,32 +217,124 @@ async fn missing_file_returns_404() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
-async fn config_index_returns_default_payload() {
-    // Build the v1 router without state — the config index endpoint
-    // doesn't touch WebState today and returns the default payload
-    // unconditionally. Once the config_settings repo ports, this test
-    // adds a DB fixture; today it asserts the wire shape only.
-    let router = mydia_rs_web::api::v1::router();
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/api/v1/config")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .expect("router oneshot");
+// ---------------------------------------------------------------------
+// Auth pipeline — per Phoenix `router.ex:213-319`.
+// ---------------------------------------------------------------------
 
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = collect(response.into_body()).await;
-    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("config index json");
-    assert!(parsed.get("data").is_some(), "data key missing: {parsed}");
+struct AuthFixture {
+    state: WebState,
+    api_key: String,
+    admin_api_key: String,
+    media_signer: MediaTokenSigner,
+    user_id: String,
+}
+
+async fn auth_fixture() -> AuthFixture {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("open in-memory sqlite");
+    for stmt in SETUP_SQL.split(';') {
+        let trimmed = stmt.trim();
+        if !trimmed.is_empty() {
+            sqlx::query(trimmed)
+                .execute(&pool)
+                .await
+                .expect("apply schema");
+        }
+    }
+    let db = Db::Sqlite(pool);
+
+    let user_id = insert_user(&db, "user").await;
+    let admin_id = insert_user(&db, "admin").await;
+
+    let api_key = "mydia_test_user_key_aaaaaaaaaaaaaa".to_string();
+    let admin_api_key = "mydia_test_admin_key_bbbbbbbbbbbbb".to_string();
+    insert_api_key(&db, &user_id, &api_key).await;
+    insert_api_key(&db, &admin_id, &admin_api_key).await;
+
+    let secret = "test-guardian-secret-key-for-rest-tests";
+    let media_signer = MediaTokenSigner::new(secret, 0);
+    let media_cache = MediaTokenCache::new(std::time::Duration::from_secs(300));
+
+    let pubsub = Pubsub::new();
+    let storage: JobStorage<mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs> =
+        JobStorage::from_db(&db);
+
+    let state = WebState::new(db, pubsub, storage, None)
+        .with_media_signer(media_signer.clone(), media_cache);
+
+    AuthFixture {
+        state,
+        api_key,
+        admin_api_key,
+        media_signer,
+        user_id,
+    }
+}
+
+async fn insert_user(db: &Db, role: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(format!("user-{}", &id[..8]))
+        .bind(format!("{}@example.com", &id[..8]))
+        .bind(role)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert user");
+    }
+    id
+}
+
+async fn insert_api_key(db: &Db, user_id: &str, plaintext: &str) {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let hash = hash_api_key(plaintext).expect("hash api key");
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, \
+             inserted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(user_id)
+        .bind("test")
+        .bind(&hash)
+        .bind(&plaintext[..8.min(plaintext.len())])
+        .bind("read,write")
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert api_key");
+    }
+}
+
+/// Attach the `WebState` extension to a request so the auth layer can
+/// reach the DB and signers. The boot path attaches this at the
+/// merged-router level; for tests we add it via a layer on the inner
+/// router so each call sees a fresh state.
+fn router_with_state(state: WebState) -> axum::Router {
+    use axum::Extension;
+    mydia_rs_web::api::v1::router().layer(Extension(state))
+}
+
+fn player_router_with_state(state: WebState) -> axum::Router {
+    use axum::Extension;
+    mydia_rs_web::api::player::v1::router().layer(Extension(state))
 }
 
 #[tokio::test]
-async fn scaffolded_endpoint_returns_501_with_todo_marker() {
-    let router = mydia_rs_web::api::v1::router();
+async fn protected_route_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
     let response = router
         .oneshot(
             Request::builder()
@@ -221,9 +345,50 @@ async fn scaffolded_endpoint_returns_501_with_todo_marker() {
         .await
         .expect("router oneshot");
 
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["error"].as_str().unwrap_or(""), "Unauthorized");
+}
+
+#[tokio::test]
+async fn protected_route_returns_401_with_invalid_api_key() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/indexers")
+                .header("X-API-Key", "mydia_wrong_key_99999999999999999")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn protected_route_accepts_valid_api_key_and_returns_501_marker() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/indexers")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    // The indexer handler is scaffolded; the route must still be
+    // reachable with a valid API key and carry the U33 TODO marker.
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     let body = collect(response.into_body()).await;
-    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("indexer 501 json");
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
     assert!(
         parsed
             .get("todo")
@@ -234,12 +399,27 @@ async fn scaffolded_endpoint_returns_501_with_todo_marker() {
 }
 
 #[tokio::test]
-async fn playback_show_returns_default_progress() {
-    let router = mydia_rs_web::api::v1::router();
+async fn protected_route_accepts_api_key_via_query_param() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let uri = format!("/api/v1/indexers?api_key={}", fx.api_key);
+    let response = router
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+}
+
+#[tokio::test]
+async fn playback_show_with_api_key_returns_default_progress() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
     let response = router
         .oneshot(
             Request::builder()
                 .uri("/api/v1/playback/movie/00000000-0000-0000-0000-000000000000")
+                .header("X-API-Key", &fx.api_key)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -253,9 +433,206 @@ async fn playback_show_returns_default_progress() {
     assert_eq!(parsed["watched"], false);
 }
 
+// ---------- admin-only (`require_admin`) ----------
+
 #[tokio::test]
-async fn player_v1_subtitle_index_route_is_mounted() {
-    let router = mydia_rs_web::api::player::v1::router();
+async fn config_index_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn config_index_returns_403_for_non_admin_api_key() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/config")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(parsed["error"].as_str().unwrap_or(""), "Forbidden");
+}
+
+#[tokio::test]
+async fn config_index_returns_default_payload_for_admin() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/config")
+                .header("X-API-Key", &fx.admin_api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("config index json");
+    assert!(parsed.get("data").is_some(), "data key missing: {parsed}");
+}
+
+// ---------- media-token (`:media_api_auth`) ----------
+
+#[tokio::test]
+async fn stream_route_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/stream/file/abc")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn stream_route_accepts_media_token_bearer() {
+    let fx = auth_fixture().await;
+    let token = fx
+        .media_signer
+        .issue(
+            "device-1",
+            &fx.user_id,
+            &[MediaTokenPermission::Stream],
+            std::time::Duration::from_secs(3600),
+        )
+        .expect("issue media token");
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/stream/file/00000000-0000-0000-0000-000000000000")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    // The media-token verification passes; the handler then runs and
+    // hits the DB looking for the media file. The fixture has no
+    // media_files table, so we expect a 500 (db error) rather than a
+    // 401, which proves the auth layer let the request through.
+    assert!(
+        response.status() == StatusCode::NOT_FOUND
+            || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
+        "expected handler-level 404/500, got {}",
+        response.status()
+    );
+}
+
+#[tokio::test]
+async fn stream_route_accepts_media_token_via_query_param() {
+    let fx = auth_fixture().await;
+    let token = fx
+        .media_signer
+        .issue(
+            "device-1",
+            &fx.user_id,
+            &[MediaTokenPermission::Stream],
+            std::time::Duration::from_secs(3600),
+        )
+        .expect("issue media token");
+    let router = router_with_state(fx.state);
+    let uri = format!("/api/v1/stream/file/00000000-0000-0000-0000-000000000000?token={token}");
+    let response = router
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .expect("router oneshot");
+
+    assert!(
+        response.status() == StatusCode::NOT_FOUND
+            || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
+        "expected handler-level 404/500, got {}",
+        response.status()
+    );
+}
+
+#[tokio::test]
+async fn stream_route_rejects_expired_media_token() {
+    let fx = auth_fixture().await;
+    // TTL must be > 0 (issue rejects zero-duration), but with leeway=0
+    // a one-second-old expired token reads as expired.
+    let signer = MediaTokenSigner::new("test-guardian-secret-key-for-rest-tests", 0);
+    // Manually build an expired claim by issuing 0-second TTL and
+    // sleeping; or rely on the signer's behaviour at boundary.
+    // Simpler: issue with a tiny TTL and sleep past it.
+    let token = signer
+        .issue(
+            "device-1",
+            &fx.user_id,
+            &[MediaTokenPermission::Stream],
+            std::time::Duration::from_secs(1),
+        )
+        .expect("issue token");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/stream/file/abc")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn hls_route_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/hls/start")
+                .method("POST")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// ---------- player subtitle (`:api_auth`) ----------
+
+#[tokio::test]
+async fn player_v1_subtitle_returns_401_without_auth() {
+    let fx = auth_fixture().await;
+    let router = player_router_with_state(fx.state);
     let response = router
         .oneshot(
             Request::builder()
@@ -266,14 +643,59 @@ async fn player_v1_subtitle_index_route_is_mounted() {
         .await
         .expect("router oneshot");
 
-    // The subtitle handler is scaffolded; the route must still be
-    // reachable (not 404) so the player sees a well-defined response
-    // shape, and the response must carry the U33 TODO marker.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn player_v1_subtitle_with_api_key_returns_501_marker() {
+    let fx = auth_fixture().await;
+    let router = player_router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/player/v1/subtitles/movie/abc")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     let body = collect(response.into_body()).await;
-    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("subtitle 501 json");
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
     assert_eq!(
         parsed["todo"].as_str().unwrap_or(""),
         "U33.player.subtitles.index"
     );
+}
+
+// ---------- revoked / expired API key paths ----------
+
+#[tokio::test]
+async fn revoked_api_key_returns_401() {
+    let fx = auth_fixture().await;
+    // Revoke the user key.
+    if let Db::Sqlite(pool) = &fx.state.db {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query("UPDATE api_keys SET revoked_at = ? WHERE user_id = ?")
+            .bind(&now)
+            .bind(&fx.user_id)
+            .execute(pool)
+            .await
+            .expect("revoke");
+    }
+    let router = router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/indexers")
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

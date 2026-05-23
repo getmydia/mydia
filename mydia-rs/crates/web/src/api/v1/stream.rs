@@ -42,6 +42,7 @@ use axum::{
     body::Body,
     extract::{Path as AxumPath, Query},
     http::{header, HeaderMap, HeaderValue, StatusCode},
+    middleware::from_fn,
     response::Response,
     routing::get,
     Extension, Router,
@@ -50,6 +51,7 @@ use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
+use crate::api::auth_layer::media_token_auth;
 use crate::api::range_helper::{
     calculate_range, format_content_range, get_mime_type, parse_range_header, RangeOutcome,
 };
@@ -67,6 +69,7 @@ pub fn router() -> Router {
             "/api/v1/stream/{content_type}/{id}/candidates",
             get(stream_candidates),
         )
+        .layer(from_fn(media_token_auth))
 }
 
 /// Query parameters supported on the streaming endpoints. `strategy`

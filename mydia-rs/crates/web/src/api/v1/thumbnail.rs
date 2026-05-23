@@ -5,27 +5,26 @@
 //! `lib/mydia_web/controllers/api/thumbnail_controller.ex`. The
 //! generated-media base directory is operator-configurable in
 //! Phoenix via the `:mydia, :generated_media_path` Application env
-//! key; here we read it from the `MYDIA_GENERATED_MEDIA_PATH`
-//! environment variable so the wiring is explicit on the Rust side
-//! without growing a full config-system pull-through for U33. Default
-//! falls back to `./priv/generated` to match the Phoenix dev path.
-//!
-//! TODO(U33-follow-up): once the config surface is plumbed through to
-//! REST handlers, source the base path from `Config::media` instead of
-//! `std::env`. The schema field is in place already.
+//! key; on the Rust side that path resolves once at boot from the
+//! `MYDIA_GENERATED_MEDIA_PATH` environment variable (the same one
+//! Phoenix reads via release env) and is stored on [`WebState`] so
+//! the per-request hot path is allocation-free. Defaults to
+//! `priv/generated` to match Phoenix's dev-mode output.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use axum::{
     body::Body,
     extract::Path as AxumPath,
     http::{header, HeaderValue, StatusCode},
+    middleware::from_fn,
     response::{IntoResponse, Response},
     routing::get,
     Extension, Router,
 };
 use tokio_util::io::ReaderStream;
 
+use crate::api::auth_layer::api_key_auth;
 use crate::api::v1::json_error;
 use crate::WebState;
 
@@ -34,6 +33,7 @@ pub fn router() -> Router {
     Router::new()
         .route("/api/v1/media/{id}/thumbnails.vtt", get(show_vtt))
         .route("/api/v1/media/{id}/thumbnails.jpg", get(show_sprite))
+        .layer(from_fn(api_key_auth))
 }
 
 async fn show_vtt(
@@ -101,7 +101,7 @@ async fn serve_blob(state: &WebState, media_file_id: &str, kind: BlobKind) -> Re
         }
     };
 
-    let path = generated_media_path(kind, &checksum);
+    let path = generated_media_path(&state.generated_media_path, kind, &checksum);
 
     let Ok(file) = tokio::fs::File::open(&path).await else {
         tracing::warn!(
@@ -158,11 +158,7 @@ async fn lookup_blob_checksum(
 /// Resolve a generated-media checksum to an absolute path. Mirrors
 /// `Mydia.Library.GeneratedMedia.build_path/2`: two-tier sharding off
 /// the first two and next two checksum characters.
-fn generated_media_path(kind: BlobKind, checksum: &str) -> PathBuf {
-    let base = std::env::var("MYDIA_GENERATED_MEDIA_PATH")
-        .ok()
-        .map_or_else(|| PathBuf::from("priv/generated"), PathBuf::from);
-
+fn generated_media_path(base: &Path, kind: BlobKind, checksum: &str) -> PathBuf {
     let tier1 = checksum.get(0..2).unwrap_or("");
     let tier2 = checksum.get(2..4).unwrap_or("");
 
@@ -178,12 +174,8 @@ mod tests {
 
     #[test]
     fn vtt_path_resolves_with_tier_sharding() {
-        // SAFETY: tests run in a fresh process; set_var here is before
-        // any thread that reads MYDIA_GENERATED_MEDIA_PATH starts.
-        unsafe {
-            std::env::set_var("MYDIA_GENERATED_MEDIA_PATH", "/tmp/generated");
-        }
-        let path = generated_media_path(BlobKind::Vtt, "abcdef0123456789");
+        let base = PathBuf::from("/tmp/generated");
+        let path = generated_media_path(&base, BlobKind::Vtt, "abcdef0123456789");
         assert_eq!(
             path,
             PathBuf::from("/tmp/generated/vtt/ab/cd/abcdef0123456789.vtt")
@@ -192,10 +184,8 @@ mod tests {
 
     #[test]
     fn sprite_path_uses_jpg_extension() {
-        unsafe {
-            std::env::set_var("MYDIA_GENERATED_MEDIA_PATH", "/tmp/generated");
-        }
-        let path = generated_media_path(BlobKind::Sprite, "deadbeefcafebabe");
+        let base = PathBuf::from("/tmp/generated");
+        let path = generated_media_path(&base, BlobKind::Sprite, "deadbeefcafebabe");
         assert_eq!(
             path,
             PathBuf::from("/tmp/generated/sprites/de/ad/deadbeefcafebabe.jpg")

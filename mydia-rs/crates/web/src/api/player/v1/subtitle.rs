@@ -10,14 +10,16 @@
 //! The routes are mounted with the Phoenix URL shape so the Flutter
 //! player's existing URLs resolve.
 
-use axum::{response::Response, routing::get, Router};
+use axum::{middleware::from_fn, response::Response, routing::get, Router};
 
+use crate::api::auth_layer::api_key_auth;
 use crate::api::v1::not_implemented;
 
 pub fn router() -> Router {
     Router::new()
         .route("/api/player/v1/subtitles/{type}/{id}", get(index))
         .route("/api/player/v1/subtitles/{type}/{id}/{track}", get(show))
+        .layer(from_fn(api_key_auth))
 }
 
 async fn index() -> Response {

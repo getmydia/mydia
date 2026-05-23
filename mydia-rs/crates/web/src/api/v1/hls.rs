@@ -11,11 +11,13 @@
 //! the routes are mounted and return `501 Not Implemented`.
 
 use axum::{
+    middleware::from_fn,
     response::Response,
     routing::{delete, get, post},
     Router,
 };
 
+use crate::api::auth_layer::media_token_auth;
 use crate::api::v1::not_implemented;
 
 pub fn router() -> Router {
@@ -36,6 +38,7 @@ pub fn router() -> Router {
         // path (with `/index.m3u8`) automatically, falling through
         // here for ffmpeg's flat segment layout.
         .route("/api/v1/hls/{session_id}/{segment}", get(root_segment))
+        .layer(from_fn(media_token_auth))
 }
 
 async fn start_session() -> Response {

@@ -16,12 +16,14 @@
 use axum::{
     extract::Path,
     http::StatusCode,
+    middleware::from_fn,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use serde_json::json;
 
+use crate::api::auth_layer::api_key_auth;
 use crate::api::v1::not_implemented;
 
 pub fn router() -> Router {
@@ -32,6 +34,7 @@ pub fn router() -> Router {
         .route("/api/v1/playback/episode/{id}", post(update_episode))
         .route("/api/v1/playback/file/{id}", get(show_file))
         .route("/api/v1/playback/file/{id}", post(update_file))
+        .layer(from_fn(api_key_auth))
 }
 
 async fn show_movie(Path(_id): Path<String>) -> Response {

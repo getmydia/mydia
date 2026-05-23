@@ -8,11 +8,13 @@
 //! serialization ports as a U33 follow-up.
 
 use axum::{
+    middleware::from_fn,
     response::Response,
     routing::{get, post},
     Router,
 };
 
+use crate::api::auth_layer::api_key_auth;
 use crate::api::v1::not_implemented;
 
 pub fn router() -> Router {
@@ -22,6 +24,7 @@ pub fn router() -> Router {
         .route("/api/v1/indexers/{id}", get(show))
         .route("/api/v1/indexers/{id}/test", post(test))
         .route("/api/v1/indexers/{id}/reset-failures", post(reset_failures))
+        .layer(from_fn(api_key_auth))
 }
 
 async fn index() -> Response {

@@ -14,12 +14,14 @@
 use axum::{
     extract::Path,
     http::StatusCode,
+    middleware::from_fn,
     response::{IntoResponse, Response},
     routing::{get, post},
     Extension, Json, Router,
 };
 use serde_json::json;
 
+use crate::api::auth_layer::api_key_auth;
 use crate::api::v1::{json_error, not_implemented};
 use crate::WebState;
 
@@ -27,6 +29,7 @@ pub fn router() -> Router {
     Router::new()
         .route("/api/v1/media/{id}", get(show))
         .route("/api/v1/media/{id}/match", post(match_handler))
+        .layer(from_fn(api_key_auth))
 }
 
 async fn show(Extension(state): Extension<WebState>, Path(id): Path<String>) -> Response {

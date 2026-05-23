@@ -286,7 +286,36 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
         mydia_rs_graphql::GraphqlAppState::with_pubsub(db.clone(), pubsub.clone()),
     );
 
-    let web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc);
+    let mut web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc);
+
+    // U33 follow-up: wire the media-token signer + verified-claims cache
+    // into WebState so the REST media-token auth pipeline can verify
+    // bearer tokens. The signer keys off the same `guardian_secret_key`
+    // the p2p subsystem uses, so issued tokens round-trip across both
+    // surfaces. When the secret is absent the routes still return 401
+    // for any token — the middleware noticed an unconfigured signer and
+    // logs a warn diagnostic for the operator.
+    if let Some(secret) = config.server.guardian_secret_key.as_ref() {
+        let leeway_secs = u64::from(config.auth.jwt_allowed_drift_ms) / 1000;
+        let signer = mydia_rs_auth::MediaTokenSigner::new(secret, leeway_secs);
+        let cache = mydia_rs_auth::MediaTokenCache::new(std::time::Duration::from_secs(300));
+        web_state = web_state.with_media_signer(signer, cache);
+    } else {
+        tracing::warn!(
+            "config.server.guardian_secret_key is unset; \
+             /api/v1/stream and /api/v1/hls will reject every request \
+             until a secret is configured"
+        );
+    }
+
+    // U33 follow-up: source the generated-media base path from the env
+    // var Phoenix sets (`MYDIA_GENERATED_MEDIA_PATH`). When unset, the
+    // default of `priv/generated` is fine for dev mode. Once the
+    // `LibraryConfig` schema grows a typed field for this we can drop
+    // the env var read.
+    if let Ok(path) = std::env::var("MYDIA_GENERATED_MEDIA_PATH") {
+        web_state = web_state.with_generated_media_path(std::path::PathBuf::from(path));
+    }
 
     // U29: boot the p2p Server (iroh Host wrapper) when remote-access
     // is enabled and a keypair path is configured. The Phoenix backend

@@ -29,22 +29,18 @@
 //!
 //! ## Auth posture
 //!
-//! Today the routes mount without their per-route auth pipeline
-//! attached — the U6 extractors (API key, media token, session
-//! cookie) exist in `mydia-rs-auth`, but the per-route Phoenix Plug
-//! pipeline mapping (`api_auth`, `media_api_auth`, `require_admin`,
-//! `require_authenticated`) ports as part of U33's follow-up slice.
-//! The handlers themselves are scaffolded so the surface is wired
-//! and verifiable; the byte-range and thumbnail endpoints are
-//! behaviorally complete on the request side.
+//! Each submodule's `router()` attaches the appropriate auth layer per
+//! Phoenix's `router.ex:213-319`:
 //!
-//! TODO(U33-follow-up): wire `mydia_rs_auth::api_key`, `media_token`,
-//! and session extractors into per-route middleware so the auth
-//! pipeline matches the Phoenix `router.ex` scope blocks (lines
-//! 213-273).
+//! - `:api_auth` — [`auth_layer::api_key_auth`]: download, download
+//!   client, indexer, media, playback, thumbnail, subtitle.
+//! - `:media_api_auth` — [`auth_layer::media_token_auth`]: stream, hls.
+//! - `:require_admin` — [`auth_layer::require_admin`] *after*
+//!   `api_key_auth`: config (read and write both).
 
 #![cfg(feature = "server")]
 
+pub mod auth_layer;
 pub mod player;
 pub mod range_helper;
 pub mod v1;

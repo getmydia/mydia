@@ -9,11 +9,13 @@
 //! until the job dispatch glue lands.
 
 use axum::{
+    middleware::from_fn,
     response::Response,
     routing::{delete, get, post},
     Router,
 };
 
+use crate::api::auth_layer::api_key_auth;
 use crate::api::v1::not_implemented;
 
 pub fn router() -> Router {
@@ -26,6 +28,7 @@ pub fn router() -> Router {
         .route("/api/v1/download/job/{job_id}/status", get(job_status))
         .route("/api/v1/download/job/{job_id}", delete(cancel_job))
         .route("/api/v1/download/job/{job_id}/file", get(download_file))
+        .layer(from_fn(api_key_auth))
 }
 
 async fn options() -> Response {
