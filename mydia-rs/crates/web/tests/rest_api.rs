@@ -127,6 +127,39 @@ CREATE TABLE IF NOT EXISTS media_files (
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS library_paths (
+    id TEXT PRIMARY KEY,
+    path TEXT,
+    type TEXT,
+    monitored INTEGER NOT NULL DEFAULT 1,
+    scan_interval INTEGER NOT NULL DEFAULT 3600,
+    from_env INTEGER NOT NULL DEFAULT 0,
+    disabled INTEGER NOT NULL DEFAULT 0,
+    category_paths TEXT NOT NULL DEFAULT '{}',
+    auto_organize INTEGER NOT NULL DEFAULT 0,
+    auto_import INTEGER NOT NULL DEFAULT 0,
+    write_nfo INTEGER NOT NULL DEFAULT 0,
+    auto_rename INTEGER NOT NULL DEFAULT 1,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS subtitles (
+    id TEXT PRIMARY KEY,
+    media_file_id TEXT NOT NULL,
+    language TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    subtitle_hash TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    sync_offset INTEGER NOT NULL DEFAULT 0,
+    format TEXT NOT NULL,
+    rating REAL,
+    download_count INTEGER,
+    hearing_impaired INTEGER NOT NULL DEFAULT 0,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ";
 
 /// Write `len` deterministic bytes (`i % 251`) to a tempfile so the
@@ -779,7 +812,7 @@ async fn player_v1_subtitle_index_rejects_invalid_type() {
 }
 
 #[tokio::test]
-async fn player_v1_subtitle_show_remains_501_with_todo_marker() {
+async fn player_v1_subtitle_show_returns_404_for_unknown_media() {
     let fx = auth_fixture().await;
     let router = player_router_with_state(fx.state);
     let response = router
@@ -793,13 +826,286 @@ async fn player_v1_subtitle_show_remains_501_with_todo_marker() {
         .await
         .expect("router oneshot");
 
-    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    // No media_files row for "abc" -> the lookup returns None and the
+    // handler responds 404 "No media files available". Verifies the
+    // 501 marker is gone and the resolver fires.
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let body = collect(response.into_body()).await;
     let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
     assert_eq!(
-        parsed["todo"].as_str().unwrap_or(""),
-        "U33.player.subtitles.show"
+        parsed["error"].as_str().unwrap_or(""),
+        "No media files available"
     );
+}
+
+#[tokio::test]
+async fn player_v1_subtitle_show_external_track_serves_file_from_cache() {
+    // External subtitle path: a row in the `subtitles` table whose
+    // file_path lives on disk. The handler should resolve the row,
+    // open the file, and stream it with text/plain (for srt).
+    let fx = auth_fixture().await;
+    let media_file_id = insert_media_file_with_path(&fx.state.db, "/nonexistent.mkv").await;
+
+    // Write the external sidecar to a temp file so the test doesn't
+    // depend on the filesystem layout.
+    let sidecar = tempfile::NamedTempFile::new().expect("tempfile");
+    let sidecar_path = sidecar.path().to_path_buf();
+    std::fs::write(&sidecar_path, b"1\n00:00:01,000 --> 00:00:02,000\nHello\n")
+        .expect("write sidecar");
+
+    let subtitle_id = uuid::Uuid::new_v4().to_string();
+    insert_subtitle(
+        &fx.state.db,
+        &subtitle_id,
+        &media_file_id,
+        sidecar_path.to_str().unwrap(),
+        "srt",
+        "en",
+    )
+    .await;
+
+    let router = player_router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/player/v1/subtitles/file/{media_file_id}/{subtitle_id}"
+                ))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let content_type = response
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .map(|v| v.to_str().unwrap_or("").to_string())
+        .unwrap_or_default();
+    assert!(
+        content_type.starts_with("text/plain"),
+        "expected text/plain content-type, got {content_type}"
+    );
+    let etag = response
+        .headers()
+        .get(http::header::ETAG)
+        .map(|v| v.to_str().unwrap_or("").to_string());
+    assert!(etag.is_some(), "expected ETag header on subtitle response");
+    let body = collect(response.into_body()).await;
+    assert!(
+        body.starts_with(b"1\n"),
+        "expected SRT body, got {} bytes",
+        body.len()
+    );
+}
+
+#[tokio::test]
+async fn player_v1_subtitle_show_returns_304_on_matching_if_none_match() {
+    // Round-trip the ETag from a first request and replay it as
+    // If-None-Match; the second request should short-circuit to 304
+    // without re-reading the body.
+    let fx = auth_fixture().await;
+    let media_file_id = insert_media_file_with_path(&fx.state.db, "/nonexistent.mkv").await;
+
+    let sidecar = tempfile::NamedTempFile::new().expect("tempfile");
+    let sidecar_path = sidecar.path().to_path_buf();
+    std::fs::write(
+        &sidecar_path,
+        b"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHi\n",
+    )
+    .expect("write sidecar");
+
+    let subtitle_id = uuid::Uuid::new_v4().to_string();
+    insert_subtitle(
+        &fx.state.db,
+        &subtitle_id,
+        &media_file_id,
+        sidecar_path.to_str().unwrap(),
+        "vtt",
+        "en",
+    )
+    .await;
+
+    // Build the router as a service so two oneshot calls share the
+    // same fixture; tower::ServiceExt::oneshot consumes the router so
+    // we clone the state for the second build.
+    let router1 = player_router_with_state(fx.state.clone());
+    let first = router1
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/player/v1/subtitles/file/{media_file_id}/{subtitle_id}"
+                ))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+    assert_eq!(first.status(), StatusCode::OK);
+    let etag = first
+        .headers()
+        .get(http::header::ETAG)
+        .expect("first response has ETag")
+        .to_str()
+        .expect("ASCII etag")
+        .to_string();
+
+    let router2 = player_router_with_state(fx.state);
+    let second = router2
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/player/v1/subtitles/file/{media_file_id}/{subtitle_id}"
+                ))
+                .header("X-API-Key", &fx.api_key)
+                .header(http::header::IF_NONE_MATCH, &etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+    // The ETag should still come back on a 304 so the client can
+    // re-cache it (RFC 7232 §4.1).
+    let echo = second
+        .headers()
+        .get(http::header::ETAG)
+        .map(|v| v.to_str().unwrap_or("").to_string())
+        .unwrap_or_default();
+    assert_eq!(echo, etag);
+}
+
+#[tokio::test]
+async fn player_v1_subtitle_show_returns_404_for_unknown_external_track() {
+    let fx = auth_fixture().await;
+    let media_file_id = insert_media_file_with_path(&fx.state.db, "/nonexistent.mkv").await;
+    let router = player_router_with_state(fx.state);
+
+    let unknown_subtitle_id = uuid::Uuid::new_v4().to_string();
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/player/v1/subtitles/file/{media_file_id}/{unknown_subtitle_id}"
+                ))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(
+        parsed["error"].as_str().unwrap_or(""),
+        "Subtitle track not found"
+    );
+}
+
+#[tokio::test]
+async fn player_v1_subtitle_index_includes_external_tracks() {
+    // The index endpoint should return external tracks alongside the
+    // (empty, since no media file on disk) embedded tracks.
+    let fx = auth_fixture().await;
+    let media_file_id = insert_media_file_with_path(&fx.state.db, "/nonexistent.mkv").await;
+
+    let sidecar = tempfile::NamedTempFile::new().expect("tempfile");
+    let subtitle_id = uuid::Uuid::new_v4().to_string();
+    insert_subtitle(
+        &fx.state.db,
+        &subtitle_id,
+        &media_file_id,
+        sidecar.path().to_str().unwrap(),
+        "srt",
+        "eng",
+    )
+    .await;
+
+    let router = player_router_with_state(fx.state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/player/v1/subtitles/file/{media_file_id}"))
+                .header("X-API-Key", &fx.api_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("router oneshot");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = collect(response.into_body()).await;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let data = parsed["data"].as_array().expect("data array");
+    assert_eq!(data.len(), 1, "expected exactly one external track");
+    assert_eq!(data[0]["track_id"].as_str().unwrap_or(""), subtitle_id);
+    assert!(!data[0]["embedded"].as_bool().unwrap_or(true));
+    assert_eq!(data[0]["format"].as_str().unwrap_or(""), "srt");
+    assert_eq!(data[0]["language"].as_str().unwrap_or(""), "eng");
+    assert_eq!(
+        data[0]["title"].as_str().unwrap_or(""),
+        "English (External)"
+    );
+}
+
+// Insert a media_files row with a given absolute path; returns the id.
+// Mirrors the columns the subtitle handler's lookup_media_file
+// projection touches: id, path, trashed_at IS NULL.
+async fn insert_media_file_with_path(db: &Db, path: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO media_files \
+             (id, media_item_id, path, analysis_attempts, inserted_at, updated_at) \
+             VALUES (?, ?, ?, 0, ?, ?)",
+        )
+        .bind(&id)
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(path)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert media_file");
+    }
+    id
+}
+
+async fn insert_subtitle(
+    db: &Db,
+    id: &str,
+    media_file_id: &str,
+    file_path: &str,
+    format: &str,
+    language: &str,
+) {
+    let now = Utc::now().to_rfc3339();
+    if let Db::Sqlite(pool) = db {
+        sqlx::query(
+            "INSERT INTO subtitles \
+             (id, media_file_id, language, provider, subtitle_hash, file_path, \
+              sync_offset, format, hearing_impaired, inserted_at, updated_at) \
+             VALUES (?, ?, ?, 'test', ?, ?, 0, ?, 0, ?, ?)",
+        )
+        .bind(id)
+        .bind(media_file_id)
+        .bind(language)
+        .bind(uuid::Uuid::new_v4().to_string()) // unique hash
+        .bind(file_path)
+        .bind(format)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert subtitle");
+    }
 }
 
 // ---------- wired adapters: download_client + indexer ----------
