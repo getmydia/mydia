@@ -100,6 +100,85 @@ CREATE TABLE IF NOT EXISTS media_requests (
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS config_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    category TEXT NOT NULL,
+    updated_by_id TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS download_clients (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    url TEXT NOT NULL,
+    username TEXT,
+    password TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS indexers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    definition TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    api_key TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS media_servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    access_token TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS import_lists (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    url_or_id TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    last_synced_at TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS release_blacklist (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    reason TEXT,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS quality_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS quality_profile_cutoffs (
+    id TEXT PRIMARY KEY,
+    quality_profile_id TEXT NOT NULL,
+    resolution TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    inserted_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ";
 
 struct Fixture {
@@ -535,4 +614,401 @@ async fn requests_approve_updates_status() {
     };
     assert_eq!(status, "approved");
     assert_eq!(approved_by.as_deref(), Some(admin.as_str()));
+}
+
+// ---------- config_settings ----------
+
+#[tokio::test]
+async fn config_settings_upsert_updates_existing_row() {
+    let fx = fixture().await;
+    let admin = insert_user(&fx.db, "admin").await;
+    let now = Utc::now().to_rfc3339();
+
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            )
+            .bind("server.port")
+            .bind("4000")
+            .bind("Server")
+            .bind(&admin)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert");
+
+            // Second upsert on the same key changes the value, not the row count.
+            sqlx::query(
+                "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            )
+            .bind("server.port")
+            .bind("5555")
+            .bind("Server")
+            .bind(&admin)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("update via upsert");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    let rows: Vec<(String, String)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT key, value FROM config_settings")
+            .fetch_all(pool)
+            .await
+            .expect("query"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(rows.len(), 1, "upsert collapses to one row");
+    assert_eq!(rows[0].0, "server.port");
+    assert_eq!(rows[0].1, "5555");
+}
+
+// ---------- download_clients ----------
+
+async fn insert_download_client(db: &Db, name: &str, kind: &str, enabled: bool) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO download_clients (id, name, kind, url, enabled, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&id)
+            .bind(name)
+            .bind(kind)
+            .bind("http://localhost:8080")
+            .bind(enabled)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert download_client");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+    id
+}
+
+#[tokio::test]
+async fn download_clients_list_returns_inserted_rows_ordered() {
+    let fx = fixture().await;
+    let _qb = insert_download_client(&fx.db, "qb1", "qbittorrent", true).await;
+    let _tr = insert_download_client(&fx.db, "tr1", "transmission", true).await;
+
+    let rows: Vec<(String, String, bool)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as(
+            "SELECT name, kind, enabled FROM download_clients ORDER BY inserted_at ASC",
+        )
+        .fetch_all(pool)
+        .await
+        .expect("query"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].0, "qb1");
+    assert_eq!(rows[1].0, "tr1");
+}
+
+#[tokio::test]
+async fn download_clients_toggle_flips_enabled() {
+    let fx = fixture().await;
+    let id = insert_download_client(&fx.db, "qb", "qbittorrent", true).await;
+
+    let now = Utc::now().to_rfc3339();
+    match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "UPDATE download_clients SET enabled = NOT enabled, updated_at = ? WHERE id = ?",
+        )
+        .bind(&now)
+        .bind(&id)
+        .execute(pool)
+        .await
+        .expect("toggle"),
+        Db::Postgres(_) => unreachable!(),
+    };
+
+    let (enabled,): (bool,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT enabled FROM download_clients WHERE id = ?")
+            .bind(&id)
+            .fetch_one(pool)
+            .await
+            .expect("readback"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert!(!enabled, "toggle flipped enabled to false");
+}
+
+// ---------- indexers ----------
+
+#[tokio::test]
+async fn indexers_insert_and_list_round_trip() {
+    let fx = fixture().await;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "INSERT INTO indexers (id, name, definition, base_url, enabled, inserted_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind("iptorrents")
+        .bind("iptorrents")
+        .bind("https://iptorrents.com")
+        .bind(true)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert indexer"),
+        Db::Postgres(_) => unreachable!(),
+    };
+
+    let rows: Vec<(String, String, String)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT name, definition, base_url FROM indexers")
+            .fetch_all(pool)
+            .await
+            .expect("query"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].0, "iptorrents");
+    assert_eq!(rows[0].2, "https://iptorrents.com");
+}
+
+// ---------- media_servers ----------
+
+#[tokio::test]
+async fn media_servers_delete_removes_row() {
+    let fx = fixture().await;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO media_servers (id, name, kind, base_url, enabled, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&id)
+            .bind("jellyfin")
+            .bind("jellyfin")
+            .bind("http://jellyfin:8096")
+            .bind(true)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query("DELETE FROM media_servers WHERE id = ?")
+            .bind(&id)
+            .execute(pool)
+            .await
+            .expect("delete")
+            .rows_affected(),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 1);
+
+    let (count,): (i64,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM media_servers")
+            .fetch_one(pool)
+            .await
+            .expect("count"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(count, 0);
+}
+
+// ---------- import_lists ----------
+
+#[tokio::test]
+async fn import_lists_kind_constraint_via_validation() {
+    // The kind constraint lives in the server fn's validator, not
+    // the DB schema; this test pins the inserted-shape contract.
+    let fx = fixture().await;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    match &fx.db {
+        Db::Sqlite(pool) => sqlx::query(
+            "INSERT INTO import_lists (id, name, kind, url_or_id, enabled, inserted_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind("trending")
+        .bind("trakt")
+        .bind("user/mylist")
+        .bind(true)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("insert"),
+        Db::Postgres(_) => unreachable!(),
+    };
+
+    let (kind,): (String,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT kind FROM import_lists WHERE id = ?")
+            .bind(&id)
+            .fetch_one(pool)
+            .await
+            .expect("readback"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(kind, "trakt");
+}
+
+// ---------- release_blacklist ----------
+
+#[tokio::test]
+async fn release_blacklist_insert_and_delete_round_trip() {
+    let fx = fixture().await;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO release_blacklist (id, kind, pattern, reason, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&id)
+            .bind("title")
+            .bind("*CAM*")
+            .bind(Some("camrip quality unacceptable".to_owned()))
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    let (pattern,): (String,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT pattern FROM release_blacklist WHERE id = ?")
+            .bind(&id)
+            .fetch_one(pool)
+            .await
+            .expect("readback"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(pattern, "*CAM*");
+
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query("DELETE FROM release_blacklist WHERE id = ?")
+            .bind(&id)
+            .execute(pool)
+            .await
+            .expect("delete")
+            .rows_affected(),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 1);
+}
+
+// ---------- quality_profiles ----------
+
+#[tokio::test]
+async fn quality_profiles_cutoff_count_via_subquery() {
+    let fx = fixture().await;
+    let profile_id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO quality_profiles (id, name, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?)",
+            )
+            .bind(&profile_id)
+            .bind("Any")
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert profile");
+
+            for (i, res) in ["480p", "720p", "1080p"].iter().enumerate() {
+                sqlx::query(
+                    "INSERT INTO quality_profile_cutoffs (id, quality_profile_id, resolution, position, inserted_at, updated_at) \
+                     VALUES (?, ?, ?, ?, ?, ?)",
+                )
+                .bind(uuid::Uuid::new_v4().to_string())
+                .bind(&profile_id)
+                .bind(*res)
+                .bind(i as i64)
+                .bind(&now)
+                .bind(&now)
+                .execute(pool)
+                .await
+                .expect("insert cutoff");
+            }
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    let rows: Vec<(String, String, i64)> = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as(
+            "SELECT p.id, p.name, \
+                    (SELECT COUNT(*) FROM quality_profile_cutoffs c WHERE c.quality_profile_id = p.id) \
+             FROM quality_profiles p",
+        )
+        .fetch_all(pool)
+        .await
+        .expect("query"),
+        Db::Postgres(_) => unreachable!(),
+    };
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].1, "Any");
+    assert_eq!(rows[0].2, 3, "cutoff subquery counts 3 items");
+}
+
+// ---------- remote_access ----------
+
+#[tokio::test]
+async fn remote_access_status_counts_active_vs_revoked() {
+    let fx = fixture().await;
+    let user = insert_user(&fx.db, "admin").await;
+    let _live = insert_device(&fx.db, &user, false).await;
+    let _live2 = insert_device(&fx.db, &user, false).await;
+    let _dead = insert_device(&fx.db, &user, true).await;
+
+    let (paired,): (i64,) = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NULL")
+                .fetch_one(pool)
+                .await
+                .expect("count")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    let (revoked,): (i64,) = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NOT NULL")
+                .fetch_one(pool)
+                .await
+                .expect("count")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(paired, 2, "two paired devices stay live");
+    assert_eq!(revoked, 1, "one revoked device is counted separately");
 }

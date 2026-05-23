@@ -17,9 +17,18 @@ use crate::layout::{AppShell, AuthShell};
 use crate::pages::activity::Activity;
 use crate::pages::add_media::AddMedia;
 use crate::pages::admin::devices::Devices;
+use crate::pages::admin::download_clients::DownloadClients;
+use crate::pages::admin::import_lists::ImportLists;
+use crate::pages::admin::indexers::Indexers;
 use crate::pages::admin::jobs::Jobs;
 use crate::pages::admin::library_paths::LibraryPaths;
+use crate::pages::admin::media_servers::MediaServers;
+use crate::pages::admin::quality_profiles::QualityProfiles;
+use crate::pages::admin::release_blacklist::ReleaseBlacklist;
+use crate::pages::admin::remote_access::RemoteAccess;
 use crate::pages::admin::requests::Requests;
+use crate::pages::admin::settings::Settings;
+use crate::pages::admin::system::System;
 use crate::pages::admin::transcodes::Transcodes;
 use crate::pages::admin::users::Users;
 use crate::pages::auth::login::Login;
@@ -121,4 +130,32 @@ pub enum Route {
 
         #[route("/requests")]
         MyRequests {},
+
+        // U28 follow-up — configuration-heavy admin pages.
+        #[route("/admin/system")]
+        System {},
+
+        #[route("/admin/settings")]
+        Settings {},
+
+        #[route("/admin/download_clients")]
+        DownloadClients {},
+
+        #[route("/admin/indexers")]
+        Indexers {},
+
+        #[route("/admin/media_servers")]
+        MediaServers {},
+
+        #[route("/admin/remote_access")]
+        RemoteAccess {},
+
+        #[route("/admin/import_lists")]
+        ImportLists {},
+
+        #[route("/admin/release_blacklist")]
+        ReleaseBlacklist {},
+
+        #[route("/admin/quality_profiles")]
+        QualityProfiles {},
 }

@@ -10,11 +10,24 @@
 //! Page-private components stay alongside the page file (e.g., the
 //! user-create modal lives in `pages/admin/users.rs`) — only patterns
 //! that recur across 2+ admin pages graduate here.
+//!
+//! U28 follow-up cohort adds [`config_form`] — the
+//! `<.section>`-style card + labelled row primitives the
+//! configuration-heavy admin pages (system, settings, download
+//! clients, indexers, media servers, remote access, import lists,
+//! release blacklist) share. Quality profiles uses the same
+//! primitive at the outer level even though its inner "form driving
+//! forms" is page-private.
 
+mod config_form;
 mod filter_bar;
 mod page_header;
 mod status_pill;
 
+pub use config_form::{
+    ConfigRow, ConfigRowProps, ConfigSection, ConfigSectionProps, ConfigSource, SourcePill,
+    SourcePillProps, StatRow, StatRowProps,
+};
 pub use filter_bar::{FilterBar, FilterOption};
 pub use page_header::{AdminPageHeader, AdminPageHeaderProps};
 pub use status_pill::{status_pill_class, StatusPill};

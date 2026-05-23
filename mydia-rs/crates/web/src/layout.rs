@@ -291,19 +291,59 @@ fn Sidebar(props: SidebarProps) -> Element {
                         if is_admin {
                             SectionTitle { label: "Administration".to_string() }
                             NavItem {
+                                to: Route::System {},
+                                icon: "cog-6-tooth".to_string(),
+                                label: "System".to_string(),
+                            }
+                            NavItem {
+                                to: Route::Settings {},
+                                icon: "cog-6-tooth".to_string(),
+                                label: "Settings".to_string(),
+                            }
+                            NavItem {
                                 to: Route::Users {},
                                 icon: "users".to_string(),
                                 label: "Users".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/admin/config".to_string(),
-                                icon: "cog-6-tooth".to_string(),
-                                label: "Configuration".to_string(),
+                            NavItem {
+                                to: Route::LibraryPaths {},
+                                icon: "folder".to_string(),
+                                label: "Library paths".to_string(),
                             }
-                            LinkPlaceholder {
-                                href: "/admin/import-lists".to_string(),
+                            NavItem {
+                                to: Route::QualityProfiles {},
+                                icon: "star".to_string(),
+                                label: "Quality Profiles".to_string(),
+                            }
+                            NavItem {
+                                to: Route::DownloadClients {},
+                                icon: "arrow-down-tray".to_string(),
+                                label: "Download Clients".to_string(),
+                            }
+                            NavItem {
+                                to: Route::Indexers {},
+                                icon: "magnifying-glass".to_string(),
+                                label: "Indexers".to_string(),
+                            }
+                            NavItem {
+                                to: Route::MediaServers {},
+                                icon: "computer-desktop".to_string(),
+                                label: "Media Servers".to_string(),
+                            }
+                            NavItem {
+                                to: Route::RemoteAccess {},
+                                icon: "signal".to_string(),
+                                label: "Remote Access".to_string(),
+                            }
+                            NavItem {
+                                to: Route::ImportLists {},
                                 icon: "arrow-down-on-square-stack".to_string(),
                                 label: "Import Lists".to_string(),
+                            }
+                            NavItem {
+                                to: Route::ReleaseBlacklist {},
+                                icon: "no-symbol".to_string(),
+                                label: "Release Blacklist".to_string(),
                             }
                             NavItem {
                                 to: Route::Jobs {},
@@ -317,18 +357,8 @@ fn Sidebar(props: SidebarProps) -> Element {
                             }
                             NavItem {
                                 to: Route::Devices {},
-                                icon: "signal".to_string(),
+                                icon: "user".to_string(),
                                 label: "Devices".to_string(),
-                            }
-                            LinkPlaceholder {
-                                href: "/admin/release-blacklist".to_string(),
-                                icon: "no-symbol".to_string(),
-                                label: "Release Blacklist".to_string(),
-                            }
-                            NavItem {
-                                to: Route::LibraryPaths {},
-                                icon: "folder".to_string(),
-                                label: "Library paths".to_string(),
                             }
                             NavItem {
                                 to: Route::Requests {},
