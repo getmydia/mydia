@@ -806,3 +806,239 @@ fn import_finalize_accepts_only_movie_or_tv_show_categories() {
         );
     }
 }
+
+// ---------- import media (finalize step — db boundary) ----------
+//
+// These tests pin the SQL contract the finalize server fn issues
+// against the same in-memory schema the rest of the suite uses. They
+// don't exercise the server fn directly (which would require a
+// FullstackContext mock); they exercise the same INSERT / UPDATE /
+// SELECT shape the server fn executes against the DB so a SQL drift
+// regression surfaces here.
+
+async fn count_media_items(db: &Db) -> i64 {
+    let (n,): (i64,) = match db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM media_items")
+            .fetch_one(pool)
+            .await
+            .expect("count"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    n
+}
+
+#[tokio::test]
+async fn import_finalize_insert_writes_media_item_row() {
+    let fx = fixture().await;
+    // Replicate the server fn's INSERT shape.
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&id)
+            .bind("movie")
+            .bind("Inception")
+            .bind(2010_i32)
+            .bind(27205_i64)
+            .bind(true)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert media_item");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    type Row = (String, String, Option<i32>, Option<i64>);
+    let (db_id, db_type, db_year, db_tmdb): Row = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT id, type, year, tmdb_id FROM media_items WHERE id = ?")
+                .bind(&id)
+                .fetch_one(pool)
+                .await
+                .expect("readback")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(db_id, id);
+    assert_eq!(db_type, "movie");
+    assert_eq!(db_year, Some(2010));
+    assert_eq!(db_tmdb, Some(27205));
+    assert_eq!(count_media_items(&fx.db).await, 1);
+}
+
+#[tokio::test]
+async fn import_finalize_dedup_by_tmdb_and_type() {
+    let fx = fixture().await;
+    // Pre-seed with a movie at tmdb_id=603.
+    let id_first = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO media_items (id, type, title, tmdb_id, monitored, inserted_at, updated_at) \
+                 VALUES (?, 'movie', 'The Matrix', 603, 1, ?, ?)",
+            )
+            .bind(&id_first)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("seed");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    // The server fn's de-dup SELECT against (tmdb_id, type) returns
+    // the existing row — no second INSERT happens.
+    let existing: Option<(String,)> = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT id FROM media_items WHERE tmdb_id = ? AND type = ? LIMIT 1")
+                .bind(603_i64)
+                .bind("movie")
+                .fetch_optional(pool)
+                .await
+                .expect("lookup")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(existing.map(|(id,)| id), Some(id_first.clone()));
+    assert_eq!(count_media_items(&fx.db).await, 1);
+
+    // A movie and a tv_show sharing the same tmdb id are NOT the
+    // same row — verify the SELECT scopes by type.
+    let id_show = uuid::Uuid::new_v4().to_string();
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO media_items (id, type, title, tmdb_id, monitored, inserted_at, updated_at) \
+                 VALUES (?, 'tv_show', 'Matrix Show', 603, 1, ?, ?)",
+            )
+            .bind(&id_show)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("insert tv");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+    let tv_match: Option<(String,)> = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query_as("SELECT id FROM media_items WHERE tmdb_id = ? AND type = ? LIMIT 1")
+                .bind(603_i64)
+                .bind("tv_show")
+                .fetch_optional(pool)
+                .await
+                .expect("lookup")
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(tv_match.map(|(id,)| id), Some(id_show));
+    assert_eq!(count_media_items(&fx.db).await, 2);
+}
+
+#[tokio::test]
+async fn import_finalize_file_association_updates_media_item_id() {
+    let fx = fixture().await;
+    // Seed a media_item and an orphan media_file (no media_item_id).
+    let item_id = uuid::Uuid::new_v4().to_string();
+    let file_id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
+                 VALUES (?, 'movie', 'Inception', 1, ?, ?)",
+            )
+            .bind(&item_id)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("seed item");
+            sqlx::query(
+                "INSERT INTO media_files (id, file_name, inserted_at, updated_at) \
+                 VALUES (?, 'Inception.2010.1080p.mkv', ?, ?)",
+            )
+            .bind(&file_id)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("seed file");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    // Replicate the server fn's UPDATE shape.
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query("UPDATE media_files SET media_item_id = ?, updated_at = ? WHERE id = ?")
+                .bind(&item_id)
+                .bind(&now)
+                .bind(&file_id)
+                .execute(pool)
+                .await
+                .expect("update")
+                .rows_affected()
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 1);
+
+    let (mi_id,): (Option<String>,) = match &fx.db {
+        Db::Sqlite(pool) => sqlx::query_as("SELECT media_item_id FROM media_files WHERE id = ?")
+            .bind(&file_id)
+            .fetch_one(pool)
+            .await
+            .expect("readback"),
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(mi_id, Some(item_id));
+}
+
+#[tokio::test]
+async fn import_finalize_file_association_missing_file_returns_zero_rows() {
+    let fx = fixture().await;
+    let item_id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
+                 VALUES (?, 'movie', 'M', 1, ?, ?)",
+            )
+            .bind(&item_id)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .expect("seed item");
+        }
+        Db::Postgres(_) => unreachable!(),
+    }
+
+    // The server fn surfaces a missing media_files row as a
+    // ServerFnError — verify the underlying UPDATE returns zero
+    // rows_affected, which is the condition the server fn checks.
+    let affected = match &fx.db {
+        Db::Sqlite(pool) => {
+            sqlx::query("UPDATE media_files SET media_item_id = ?, updated_at = ? WHERE id = ?")
+                .bind(&item_id)
+                .bind(&now)
+                .bind("non-existent-file-id")
+                .execute(pool)
+                .await
+                .expect("update")
+                .rows_affected()
+        }
+        Db::Postgres(_) => unreachable!(),
+    };
+    assert_eq!(affected, 0);
+}

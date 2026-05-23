@@ -25,10 +25,11 @@ use dioxus::prelude::*;
 use crate::components::admin::{AdminPageHeader, FilterBar, FilterOption};
 use crate::components::core::{Button, ButtonVariant, Input};
 use crate::components::request_form::CandidateCard;
+use crate::routes::Route;
 use crate::server_fns::add_media::AddMediaCandidate;
 use crate::server_fns::import_media::{
-    fetch_candidate_details, search_candidates, ImportCandidate, ImportCandidateDetails,
-    ImportCandidateRef, ImportSearchQuery,
+    fetch_candidate_details, finalize_import, search_candidates, ImportCandidate,
+    ImportCandidateDetails, ImportCandidateRef, ImportFinalize, ImportSearchQuery,
 };
 
 const MEDIA_TYPE_OPTIONS: &[(&str, &str)] = &[("movie", "Movies"), ("tv_show", "TV Shows")];
@@ -256,12 +257,59 @@ fn MatchStep(candidate: ImportCandidate, on_back: Callback<()>) -> Element {
     };
 
     let candidate_for_fallback = candidate.clone();
+    let candidate_for_confirm = candidate.clone();
+
+    let nav = navigator();
+    let mut submitting = use_signal(|| false);
+    let mut finalize_error = use_signal::<Option<String>>(|| None);
+
+    let on_confirm = {
+        let candidate = candidate_for_confirm.clone();
+        Callback::new(move |confirmed: ImportCandidateDetails| {
+            if *submitting.read() {
+                return;
+            }
+            submitting.set(true);
+            finalize_error.set(None);
+            // Use the freshly-fetched details when available — the
+            // candidate fallback may carry a less canonical title
+            // (e.g. localized vs. original) than the detail payload.
+            let title = if confirmed.title.is_empty() {
+                candidate.title.clone()
+            } else {
+                confirmed.title.clone()
+            };
+            let payload = ImportFinalize {
+                provider: candidate.provider.clone(),
+                external_id: candidate.external_id.clone(),
+                media_type: candidate.media_type.clone(),
+                title,
+                year: confirmed.year.or(candidate.year),
+                file_id: None,
+                category_override: None,
+            };
+            spawn(async move {
+                match finalize_import(payload).await {
+                    Ok(ack) => {
+                        nav.push(Route::MediaShow {
+                            id: ack.media_item_id,
+                        });
+                    }
+                    Err(err) => {
+                        finalize_error.set(Some(err.to_string()));
+                        submitting.set(false);
+                    }
+                }
+            });
+        })
+    };
 
     rsx! {
         div { id: "import-media-match", class: "space-y-4",
             div { id: "import-media-back-row", class: "flex items-center gap-2",
                 Button {
                     variant: ButtonVariant::Ghost,
+                    disabled: *submitting.read(),
                     onclick: move |_| on_back.call(()),
                     "← Back to results"
                 }
@@ -270,41 +318,70 @@ fn MatchStep(candidate: ImportCandidate, on_back: Callback<()>) -> Element {
                 }
             }
 
+            if let Some(err) = finalize_error.read().clone() {
+                div { id: "import-media-finalize-error", class: "alert alert-error",
+                    "Failed to finalize import: {err}"
+                }
+            }
+
             match &*details.read_unchecked() {
-                Some(Ok(d)) => rsx! {
-                    MatchCard { details: d.clone() }
-                    // TODO(U27.import-finalize-step): replace this
-                    // placeholder with a Confirm button that calls
-                    // finalize_import and navigates to /media/<id> on
-                    // success.
-                    div { class: "card bg-base-100 shadow-sm border border-base-content/5",
-                        div { class: "card-body py-4",
-                            div { class: "flex items-center justify-between gap-3",
-                                p { class: "text-sm text-base-content/70",
-                                    "Confirm + add lands in the next commit."
-                                }
-                                div { id: "import-media-confirm-wrap",
-                                    Button {
-                                        variant: ButtonVariant::Primary,
-                                        disabled: true,
-                                        "Confirm import"
-                                    }
-                                }
-                            }
+                Some(Ok(d)) => {
+                    let d_for_card = d.clone();
+                    let d_for_confirm = d.clone();
+                    rsx! {
+                        MatchCard { details: d_for_card }
+                        ConfirmBar {
+                            label: "Confirm import".to_string(),
+                            busy: *submitting.read(),
+                            on_confirm: move |_| on_confirm.call(d_for_confirm.clone()),
                         }
                     }
-                },
-                Some(Err(err)) => rsx! {
-                    div { class: "alert alert-error", "Failed to load details: {err}" }
-                    // Operator still sees a thin fallback summary so
-                    // the page never strands them on a bare error.
-                    MatchCard { details: details_from_candidate(&candidate_for_fallback) }
-                },
+                }
+                Some(Err(err)) => {
+                    let fallback = details_from_candidate(&candidate_for_fallback);
+                    let fallback_for_card = fallback.clone();
+                    let fallback_for_confirm = fallback.clone();
+                    rsx! {
+                        div { class: "alert alert-error", "Failed to load details: {err}" }
+                        // Operator still sees a thin fallback summary so
+                        // the page never strands them on a bare error.
+                        MatchCard { details: fallback_for_card }
+                        ConfirmBar {
+                            label: "Confirm with partial metadata".to_string(),
+                            busy: *submitting.read(),
+                            on_confirm: move |_| on_confirm.call(fallback_for_confirm.clone()),
+                        }
+                    }
+                }
                 None => rsx! {
                     div { class: "py-8 text-center",
                         span { class: "loading loading-spinner loading-md" }
                     }
                 },
+            }
+        }
+    }
+}
+
+#[component]
+fn ConfirmBar(label: String, busy: bool, on_confirm: Callback<MouseEvent>) -> Element {
+    rsx! {
+        div { class: "card bg-base-100 shadow-sm border border-base-content/5",
+            div { class: "card-body py-4",
+                div { class: "flex items-center justify-between gap-3",
+                    p { class: "text-sm text-base-content/70",
+                        "Adds the title to your library and queues a metadata refresh."
+                    }
+                    div { id: "import-media-confirm-wrap",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            disabled: busy,
+                            loading: busy,
+                            onclick: move |evt: MouseEvent| on_confirm.call(evt),
+                            "{label}"
+                        }
+                    }
+                }
             }
         }
     }

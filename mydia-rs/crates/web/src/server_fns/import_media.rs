@@ -103,6 +103,15 @@ pub struct ImportFinalize {
     pub provider: String,
     pub external_id: String,
     pub media_type: String,
+    /// Operator-confirmed title — written verbatim into
+    /// `media_items.title`. The metadata-refresh worker subsequently
+    /// overwrites this with the canonical provider value, but the row
+    /// is searchable in the meantime.
+    pub title: String,
+    /// Operator-confirmed year (optional — books and ongoing series
+    /// can omit).
+    #[serde(default)]
+    pub year: Option<i32>,
     /// `media_files.id` when finalizing against an orphan file.
     /// `None` for a metadata-only library add (no on-disk file yet).
     #[serde(default)]
@@ -336,12 +345,13 @@ mod server {
         match db {
             Db::Sqlite(pool) => {
                 sqlx::query(
-                    "INSERT INTO media_items (id, type, title, tmdb_id, monitored, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(id)
                 .bind(media_type)
-                .bind(format!("(pending refresh) {}", payload.external_id))
+                .bind(&payload.title)
+                .bind(payload.year)
                 .bind(tmdb_id)
                 .bind(true)
                 .bind(now.to_rfc3339())
@@ -352,12 +362,13 @@ mod server {
             }
             Db::Postgres(pool) => {
                 sqlx::query(
-                    "INSERT INTO media_items (id, type, title, tmdb_id, monitored, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                 )
                 .bind(id)
                 .bind(media_type)
-                .bind(format!("(pending refresh) {}", payload.external_id))
+                .bind(&payload.title)
+                .bind(payload.year)
                 .bind(tmdb_id)
                 .bind(true)
                 .bind(now)
