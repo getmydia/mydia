@@ -87,6 +87,177 @@ const THEME_BOOTSTRAP_JS: &str = r"
 })();
 ";
 
+/// Configuration shell for the eight `/admin/config/*` tab pages.
+///
+/// Phoenix counterpart: `MydiaWeb.AdminComponents.admin_page/1` +
+/// `tab_nav/1` at `lib/mydia_web/components/admin_components.ex:16-103`.
+/// Every Phoenix `admin_*_live` template wraps its tab body in this
+/// shared chrome — a single "Configuration" h1 + subtitle followed by
+/// a tab strip and the active tab's content. We mirror that here as
+/// a `#[layout(AdminConfigShell)]` block in the route enum so the shell
+/// stays mounted while the inner outlet swaps between tabs.
+///
+/// Active-tab detection reads the current `Route` variant via
+/// `use_route::<Route>()` and pattern-matches on the eight config
+/// variants. Matching on the typed enum rather than parsing the URL
+/// keeps tab styling locked to the routing surface — a renamed route
+/// or a typo'd path fails the build, not the styling.
+///
+/// Remote Access feature flag: Phoenix gates the Remote Access tab on
+/// `Application.get_env(:mydia, :features, [])[:remote_access_enabled]`
+/// (see `admin_components.ex:17-19`). The Dioxus port has no equivalent
+/// runtime flag wired through `LayoutData` today, so the tab renders
+/// unconditionally with a `TODO(feature-flag)` marker. The route is
+/// already conditional on operator action (an admin who doesn't want
+/// remote access never visits the tab) and Phoenix defaults the flag
+/// to `false`, so this is a visible-but-quiet gap to close once a
+/// feature-flag context is plumbed.
+#[component]
+pub fn AdminConfigShell() -> Element {
+    use crate::routes::Route;
+
+    let route = use_route::<Route>();
+    let active = ConfigTab::from_route(&route);
+
+    // TODO(feature-flag): mirror Phoenix's
+    // `Mydia.Features.remote_access_enabled?/0` once the LayoutData
+    // context grows a `features` field. Hard-coded `true` keeps the
+    // tab visible so the route remains discoverable.
+    let remote_access_enabled = true;
+
+    rsx! {
+        div {
+            // Page header — Configuration h1 + subtitle. Matches
+            // `admin_components.ex:88-95` exactly.
+            div { class: "flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6",
+                div {
+                    h1 { class: "text-3xl font-bold", "Configuration" }
+                    p { class: "text-base-content/70 mt-1",
+                        "System status, application settings, and configuration management"
+                    }
+                }
+            }
+
+            // Tab strip — DaisyUI `tabs tabs-border` with hero icons,
+            // mirroring `admin_components.ex:24-79`.
+            div {
+                role: "tablist",
+                class: "tabs tabs-border mb-6",
+                ConfigTabLink {
+                    to: Route::System {},
+                    icon: "chart-bar",
+                    label: "Status",
+                    active: active == Some(ConfigTab::Status),
+                }
+                ConfigTabLink {
+                    to: Route::Settings {},
+                    icon: "cog-6-tooth",
+                    label: "Settings",
+                    active: active == Some(ConfigTab::Settings),
+                }
+                ConfigTabLink {
+                    to: Route::QualityProfiles {},
+                    icon: "sparkles",
+                    label: "Quality",
+                    active: active == Some(ConfigTab::Quality),
+                }
+                ConfigTabLink {
+                    to: Route::DownloadClients {},
+                    icon: "arrow-down-tray",
+                    label: "Clients",
+                    active: active == Some(ConfigTab::Clients),
+                }
+                ConfigTabLink {
+                    to: Route::Indexers {},
+                    icon: "magnifying-glass",
+                    label: "Indexers",
+                    active: active == Some(ConfigTab::Indexers),
+                }
+                ConfigTabLink {
+                    to: Route::LibraryPaths {},
+                    icon: "folder",
+                    label: "Library",
+                    active: active == Some(ConfigTab::Library),
+                }
+                ConfigTabLink {
+                    to: Route::MediaServers {},
+                    icon: "computer-desktop",
+                    label: "Media Servers",
+                    active: active == Some(ConfigTab::MediaServers),
+                }
+                if remote_access_enabled {
+                    ConfigTabLink {
+                        to: Route::RemoteAccess {},
+                        icon: "signal",
+                        label: "Remote Access",
+                        active: active == Some(ConfigTab::RemoteAccess),
+                    }
+                }
+            }
+
+            // Active tab body. `bg-base-100` wrapper mirrors
+            // `admin_components.ex:99-101`.
+            div { class: "bg-base-100",
+                Outlet::<Route> {}
+            }
+        }
+    }
+}
+
+/// Compact enum identifying which of the eight config tabs is active.
+/// Kept private to this module — pages don't need to know about it,
+/// they're addressed via their existing `Route::*` variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ConfigTab {
+    Status,
+    Settings,
+    Quality,
+    Clients,
+    Indexers,
+    Library,
+    MediaServers,
+    RemoteAccess,
+}
+
+impl ConfigTab {
+    fn from_route(route: &crate::routes::Route) -> Option<Self> {
+        use crate::routes::Route;
+        match route {
+            Route::System {} => Some(Self::Status),
+            Route::Settings {} => Some(Self::Settings),
+            Route::QualityProfiles {} => Some(Self::Quality),
+            Route::DownloadClients {} => Some(Self::Clients),
+            Route::Indexers {} => Some(Self::Indexers),
+            Route::LibraryPaths {} => Some(Self::Library),
+            Route::MediaServers {} => Some(Self::MediaServers),
+            Route::RemoteAccess {} => Some(Self::RemoteAccess),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Props, Clone, PartialEq)]
+struct ConfigTabLinkProps {
+    to: crate::routes::Route,
+    icon: &'static str,
+    label: &'static str,
+    active: bool,
+}
+
+#[component]
+fn ConfigTabLink(props: ConfigTabLinkProps) -> Element {
+    rsx! {
+        Link {
+            to: props.to,
+            role: "tab",
+            class: if props.active { "tab gap-2 tab-active" } else { "tab gap-2" },
+            "data-active": if props.active { "true" } else { "false" },
+            Icon { name: props.icon.to_string(), class: "w-4 h-4".to_string() }
+            "{props.label}"
+        }
+    }
+}
+
 /// Thin auth-page layout — centered card on a muted background.
 /// Used by `/login` and `/setup` so unauthenticated visitors aren't
 /// bounced by the [`AppShell`] guard.
