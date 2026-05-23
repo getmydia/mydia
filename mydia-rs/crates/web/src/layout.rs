@@ -460,61 +460,38 @@ fn Sidebar(props: SidebarProps) -> Element {
                         }
 
                         if is_admin {
+                            // Administration section — 6 entries matching
+                            // Phoenix's `layouts.ex:228-286`:
+                            // Users, Configuration, Import Lists,
+                            // Background Jobs, Release Blacklist, Requests.
+                            //
+                            // Configuration links to the Status tab (the
+                            // /admin/config redirect lives in routes.rs
+                            // and would force a full hop). Transcodes
+                            // and Devices stay reachable as deep-links
+                            // from Jobs and Users detail but drop out
+                            // of the sidebar — matches Phoenix.
                             SectionTitle { label: "Administration".to_string() }
-                            NavItem {
-                                to: Route::System {},
-                                icon: "cog-6-tooth".to_string(),
-                                label: "System".to_string(),
-                            }
-                            NavItem {
-                                to: Route::Settings {},
-                                icon: "cog-6-tooth".to_string(),
-                                label: "Settings".to_string(),
-                            }
                             NavItem {
                                 to: Route::Users {},
                                 icon: "users".to_string(),
                                 label: "Users".to_string(),
                             }
                             NavItem {
-                                to: Route::LibraryPaths {},
-                                icon: "folder".to_string(),
-                                label: "Library paths".to_string(),
+                                to: Route::System {},
+                                icon: "cog-6-tooth".to_string(),
+                                label: "Configuration".to_string(),
                             }
-                            NavItem {
-                                to: Route::QualityProfiles {},
-                                icon: "star".to_string(),
-                                label: "Quality Profiles".to_string(),
-                            }
-                            NavItem {
-                                to: Route::DownloadClients {},
-                                icon: "arrow-down-tray".to_string(),
-                                label: "Download Clients".to_string(),
-                            }
-                            NavItem {
-                                to: Route::Indexers {},
-                                icon: "magnifying-glass".to_string(),
-                                label: "Indexers".to_string(),
-                            }
-                            NavItem {
-                                to: Route::MediaServers {},
-                                icon: "computer-desktop".to_string(),
-                                label: "Media Servers".to_string(),
-                            }
-                            NavItem {
-                                to: Route::RemoteAccess {},
-                                icon: "signal".to_string(),
-                                label: "Remote Access".to_string(),
-                            }
+                            // TODO(feature-flag): mirror Phoenix's
+                            // `Mydia.ImportLists.FeatureFlags.enabled?/0`
+                            // gate at `layouts.ex:249`. Until LayoutData
+                            // grows a `features` field we render the
+                            // entry unconditionally so the page stays
+                            // discoverable.
                             NavItem {
                                 to: Route::ImportLists {},
                                 icon: "arrow-down-on-square-stack".to_string(),
                                 label: "Import Lists".to_string(),
-                            }
-                            NavItem {
-                                to: Route::ReleaseBlacklist {},
-                                icon: "no-symbol".to_string(),
-                                label: "Release Blacklist".to_string(),
                             }
                             NavItem {
                                 to: Route::Jobs {},
@@ -522,14 +499,9 @@ fn Sidebar(props: SidebarProps) -> Element {
                                 label: "Background Jobs".to_string(),
                             }
                             NavItem {
-                                to: Route::Transcodes {},
-                                icon: "film".to_string(),
-                                label: "Transcodes".to_string(),
-                            }
-                            NavItem {
-                                to: Route::Devices {},
-                                icon: "user".to_string(),
-                                label: "Devices".to_string(),
+                                to: Route::ReleaseBlacklist {},
+                                icon: "no-symbol".to_string(),
+                                label: "Release Blacklist".to_string(),
                             }
                             NavItem {
                                 to: Route::Requests {},
