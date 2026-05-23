@@ -9,6 +9,16 @@
 # in mydia.toml (or `MYDIA_DATABASE__TYPE`). One image, both engines —
 # no separate `:latest-pg` variant; that split only made sense for the
 # Phoenix image because Ecto's adapter is compiled into the BEAM release.
+#
+# TODO: this Dockerfile still uses plain `cargo build` and does not run
+# dx's link-time asset post-processing. Result: the binary contains
+# unrewritten `asset!()` placeholders and no wasm bundle ships. The dev
+# loop migrated to `dx serve` (2026-05-22); the production migration to
+# `dx build --release --package mydia-rs-app` is a separate unit of work
+# — it needs the dx output layout pinned, the wasm bundle copy step
+# wired into the runtime image, and DIOXUS_PUBLIC_PATH set on the
+# entrypoint. Until then the image compiles but won't serve a working
+# UI.
 
 ARG RUST_VERSION=1.86
 ARG ALPINE_VERSION=3.20
@@ -27,8 +37,8 @@ RUN apk add --no-cache \
     curl
 
 # Tailwind v4 standalone binary — same minor pin as the dev image and
-# the Phoenix `:tailwind` package. Compiles `crates/web/assets/app.css`
-# (Tailwind + DaisyUI source) into `app.built.css`, which the asset!()
+# the Phoenix `:tailwind` package. Compiles `crates/web/assets/tailwind.css`
+# (Tailwind + DaisyUI source) into `tailwind.built.css`, which the asset!()
 # macro in crates/web/src/app.rs references. Without this step the
 # Rust compile fails (asset! verifies file existence at compile time).
 ARG TAILWIND_VERSION=4.1.18
@@ -59,8 +69,8 @@ COPY mydia-rs/bin ./bin
 # Compile Tailwind once before the Rust build — asset!() needs the
 # output file present at cargo-build time.
 RUN /usr/local/bin/tailwindcss \
-        --input crates/web/assets/app.css \
-        --output crates/web/assets/app.built.css \
+        --input crates/web/assets/tailwind.css \
+        --output crates/web/assets/tailwind.built.css \
         --minify
 
 # Build the release binary.

@@ -35,6 +35,7 @@ server = [
     "dep:sqlx",
     "dep:chrono",
     "dep:thiserror",
+    "dep:anyhow",
     "dep:mydia-rs-config",
     "dep:mydia-rs-db",
     "dep:mydia-rs-pubsub",
@@ -69,6 +70,10 @@ chrono = { version = "0.4", optional = true, default-features = false, features 
     "clock",
 ] }
 thiserror = { workspace = true, optional = true }
+# dioxus::serve's closure must return Result<Router, anyhow::Error>; we
+# adopt anyhow in the boot path so figment / sqlx / runtime-lock errors
+# coerce cleanly via `?`. Server-only — wasm bin never sees it.
+anyhow = { workspace = true, optional = true }
 mydia-rs-config = { path = "../config", optional = true }
 mydia-rs-db = { path = "../db", optional = true }
 mydia-rs-pubsub = { path = "../pubsub", optional = true }

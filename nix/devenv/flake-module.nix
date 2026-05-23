@@ -3,24 +3,31 @@
 # Two entry points it produces:
 #
 #   nix run .#mydia-rs-dev-devenv-up         (alias: `./dev rs up`)
-#     -> devenv up — launches every declared process under
-#     process-compose: cargo-watch + tailwindcss --watch + log tails.
+#     -> devenv up — launches `dx serve` under process-compose.
 #     Ctrl-C tears every child down cleanly.
 #
 #   nix develop --impure .#mydia-rs-dev      (alias: `./dev rs shell`)
 #     -> drops you in a shell with the dev toolchain on PATH
-#     (cargo-watch, tailwindcss, dx, sqlx-cli, rust, ffmpeg, ...).
-#     Useful for one-off cargo commands or running `dx serve` by hand.
+#     (dx, sqlx-cli, rust, ffmpeg, ...). Useful for one-off cargo
+#     commands or running `dx build` by hand.
 #
-# Hot-reload model: cargo-watch is the canonical "edit Rust file ->
-# cargo rebuild -> kill running binary -> start new one" loop. We
-# tried dx serve for this and discovered dx 0.7's file watcher
-# only pushes RSX hot-patches to a connected wasm browser client;
-# it does NOT rebuild the server binary on file change. For our
-# SSR-first use case we need full rebuilds, so cargo-watch wins.
-# dx 0.7.9 still ships in the shell PATH for manual experimentation
-# (`dx serve` directly) and to bake the wasm bundle build pipeline
-# for future RSX work.
+# Hot-reload model: `dx serve --hot-patch`. dx 0.7 owns:
+#   - both server (native) and client (wasm32) cargo builds, in
+#     parallel under the `@client` / `@server` channels
+#   - the Subsecond hot-patch machinery, which patches Rust code in
+#     the running process (server + wasm) without a kill-restart
+#   - RSX hot-reload over the dev WebSocket
+#   - the auto-downloaded standalone tailwindcss binary, run with
+#     `--watch` against `Dioxus.toml`'s tailwind_input/tailwind_output
+#   - SSR HTML <script> injection that boots the wasm hydration client
+#   - graceful kill-restart of the server binary when a change is
+#     outside hot-patch scope (signature changes, new deps, etc.)
+#
+# Why one process: dx's serve loop is itself a process-compose-shaped
+# thing — putting it under our process-compose lets `./dev rs down`
+# kill the whole tree via the same setsid / pgid trick the old
+# cargo-watch setup used, while letting dx own the cargo + tailwind
+# orchestration.
 
 { inputs, ... }:
 
@@ -62,15 +69,6 @@
         rustfmt
         clippy
         sqlx-cli
-        cargo-watch     # the hot-rebuild driver
-        # NOTE: nixpkgs in this lockfile carries dioxus-cli 0.7.3;
-        # our dioxus crate dep is 0.7.9. The enterShell hook below
-        # installs 0.7.9 into ~/.cargo/bin (cached) for manual
-        # `dx serve` invocations and the wasm asset pipeline.
-
-        # --- CSS pipeline ---
-        # tailwindcss_4 is the standalone v4 binary (no npm).
-        tailwindcss_4
 
         # --- Media / asset helpers ---
         ffmpeg          # exercised by U16 file_analyzer + U19 HLS
@@ -82,35 +80,44 @@
         # --- Convenience ---
         curl            # healthcheck loop + manual probes
         git
+
+        # NOTE: dioxus-cli is NOT pulled from nixpkgs. nixpkgs ships
+        # 0.7.3, but the dioxus crate dep is 0.7.9; dx fails its own
+        # crate<->cli version check between those. The enterShell
+        # hook below pins 0.7.9 via `cargo install` into ~/.cargo/bin
+        # (cached across rebuilds).
+        #
+        # NOTE: tailwindcss is NOT pulled from nixpkgs either. dx 0.7
+        # auto-downloads the standalone Tailwind v4 binary on first
+        # `dx serve` / `dx build` (cached under ~/.dioxus). Bringing
+        # our own would just be a second copy that fights dx's.
       ];
 
       # ----------------------------------------------------------
-      # Env passed to every process (process-compose runs them with
-      # a stripped environment otherwise).
-      # ----------------------------------------------------------
-      # ----------------------------------------------------------
-      # Process: cargo-watch
+      # Process: dx serve
       #
-      # Watches Rust source under crates/ + bin/ + workspace
-      # manifests; on change, runs `cargo run -p mydia-rs-app`.
-      # cargo-watch's default behavior is to kill the prior process
-      # before re-running, so the lock-skip env above is what makes
-      # rapid restarts work.
+      # Drives the full dev loop. dx handles the cargo build, the
+      # wasm build, the tailwindcss watcher, the hot-patch / hot-
+      # reload websocket, the SSR <script> injection — everything
+      # we used to wire up by hand.
       # ----------------------------------------------------------
-      processes.cargo-watch = {
-        # Env vars are exported here directly because devenv's
-        # top-level `env` config doesn't always propagate to
-        # process-compose's child processes the way you'd expect
-        # (figment ends up reading config defaults instead).
-        # Exporting inline is the load-bearing fix.
+      processes.dx-serve = {
         exec = ''
-          mkdir -p /tmp/mydia-rs-devenv-public/assets
-          mkdir -p /tmp/mydia-rs-devenv-public/wasm
-          export DIOXUS_PUBLIC_PATH=/tmp/mydia-rs-devenv-public
+          # Env vars are exported here directly because devenv's
+          # top-level `env` config doesn't always propagate to
+          # process-compose's child processes (figment ends up
+          # reading config defaults instead). Exporting inline is
+          # the load-bearing fix.
+
           # Lock-skip env intentionally doesn't start with MYDIA_
           # because figment grabs all MYDIA_* env vars as Config
           # schema overrides and `deny_unknown_fields` would reject
           # an unrecognized name like MYDIA_RUNTIME_LOCK_ENABLED.
+          # Without skip-lock, dx's kill-restart on a full rebuild
+          # leaves a 30-second-fresh lock row that blocks the new
+          # binary from starting. Hot-patch never restarts so the
+          # lock is held continuously; this env var only matters
+          # for the full-rebuild path.
           export MYDIA_RS_DEV_SKIP_LOCK=true
           export MYDIA_DATABASE__TYPE=sqlite
           # Point at the repo-root SQLite file Phoenix maintains (see
@@ -127,84 +134,50 @@
           export MYDIA_LOGGING__LEVEL=info
           export MYDIA_LOGGING__FORMAT=text
 
+          # dx uses ~/.cargo/bin and ~/.dioxus for its caches; make
+          # sure both are on PATH so the pinned cli + downloaded
+          # tailwindcss resolve.
+          export PATH="$HOME/.cargo/bin:$PATH"
+
           cd "$DEVENV_ROOT/mydia-rs"
 
-          # Bootstrap the public asset tree dioxus_server reads at boot:
-          #   1. `index.html` — load-bearing for standards-mode rendering
-          #      AND for the wasm hydration <script> tag. Without it,
-          #      dioxus-server falls back to the bare `ssr_only()`
-          #      template which has no <title> placeholder, causing the
-          #      document::Title { ... } component to be emitted BEFORE
-          #      <!DOCTYPE html> and triggering quirks mode.
-          #   2. `wasm/` — populated by `dx build --platform web` (run
-          #      manually via `./dev rs build-wasm`). When the bundle is
-          #      present, the page hydrates and onsubmit / onclick
-          #      handlers fire. When absent, the page is SSR-only and
-          #      forms don't work — but the meta-refresh redirect
-          #      fallback in AppShell still lets the operator at least
-          #      reach /login.
-          if [ -f "$DEVENV_ROOT/mydia-rs/crates/web/assets/index.html" ]; then
-            cp "$DEVENV_ROOT/mydia-rs/crates/web/assets/index.html" \
-               "$DIOXUS_PUBLIC_PATH/index.html"
-          fi
-          if [ -d "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/wasm" ]; then
-            cp -r "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/wasm/." \
-                  "$DIOXUS_PUBLIC_PATH/wasm/"
-            # The dx-built index.html ships the right `<script type=
-            # "module" src="/wasm/mydia-rs.js">` tag too — prefer it
-            # over the hand-written placeholder if available.
-            if [ -f "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/index.html" ]; then
-              cp "$DEVENV_ROOT/mydia-rs/target/dx/mydia-rs/debug/web/public/index.html" \
-                 "$DIOXUS_PUBLIC_PATH/index.html"
-            fi
-            echo "[devenv] wasm bundle present in DIOXUS_PUBLIC_PATH; forms will be interactive"
-          else
-            echo "[devenv] no wasm bundle yet — run './dev rs build-wasm' to enable interactive forms"
-          fi
-
-          # -s mode (shell command) instead of -x (cargo subcmd) so
-          # we can `exec` the built binary directly. With `cargo run`
-          # the binary is spawned in its own process group and never
-          # sees the SIGTERM cargo-watch sends to its child, leaving
-          # the OLD binary alive on port 4002 when the new one tries
-          # to bind. With `cargo build && exec ./target/debug/mydia-rs`
-          # the binary replaces the shell in cargo-watch's process
-          # group, so SIGTERM kills it directly.
+          # `dx serve` flags:
+          #   --package mydia-rs-app : the dual-target binary.
+          #   --web                  : force the wasm client build.
+          #                            Even though our `dioxus`
+          #                            dep enables `fullstack`,
+          #                            dx 0.7.9's auto-detection
+          #                            stops at the server target
+          #                            unless --web is explicit;
+          #                            without it the SSR page
+          #                            renders but the wasm
+          #                            hydration shim never gets
+          #                            a bundle to import and
+          #                            interactive forms (login,
+          #                            profile) are dead.
+          #   --port 4002            : honored by axum bind via
+          #                            dioxus_cli_config; also the
+          #                            port dx's proxy listens on.
+          #   --addr 0.0.0.0         : bind on all interfaces so
+          #                            Phoenix-side proxy + Docker
+          #                            host reach the server.
+          #   --open false           : we're not running a desktop
+          #                            browser from this shell.
           #
-          # `dx tools assets` is the link-time post-processing step
-          # `dx build` does internally: it patches the binary's
-          # embedded asset metadata (replacing the "should be replaced
-          # by dx" placeholders with fingerprinted filenames) and
-          # copies the referenced files into DIOXUS_PUBLIC_PATH. Without
-          # it, `<link rel=stylesheet href=/assets/...>` renders the
-          # placeholder string verbatim and the browser 404s on it.
-          exec ${pkgs.cargo-watch}/bin/cargo-watch \
-            -q -c \
-            -w crates -w bin -w Cargo.toml -w Cargo.lock \
-            --ignore 'target/**' \
-            --ignore 'crates/web/assets/app.built.css' \
-            -s 'cargo build -p mydia-rs-app \
-                && dx tools assets target/debug/mydia-rs "$DIOXUS_PUBLIC_PATH/assets" \
-                && exec ./target/debug/mydia-rs'
-        '';
-      };
-
-      # ----------------------------------------------------------
-      # Process: tailwindcss --watch
-      #
-      # Compiles crates/web/assets/app.css (Tailwind v4 + DaisyUI
-      # source) into crates/web/assets/app.built.css. The asset!
-      # macro in crates/web/src/app.rs references the .built.css
-      # path. cargo-watch's --ignore rule above keeps the recompiled
-      # CSS from triggering a Rust rebuild loop.
-      # ----------------------------------------------------------
-      processes.tailwindcss = {
-        exec = ''
-          cd "$DEVENV_ROOT/mydia-rs"
-          exec ${pkgs.tailwindcss_4}/bin/tailwindcss \
-            -i crates/web/assets/app.css \
-            -o crates/web/assets/app.built.css \
-            --watch
+          # `--hot-patch` is intentionally OFF. dx 0.7.9 currently
+          # fails workspace fullstack builds with "Missing linker
+          # args for fat link" when --hot-patch is set; the fix
+          # is tracked upstream. Until then, dx falls back to
+          # graceful kill-restart on every change — RSX hot-reload
+          # still works (no rebuild, sub-second), and full rebuilds
+          # take a few seconds with the warm incremental cache.
+          # Re-enable once dx ships the fix.
+          exec dx serve \
+            --package mydia-rs-app \
+            --web \
+            --port 4002 \
+            --addr 0.0.0.0 \
+            --open false
         '';
       };
 
@@ -215,29 +188,42 @@
         # Pin dx 0.7.9 to match the dioxus crate dep. nixpkgs's
         # dioxus-cli 0.7.3 fails the cli<->crate version check.
         # Cached at $CARGO_HOME/bin (default ~/.cargo/bin) so
-        # subsequent shells are instant. We don't depend on dx
-        # for the dev loop (cargo-watch is the watcher), but
-        # keeping it installed lets you run `dx serve` manually
-        # for wasm-side experimentation.
+        # subsequent shells are instant. dx is the only driver for
+        # the dev loop now; without it, `./dev rs up` fails.
         DX_WANT="0.7.9"
         DX_CUR=$(command -v dx >/dev/null 2>&1 && dx --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "none")
         if [ "$DX_CUR" != "$DX_WANT" ]; then
           echo "[devenv] installing dioxus-cli $DX_WANT (current: $DX_CUR) ..."
           cargo install --locked --version "$DX_WANT" dioxus-cli || {
-            echo "[devenv] WARNING: dioxus-cli install failed — manual dx serve will not work until this is resolved"
+            echo "[devenv] ERROR: dioxus-cli install failed — './dev rs up' will not work until this is resolved" >&2
           }
         fi
         export PATH="$HOME/.cargo/bin:$PATH"
 
+        # Ensure the tailwind.built.css placeholder exists. dx serve
+        # / dx build will overwrite it with real compiled CSS; we
+        # only create it so plain `cargo check` / `cargo build` (no
+        # dx in the loop) doesn't fail at `asset!("/assets/
+        # tailwind.built.css")` resolution on a fresh checkout.
+        #
+        # Guard on DEVENV_ROOT being a real directory — if it's empty
+        # or wrong (e.g., shell entered with `nix develop` without the
+        # ./dev wrapper), skip the placeholder rather than creating a
+        # `/mydia-rs/...` path or a sibling `mydia-rs/mydia-rs/` dir.
+        if [ -n "$DEVENV_ROOT" ] && [ -d "$DEVENV_ROOT/mydia-rs/crates/web/assets" ]; then
+          BUILT_CSS="$DEVENV_ROOT/mydia-rs/crates/web/assets/tailwind.built.css"
+          if [ ! -f "$BUILT_CSS" ]; then
+            printf '%s\n' '/* placeholder — overwritten by dx serve / dx build */' > "$BUILT_CSS"
+          fi
+        fi
+
         if [ -t 1 ]; then
           echo ""
           echo "mydia-rs dev environment (devenv) loaded."
-          echo "  cargo-watch:  $(cargo-watch --version 2>&1 | head -1)"
-          echo "  tailwindcss:  $(tailwindcss --help 2>&1 | head -1 | sed 's/^≈ //')"
-          echo "  dx (manual):  $(dx --version 2>/dev/null || echo 'NOT INSTALLED')"
+          echo "  dx:           $(dx --version 2>/dev/null || echo 'NOT INSTALLED')"
           echo "  rustc:        $(rustc --version 2>&1)"
           echo ""
-          echo "Run 'devenv up' (or './dev rs up') to launch cargo-watch + tailwindcss --watch."
+          echo "Run './dev rs up' to launch 'dx serve --hot-patch' (host port 4002)."
           echo ""
         fi
       '';

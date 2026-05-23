@@ -7,19 +7,24 @@
 //! `<head>` so the same file is served from the hashed path the bundle
 //! exposes.
 //!
-//! The CSS asset path points at `app.built.css`, NOT the
-//! `app.css` source. The source is Tailwind v4 + `DaisyUI` directives
-//! that the browser can't parse; the standalone `tailwindcss` binary
-//! compiles it into the `.built.css` file the asset macro picks up.
-//! In dev, `docker/dev-entrypoint.sh` runs `tailwindcss --watch`
-//! alongside `dx serve` so saving an RSX file with new utility
-//! classes auto-rebuilds the stylesheet.
+//! The CSS asset path points at `tailwind.built.css`, NOT the
+//! `tailwind.css` source. The source is Tailwind v4 + `DaisyUI`
+//! directives that the browser can't parse; dx auto-runs the
+//! standalone `tailwindcss` binary (configured via `[application]
+//! tailwind_input` / `tailwind_output` in `Dioxus.toml`) to compile
+//! it into the `.built.css` file the asset macro picks up. `dx
+//! serve` watches and rebuilds on save; `dx build` runs it once.
+//!
+//! A placeholder `tailwind.built.css` ships in the repo so `cargo
+//! build` (outside dx) can resolve the `asset!()` path on a fresh
+//! checkout; the first `dx serve` / `dx build` overwrites it with
+//! the real compiled CSS.
 
 use dioxus::prelude::*;
 
 use crate::routes::Route;
 
-const APP_CSS: Asset = asset!("/assets/app.built.css");
+const APP_CSS: Asset = asset!("/assets/tailwind.built.css");
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 
 #[component]

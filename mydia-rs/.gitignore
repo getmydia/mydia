@@ -11,9 +11,13 @@
 # Editor noise
 .DS_Store
 
-# Tailwind v4 build output. `crates/web/assets/app.css` is the source
-# of truth (Tailwind + DaisyUI directives); the `tailwindcss` binary
-# compiles it into `app.built.css` which is what the asset!() macro
-# in crates/web/src/app.rs references. The dev container rebuilds it
-# on every save; the production image compiles it once at build time.
-crates/web/assets/app.built.css
+# Tailwind v4 build output. `crates/web/assets/tailwind.css` is the
+# source of truth (Tailwind + DaisyUI directives); the dx CLI runs
+# the standalone tailwindcss binary against it (input/output paths
+# from `[application] tailwind_*` in Dioxus.toml) to produce
+# `tailwind.built.css`, which the asset!() macro in
+# crates/web/src/app.rs references. `dx serve` watches and rebuilds
+# on save; `dx build` compiles it once. The nix devenv shell creates
+# an empty placeholder on first entry so plain `cargo check` /
+# `cargo build` (no dx) can resolve the asset! path.
+crates/web/assets/tailwind.built.css

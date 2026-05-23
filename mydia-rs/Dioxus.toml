@@ -3,21 +3,34 @@
 # Most settings are optional in 0.7 — every top-level section in dx's
 # `DioxusConfig` carries `#[serde(default)]`, so this file can stay
 # minimal. We pin only the operator-visible bits: app name, page
-# title, and the watch path so dx's file watcher catches edits in
-# both `crates/web/src` (RSX, components) and `crates/web/assets`
-# (CSS, favicon, eventually compiled tailwind output).
+# title, the tailwind input/output paths, and the watch path.
 #
 # Build orchestration:
-#   - `dx build --release --package mydia-rs-app` produces the server
-#     binary plus the wasm bundle.
-#   - `dx serve --package mydia-rs-app` is the dev loop with hot reload.
+#   - `dx serve` is the dev loop. Reads --package from CLI; we always
+#     pass `--package mydia-rs-app`. dx owns:
+#       * cargo build of both server (native) and client (wasm32)
+#         targets in parallel via the @client / @server channels
+#       * the standalone tailwindcss watcher (auto-downloaded; input
+#         and output from [application] below)
+#       * the dev WebSocket for RSX hot-reload + Subsecond hot-patching
+#       * the SSR HTML <script> injection that boots the wasm client
+#       * graceful kill-restart of the server binary on full rebuilds
+#   - `dx build --release --package mydia-rs-app` produces the
+#     production server binary plus the wasm bundle + hashed assets.
 #
 # Platform selection: dx 0.7 has no `default_platform` toml key —
-# platform is a CLI flag (e.g. `--web`, `--fullstack`) or inferred
-# from enabled features. `dx serve --package mydia-rs-app` is enough.
+# platform is auto-detected from the dioxus crate's `fullstack`
+# feature. `dx serve --package mydia-rs-app` is enough.
 
 [application]
 name = "mydia-rs"
+
+# Tailwind v4 source + compiled artifact. Paths are relative to the
+# package's manifest dir (mydia-rs/crates/app/), so we walk up one
+# level into the web crate where the source CSS and asset! consumer
+# live together.
+tailwind_input  = "../web/assets/tailwind.css"
+tailwind_output = "../web/assets/tailwind.built.css"
 
 [web.app]
 title = "mydia"
@@ -28,8 +41,12 @@ title = "mydia"
 # to crates/web/ would silently break hot reload when you edit, say,
 # crates/auth/src/lib.rs even though that change relinks into the
 # server binary.
+#
+# `bin/` (the standalone mydia-rs-cli) is intentionally NOT watched:
+# it isn't reachable from the dioxus dual-target binary, so changes
+# there shouldn't trigger a dx rebuild loop. Iterate on the CLI with
+# `cargo build -p mydia-rs-cli` instead.
 watch_path = [
     "crates",
-    "bin",
     "crates/web/assets",
 ]

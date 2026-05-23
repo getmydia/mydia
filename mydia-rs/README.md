@@ -2,7 +2,7 @@
 
 A parallel Rust reimplementation of the mydia Phoenix backend, developed alongside the Elixir code in the same repository.
 
-The binary today boots a tokio runtime, loads configuration, opens the database, runs the `schema_migrations` probe, acquires the boot-time mutual-exclusion lock (U34), and serves an axum + Dioxus SSR home page (U22 scaffolding). Background workers (U17), GraphQL (U8-U14), HLS streaming (U19), and the rest land incrementally.
+The binary today boots a tokio runtime, loads configuration, opens the database, runs the `schema_migrations` probe, acquires the boot-time mutual-exclusion lock (U34), and serves an axum + Dioxus SSR + wasm-hydration UI (U22 scaffolding). Background workers (U17), GraphQL (U8-U14), HLS streaming (U19), and the rest land incrementally.
 
 ## Layout
 
@@ -17,35 +17,40 @@ The binary today boots a tokio runtime, loads configuration, opens the database,
 
 The shared p2p networking core (`native/mydia_p2p_core` at the repo root) is consumed as a path dependency from `crates/p2p` once that unit lands.
 
-## Two ways to run it
+## Dev loop
 
-All `./dev rs` commands run natively via Nix devenv. No Docker layer for development — file watching uses real inotify, signals propagate correctly to the running binary, and `cargo build`'s incremental compile cache lives on the host filesystem so rebuilds are seconds.
+Driven by `dx serve` under devenv's process-compose. dx 0.7 owns the full dual-target build (server binary + wasm bundle), the tailwindcss watcher, the dev WebSocket for RSX hot-reload, and the asset pipeline. Nothing in the dev path runs in Docker — file watching uses real inotify, the incremental compile cache lives on the host, and signals propagate cleanly.
+
+`dx serve --hot-patch` (Subsecond Rust-side patching) is intentionally off for now: dx 0.7.9 fails the workspace fullstack build with "Missing linker args for fat link" when it's enabled. RSX hot-reload doesn't depend on it; Rust-side hot-patch turns on once dx ships the fix.
+
+Two other dx 0.7.9 papercuts worth knowing about:
+
+1. **RSX literal edits aren't reflected in SSR responses**, only in connected wasm clients. dx pushes the patch over the dev WebSocket to clients that already hydrated, but doesn't rebuild the server binary — so a `curl /login` after an RSX-only edit still returns the previous HTML. The browser experience is live; the SSR raw HTML waits for the next non-RSX edit (or until you `touch` and modify a real Rust line). Comment in `dioxus-server-0.7.9/src/launch.rs:222`: "We don't do RSX hot-reload [on the server] since usually the client handles that once the page is loaded."
+2. **Occasional EADDRINUSE on full rebuild restart**: dx kills the old server binary then immediately spawns the new one, but doesn't set `SO_REUSEADDR` on its listener. The new binary's `dioxus::serve` panics with "Address already in use", dx logs it as a failed restart, and the old binary keeps serving stale responses. Workaround: `./dev rs down && ./dev rs up`, or `kill` the orphan PID (`pgrep -f 'target/dx/mydia-rs/.*/server-'`) and save another edit to re-trigger the build. Tracked upstream — will go away once dx adopts `SO_REUSEADDR` on its dev listener.
 
 Nix must be installed on the host. The Phoenix dev path still uses Docker; the Rust path runs natively the same way the Android player build does.
 
-### Hot-reload dev loop
+### Hot-reload
 
 ```
-./dev rs up            # start cargo-watch + tailwindcss --watch, host port 4002
+./dev rs up            # dx serve on host port 4002
 ./dev rs down          # stop everything cleanly
-./dev rs shell         # enter the devenv shell (toolchain + dx + tailwindcss)
+./dev rs shell         # enter the devenv shell (toolchain + dx)
 ```
 
-`./dev rs up` launches a devenv-managed `process-compose` session with two processes:
+What each kind of edit triggers:
 
-- **cargo-watch** runs `cargo build -p mydia-rs-app && exec ./target/debug/mydia-rs`. On any Rust source change under `crates/` or `bin/`, the running binary gets SIGTERM, cargo rebuilds incrementally, and `exec` replaces the shell with the fresh binary so it lands in cargo-watch's own process group (signals propagate cleanly on the next restart). End-to-end edit-to-served time is around 5 seconds for a small change.
-- **tailwindcss --watch** compiles `crates/web/assets/app.css` (Tailwind v4 + DaisyUI source) into `app.built.css` whenever an RSX file introduces a new utility class. The asset macro in `crates/web/src/app.rs` references `app.built.css`, so the SSR response always serves the latest stylesheet.
+- **RSX literals** (text, attributes, conditional bodies inside `rsx!{}`) → patch over the dev WebSocket, no rebuild, sub-second to browser.
+- **Anything else in Rust** (function bodies, signatures, new deps, new server fns) → dx triggers parallel server + wasm rebuilds, then gracefully kill-restarts the binary. Initial cold build takes a few minutes; warm incremental rebuilds are a handful of seconds.
+- **Tailwind utility classes** → tailwindcss --watch picks it up, rewrites `crates/web/assets/tailwind.built.css`, dx propagates the new bundle. No Rust rebuild.
 
-Two dev-only knobs make this work:
+`MYDIA_RS_DEV_SKIP_LOCK=true` is set in the dev process env so the kill-restart path doesn't trip the U34 lock's 30-second staleness window. Production must never set this — the lock is the only thing keeping two backends off the same DB.
 
-- `MYDIA_RS_DEV_SKIP_LOCK=true` — disables the U34 boot-time mutual-exclusion lock, because cargo-watch restarts faster than the lock's 30-second stale-after window. Production must never set this.
-- `SO_REUSEADDR` is set on the listener (in `crates/app/src/server.rs`) so the rebuilt binary can immediately rebind port 4002 without waiting for the kernel's TIME_WAIT.
-
-### One-shot cargo commands
+### One-shot commands
 
 ```
-./dev rs build         # cargo build (full workspace)
-./dev rs run           # cargo run -p mydia-rs-app (no watcher)
+./dev rs build         # dx build of server + wasm + tailwind
+./dev rs run           # dx run (one-shot, no watcher)
 ./dev rs test          # cargo test
 ./dev rs check         # cargo check
 ./dev rs fmt           # cargo fmt
@@ -53,30 +58,16 @@ Two dev-only knobs make this work:
 ./dev rs sqlx-prepare  # refresh sqlx offline query cache
 ```
 
-Each enters a `nix develop` shell with the Rust toolchain and runs `cargo` from the `mydia-rs/` directory. Useful for CI-equivalent checks or one-off builds outside the watcher loop.
-
-### dx (Dioxus CLI)
-
-`dx 0.7.9` is installed into `~/.cargo/bin` by the devenv shell's `enterShell` hook (nixpkgs ships 0.7.3 which is too old for our dioxus crate dep at 0.7.9). It's available inside `./dev rs shell` for manual experimentation with the wasm asset pipeline, but `./dev rs up` doesn't use it — dx 0.7's hot-reload mechanism is RSX-patching against a connected browser client, not server rebuild, and our SSR-first use case wants the latter.
-
-## Web UI (U22 scaffolding)
-
-`crates/web` carries the Dioxus 0.7 full-stack UI: layout (DaisyUI drawer + sidebar), core components (button, input, modal, icon, flash), router skeleton (`/`, `/hello/:name`), and the CSP / security-header constants the server middleware reads. `crates/app/src/server.rs` mounts the Dioxus router on axum with security middleware, request-id propagation, compression, panic-catch, and trace layers.
+Each runs inside the devenv shell, which pins `dioxus-cli 0.7.9` into `~/.cargo/bin` on first entry (nixpkgs only ships 0.7.3, which fails dx's cli↔crate version check). The shell also creates a placeholder `crates/web/assets/tailwind.built.css` if absent, so the `asset!()` macro resolves on a fresh checkout even before the first `dx serve` / `dx build` has compiled the real stylesheet.
 
 ### Dual-target binary layout
 
 `crates/app/Cargo.toml` declares two features:
 
-- `server` (the cargo default) builds the native axum binary with the config / DB / lock / SSR bootstrap. All server-only deps (`sqlx`, `tokio`, `axum`, `tower-http`, `mydia-rs-db`, ...) are gated behind this feature.
+- `server` (the cargo default) builds the native axum binary with the config / DB / lock / SSR bootstrap. All server-only deps (`sqlx`, `tokio`, `axum`, `tower-http`, `mydia-rs-db`, ...) are gated behind this feature. Entry point: `dioxus::serve(closure)`, which owns the listener, the tokio runtime, and the devtools websocket. The closure runs the expensive boot sequence behind a `tokio::sync::OnceCell` so hot-patches reuse the cached state.
 - `web` builds a wasm binary that calls `dioxus::launch(mydia_rs_web::app)`. The wasm tree has none of the server deps — only `dioxus` (with the `web` feature) and the wasm-compatible `mydia-rs-web` library.
 
-Operators don't see this split: `./dev rs build` and `./dev rs run` use the default `server` feature; `dx serve` orchestrates both compiles. The split is what lets `mydia-rs-app` be a single binary crate that compiles cleanly for `wasm32-unknown-unknown` (client) and `x86_64-unknown-linux-gnu` (server).
-
-### Known follow-up: wasm hydration + RSX hot-patching
-
-`./dev rs up` rebuilds and restarts the server binary on every Rust edit. That's the right shape for SSR-first development but doesn't deliver Dioxus's sub-second RSX hot-patching — the wasm bundle isn't being built and served as part of the dev loop, so there's no wasm browser client to hot-patch against.
-
-Wiring the wasm side is a separate follow-up: build the wasm target alongside the server, deliver the bundle via the asset pipeline, and have the wasm client connect to dx's hot-reload WebSocket. The dual-target crate shape is already in place (`server` / `web` features on `mydia-rs-app`); what's missing is the orchestration that builds both targets and bridges dx's RSX patches into the live browser. Once that lands, RSX-only edits will update the browser in under a second without rebuilding the server.
+Operators don't see this split: `./dev rs build` and `./dev rs run` go through `dx`, which orchestrates both compiles in parallel via its `@client` / `@server` channels. Plain `cargo` commands (`./dev rs check`, `./dev rs test`) hit the server target only.
 
 ## See also
 

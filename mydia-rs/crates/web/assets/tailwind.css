@@ -1,9 +1,11 @@
 /* Tailwind v4 + DaisyUI source CSS for the mydia-rs Dioxus UI.
  *
- * Compiled by the standalone `tailwindcss` binary (NO npm) into
- * `app.built.css`. The dev container runs `tailwindcss --watch` in
- * the background alongside `dx serve`; the production Dockerfile
- * compiles once at image-build time.
+ * Compiled by the dx CLI (which downloads the standalone tailwindcss
+ * binary on first run) into `tailwind.built.css`. `dx serve` runs
+ * tailwindcss --watch automatically alongside the Rust rebuild loop;
+ * one-shot `dx build` invocations run it once. The `[application]
+ * tailwind_input` / `tailwind_output` keys in `Dioxus.toml` point
+ * dx at these two paths.
  *
  * Sources are declared inline (Tailwind v4 has no tailwind.config.js)
  * relative to this file so the JIT scans every RSX file in the web
