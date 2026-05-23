@@ -77,6 +77,13 @@
         openssl.dev
         postgresql.dev
 
+        # psql client for ad-hoc inspection of the sqlx prepare DB
+        # (the postgres service below ships its own server binaries
+        # but services.postgres only adds them to PATH inside the
+        # process; pulling postgresql_16 here lets `psql` work from
+        # any devenv shell).
+        postgresql_16
+
         # --- Convenience ---
         curl            # healthcheck loop + manual probes
         git
@@ -92,6 +99,54 @@
         # `dx serve` / `dx build` (cached under ~/.dioxus). Bringing
         # our own would just be a second copy that fights dx's.
       ];
+
+      # ----------------------------------------------------------
+      # Service: Postgres 16 (for the sqlx compile-time prepare DB)
+      #
+      # Pinned to Postgres 16 to match the matrix in
+      # `.github/workflows/ci-mydia-rs.yml` (test-postgres and
+      # sqlx-prepare-check both run `postgres:16`). Keeping the dev
+      # and CI engines in lockstep means a `cargo sqlx prepare`
+      # cache generated locally validates against the same engine
+      # CI later checks it against.
+      #
+      # The service is wired up to `devenv up` but the dev loop
+      # does NOT require it. SQLite-only contributors can ignore
+      # Postgres entirely; it only matters when editing a query
+      # behind a `sqlx::query!`/`query_as!` macro and refreshing
+      # the offline cache under `mydia-rs/.sqlx/`.
+      #
+      # The DATABASE_URL exported in enterShell points here so
+      # `cargo sqlx prepare --workspace` (./dev rs sqlx-prepare)
+      # has a target out of the box. Phoenix's own dev Postgres
+      # binds host port 5433 (see `compose.yml`) so the two don't
+      # collide.
+      #
+      # One-time setup to populate the schema (the prepare DB
+      # mirrors the Phoenix-owned migration set, mydia-rs never
+      # writes a migration):
+      #
+      #   DATABASE_TYPE=postgres \
+      #   DATABASE_PORT=5432 \
+      #   DATABASE_NAME=mydia_rs_prepare \
+      #   DATABASE_USER=postgres \
+      #   DATABASE_PASSWORD="" \
+      #   DATABASE_HOST=localhost \
+      #   ./dev mix ecto.migrate
+      #
+      # Re-run whenever a Phoenix migration changes the columns or
+      # types that mydia-rs reads. See `mydia-rs/README.md` for the
+      # full walk-through.
+      # ----------------------------------------------------------
+      services.postgres = {
+        enable = true;
+        package = pkgs.postgresql_16;
+        listen_addresses = "127.0.0.1";
+        port = 5432;
+        initialDatabases = [
+          { name = "mydia_rs_prepare"; }
+        ];
+      };
 
       # ----------------------------------------------------------
       # Process: dx serve
@@ -200,6 +255,17 @@
         fi
         export PATH="$HOME/.cargo/bin:$PATH"
 
+        # Point sqlx-cli + the compile-time `query!` / `query_as!`
+        # macros at the devenv-managed Postgres 16 prepare DB. The
+        # service block above creates `mydia_rs_prepare` empty; the
+        # operator runs Phoenix's ecto.migrate against it once (see
+        # the comment on `services.postgres` above) so the schema is
+        # populated before `cargo sqlx prepare` runs. The URL is set
+        # unconditionally: both the SQLite-only and Postgres-prepare
+        # workflows tolerate it being present (sqlx only reads it
+        # when a `query!` macro forces an offline-or-live check).
+        export DATABASE_URL="postgres://postgres@localhost:5432/mydia_rs_prepare"
+
         # Ensure the tailwind.built.css placeholder exists. dx serve
         # / dx build will overwrite it with real compiled CSS; we
         # only create it so plain `cargo check` / `cargo build` (no
@@ -222,8 +288,12 @@
           echo "mydia-rs dev environment (devenv) loaded."
           echo "  dx:           $(dx --version 2>/dev/null || echo 'NOT INSTALLED')"
           echo "  rustc:        $(rustc --version 2>&1)"
+          echo "  DATABASE_URL: $DATABASE_URL"
           echo ""
-          echo "Run './dev rs up' to launch 'dx serve --hot-patch' (host port 4002)."
+          echo "Run './dev rs up' to launch 'dx serve' (host port 4002)."
+          echo "Run './dev rs sqlx-prepare' to refresh the offline query cache"
+          echo "(needs the postgres service from 'devenv up' + a one-time"
+          echo "ecto.migrate run; see mydia-rs/README.md)."
           echo ""
         fi
       '';
