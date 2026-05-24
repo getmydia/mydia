@@ -1,4 +1,4 @@
-//! `sqlx::Type` for JSON-shaped columns that round-trip across engines.
+//! `SeaORM` wrapper for JSON-shaped columns that round-trip across engines.
 //!
 //! Two Ecto column shapes both fit this type:
 //!
@@ -21,11 +21,6 @@ use sea_orm::sea_query::{
 };
 use sea_orm::{ColIdx, DbBackend, DbErr, QueryResult, TryGetError, TryGetable};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sqlx::database::Database;
-use sqlx::decode::Decode;
-use sqlx::encode::{Encode, IsNull};
-use sqlx::error::BoxDynError;
-use sqlx::{Postgres, Sqlite, Type};
 
 /// Newtype around an arbitrary serializable payload stored as JSON.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,75 +40,6 @@ impl<T> JsonMap<T> {
 impl<T> From<T> for JsonMap<T> {
     fn from(value: T) -> Self {
         Self(value)
-    }
-}
-
-// ---------- SQLite (TEXT holding JSON) ----------
-
-impl<T> Type<Sqlite> for JsonMap<T> {
-    fn type_info() -> <Sqlite as Database>::TypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-    fn compatible(ty: &<Sqlite as Database>::TypeInfo) -> bool {
-        <String as Type<Sqlite>>::compatible(ty)
-    }
-}
-
-impl<'q, T> Encode<'q, Sqlite> for JsonMap<T>
-where
-    T: Serialize,
-{
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        let json = serde_json::to_string(&self.0)?;
-        <String as Encode<'q, Sqlite>>::encode_by_ref(&json, buf)
-    }
-}
-
-impl<'r, T> Decode<'r, Sqlite> for JsonMap<T>
-where
-    T: DeserializeOwned,
-{
-    fn decode(value: <Sqlite as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let s = <String as Decode<'r, Sqlite>>::decode(value)?;
-        let v: T = serde_json::from_str(&s)?;
-        Ok(Self(v))
-    }
-}
-
-// ---------- Postgres (native JSONB) ----------
-
-impl<T> Type<Postgres> for JsonMap<T> {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <sqlx::types::Json<T> as Type<Postgres>>::type_info()
-    }
-    fn compatible(ty: &<Postgres as Database>::TypeInfo) -> bool {
-        <sqlx::types::Json<T> as Type<Postgres>>::compatible(ty)
-    }
-}
-
-impl<'q, T> Encode<'q, Postgres> for JsonMap<T>
-where
-    T: Serialize,
-{
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Postgres as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        let wrapped = sqlx::types::Json(&self.0);
-        <sqlx::types::Json<&T> as Encode<'q, Postgres>>::encode_by_ref(&wrapped, buf)
-    }
-}
-
-impl<'r, T> Decode<'r, Postgres> for JsonMap<T>
-where
-    T: DeserializeOwned + 'r,
-{
-    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let inner = <sqlx::types::Json<T> as Decode<'r, Postgres>>::decode(value)?;
-        Ok(Self(inner.0))
     }
 }
 

@@ -1,12 +1,9 @@
 //! Typed errors for the db crate.
 
-/// The sqlx error variant is boxed to keep `Result<_, DbError>` cheap;
-/// `sqlx::Error` is ~120 bytes.
+/// The sea-orm error variant is boxed to keep `Result<_, DbError>` cheap;
+/// `sea_orm::DbErr` is ~120 bytes.
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
-    #[error("database error: {0}")]
-    Sqlx(Box<sqlx::Error>),
-
     #[error("database error: {0}")]
     SeaOrm(Box<sea_orm::DbErr>),
 
@@ -21,12 +18,6 @@ pub enum DbError {
 
     #[error("schema check failed: {0}")]
     SchemaCheck(String),
-}
-
-impl From<sqlx::Error> for DbError {
-    fn from(err: sqlx::Error) -> Self {
-        Self::Sqlx(Box::new(err))
-    }
 }
 
 impl From<sea_orm::DbErr> for DbError {

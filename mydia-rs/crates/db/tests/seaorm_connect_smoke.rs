@@ -1,6 +1,7 @@
-//! Smoke tests for `connect_from_config_seaorm`. Validates the
-//! transitional Phase A entry point that returns a `DatabaseConnection`
-//! via `Database::connect(ConnectOptions...)`, including:
+//! Smoke tests for [`connect_from_config`]. Validates the
+//! `SeaORM`-native connection entry point that returns a
+//! [`DatabaseConnection`] via `Database::connect(ConnectOptions...)`,
+//! including:
 //!
 //! - Pool opens on both `SQLite` (temp file) and Postgres (via
 //!   `DATABASE_URL`).
@@ -18,7 +19,7 @@
 use std::path::PathBuf;
 
 use mydia_rs_config::{Config, DatabaseConfig, DatabaseType, SqliteJournalMode, SqliteSynchronous};
-use mydia_rs_db::connect_from_config_seaorm;
+use mydia_rs_db::connect_from_config;
 use sea_orm::{ConnectionTrait, Statement};
 use tempfile::TempDir;
 
@@ -47,11 +48,9 @@ fn postgres_url_from_env() -> Option<String> {
 }
 
 #[tokio::test]
-async fn seaorm_connect_sqlite_opens_and_runs_smoke() {
+async fn seaorm_sqlite_opens_and_runs_smoke() {
     let (config, _tmp, _path) = sqlite_config_with_journal(SqliteJournalMode::Wal);
-    let db = connect_from_config_seaorm(&config)
-        .await
-        .expect("connect_seaorm");
+    let db = connect_from_config(&config).await.expect("connect");
     let backend = db.get_database_backend();
     let row = db
         .query_one_raw(Statement::from_string(backend, "SELECT 1 AS v".to_string()))
@@ -63,11 +62,9 @@ async fn seaorm_connect_sqlite_opens_and_runs_smoke() {
 }
 
 #[tokio::test]
-async fn seaorm_connect_sqlite_applies_wal_journal_mode() {
+async fn seaorm_sqlite_applies_wal_journal_mode() {
     let (config, _tmp, _path) = sqlite_config_with_journal(SqliteJournalMode::Wal);
-    let db = connect_from_config_seaorm(&config)
-        .await
-        .expect("connect_seaorm");
+    let db = connect_from_config(&config).await.expect("connect");
     let backend = db.get_database_backend();
     let row = db
         .query_one_raw(Statement::from_string(
@@ -86,11 +83,9 @@ async fn seaorm_connect_sqlite_applies_wal_journal_mode() {
 }
 
 #[tokio::test]
-async fn seaorm_connect_sqlite_enables_foreign_keys_pragma() {
+async fn seaorm_sqlite_enables_foreign_keys_pragma() {
     let (config, _tmp, _path) = sqlite_config_with_journal(SqliteJournalMode::Wal);
-    let db = connect_from_config_seaorm(&config)
-        .await
-        .expect("connect_seaorm");
+    let db = connect_from_config(&config).await.expect("connect");
     let backend = db.get_database_backend();
     let row = db
         .query_one_raw(Statement::from_string(
@@ -105,7 +100,7 @@ async fn seaorm_connect_sqlite_enables_foreign_keys_pragma() {
 }
 
 #[tokio::test]
-async fn seaorm_connect_postgres_opens_and_runs_smoke() {
+async fn seaorm_postgres_opens_and_runs_smoke() {
     let Some(url) = postgres_url_from_env() else {
         return;
     };
@@ -119,9 +114,7 @@ async fn seaorm_connect_postgres_opens_and_runs_smoke() {
         },
         ..Config::default()
     };
-    let db = connect_from_config_seaorm(&config)
-        .await
-        .expect("connect_seaorm");
+    let db = connect_from_config(&config).await.expect("connect");
     let backend = db.get_database_backend();
     let row = db
         .query_one_raw(Statement::from_string(backend, "SELECT 1 AS v".to_string()))

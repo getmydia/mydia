@@ -17,11 +17,19 @@
 //!
 //! Missing `schema_migrations` table -> this doesn't look like a mydia
 //! database. Surface as `SchemaMissing`.
+//!
+//! Implementation note: the probe lives in `mydia-rs-db` rather than
+//! `mydia-rs-entities` (where the `schema_migrations` entity itself
+//! sits) because `entities` already depends on `db` for the wrapper
+//! types. Adding the reverse direction would create a cycle, so this
+//! file falls back to raw `Statement::from_string` for the two queries
+//! it needs — `match db.get_database_backend()` covers the dialect
+//! divergence on the existence check, and the version-max query is
+//! identical SQL on both engines.
 
-use sqlx::Row;
+use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
 
 use crate::error::DbError;
-use crate::pool::Db;
 
 /// Highest Phoenix migration version this build of mydia-rs has been
 /// tested against. Bump whenever a new migration is pulled into the
@@ -51,56 +59,47 @@ pub enum SchemaCheckOutcome {
 
 /// Probe the schema version. Returns the outcome and logs at the
 /// appropriate tracing level for that case.
-pub async fn schema_check(db: &Db) -> Result<SchemaCheckOutcome, DbError> {
-    let raw_version = match db {
-        Db::Sqlite(pool) => {
-            // Dialect-divergent: `sqlite_master` is SQLite-only.
-            #[allow(clippy::disallowed_methods)]
-            let exists: Option<String> = sqlx::query_scalar(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
-            )
-            .fetch_optional(pool)
-            .await?;
+pub async fn schema_check(db: &DatabaseConnection) -> Result<SchemaCheckOutcome, DbError> {
+    let backend = db.get_database_backend();
 
-            if exists.is_none() {
-                tracing::error!(
-                    "schema_migrations table missing; this doesn't look like a mydia database"
-                );
-                return Ok(SchemaCheckOutcome::SchemaMissing);
-            }
-
-            // schema_migrations is Phoenix-owned and absent from the macro prepare schema.
-            #[allow(clippy::disallowed_methods)]
-            let row = sqlx::query("SELECT MAX(version) AS v FROM schema_migrations")
-                .fetch_one(pool)
-                .await?;
-            row.try_get::<Option<i64>, _>("v")?
+    // Existence check: SQLite uses sqlite_master, Postgres uses
+    // to_regclass. The output column name differs, so probe by row
+    // presence rather than by reading the column value.
+    let exists_sql = match backend {
+        DbBackend::Sqlite => {
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
         }
-        Db::Postgres(pool) => {
-            // Dialect-divergent: `to_regclass` is Postgres-only.
-            #[allow(clippy::disallowed_methods)]
-            let exists: Option<String> =
-                sqlx::query_scalar("SELECT to_regclass('public.schema_migrations')::text")
-                    .fetch_one(pool)
-                    .await?;
-
-            if exists.is_none() {
-                tracing::error!(
-                    "schema_migrations table missing; this doesn't look like a mydia database"
-                );
-                return Ok(SchemaCheckOutcome::SchemaMissing);
-            }
-
-            // schema_migrations is Phoenix-owned and absent from the macro prepare schema.
-            #[allow(clippy::disallowed_methods)]
-            let row = sqlx::query("SELECT MAX(version) AS v FROM schema_migrations")
-                .fetch_one(pool)
-                .await?;
-            row.try_get::<Option<i64>, _>("v")?
+        DbBackend::Postgres => {
+            "SELECT to_regclass('public.schema_migrations')::text AS name WHERE to_regclass('public.schema_migrations') IS NOT NULL"
         }
+        DbBackend::MySql => unreachable!("mydia-rs is dual-engine SQLite/Postgres only"),
+        _ => unreachable!(
+            "unknown DbBackend variant; mydia-rs is dual-engine SQLite/Postgres only"
+        ),
     };
+    let exists = db
+        .query_one_raw(Statement::from_string(backend, exists_sql.to_string()))
+        .await?
+        .is_some();
+    if !exists {
+        tracing::error!("schema_migrations table missing; this doesn't look like a mydia database");
+        return Ok(SchemaCheckOutcome::SchemaMissing);
+    }
 
-    let Some(version) = raw_version else {
+    // Version-max query: identical SQL on both engines, identical
+    // result-column name, dialect-portable through Statement::from_string.
+    let row = db
+        .query_one_raw(Statement::from_string(
+            backend,
+            "SELECT MAX(version) AS v FROM schema_migrations".to_string(),
+        ))
+        .await?;
+    let Some(row) = row else {
+        tracing::error!("schema_migrations exists but max(version) returned no rows");
+        return Ok(SchemaCheckOutcome::SchemaMissing);
+    };
+    let version: Option<i64> = row.try_get_by("v")?;
+    let Some(version) = version else {
         tracing::error!("schema_migrations exists but is empty");
         return Ok(SchemaCheckOutcome::SchemaMissing);
     };

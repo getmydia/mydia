@@ -1,4 +1,5 @@
-//! `sqlx::Type` impls matching the on-disk format Ecto actually writes.
+//! `SeaORM`-native wrapper types matching the on-disk format Ecto
+//! actually writes.
 //!
 //! - [`uuid`]: TEXT on `SQLite` (36-char lowercase hyphenated, per
 //!   `ecto_sqlite3`'s `:binary_id_type = :string` default), native

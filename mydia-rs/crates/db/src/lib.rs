@@ -1,24 +1,20 @@
 //! Database access layer.
 //!
-//! Currently in the middle of the `SeaORM` cutover described in
-//! `docs/plans/2026-05-24-001-refactor-seaorm-data-layer-unification-plan.md`.
-//! During Phase A, both surfaces coexist: the legacy [`pool::Db`] enum and
-//! sqlx-backed [`dialect`] / [`schema_check`] paths still serve in-flight
-//! call sites, while [`types`], [`insert_helper`], and the new `SeaORM`
-//! [`pool::connect_from_config_seaorm`] entry point land in
-//! preparation for the U6 cutover.
+//! Post-U6 cutover: the workspace's data API is `SeaORM`-only. The legacy
+//! `Db` enum, `from_sqlx_*_pool` bridging, and direct sqlx call sites
+//! are gone. Every consumer crate threads [`DatabaseConnection`] through
+//! repo / service function signatures, and writes against wrapper-typed
+//! columns go through [`insert_active_model`] / [`update_active_model`].
 //!
-//! - [`pool`] owns the [`Db`] enum that legacy callers route every query
-//!   through, plus the new `SeaORM` `connect_from_config_seaorm` entry
-//!   point that Phase B converts to.
+//! - [`pool`] owns [`pool::connect_from_config`], the single entry point
+//!   for opening a database, plus the cheap `SELECT 1` smoke query.
 //! - [`types`] holds the cross-engine wrapper types (`UuidText`,
 //!   `DateTimeSecs`, `DateTimeMicros`, `JsonMap`, `StringArray`). Each
-//!   carries both the legacy `sqlx::Type` impls and the `SeaORM`-native
-//!   [`From<W> for Value`] + custom [`TryGetable`] + `into_simple_expr`
-//!   write helper. Phoenix and mydia-rs read each other's rows unchanged
-//!   through these.
-//! - [`insert_helper`] exposes `insert_active_model` and
-//!   `update_active_model` — the workspace's write API for any
+//!   carries `From<W> for Value` + custom engine-branched [`TryGetable`]
+//!   + an `into_simple_expr(backend)` write helper. Phoenix and mydia-rs
+//!   read each other's rows unchanged through these.
+//! - [`insert_helper`] exposes [`insert_active_model`] and
+//!   [`update_active_model`] — the workspace's write API for any
 //!   `ActiveModel` whose entity has at least one wrapper-typed column.
 //!   Vanilla `ActiveModelTrait::insert` and `::update` are forbidden by
 //!   the workspace `clippy.toml`; this helper threads the engine-aware
@@ -34,7 +30,7 @@ mod error;
 
 pub use error::DbError;
 pub use insert_helper::{insert_active_model, update_active_model};
-pub use pool::{connect_from_config, connect_from_config_seaorm, Db};
+pub use pool::{connect_from_config, smoke_query};
 pub use schema_check::{schema_check, SchemaCheckOutcome, MAX_KNOWN_MIGRATION};
 
 // `SeaORM` connection type re-export. Phase B conversion units thread this

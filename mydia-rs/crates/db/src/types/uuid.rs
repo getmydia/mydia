@@ -3,19 +3,16 @@
 //! Phoenix uses `ecto_sqlite3`'s default `:binary_id_type = :string`,
 //! which stores UUIDs as 36-character lowercase-hyphenated TEXT on
 //! `SQLite` (e.g. `0186fa3d-1c2f-7c4f-9aaa-1234567890ab`). Postgres uses
-//! the native `uuid` type. sqlx's built-in `Uuid` Type stores BLOB on
-//! `SQLite`, which would corrupt cross-backend reads, so we wrap with
-//! [`UuidText`] and route the `SQLite` path through TEXT.
-//!
-//! `SeaORM`-side (additive during the cutover): [`UuidText`] marshals as
-//! `Value::String` universally, then [`UuidText::into_simple_expr`]
-//! injects the `$N::uuid` cast on Postgres at write time. Reads engine-
-//! branch in [`TryGetable`] — Postgres reads the native `uuid` and
-//! converts to text storage, `SQLite` reads TEXT and parses. The spike
-//! at `crates/entities/tests/value_type_spike.rs` (deleted alongside
-//! this change) empirically established that no single context-free
-//! `Value` variant satisfies both engines; the wrapper carries the
-//! engine awareness so call sites can stay dialect-agnostic.
+//! the native `uuid` type. SeaORM's own `Value::Uuid` writes a BLOB to
+//! `SQLite` via sqlx-sqlite's default `Encode`, which would corrupt
+//! cross-backend reads; the [`UuidText`] wrapper routes the value
+//! through `Value::String` instead, with the Postgres cast applied via
+//! [`UuidText::into_simple_expr`] at write time. Reads engine-branch in
+//! [`TryGetable`] — Postgres reads the native `uuid` and converts to
+//! text storage, `SQLite` reads TEXT and parses. The spike empirically
+//! established that no single context-free `Value` variant satisfies
+//! both engines; the wrapper carries the engine awareness so call
+//! sites can stay dialect-agnostic.
 
 use std::fmt;
 use std::str::FromStr;
@@ -25,11 +22,6 @@ use sea_orm::sea_query::{
 };
 use sea_orm::{ColIdx, DbBackend, DbErr, QueryResult, TryFromU64, TryGetError, TryGetable};
 use serde::{Deserialize, Serialize};
-use sqlx::database::Database;
-use sqlx::decode::Decode;
-use sqlx::encode::{Encode, IsNull};
-use sqlx::error::BoxDynError;
-use sqlx::{Postgres, Sqlite, Type};
 use uuid::Uuid;
 
 /// Newtype wrapper around [`uuid::Uuid`] that encodes as TEXT on `SQLite`
@@ -67,64 +59,6 @@ impl FromStr for UuidText {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Uuid::parse_str(s).map(Self)
-    }
-}
-
-// ---------- SQLite (TEXT) ----------
-
-impl Type<Sqlite> for UuidText {
-    fn type_info() -> <Sqlite as Database>::TypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-
-    fn compatible(ty: &<Sqlite as Database>::TypeInfo) -> bool {
-        <String as Type<Sqlite>>::compatible(ty)
-    }
-}
-
-impl<'q> Encode<'q, Sqlite> for UuidText {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        // Lowercase hyphenated form (Ecto convention).
-        let s = self.0.as_hyphenated().to_string();
-        <String as Encode<'q, Sqlite>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> Decode<'r, Sqlite> for UuidText {
-    fn decode(value: <Sqlite as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let s = <String as Decode<'r, Sqlite>>::decode(value)?;
-        Ok(Self(Uuid::parse_str(&s)?))
-    }
-}
-
-// ---------- Postgres (native uuid) ----------
-
-impl Type<Postgres> for UuidText {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <Uuid as Type<Postgres>>::type_info()
-    }
-
-    fn compatible(ty: &<Postgres as Database>::TypeInfo) -> bool {
-        <Uuid as Type<Postgres>>::compatible(ty)
-    }
-}
-
-impl<'q> Encode<'q, Postgres> for UuidText {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Postgres as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        <Uuid as Encode<'q, Postgres>>::encode_by_ref(&self.0, buf)
-    }
-}
-
-impl<'r> Decode<'r, Postgres> for UuidText {
-    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let inner = <Uuid as Decode<'r, Postgres>>::decode(value)?;
-        Ok(Self(inner))
     }
 }
 

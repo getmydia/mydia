@@ -10,10 +10,11 @@
 //!   Used by `release_blacklist.expires_at`,
 //!   `release_blacklist.inserted_at`, and `download.last_progress_at`.
 //!
-//! sqlx-sqlite's built-in `DateTime<Utc>` encoding produces
-//! `"YYYY-MM-DD HH:MM:SS"` (space separator, no `Z`), which Ecto would
-//! still parse but mydia-rs would round-trip with subtle drift. Going
-//! through TEXT explicitly keeps Phoenix and mydia-rs writes byte-equal.
+//! `SeaORM`'s own `Value::ChronoDateTimeUtc` would produce a
+//! `"YYYY-MM-DD HH:MM:SS"`-shaped bind via sqlx-sqlite's default
+//! `Encode`, which Ecto would still parse but mydia-rs would round-trip
+//! with subtle drift. Going through TEXT explicitly keeps Phoenix and
+//! mydia-rs writes byte-equal.
 
 use chrono::{DateTime, NaiveDateTime, SecondsFormat, TimeZone, Utc};
 use sea_orm::sea_query::{
@@ -21,11 +22,6 @@ use sea_orm::sea_query::{
 };
 use sea_orm::{ColIdx, DbBackend, DbErr, QueryResult, TryGetError, TryGetable};
 use serde::{Deserialize, Serialize};
-use sqlx::database::Database;
-use sqlx::decode::Decode;
-use sqlx::encode::{Encode, IsNull};
-use sqlx::error::BoxDynError;
-use sqlx::{Postgres, Sqlite, Type};
 
 /// Ecto `:utc_datetime` (second precision).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -58,115 +54,6 @@ impl From<DateTime<Utc>> for DateTimeMicros {
 impl From<DateTimeMicros> for DateTime<Utc> {
     fn from(value: DateTimeMicros) -> Self {
         value.0
-    }
-}
-
-// ---------- SQLite (TEXT) ----------
-
-impl Type<Sqlite> for DateTimeSecs {
-    fn type_info() -> <Sqlite as Database>::TypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-    fn compatible(ty: &<Sqlite as Database>::TypeInfo) -> bool {
-        <String as Type<Sqlite>>::compatible(ty)
-    }
-}
-
-impl<'q> Encode<'q, Sqlite> for DateTimeSecs {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        // SecondsFormat::Secs + use_z=true gives "...Z" not "...+00:00".
-        let s = self.0.to_rfc3339_opts(SecondsFormat::Secs, true);
-        <String as Encode<'q, Sqlite>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> Decode<'r, Sqlite> for DateTimeSecs {
-    fn decode(value: <Sqlite as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let s = <String as Decode<'r, Sqlite>>::decode(value)?;
-        Ok(Self(parse_ecto_iso8601(&s)?))
-    }
-}
-
-impl Type<Sqlite> for DateTimeMicros {
-    fn type_info() -> <Sqlite as Database>::TypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-    fn compatible(ty: &<Sqlite as Database>::TypeInfo) -> bool {
-        <String as Type<Sqlite>>::compatible(ty)
-    }
-}
-
-impl<'q> Encode<'q, Sqlite> for DateTimeMicros {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        let s = self.0.to_rfc3339_opts(SecondsFormat::Micros, true);
-        <String as Encode<'q, Sqlite>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> Decode<'r, Sqlite> for DateTimeMicros {
-    fn decode(value: <Sqlite as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let s = <String as Decode<'r, Sqlite>>::decode(value)?;
-        Ok(Self(parse_ecto_iso8601(&s)?))
-    }
-}
-
-// ---------- Postgres (TIMESTAMPTZ) ----------
-
-impl Type<Postgres> for DateTimeSecs {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <DateTime<Utc> as Type<Postgres>>::type_info()
-    }
-    fn compatible(ty: &<Postgres as Database>::TypeInfo) -> bool {
-        <DateTime<Utc> as Type<Postgres>>::compatible(ty)
-    }
-}
-
-impl<'q> Encode<'q, Postgres> for DateTimeSecs {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Postgres as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        <DateTime<Utc> as Encode<'q, Postgres>>::encode_by_ref(&self.0, buf)
-    }
-}
-
-impl<'r> Decode<'r, Postgres> for DateTimeSecs {
-    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        Ok(Self(<DateTime<Utc> as Decode<'r, Postgres>>::decode(
-            value,
-        )?))
-    }
-}
-
-impl Type<Postgres> for DateTimeMicros {
-    fn type_info() -> <Postgres as Database>::TypeInfo {
-        <DateTime<Utc> as Type<Postgres>>::type_info()
-    }
-    fn compatible(ty: &<Postgres as Database>::TypeInfo) -> bool {
-        <DateTime<Utc> as Type<Postgres>>::compatible(ty)
-    }
-}
-
-impl<'q> Encode<'q, Postgres> for DateTimeMicros {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Postgres as Database>::ArgumentBuffer<'q>,
-    ) -> Result<IsNull, BoxDynError> {
-        <DateTime<Utc> as Encode<'q, Postgres>>::encode_by_ref(&self.0, buf)
-    }
-}
-
-impl<'r> Decode<'r, Postgres> for DateTimeMicros {
-    fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        Ok(Self(<DateTime<Utc> as Decode<'r, Postgres>>::decode(
-            value,
-        )?))
     }
 }
 

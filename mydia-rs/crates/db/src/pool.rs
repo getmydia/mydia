@@ -1,102 +1,45 @@
-//! Connection pool selector and constructor.
+//! `SeaORM` connection bootstrap.
 //!
-//! The `Db` enum stays the single handle every caller threads through
-//! the app. Internally it dispatches to either `sqlx::SqlitePool` or
-//! `sqlx::PgPool`. This is the runtime-select replacement for Phoenix's
-//! compile-time `database_adapter` choice.
+//! [`connect_from_config`] is the single workspace entry point for
+//! opening a database. It returns the `SeaORM`-native
+//! [`DatabaseConnection`] directly — there is no `Db` enum, no
+//! `from_sqlx_*_pool` bridging seam, and no per-engine accessor.
+//! Downstream crates thread `&DatabaseConnection` everywhere; engine
+//! awareness lives inside [`crate::types`] (wrapper write helpers and
+//! `TryGetable` reads) and [`crate::insert_helper`] (ActiveModel
+//! dispatch). Callers don't branch on backend at all unless they're
+//! gating an engine-specific feature outright (e.g. `mydia_runtime_lock`
+//! on `SQLite`-only).
+//!
+//! `SQLite` PRAGMAs (`journal_mode`, `synchronous`, `busy_timeout`,
+//! `cache_size`, `temp_store`, `foreign_keys`) reach the underlying
+//! sqlx-sqlite driver via `ConnectOptions::map_sqlx_sqlite_opts`. The
+//! values match the legacy `pool.rs` set; behavior parity with the
+//! pre-cutover pool was validated by the Phase A smoke tests in
+//! `tests/seaorm_connect_smoke.rs`.
 
 use std::time::Duration;
 
-use sea_orm::{ConnectOptions, Database, DatabaseConnection, Statement};
-use sqlx::postgres::PgPoolOptions;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use sqlx::{PgPool, SqlitePool};
+use sea_orm::sqlx::sqlite::{SqliteJournalMode, SqliteSynchronous};
+use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection, Statement};
 
 use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
 
 use crate::error::DbError;
 
-/// Active connection pool plus the dialect it talks.
-#[derive(Debug, Clone)]
-pub enum Db {
-    Sqlite(SqlitePool),
-    Postgres(PgPool),
-}
-
-impl Db {
-    /// Borrow the `SQLite` pool. Returns `None` when the active backend is
-    /// Postgres. Use this only in code paths that genuinely need the
-    /// concrete `SqlitePool` (e.g. SQLite-specific PRAGMAs).
-    pub fn as_sqlite(&self) -> Option<&SqlitePool> {
-        match self {
-            Self::Sqlite(p) => Some(p),
-            Self::Postgres(_) => None,
-        }
-    }
-
-    /// Borrow the Postgres pool. Returns `None` when the active backend
-    /// is `SQLite`.
-    pub fn as_postgres(&self) -> Option<&PgPool> {
-        match self {
-            Self::Postgres(p) => Some(p),
-            Self::Sqlite(_) => None,
-        }
-    }
-
-    /// Cheap smoke query: `SELECT 1`. Confirms the pool is wired up
-    /// without depending on any application schema. Called from
-    /// [`connect_from_config`] right after opening.
-    pub async fn smoke_query(&self) -> Result<i32, DbError> {
-        let value = match self {
-            Self::Sqlite(p) => {
-                // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
-                #[allow(clippy::disallowed_methods)]
-                sqlx::query_scalar::<_, i32>("SELECT 1")
-                    .fetch_one(p)
-                    .await?
-            }
-            Self::Postgres(p) => sqlx::query_scalar!("SELECT 1")
-                .fetch_one(p)
-                .await?
-                .unwrap_or(0),
-        };
-        Ok(value)
-    }
-}
-
-/// Open a pool from the loaded configuration. Validates the chosen
-/// driver is compiled in, applies `SQLite` PRAGMAs matching the
-/// Phoenix-side production tuning, runs the smoke query, and returns
-/// the ready [`Db`].
-pub async fn connect_from_config(config: &Config) -> Result<Db, DbError> {
-    let db = open_pool(&config.database).await?;
-    db.smoke_query().await?;
-    Ok(db)
-}
-
-async fn open_pool(cfg: &DatabaseConfig) -> Result<Db, DbError> {
-    match cfg.db_type {
-        DatabaseType::Sqlite => open_sqlite(cfg).await,
-        DatabaseType::Postgres => open_postgres(cfg).await,
-    }
-}
-
 /// Open a `SeaORM` [`DatabaseConnection`] from the loaded configuration.
 ///
-/// Transitional Phase A entry point that lives alongside
-/// [`connect_from_config`]. The two are independent — there is no
-/// bridging seam between them. Phase B's U6 cutover deletes the legacy
-/// path and renames this function to drop the `_seaorm` suffix.
+/// Dispatches on `database.db_type`: builds a `sqlite:` URL from
+/// `database.path` for `SQLite`, or passes `database.url` through for
+/// Postgres. `ConnectOptions` applies the shared pool tuning
+/// (`max_connections`, `acquire_timeout`); `SQLite` additionally routes
+/// PRAGMAs through `map_sqlx_sqlite_opts`.
 ///
-/// PRAGMAs on `SQLite` flow through `ConnectOptions::map_sqlx_sqlite_opts`,
-/// matching the `journal_mode` / `synchronous` / `busy_timeout` /
-/// `cache_size` / `temp_store` / `foreign_keys` set the legacy path
-/// configures on `SqliteConnectOptions`. Behavior parity with
-/// [`connect_from_config`] is the design goal — the runtime should see
-/// the same database modulo the API surface.
-pub async fn connect_from_config_seaorm(config: &Config) -> Result<DatabaseConnection, DbError> {
+/// Returns after a successful smoke query so the caller knows the
+/// connection is live without requiring any application schema.
+pub async fn connect_from_config(config: &Config) -> Result<DatabaseConnection, DbError> {
     let cfg = &config.database;
-    let url = build_seaorm_url(cfg)?;
+    let url = build_url(cfg)?;
     let mut opts = ConnectOptions::new(url);
     opts.max_connections(cfg.pool_size)
         .acquire_timeout(Duration::from_millis(u64::from(cfg.timeout_ms)))
@@ -116,38 +59,35 @@ pub async fn connect_from_config_seaorm(config: &Config) -> Result<DatabaseConne
     }
 
     let db = Database::connect(opts).await?;
-    smoke_query_seaorm(&db).await?;
+    smoke_query(&db).await?;
     Ok(db)
 }
 
 /// Cheap smoke query against a `SeaORM` connection. `SELECT 1` survives
 /// dialect differences; runs via `query_one_raw` so we don't depend on
-/// any application schema.
-async fn smoke_query_seaorm(db: &DatabaseConnection) -> Result<(), DbError> {
-    use sea_orm::ConnectionTrait;
-
+/// any application schema. Called from [`connect_from_config`] right
+/// after opening.
+pub async fn smoke_query(db: &DatabaseConnection) -> Result<(), DbError> {
     let backend = db.get_database_backend();
     let stmt = Statement::from_string(backend, "SELECT 1".to_string());
     db.query_one_raw(stmt).await?;
     Ok(())
 }
 
-fn build_seaorm_url(cfg: &DatabaseConfig) -> Result<String, DbError> {
+fn build_url(cfg: &DatabaseConfig) -> Result<String, DbError> {
     match cfg.db_type {
         DatabaseType::Sqlite => {
-            let path = cfg
-                .path
-                .as_deref()
-                .filter(|p| !p.is_empty())
-                .ok_or(DbError::Misconfigured {
-                    kind: "type",
-                    required: "sqlite (database.path)",
-                })?;
+            let path =
+                cfg.path
+                    .as_deref()
+                    .filter(|p| !p.is_empty())
+                    .ok_or(DbError::Misconfigured {
+                        kind: "type",
+                        required: "sqlite (database.path)",
+                    })?;
             // sqlx-sqlite accepts `sqlite::memory:` and `sqlite:filename`;
-            // the legacy `open_sqlite` builds `SqliteConnectOptions` from
-            // a bare filename, so passing the path verbatim through the
-            // `sqlite:` scheme matches that behavior. `create_if_missing`
-            // applies in the `map_sqlx_sqlite_opts` callback above.
+            // `create_if_missing` applies via the `map_sqlx_sqlite_opts`
+            // callback configured in [`connect_from_config`].
             if path == ":memory:" {
                 Ok("sqlite::memory:".to_string())
             } else {
@@ -155,65 +95,17 @@ fn build_seaorm_url(cfg: &DatabaseConfig) -> Result<String, DbError> {
             }
         }
         DatabaseType::Postgres => {
-            let url = cfg
-                .url
-                .as_deref()
-                .filter(|u| !u.is_empty())
-                .ok_or(DbError::Misconfigured {
-                    kind: "type",
-                    required: "postgres (database.url)",
-                })?;
+            let url =
+                cfg.url
+                    .as_deref()
+                    .filter(|u| !u.is_empty())
+                    .ok_or(DbError::Misconfigured {
+                        kind: "type",
+                        required: "postgres (database.url)",
+                    })?;
             Ok(url.to_string())
         }
     }
-}
-
-async fn open_sqlite(cfg: &DatabaseConfig) -> Result<Db, DbError> {
-    let path = cfg
-        .path
-        .as_deref()
-        .filter(|p| !p.is_empty())
-        .ok_or(DbError::Misconfigured {
-            kind: "type",
-            required: "sqlite (database.path)",
-        })?;
-
-    let opts = SqliteConnectOptions::new()
-        .filename(path)
-        .create_if_missing(true)
-        .journal_mode(map_journal_mode(cfg.journal_mode))
-        .synchronous(map_synchronous(cfg.synchronous))
-        .busy_timeout(Duration::from_millis(u64::from(cfg.busy_timeout_ms)))
-        .pragma("cache_size", cfg.cache_size_kib.to_string())
-        .pragma("temp_store", "memory")
-        .pragma("foreign_keys", "ON");
-
-    let pool = SqlitePoolOptions::new()
-        .max_connections(cfg.pool_size)
-        .acquire_timeout(Duration::from_millis(u64::from(cfg.timeout_ms)))
-        .connect_with(opts)
-        .await?;
-
-    Ok(Db::Sqlite(pool))
-}
-
-async fn open_postgres(cfg: &DatabaseConfig) -> Result<Db, DbError> {
-    let url = cfg
-        .url
-        .as_deref()
-        .filter(|u| !u.is_empty())
-        .ok_or(DbError::Misconfigured {
-            kind: "type",
-            required: "postgres (database.url)",
-        })?;
-
-    let pool = PgPoolOptions::new()
-        .max_connections(cfg.pool_size)
-        .acquire_timeout(Duration::from_millis(u64::from(cfg.timeout_ms)))
-        .connect(url)
-        .await?;
-
-    Ok(Db::Postgres(pool))
 }
 
 fn map_journal_mode(mode: mydia_rs_config::SqliteJournalMode) -> SqliteJournalMode {

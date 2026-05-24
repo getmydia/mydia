@@ -6,19 +6,12 @@ license.workspace = true
 publish = false
 
 [dependencies]
-sqlx = { version = "0.8", default-features = false, features = [
-    "runtime-tokio",
-    "tls-rustls",
-    "sqlite",
-    "postgres",
-    "macros",
-    "chrono",
-    "uuid",
-    "json",
-] }
-# SeaORM joins the workspace alongside sqlx for the cross-engine data layer
-# unification sweep (Phase A U1). The two coexist during Phase B; sqlx
-# eventually drops once every call site converts.
+# SeaORM is the workspace's data layer post-U6 cutover. sqlx is no
+# longer a direct dependency — sea-orm pulls it transitively for the
+# `sea_orm::sqlx::sqlite::*` types that pool.rs needs to translate
+# config-side enums into PRAGMA values. The wrapper types and helpers
+# in this crate are SeaORM-native; downstream call sites thread
+# `DatabaseConnection` and use `insert_active_model` for writes.
 sea-orm.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 uuid = { version = "1", features = ["v4", "serde"] }
