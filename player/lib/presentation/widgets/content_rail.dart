@@ -75,7 +75,8 @@ class _ContentRailState extends State<ContentRail> {
       children: [
         // Header
         Padding(
-          padding: EdgeInsets.fromLTRB(horizontalPadding, isDesktop ? 32 : 24, horizontalPadding, isDesktop ? 20 : 16),
+          padding: EdgeInsets.fromLTRB(horizontalPadding, isDesktop ? 32 : 24,
+              horizontalPadding, isDesktop ? 20 : 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

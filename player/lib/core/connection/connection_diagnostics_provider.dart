@@ -36,18 +36,18 @@ class UrlProbeResult {
   });
 
   Map<String, dynamic> toJson() => {
-    'url': url,
-    'success': success,
-    'error': error,
-    'timestamp': timestamp.toIso8601String(),
-  };
+        'url': url,
+        'success': success,
+        'error': error,
+        'timestamp': timestamp.toIso8601String(),
+      };
 
   factory UrlProbeResult.fromJson(Map<String, dynamic> json) => UrlProbeResult(
-    url: json['url'] as String,
-    success: json['success'] as bool,
-    error: json['error'] as String?,
-    timestamp: DateTime.parse(json['timestamp'] as String),
-  );
+        url: json['url'] as String,
+        success: json['success'] as bool,
+        error: json['error'] as String?,
+        timestamp: DateTime.parse(json['timestamp'] as String),
+      );
 }
 
 /// Re-export for convenience in UI.
@@ -89,8 +89,9 @@ class ConnectionDiagnosticsState {
     return ConnectionDiagnosticsState(
       directUrls: directUrls ?? this.directUrls,
       urlAttempts: urlAttempts ?? this.urlAttempts,
-      lastDirectAttempt:
-          clearLastDirectAttempt ? null : (lastDirectAttempt ?? this.lastDirectAttempt),
+      lastDirectAttempt: clearLastDirectAttempt
+          ? null
+          : (lastDirectAttempt ?? this.lastDirectAttempt),
       isP2PMode: isP2PMode ?? this.isP2PMode,
       isLoading: isLoading ?? this.isLoading,
     );
@@ -123,7 +124,8 @@ class ConnectionDiagnosticsState {
 }
 
 /// Notifier for connection diagnostics.
-class ConnectionDiagnosticsNotifier extends Notifier<ConnectionDiagnosticsState> {
+class ConnectionDiagnosticsNotifier
+    extends Notifier<ConnectionDiagnosticsState> {
   @override
   ConnectionDiagnosticsState build() {
     // Watch the connection provider for real-time updates
@@ -165,7 +167,8 @@ class ConnectionDiagnosticsNotifier extends Notifier<ConnectionDiagnosticsState>
         try {
           lastDirectAttempt = DateTime.parse(lastAttemptStr);
         } catch (e) {
-          debugPrint('[ConnectionDiagnostics] Failed to parse last attempt: $e');
+          debugPrint(
+              '[ConnectionDiagnostics] Failed to parse last attempt: $e');
         }
       }
 
@@ -176,8 +179,8 @@ class ConnectionDiagnosticsNotifier extends Notifier<ConnectionDiagnosticsState>
       if (errorsJson != null) {
         try {
           final decoded = jsonDecode(errorsJson) as Map<String, dynamic>;
-          urlAttempts = decoded.map((key, value) =>
-              MapEntry(key, DirectUrlAttempt.fromJson(value as Map<String, dynamic>)));
+          urlAttempts = decoded.map((key, value) => MapEntry(
+              key, DirectUrlAttempt.fromJson(value as Map<String, dynamic>)));
         } catch (e) {
           debugPrint('[ConnectionDiagnostics] Failed to parse URL errors: $e');
         }

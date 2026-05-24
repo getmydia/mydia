@@ -5,10 +5,11 @@ class Variables$Query$StreamingCandidates {
   factory Variables$Query$StreamingCandidates({
     required String contentType,
     required String id,
-  }) => Variables$Query$StreamingCandidates._({
-    r'contentType': contentType,
-    r'id': id,
-  });
+  }) =>
+      Variables$Query$StreamingCandidates._({
+        r'contentType': contentType,
+        r'id': id,
+      });
 
   Variables$Query$StreamingCandidates._(this._$data);
 
@@ -39,9 +40,9 @@ class Variables$Query$StreamingCandidates {
   }
 
   CopyWith$Variables$Query$StreamingCandidates<
-    Variables$Query$StreamingCandidates
-  >
-  get copyWith => CopyWith$Variables$Query$StreamingCandidates(this, (i) => i);
+          Variables$Query$StreamingCandidates>
+      get copyWith =>
+          CopyWith$Variables$Query$StreamingCandidates(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -197,7 +198,7 @@ abstract class CopyWith$Query$StreamingCandidates<TRes> {
     String? $__typename,
   });
   CopyWith$Query$StreamingCandidates$streamingCandidates<TRes>
-  get streamingCandidates;
+      get streamingCandidates;
 }
 
 class _CopyWithImpl$Query$StreamingCandidates<TRes>
@@ -213,20 +214,21 @@ class _CopyWithImpl$Query$StreamingCandidates<TRes>
   TRes call({
     Object? streamingCandidates = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$StreamingCandidates(
-      streamingCandidates: streamingCandidates == _undefined
-          ? _instance.streamingCandidates
-          : (streamingCandidates
-                as Query$StreamingCandidates$streamingCandidates?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$StreamingCandidates(
+          streamingCandidates: streamingCandidates == _undefined
+              ? _instance.streamingCandidates
+              : (streamingCandidates
+                  as Query$StreamingCandidates$streamingCandidates?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Query$StreamingCandidates$streamingCandidates<TRes>
-  get streamingCandidates {
+      get streamingCandidates {
     final local$streamingCandidates = _instance.streamingCandidates;
     return local$streamingCandidates == null
         ? CopyWith$Query$StreamingCandidates$streamingCandidates.stub(
@@ -248,11 +250,12 @@ class _CopyWithStubImpl$Query$StreamingCandidates<TRes>
   call({
     Query$StreamingCandidates$streamingCandidates? streamingCandidates,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Query$StreamingCandidates$streamingCandidates<TRes>
-  get streamingCandidates =>
-      CopyWith$Query$StreamingCandidates$streamingCandidates.stub(_res);
+      get streamingCandidates =>
+          CopyWith$Query$StreamingCandidates$streamingCandidates.stub(_res);
 }
 
 const documentNodeQueryStreamingCandidates = DocumentNode(
@@ -432,10 +435,10 @@ class Query$StreamingCandidates$streamingCandidates {
       fileId: (l$fileId as String),
       candidates: (l$candidates as List<dynamic>)
           .map(
-            (e) =>
-                Query$StreamingCandidates$streamingCandidates$candidates.fromJson(
-                  (e as Map<String, dynamic>),
-                ),
+            (e) => Query$StreamingCandidates$streamingCandidates$candidates
+                .fromJson(
+              (e as Map<String, dynamic>),
+            ),
           )
           .toList(),
       metadata: Query$StreamingCandidates$streamingCandidates$metadata.fromJson(
@@ -448,7 +451,7 @@ class Query$StreamingCandidates$streamingCandidates {
   final String fileId;
 
   final List<Query$StreamingCandidates$streamingCandidates$candidates>
-  candidates;
+      candidates;
 
   final Query$StreamingCandidates$streamingCandidates$metadata metadata;
 
@@ -524,10 +527,9 @@ class Query$StreamingCandidates$streamingCandidates {
 extension UtilityExtension$Query$StreamingCandidates$streamingCandidates
     on Query$StreamingCandidates$streamingCandidates {
   CopyWith$Query$StreamingCandidates$streamingCandidates<
-    Query$StreamingCandidates$streamingCandidates
-  >
-  get copyWith =>
-      CopyWith$Query$StreamingCandidates$streamingCandidates(this, (i) => i);
+          Query$StreamingCandidates$streamingCandidates>
+      get copyWith => CopyWith$Query$StreamingCandidates$streamingCandidates(
+          this, (i) => i);
 }
 
 abstract class CopyWith$Query$StreamingCandidates$streamingCandidates<TRes> {
@@ -549,15 +551,12 @@ abstract class CopyWith$Query$StreamingCandidates$streamingCandidates<TRes> {
   TRes candidates(
     Iterable<Query$StreamingCandidates$streamingCandidates$candidates> Function(
       Iterable<
-        CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
-          Query$StreamingCandidates$streamingCandidates$candidates
-        >
-      >,
-    )
-    _fn,
+          CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
+              Query$StreamingCandidates$streamingCandidates$candidates>>,
+    ) _fn,
   );
   CopyWith$Query$StreamingCandidates$streamingCandidates$metadata<TRes>
-  get metadata;
+      get metadata;
 }
 
 class _CopyWithImpl$Query$StreamingCandidates$streamingCandidates<TRes>
@@ -578,50 +577,47 @@ class _CopyWithImpl$Query$StreamingCandidates$streamingCandidates<TRes>
     Object? candidates = _undefined,
     Object? metadata = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$StreamingCandidates$streamingCandidates(
-      fileId: fileId == _undefined || fileId == null
-          ? _instance.fileId
-          : (fileId as String),
-      candidates: candidates == _undefined || candidates == null
-          ? _instance.candidates
-          : (candidates
-                as List<
-                  Query$StreamingCandidates$streamingCandidates$candidates
-                >),
-      metadata: metadata == _undefined || metadata == null
-          ? _instance.metadata
-          : (metadata
-                as Query$StreamingCandidates$streamingCandidates$metadata),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$StreamingCandidates$streamingCandidates(
+          fileId: fileId == _undefined || fileId == null
+              ? _instance.fileId
+              : (fileId as String),
+          candidates: candidates == _undefined || candidates == null
+              ? _instance.candidates
+              : (candidates as List<
+                  Query$StreamingCandidates$streamingCandidates$candidates>),
+          metadata: metadata == _undefined || metadata == null
+              ? _instance.metadata
+              : (metadata
+                  as Query$StreamingCandidates$streamingCandidates$metadata),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   TRes candidates(
     Iterable<Query$StreamingCandidates$streamingCandidates$candidates> Function(
       Iterable<
-        CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
-          Query$StreamingCandidates$streamingCandidates$candidates
-        >
-      >,
-    )
-    _fn,
-  ) => call(
-    candidates: _fn(
-      _instance.candidates.map(
-        (e) =>
-            CopyWith$Query$StreamingCandidates$streamingCandidates$candidates(
+          CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
+              Query$StreamingCandidates$streamingCandidates$candidates>>,
+    ) _fn,
+  ) =>
+      call(
+        candidates: _fn(
+          _instance.candidates.map(
+            (e) =>
+                CopyWith$Query$StreamingCandidates$streamingCandidates$candidates(
               e,
               (i) => i,
             ),
-      ),
-    ).toList(),
-  );
+          ),
+        ).toList(),
+      );
 
   CopyWith$Query$StreamingCandidates$streamingCandidates$metadata<TRes>
-  get metadata {
+      get metadata {
     final local$metadata = _instance.metadata;
     return CopyWith$Query$StreamingCandidates$streamingCandidates$metadata(
       local$metadata,
@@ -641,15 +637,16 @@ class _CopyWithStubImpl$Query$StreamingCandidates$streamingCandidates<TRes>
     List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
     Query$StreamingCandidates$streamingCandidates$metadata? metadata,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   candidates(_fn) => _res;
 
   CopyWith$Query$StreamingCandidates$streamingCandidates$metadata<TRes>
-  get metadata =>
-      CopyWith$Query$StreamingCandidates$streamingCandidates$metadata.stub(
-        _res,
-      );
+      get metadata =>
+          CopyWith$Query$StreamingCandidates$streamingCandidates$metadata.stub(
+            _res,
+          );
 }
 
 class Query$StreamingCandidates$streamingCandidates$candidates {
@@ -778,22 +775,20 @@ class Query$StreamingCandidates$streamingCandidates$candidates {
 extension UtilityExtension$Query$StreamingCandidates$streamingCandidates$candidates
     on Query$StreamingCandidates$streamingCandidates$candidates {
   CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
-    Query$StreamingCandidates$streamingCandidates$candidates
-  >
-  get copyWith =>
-      CopyWith$Query$StreamingCandidates$streamingCandidates$candidates(
-        this,
-        (i) => i,
-      );
+          Query$StreamingCandidates$streamingCandidates$candidates>
+      get copyWith =>
+          CopyWith$Query$StreamingCandidates$streamingCandidates$candidates(
+            this,
+            (i) => i,
+          );
 }
 
 abstract class CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
-  TRes
-> {
+    TRes> {
   factory CopyWith$Query$StreamingCandidates$streamingCandidates$candidates(
     Query$StreamingCandidates$streamingCandidates$candidates instance,
     TRes Function(Query$StreamingCandidates$streamingCandidates$candidates)
-    then,
+        then,
   ) = _CopyWithImpl$Query$StreamingCandidates$streamingCandidates$candidates;
 
   factory CopyWith$Query$StreamingCandidates$streamingCandidates$candidates.stub(
@@ -811,12 +806,10 @@ abstract class CopyWith$Query$StreamingCandidates$streamingCandidates$candidates
 }
 
 class _CopyWithImpl$Query$StreamingCandidates$streamingCandidates$candidates<
-  TRes
->
+        TRes>
     implements
         CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
-          TRes
-        > {
+            TRes> {
   _CopyWithImpl$Query$StreamingCandidates$streamingCandidates$candidates(
     this._instance,
     this._then,
@@ -825,7 +818,7 @@ class _CopyWithImpl$Query$StreamingCandidates$streamingCandidates$candidates<
   final Query$StreamingCandidates$streamingCandidates$candidates _instance;
 
   final TRes Function(Query$StreamingCandidates$streamingCandidates$candidates)
-  _then;
+      _then;
 
   static const _undefined = <dynamic, dynamic>{};
 
@@ -836,37 +829,36 @@ class _CopyWithImpl$Query$StreamingCandidates$streamingCandidates$candidates<
     Object? videoCodec = _undefined,
     Object? audioCodec = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$StreamingCandidates$streamingCandidates$candidates(
-      strategy: strategy == _undefined || strategy == null
-          ? _instance.strategy
-          : (strategy as Enum$StreamingCandidateStrategy),
-      mime: mime == _undefined || mime == null
-          ? _instance.mime
-          : (mime as String),
-      container: container == _undefined || container == null
-          ? _instance.container
-          : (container as String),
-      videoCodec: videoCodec == _undefined
-          ? _instance.videoCodec
-          : (videoCodec as String?),
-      audioCodec: audioCodec == _undefined
-          ? _instance.audioCodec
-          : (audioCodec as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$StreamingCandidates$streamingCandidates$candidates(
+          strategy: strategy == _undefined || strategy == null
+              ? _instance.strategy
+              : (strategy as Enum$StreamingCandidateStrategy),
+          mime: mime == _undefined || mime == null
+              ? _instance.mime
+              : (mime as String),
+          container: container == _undefined || container == null
+              ? _instance.container
+              : (container as String),
+          videoCodec: videoCodec == _undefined
+              ? _instance.videoCodec
+              : (videoCodec as String?),
+          audioCodec: audioCodec == _undefined
+              ? _instance.audioCodec
+              : (audioCodec as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$StreamingCandidates$streamingCandidates$candidates<
-  TRes
->
+        TRes>
     implements
         CopyWith$Query$StreamingCandidates$streamingCandidates$candidates<
-          TRes
-        > {
+            TRes> {
   _CopyWithStubImpl$Query$StreamingCandidates$streamingCandidates$candidates(
     this._res,
   );
@@ -880,7 +872,8 @@ class _CopyWithStubImpl$Query$StreamingCandidates$streamingCandidates$candidates
     String? videoCodec,
     String? audioCodec,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }
 
 class Query$StreamingCandidates$streamingCandidates$metadata {
@@ -972,18 +965,16 @@ class Query$StreamingCandidates$streamingCandidates$metadata {
 extension UtilityExtension$Query$StreamingCandidates$streamingCandidates$metadata
     on Query$StreamingCandidates$streamingCandidates$metadata {
   CopyWith$Query$StreamingCandidates$streamingCandidates$metadata<
-    Query$StreamingCandidates$streamingCandidates$metadata
-  >
-  get copyWith =>
-      CopyWith$Query$StreamingCandidates$streamingCandidates$metadata(
-        this,
-        (i) => i,
-      );
+          Query$StreamingCandidates$streamingCandidates$metadata>
+      get copyWith =>
+          CopyWith$Query$StreamingCandidates$streamingCandidates$metadata(
+            this,
+            (i) => i,
+          );
 }
 
 abstract class CopyWith$Query$StreamingCandidates$streamingCandidates$metadata<
-  TRes
-> {
+    TRes> {
   factory CopyWith$Query$StreamingCandidates$streamingCandidates$metadata(
     Query$StreamingCandidates$streamingCandidates$metadata instance,
     TRes Function(Query$StreamingCandidates$streamingCandidates$metadata) then,
@@ -1007,7 +998,7 @@ class _CopyWithImpl$Query$StreamingCandidates$streamingCandidates$metadata<TRes>
   final Query$StreamingCandidates$streamingCandidates$metadata _instance;
 
   final TRes Function(Query$StreamingCandidates$streamingCandidates$metadata)
-  _then;
+      _then;
 
   static const _undefined = <dynamic, dynamic>{};
 
@@ -1016,23 +1007,23 @@ class _CopyWithImpl$Query$StreamingCandidates$streamingCandidates$metadata<TRes>
     Object? width = _undefined,
     Object? height = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$StreamingCandidates$streamingCandidates$metadata(
-      duration: duration == _undefined
-          ? _instance.duration
-          : (duration as double?),
-      width: width == _undefined ? _instance.width : (width as int?),
-      height: height == _undefined ? _instance.height : (height as int?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$StreamingCandidates$streamingCandidates$metadata(
+          duration: duration == _undefined
+              ? _instance.duration
+              : (duration as double?),
+          width: width == _undefined ? _instance.width : (width as int?),
+          height: height == _undefined ? _instance.height : (height as int?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$StreamingCandidates$streamingCandidates$metadata<
-  TRes
->
+        TRes>
     implements
         CopyWith$Query$StreamingCandidates$streamingCandidates$metadata<TRes> {
   _CopyWithStubImpl$Query$StreamingCandidates$streamingCandidates$metadata(

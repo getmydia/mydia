@@ -29,7 +29,7 @@ class Variables$Query$MovieDetail {
   }
 
   CopyWith$Variables$Query$MovieDetail<Variables$Query$MovieDetail>
-  get copyWith => CopyWith$Variables$Query$MovieDetail(this, (i) => i);
+      get copyWith => CopyWith$Variables$Query$MovieDetail(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -78,11 +78,11 @@ class _CopyWithImpl$Variables$Query$MovieDetail<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? id = _undefined}) => _then(
-    Variables$Query$MovieDetail._({
-      ..._instance._$data,
-      if (id != _undefined && id != null) 'id': (id as String),
-    }),
-  );
+        Variables$Query$MovieDetail._({
+          ..._instance._$data,
+          if (id != _undefined && id != null) 'id': (id as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Query$MovieDetail<TRes>
@@ -579,9 +579,8 @@ class Query$MovieDetail$movie {
     final l$imdbId = imdbId;
     _resultData['imdbId'] = l$imdbId;
     final l$category = category;
-    _resultData['category'] = l$category == null
-        ? null
-        : toJson$Enum$MediaCategory(l$category);
+    _resultData['category'] =
+        l$category == null ? null : toJson$Enum$MediaCategory(l$category);
     final l$monitored = monitored;
     _resultData['monitored'] = l$monitored;
     final l$addedAt = addedAt;
@@ -812,10 +811,8 @@ abstract class CopyWith$Query$MovieDetail$movie<TRes> {
   TRes files(
     Iterable<Fragment$MediaFileFragment?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?
-      >?,
-    )
-    _fn,
+          CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?>?,
+    ) _fn,
   );
 }
 
@@ -849,55 +846,57 @@ class _CopyWithImpl$Query$MovieDetail$movie<TRes>
     Object? files = _undefined,
     Object? isFavorite = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$MovieDetail$movie(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      originalTitle: originalTitle == _undefined
-          ? _instance.originalTitle
-          : (originalTitle as String?),
-      year: year == _undefined ? _instance.year : (year as int?),
-      overview: overview == _undefined
-          ? _instance.overview
-          : (overview as String?),
-      runtime: runtime == _undefined ? _instance.runtime : (runtime as int?),
-      genres: genres == _undefined
-          ? _instance.genres
-          : (genres as List<String?>?),
-      contentRating: contentRating == _undefined
-          ? _instance.contentRating
-          : (contentRating as String?),
-      rating: rating == _undefined ? _instance.rating : (rating as double?),
-      tmdbId: tmdbId == _undefined ? _instance.tmdbId : (tmdbId as int?),
-      imdbId: imdbId == _undefined ? _instance.imdbId : (imdbId as String?),
-      category: category == _undefined
-          ? _instance.category
-          : (category as Enum$MediaCategory?),
-      monitored: monitored == _undefined || monitored == null
-          ? _instance.monitored
-          : (monitored as bool),
-      addedAt: addedAt == _undefined || addedAt == null
-          ? _instance.addedAt
-          : (addedAt as String),
-      artwork: artwork == _undefined
-          ? _instance.artwork
-          : (artwork as Fragment$ArtworkFragment?),
-      progress: progress == _undefined
-          ? _instance.progress
-          : (progress as Fragment$ProgressFragment?),
-      files: files == _undefined
-          ? _instance.files
-          : (files as List<Fragment$MediaFileFragment?>?),
-      isFavorite: isFavorite == _undefined || isFavorite == null
-          ? _instance.isFavorite
-          : (isFavorite as bool),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$MovieDetail$movie(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          originalTitle: originalTitle == _undefined
+              ? _instance.originalTitle
+              : (originalTitle as String?),
+          year: year == _undefined ? _instance.year : (year as int?),
+          overview: overview == _undefined
+              ? _instance.overview
+              : (overview as String?),
+          runtime:
+              runtime == _undefined ? _instance.runtime : (runtime as int?),
+          genres: genres == _undefined
+              ? _instance.genres
+              : (genres as List<String?>?),
+          contentRating: contentRating == _undefined
+              ? _instance.contentRating
+              : (contentRating as String?),
+          rating: rating == _undefined ? _instance.rating : (rating as double?),
+          tmdbId: tmdbId == _undefined ? _instance.tmdbId : (tmdbId as int?),
+          imdbId: imdbId == _undefined ? _instance.imdbId : (imdbId as String?),
+          category: category == _undefined
+              ? _instance.category
+              : (category as Enum$MediaCategory?),
+          monitored: monitored == _undefined || monitored == null
+              ? _instance.monitored
+              : (monitored as bool),
+          addedAt: addedAt == _undefined || addedAt == null
+              ? _instance.addedAt
+              : (addedAt as String),
+          artwork: artwork == _undefined
+              ? _instance.artwork
+              : (artwork as Fragment$ArtworkFragment?),
+          progress: progress == _undefined
+              ? _instance.progress
+              : (progress as Fragment$ProgressFragment?),
+          files: files == _undefined
+              ? _instance.files
+              : (files as List<Fragment$MediaFileFragment?>?),
+          isFavorite: isFavorite == _undefined || isFavorite == null
+              ? _instance.isFavorite
+              : (isFavorite as bool),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork {
     final local$artwork = _instance.artwork;
@@ -922,18 +921,18 @@ class _CopyWithImpl$Query$MovieDetail$movie<TRes>
   TRes files(
     Iterable<Fragment$MediaFileFragment?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?
-      >?,
-    )
-    _fn,
-  ) => call(
-    files: _fn(
-      _instance.files?.map(
-        (e) =>
-            e == null ? null : CopyWith$Fragment$MediaFileFragment(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>?>?,
+    ) _fn,
+  ) =>
+      call(
+        files: _fn(
+          _instance.files?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Fragment$MediaFileFragment(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 }
 
 class _CopyWithStubImpl$Query$MovieDetail$movie<TRes>
@@ -962,7 +961,8 @@ class _CopyWithStubImpl$Query$MovieDetail$movie<TRes>
     List<Fragment$MediaFileFragment?>? files,
     bool? isFavorite,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork =>
       CopyWith$Fragment$ArtworkFragment.stub(_res);

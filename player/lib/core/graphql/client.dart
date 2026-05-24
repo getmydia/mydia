@@ -86,18 +86,16 @@ WebSocketLink createWebSocketLink(String serverUrl, String? authToken) {
       .replaceFirst('http://', 'ws://')
       .replaceFirst('https://', 'wss://');
 
-  final baseUrl = wsUrl.endsWith('/')
-      ? wsUrl.substring(0, wsUrl.length - 1)
-      : wsUrl;
+  final baseUrl =
+      wsUrl.endsWith('/') ? wsUrl.substring(0, wsUrl.length - 1) : wsUrl;
 
   return WebSocketLink(
     '$baseUrl/api/graphql/socket',
     config: SocketClientConfig(
       autoReconnect: true,
       inactivityTimeout: const Duration(seconds: 30),
-      initialPayload: authToken != null
-          ? {'Authorization': 'Bearer $authToken'}
-          : null,
+      initialPayload:
+          authToken != null ? {'Authorization': 'Bearer $authToken'} : null,
     ),
   );
 }

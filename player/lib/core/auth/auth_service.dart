@@ -46,9 +46,8 @@ class AuthService {
   /// Store the server URL.
   Future<void> setServerUrl(String url) async {
     // Ensure URL doesn't have trailing slash
-    final normalizedUrl = url.endsWith('/')
-        ? url.substring(0, url.length - 1)
-        : url;
+    final normalizedUrl =
+        url.endsWith('/') ? url.substring(0, url.length - 1) : url;
     await _storage.write(_serverUrlKey, normalizedUrl);
   }
 
@@ -86,9 +85,8 @@ class AuthService {
   /// Store a custom relay URL.
   Future<void> setRelayUrl(String url) async {
     // Ensure URL doesn't have trailing slash
-    final normalizedUrl = url.endsWith('/')
-        ? url.substring(0, url.length - 1)
-        : url;
+    final normalizedUrl =
+        url.endsWith('/') ? url.substring(0, url.length - 1) : url;
     await _storage.write(_relayUrlKey, normalizedUrl);
   }
 
@@ -190,9 +188,8 @@ class AuthService {
         throw Exception('Login failed: $errorMessage');
       }
 
-      final mutation = result.data != null
-          ? Mutation$Login.fromJson(result.data!)
-          : null;
+      final mutation =
+          result.data != null ? Mutation$Login.fromJson(result.data!) : null;
       final loginData = mutation?.login;
       if (loginData == null) {
         throw Exception('No data returned from login mutation');

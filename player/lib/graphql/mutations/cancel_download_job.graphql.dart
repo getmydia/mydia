@@ -27,9 +27,9 @@ class Variables$Mutation$CancelDownloadJob {
   }
 
   CopyWith$Variables$Mutation$CancelDownloadJob<
-    Variables$Mutation$CancelDownloadJob
-  >
-  get copyWith => CopyWith$Variables$Mutation$CancelDownloadJob(this, (i) => i);
+          Variables$Mutation$CancelDownloadJob>
+      get copyWith =>
+          CopyWith$Variables$Mutation$CancelDownloadJob(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -81,11 +81,11 @@ class _CopyWithImpl$Variables$Mutation$CancelDownloadJob<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? jobId = _undefined}) => _then(
-    Variables$Mutation$CancelDownloadJob._({
-      ..._instance._$data,
-      if (jobId != _undefined && jobId != null) 'jobId': (jobId as String),
-    }),
-  );
+        Variables$Mutation$CancelDownloadJob._({
+          ..._instance._$data,
+          if (jobId != _undefined && jobId != null) 'jobId': (jobId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$CancelDownloadJob<TRes>
@@ -162,7 +162,7 @@ class Mutation$CancelDownloadJob {
 extension UtilityExtension$Mutation$CancelDownloadJob
     on Mutation$CancelDownloadJob {
   CopyWith$Mutation$CancelDownloadJob<Mutation$CancelDownloadJob>
-  get copyWith => CopyWith$Mutation$CancelDownloadJob(this, (i) => i);
+      get copyWith => CopyWith$Mutation$CancelDownloadJob(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$CancelDownloadJob<TRes> {
@@ -179,7 +179,7 @@ abstract class CopyWith$Mutation$CancelDownloadJob<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob<TRes>
-  get cancelDownloadJob;
+      get cancelDownloadJob;
 }
 
 class _CopyWithImpl$Mutation$CancelDownloadJob<TRes>
@@ -195,20 +195,21 @@ class _CopyWithImpl$Mutation$CancelDownloadJob<TRes>
   TRes call({
     Object? cancelDownloadJob = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$CancelDownloadJob(
-      cancelDownloadJob: cancelDownloadJob == _undefined
-          ? _instance.cancelDownloadJob
-          : (cancelDownloadJob
-                as Mutation$CancelDownloadJob$cancelDownloadJob?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$CancelDownloadJob(
+          cancelDownloadJob: cancelDownloadJob == _undefined
+              ? _instance.cancelDownloadJob
+              : (cancelDownloadJob
+                  as Mutation$CancelDownloadJob$cancelDownloadJob?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob<TRes>
-  get cancelDownloadJob {
+      get cancelDownloadJob {
     final local$cancelDownloadJob = _instance.cancelDownloadJob;
     return local$cancelDownloadJob == null
         ? CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob.stub(
@@ -230,11 +231,12 @@ class _CopyWithStubImpl$Mutation$CancelDownloadJob<TRes>
   call({
     Mutation$CancelDownloadJob$cancelDownloadJob? cancelDownloadJob,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob<TRes>
-  get cancelDownloadJob =>
-      CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob.stub(_res);
+      get cancelDownloadJob =>
+          CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob.stub(_res);
 }
 
 const documentNodeMutationCancelDownloadJob = DocumentNode(
@@ -358,10 +360,9 @@ class Mutation$CancelDownloadJob$cancelDownloadJob {
 extension UtilityExtension$Mutation$CancelDownloadJob$cancelDownloadJob
     on Mutation$CancelDownloadJob$cancelDownloadJob {
   CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob<
-    Mutation$CancelDownloadJob$cancelDownloadJob
-  >
-  get copyWith =>
-      CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob(this, (i) => i);
+          Mutation$CancelDownloadJob$cancelDownloadJob>
+      get copyWith =>
+          CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$CancelDownloadJob$cancelDownloadJob<TRes> {

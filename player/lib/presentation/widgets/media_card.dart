@@ -17,6 +17,7 @@ class MediaCard extends StatefulWidget {
   final double? width;
   final double? height;
   final List<MediaFile>? files;
+
   /// If true, uses responsive sizing based on screen width
   final bool responsive;
 
@@ -175,7 +176,8 @@ class _MediaCardState extends State<MediaCard>
                                   imageUrl: widget.posterUrl!,
                                   fit: BoxFit.cover,
                                   cacheManager: PosterCacheManager(),
-                                  placeholder: (context, url) => _buildPlaceholder(),
+                                  placeholder: (context, url) =>
+                                      _buildPlaceholder(),
                                   errorWidget: (context, url, error) =>
                                       _buildPlaceholder(),
                                 )
@@ -185,7 +187,8 @@ class _MediaCardState extends State<MediaCard>
                         // Progress overlay at bottom
                         if (widget.progressPercentage != null &&
                             widget.progressPercentage! > 0)
-                          ProgressOverlay(percentage: widget.progressPercentage!),
+                          ProgressOverlay(
+                              percentage: widget.progressPercentage!),
 
                         // Quality badges at top-right
                         if (quality.hasQuality)

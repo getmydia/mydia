@@ -163,8 +163,8 @@ void main() {
           );
 
           expect(await service.getToken(), equals('session-token'));
-          expect(
-              await service.getServerUrl(), equals('https://session.example.com'));
+          expect(await service.getServerUrl(),
+              equals('https://session.example.com'));
           expect(await service.getUserId(), equals('user-456'));
           expect(await service.getUsername(), equals('sessionuser'));
         });

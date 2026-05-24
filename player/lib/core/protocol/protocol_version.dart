@@ -67,7 +67,8 @@ class ProtocolVersion {
   ///
   /// Returns a map of negotiated versions, or null for layers that
   /// have no compatible version.
-  static Map<String, String?> negotiateAll(Map<String, dynamic> serverVersions) {
+  static Map<String, String?> negotiateAll(
+      Map<String, dynamic> serverVersions) {
     return {
       'encryption_protocol': negotiateVersion(
         'encryption_protocol',
@@ -87,7 +88,8 @@ class ProtocolVersion {
   /// Checks server versions and returns mismatch details if incompatible.
   ///
   /// Returns `null` if all versions are compatible.
-  static VersionMismatch? checkCompatibility(Map<String, dynamic> serverVersions) {
+  static VersionMismatch? checkCompatibility(
+      Map<String, dynamic> serverVersions) {
     final mismatches = <VersionInfo>[];
 
     void check(String layer, List<String> clientVersions) {
@@ -164,7 +166,8 @@ class VersionMismatch {
 
   String get message {
     if (mismatches.isEmpty) return '';
-    final layers = mismatches.map((m) => m.layer.replaceAll('_', ' ')).join(', ');
+    final layers =
+        mismatches.map((m) => m.layer.replaceAll('_', ' ')).join(', ');
     return 'Protocol version mismatch in: $layers. Please update your app.';
   }
 
@@ -188,8 +191,9 @@ class UpdateRequiredError implements Exception {
   factory UpdateRequiredError.fromJson(Map<String, dynamic> json) {
     return UpdateRequiredError(
       message: json['message'] as String? ?? 'Update required',
-      incompatibleLayers:
-          (json['incompatible_layers'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+      incompatibleLayers: (json['incompatible_layers'] as List?)
+              ?.cast<Map<String, dynamic>>() ??
+          [],
       updateUrl: json['update_url'] as String?,
     );
   }

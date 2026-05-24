@@ -27,9 +27,9 @@ class Variables$Mutation$DownloadJobStatus {
   }
 
   CopyWith$Variables$Mutation$DownloadJobStatus<
-    Variables$Mutation$DownloadJobStatus
-  >
-  get copyWith => CopyWith$Variables$Mutation$DownloadJobStatus(this, (i) => i);
+          Variables$Mutation$DownloadJobStatus>
+      get copyWith =>
+          CopyWith$Variables$Mutation$DownloadJobStatus(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -81,11 +81,11 @@ class _CopyWithImpl$Variables$Mutation$DownloadJobStatus<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? jobId = _undefined}) => _then(
-    Variables$Mutation$DownloadJobStatus._({
-      ..._instance._$data,
-      if (jobId != _undefined && jobId != null) 'jobId': (jobId as String),
-    }),
-  );
+        Variables$Mutation$DownloadJobStatus._({
+          ..._instance._$data,
+          if (jobId != _undefined && jobId != null) 'jobId': (jobId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$DownloadJobStatus<TRes>
@@ -162,7 +162,7 @@ class Mutation$DownloadJobStatus {
 extension UtilityExtension$Mutation$DownloadJobStatus
     on Mutation$DownloadJobStatus {
   CopyWith$Mutation$DownloadJobStatus<Mutation$DownloadJobStatus>
-  get copyWith => CopyWith$Mutation$DownloadJobStatus(this, (i) => i);
+      get copyWith => CopyWith$Mutation$DownloadJobStatus(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$DownloadJobStatus<TRes> {
@@ -179,7 +179,7 @@ abstract class CopyWith$Mutation$DownloadJobStatus<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$DownloadJobStatus$downloadJobStatus<TRes>
-  get downloadJobStatus;
+      get downloadJobStatus;
 }
 
 class _CopyWithImpl$Mutation$DownloadJobStatus<TRes>
@@ -195,20 +195,21 @@ class _CopyWithImpl$Mutation$DownloadJobStatus<TRes>
   TRes call({
     Object? downloadJobStatus = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$DownloadJobStatus(
-      downloadJobStatus: downloadJobStatus == _undefined
-          ? _instance.downloadJobStatus
-          : (downloadJobStatus
-                as Mutation$DownloadJobStatus$downloadJobStatus?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$DownloadJobStatus(
+          downloadJobStatus: downloadJobStatus == _undefined
+              ? _instance.downloadJobStatus
+              : (downloadJobStatus
+                  as Mutation$DownloadJobStatus$downloadJobStatus?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$DownloadJobStatus$downloadJobStatus<TRes>
-  get downloadJobStatus {
+      get downloadJobStatus {
     final local$downloadJobStatus = _instance.downloadJobStatus;
     return local$downloadJobStatus == null
         ? CopyWith$Mutation$DownloadJobStatus$downloadJobStatus.stub(
@@ -230,11 +231,12 @@ class _CopyWithStubImpl$Mutation$DownloadJobStatus<TRes>
   call({
     Mutation$DownloadJobStatus$downloadJobStatus? downloadJobStatus,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$DownloadJobStatus$downloadJobStatus<TRes>
-  get downloadJobStatus =>
-      CopyWith$Mutation$DownloadJobStatus$downloadJobStatus.stub(_res);
+      get downloadJobStatus =>
+          CopyWith$Mutation$DownloadJobStatus$downloadJobStatus.stub(_res);
 }
 
 const documentNodeMutationDownloadJobStatus = DocumentNode(
@@ -445,10 +447,9 @@ class Mutation$DownloadJobStatus$downloadJobStatus {
 extension UtilityExtension$Mutation$DownloadJobStatus$downloadJobStatus
     on Mutation$DownloadJobStatus$downloadJobStatus {
   CopyWith$Mutation$DownloadJobStatus$downloadJobStatus<
-    Mutation$DownloadJobStatus$downloadJobStatus
-  >
-  get copyWith =>
-      CopyWith$Mutation$DownloadJobStatus$downloadJobStatus(this, (i) => i);
+          Mutation$DownloadJobStatus$downloadJobStatus>
+      get copyWith =>
+          CopyWith$Mutation$DownloadJobStatus$downloadJobStatus(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$DownloadJobStatus$downloadJobStatus<TRes> {
@@ -490,26 +491,26 @@ class _CopyWithImpl$Mutation$DownloadJobStatus$downloadJobStatus<TRes>
     Object? error = _undefined,
     Object? fileSize = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$DownloadJobStatus$downloadJobStatus(
-      jobId: jobId == _undefined || jobId == null
-          ? _instance.jobId
-          : (jobId as String),
-      status: status == _undefined || status == null
-          ? _instance.status
-          : (status as String),
-      progress: progress == _undefined || progress == null
-          ? _instance.progress
-          : (progress as double),
-      error: error == _undefined ? _instance.error : (error as String?),
-      fileSize: fileSize == _undefined
-          ? _instance.fileSize
-          : (fileSize as int?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$DownloadJobStatus$downloadJobStatus(
+          jobId: jobId == _undefined || jobId == null
+              ? _instance.jobId
+              : (jobId as String),
+          status: status == _undefined || status == null
+              ? _instance.status
+              : (status as String),
+          progress: progress == _undefined || progress == null
+              ? _instance.progress
+              : (progress as double),
+          error: error == _undefined ? _instance.error : (error as String?),
+          fileSize:
+              fileSize == _undefined ? _instance.fileSize : (fileSize as int?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$DownloadJobStatus$downloadJobStatus<TRes>
@@ -525,5 +526,6 @@ class _CopyWithStubImpl$Mutation$DownloadJobStatus$downloadJobStatus<TRes>
     String? error,
     int? fileSize,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

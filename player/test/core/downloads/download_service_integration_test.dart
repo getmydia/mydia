@@ -39,11 +39,14 @@ void main() {
   setUp(() async {
     // Open fresh boxes for each test with unique names
     boxCounter++;
-    tasksBox = await Hive.openBox<DownloadTask>('download_tasks_test_$boxCounter');
-    mediaBox = await Hive.openBox<DownloadedMedia>('downloaded_media_test_$boxCounter');
+    tasksBox =
+        await Hive.openBox<DownloadTask>('download_tasks_test_$boxCounter');
+    mediaBox = await Hive.openBox<DownloadedMedia>(
+        'downloaded_media_test_$boxCounter');
 
     database = TestDownloadDatabase(tasksBox: tasksBox, mediaBox: mediaBox);
-    service = TestDownloadService(database: database, downloadDir: tempDir.path);
+    service =
+        TestDownloadService(database: database, downloadDir: tempDir.path);
   });
 
   tearDown(() async {
@@ -149,7 +152,8 @@ void main() {
 
       // Verify progress increased monotonically
       for (var i = 1; i < progressUpdates.length; i++) {
-        expect(progressUpdates[i], greaterThanOrEqualTo(progressUpdates[i - 1]));
+        expect(
+            progressUpdates[i], greaterThanOrEqualTo(progressUpdates[i - 1]));
       }
     });
 
@@ -383,7 +387,8 @@ void main() {
       expect(downloadedMedia!.mediaId, equals(mediaId));
       expect(downloadedMedia.title, equals(title));
       expect(downloadedMedia.quality, equals(quality));
-      expect(downloadedMedia.posterUrl, equals('https://example.com/poster.jpg'));
+      expect(
+          downloadedMedia.posterUrl, equals('https://example.com/poster.jpg'));
     });
 
     test('downloaded file exists and is accessible', () async {
@@ -436,7 +441,8 @@ void main() {
 
       // Assert
       expect(allMedia.length, equals(2));
-      expect(allMedia.map((m) => m.mediaId), containsAll(['multi_1', 'multi_2']));
+      expect(
+          allMedia.map((m) => m.mediaId), containsAll(['multi_1', 'multi_2']));
     });
   });
 
@@ -471,7 +477,8 @@ void main() {
       );
 
       await Future.delayed(const Duration(milliseconds: 200));
-      expect(database.getTask(task.id)!.downloadStatus, equals(DownloadStatus.failed));
+      expect(database.getTask(task.id)!.downloadStatus,
+          equals(DownloadStatus.failed));
 
       // Update with valid URL for retry
       final failedTask = database.getTask(task.id)!;
@@ -522,7 +529,8 @@ void main() {
         },
       );
 
-      await service.waitForDownloadComplete(task.id, timeout: const Duration(seconds: 5));
+      await service.waitForDownloadComplete(task.id,
+          timeout: const Duration(seconds: 5));
 
       // Assert
       final completedTask = database.getTask(task.id);
@@ -552,8 +560,10 @@ void main() {
 
       // Assert - Previous successful download should still be intact
       expect(database.isMediaDownloaded('success_before_fail'), isTrue);
-      expect(database.getTask(successTask.id)!.downloadStatus, equals(DownloadStatus.completed));
-      expect(database.getTask(failTask.id)!.downloadStatus, equals(DownloadStatus.failed));
+      expect(database.getTask(successTask.id)!.downloadStatus,
+          equals(DownloadStatus.completed));
+      expect(database.getTask(failTask.id)!.downloadStatus,
+          equals(DownloadStatus.failed));
     });
   });
 
@@ -587,7 +597,8 @@ void main() {
 
       expect(
         task1Status!.downloadStatus,
-        anyOf(equals(DownloadStatus.downloading), equals(DownloadStatus.pending)),
+        anyOf(
+            equals(DownloadStatus.downloading), equals(DownloadStatus.pending)),
       );
       expect(task2Status!.downloadStatus, equals(DownloadStatus.queued));
 
@@ -621,7 +632,8 @@ void main() {
       );
 
       // Verify task2 is queued initially
-      expect(database.getTask(task2.id)!.downloadStatus, equals(DownloadStatus.queued));
+      expect(database.getTask(task2.id)!.downloadStatus,
+          equals(DownloadStatus.queued));
 
       // Wait for first to complete
       await service.waitForDownloadComplete(task1.id);
@@ -732,7 +744,8 @@ class TestDownloadDatabase {
 
   int getTotalStorageUsed() {
     if (!isOpen) return 0;
-    return mediaBox.values.fold<int>(0, (total, media) => total + media.fileSize);
+    return mediaBox.values
+        .fold<int>(0, (total, media) => total + media.fileSize);
   }
 }
 
@@ -766,7 +779,8 @@ class TestDownloadService {
 
   int _getActiveDownloadCount() {
     if (!database.isOpen) return 0;
-    return database.getAllTasks()
+    return database
+        .getAllTasks()
         .where((t) => t.status == 'downloading' || t.status == 'pending')
         .length;
   }
@@ -781,7 +795,8 @@ class TestDownloadService {
     while (_hasAvailableSlots()) {
       if (_disposed || !database.isOpen) return;
 
-      final queuedTasks = database.getAllTasks()
+      final queuedTasks = database
+          .getAllTasks()
           .where((t) => t.status == 'queued')
           .toList()
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -932,7 +947,8 @@ class TestDownloadService {
   }
 
   /// Wait for a download to transition to the 'downloading' status.
-  Future<void> waitForDownloadStarted(String taskId, {Duration timeout = const Duration(seconds: 5)}) async {
+  Future<void> waitForDownloadStarted(String taskId,
+      {Duration timeout = const Duration(seconds: 5)}) async {
     final startedCompleter = _startedCompleters[taskId];
     if (startedCompleter != null && !startedCompleter.isCompleted) {
       await startedCompleter.future.timeout(timeout, onTimeout: () {});
@@ -1144,7 +1160,8 @@ class TestDownloadService {
     _processQueue();
   }
 
-  void _simulateDownloadWithRetry(DownloadTask task, bool Function() shouldFail) async {
+  void _simulateDownloadWithRetry(
+      DownloadTask task, bool Function() shouldFail) async {
     if (_disposed || !database.isOpen) return;
 
     final completer = Completer<void>();
@@ -1266,7 +1283,8 @@ class TestDownloadService {
   Future<void> retryDownload(String taskId) async {
     if (!database.isOpen) return;
     final task = database.getTask(taskId);
-    if (task != null && (task.status == 'failed' || task.status == 'cancelled')) {
+    if (task != null &&
+        (task.status == 'failed' || task.status == 'cancelled')) {
       final retryTask = task.copyWith(
         status: 'pending',
         progress: 0.0,
@@ -1300,7 +1318,8 @@ class TestDownloadService {
     }
   }
 
-  Future<void> waitForDownloadComplete(String taskId, {Duration timeout = const Duration(seconds: 10)}) async {
+  Future<void> waitForDownloadComplete(String taskId,
+      {Duration timeout = const Duration(seconds: 10)}) async {
     final completer = _completers[taskId];
     if (completer != null && !completer.isCompleted) {
       await completer.future.timeout(timeout, onTimeout: () {
@@ -1313,21 +1332,26 @@ class TestDownloadService {
     while (DateTime.now().isBefore(deadline)) {
       if (!database.isOpen) return;
       final task = database.getTask(taskId);
-      if (task?.status == 'completed' || task?.status == 'failed' || task?.status == 'cancelled') {
+      if (task?.status == 'completed' ||
+          task?.status == 'failed' ||
+          task?.status == 'cancelled') {
         return;
       }
       await Future.delayed(const Duration(milliseconds: 50));
     }
   }
 
-  bool isMediaDownloaded(String mediaId) => database.isOpen && database.isMediaDownloaded(mediaId);
+  bool isMediaDownloaded(String mediaId) =>
+      database.isOpen && database.isMediaDownloaded(mediaId);
 
   DownloadedMedia? getDownloadedMediaById(String mediaId) =>
       database.isOpen ? database.getMediaByMediaId(mediaId) : null;
 
-  List<DownloadedMedia> getDownloadedMedia() => database.isOpen ? database.getAllMedia() : [];
+  List<DownloadedMedia> getDownloadedMedia() =>
+      database.isOpen ? database.getAllMedia() : [];
 
-  int getTotalStorageUsed() => database.isOpen ? database.getTotalStorageUsed() : 0;
+  int getTotalStorageUsed() =>
+      database.isOpen ? database.getTotalStorageUsed() : 0;
 
   Future<void> dispose() async {
     _disposed = true;

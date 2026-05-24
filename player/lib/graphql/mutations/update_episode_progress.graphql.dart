@@ -6,11 +6,12 @@ class Variables$Mutation$UpdateEpisodeProgress {
     required String episodeId,
     required int positionSeconds,
     int? durationSeconds,
-  }) => Variables$Mutation$UpdateEpisodeProgress._({
-    r'episodeId': episodeId,
-    r'positionSeconds': positionSeconds,
-    if (durationSeconds != null) r'durationSeconds': durationSeconds,
-  });
+  }) =>
+      Variables$Mutation$UpdateEpisodeProgress._({
+        r'episodeId': episodeId,
+        r'positionSeconds': positionSeconds,
+        if (durationSeconds != null) r'durationSeconds': durationSeconds,
+      });
 
   Variables$Mutation$UpdateEpisodeProgress._(this._$data);
 
@@ -51,10 +52,9 @@ class Variables$Mutation$UpdateEpisodeProgress {
   }
 
   CopyWith$Variables$Mutation$UpdateEpisodeProgress<
-    Variables$Mutation$UpdateEpisodeProgress
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$UpdateEpisodeProgress(this, (i) => i);
+          Variables$Mutation$UpdateEpisodeProgress>
+      get copyWith =>
+          CopyWith$Variables$Mutation$UpdateEpisodeProgress(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -129,17 +129,18 @@ class _CopyWithImpl$Variables$Mutation$UpdateEpisodeProgress<TRes>
     Object? episodeId = _undefined,
     Object? positionSeconds = _undefined,
     Object? durationSeconds = _undefined,
-  }) => _then(
-    Variables$Mutation$UpdateEpisodeProgress._({
-      ..._instance._$data,
-      if (episodeId != _undefined && episodeId != null)
-        'episodeId': (episodeId as String),
-      if (positionSeconds != _undefined && positionSeconds != null)
-        'positionSeconds': (positionSeconds as int),
-      if (durationSeconds != _undefined)
-        'durationSeconds': (durationSeconds as int?),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Mutation$UpdateEpisodeProgress._({
+          ..._instance._$data,
+          if (episodeId != _undefined && episodeId != null)
+            'episodeId': (episodeId as String),
+          if (positionSeconds != _undefined && positionSeconds != null)
+            'positionSeconds': (positionSeconds as int),
+          if (durationSeconds != _undefined)
+            'durationSeconds': (durationSeconds as int?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$UpdateEpisodeProgress<TRes>
@@ -216,7 +217,7 @@ class Mutation$UpdateEpisodeProgress {
 extension UtilityExtension$Mutation$UpdateEpisodeProgress
     on Mutation$UpdateEpisodeProgress {
   CopyWith$Mutation$UpdateEpisodeProgress<Mutation$UpdateEpisodeProgress>
-  get copyWith => CopyWith$Mutation$UpdateEpisodeProgress(this, (i) => i);
+      get copyWith => CopyWith$Mutation$UpdateEpisodeProgress(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$UpdateEpisodeProgress<TRes> {
@@ -248,16 +249,17 @@ class _CopyWithImpl$Mutation$UpdateEpisodeProgress<TRes>
   TRes call({
     Object? updateEpisodeProgress = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$UpdateEpisodeProgress(
-      updateEpisodeProgress: updateEpisodeProgress == _undefined
-          ? _instance.updateEpisodeProgress
-          : (updateEpisodeProgress as Fragment$ProgressFragment?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$UpdateEpisodeProgress(
+          updateEpisodeProgress: updateEpisodeProgress == _undefined
+              ? _instance.updateEpisodeProgress
+              : (updateEpisodeProgress as Fragment$ProgressFragment?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ProgressFragment<TRes> get updateEpisodeProgress {
     final local$updateEpisodeProgress = _instance.updateEpisodeProgress;
@@ -279,7 +281,8 @@ class _CopyWithStubImpl$Mutation$UpdateEpisodeProgress<TRes>
   call({
     Fragment$ProgressFragment? updateEpisodeProgress,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ProgressFragment<TRes> get updateEpisodeProgress =>
       CopyWith$Fragment$ProgressFragment.stub(_res);

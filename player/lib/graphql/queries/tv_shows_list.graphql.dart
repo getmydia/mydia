@@ -7,11 +7,12 @@ class Variables$Query$TvShowsList {
     int? first,
     String? after,
     Enum$MediaCategory? category,
-  }) => Variables$Query$TvShowsList._({
-    if (first != null) r'first': first,
-    if (after != null) r'after': after,
-    if (category != null) r'category': category,
-  });
+  }) =>
+      Variables$Query$TvShowsList._({
+        if (first != null) r'first': first,
+        if (after != null) r'after': after,
+        if (category != null) r'category': category,
+      });
 
   Variables$Query$TvShowsList._(this._$data);
 
@@ -55,15 +56,14 @@ class Variables$Query$TvShowsList {
     }
     if (_$data.containsKey('category')) {
       final l$category = category;
-      result$data['category'] = l$category == null
-          ? null
-          : toJson$Enum$MediaCategory(l$category);
+      result$data['category'] =
+          l$category == null ? null : toJson$Enum$MediaCategory(l$category);
     }
     return result$data;
   }
 
   CopyWith$Variables$Query$TvShowsList<Variables$Query$TvShowsList>
-  get copyWith => CopyWith$Variables$Query$TvShowsList(this, (i) => i);
+      get copyWith => CopyWith$Variables$Query$TvShowsList(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -141,14 +141,16 @@ class _CopyWithImpl$Variables$Query$TvShowsList<TRes>
     Object? first = _undefined,
     Object? after = _undefined,
     Object? category = _undefined,
-  }) => _then(
-    Variables$Query$TvShowsList._({
-      ..._instance._$data,
-      if (first != _undefined) 'first': (first as int?),
-      if (after != _undefined) 'after': (after as String?),
-      if (category != _undefined) 'category': (category as Enum$MediaCategory?),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Query$TvShowsList._({
+          ..._instance._$data,
+          if (first != _undefined) 'first': (first as int?),
+          if (after != _undefined) 'after': (after as String?),
+          if (category != _undefined)
+            'category': (category as Enum$MediaCategory?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Query$TvShowsList<TRes>
@@ -723,12 +725,9 @@ abstract class CopyWith$Query$TvShowsList$tvShows<TRes> {
   TRes edges(
     Iterable<Query$TvShowsList$tvShows$edges> Function(
       Iterable<
-        CopyWith$Query$TvShowsList$tvShows$edges<
-          Query$TvShowsList$tvShows$edges
-        >
-      >,
-    )
-    _fn,
+          CopyWith$Query$TvShowsList$tvShows$edges<
+              Query$TvShowsList$tvShows$edges>>,
+    ) _fn,
   );
   CopyWith$Query$TvShowsList$tvShows$pageInfo<TRes> get pageInfo;
 }
@@ -748,39 +747,38 @@ class _CopyWithImpl$Query$TvShowsList$tvShows<TRes>
     Object? pageInfo = _undefined,
     Object? totalCount = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$TvShowsList$tvShows(
-      edges: edges == _undefined || edges == null
-          ? _instance.edges
-          : (edges as List<Query$TvShowsList$tvShows$edges>),
-      pageInfo: pageInfo == _undefined || pageInfo == null
-          ? _instance.pageInfo
-          : (pageInfo as Query$TvShowsList$tvShows$pageInfo),
-      totalCount: totalCount == _undefined || totalCount == null
-          ? _instance.totalCount
-          : (totalCount as int),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$TvShowsList$tvShows(
+          edges: edges == _undefined || edges == null
+              ? _instance.edges
+              : (edges as List<Query$TvShowsList$tvShows$edges>),
+          pageInfo: pageInfo == _undefined || pageInfo == null
+              ? _instance.pageInfo
+              : (pageInfo as Query$TvShowsList$tvShows$pageInfo),
+          totalCount: totalCount == _undefined || totalCount == null
+              ? _instance.totalCount
+              : (totalCount as int),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   TRes edges(
     Iterable<Query$TvShowsList$tvShows$edges> Function(
       Iterable<
-        CopyWith$Query$TvShowsList$tvShows$edges<
-          Query$TvShowsList$tvShows$edges
-        >
-      >,
-    )
-    _fn,
-  ) => call(
-    edges: _fn(
-      _instance.edges.map(
-        (e) => CopyWith$Query$TvShowsList$tvShows$edges(e, (i) => i),
-      ),
-    ).toList(),
-  );
+          CopyWith$Query$TvShowsList$tvShows$edges<
+              Query$TvShowsList$tvShows$edges>>,
+    ) _fn,
+  ) =>
+      call(
+        edges: _fn(
+          _instance.edges.map(
+            (e) => CopyWith$Query$TvShowsList$tvShows$edges(e, (i) => i),
+          ),
+        ).toList(),
+      );
 
   CopyWith$Query$TvShowsList$tvShows$pageInfo<TRes> get pageInfo {
     final local$pageInfo = _instance.pageInfo;
@@ -802,7 +800,8 @@ class _CopyWithStubImpl$Query$TvShowsList$tvShows<TRes>
     Query$TvShowsList$tvShows$pageInfo? pageInfo,
     int? totalCount,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   edges(_fn) => _res;
 
@@ -886,7 +885,7 @@ class Query$TvShowsList$tvShows$edges {
 extension UtilityExtension$Query$TvShowsList$tvShows$edges
     on Query$TvShowsList$tvShows$edges {
   CopyWith$Query$TvShowsList$tvShows$edges<Query$TvShowsList$tvShows$edges>
-  get copyWith => CopyWith$Query$TvShowsList$tvShows$edges(this, (i) => i);
+      get copyWith => CopyWith$Query$TvShowsList$tvShows$edges(this, (i) => i);
 }
 
 abstract class CopyWith$Query$TvShowsList$tvShows$edges<TRes> {
@@ -920,19 +919,20 @@ class _CopyWithImpl$Query$TvShowsList$tvShows$edges<TRes>
     Object? node = _undefined,
     Object? cursor = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$TvShowsList$tvShows$edges(
-      node: node == _undefined || node == null
-          ? _instance.node
-          : (node as Query$TvShowsList$tvShows$edges$node),
-      cursor: cursor == _undefined || cursor == null
-          ? _instance.cursor
-          : (cursor as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$TvShowsList$tvShows$edges(
+          node: node == _undefined || node == null
+              ? _instance.node
+              : (node as Query$TvShowsList$tvShows$edges$node),
+          cursor: cursor == _undefined || cursor == null
+              ? _instance.cursor
+              : (cursor as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Query$TvShowsList$tvShows$edges$node<TRes> get node {
     final local$node = _instance.node;
@@ -953,7 +953,8 @@ class _CopyWithStubImpl$Query$TvShowsList$tvShows$edges<TRes>
     Query$TvShowsList$tvShows$edges$node? node,
     String? cursor,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Query$TvShowsList$tvShows$edges$node<TRes> get node =>
       CopyWith$Query$TvShowsList$tvShows$edges$node.stub(_res);
@@ -1212,9 +1213,9 @@ class Query$TvShowsList$tvShows$edges$node {
 extension UtilityExtension$Query$TvShowsList$tvShows$edges$node
     on Query$TvShowsList$tvShows$edges$node {
   CopyWith$Query$TvShowsList$tvShows$edges$node<
-    Query$TvShowsList$tvShows$edges$node
-  >
-  get copyWith => CopyWith$Query$TvShowsList$tvShows$edges$node(this, (i) => i);
+          Query$TvShowsList$tvShows$edges$node>
+      get copyWith =>
+          CopyWith$Query$TvShowsList$tvShows$edges$node(this, (i) => i);
 }
 
 abstract class CopyWith$Query$TvShowsList$tvShows$edges$node<TRes> {
@@ -1244,7 +1245,7 @@ abstract class CopyWith$Query$TvShowsList$tvShows$edges$node<TRes> {
   });
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork;
   CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode<TRes>
-  get nextEpisode;
+      get nextEpisode;
 }
 
 class _CopyWithImpl$Query$TvShowsList$tvShows$edges$node<TRes>
@@ -1275,44 +1276,46 @@ class _CopyWithImpl$Query$TvShowsList$tvShows$edges$node<TRes>
     Object? isFavorite = _undefined,
     Object? nextEpisode = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$TvShowsList$tvShows$edges$node(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      year: year == _undefined ? _instance.year : (year as int?),
-      overview: overview == _undefined
-          ? _instance.overview
-          : (overview as String?),
-      status: status == _undefined ? _instance.status : (status as String?),
-      genres: genres == _undefined
-          ? _instance.genres
-          : (genres as List<String?>?),
-      contentRating: contentRating == _undefined
-          ? _instance.contentRating
-          : (contentRating as String?),
-      rating: rating == _undefined ? _instance.rating : (rating as double?),
-      seasonCount: seasonCount == _undefined
-          ? _instance.seasonCount
-          : (seasonCount as int?),
-      episodeCount: episodeCount == _undefined
-          ? _instance.episodeCount
-          : (episodeCount as int?),
-      artwork: artwork == _undefined
-          ? _instance.artwork
-          : (artwork as Fragment$ArtworkFragment?),
-      isFavorite: isFavorite == _undefined || isFavorite == null
-          ? _instance.isFavorite
-          : (isFavorite as bool),
-      nextEpisode: nextEpisode == _undefined
-          ? _instance.nextEpisode
-          : (nextEpisode as Query$TvShowsList$tvShows$edges$node$nextEpisode?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$TvShowsList$tvShows$edges$node(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          year: year == _undefined ? _instance.year : (year as int?),
+          overview: overview == _undefined
+              ? _instance.overview
+              : (overview as String?),
+          status: status == _undefined ? _instance.status : (status as String?),
+          genres: genres == _undefined
+              ? _instance.genres
+              : (genres as List<String?>?),
+          contentRating: contentRating == _undefined
+              ? _instance.contentRating
+              : (contentRating as String?),
+          rating: rating == _undefined ? _instance.rating : (rating as double?),
+          seasonCount: seasonCount == _undefined
+              ? _instance.seasonCount
+              : (seasonCount as int?),
+          episodeCount: episodeCount == _undefined
+              ? _instance.episodeCount
+              : (episodeCount as int?),
+          artwork: artwork == _undefined
+              ? _instance.artwork
+              : (artwork as Fragment$ArtworkFragment?),
+          isFavorite: isFavorite == _undefined || isFavorite == null
+              ? _instance.isFavorite
+              : (isFavorite as bool),
+          nextEpisode: nextEpisode == _undefined
+              ? _instance.nextEpisode
+              : (nextEpisode
+                  as Query$TvShowsList$tvShows$edges$node$nextEpisode?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork {
     final local$artwork = _instance.artwork;
@@ -1325,7 +1328,7 @@ class _CopyWithImpl$Query$TvShowsList$tvShows$edges$node<TRes>
   }
 
   CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode<TRes>
-  get nextEpisode {
+      get nextEpisode {
     final local$nextEpisode = _instance.nextEpisode;
     return local$nextEpisode == null
         ? CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode.stub(
@@ -1359,14 +1362,15 @@ class _CopyWithStubImpl$Query$TvShowsList$tvShows$edges$node<TRes>
     bool? isFavorite,
     Query$TvShowsList$tvShows$edges$node$nextEpisode? nextEpisode,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork =>
       CopyWith$Fragment$ArtworkFragment.stub(_res);
 
   CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode<TRes>
-  get nextEpisode =>
-      CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode.stub(_res);
+      get nextEpisode =>
+          CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode.stub(_res);
 }
 
 class Query$TvShowsList$tvShows$edges$node$nextEpisode {
@@ -1477,10 +1481,9 @@ class Query$TvShowsList$tvShows$edges$node$nextEpisode {
 extension UtilityExtension$Query$TvShowsList$tvShows$edges$node$nextEpisode
     on Query$TvShowsList$tvShows$edges$node$nextEpisode {
   CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode<
-    Query$TvShowsList$tvShows$edges$node$nextEpisode
-  >
-  get copyWith =>
-      CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode(this, (i) => i);
+          Query$TvShowsList$tvShows$edges$node$nextEpisode>
+      get copyWith => CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode(
+          this, (i) => i);
 }
 
 abstract class CopyWith$Query$TvShowsList$tvShows$edges$node$nextEpisode<TRes> {
@@ -1521,21 +1524,22 @@ class _CopyWithImpl$Query$TvShowsList$tvShows$edges$node$nextEpisode<TRes>
     Object? episodeNumber = _undefined,
     Object? title = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$TvShowsList$tvShows$edges$node$nextEpisode(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      seasonNumber: seasonNumber == _undefined || seasonNumber == null
-          ? _instance.seasonNumber
-          : (seasonNumber as int),
-      episodeNumber: episodeNumber == _undefined || episodeNumber == null
-          ? _instance.episodeNumber
-          : (episodeNumber as int),
-      title: title == _undefined ? _instance.title : (title as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$TvShowsList$tvShows$edges$node$nextEpisode(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          seasonNumber: seasonNumber == _undefined || seasonNumber == null
+              ? _instance.seasonNumber
+              : (seasonNumber as int),
+          episodeNumber: episodeNumber == _undefined || episodeNumber == null
+              ? _instance.episodeNumber
+              : (episodeNumber as int),
+          title: title == _undefined ? _instance.title : (title as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$TvShowsList$tvShows$edges$node$nextEpisode<TRes>
@@ -1550,7 +1554,8 @@ class _CopyWithStubImpl$Query$TvShowsList$tvShows$edges$node$nextEpisode<TRes>
     int? episodeNumber,
     String? title,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }
 
 class Query$TvShowsList$tvShows$pageInfo {
@@ -1661,9 +1666,9 @@ class Query$TvShowsList$tvShows$pageInfo {
 extension UtilityExtension$Query$TvShowsList$tvShows$pageInfo
     on Query$TvShowsList$tvShows$pageInfo {
   CopyWith$Query$TvShowsList$tvShows$pageInfo<
-    Query$TvShowsList$tvShows$pageInfo
-  >
-  get copyWith => CopyWith$Query$TvShowsList$tvShows$pageInfo(this, (i) => i);
+          Query$TvShowsList$tvShows$pageInfo>
+      get copyWith =>
+          CopyWith$Query$TvShowsList$tvShows$pageInfo(this, (i) => i);
 }
 
 abstract class CopyWith$Query$TvShowsList$tvShows$pageInfo<TRes> {
@@ -1700,25 +1705,27 @@ class _CopyWithImpl$Query$TvShowsList$tvShows$pageInfo<TRes>
     Object? startCursor = _undefined,
     Object? endCursor = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$TvShowsList$tvShows$pageInfo(
-      hasNextPage: hasNextPage == _undefined || hasNextPage == null
-          ? _instance.hasNextPage
-          : (hasNextPage as bool),
-      hasPreviousPage: hasPreviousPage == _undefined || hasPreviousPage == null
-          ? _instance.hasPreviousPage
-          : (hasPreviousPage as bool),
-      startCursor: startCursor == _undefined
-          ? _instance.startCursor
-          : (startCursor as String?),
-      endCursor: endCursor == _undefined
-          ? _instance.endCursor
-          : (endCursor as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$TvShowsList$tvShows$pageInfo(
+          hasNextPage: hasNextPage == _undefined || hasNextPage == null
+              ? _instance.hasNextPage
+              : (hasNextPage as bool),
+          hasPreviousPage:
+              hasPreviousPage == _undefined || hasPreviousPage == null
+                  ? _instance.hasPreviousPage
+                  : (hasPreviousPage as bool),
+          startCursor: startCursor == _undefined
+              ? _instance.startCursor
+              : (startCursor as String?),
+          endCursor: endCursor == _undefined
+              ? _instance.endCursor
+              : (endCursor as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$TvShowsList$tvShows$pageInfo<TRes>
@@ -1733,5 +1740,6 @@ class _CopyWithStubImpl$Query$TvShowsList$tvShows$pageInfo<TRes>
     String? startCursor,
     String? endCursor,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

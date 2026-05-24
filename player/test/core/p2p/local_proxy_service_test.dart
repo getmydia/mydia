@@ -90,8 +90,8 @@ void main() {
       final client = HttpClient();
 
       try {
-        final request =
-            await client.getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$path'));
+        final request = await client
+            .getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$path'));
         if (rangeHeader != null) {
           request.headers.set(HttpHeaders.rangeHeader, rangeHeader);
         }
@@ -142,11 +142,13 @@ void main() {
       });
 
       test('throws when not started and buildHlsUrl called', () {
-        expect(() => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
+        expect(
+            () => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
       });
 
       test('throws when not started and buildBaseUrl called', () {
-        expect(() => proxy.buildBaseUrl('session123'), throwsA(isA<StateError>()));
+        expect(
+            () => proxy.buildBaseUrl('session123'), throwsA(isA<StateError>()));
       });
 
       test('can update target peer when already running', () async {
@@ -176,7 +178,8 @@ void main() {
 
         expect(response.statusCode, equals(HttpStatus.notFound));
         expect(response.body, contains('Not Found'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
       test('returns 400 for invalid HLS path format with CORS', () async {
@@ -186,7 +189,8 @@ void main() {
 
         expect(response.statusCode, equals(HttpStatus.badRequest));
         expect(response.body, contains('Invalid HLS path format'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
       test('forwards HLS request to P2P and serves payload', () async {
@@ -208,8 +212,10 @@ void main() {
         expect(response.body, contains('#EXTM3U'));
         expect(response.headers.contentType?.mimeType,
             equals('application/vnd.apple.mpegurl'));
-        expect(response.headers.value(HttpHeaders.cacheControlHeader), equals('no-cache'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(response.headers.value(HttpHeaders.cacheControlHeader),
+            equals('no-cache'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
 
         expect(p2p.calls, hasLength(1));
         final call = p2p.calls.single;
@@ -270,16 +276,19 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => throw Exception('p2p transport failure');
+        p2p.onSendHlsRequest =
+            (_) async => throw Exception('p2p transport failure');
 
         final response = await makeRequest('/hls/session123/index.m3u8');
 
         expect(response.statusCode, equals(HttpStatus.internalServerError));
         expect(response.body, contains('p2p transport failure'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
-      test('recovers after write error and serves subsequent requests', () async {
+      test('recovers after write error and serves subsequent requests',
+          () async {
         await proxy.start(
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',

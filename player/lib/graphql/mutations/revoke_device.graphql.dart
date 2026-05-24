@@ -25,7 +25,7 @@ class Variables$Mutation$RevokeDevice {
   }
 
   CopyWith$Variables$Mutation$RevokeDevice<Variables$Mutation$RevokeDevice>
-  get copyWith => CopyWith$Variables$Mutation$RevokeDevice(this, (i) => i);
+      get copyWith => CopyWith$Variables$Mutation$RevokeDevice(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -74,11 +74,11 @@ class _CopyWithImpl$Variables$Mutation$RevokeDevice<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? id = _undefined}) => _then(
-    Variables$Mutation$RevokeDevice._({
-      ..._instance._$data,
-      if (id != _undefined && id != null) 'id': (id as String),
-    }),
-  );
+        Variables$Mutation$RevokeDevice._({
+          ..._instance._$data,
+          if (id != _undefined && id != null) 'id': (id as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$RevokeDevice<TRes>
@@ -185,16 +185,17 @@ class _CopyWithImpl$Mutation$RevokeDevice<TRes>
   TRes call({
     Object? revokeDevice = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$RevokeDevice(
-      revokeDevice: revokeDevice == _undefined
-          ? _instance.revokeDevice
-          : (revokeDevice as Mutation$RevokeDevice$revokeDevice?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$RevokeDevice(
+          revokeDevice: revokeDevice == _undefined
+              ? _instance.revokeDevice
+              : (revokeDevice as Mutation$RevokeDevice$revokeDevice?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$RevokeDevice$revokeDevice<TRes> get revokeDevice {
     final local$revokeDevice = _instance.revokeDevice;
@@ -216,7 +217,8 @@ class _CopyWithStubImpl$Mutation$RevokeDevice<TRes>
   call({
     Mutation$RevokeDevice$revokeDevice? revokeDevice,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$RevokeDevice$revokeDevice<TRes> get revokeDevice =>
       CopyWith$Mutation$RevokeDevice$revokeDevice.stub(_res);
@@ -419,9 +421,9 @@ class Mutation$RevokeDevice$revokeDevice {
 extension UtilityExtension$Mutation$RevokeDevice$revokeDevice
     on Mutation$RevokeDevice$revokeDevice {
   CopyWith$Mutation$RevokeDevice$revokeDevice<
-    Mutation$RevokeDevice$revokeDevice
-  >
-  get copyWith => CopyWith$Mutation$RevokeDevice$revokeDevice(this, (i) => i);
+          Mutation$RevokeDevice$revokeDevice>
+      get copyWith =>
+          CopyWith$Mutation$RevokeDevice$revokeDevice(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$RevokeDevice$revokeDevice<TRes> {
@@ -455,19 +457,20 @@ class _CopyWithImpl$Mutation$RevokeDevice$revokeDevice<TRes>
     Object? success = _undefined,
     Object? device = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$RevokeDevice$revokeDevice(
-      success: success == _undefined || success == null
-          ? _instance.success
-          : (success as bool),
-      device: device == _undefined
-          ? _instance.device
-          : (device as Mutation$RevokeDevice$revokeDevice$device?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$RevokeDevice$revokeDevice(
+          success: success == _undefined || success == null
+              ? _instance.success
+              : (success as bool),
+          device: device == _undefined
+              ? _instance.device
+              : (device as Mutation$RevokeDevice$revokeDevice$device?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$RevokeDevice$revokeDevice$device<TRes> get device {
     final local$device = _instance.device;
@@ -492,7 +495,8 @@ class _CopyWithStubImpl$Mutation$RevokeDevice$revokeDevice<TRes>
     bool? success,
     Mutation$RevokeDevice$revokeDevice$device? device,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$RevokeDevice$revokeDevice$device<TRes> get device =>
       CopyWith$Mutation$RevokeDevice$revokeDevice$device.stub(_res);
@@ -634,10 +638,9 @@ class Mutation$RevokeDevice$revokeDevice$device {
 extension UtilityExtension$Mutation$RevokeDevice$revokeDevice$device
     on Mutation$RevokeDevice$revokeDevice$device {
   CopyWith$Mutation$RevokeDevice$revokeDevice$device<
-    Mutation$RevokeDevice$revokeDevice$device
-  >
-  get copyWith =>
-      CopyWith$Mutation$RevokeDevice$revokeDevice$device(this, (i) => i);
+          Mutation$RevokeDevice$revokeDevice$device>
+      get copyWith =>
+          CopyWith$Mutation$RevokeDevice$revokeDevice$device(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$RevokeDevice$revokeDevice$device<TRes> {
@@ -681,29 +684,30 @@ class _CopyWithImpl$Mutation$RevokeDevice$revokeDevice$device<TRes>
     Object? isRevoked = _undefined,
     Object? createdAt = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$RevokeDevice$revokeDevice$device(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      deviceName: deviceName == _undefined || deviceName == null
-          ? _instance.deviceName
-          : (deviceName as String),
-      platform: platform == _undefined || platform == null
-          ? _instance.platform
-          : (platform as String),
-      lastSeenAt: lastSeenAt == _undefined
-          ? _instance.lastSeenAt
-          : (lastSeenAt as String?),
-      isRevoked: isRevoked == _undefined || isRevoked == null
-          ? _instance.isRevoked
-          : (isRevoked as bool),
-      createdAt: createdAt == _undefined || createdAt == null
-          ? _instance.createdAt
-          : (createdAt as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$RevokeDevice$revokeDevice$device(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          deviceName: deviceName == _undefined || deviceName == null
+              ? _instance.deviceName
+              : (deviceName as String),
+          platform: platform == _undefined || platform == null
+              ? _instance.platform
+              : (platform as String),
+          lastSeenAt: lastSeenAt == _undefined
+              ? _instance.lastSeenAt
+              : (lastSeenAt as String?),
+          isRevoked: isRevoked == _undefined || isRevoked == null
+              ? _instance.isRevoked
+              : (isRevoked as bool),
+          createdAt: createdAt == _undefined || createdAt == null
+              ? _instance.createdAt
+              : (createdAt as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$RevokeDevice$revokeDevice$device<TRes>
@@ -720,5 +724,6 @@ class _CopyWithStubImpl$Mutation$RevokeDevice$revokeDevice$device<TRes>
     bool? isRevoked,
     String? createdAt,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

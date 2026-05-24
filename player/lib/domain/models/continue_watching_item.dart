@@ -46,7 +46,10 @@ class ContinueWatchingItem {
   bool get isMovie => type.toLowerCase() == 'movie';
 
   String get displayTitle {
-    if (isEpisode && showTitle != null && seasonNumber != null && episodeNumber != null) {
+    if (isEpisode &&
+        showTitle != null &&
+        seasonNumber != null &&
+        episodeNumber != null) {
       return '$showTitle - S${seasonNumber}E${episodeNumber}';
     }
     return title;

@@ -347,8 +347,7 @@ class ShowDetailScreen extends ConsumerWidget {
                       files: show.nextEpisode!.files,
                       onFileSelected: (file) {
                         final nextEp = show.nextEpisode!;
-                        final title =
-                            '${show.title} - ${nextEp.episodeCode}';
+                        final title = '${show.title} - ${nextEp.episodeCode}';
                         context.push(
                           '/player/episode/${nextEp.id}?fileId=${file.id}&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${nextEp.seasonNumber}',
                         );

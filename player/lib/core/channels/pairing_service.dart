@@ -91,8 +91,10 @@ class PairingResult {
     this.isP2PMode = false,
   });
 
-  factory PairingResult.success(PairingCredentials credentials, {bool isP2PMode = false}) {
-    return PairingResult._(success: true, credentials: credentials, isP2PMode: isP2PMode);
+  factory PairingResult.success(PairingCredentials credentials,
+      {bool isP2PMode = false}) {
+    return PairingResult._(
+        success: true, credentials: credentials, isP2PMode: isP2PMode);
   }
 
   factory PairingResult.error(String error) {
@@ -182,19 +184,22 @@ class PairingService {
     try {
       final devicePlatform = platform ?? _detectPlatform();
       debugPrint('[PairingService] === PAIRING VIA CLAIM CODE ===');
-      debugPrint('[PairingService] claimCode=$claimCode, deviceName=$deviceName, platform=$devicePlatform');
+      debugPrint(
+          '[PairingService] claimCode=$claimCode, deviceName=$deviceName, platform=$devicePlatform');
 
       // Use the injected P2P service - it must be provided and initialized
       final p2pService = _p2pService;
       if (p2pService == null) {
-        return PairingResult.error('P2P service not available. Please try again.');
+        return PairingResult.error(
+            'P2P service not available. Please try again.');
       }
 
       // 1. Resolve claim code via relay API to get server's EndpointAddr
       onStatusUpdate?.call('Resolving pairing code...');
       final relayClient = RelayApiClient();
       final resolveResult = await relayClient.resolveClaimCode(claimCode);
-      debugPrint('[PairingService] Resolved node_addr: ${resolveResult.nodeAddr}');
+      debugPrint(
+          '[PairingService] Resolved node_addr: ${resolveResult.nodeAddr}');
 
       // 2. Initialize the P2P host
       onStatusUpdate?.call('Initializing secure connection...');
@@ -207,12 +212,14 @@ class PairingService {
         debugPrint('[PairingService] Dialed server successfully');
       } catch (e) {
         debugPrint('[PairingService] Failed to dial server: $e');
-        return PairingResult.error('Could not connect to server. Please check your network connection.');
+        return PairingResult.error(
+            'Could not connect to server. Please check your network connection.');
       }
 
       final peerId = _extractNodeId(resolveResult.nodeAddr);
       if (peerId == null) {
-        debugPrint('[PairingService] Could not extract node ID from resolved node_addr');
+        debugPrint(
+            '[PairingService] Could not extract node ID from resolved node_addr');
         return PairingResult.error('Pairing failed: server address is invalid');
       }
       debugPrint('[PairingService] Using peer node ID: $peerId');
@@ -237,7 +244,8 @@ class PairingService {
       // Store credentials
       await _authStorage.write(_StorageKeys.accessToken, accessToken);
       await _authStorage.write(_StorageKeys.mediaToken, mediaToken);
-      await _authStorage.write(_StorageKeys.serverNodeAddr, resolveResult.nodeAddr);
+      await _authStorage.write(
+          _StorageKeys.serverNodeAddr, resolveResult.nodeAddr);
       if (deviceToken != null) {
         await _authStorage.write(_StorageKeys.deviceToken, deviceToken);
       }
@@ -287,11 +295,13 @@ class PairingService {
       final devicePlatform = platform ?? _detectPlatform();
       debugPrint('[PairingService] === PAIRING VIA QR CODE ===');
       debugPrint('[PairingService] instanceId=${qrData.instanceId}');
-      debugPrint('[PairingService] claimCode=${qrData.claimCode}, deviceName=$deviceName');
+      debugPrint(
+          '[PairingService] claimCode=${qrData.claimCode}, deviceName=$deviceName');
 
       final p2pService = _p2pService;
       if (p2pService == null) {
-        return PairingResult.error('P2P service not available. Please try again.');
+        return PairingResult.error(
+            'P2P service not available. Please try again.');
       }
 
       // Initialize the host
@@ -305,13 +315,16 @@ class PairingService {
         debugPrint('[PairingService] Dialed server successfully');
       } catch (e) {
         debugPrint('[PairingService] Failed to dial server: $e');
-        return PairingResult.error('Could not connect to server. Please check your network connection.');
+        return PairingResult.error(
+            'Could not connect to server. Please check your network connection.');
       }
 
       final peerId = _extractNodeId(qrData.nodeAddr);
       if (peerId == null) {
-        debugPrint('[PairingService] Could not extract node ID from QR node_addr');
-        return PairingResult.error('Pairing failed: QR code contains an invalid server address');
+        debugPrint(
+            '[PairingService] Could not extract node ID from QR node_addr');
+        return PairingResult.error(
+            'Pairing failed: QR code contains an invalid server address');
       }
       debugPrint('[PairingService] Using peer node ID: $peerId');
 

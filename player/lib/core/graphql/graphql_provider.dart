@@ -56,7 +56,8 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
   final authTokenAsync = ref.watch(authTokenProvider);
   final authService = ref.watch(authServiceProvider);
 
-  debugPrint('[graphqlClientProvider] Building: isP2PMode=${connectionState.isP2PMode}');
+  debugPrint(
+      '[graphqlClientProvider] Building: isP2PMode=${connectionState.isP2PMode}');
 
   // Check if we're in P2P mode
   if (connectionState.isP2PMode) {
@@ -68,7 +69,8 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
       return null;
     }
 
-    debugPrint('[graphqlClientProvider] Using P2P mode (service will auto-initialize on first request)');
+    debugPrint(
+        '[graphqlClientProvider] Using P2P mode (service will auto-initialize on first request)');
 
     // Create P2P GraphQL client - use the full EndpointAddr JSON for reconnection
     // The P2P service will auto-initialize when ensureConnected is called
@@ -106,14 +108,16 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
         },
         loading: () => null,
         error: (error, stackTrace) {
-          debugPrint('[graphqlClientProvider] Auth token error in direct mode: $error\n$stackTrace');
+          debugPrint(
+              '[graphqlClientProvider] Auth token error in direct mode: $error\n$stackTrace');
           return null;
         },
       );
     },
     loading: () => null,
     error: (error, stackTrace) {
-      debugPrint('[graphqlClientProvider] Server URL error: $error\n$stackTrace');
+      debugPrint(
+          '[graphqlClientProvider] Server URL error: $error\n$stackTrace');
       return null;
     },
   );
@@ -152,14 +156,16 @@ final graphqlClientWithSubscriptionsProvider = Provider<GraphQLClient?>((ref) {
         },
         loading: () => null,
         error: (error, stackTrace) {
-          debugPrint('[graphqlClientWithSubscriptionsProvider] Auth token error: $error\n$stackTrace');
+          debugPrint(
+              '[graphqlClientWithSubscriptionsProvider] Auth token error: $error\n$stackTrace');
           return null;
         },
       );
     },
     loading: () => null,
     error: (error, stackTrace) {
-      debugPrint('[graphqlClientWithSubscriptionsProvider] Server URL error: $error\n$stackTrace');
+      debugPrint(
+          '[graphqlClientWithSubscriptionsProvider] Server URL error: $error\n$stackTrace');
       return null;
     },
   );
@@ -197,7 +203,8 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
       // Check if we have stored credentials
       final isAuth = await authService.isAuthenticated();
 
-      state = AsyncValue.data(isAuth ? AuthStatus.authenticated : AuthStatus.unauthenticated);
+      state = AsyncValue.data(
+          isAuth ? AuthStatus.authenticated : AuthStatus.unauthenticated);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -223,13 +230,15 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
   }
 
   Future<void> _checkAuth() async {
-    debugPrint('[AuthStateNotifier] _checkAuth() called, setting state to loading');
+    debugPrint(
+        '[AuthStateNotifier] _checkAuth() called, setting state to loading');
     state = const AsyncValue.loading();
     try {
       debugPrint('[AuthStateNotifier] Calling isAuthenticated()...');
       final isAuth = await authService.isAuthenticated();
       debugPrint('[AuthStateNotifier] isAuthenticated() returned: $isAuth');
-      final status = isAuth ? AuthStatus.authenticated : AuthStatus.unauthenticated;
+      final status =
+          isAuth ? AuthStatus.authenticated : AuthStatus.unauthenticated;
       state = AsyncValue.data(status);
       debugPrint('[AuthStateNotifier] State set to AsyncValue.data($status)');
     } catch (e, st) {
@@ -276,7 +285,8 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
 
 /// Provider for the auth state notifier.
 final authStateProvider =
-    NotifierProvider<AuthStateNotifier, AsyncValue<AuthStatus>>(AuthStateNotifier.new);
+    NotifierProvider<AuthStateNotifier, AsyncValue<AuthStatus>>(
+        AuthStateNotifier.new);
 
 /// Async provider for the GraphQL client.
 ///
@@ -284,7 +294,7 @@ final authStateProvider =
 /// to be available. This properly handles the async loading of auth state.
 final asyncGraphqlClientProvider = FutureProvider<GraphQLClient>((ref) async {
   debugPrint('[asyncGraphqlClientProvider] Starting...');
-  
+
   // Wait for auth check to complete (isAuthenticatedProvider is a FutureProvider)
   final isAuthenticated = await ref.watch(isAuthenticatedProvider.future);
   debugPrint('[asyncGraphqlClientProvider] isAuthenticated=$isAuthenticated');
@@ -304,7 +314,8 @@ final asyncGraphqlClientProvider = FutureProvider<GraphQLClient>((ref) async {
   // Watch the sync provider to get updates when connection mode changes
   debugPrint('[asyncGraphqlClientProvider] Getting graphqlClientProvider...');
   final client = ref.watch(graphqlClientProvider);
-  debugPrint('[asyncGraphqlClientProvider] client=${client != null ? "available" : "null"}');
+  debugPrint(
+      '[asyncGraphqlClientProvider] client=${client != null ? "available" : "null"}');
   if (client == null) {
     // This shouldn't happen if auth is ready, but handle it gracefully
     throw Exception('GraphQL client not available');
@@ -326,7 +337,8 @@ final mediaTokenServiceProvider = Provider<MediaTokenService?>((ref) {
 /// Async provider for the media token service.
 ///
 /// Use this in async contexts where you need to wait for the service to be ready.
-final asyncMediaTokenServiceProvider = FutureProvider<MediaTokenService>((ref) async {
+final asyncMediaTokenServiceProvider =
+    FutureProvider<MediaTokenService>((ref) async {
   final client = await ref.watch(asyncGraphqlClientProvider.future);
   return MediaTokenService(client);
 });

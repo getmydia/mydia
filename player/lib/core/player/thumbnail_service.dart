@@ -150,7 +150,9 @@ class ThumbnailService {
       final line = lines[i].trim();
 
       // Skip WEBVTT header and empty lines
-      if (line.isEmpty || line.startsWith('WEBVTT') || line.startsWith('NOTE')) {
+      if (line.isEmpty ||
+          line.startsWith('WEBVTT') ||
+          line.startsWith('NOTE')) {
         i++;
         continue;
       }
@@ -199,7 +201,8 @@ class ThumbnailService {
     final minutes = int.tryParse(parts[1]) ?? 0;
     final secondsParts = parts[2].split('.');
     final seconds = int.tryParse(secondsParts[0]) ?? 0;
-    final millis = secondsParts.length > 1 ? int.tryParse(secondsParts[1]) ?? 0 : 0;
+    final millis =
+        secondsParts.length > 1 ? int.tryParse(secondsParts[1]) ?? 0 : 0;
 
     return hours * 3600.0 + minutes * 60.0 + seconds + millis / 1000.0;
   }

@@ -283,8 +283,8 @@ GoRouter appRouter(Ref ref) {
           final fileId = state.uri.queryParameters['fileId'];
           final title = state.uri.queryParameters['title'];
           final showId = state.uri.queryParameters['showId'];
-          final seasonNumber = int.tryParse(
-              state.uri.queryParameters['seasonNumber'] ?? '');
+          final seasonNumber =
+              int.tryParse(state.uri.queryParameters['seasonNumber'] ?? '');
 
           if (fileId == null) {
             // If no fileId provided, show error

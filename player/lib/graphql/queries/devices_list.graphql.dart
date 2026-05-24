@@ -94,8 +94,7 @@ abstract class CopyWith$Query$DevicesList<TRes> {
   TRes devices(
     Iterable<Query$DevicesList$devices?>? Function(
       Iterable<CopyWith$Query$DevicesList$devices<Query$DevicesList$devices>?>?,
-    )
-    _fn,
+    ) _fn,
   );
 }
 
@@ -124,16 +123,17 @@ class _CopyWithImpl$Query$DevicesList<TRes>
   TRes devices(
     Iterable<Query$DevicesList$devices?>? Function(
       Iterable<CopyWith$Query$DevicesList$devices<Query$DevicesList$devices>?>?,
-    )
-    _fn,
-  ) => call(
-    devices: _fn(
-      _instance.devices?.map(
-        (e) =>
-            e == null ? null : CopyWith$Query$DevicesList$devices(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+    ) _fn,
+  ) =>
+      call(
+        devices: _fn(
+          _instance.devices?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Query$DevicesList$devices(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 }
 
 class _CopyWithStubImpl$Query$DevicesList<TRes>
@@ -404,29 +404,30 @@ class _CopyWithImpl$Query$DevicesList$devices<TRes>
     Object? isRevoked = _undefined,
     Object? createdAt = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$DevicesList$devices(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      deviceName: deviceName == _undefined || deviceName == null
-          ? _instance.deviceName
-          : (deviceName as String),
-      platform: platform == _undefined || platform == null
-          ? _instance.platform
-          : (platform as String),
-      lastSeenAt: lastSeenAt == _undefined
-          ? _instance.lastSeenAt
-          : (lastSeenAt as String?),
-      isRevoked: isRevoked == _undefined || isRevoked == null
-          ? _instance.isRevoked
-          : (isRevoked as bool),
-      createdAt: createdAt == _undefined || createdAt == null
-          ? _instance.createdAt
-          : (createdAt as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$DevicesList$devices(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          deviceName: deviceName == _undefined || deviceName == null
+              ? _instance.deviceName
+              : (deviceName as String),
+          platform: platform == _undefined || platform == null
+              ? _instance.platform
+              : (platform as String),
+          lastSeenAt: lastSeenAt == _undefined
+              ? _instance.lastSeenAt
+              : (lastSeenAt as String?),
+          isRevoked: isRevoked == _undefined || isRevoked == null
+              ? _instance.isRevoked
+              : (isRevoked as bool),
+          createdAt: createdAt == _undefined || createdAt == null
+              ? _instance.createdAt
+              : (createdAt as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$DevicesList$devices<TRes>
@@ -443,5 +444,6 @@ class _CopyWithStubImpl$Query$DevicesList$devices<TRes>
     bool? isRevoked,
     String? createdAt,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

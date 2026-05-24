@@ -127,22 +127,23 @@ class _CopyWithImpl$Fragment$ArtworkFragment<TRes>
     Object? backdropUrl = _undefined,
     Object? thumbnailUrl = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Fragment$ArtworkFragment(
-      posterUrl: posterUrl == _undefined
-          ? _instance.posterUrl
-          : (posterUrl as String?),
-      backdropUrl: backdropUrl == _undefined
-          ? _instance.backdropUrl
-          : (backdropUrl as String?),
-      thumbnailUrl: thumbnailUrl == _undefined
-          ? _instance.thumbnailUrl
-          : (thumbnailUrl as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Fragment$ArtworkFragment(
+          posterUrl: posterUrl == _undefined
+              ? _instance.posterUrl
+              : (posterUrl as String?),
+          backdropUrl: backdropUrl == _undefined
+              ? _instance.backdropUrl
+              : (backdropUrl as String?),
+          thumbnailUrl: thumbnailUrl == _undefined
+              ? _instance.thumbnailUrl
+              : (thumbnailUrl as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Fragment$ArtworkFragment<TRes>
@@ -156,7 +157,8 @@ class _CopyWithStubImpl$Fragment$ArtworkFragment<TRes>
     String? backdropUrl,
     String? thumbnailUrl,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }
 
 const fragmentDefinitionArtworkFragment = FragmentDefinitionNode(

@@ -6,11 +6,12 @@ class Variables$Mutation$UpdateMovieProgress {
     required String movieId,
     required int positionSeconds,
     int? durationSeconds,
-  }) => Variables$Mutation$UpdateMovieProgress._({
-    r'movieId': movieId,
-    r'positionSeconds': positionSeconds,
-    if (durationSeconds != null) r'durationSeconds': durationSeconds,
-  });
+  }) =>
+      Variables$Mutation$UpdateMovieProgress._({
+        r'movieId': movieId,
+        r'positionSeconds': positionSeconds,
+        if (durationSeconds != null) r'durationSeconds': durationSeconds,
+      });
 
   Variables$Mutation$UpdateMovieProgress._(this._$data);
 
@@ -51,10 +52,9 @@ class Variables$Mutation$UpdateMovieProgress {
   }
 
   CopyWith$Variables$Mutation$UpdateMovieProgress<
-    Variables$Mutation$UpdateMovieProgress
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$UpdateMovieProgress(this, (i) => i);
+          Variables$Mutation$UpdateMovieProgress>
+      get copyWith =>
+          CopyWith$Variables$Mutation$UpdateMovieProgress(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -129,17 +129,18 @@ class _CopyWithImpl$Variables$Mutation$UpdateMovieProgress<TRes>
     Object? movieId = _undefined,
     Object? positionSeconds = _undefined,
     Object? durationSeconds = _undefined,
-  }) => _then(
-    Variables$Mutation$UpdateMovieProgress._({
-      ..._instance._$data,
-      if (movieId != _undefined && movieId != null)
-        'movieId': (movieId as String),
-      if (positionSeconds != _undefined && positionSeconds != null)
-        'positionSeconds': (positionSeconds as int),
-      if (durationSeconds != _undefined)
-        'durationSeconds': (durationSeconds as int?),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Mutation$UpdateMovieProgress._({
+          ..._instance._$data,
+          if (movieId != _undefined && movieId != null)
+            'movieId': (movieId as String),
+          if (positionSeconds != _undefined && positionSeconds != null)
+            'positionSeconds': (positionSeconds as int),
+          if (durationSeconds != _undefined)
+            'durationSeconds': (durationSeconds as int?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$UpdateMovieProgress<TRes>
@@ -216,7 +217,7 @@ class Mutation$UpdateMovieProgress {
 extension UtilityExtension$Mutation$UpdateMovieProgress
     on Mutation$UpdateMovieProgress {
   CopyWith$Mutation$UpdateMovieProgress<Mutation$UpdateMovieProgress>
-  get copyWith => CopyWith$Mutation$UpdateMovieProgress(this, (i) => i);
+      get copyWith => CopyWith$Mutation$UpdateMovieProgress(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$UpdateMovieProgress<TRes> {
@@ -248,16 +249,17 @@ class _CopyWithImpl$Mutation$UpdateMovieProgress<TRes>
   TRes call({
     Object? updateMovieProgress = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$UpdateMovieProgress(
-      updateMovieProgress: updateMovieProgress == _undefined
-          ? _instance.updateMovieProgress
-          : (updateMovieProgress as Fragment$ProgressFragment?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$UpdateMovieProgress(
+          updateMovieProgress: updateMovieProgress == _undefined
+              ? _instance.updateMovieProgress
+              : (updateMovieProgress as Fragment$ProgressFragment?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ProgressFragment<TRes> get updateMovieProgress {
     final local$updateMovieProgress = _instance.updateMovieProgress;

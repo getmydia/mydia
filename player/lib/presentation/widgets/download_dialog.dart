@@ -114,7 +114,9 @@ class _DownloadDialogState extends State<DownloadDialog> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.2) : AppColors.surfaceVariant,
+          color: isSelected
+              ? AppColors.primary.withOpacity(0.2)
+              : AppColors.surfaceVariant,
           border: Border.all(
             color: isSelected ? AppColors.primary : Colors.transparent,
             width: 2,

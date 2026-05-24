@@ -27,10 +27,9 @@ class Variables$Mutation$EndStreamingSession {
   }
 
   CopyWith$Variables$Mutation$EndStreamingSession<
-    Variables$Mutation$EndStreamingSession
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$EndStreamingSession(this, (i) => i);
+          Variables$Mutation$EndStreamingSession>
+      get copyWith =>
+          CopyWith$Variables$Mutation$EndStreamingSession(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -82,12 +81,12 @@ class _CopyWithImpl$Variables$Mutation$EndStreamingSession<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? sessionId = _undefined}) => _then(
-    Variables$Mutation$EndStreamingSession._({
-      ..._instance._$data,
-      if (sessionId != _undefined && sessionId != null)
-        'sessionId': (sessionId as String),
-    }),
-  );
+        Variables$Mutation$EndStreamingSession._({
+          ..._instance._$data,
+          if (sessionId != _undefined && sessionId != null)
+            'sessionId': (sessionId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$EndStreamingSession<TRes>
@@ -160,7 +159,7 @@ class Mutation$EndStreamingSession {
 extension UtilityExtension$Mutation$EndStreamingSession
     on Mutation$EndStreamingSession {
   CopyWith$Mutation$EndStreamingSession<Mutation$EndStreamingSession>
-  get copyWith => CopyWith$Mutation$EndStreamingSession(this, (i) => i);
+      get copyWith => CopyWith$Mutation$EndStreamingSession(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$EndStreamingSession<TRes> {
@@ -188,16 +187,17 @@ class _CopyWithImpl$Mutation$EndStreamingSession<TRes>
   TRes call({
     Object? endStreamingSession = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$EndStreamingSession(
-      endStreamingSession: endStreamingSession == _undefined
-          ? _instance.endStreamingSession
-          : (endStreamingSession as bool?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$EndStreamingSession(
+          endStreamingSession: endStreamingSession == _undefined
+              ? _instance.endStreamingSession
+              : (endStreamingSession as bool?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$EndStreamingSession<TRes>

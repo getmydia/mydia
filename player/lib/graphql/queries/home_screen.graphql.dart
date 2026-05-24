@@ -8,12 +8,14 @@ class Variables$Query$HomeScreen {
     int? continueWatchingLimit,
     int? recentlyAddedLimit,
     int? upNextLimit,
-  }) => Variables$Query$HomeScreen._({
-    if (continueWatchingLimit != null)
-      r'continueWatchingLimit': continueWatchingLimit,
-    if (recentlyAddedLimit != null) r'recentlyAddedLimit': recentlyAddedLimit,
-    if (upNextLimit != null) r'upNextLimit': upNextLimit,
-  });
+  }) =>
+      Variables$Query$HomeScreen._({
+        if (continueWatchingLimit != null)
+          r'continueWatchingLimit': continueWatchingLimit,
+        if (recentlyAddedLimit != null)
+          r'recentlyAddedLimit': recentlyAddedLimit,
+        if (upNextLimit != null) r'upNextLimit': upNextLimit,
+      });
 
   Variables$Query$HomeScreen._(this._$data);
 
@@ -60,7 +62,7 @@ class Variables$Query$HomeScreen {
   }
 
   CopyWith$Variables$Query$HomeScreen<Variables$Query$HomeScreen>
-  get copyWith => CopyWith$Variables$Query$HomeScreen(this, (i) => i);
+      get copyWith => CopyWith$Variables$Query$HomeScreen(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -148,16 +150,17 @@ class _CopyWithImpl$Variables$Query$HomeScreen<TRes>
     Object? continueWatchingLimit = _undefined,
     Object? recentlyAddedLimit = _undefined,
     Object? upNextLimit = _undefined,
-  }) => _then(
-    Variables$Query$HomeScreen._({
-      ..._instance._$data,
-      if (continueWatchingLimit != _undefined)
-        'continueWatchingLimit': (continueWatchingLimit as int?),
-      if (recentlyAddedLimit != _undefined)
-        'recentlyAddedLimit': (recentlyAddedLimit as int?),
-      if (upNextLimit != _undefined) 'upNextLimit': (upNextLimit as int?),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Query$HomeScreen._({
+          ..._instance._$data,
+          if (continueWatchingLimit != _undefined)
+            'continueWatchingLimit': (continueWatchingLimit as int?),
+          if (recentlyAddedLimit != _undefined)
+            'recentlyAddedLimit': (recentlyAddedLimit as int?),
+          if (upNextLimit != _undefined) 'upNextLimit': (upNextLimit as int?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Query$HomeScreen<TRes>
@@ -170,7 +173,8 @@ class _CopyWithStubImpl$Variables$Query$HomeScreen<TRes>
     int? continueWatchingLimit,
     int? recentlyAddedLimit,
     int? upNextLimit,
-  }) => _res;
+  }) =>
+      _res;
 }
 
 class Query$HomeScreen {
@@ -227,13 +231,11 @@ class Query$HomeScreen {
   Map<String, dynamic> toJson() {
     final _resultData = <String, dynamic>{};
     final l$continueWatching = continueWatching;
-    _resultData['continueWatching'] = l$continueWatching
-        ?.map((e) => e?.toJson())
-        .toList();
+    _resultData['continueWatching'] =
+        l$continueWatching?.map((e) => e?.toJson()).toList();
     final l$recentlyAdded = recentlyAdded;
-    _resultData['recentlyAdded'] = l$recentlyAdded
-        ?.map((e) => e?.toJson())
-        .toList();
+    _resultData['recentlyAdded'] =
+        l$recentlyAdded?.map((e) => e?.toJson()).toList();
     final l$upNext = upNext;
     _resultData['upNext'] = l$upNext?.map((e) => e?.toJson()).toList();
     final l$$__typename = $__typename;
@@ -347,26 +349,21 @@ abstract class CopyWith$Query$HomeScreen<TRes> {
   TRes continueWatching(
     Iterable<Query$HomeScreen$continueWatching?>? Function(
       Iterable<
-        CopyWith$Query$HomeScreen$continueWatching<
-          Query$HomeScreen$continueWatching
-        >?
-      >?,
-    )
-    _fn,
+          CopyWith$Query$HomeScreen$continueWatching<
+              Query$HomeScreen$continueWatching>?>?,
+    ) _fn,
   );
   TRes recentlyAdded(
     Iterable<Query$HomeScreen$recentlyAdded?>? Function(
       Iterable<
-        CopyWith$Query$HomeScreen$recentlyAdded<Query$HomeScreen$recentlyAdded>?
-      >?,
-    )
-    _fn,
+          CopyWith$Query$HomeScreen$recentlyAdded<
+              Query$HomeScreen$recentlyAdded>?>?,
+    ) _fn,
   );
   TRes upNext(
     Iterable<Query$HomeScreen$upNext?>? Function(
       Iterable<CopyWith$Query$HomeScreen$upNext<Query$HomeScreen$upNext>?>?,
-    )
-    _fn,
+    ) _fn,
   );
 }
 
@@ -385,71 +382,72 @@ class _CopyWithImpl$Query$HomeScreen<TRes>
     Object? recentlyAdded = _undefined,
     Object? upNext = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$HomeScreen(
-      continueWatching: continueWatching == _undefined
-          ? _instance.continueWatching
-          : (continueWatching as List<Query$HomeScreen$continueWatching?>?),
-      recentlyAdded: recentlyAdded == _undefined
-          ? _instance.recentlyAdded
-          : (recentlyAdded as List<Query$HomeScreen$recentlyAdded?>?),
-      upNext: upNext == _undefined
-          ? _instance.upNext
-          : (upNext as List<Query$HomeScreen$upNext?>?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$HomeScreen(
+          continueWatching: continueWatching == _undefined
+              ? _instance.continueWatching
+              : (continueWatching as List<Query$HomeScreen$continueWatching?>?),
+          recentlyAdded: recentlyAdded == _undefined
+              ? _instance.recentlyAdded
+              : (recentlyAdded as List<Query$HomeScreen$recentlyAdded?>?),
+          upNext: upNext == _undefined
+              ? _instance.upNext
+              : (upNext as List<Query$HomeScreen$upNext?>?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   TRes continueWatching(
     Iterable<Query$HomeScreen$continueWatching?>? Function(
       Iterable<
-        CopyWith$Query$HomeScreen$continueWatching<
-          Query$HomeScreen$continueWatching
-        >?
-      >?,
-    )
-    _fn,
-  ) => call(
-    continueWatching: _fn(
-      _instance.continueWatching?.map(
-        (e) => e == null
-            ? null
-            : CopyWith$Query$HomeScreen$continueWatching(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Query$HomeScreen$continueWatching<
+              Query$HomeScreen$continueWatching>?>?,
+    ) _fn,
+  ) =>
+      call(
+        continueWatching: _fn(
+          _instance.continueWatching?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Query$HomeScreen$continueWatching(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 
   TRes recentlyAdded(
     Iterable<Query$HomeScreen$recentlyAdded?>? Function(
       Iterable<
-        CopyWith$Query$HomeScreen$recentlyAdded<Query$HomeScreen$recentlyAdded>?
-      >?,
-    )
-    _fn,
-  ) => call(
-    recentlyAdded: _fn(
-      _instance.recentlyAdded?.map(
-        (e) => e == null
-            ? null
-            : CopyWith$Query$HomeScreen$recentlyAdded(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Query$HomeScreen$recentlyAdded<
+              Query$HomeScreen$recentlyAdded>?>?,
+    ) _fn,
+  ) =>
+      call(
+        recentlyAdded: _fn(
+          _instance.recentlyAdded?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Query$HomeScreen$recentlyAdded(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 
   TRes upNext(
     Iterable<Query$HomeScreen$upNext?>? Function(
       Iterable<CopyWith$Query$HomeScreen$upNext<Query$HomeScreen$upNext>?>?,
-    )
-    _fn,
-  ) => call(
-    upNext: _fn(
-      _instance.upNext?.map(
-        (e) => e == null ? null : CopyWith$Query$HomeScreen$upNext(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+    ) _fn,
+  ) =>
+      call(
+        upNext: _fn(
+          _instance.upNext?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Query$HomeScreen$upNext(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 }
 
 class _CopyWithStubImpl$Query$HomeScreen<TRes>
@@ -463,7 +461,8 @@ class _CopyWithStubImpl$Query$HomeScreen<TRes>
     List<Query$HomeScreen$recentlyAdded?>? recentlyAdded,
     List<Query$HomeScreen$upNext?>? upNext,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   continueWatching(_fn) => _res;
 
@@ -1043,7 +1042,8 @@ class Query$HomeScreen$continueWatching {
 extension UtilityExtension$Query$HomeScreen$continueWatching
     on Query$HomeScreen$continueWatching {
   CopyWith$Query$HomeScreen$continueWatching<Query$HomeScreen$continueWatching>
-  get copyWith => CopyWith$Query$HomeScreen$continueWatching(this, (i) => i);
+      get copyWith =>
+          CopyWith$Query$HomeScreen$continueWatching(this, (i) => i);
 }
 
 abstract class CopyWith$Query$HomeScreen$continueWatching<TRes> {
@@ -1092,36 +1092,37 @@ class _CopyWithImpl$Query$HomeScreen$continueWatching<TRes>
     Object? seasonNumber = _undefined,
     Object? episodeNumber = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$HomeScreen$continueWatching(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      type: type == _undefined || type == null
-          ? _instance.type
-          : (type as Enum$MediaType),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      artwork: artwork == _undefined
-          ? _instance.artwork
-          : (artwork as Fragment$ArtworkFragment?),
-      progress: progress == _undefined || progress == null
-          ? _instance.progress
-          : (progress as Fragment$ProgressFragment),
-      showId: showId == _undefined ? _instance.showId : (showId as String?),
-      showTitle: showTitle == _undefined
-          ? _instance.showTitle
-          : (showTitle as String?),
-      seasonNumber: seasonNumber == _undefined
-          ? _instance.seasonNumber
-          : (seasonNumber as int?),
-      episodeNumber: episodeNumber == _undefined
-          ? _instance.episodeNumber
-          : (episodeNumber as int?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$HomeScreen$continueWatching(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          type: type == _undefined || type == null
+              ? _instance.type
+              : (type as Enum$MediaType),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          artwork: artwork == _undefined
+              ? _instance.artwork
+              : (artwork as Fragment$ArtworkFragment?),
+          progress: progress == _undefined || progress == null
+              ? _instance.progress
+              : (progress as Fragment$ProgressFragment),
+          showId: showId == _undefined ? _instance.showId : (showId as String?),
+          showTitle: showTitle == _undefined
+              ? _instance.showTitle
+              : (showTitle as String?),
+          seasonNumber: seasonNumber == _undefined
+              ? _instance.seasonNumber
+              : (seasonNumber as int?),
+          episodeNumber: episodeNumber == _undefined
+              ? _instance.episodeNumber
+              : (episodeNumber as int?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork {
     final local$artwork = _instance.artwork;
@@ -1159,7 +1160,8 @@ class _CopyWithStubImpl$Query$HomeScreen$continueWatching<TRes>
     int? seasonNumber,
     int? episodeNumber,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork =>
       CopyWith$Fragment$ArtworkFragment.stub(_res);
@@ -1306,7 +1308,7 @@ class Query$HomeScreen$recentlyAdded {
 extension UtilityExtension$Query$HomeScreen$recentlyAdded
     on Query$HomeScreen$recentlyAdded {
   CopyWith$Query$HomeScreen$recentlyAdded<Query$HomeScreen$recentlyAdded>
-  get copyWith => CopyWith$Query$HomeScreen$recentlyAdded(this, (i) => i);
+      get copyWith => CopyWith$Query$HomeScreen$recentlyAdded(this, (i) => i);
 }
 
 abstract class CopyWith$Query$HomeScreen$recentlyAdded<TRes> {
@@ -1348,27 +1350,28 @@ class _CopyWithImpl$Query$HomeScreen$recentlyAdded<TRes>
     Object? artwork = _undefined,
     Object? addedAt = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$HomeScreen$recentlyAdded(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      type: type == _undefined || type == null
-          ? _instance.type
-          : (type as Enum$MediaType),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      year: year == _undefined ? _instance.year : (year as int?),
-      artwork: artwork == _undefined
-          ? _instance.artwork
-          : (artwork as Fragment$ArtworkFragment?),
-      addedAt: addedAt == _undefined || addedAt == null
-          ? _instance.addedAt
-          : (addedAt as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$HomeScreen$recentlyAdded(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          type: type == _undefined || type == null
+              ? _instance.type
+              : (type as Enum$MediaType),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          year: year == _undefined ? _instance.year : (year as int?),
+          artwork: artwork == _undefined
+              ? _instance.artwork
+              : (artwork as Fragment$ArtworkFragment?),
+          addedAt: addedAt == _undefined || addedAt == null
+              ? _instance.addedAt
+              : (addedAt as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork {
     final local$artwork = _instance.artwork;
@@ -1395,7 +1398,8 @@ class _CopyWithStubImpl$Query$HomeScreen$recentlyAdded<TRes>
     Fragment$ArtworkFragment? artwork,
     String? addedAt,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork =>
       CopyWith$Fragment$ArtworkFragment.stub(_res);
@@ -1527,22 +1531,23 @@ class _CopyWithImpl$Query$HomeScreen$upNext<TRes>
     Object? episode = _undefined,
     Object? $show = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$HomeScreen$upNext(
-      progressState: progressState == _undefined || progressState == null
-          ? _instance.progressState
-          : (progressState as String),
-      episode: episode == _undefined || episode == null
-          ? _instance.episode
-          : (episode as Query$HomeScreen$upNext$episode),
-      $show: $show == _undefined || $show == null
-          ? _instance.$show
-          : ($show as Query$HomeScreen$upNext$show),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$HomeScreen$upNext(
+          progressState: progressState == _undefined || progressState == null
+              ? _instance.progressState
+              : (progressState as String),
+          episode: episode == _undefined || episode == null
+              ? _instance.episode
+              : (episode as Query$HomeScreen$upNext$episode),
+          $show: $show == _undefined || $show == null
+              ? _instance.$show
+              : ($show as Query$HomeScreen$upNext$show),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Query$HomeScreen$upNext$episode<TRes> get episode {
     final local$episode = _instance.episode;
@@ -1572,7 +1577,8 @@ class _CopyWithStubImpl$Query$HomeScreen$upNext<TRes>
     Query$HomeScreen$upNext$episode? episode,
     Query$HomeScreen$upNext$show? $show,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Query$HomeScreen$upNext$episode<TRes> get episode =>
       CopyWith$Query$HomeScreen$upNext$episode.stub(_res);
@@ -1729,7 +1735,7 @@ class Query$HomeScreen$upNext$episode {
 extension UtilityExtension$Query$HomeScreen$upNext$episode
     on Query$HomeScreen$upNext$episode {
   CopyWith$Query$HomeScreen$upNext$episode<Query$HomeScreen$upNext$episode>
-  get copyWith => CopyWith$Query$HomeScreen$upNext$episode(this, (i) => i);
+      get copyWith => CopyWith$Query$HomeScreen$upNext$episode(this, (i) => i);
 }
 
 abstract class CopyWith$Query$HomeScreen$upNext$episode<TRes> {
@@ -1772,28 +1778,30 @@ class _CopyWithImpl$Query$HomeScreen$upNext$episode<TRes>
     Object? thumbnailUrl = _undefined,
     Object? hasFile = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$HomeScreen$upNext$episode(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      seasonNumber: seasonNumber == _undefined || seasonNumber == null
-          ? _instance.seasonNumber
-          : (seasonNumber as int),
-      episodeNumber: episodeNumber == _undefined || episodeNumber == null
-          ? _instance.episodeNumber
-          : (episodeNumber as int),
-      title: title == _undefined ? _instance.title : (title as String?),
-      airDate: airDate == _undefined ? _instance.airDate : (airDate as String?),
-      thumbnailUrl: thumbnailUrl == _undefined
-          ? _instance.thumbnailUrl
-          : (thumbnailUrl as String?),
-      hasFile: hasFile == _undefined || hasFile == null
-          ? _instance.hasFile
-          : (hasFile as bool),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$HomeScreen$upNext$episode(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          seasonNumber: seasonNumber == _undefined || seasonNumber == null
+              ? _instance.seasonNumber
+              : (seasonNumber as int),
+          episodeNumber: episodeNumber == _undefined || episodeNumber == null
+              ? _instance.episodeNumber
+              : (episodeNumber as int),
+          title: title == _undefined ? _instance.title : (title as String?),
+          airDate:
+              airDate == _undefined ? _instance.airDate : (airDate as String?),
+          thumbnailUrl: thumbnailUrl == _undefined
+              ? _instance.thumbnailUrl
+              : (thumbnailUrl as String?),
+          hasFile: hasFile == _undefined || hasFile == null
+              ? _instance.hasFile
+              : (hasFile as bool),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Query$HomeScreen$upNext$episode<TRes>
@@ -1811,7 +1819,8 @@ class _CopyWithStubImpl$Query$HomeScreen$upNext$episode<TRes>
     String? thumbnailUrl,
     bool? hasFile,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }
 
 class Query$HomeScreen$upNext$show {
@@ -1905,7 +1914,7 @@ class Query$HomeScreen$upNext$show {
 extension UtilityExtension$Query$HomeScreen$upNext$show
     on Query$HomeScreen$upNext$show {
   CopyWith$Query$HomeScreen$upNext$show<Query$HomeScreen$upNext$show>
-  get copyWith => CopyWith$Query$HomeScreen$upNext$show(this, (i) => i);
+      get copyWith => CopyWith$Query$HomeScreen$upNext$show(this, (i) => i);
 }
 
 abstract class CopyWith$Query$HomeScreen$upNext$show<TRes> {
@@ -1941,20 +1950,21 @@ class _CopyWithImpl$Query$HomeScreen$upNext$show<TRes>
     Object? title = _undefined,
     Object? artwork = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Query$HomeScreen$upNext$show(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      artwork: artwork == _undefined
-          ? _instance.artwork
-          : (artwork as Fragment$ArtworkFragment?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Query$HomeScreen$upNext$show(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          artwork: artwork == _undefined
+              ? _instance.artwork
+              : (artwork as Fragment$ArtworkFragment?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork {
     final local$artwork = _instance.artwork;
@@ -1978,7 +1988,8 @@ class _CopyWithStubImpl$Query$HomeScreen$upNext$show<TRes>
     String? title,
     Fragment$ArtworkFragment? artwork,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Fragment$ArtworkFragment<TRes> get artwork =>
       CopyWith$Fragment$ArtworkFragment.stub(_res);

@@ -223,7 +223,7 @@ class Fragment$MediaFileFragment {
 extension UtilityExtension$Fragment$MediaFileFragment
     on Fragment$MediaFileFragment {
   CopyWith$Fragment$MediaFileFragment<Fragment$MediaFileFragment>
-  get copyWith => CopyWith$Fragment$MediaFileFragment(this, (i) => i);
+      get copyWith => CopyWith$Fragment$MediaFileFragment(this, (i) => i);
 }
 
 abstract class CopyWith$Fragment$MediaFileFragment<TRes> {
@@ -252,12 +252,9 @@ abstract class CopyWith$Fragment$MediaFileFragment<TRes> {
   TRes subtitles(
     Iterable<Fragment$MediaFileFragment$subtitles?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment$subtitles<
-          Fragment$MediaFileFragment$subtitles
-        >?
-      >?,
-    )
-    _fn,
+          CopyWith$Fragment$MediaFileFragment$subtitles<
+              Fragment$MediaFileFragment$subtitles>?>?,
+    ) _fn,
   );
 }
 
@@ -284,57 +281,57 @@ class _CopyWithImpl$Fragment$MediaFileFragment<TRes>
     Object? directPlayUrl = _undefined,
     Object? subtitles = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Fragment$MediaFileFragment(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      resolution: resolution == _undefined
-          ? _instance.resolution
-          : (resolution as String?),
-      codec: codec == _undefined ? _instance.codec : (codec as String?),
-      audioCodec: audioCodec == _undefined
-          ? _instance.audioCodec
-          : (audioCodec as String?),
-      hdrFormat: hdrFormat == _undefined
-          ? _instance.hdrFormat
-          : (hdrFormat as String?),
-      size: size == _undefined ? _instance.size : (size as int?),
-      bitrate: bitrate == _undefined ? _instance.bitrate : (bitrate as int?),
-      directPlaySupported: directPlaySupported == _undefined
-          ? _instance.directPlaySupported
-          : (directPlaySupported as bool?),
-      streamUrl: streamUrl == _undefined
-          ? _instance.streamUrl
-          : (streamUrl as String?),
-      directPlayUrl: directPlayUrl == _undefined
-          ? _instance.directPlayUrl
-          : (directPlayUrl as String?),
-      subtitles: subtitles == _undefined
-          ? _instance.subtitles
-          : (subtitles as List<Fragment$MediaFileFragment$subtitles?>?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Fragment$MediaFileFragment(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          resolution: resolution == _undefined
+              ? _instance.resolution
+              : (resolution as String?),
+          codec: codec == _undefined ? _instance.codec : (codec as String?),
+          audioCodec: audioCodec == _undefined
+              ? _instance.audioCodec
+              : (audioCodec as String?),
+          hdrFormat: hdrFormat == _undefined
+              ? _instance.hdrFormat
+              : (hdrFormat as String?),
+          size: size == _undefined ? _instance.size : (size as int?),
+          bitrate:
+              bitrate == _undefined ? _instance.bitrate : (bitrate as int?),
+          directPlaySupported: directPlaySupported == _undefined
+              ? _instance.directPlaySupported
+              : (directPlaySupported as bool?),
+          streamUrl: streamUrl == _undefined
+              ? _instance.streamUrl
+              : (streamUrl as String?),
+          directPlayUrl: directPlayUrl == _undefined
+              ? _instance.directPlayUrl
+              : (directPlayUrl as String?),
+          subtitles: subtitles == _undefined
+              ? _instance.subtitles
+              : (subtitles as List<Fragment$MediaFileFragment$subtitles?>?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   TRes subtitles(
     Iterable<Fragment$MediaFileFragment$subtitles?>? Function(
       Iterable<
-        CopyWith$Fragment$MediaFileFragment$subtitles<
-          Fragment$MediaFileFragment$subtitles
-        >?
-      >?,
-    )
-    _fn,
-  ) => call(
-    subtitles: _fn(
-      _instance.subtitles?.map(
-        (e) => e == null
-            ? null
-            : CopyWith$Fragment$MediaFileFragment$subtitles(e, (i) => i),
-      ),
-    )?.toList(),
-  );
+          CopyWith$Fragment$MediaFileFragment$subtitles<
+              Fragment$MediaFileFragment$subtitles>?>?,
+    ) _fn,
+  ) =>
+      call(
+        subtitles: _fn(
+          _instance.subtitles?.map(
+            (e) => e == null
+                ? null
+                : CopyWith$Fragment$MediaFileFragment$subtitles(e, (i) => i),
+          ),
+        )?.toList(),
+      );
 }
 
 class _CopyWithStubImpl$Fragment$MediaFileFragment<TRes>
@@ -356,7 +353,8 @@ class _CopyWithStubImpl$Fragment$MediaFileFragment<TRes>
     String? directPlayUrl,
     List<Fragment$MediaFileFragment$subtitles?>? subtitles,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   subtitles(_fn) => _res;
 }
@@ -653,9 +651,9 @@ class Fragment$MediaFileFragment$subtitles {
 extension UtilityExtension$Fragment$MediaFileFragment$subtitles
     on Fragment$MediaFileFragment$subtitles {
   CopyWith$Fragment$MediaFileFragment$subtitles<
-    Fragment$MediaFileFragment$subtitles
-  >
-  get copyWith => CopyWith$Fragment$MediaFileFragment$subtitles(this, (i) => i);
+          Fragment$MediaFileFragment$subtitles>
+      get copyWith =>
+          CopyWith$Fragment$MediaFileFragment$subtitles(this, (i) => i);
 }
 
 abstract class CopyWith$Fragment$MediaFileFragment$subtitles<TRes> {
@@ -699,29 +697,30 @@ class _CopyWithImpl$Fragment$MediaFileFragment$subtitles<TRes>
     Object? embedded = _undefined,
     Object? url = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Fragment$MediaFileFragment$subtitles(
-      trackId: trackId == _undefined || trackId == null
-          ? _instance.trackId
-          : (trackId as String),
-      language: language == _undefined || language == null
-          ? _instance.language
-          : (language as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      format: format == _undefined || format == null
-          ? _instance.format
-          : (format as String),
-      embedded: embedded == _undefined || embedded == null
-          ? _instance.embedded
-          : (embedded as bool),
-      url: url == _undefined ? _instance.url : (url as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Fragment$MediaFileFragment$subtitles(
+          trackId: trackId == _undefined || trackId == null
+              ? _instance.trackId
+              : (trackId as String),
+          language: language == _undefined || language == null
+              ? _instance.language
+              : (language as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          format: format == _undefined || format == null
+              ? _instance.format
+              : (format as String),
+          embedded: embedded == _undefined || embedded == null
+              ? _instance.embedded
+              : (embedded as bool),
+          url: url == _undefined ? _instance.url : (url as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Fragment$MediaFileFragment$subtitles<TRes>
@@ -738,5 +737,6 @@ class _CopyWithStubImpl$Fragment$MediaFileFragment$subtitles<TRes>
     bool? embedded,
     String? url,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

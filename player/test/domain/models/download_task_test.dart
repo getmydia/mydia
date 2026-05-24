@@ -138,7 +138,8 @@ void main() {
           expect(task.statusDisplay, equals('Preparing & Downloading'));
         });
 
-        test('shows "Starting Download..." when transcode complete but download at 0',
+        test(
+            'shows "Starting Download..." when transcode complete but download at 0',
             () {
           final task = _createTask(
             status: 'downloading',

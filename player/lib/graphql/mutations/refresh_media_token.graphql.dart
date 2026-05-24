@@ -27,9 +27,9 @@ class Variables$Mutation$RefreshMediaToken {
   }
 
   CopyWith$Variables$Mutation$RefreshMediaToken<
-    Variables$Mutation$RefreshMediaToken
-  >
-  get copyWith => CopyWith$Variables$Mutation$RefreshMediaToken(this, (i) => i);
+          Variables$Mutation$RefreshMediaToken>
+      get copyWith =>
+          CopyWith$Variables$Mutation$RefreshMediaToken(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -81,11 +81,11 @@ class _CopyWithImpl$Variables$Mutation$RefreshMediaToken<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? token = _undefined}) => _then(
-    Variables$Mutation$RefreshMediaToken._({
-      ..._instance._$data,
-      if (token != _undefined && token != null) 'token': (token as String),
-    }),
-  );
+        Variables$Mutation$RefreshMediaToken._({
+          ..._instance._$data,
+          if (token != _undefined && token != null) 'token': (token as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$RefreshMediaToken<TRes>
@@ -162,7 +162,7 @@ class Mutation$RefreshMediaToken {
 extension UtilityExtension$Mutation$RefreshMediaToken
     on Mutation$RefreshMediaToken {
   CopyWith$Mutation$RefreshMediaToken<Mutation$RefreshMediaToken>
-  get copyWith => CopyWith$Mutation$RefreshMediaToken(this, (i) => i);
+      get copyWith => CopyWith$Mutation$RefreshMediaToken(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$RefreshMediaToken<TRes> {
@@ -179,7 +179,7 @@ abstract class CopyWith$Mutation$RefreshMediaToken<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$RefreshMediaToken$refreshMediaToken<TRes>
-  get refreshMediaToken;
+      get refreshMediaToken;
 }
 
 class _CopyWithImpl$Mutation$RefreshMediaToken<TRes>
@@ -195,20 +195,21 @@ class _CopyWithImpl$Mutation$RefreshMediaToken<TRes>
   TRes call({
     Object? refreshMediaToken = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$RefreshMediaToken(
-      refreshMediaToken: refreshMediaToken == _undefined
-          ? _instance.refreshMediaToken
-          : (refreshMediaToken
-                as Mutation$RefreshMediaToken$refreshMediaToken?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$RefreshMediaToken(
+          refreshMediaToken: refreshMediaToken == _undefined
+              ? _instance.refreshMediaToken
+              : (refreshMediaToken
+                  as Mutation$RefreshMediaToken$refreshMediaToken?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$RefreshMediaToken$refreshMediaToken<TRes>
-  get refreshMediaToken {
+      get refreshMediaToken {
     final local$refreshMediaToken = _instance.refreshMediaToken;
     return local$refreshMediaToken == null
         ? CopyWith$Mutation$RefreshMediaToken$refreshMediaToken.stub(
@@ -230,11 +231,12 @@ class _CopyWithStubImpl$Mutation$RefreshMediaToken<TRes>
   call({
     Mutation$RefreshMediaToken$refreshMediaToken? refreshMediaToken,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$RefreshMediaToken$refreshMediaToken<TRes>
-  get refreshMediaToken =>
-      CopyWith$Mutation$RefreshMediaToken$refreshMediaToken.stub(_res);
+      get refreshMediaToken =>
+          CopyWith$Mutation$RefreshMediaToken$refreshMediaToken.stub(_res);
 }
 
 const documentNodeMutationRefreshMediaToken = DocumentNode(
@@ -327,9 +329,8 @@ class Mutation$RefreshMediaToken$refreshMediaToken {
     return Mutation$RefreshMediaToken$refreshMediaToken(
       token: (l$token as String),
       expiresAt: (l$expiresAt as String),
-      permissions: (l$permissions as List<dynamic>)
-          .map((e) => (e as String))
-          .toList(),
+      permissions:
+          (l$permissions as List<dynamic>).map((e) => (e as String)).toList(),
       $__typename: (l$$__typename as String),
     );
   }
@@ -412,10 +413,9 @@ class Mutation$RefreshMediaToken$refreshMediaToken {
 extension UtilityExtension$Mutation$RefreshMediaToken$refreshMediaToken
     on Mutation$RefreshMediaToken$refreshMediaToken {
   CopyWith$Mutation$RefreshMediaToken$refreshMediaToken<
-    Mutation$RefreshMediaToken$refreshMediaToken
-  >
-  get copyWith =>
-      CopyWith$Mutation$RefreshMediaToken$refreshMediaToken(this, (i) => i);
+          Mutation$RefreshMediaToken$refreshMediaToken>
+      get copyWith =>
+          CopyWith$Mutation$RefreshMediaToken$refreshMediaToken(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$RefreshMediaToken$refreshMediaToken<TRes> {
@@ -453,22 +453,23 @@ class _CopyWithImpl$Mutation$RefreshMediaToken$refreshMediaToken<TRes>
     Object? expiresAt = _undefined,
     Object? permissions = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$RefreshMediaToken$refreshMediaToken(
-      token: token == _undefined || token == null
-          ? _instance.token
-          : (token as String),
-      expiresAt: expiresAt == _undefined || expiresAt == null
-          ? _instance.expiresAt
-          : (expiresAt as String),
-      permissions: permissions == _undefined || permissions == null
-          ? _instance.permissions
-          : (permissions as List<String>),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$RefreshMediaToken$refreshMediaToken(
+          token: token == _undefined || token == null
+              ? _instance.token
+              : (token as String),
+          expiresAt: expiresAt == _undefined || expiresAt == null
+              ? _instance.expiresAt
+              : (expiresAt as String),
+          permissions: permissions == _undefined || permissions == null
+              ? _instance.permissions
+              : (permissions as List<String>),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$RefreshMediaToken$refreshMediaToken<TRes>
@@ -482,5 +483,6 @@ class _CopyWithStubImpl$Mutation$RefreshMediaToken$refreshMediaToken<TRes>
     String? expiresAt,
     List<String>? permissions,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

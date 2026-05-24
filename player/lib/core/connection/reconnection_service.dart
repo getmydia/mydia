@@ -11,7 +11,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
 
-
 /// Result of a reconnection operation.
 class ReconnectionResult {
   final bool success;
@@ -74,7 +73,6 @@ class ReconnectionSession {
     this.certFingerprint,
   });
 }
-
 
 /// Default relay URL for fallback connections.
 const _defaultRelayUrl = String.fromEnvironment(

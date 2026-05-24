@@ -27,9 +27,9 @@ class Variables$Mutation$MarkMovieWatched {
   }
 
   CopyWith$Variables$Mutation$MarkMovieWatched<
-    Variables$Mutation$MarkMovieWatched
-  >
-  get copyWith => CopyWith$Variables$Mutation$MarkMovieWatched(this, (i) => i);
+          Variables$Mutation$MarkMovieWatched>
+      get copyWith =>
+          CopyWith$Variables$Mutation$MarkMovieWatched(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -78,12 +78,12 @@ class _CopyWithImpl$Variables$Mutation$MarkMovieWatched<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? movieId = _undefined}) => _then(
-    Variables$Mutation$MarkMovieWatched._({
-      ..._instance._$data,
-      if (movieId != _undefined && movieId != null)
-        'movieId': (movieId as String),
-    }),
-  );
+        Variables$Mutation$MarkMovieWatched._({
+          ..._instance._$data,
+          if (movieId != _undefined && movieId != null)
+            'movieId': (movieId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$MarkMovieWatched<TRes>
@@ -177,7 +177,7 @@ abstract class CopyWith$Mutation$MarkMovieWatched<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$MarkMovieWatched$markMovieWatched<TRes>
-  get markMovieWatched;
+      get markMovieWatched;
 }
 
 class _CopyWithImpl$Mutation$MarkMovieWatched<TRes>
@@ -193,19 +193,21 @@ class _CopyWithImpl$Mutation$MarkMovieWatched<TRes>
   TRes call({
     Object? markMovieWatched = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkMovieWatched(
-      markMovieWatched: markMovieWatched == _undefined
-          ? _instance.markMovieWatched
-          : (markMovieWatched as Mutation$MarkMovieWatched$markMovieWatched?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkMovieWatched(
+          markMovieWatched: markMovieWatched == _undefined
+              ? _instance.markMovieWatched
+              : (markMovieWatched
+                  as Mutation$MarkMovieWatched$markMovieWatched?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$MarkMovieWatched$markMovieWatched<TRes>
-  get markMovieWatched {
+      get markMovieWatched {
     final local$markMovieWatched = _instance.markMovieWatched;
     return local$markMovieWatched == null
         ? CopyWith$Mutation$MarkMovieWatched$markMovieWatched.stub(
@@ -227,11 +229,12 @@ class _CopyWithStubImpl$Mutation$MarkMovieWatched<TRes>
   call({
     Mutation$MarkMovieWatched$markMovieWatched? markMovieWatched,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$MarkMovieWatched$markMovieWatched<TRes>
-  get markMovieWatched =>
-      CopyWith$Mutation$MarkMovieWatched$markMovieWatched.stub(_res);
+      get markMovieWatched =>
+          CopyWith$Mutation$MarkMovieWatched$markMovieWatched.stub(_res);
 }
 
 const documentNodeMutationMarkMovieWatched = DocumentNode(
@@ -375,10 +378,9 @@ class Mutation$MarkMovieWatched$markMovieWatched {
 extension UtilityExtension$Mutation$MarkMovieWatched$markMovieWatched
     on Mutation$MarkMovieWatched$markMovieWatched {
   CopyWith$Mutation$MarkMovieWatched$markMovieWatched<
-    Mutation$MarkMovieWatched$markMovieWatched
-  >
-  get copyWith =>
-      CopyWith$Mutation$MarkMovieWatched$markMovieWatched(this, (i) => i);
+          Mutation$MarkMovieWatched$markMovieWatched>
+      get copyWith =>
+          CopyWith$Mutation$MarkMovieWatched$markMovieWatched(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkMovieWatched$markMovieWatched<TRes> {
@@ -410,17 +412,18 @@ class _CopyWithImpl$Mutation$MarkMovieWatched$markMovieWatched<TRes>
     Object? id = _undefined,
     Object? title = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkMovieWatched$markMovieWatched(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkMovieWatched$markMovieWatched(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$MarkMovieWatched$markMovieWatched<TRes>
@@ -459,10 +462,9 @@ class Variables$Mutation$MarkMovieUnwatched {
   }
 
   CopyWith$Variables$Mutation$MarkMovieUnwatched<
-    Variables$Mutation$MarkMovieUnwatched
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$MarkMovieUnwatched(this, (i) => i);
+          Variables$Mutation$MarkMovieUnwatched>
+      get copyWith =>
+          CopyWith$Variables$Mutation$MarkMovieUnwatched(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -514,12 +516,12 @@ class _CopyWithImpl$Variables$Mutation$MarkMovieUnwatched<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? movieId = _undefined}) => _then(
-    Variables$Mutation$MarkMovieUnwatched._({
-      ..._instance._$data,
-      if (movieId != _undefined && movieId != null)
-        'movieId': (movieId as String),
-    }),
-  );
+        Variables$Mutation$MarkMovieUnwatched._({
+          ..._instance._$data,
+          if (movieId != _undefined && movieId != null)
+            'movieId': (movieId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$MarkMovieUnwatched<TRes>
@@ -596,7 +598,7 @@ class Mutation$MarkMovieUnwatched {
 extension UtilityExtension$Mutation$MarkMovieUnwatched
     on Mutation$MarkMovieUnwatched {
   CopyWith$Mutation$MarkMovieUnwatched<Mutation$MarkMovieUnwatched>
-  get copyWith => CopyWith$Mutation$MarkMovieUnwatched(this, (i) => i);
+      get copyWith => CopyWith$Mutation$MarkMovieUnwatched(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkMovieUnwatched<TRes> {
@@ -613,7 +615,7 @@ abstract class CopyWith$Mutation$MarkMovieUnwatched<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched<TRes>
-  get markMovieUnwatched;
+      get markMovieUnwatched;
 }
 
 class _CopyWithImpl$Mutation$MarkMovieUnwatched<TRes>
@@ -629,20 +631,21 @@ class _CopyWithImpl$Mutation$MarkMovieUnwatched<TRes>
   TRes call({
     Object? markMovieUnwatched = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkMovieUnwatched(
-      markMovieUnwatched: markMovieUnwatched == _undefined
-          ? _instance.markMovieUnwatched
-          : (markMovieUnwatched
-                as Mutation$MarkMovieUnwatched$markMovieUnwatched?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkMovieUnwatched(
+          markMovieUnwatched: markMovieUnwatched == _undefined
+              ? _instance.markMovieUnwatched
+              : (markMovieUnwatched
+                  as Mutation$MarkMovieUnwatched$markMovieUnwatched?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched<TRes>
-  get markMovieUnwatched {
+      get markMovieUnwatched {
     final local$markMovieUnwatched = _instance.markMovieUnwatched;
     return local$markMovieUnwatched == null
         ? CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched.stub(
@@ -664,11 +667,12 @@ class _CopyWithStubImpl$Mutation$MarkMovieUnwatched<TRes>
   call({
     Mutation$MarkMovieUnwatched$markMovieUnwatched? markMovieUnwatched,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched<TRes>
-  get markMovieUnwatched =>
-      CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched.stub(_res);
+      get markMovieUnwatched =>
+          CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched.stub(_res);
 }
 
 const documentNodeMutationMarkMovieUnwatched = DocumentNode(
@@ -812,10 +816,9 @@ class Mutation$MarkMovieUnwatched$markMovieUnwatched {
 extension UtilityExtension$Mutation$MarkMovieUnwatched$markMovieUnwatched
     on Mutation$MarkMovieUnwatched$markMovieUnwatched {
   CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched<
-    Mutation$MarkMovieUnwatched$markMovieUnwatched
-  >
-  get copyWith =>
-      CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched(this, (i) => i);
+          Mutation$MarkMovieUnwatched$markMovieUnwatched>
+      get copyWith => CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched(
+          this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkMovieUnwatched$markMovieUnwatched<TRes> {
@@ -848,17 +851,18 @@ class _CopyWithImpl$Mutation$MarkMovieUnwatched$markMovieUnwatched<TRes>
     Object? id = _undefined,
     Object? title = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkMovieUnwatched$markMovieUnwatched(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkMovieUnwatched$markMovieUnwatched(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$MarkMovieUnwatched$markMovieUnwatched<TRes>
@@ -897,10 +901,9 @@ class Variables$Mutation$MarkEpisodeWatched {
   }
 
   CopyWith$Variables$Mutation$MarkEpisodeWatched<
-    Variables$Mutation$MarkEpisodeWatched
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$MarkEpisodeWatched(this, (i) => i);
+          Variables$Mutation$MarkEpisodeWatched>
+      get copyWith =>
+          CopyWith$Variables$Mutation$MarkEpisodeWatched(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -952,12 +955,12 @@ class _CopyWithImpl$Variables$Mutation$MarkEpisodeWatched<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? episodeId = _undefined}) => _then(
-    Variables$Mutation$MarkEpisodeWatched._({
-      ..._instance._$data,
-      if (episodeId != _undefined && episodeId != null)
-        'episodeId': (episodeId as String),
-    }),
-  );
+        Variables$Mutation$MarkEpisodeWatched._({
+          ..._instance._$data,
+          if (episodeId != _undefined && episodeId != null)
+            'episodeId': (episodeId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$MarkEpisodeWatched<TRes>
@@ -1034,7 +1037,7 @@ class Mutation$MarkEpisodeWatched {
 extension UtilityExtension$Mutation$MarkEpisodeWatched
     on Mutation$MarkEpisodeWatched {
   CopyWith$Mutation$MarkEpisodeWatched<Mutation$MarkEpisodeWatched>
-  get copyWith => CopyWith$Mutation$MarkEpisodeWatched(this, (i) => i);
+      get copyWith => CopyWith$Mutation$MarkEpisodeWatched(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkEpisodeWatched<TRes> {
@@ -1051,7 +1054,7 @@ abstract class CopyWith$Mutation$MarkEpisodeWatched<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched<TRes>
-  get markEpisodeWatched;
+      get markEpisodeWatched;
 }
 
 class _CopyWithImpl$Mutation$MarkEpisodeWatched<TRes>
@@ -1067,20 +1070,21 @@ class _CopyWithImpl$Mutation$MarkEpisodeWatched<TRes>
   TRes call({
     Object? markEpisodeWatched = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkEpisodeWatched(
-      markEpisodeWatched: markEpisodeWatched == _undefined
-          ? _instance.markEpisodeWatched
-          : (markEpisodeWatched
-                as Mutation$MarkEpisodeWatched$markEpisodeWatched?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkEpisodeWatched(
+          markEpisodeWatched: markEpisodeWatched == _undefined
+              ? _instance.markEpisodeWatched
+              : (markEpisodeWatched
+                  as Mutation$MarkEpisodeWatched$markEpisodeWatched?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched<TRes>
-  get markEpisodeWatched {
+      get markEpisodeWatched {
     final local$markEpisodeWatched = _instance.markEpisodeWatched;
     return local$markEpisodeWatched == null
         ? CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched.stub(
@@ -1102,11 +1106,12 @@ class _CopyWithStubImpl$Mutation$MarkEpisodeWatched<TRes>
   call({
     Mutation$MarkEpisodeWatched$markEpisodeWatched? markEpisodeWatched,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched<TRes>
-  get markEpisodeWatched =>
-      CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched.stub(_res);
+      get markEpisodeWatched =>
+          CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched.stub(_res);
 }
 
 const documentNodeMutationMarkEpisodeWatched = DocumentNode(
@@ -1250,10 +1255,9 @@ class Mutation$MarkEpisodeWatched$markEpisodeWatched {
 extension UtilityExtension$Mutation$MarkEpisodeWatched$markEpisodeWatched
     on Mutation$MarkEpisodeWatched$markEpisodeWatched {
   CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched<
-    Mutation$MarkEpisodeWatched$markEpisodeWatched
-  >
-  get copyWith =>
-      CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched(this, (i) => i);
+          Mutation$MarkEpisodeWatched$markEpisodeWatched>
+      get copyWith => CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched(
+          this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkEpisodeWatched$markEpisodeWatched<TRes> {
@@ -1286,15 +1290,16 @@ class _CopyWithImpl$Mutation$MarkEpisodeWatched$markEpisodeWatched<TRes>
     Object? id = _undefined,
     Object? title = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkEpisodeWatched$markEpisodeWatched(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined ? _instance.title : (title as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkEpisodeWatched$markEpisodeWatched(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined ? _instance.title : (title as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$MarkEpisodeWatched$markEpisodeWatched<TRes>
@@ -1309,7 +1314,8 @@ class _CopyWithStubImpl$Mutation$MarkEpisodeWatched$markEpisodeWatched<TRes>
 class Variables$Mutation$MarkEpisodeUnwatched {
   factory Variables$Mutation$MarkEpisodeUnwatched({
     required String episodeId,
-  }) => Variables$Mutation$MarkEpisodeUnwatched._({r'episodeId': episodeId});
+  }) =>
+      Variables$Mutation$MarkEpisodeUnwatched._({r'episodeId': episodeId});
 
   Variables$Mutation$MarkEpisodeUnwatched._(this._$data);
 
@@ -1334,10 +1340,9 @@ class Variables$Mutation$MarkEpisodeUnwatched {
   }
 
   CopyWith$Variables$Mutation$MarkEpisodeUnwatched<
-    Variables$Mutation$MarkEpisodeUnwatched
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$MarkEpisodeUnwatched(this, (i) => i);
+          Variables$Mutation$MarkEpisodeUnwatched>
+      get copyWith =>
+          CopyWith$Variables$Mutation$MarkEpisodeUnwatched(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -1389,12 +1394,12 @@ class _CopyWithImpl$Variables$Mutation$MarkEpisodeUnwatched<TRes>
   static const _undefined = <dynamic, dynamic>{};
 
   TRes call({Object? episodeId = _undefined}) => _then(
-    Variables$Mutation$MarkEpisodeUnwatched._({
-      ..._instance._$data,
-      if (episodeId != _undefined && episodeId != null)
-        'episodeId': (episodeId as String),
-    }),
-  );
+        Variables$Mutation$MarkEpisodeUnwatched._({
+          ..._instance._$data,
+          if (episodeId != _undefined && episodeId != null)
+            'episodeId': (episodeId as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$MarkEpisodeUnwatched<TRes>
@@ -1426,7 +1431,7 @@ class Mutation$MarkEpisodeUnwatched {
   }
 
   final Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched?
-  markEpisodeUnwatched;
+      markEpisodeUnwatched;
 
   final String $__typename;
 
@@ -1472,7 +1477,7 @@ class Mutation$MarkEpisodeUnwatched {
 extension UtilityExtension$Mutation$MarkEpisodeUnwatched
     on Mutation$MarkEpisodeUnwatched {
   CopyWith$Mutation$MarkEpisodeUnwatched<Mutation$MarkEpisodeUnwatched>
-  get copyWith => CopyWith$Mutation$MarkEpisodeUnwatched(this, (i) => i);
+      get copyWith => CopyWith$Mutation$MarkEpisodeUnwatched(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkEpisodeUnwatched<TRes> {
@@ -1489,7 +1494,7 @@ abstract class CopyWith$Mutation$MarkEpisodeUnwatched<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched<TRes>
-  get markEpisodeUnwatched;
+      get markEpisodeUnwatched;
 }
 
 class _CopyWithImpl$Mutation$MarkEpisodeUnwatched<TRes>
@@ -1505,20 +1510,21 @@ class _CopyWithImpl$Mutation$MarkEpisodeUnwatched<TRes>
   TRes call({
     Object? markEpisodeUnwatched = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkEpisodeUnwatched(
-      markEpisodeUnwatched: markEpisodeUnwatched == _undefined
-          ? _instance.markEpisodeUnwatched
-          : (markEpisodeUnwatched
-                as Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkEpisodeUnwatched(
+          markEpisodeUnwatched: markEpisodeUnwatched == _undefined
+              ? _instance.markEpisodeUnwatched
+              : (markEpisodeUnwatched
+                  as Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched<TRes>
-  get markEpisodeUnwatched {
+      get markEpisodeUnwatched {
     final local$markEpisodeUnwatched = _instance.markEpisodeUnwatched;
     return local$markEpisodeUnwatched == null
         ? CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched.stub(
@@ -1540,11 +1546,13 @@ class _CopyWithStubImpl$Mutation$MarkEpisodeUnwatched<TRes>
   call({
     Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched? markEpisodeUnwatched,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched<TRes>
-  get markEpisodeUnwatched =>
-      CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched.stub(_res);
+      get markEpisodeUnwatched =>
+          CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched.stub(
+              _res);
 }
 
 const documentNodeMutationMarkEpisodeUnwatched = DocumentNode(
@@ -1688,17 +1696,16 @@ class Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched {
 extension UtilityExtension$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched
     on Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched {
   CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched<
-    Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched
-  >
-  get copyWith => CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched(
-    this,
-    (i) => i,
-  );
+          Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched>
+      get copyWith =>
+          CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched(
+            this,
+            (i) => i,
+          );
 }
 
 abstract class CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched<
-  TRes
-> {
+    TRes> {
   factory CopyWith$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched(
     Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched instance,
     TRes Function(Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched) then,
@@ -1729,15 +1736,16 @@ class _CopyWithImpl$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched<TRes>
     Object? id = _undefined,
     Object? title = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined ? _instance.title : (title as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined ? _instance.title : (title as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$MarkEpisodeUnwatched$markEpisodeUnwatched<TRes>
@@ -1756,10 +1764,11 @@ class Variables$Mutation$MarkSeasonWatched {
   factory Variables$Mutation$MarkSeasonWatched({
     required String showId,
     required int seasonNumber,
-  }) => Variables$Mutation$MarkSeasonWatched._({
-    r'showId': showId,
-    r'seasonNumber': seasonNumber,
-  });
+  }) =>
+      Variables$Mutation$MarkSeasonWatched._({
+        r'showId': showId,
+        r'seasonNumber': seasonNumber,
+      });
 
   Variables$Mutation$MarkSeasonWatched._(this._$data);
 
@@ -1790,9 +1799,9 @@ class Variables$Mutation$MarkSeasonWatched {
   }
 
   CopyWith$Variables$Mutation$MarkSeasonWatched<
-    Variables$Mutation$MarkSeasonWatched
-  >
-  get copyWith => CopyWith$Variables$Mutation$MarkSeasonWatched(this, (i) => i);
+          Variables$Mutation$MarkSeasonWatched>
+      get copyWith =>
+          CopyWith$Variables$Mutation$MarkSeasonWatched(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -1935,7 +1944,7 @@ class Mutation$MarkSeasonWatched {
 extension UtilityExtension$Mutation$MarkSeasonWatched
     on Mutation$MarkSeasonWatched {
   CopyWith$Mutation$MarkSeasonWatched<Mutation$MarkSeasonWatched>
-  get copyWith => CopyWith$Mutation$MarkSeasonWatched(this, (i) => i);
+      get copyWith => CopyWith$Mutation$MarkSeasonWatched(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkSeasonWatched<TRes> {
@@ -1952,7 +1961,7 @@ abstract class CopyWith$Mutation$MarkSeasonWatched<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched<TRes>
-  get markSeasonWatched;
+      get markSeasonWatched;
 }
 
 class _CopyWithImpl$Mutation$MarkSeasonWatched<TRes>
@@ -1968,20 +1977,21 @@ class _CopyWithImpl$Mutation$MarkSeasonWatched<TRes>
   TRes call({
     Object? markSeasonWatched = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkSeasonWatched(
-      markSeasonWatched: markSeasonWatched == _undefined
-          ? _instance.markSeasonWatched
-          : (markSeasonWatched
-                as Mutation$MarkSeasonWatched$markSeasonWatched?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkSeasonWatched(
+          markSeasonWatched: markSeasonWatched == _undefined
+              ? _instance.markSeasonWatched
+              : (markSeasonWatched
+                  as Mutation$MarkSeasonWatched$markSeasonWatched?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched<TRes>
-  get markSeasonWatched {
+      get markSeasonWatched {
     final local$markSeasonWatched = _instance.markSeasonWatched;
     return local$markSeasonWatched == null
         ? CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched.stub(
@@ -2003,11 +2013,12 @@ class _CopyWithStubImpl$Mutation$MarkSeasonWatched<TRes>
   call({
     Mutation$MarkSeasonWatched$markSeasonWatched? markSeasonWatched,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched<TRes>
-  get markSeasonWatched =>
-      CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched.stub(_res);
+      get markSeasonWatched =>
+          CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched.stub(_res);
 }
 
 const documentNodeMutationMarkSeasonWatched = DocumentNode(
@@ -2161,10 +2172,9 @@ class Mutation$MarkSeasonWatched$markSeasonWatched {
 extension UtilityExtension$Mutation$MarkSeasonWatched$markSeasonWatched
     on Mutation$MarkSeasonWatched$markSeasonWatched {
   CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched<
-    Mutation$MarkSeasonWatched$markSeasonWatched
-  >
-  get copyWith =>
-      CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched(this, (i) => i);
+          Mutation$MarkSeasonWatched$markSeasonWatched>
+      get copyWith =>
+          CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$MarkSeasonWatched$markSeasonWatched<TRes> {
@@ -2196,17 +2206,18 @@ class _CopyWithImpl$Mutation$MarkSeasonWatched$markSeasonWatched<TRes>
     Object? id = _undefined,
     Object? title = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$MarkSeasonWatched$markSeasonWatched(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      title: title == _undefined || title == null
-          ? _instance.title
-          : (title as String),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$MarkSeasonWatched$markSeasonWatched(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          title: title == _undefined || title == null
+              ? _instance.title
+              : (title as String),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$MarkSeasonWatched$markSeasonWatched<TRes>

@@ -6,11 +6,12 @@ class Variables$Mutation$StartStreamingSession {
     required String fileId,
     required Enum$StreamingStrategy strategy,
     int? maxBitrate,
-  }) => Variables$Mutation$StartStreamingSession._({
-    r'fileId': fileId,
-    r'strategy': strategy,
-    if (maxBitrate != null) r'maxBitrate': maxBitrate,
-  });
+  }) =>
+      Variables$Mutation$StartStreamingSession._({
+        r'fileId': fileId,
+        r'strategy': strategy,
+        if (maxBitrate != null) r'maxBitrate': maxBitrate,
+      });
 
   Variables$Mutation$StartStreamingSession._(this._$data);
 
@@ -54,10 +55,9 @@ class Variables$Mutation$StartStreamingSession {
   }
 
   CopyWith$Variables$Mutation$StartStreamingSession<
-    Variables$Mutation$StartStreamingSession
-  >
-  get copyWith =>
-      CopyWith$Variables$Mutation$StartStreamingSession(this, (i) => i);
+          Variables$Mutation$StartStreamingSession>
+      get copyWith =>
+          CopyWith$Variables$Mutation$StartStreamingSession(this, (i) => i);
 
   @override
   bool operator ==(Object other) {
@@ -136,15 +136,17 @@ class _CopyWithImpl$Variables$Mutation$StartStreamingSession<TRes>
     Object? fileId = _undefined,
     Object? strategy = _undefined,
     Object? maxBitrate = _undefined,
-  }) => _then(
-    Variables$Mutation$StartStreamingSession._({
-      ..._instance._$data,
-      if (fileId != _undefined && fileId != null) 'fileId': (fileId as String),
-      if (strategy != _undefined && strategy != null)
-        'strategy': (strategy as Enum$StreamingStrategy),
-      if (maxBitrate != _undefined) 'maxBitrate': (maxBitrate as int?),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Mutation$StartStreamingSession._({
+          ..._instance._$data,
+          if (fileId != _undefined && fileId != null)
+            'fileId': (fileId as String),
+          if (strategy != _undefined && strategy != null)
+            'strategy': (strategy as Enum$StreamingStrategy),
+          if (maxBitrate != _undefined) 'maxBitrate': (maxBitrate as int?),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$StartStreamingSession<TRes>
@@ -177,7 +179,7 @@ class Mutation$StartStreamingSession {
   }
 
   final Mutation$StartStreamingSession$startStreamingSession?
-  startStreamingSession;
+      startStreamingSession;
 
   final String $__typename;
 
@@ -223,7 +225,7 @@ class Mutation$StartStreamingSession {
 extension UtilityExtension$Mutation$StartStreamingSession
     on Mutation$StartStreamingSession {
   CopyWith$Mutation$StartStreamingSession<Mutation$StartStreamingSession>
-  get copyWith => CopyWith$Mutation$StartStreamingSession(this, (i) => i);
+      get copyWith => CopyWith$Mutation$StartStreamingSession(this, (i) => i);
 }
 
 abstract class CopyWith$Mutation$StartStreamingSession<TRes> {
@@ -240,7 +242,7 @@ abstract class CopyWith$Mutation$StartStreamingSession<TRes> {
     String? $__typename,
   });
   CopyWith$Mutation$StartStreamingSession$startStreamingSession<TRes>
-  get startStreamingSession;
+      get startStreamingSession;
 }
 
 class _CopyWithImpl$Mutation$StartStreamingSession<TRes>
@@ -256,20 +258,21 @@ class _CopyWithImpl$Mutation$StartStreamingSession<TRes>
   TRes call({
     Object? startStreamingSession = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$StartStreamingSession(
-      startStreamingSession: startStreamingSession == _undefined
-          ? _instance.startStreamingSession
-          : (startStreamingSession
-                as Mutation$StartStreamingSession$startStreamingSession?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$StartStreamingSession(
+          startStreamingSession: startStreamingSession == _undefined
+              ? _instance.startStreamingSession
+              : (startStreamingSession
+                  as Mutation$StartStreamingSession$startStreamingSession?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$StartStreamingSession$startStreamingSession<TRes>
-  get startStreamingSession {
+      get startStreamingSession {
     final local$startStreamingSession = _instance.startStreamingSession;
     return local$startStreamingSession == null
         ? CopyWith$Mutation$StartStreamingSession$startStreamingSession.stub(
@@ -291,11 +294,13 @@ class _CopyWithStubImpl$Mutation$StartStreamingSession<TRes>
   call({
     Mutation$StartStreamingSession$startStreamingSession? startStreamingSession,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$StartStreamingSession$startStreamingSession<TRes>
-  get startStreamingSession =>
-      CopyWith$Mutation$StartStreamingSession$startStreamingSession.stub(_res);
+      get startStreamingSession =>
+          CopyWith$Mutation$StartStreamingSession$startStreamingSession.stub(
+              _res);
 }
 
 const documentNodeMutationStartStreamingSession = DocumentNode(
@@ -462,17 +467,16 @@ class Mutation$StartStreamingSession$startStreamingSession {
 extension UtilityExtension$Mutation$StartStreamingSession$startStreamingSession
     on Mutation$StartStreamingSession$startStreamingSession {
   CopyWith$Mutation$StartStreamingSession$startStreamingSession<
-    Mutation$StartStreamingSession$startStreamingSession
-  >
-  get copyWith => CopyWith$Mutation$StartStreamingSession$startStreamingSession(
-    this,
-    (i) => i,
-  );
+          Mutation$StartStreamingSession$startStreamingSession>
+      get copyWith =>
+          CopyWith$Mutation$StartStreamingSession$startStreamingSession(
+            this,
+            (i) => i,
+          );
 }
 
 abstract class CopyWith$Mutation$StartStreamingSession$startStreamingSession<
-  TRes
-> {
+    TRes> {
   factory CopyWith$Mutation$StartStreamingSession$startStreamingSession(
     Mutation$StartStreamingSession$startStreamingSession instance,
     TRes Function(Mutation$StartStreamingSession$startStreamingSession) then,
@@ -496,7 +500,7 @@ class _CopyWithImpl$Mutation$StartStreamingSession$startStreamingSession<TRes>
   final Mutation$StartStreamingSession$startStreamingSession _instance;
 
   final TRes Function(Mutation$StartStreamingSession$startStreamingSession)
-  _then;
+      _then;
 
   static const _undefined = <dynamic, dynamic>{};
 
@@ -504,24 +508,24 @@ class _CopyWithImpl$Mutation$StartStreamingSession$startStreamingSession<TRes>
     Object? sessionId = _undefined,
     Object? duration = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$StartStreamingSession$startStreamingSession(
-      sessionId: sessionId == _undefined || sessionId == null
-          ? _instance.sessionId
-          : (sessionId as String),
-      duration: duration == _undefined
-          ? _instance.duration
-          : (duration as double?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$StartStreamingSession$startStreamingSession(
+          sessionId: sessionId == _undefined || sessionId == null
+              ? _instance.sessionId
+              : (sessionId as String),
+          duration: duration == _undefined
+              ? _instance.duration
+              : (duration as double?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$StartStreamingSession$startStreamingSession<
-  TRes
->
+        TRes>
     implements
         CopyWith$Mutation$StartStreamingSession$startStreamingSession<TRes> {
   _CopyWithStubImpl$Mutation$StartStreamingSession$startStreamingSession(

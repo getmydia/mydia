@@ -35,8 +35,10 @@ class E2eApiClient {
   factory E2eApiClient.fromEnvironment() {
     // Use runtime environment variables - the test driver runs on the host
     final mydiaUrl = Platform.environment['MYDIA_URL'] ?? 'http://mydia:4000';
-    final adminEmail = Platform.environment['E2E_ADMIN_EMAIL'] ?? 'admin@test.local';
-    final adminPassword = Platform.environment['E2E_ADMIN_PASSWORD'] ?? 'testpassword123';
+    final adminEmail =
+        Platform.environment['E2E_ADMIN_EMAIL'] ?? 'admin@test.local';
+    final adminPassword =
+        Platform.environment['E2E_ADMIN_PASSWORD'] ?? 'testpassword123';
 
     return E2eApiClient(
       mydiaUrl: mydiaUrl,
@@ -97,7 +99,8 @@ class E2eApiClient {
 
     if (response['errors'] != null) {
       final errors = response['errors'] as List;
-      throw Exception('Failed to generate claim code: ${errors.first['message']}');
+      throw Exception(
+          'Failed to generate claim code: ${errors.first['message']}');
     }
 
     final data = response['data']['generateClaimCode'];
@@ -163,7 +166,8 @@ class E2eApiClient {
       await Future.delayed(interval);
     }
 
-    throw TimeoutException('Mydia server did not become healthy within $timeout');
+    throw TimeoutException(
+        'Mydia server did not become healthy within $timeout');
   }
 }
 

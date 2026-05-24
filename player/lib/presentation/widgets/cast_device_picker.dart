@@ -62,12 +62,12 @@ class CastDevicePickerDialog extends ConsumerWidget {
                 return ListTile(
                   leading: Icon(
                     isConnected ? Icons.cast_connected : Icons.cast,
-                    color: isConnected ? AppColors.primary : AppColors.textSecondary,
+                    color: isConnected
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
                   ),
                   title: Text(device.name),
-                  subtitle: device.model != null
-                      ? Text(device.model!)
-                      : null,
+                  subtitle: device.model != null ? Text(device.model!) : null,
                   trailing: isConnected
                       ? const Icon(Icons.check, color: AppColors.primary)
                       : null,
@@ -97,7 +97,8 @@ class CastDevicePickerDialog extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                const Icon(Icons.error_outline,
+                    size: 48, color: AppColors.error),
                 const SizedBox(height: 16),
                 Text(
                   'Failed to find devices',

@@ -17,7 +17,8 @@ void main() {
       final candidate = StreamingCandidate.fromJson(json);
 
       expect(candidate.strategy, equals(StreamingStrategy.directPlay));
-      expect(candidate.mime, equals('video/mp4; codecs="avc1.640028, mp4a.40.2"'));
+      expect(
+          candidate.mime, equals('video/mp4; codecs="avc1.640028, mp4a.40.2"'));
       expect(candidate.container, equals('mp4'));
       expect(candidate.videoCodec, equals('avc1.640028'));
       expect(candidate.audioCodec, equals('mp4a.40.2'));
@@ -169,10 +170,13 @@ void main() {
       final response = StreamingCandidatesResponse.fromJson(json);
 
       expect(response.candidates.length, equals(4));
-      expect(response.candidates[0].strategy, equals(StreamingStrategy.directPlay));
+      expect(response.candidates[0].strategy,
+          equals(StreamingStrategy.directPlay));
       expect(response.candidates[1].strategy, equals(StreamingStrategy.remux));
-      expect(response.candidates[2].strategy, equals(StreamingStrategy.hlsCopy));
-      expect(response.candidates[3].strategy, equals(StreamingStrategy.transcode));
+      expect(
+          response.candidates[2].strategy, equals(StreamingStrategy.hlsCopy));
+      expect(
+          response.candidates[3].strategy, equals(StreamingStrategy.transcode));
       expect(response.metadata.duration, equals(596.5));
       expect(response.metadata.resolution, equals('1080p'));
     });
@@ -324,7 +328,10 @@ void main() {
         strategy: StreamingStrategy.hlsCopy,
       );
 
-      expect(url, equals('https://example.com/api/v1/stream/file/file-123?strategy=HLS_COPY'));
+      expect(
+          url,
+          equals(
+              'https://example.com/api/v1/stream/file/file-123?strategy=HLS_COPY'));
     });
 
     test('buildStreamUrl includes media token when provided', () {

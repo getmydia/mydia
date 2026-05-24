@@ -47,9 +47,11 @@ class CastService {
 
     // Listen to device discovery stream
     _deviceSubscription?.cancel();
-    _deviceSubscription = GoogleCastDiscoveryManager.instance.devicesStream.listen(
+    _deviceSubscription =
+        GoogleCastDiscoveryManager.instance.devicesStream.listen(
       (googleCastDevices) {
-        debugPrint('CastService: Discovered ${googleCastDevices.length} devices');
+        debugPrint(
+            'CastService: Discovered ${googleCastDevices.length} devices');
 
         // Convert GoogleCastDevice to our CastDevice model
         final devices = googleCastDevices.map((device) {
@@ -70,7 +72,8 @@ class CastService {
 
     // Listen to session state changes
     _sessionSubscription?.cancel();
-    _sessionSubscription = GoogleCastSessionManager.instance.currentSessionStream.listen(
+    _sessionSubscription =
+        GoogleCastSessionManager.instance.currentSessionStream.listen(
       (session) {
         debugPrint('CastService: Session state changed: ${session != null}');
 
@@ -108,14 +111,16 @@ class CastService {
 
     try {
       // Find the GoogleCastDevice that matches our CastDevice
-      final devices = await GoogleCastDiscoveryManager.instance.devicesStream.first;
+      final devices =
+          await GoogleCastDiscoveryManager.instance.devicesStream.first;
       final googleDevice = devices.firstWhere(
         (d) => d.deviceID == device.id,
         orElse: () => throw Exception('Device not found: ${device.name}'),
       );
 
       // Start session with the device
-      await GoogleCastSessionManager.instance.startSessionWithDevice(googleDevice);
+      await GoogleCastSessionManager.instance
+          .startSessionWithDevice(googleDevice);
 
       // Create session object
       _currentSession = CastSession(
@@ -138,7 +143,8 @@ class CastService {
   /// Listen to media status updates from the cast device.
   void _listenToMediaStatus() {
     _mediaStatusSubscription?.cancel();
-    _mediaStatusSubscription = GoogleCastRemoteMediaClient.instance.mediaStatusStream.listen(
+    _mediaStatusSubscription =
+        GoogleCastRemoteMediaClient.instance.mediaStatusStream.listen(
       (mediaStatus) {
         if (mediaStatus == null || _currentSession == null) return;
 

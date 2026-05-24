@@ -19,7 +19,8 @@ class ResumeDialog extends StatelessWidget {
     final positionText = _formatDuration(savedPositionSeconds);
     // Guard against division by zero
     final percentage = totalDurationSeconds > 0
-        ? ((savedPositionSeconds / totalDurationSeconds * 100).clamp(0, 100)).round()
+        ? ((savedPositionSeconds / totalDurationSeconds * 100).clamp(0, 100))
+            .round()
         : 0;
     final progressValue = totalDurationSeconds > 0
         ? (savedPositionSeconds / totalDurationSeconds).clamp(0.0, 1.0)

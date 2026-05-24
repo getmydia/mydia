@@ -7,13 +7,14 @@ class Variables$Mutation$Login {
     required String deviceId,
     required String deviceName,
     required String platform,
-  }) => Variables$Mutation$Login._({
-    r'username': username,
-    r'password': password,
-    r'deviceId': deviceId,
-    r'deviceName': deviceName,
-    r'platform': platform,
-  });
+  }) =>
+      Variables$Mutation$Login._({
+        r'username': username,
+        r'password': password,
+        r'deviceId': deviceId,
+        r'deviceName': deviceName,
+        r'platform': platform,
+      });
 
   Variables$Mutation$Login._(this._$data);
 
@@ -150,21 +151,22 @@ class _CopyWithImpl$Variables$Mutation$Login<TRes>
     Object? deviceId = _undefined,
     Object? deviceName = _undefined,
     Object? platform = _undefined,
-  }) => _then(
-    Variables$Mutation$Login._({
-      ..._instance._$data,
-      if (username != _undefined && username != null)
-        'username': (username as String),
-      if (password != _undefined && password != null)
-        'password': (password as String),
-      if (deviceId != _undefined && deviceId != null)
-        'deviceId': (deviceId as String),
-      if (deviceName != _undefined && deviceName != null)
-        'deviceName': (deviceName as String),
-      if (platform != _undefined && platform != null)
-        'platform': (platform as String),
-    }),
-  );
+  }) =>
+      _then(
+        Variables$Mutation$Login._({
+          ..._instance._$data,
+          if (username != _undefined && username != null)
+            'username': (username as String),
+          if (password != _undefined && password != null)
+            'password': (password as String),
+          if (deviceId != _undefined && deviceId != null)
+            'deviceId': (deviceId as String),
+          if (deviceName != _undefined && deviceName != null)
+            'deviceName': (deviceName as String),
+          if (platform != _undefined && platform != null)
+            'platform': (platform as String),
+        }),
+      );
 }
 
 class _CopyWithStubImpl$Variables$Mutation$Login<TRes>
@@ -179,7 +181,8 @@ class _CopyWithStubImpl$Variables$Mutation$Login<TRes>
     String? deviceId,
     String? deviceName,
     String? platform,
-  }) => _res;
+  }) =>
+      _res;
 }
 
 class Mutation$Login {
@@ -578,22 +581,23 @@ class _CopyWithImpl$Mutation$Login$login<TRes>
     Object? user = _undefined,
     Object? expiresIn = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$Login$login(
-      token: token == _undefined || token == null
-          ? _instance.token
-          : (token as String),
-      user: user == _undefined || user == null
-          ? _instance.user
-          : (user as Mutation$Login$login$user),
-      expiresIn: expiresIn == _undefined || expiresIn == null
-          ? _instance.expiresIn
-          : (expiresIn as int),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$Login$login(
+          token: token == _undefined || token == null
+              ? _instance.token
+              : (token as String),
+          user: user == _undefined || user == null
+              ? _instance.user
+              : (user as Mutation$Login$login$user),
+          expiresIn: expiresIn == _undefined || expiresIn == null
+              ? _instance.expiresIn
+              : (expiresIn as int),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 
   CopyWith$Mutation$Login$login$user<TRes> get user {
     final local$user = _instance.user;
@@ -612,7 +616,8 @@ class _CopyWithStubImpl$Mutation$Login$login<TRes>
     Mutation$Login$login$user? user,
     int? expiresIn,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 
   CopyWith$Mutation$Login$login$user<TRes> get user =>
       CopyWith$Mutation$Login$login$user.stub(_res);
@@ -761,21 +766,22 @@ class _CopyWithImpl$Mutation$Login$login$user<TRes>
     Object? email = _undefined,
     Object? displayName = _undefined,
     Object? $__typename = _undefined,
-  }) => _then(
-    Mutation$Login$login$user(
-      id: id == _undefined || id == null ? _instance.id : (id as String),
-      username: username == _undefined
-          ? _instance.username
-          : (username as String?),
-      email: email == _undefined ? _instance.email : (email as String?),
-      displayName: displayName == _undefined
-          ? _instance.displayName
-          : (displayName as String?),
-      $__typename: $__typename == _undefined || $__typename == null
-          ? _instance.$__typename
-          : ($__typename as String),
-    ),
-  );
+  }) =>
+      _then(
+        Mutation$Login$login$user(
+          id: id == _undefined || id == null ? _instance.id : (id as String),
+          username: username == _undefined
+              ? _instance.username
+              : (username as String?),
+          email: email == _undefined ? _instance.email : (email as String?),
+          displayName: displayName == _undefined
+              ? _instance.displayName
+              : (displayName as String?),
+          $__typename: $__typename == _undefined || $__typename == null
+              ? _instance.$__typename
+              : ($__typename as String),
+        ),
+      );
 }
 
 class _CopyWithStubImpl$Mutation$Login$login$user<TRes>
@@ -790,5 +796,6 @@ class _CopyWithStubImpl$Mutation$Login$login$user<TRes>
     String? email,
     String? displayName,
     String? $__typename,
-  }) => _res;
+  }) =>
+      _res;
 }

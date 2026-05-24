@@ -18,7 +18,8 @@ void main() {
 
       expect(
         url,
-        equals('https://example.com/api/v1/stream/file/file-123?strategy=HLS_COPY&token=test-media-token'),
+        equals(
+            'https://example.com/api/v1/stream/file/file-123?strategy=HLS_COPY&token=test-media-token'),
       );
     });
 
@@ -36,7 +37,8 @@ void main() {
 
       expect(
         url,
-        equals('https://example.com/api/v1/stream/file/file-123?strategy=DIRECT_PLAY'),
+        equals(
+            'https://example.com/api/v1/stream/file/file-123?strategy=DIRECT_PLAY'),
       );
     });
 
@@ -49,7 +51,8 @@ void main() {
     });
 
     test('getOptimalStrategy respects forceHls flag', () {
-      final strategy = StreamingStrategyService.getOptimalStrategy(forceHls: true);
+      final strategy =
+          StreamingStrategyService.getOptimalStrategy(forceHls: true);
 
       // When forced, should return HLS
       expect(strategy, equals(StreamingStrategy.hlsCopy));
