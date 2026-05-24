@@ -403,10 +403,18 @@ Components follow a three-tier system:
 
 ### Database
 
-- This project uses **SQLite exclusively** for all environments (development, test, and production)
-- **Never** use PostgreSQL-specific features, syntax, or extensions
-- **Never** suggest or implement PostgreSQL migrations or configurations
-- Use SQLite-compatible syntax for all queries and migrations
+- This project is **dual-engine**: SQLite and PostgreSQL are both first-class
+  targets. The Phoenix backend uses Ecto with `ecto_sqlite3` or `ecto_postgres`
+  based on `:database_adapter` config; the Rust backend (`mydia-rs`) uses
+  SeaORM 2.x. CI runs both engines via the test matrix
+- **Never** introduce queries, migrations, or features that work on only one
+  engine without a written justification. Cross-engine parity is the default
+- Migrations are still owned by Phoenix during the mydia-rs adoption window;
+  the schema-diff-check CI job verifies the Rust entities match the Phoenix
+  schema column-by-column on Postgres
+- Use the cross-engine wrapper types in `mydia-rs/crates/db/src/types/` for
+  Rust queries against UUID / DateTime / JSON / text[] columns — they handle
+  the on-disk format divergence transparently
 
 ### General Guidelines
 

@@ -1,88 +1,73 @@
 # mydia-rs-entities
 
 SeaORM entity definitions for the Phoenix-owned schema. One module per
-table, generated from a live, Phoenix-migrated Postgres dev database via
-`sea-orm-cli`. Treated as source code after the first generation pass —
-the operator script-patches columns onto the workspace's cross-engine
-type wrappers (see [Cross-engine wrappers](#cross-engine-wrappers)) and
-those patches re-apply idempotently after a regeneration.
+table.
 
 This crate is **server-only**. SeaORM pulls `sqlx`, which is incompatible
 with the Dioxus wasm web client per
 `reference_mydia_rs_wasm_constraints.md`. Entity types live here rather
 than in `mydia-rs-models/` so the wasm tree never tries to compile them.
 
-## Regenerating entities
+## Authoring model: entities are hand-written source code
 
-When Phoenix lands a schema migration, mydia-rs's entities drift. The
-regeneration workflow:
+The committed entities (`crates/entities/src/*.rs`) started as a one-time
+`sea-orm-cli generate entity` pass against a Phoenix-migrated Postgres
+dev DB (commit `05499e40`), then the U2 conversion (commit `25724bb3`)
+rewrote them by hand so every cross-engine column points at one of the
+wrapper types in `mydia-rs-db/src/types/`. There is no codegen workflow
+in the maintained tree — `sea-orm-cli generate entity` does not survive
+the wrapper-type rewrite, and re-running it would clobber the
+hand-edits.
 
-```bash
-# 1. Bring up the dev Postgres if it isn't already running.
-docker compose --profile postgres up -d postgres
+When Phoenix lands a schema migration, the entity files drift. To
+catch up:
 
-# 2. Apply the latest Phoenix migrations against the dev DB.
-./dev mix ecto.migrate
-
-# 3. Regenerate entities. The script wraps sea-orm-cli + the
-#    script-patch in a single command. Until U5 lands the wrapper, run
-#    the underlying tool directly:
-DATABASE_URL="postgres://postgres:postgres@localhost:5433/mydia_dev" \
-  sea-orm-cli generate entity \
-    --output-dir mydia-rs/crates/entities/src \
-    --with-serde both \
-    --lib
-
-# 4. Re-apply the type-wrapper patches (U3). Idempotent — running
-#    against an unchanged schema produces no diff.
-bash mydia-rs/crates/entities/src/_patch.sh
-
-# 5. Verify entities compile and commit.
-cd mydia-rs && cargo check -p mydia-rs-entities
-git add mydia-rs/crates/entities/src/
-git commit -m "chore(mydia-rs): regenerate entities for <reason>"
-```
-
-CI's `entity-drift-check` job (U5) runs the same steps and fails the
-build when the committed entities don't match what Phoenix's current
-schema would generate. If your branch fails this check, regenerate
-locally and commit the diff.
+1. Identify the changed column from `priv/repo/migrations/`
+2. Hand-edit the relevant entity file in `src/`. Pick the appropriate
+   wrapper type per the table below.
+3. Bump `MAX_KNOWN_MIGRATION` in `crates/db/src/schema_check.rs` to the
+   new migration's timestamp.
+4. Run `./dev rs schema-diff` locally (Postgres dev DB up). The
+   `schema-diff-check` CI job runs the same comparison in CI and fails
+   loudly on drift.
 
 ## Cross-engine wrappers
 
-`sea-orm-cli` generates entities with native Postgres types
-(`Uuid`, `DateTime`, `Vec<String>`, `serde_json::Value`). mydia-rs serves
-both Postgres and SQLite, and four wrapper types in `mydia-rs-db::types`
-reconcile the dialect divergence at the column-type level:
+Phoenix uses `ecto_sqlite3` and `ecto_postgres` on the same data with
+different on-disk encodings. Five column shapes diverge across engines;
+each has a wrapper in `mydia-rs-db/src/types/`:
 
-| Wrapper | Replaces | Postgres encoding | SQLite encoding |
-|---|---|---|---|
-| `UuidText` | `Uuid` | native `uuid` | TEXT |
-| `DateTimeSecs` | `DateTime` (sec precision) | `TIMESTAMPTZ` | RFC3339-Z TEXT |
-| `DateTimeMicros` | `DateTime` (µs precision) | `TIMESTAMPTZ` | RFC3339-Z+µs TEXT |
-| `JsonMap<T>` | `serde_json::Value` (whole-struct only) | `JSONB` | TEXT-JSON |
-| `StringArray` | `Vec<String>` | `text[]` | TEXT-JSON-array |
+| Wrapper          | SQLite (Ecto)                                | Postgres (Ecto)            | Use for                                          |
+|------------------|-----------------------------------------------|-----------------------------|--------------------------------------------------|
+| `UuidText`       | TEXT, 36-char lowercase-hyphenated           | native `uuid`               | `binary_id` primary keys / FKs                   |
+| `DateTimeSecs`   | TEXT, RFC3339 + `Z`, second precision        | `TIMESTAMPTZ`               | `:utc_datetime` columns                          |
+| `DateTimeMicros` | TEXT, RFC3339 + `Z` + `.NNNNNN`, µs precision| `TIMESTAMPTZ`               | `:utc_datetime_usec` columns                     |
+| `JsonMap<T>`     | TEXT holding JSON                            | `JSONB`                     | `:map` columns + Jason-encoded custom types      |
+| `StringArray`    | TEXT holding JSON array                      | `text[]`                    | `{:array, :string}` columns                      |
 
-The script-patch in `src/_patch.sh` rewrites the generated column types
-to use these wrappers wherever the existing schema requires cross-engine
-parity (the four `StringArray` columns are enumerated in the plan; the
-UUID and timestamp columns are detected by Postgres column type during
-the script-patch sweep).
+Each wrapper carries `From<W> for Value` + an engine-branched
+`TryGetable` impl + an `into_simple_expr(backend) -> SimpleExpr` write
+helper. Reads go through SeaORM's `Entity::find()` unchanged. Writes
+against wrapper-typed columns go through `mydia_rs_db::insert_active_model`
+(or `update_active_model`), which inspects the column's `ColumnDef`
+and applies the engine-appropriate cast template. Vanilla
+`ActiveModelTrait::insert` / `update` are forbidden by the workspace
+`clippy.toml` — they cannot inject the Postgres casts that uuid /
+timestamptz / jsonb / text[] columns require for a `Value::String`
+bind.
 
-### What never goes in this crate
+The `Statement::from_sql_and_values` and `raw_sql!` macros are
+forbidden in landed code, as is `Expr::cust_with_values` outside
+`crates/db/src/types/`. The schema-diff-check CI job enforces entity
+correctness against the Phoenix-Postgres schema.
 
-- **Hand-written entities for mydia-rs-owned tables** — the `mydia_runtime_lock`
-  SQLite-only table lives here as the documented exception. It is *not*
-  generated; it is hand-defined because Phoenix's Postgres has no
-  corresponding table. The CI drift check ignores it.
-- **JSON-path predicates** — SeaORM does not abstract `json_extract`
-  (SQLite) vs `->>` (Postgres). Per the unification plan's Key
-  Decisions, JSON columns are read/written whole and filtered in Rust.
-- **Raw SQL escape hatches** — `Statement::from_sql_and_values`,
-  `raw_sql!`, and `Expr::cust_with_values` are forbidden in landed code.
-  Queries that can't be expressed via SeaORM's typed builder get a
-  design change (denormalize, fetch + filter, generated column), not a
-  raw-SQL fallback.
+## Cross-references
 
-See `docs/plans/2026-05-24-001-refactor-seaorm-data-layer-unification-plan.md`
-for the full destination-shape policy.
+- `docs/plans/2026-05-24-001-refactor-seaorm-data-layer-unification-plan.md`
+  is the design record. Start there for any non-trivial change.
+- `crates/db/README.md` documents the wrapper-type API and the
+  `insert_active_model` / `update_active_model` write helpers.
+- The 2026-05-24 spike (memory `seaorm_wrapper_type_impasse.md`)
+  records why a single context-free `From<T> for Value` impl cannot
+  satisfy both engines and why the wrapper helper + workspace insert
+  helper combo is the smallest shape that works.
