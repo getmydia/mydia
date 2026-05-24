@@ -38,7 +38,7 @@ mod error;
 pub use dialect::Dialect;
 pub use error::DbError;
 pub use insert_helper::{insert_active_model, update_active_model};
-pub use pool::{connect_from_config, Db};
+pub use pool::{connect_from_config, connect_from_config_seaorm, Db};
 pub use schema_check::{schema_check, SchemaCheckOutcome, MAX_KNOWN_MIGRATION};
 
 // `SeaORM` connection type re-export. Phase B conversion units thread this
