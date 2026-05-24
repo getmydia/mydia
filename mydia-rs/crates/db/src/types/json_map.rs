@@ -16,6 +16,10 @@
 //! every read happens via `json_extract` / `->>`, never by string
 //! equality.
 
+use sea_orm::sea_query::{
+    ArrayType, ColumnType, Expr, Nullable, SimpleExpr, Value, ValueType, ValueTypeErr,
+};
+use sea_orm::{ColIdx, DbBackend, DbErr, QueryResult, TryGetError, TryGetable};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sqlx::database::Database;
 use sqlx::decode::Decode;
@@ -110,5 +114,105 @@ where
     fn decode(value: <Postgres as Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         let inner = <sqlx::types::Json<T> as Decode<'r, Postgres>>::decode(value)?;
         Ok(Self(inner.0))
+    }
+}
+
+// ---------- SeaORM (engine-aware via wrapper helpers) ----------
+//
+// `JsonMap<T>` marshals as a serialized JSON string in `Value::String`
+// (uniform across engines for the bind side); writes against Postgres
+// JSONB columns add the `$N::jsonb` cast in
+// [`JsonMap::into_simple_expr`]. Reads engine-branch — Postgres reads
+// the column as a `serde_json::Value` (the JSONB native form sea-orm
+// surfaces) and re-decodes into `T`; SQLite reads the TEXT and runs
+// `serde_json::from_str` directly.
+
+impl<T> From<JsonMap<T>> for Value
+where
+    T: Serialize,
+{
+    fn from(value: JsonMap<T>) -> Self {
+        // `From` must be infallible; serde_json::to_string can in theory
+        // fail on cycles or unsupported types, but every `T` we route
+        // through `JsonMap` is well-formed serde data. Fall back to an
+        // empty JSON object so the bind still produces a valid TEXT
+        // payload even in the degenerate case.
+        let s = serde_json::to_string(&value.0).unwrap_or_else(|_| "{}".to_string());
+        Value::String(Some(s))
+    }
+}
+
+impl<T> ValueType for JsonMap<T>
+where
+    T: Serialize + DeserializeOwned,
+{
+    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
+        match v {
+            Value::String(Some(s)) => serde_json::from_str(&s).map(Self).map_err(|_| ValueTypeErr),
+            _ => Err(ValueTypeErr),
+        }
+    }
+
+    fn type_name() -> String {
+        format!("JsonMap<{}>", std::any::type_name::<T>())
+    }
+
+    fn array_type() -> ArrayType {
+        ArrayType::String
+    }
+
+    fn column_type() -> ColumnType {
+        ColumnType::JsonBinary
+    }
+}
+
+impl<T> Nullable for JsonMap<T> {
+    fn null() -> Value {
+        Value::String(None)
+    }
+}
+
+impl<T> TryGetable for JsonMap<T>
+where
+    T: Serialize + DeserializeOwned,
+{
+    fn try_get_by<I: ColIdx>(res: &QueryResult, idx: I) -> Result<Self, TryGetError> {
+        if res.try_as_pg_row().is_some() {
+            // Postgres JSONB surfaces through sea-orm as `serde_json::Value`;
+            // re-decode into the concrete `T` so the wrapper stays generic
+            // over arbitrary payload shapes.
+            let raw = <serde_json::Value as TryGetable>::try_get_by(res, idx)?;
+            serde_json::from_value(raw).map(Self).map_err(|e| {
+                TryGetError::DbErr(DbErr::Type(format!("invalid JsonMap (Postgres): {e}")))
+            })
+        } else {
+            let s = <String as TryGetable>::try_get_by(res, idx)?;
+            serde_json::from_str(&s).map(Self).map_err(|e| {
+                TryGetError::DbErr(DbErr::Type(format!("invalid JsonMap (SQLite): {e}")))
+            })
+        }
+    }
+}
+
+impl<T> JsonMap<T>
+where
+    T: Serialize,
+{
+    /// `SeaORM` `SimpleExpr` that binds the serialized JSON payload
+    /// with the engine-appropriate cast — `::jsonb` on Postgres so a
+    /// string parameter can target a `JSONB` column, plain TEXT on
+    /// `SQLite`.
+    pub fn into_simple_expr(self, backend: DbBackend) -> SimpleExpr {
+        let s = serde_json::to_string(&self.0).unwrap_or_else(|_| "{}".to_string());
+        match backend {
+            DbBackend::Sqlite => SimpleExpr::Value(Value::String(Some(s))),
+            DbBackend::Postgres => {
+                Expr::cust_with_values("$1::jsonb", vec![Value::String(Some(s))])
+            }
+            DbBackend::MySql => unreachable!("mydia-rs is dual-engine SQLite/Postgres only"),
+            _ => unreachable!(
+                "unknown DbBackend variant; mydia-rs is dual-engine SQLite/Postgres only"
+            ),
+        }
     }
 }

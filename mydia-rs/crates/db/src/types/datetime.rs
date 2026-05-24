@@ -16,6 +16,10 @@
 //! through TEXT explicitly keeps Phoenix and mydia-rs writes byte-equal.
 
 use chrono::{DateTime, NaiveDateTime, SecondsFormat, TimeZone, Utc};
+use sea_orm::sea_query::{
+    ArrayType, ColumnType, Expr, Nullable, SimpleExpr, Value, ValueType, ValueTypeErr,
+};
+use sea_orm::{ColIdx, DbBackend, DbErr, QueryResult, TryGetError, TryGetable};
 use serde::{Deserialize, Serialize};
 use sqlx::database::Database;
 use sqlx::decode::Decode;
@@ -163,6 +167,146 @@ impl<'r> Decode<'r, Postgres> for DateTimeMicros {
         Ok(Self(<DateTime<Utc> as Decode<'r, Postgres>>::decode(
             value,
         )?))
+    }
+}
+
+// ---------- SeaORM (engine-aware via wrapper helpers) ----------
+//
+// Both flavors marshal to `Value::String` (RFC3339 with `T`/`Z` and the
+// appropriate sub-second suffix). Writes against Postgres `TIMESTAMPTZ`
+// columns route through [`DateTimeSecs::into_simple_expr`] /
+// [`DateTimeMicros::into_simple_expr`] which inject the `$N::timestamptz`
+// cast; SQLite gets a plain string bind matching Phoenix's Ecto
+// `:utc_datetime[_usec]` on-disk form. Reads engine-branch — Postgres
+// reads `DateTime<Utc>` natively, SQLite reads the Ecto-ISO8601 TEXT and
+// parses with [`parse_ecto_iso8601`].
+
+impl From<DateTimeSecs> for Value {
+    fn from(value: DateTimeSecs) -> Self {
+        Value::String(Some(value.0.to_rfc3339_opts(SecondsFormat::Secs, true)))
+    }
+}
+
+impl ValueType for DateTimeSecs {
+    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
+        match v {
+            Value::String(Some(s)) => parse_ecto_iso8601(&s)
+                .map(DateTimeSecs)
+                .map_err(|_| ValueTypeErr),
+            _ => Err(ValueTypeErr),
+        }
+    }
+
+    fn type_name() -> String {
+        "DateTimeSecs".to_string()
+    }
+
+    fn array_type() -> ArrayType {
+        ArrayType::String
+    }
+
+    fn column_type() -> ColumnType {
+        ColumnType::TimestampWithTimeZone
+    }
+}
+
+impl Nullable for DateTimeSecs {
+    fn null() -> Value {
+        Value::String(None)
+    }
+}
+
+impl TryGetable for DateTimeSecs {
+    fn try_get_by<I: ColIdx>(res: &QueryResult, idx: I) -> Result<Self, TryGetError> {
+        if res.try_as_pg_row().is_some() {
+            <DateTime<Utc> as TryGetable>::try_get_by(res, idx).map(Self)
+        } else {
+            let s = <String as TryGetable>::try_get_by(res, idx)?;
+            parse_ecto_iso8601(&s)
+                .map(Self)
+                .map_err(|e| TryGetError::DbErr(DbErr::Type(format!("invalid DateTimeSecs: {e}"))))
+        }
+    }
+}
+
+impl DateTimeSecs {
+    /// `SeaORM` `SimpleExpr` that binds this timestamp against either
+    /// engine, applying the `$N::timestamptz` cast on Postgres where
+    /// the wrapper's string form would otherwise fail to coerce.
+    pub fn into_simple_expr(self, backend: DbBackend) -> SimpleExpr {
+        let s = self.0.to_rfc3339_opts(SecondsFormat::Secs, true);
+        timestamptz_simple_expr(backend, s)
+    }
+}
+
+impl From<DateTimeMicros> for Value {
+    fn from(value: DateTimeMicros) -> Self {
+        Value::String(Some(value.0.to_rfc3339_opts(SecondsFormat::Micros, true)))
+    }
+}
+
+impl ValueType for DateTimeMicros {
+    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
+        match v {
+            Value::String(Some(s)) => parse_ecto_iso8601(&s)
+                .map(DateTimeMicros)
+                .map_err(|_| ValueTypeErr),
+            _ => Err(ValueTypeErr),
+        }
+    }
+
+    fn type_name() -> String {
+        "DateTimeMicros".to_string()
+    }
+
+    fn array_type() -> ArrayType {
+        ArrayType::String
+    }
+
+    fn column_type() -> ColumnType {
+        ColumnType::TimestampWithTimeZone
+    }
+}
+
+impl Nullable for DateTimeMicros {
+    fn null() -> Value {
+        Value::String(None)
+    }
+}
+
+impl TryGetable for DateTimeMicros {
+    fn try_get_by<I: ColIdx>(res: &QueryResult, idx: I) -> Result<Self, TryGetError> {
+        if res.try_as_pg_row().is_some() {
+            <DateTime<Utc> as TryGetable>::try_get_by(res, idx).map(Self)
+        } else {
+            let s = <String as TryGetable>::try_get_by(res, idx)?;
+            parse_ecto_iso8601(&s).map(Self).map_err(|e| {
+                TryGetError::DbErr(DbErr::Type(format!("invalid DateTimeMicros: {e}")))
+            })
+        }
+    }
+}
+
+impl DateTimeMicros {
+    /// `SeaORM` `SimpleExpr` that binds this microsecond-precision
+    /// timestamp against either engine. Same cast handling as
+    /// [`DateTimeSecs::into_simple_expr`].
+    pub fn into_simple_expr(self, backend: DbBackend) -> SimpleExpr {
+        let s = self.0.to_rfc3339_opts(SecondsFormat::Micros, true);
+        timestamptz_simple_expr(backend, s)
+    }
+}
+
+fn timestamptz_simple_expr(backend: DbBackend, value: String) -> SimpleExpr {
+    match backend {
+        DbBackend::Sqlite => SimpleExpr::Value(Value::String(Some(value))),
+        DbBackend::Postgres => {
+            Expr::cust_with_values("$1::timestamptz", vec![Value::String(Some(value))])
+        }
+        DbBackend::MySql => unreachable!("mydia-rs is dual-engine SQLite/Postgres only"),
+        _ => {
+            unreachable!("unknown DbBackend variant; mydia-rs is dual-engine SQLite/Postgres only")
+        }
     }
 }
 
