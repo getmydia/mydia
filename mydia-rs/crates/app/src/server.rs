@@ -123,19 +123,15 @@ mod tests {
     }
 
     async fn test_state_and_session() -> (WebState, SessionLayer) {
-        use mydia_rs_db::Db;
         use mydia_rs_jobs::storage::JobStorage;
         use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
         use mydia_rs_pubsub::Pubsub;
         use mydia_rs_web::session;
-        use sqlx::sqlite::SqlitePoolOptions;
+        use sea_orm::Database;
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
+        let db = Database::connect("sqlite::memory:")
             .await
             .expect("in-memory sqlite");
-        let db = Db::Sqlite(pool);
         session::migrate(&db).await.expect("tower-sessions migrate");
         let pubsub = Pubsub::new();
         let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);

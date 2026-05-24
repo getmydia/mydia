@@ -52,7 +52,9 @@ use mydia_rs_app::server;
 #[cfg(feature = "server")]
 use mydia_rs_config::{tracing_setup, Config};
 #[cfg(feature = "server")]
-use mydia_rs_db::{connect_from_config, schema_check, Db, SchemaCheckOutcome};
+use mydia_rs_db::{connect_from_config, schema_check, DatabaseConnection, SchemaCheckOutcome};
+#[cfg(feature = "server")]
+use sea_orm::DbBackend;
 
 #[cfg(feature = "server")]
 use mydia_rs_downloads::{DownloadService, JobManager, ServiceConfig as DownloadServiceConfig};
@@ -100,7 +102,7 @@ struct Cli {
 #[cfg(feature = "server")]
 struct BootState {
     web_state: WebState,
-    db: Db,
+    db: DatabaseConnection,
     /// Held for the lifetime of the process so the lock row stays
     /// claimed. `RuntimeLockHandle` releases on `Drop`, which only
     /// fires on clean shutdown. dx's full-rebuild SIGTERM gives us
@@ -234,7 +236,12 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
         "true" | "1" | "yes" | "on"
     );
 
-    let lock = if lock_enabled {
+    // runtime_lock is SQLite-only post-U9. On Postgres, mutual
+    // exclusion is delegated to Phoenix's own advisory-lock surface;
+    // mydia-rs skips its lock-row claim entirely. This is the one
+    // allowed runtime backend check in the codebase, gating an entire
+    // feature rather than constructing per-engine SQL.
+    let lock = if lock_enabled && db.get_database_backend() == DbBackend::Sqlite {
         match runtime_lock::acquire(&db).await {
             Ok(handle) => Some(handle),
             Err(RuntimeLockError::Held) => {
@@ -246,10 +253,15 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
                 return Err(anyhow::Error::new(err).context("failed to acquire runtime lock"));
             }
         }
-    } else {
+    } else if !lock_enabled {
         tracing::warn!(
             "MYDIA_RS_DEV_SKIP_LOCK=true — boot-time mutual-exclusion lock skipped. \
              DEV ONLY; production must not set this."
+        );
+        None
+    } else {
+        tracing::info!(
+            "runtime_lock skipped on non-SQLite backend; Phoenix advisory-lock owns Postgres mutual exclusion"
         );
         None
     };
@@ -376,7 +388,7 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
 #[cfg(feature = "server")]
 fn maybe_boot_p2p(
     config: &Config,
-    db: &Db,
+    db: &DatabaseConnection,
     streaming_supervisor: mydia_rs_streaming::Supervisor,
     graphql_schema: mydia_rs_graphql::MydiaSchema,
 ) -> Option<P2pServer> {

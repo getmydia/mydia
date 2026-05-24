@@ -32,13 +32,14 @@ default = ["server"]
 server = [
     "dep:tokio",
     "dep:clap",
-    "dep:sqlx",
+    "dep:sea-orm",
     "dep:chrono",
     "dep:thiserror",
     "dep:anyhow",
     "dep:mydia-rs-auth",
     "dep:mydia-rs-config",
     "dep:mydia-rs-db",
+    "dep:mydia-rs-entities",
     "dep:mydia-rs-graphql",
     "dep:mydia-rs-p2p",
     "dep:mydia-rs-pubsub",
@@ -65,23 +66,19 @@ tracing.workspace = true
 # builds don't try to compile them.
 tokio = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
-sqlx = { version = "0.8", optional = true, default-features = false, features = [
-    "runtime-tokio",
-    "sqlite",
-    "postgres",
-    "chrono",
-] }
+sea-orm = { workspace = true, optional = true }
 chrono = { version = "0.4", optional = true, default-features = false, features = [
     "clock",
 ] }
 thiserror = { workspace = true, optional = true }
 # dioxus::serve's closure must return Result<Router, anyhow::Error>; we
-# adopt anyhow in the boot path so figment / sqlx / runtime-lock errors
+# adopt anyhow in the boot path so figment / SeaORM / runtime-lock errors
 # coerce cleanly via `?`. Server-only — wasm bin never sees it.
 anyhow = { workspace = true, optional = true }
 mydia-rs-auth = { path = "../auth", optional = true }
 mydia-rs-config = { path = "../config", optional = true }
 mydia-rs-db = { path = "../db", optional = true }
+mydia-rs-entities = { path = "../entities", optional = true }
 mydia-rs-graphql = { path = "../graphql", optional = true }
 mydia-rs-p2p = { path = "../p2p", optional = true }
 mydia-rs-pubsub = { path = "../pubsub", optional = true }

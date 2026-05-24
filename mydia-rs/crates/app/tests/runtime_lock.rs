@@ -1,21 +1,23 @@
-// Tests: the stale-heartbeat scenario backdates the lock row directly
-// via raw UPDATE — tier-(b) by category (SQLite-only `mydia_runtime_lock`
-// table, can't macro-check).
-#![allow(clippy::disallowed_methods)]
-
 //! Integration tests for the boot-time mutual exclusion lock.
 //!
-//! `SQLite` path covered end-to-end via tempfile DBs. Postgres path is
-//! gated on `DATABASE_URL` the same way the db crate's `postgres_smoke`
-//! tests are; the CI matrix exercises it.
+//! `SQLite`-only post-U9 — runtime_lock is now a SQLite-only feature
+//! gated at the call site. The pre-U9 Postgres path used
+//! `pg_try_advisory_lock` against a held connection; the rewrite drops
+//! that surface because Phoenix's advisory-lock path owns Postgres
+//! mutual exclusion. Per-engine call-site gating happens in
+//! `crates/app/src/main.rs::bootstrap`.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use mydia_rs_app::runtime_lock::{self, RuntimeLockError};
 use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
-use mydia_rs_db::{connect_from_config, Db};
+use mydia_rs_db::{connect_from_config, DatabaseConnection};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tempfile::TempDir;
+
+use mydia_rs_db::types::DateTimeSecs;
+use mydia_rs_entities::mydia_runtime_lock;
 
 fn sqlite_config(path: &Path) -> Config {
     Config {
@@ -30,7 +32,7 @@ fn sqlite_config(path: &Path) -> Config {
     }
 }
 
-async fn fresh_sqlite_pool() -> (Db, TempDir, PathBuf) {
+async fn fresh_sqlite_pool() -> (DatabaseConnection, TempDir, PathBuf) {
     let tmp = tempfile::tempdir().expect("tempdir");
     let path = tmp.path().join("lock.db");
     let cfg = sqlite_config(&path);
@@ -38,7 +40,7 @@ async fn fresh_sqlite_pool() -> (Db, TempDir, PathBuf) {
     (db, tmp, path)
 }
 
-async fn pool_for(path: &Path) -> Db {
+async fn pool_for(path: &Path) -> DatabaseConnection {
     let cfg = sqlite_config(path);
     connect_from_config(&cfg).await.expect("connect")
 }
@@ -82,15 +84,18 @@ async fn stale_heartbeat_is_swept_and_lock_can_be_reclaimed() {
 
     // Simulate a stale heartbeat from a crashed peer by reaching into
     // the lock row and backdating it past the STALE_AFTER window.
-    let pool = db1.as_sqlite().expect("sqlite");
-    sqlx::query(
-        "UPDATE mydia_runtime_lock
-            SET heartbeat_at = '2000-01-01T00:00:00Z'
-            WHERE lock_key = 'mydia-rs-singleton'",
-    )
-    .execute(pool)
-    .await
-    .expect("backdate");
+    let backend = db1.get_database_backend();
+    let stale =
+        DateTimeSecs::from(chrono::DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z").unwrap().with_timezone(&chrono::Utc));
+    mydia_runtime_lock::Entity::update_many()
+        .col_expr(
+            mydia_runtime_lock::Column::HeartbeatAt,
+            stale.into_simple_expr(backend),
+        )
+        .filter(mydia_runtime_lock::Column::LockKey.eq("mydia-rs-singleton"))
+        .exec(&db1)
+        .await
+        .expect("backdate");
 
     let db2 = pool_for(&path).await;
     let reclaimed = runtime_lock::acquire(&db2).await.expect("reclaim");
@@ -119,51 +124,4 @@ async fn release_is_safe_to_call_after_normal_lifetime() {
     let (db, _tmp, _path) = fresh_sqlite_pool().await;
     let lock = runtime_lock::acquire(&db).await.expect("acquire");
     lock.release().await.expect("release ok");
-}
-
-// ---- Postgres path (gated on DATABASE_URL) ----
-
-fn postgres_url() -> Option<String> {
-    std::env::var("DATABASE_URL")
-        .ok()
-        .filter(|u| u.starts_with("postgres://") || u.starts_with("postgresql://"))
-}
-
-async fn postgres_pool() -> Option<Db> {
-    let url = postgres_url()?;
-    let cfg = Config {
-        database: DatabaseConfig {
-            db_type: DatabaseType::Postgres,
-            url: Some(url),
-            path: None,
-            pool_size: 4,
-            ..DatabaseConfig::default()
-        },
-        ..Config::default()
-    };
-    connect_from_config(&cfg).await.ok()
-}
-
-#[tokio::test]
-async fn postgres_advisory_lock_held_then_released() {
-    let Some(db1) = postgres_pool().await else {
-        return;
-    };
-    let lock = runtime_lock::acquire(&db1).await.expect("first acquire");
-
-    let Some(db2) = postgres_pool().await else {
-        return;
-    };
-    let err = runtime_lock::acquire(&db2)
-        .await
-        .expect_err("second must fail");
-    assert!(matches!(err, RuntimeLockError::Held));
-
-    lock.release().await.expect("release");
-
-    let Some(db3) = postgres_pool().await else {
-        return;
-    };
-    let third = runtime_lock::acquire(&db3).await.expect("after release");
-    third.release().await.expect("release");
 }

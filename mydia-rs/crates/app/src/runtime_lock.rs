@@ -1,12 +1,3 @@
-// Opt this module into the disallowed-methods lint. The SQLite arm
-// writes to `mydia_runtime_lock` — a table mydia-rs creates itself
-// (the ONE schema write the rewrite is allowed to make per the plan's
-// scope boundary). It doesn't exist in the Postgres prepare DB, so
-// those queries can't go through `sqlx::query!`. They stay runtime
-// with a documented `#[allow]` per call. The Postgres pg_advisory_lock
-// queries DO go through the macros — those are tier (a).
-#![warn(clippy::disallowed_methods)]
-
 //! Boot-time mutual exclusion lock.
 //!
 //! Prevents two mydia-rs instances (or, once Phoenix grows the
@@ -17,37 +8,35 @@
 //! state (orphaned HLS sessions, double-claimed pairing codes,
 //! conflicting Oban-vs-apalis cron firings).
 //!
-//! - **Postgres**: `pg_try_advisory_lock(<LOCK_KEY>)` against a
-//!   dedicated long-lived session. The lock releases automatically
-//!   when the session ends, so no heartbeat is required. Phoenix
-//!   doesn't take this advisory lock today, so the guard is one-way:
-//!   mydia-rs refuses when another mydia-rs is alive, but does not
-//!   yet refuse against a running Phoenix.
+//! **Engine scope:** `SQLite`-only. The `mydia_runtime_lock` table is
+//! the one schema write mydia-rs performs against the shared database,
+//! and only via `CREATE TABLE IF NOT EXISTS` (idempotent, doesn't
+//! collide with anything Phoenix owns). On Postgres, mutual exclusion
+//! is delegated to Phoenix's own advisory-lock surface; the mydia-rs
+//! boot path guards `acquire` behind a `db.get_database_backend() ==
+//! DbBackend::Sqlite` check at the call site (the one allowed runtime
+//! backend check in the codebase, gating an entire feature).
 //!
-//! - **`SQLite`**: `mydia_runtime_lock` table with a single row keyed
-//!   on `LOCK_KEY_NAME`. INSERT-with-PRIMARY-KEY is the atomic claim;
-//!   if it fails because the row exists, we check the recorded
-//!   `heartbeat_at` against `STALE_AFTER` and either give up or
-//!   reclaim. A background task heartbeats every `HEARTBEAT_EVERY`;
-//!   on clean `release().await`, the row is `DELETEd`. This is the one
-//!   schema write mydia-rs performs against the shared database, and
-//!   only via `CREATE TABLE IF NOT EXISTS` (idempotent, doesn't
-//!   collide with anything Phoenix owns).
+//! **Mechanism (`SQLite`):** `mydia_runtime_lock` table with a single
+//! row keyed on `LOCK_KEY_NAME`. INSERT-with-PRIMARY-KEY is the atomic
+//! claim; if it fails because the row exists, we check the recorded
+//! `heartbeat_at` against `STALE_AFTER` and either give up or reclaim.
+//! A background task heartbeats every `HEARTBEAT_EVERY`; on clean
+//! `release().await`, the row is `DELETEd`.
 
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use sqlx::pool::PoolConnection;
-use sqlx::Postgres;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, DbErr, EntityTrait, QueryFilter,
+    Set, Statement,
+};
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 
-use mydia_rs_db::Db;
-
-/// Postgres advisory-lock key. Constant so every mydia-rs build
-/// competes for the same slot. The high bits are ASCII "`mydia_rs`"
-/// for human readability in `pg_locks`.
-const LOCK_KEY: i64 = 0x6d79_6469_615f_7273;
+use mydia_rs_db::types::DateTimeSecs;
+use mydia_rs_entities::mydia_runtime_lock;
 
 /// `SQLite` lock-row primary key.
 const LOCK_KEY_NAME: &str = "mydia-rs-singleton";
@@ -65,92 +54,53 @@ pub enum RuntimeLockError {
     Held,
 
     #[error("database error while acquiring runtime lock: {0}")]
-    Sqlx(Box<sqlx::Error>),
+    Db(Box<DbErr>),
 
     #[error("runtime lock failed: {0}")]
     Other(String),
 }
 
-impl From<sqlx::Error> for RuntimeLockError {
-    fn from(err: sqlx::Error) -> Self {
-        Self::Sqlx(Box::new(err))
+impl From<DbErr> for RuntimeLockError {
+    fn from(err: DbErr) -> Self {
+        Self::Db(Box::new(err))
     }
 }
 
-/// Handle owning the acquired lock. Holds the backing connection
-/// (Postgres) or the heartbeat task (`SQLite`) until either
-/// [`Self::release`] is awaited or it is dropped.
+/// Handle owning the acquired `SQLite` lock. Holds the heartbeat task
+/// until either [`Self::release`] is awaited or it is dropped.
 ///
 /// `release().await` is the clean path. On `Drop` we best-effort
-/// abort the heartbeat task / drop the connection; the `SQLite` row
-/// remains until the next process times it out via `STALE_AFTER`.
+/// abort the heartbeat task; the `SQLite` row remains until the next
+/// process times it out via `STALE_AFTER`.
 #[must_use = "lock is released on drop; bind it to a variable for the lifetime of the process"]
 pub struct RuntimeLockHandle {
-    inner: Inner,
+    heartbeat: Option<JoinHandle<()>>,
+    db: DatabaseConnection,
+    released: bool,
 }
 
 impl std::fmt::Debug for RuntimeLockHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.inner {
-            Inner::Postgres(_) => f
-                .debug_struct("RuntimeLockHandle")
-                .field("backend", &"postgres")
-                .finish(),
-            Inner::Sqlite { released, .. } => f
-                .debug_struct("RuntimeLockHandle")
-                .field("backend", &"sqlite")
-                .field("released", released)
-                .finish(),
-        }
+        f.debug_struct("RuntimeLockHandle")
+            .field("backend", &"sqlite")
+            .field("released", &self.released)
+            .finish()
     }
 }
 
-enum Inner {
-    Postgres(Option<PoolConnection<Postgres>>),
-    Sqlite {
-        heartbeat: Option<JoinHandle<()>>,
-        pool: sqlx::SqlitePool,
-        released: bool,
-    },
-}
-
 impl RuntimeLockHandle {
-    /// Cleanly release the lock. Heartbeats stop, the lock row (sqlite)
-    /// or session (postgres) is dropped, and any backing connection
-    /// returns to the pool. Idempotent.
+    /// Cleanly release the lock. The heartbeat stops and the lock row is
+    /// deleted. Idempotent.
     pub async fn release(mut self) -> Result<(), RuntimeLockError> {
-        match &mut self.inner {
-            Inner::Postgres(conn) => {
-                if let Some(mut c) = conn.take() {
-                    // pg_advisory_unlock is best-effort; closing the
-                    // connection releases the lock unconditionally.
-                    // `SELECT pg_advisory_unlock(...)` is treated as a
-                    // row-returning query by the macro, so use
-                    // `fetch_optional` (we don't care about the bool).
-                    let _ = sqlx::query_scalar!("SELECT pg_advisory_unlock($1)", LOCK_KEY)
-                        .fetch_optional(&mut *c)
-                        .await;
-                }
-            }
-            Inner::Sqlite {
-                heartbeat,
-                pool,
-                released,
-            } => {
-                if let Some(handle) = heartbeat.take() {
-                    handle.abort();
-                }
-                if !*released {
-                    // SQLite-only table; not in PG prepare schema so can't
-                    // be macro-checked. Runtime form is the only option.
-                    #[allow(clippy::disallowed_methods)]
-                    sqlx::query("DELETE FROM mydia_runtime_lock WHERE lock_key = ?")
-                        .bind(LOCK_KEY_NAME)
-                        .execute(&*pool)
-                        .await?;
-                    *released = true;
-                }
-            }
+        if let Some(handle) = self.heartbeat.take() {
+            handle.abort();
+        }
+        if !self.released {
+            mydia_runtime_lock::Entity::delete_many()
+                .filter(mydia_runtime_lock::Column::LockKey.eq(LOCK_KEY_NAME))
+                .exec(&self.db)
+                .await?;
+            self.released = true;
         }
         Ok(())
     }
@@ -158,10 +108,8 @@ impl RuntimeLockHandle {
 
 impl Drop for RuntimeLockHandle {
     fn drop(&mut self) {
-        if let Inner::Sqlite { heartbeat, .. } = &mut self.inner {
-            if let Some(handle) = heartbeat.take() {
-                handle.abort();
-            }
+        if let Some(handle) = self.heartbeat.take() {
+            handle.abort();
         }
     }
 }
@@ -169,52 +117,45 @@ impl Drop for RuntimeLockHandle {
 /// Try to acquire the singleton runtime lock for the lifetime of the
 /// returned handle. Returns [`RuntimeLockError::Held`] when another
 /// instance already holds it.
-pub async fn acquire(db: &Db) -> Result<RuntimeLockHandle, RuntimeLockError> {
-    match db {
-        Db::Postgres(pool) => acquire_postgres(pool.clone()).await,
-        Db::Sqlite(pool) => acquire_sqlite(pool.clone()).await,
-    }
-}
-
-async fn acquire_postgres(pool: sqlx::PgPool) -> Result<RuntimeLockHandle, RuntimeLockError> {
-    let mut conn = pool.acquire().await?;
-    let got: Option<bool> = sqlx::query_scalar!("SELECT pg_try_advisory_lock($1)", LOCK_KEY)
-        .fetch_one(&mut *conn)
-        .await?;
-
-    if !got.unwrap_or(false) {
-        return Err(RuntimeLockError::Held);
+///
+/// **Caller responsibility:** this function is `SQLite`-only. The
+/// caller (currently `mydia-rs-app::main::bootstrap`) gates the call
+/// with `db.get_database_backend() == DbBackend::Sqlite` — the one
+/// allowed runtime backend check in the codebase, gating the entire
+/// feature rather than constructing per-engine SQL. Invoking on
+/// Postgres returns [`RuntimeLockError::Other`].
+pub async fn acquire(db: &DatabaseConnection) -> Result<RuntimeLockHandle, RuntimeLockError> {
+    if db.get_database_backend() != DbBackend::Sqlite {
+        return Err(RuntimeLockError::Other(
+            "runtime_lock is SQLite-only; caller must gate on db.get_database_backend()".into(),
+        ));
     }
 
-    tracing::info!(lock_key = LOCK_KEY, "acquired postgres advisory lock");
-    Ok(RuntimeLockHandle {
-        inner: Inner::Postgres(Some(conn)),
-    })
-}
-
-async fn acquire_sqlite(pool: sqlx::SqlitePool) -> Result<RuntimeLockHandle, RuntimeLockError> {
-    ensure_lock_table(&pool).await?;
+    ensure_lock_table(db).await?;
     let now = Utc::now();
-    sweep_stale(&pool, now).await?;
-    insert_claim(&pool, now).await?;
+    sweep_stale(db, now).await?;
+    insert_claim(db, now).await?;
 
-    let heartbeat = spawn_heartbeat(pool.clone());
+    let heartbeat = spawn_heartbeat(db.clone());
 
     tracing::info!("acquired sqlite runtime lock");
     Ok(RuntimeLockHandle {
-        inner: Inner::Sqlite {
-            heartbeat: Some(heartbeat),
-            pool,
-            released: false,
-        },
+        heartbeat: Some(heartbeat),
+        db: db.clone(),
+        released: false,
     })
 }
 
-async fn ensure_lock_table(pool: &sqlx::SqlitePool) -> Result<(), RuntimeLockError> {
-    // DDL — sqlx macros cannot validate this regardless of dialect.
-    // Plus the table is SQLite-only (Phoenix uses pg_advisory_lock on PG).
-    #[allow(clippy::disallowed_methods)]
-    sqlx::query(
+async fn ensure_lock_table(db: &DatabaseConnection) -> Result<(), RuntimeLockError> {
+    // TODO(U18): replace this raw DDL with
+    // `Schema::create_table_from_entity(mydia_runtime_lock::Entity)`.
+    // U9 deliberately leaves the CREATE TABLE in raw form so the
+    // SeaORM-native DDL emission lands as one focused unit alongside
+    // the tower-sessions table conversion. Until then, the schema
+    // shape is mirrored by hand against the entity in
+    // `mydia-rs-entities/src/mydia_runtime_lock.rs`.
+    let stmt = Statement::from_string(
+        DbBackend::Sqlite,
         "CREATE TABLE IF NOT EXISTS mydia_runtime_lock (
             lock_key TEXT PRIMARY KEY,
             pid INTEGER NOT NULL,
@@ -222,71 +163,72 @@ async fn ensure_lock_table(pool: &sqlx::SqlitePool) -> Result<(), RuntimeLockErr
             backend TEXT NOT NULL,
             started_at TEXT NOT NULL,
             heartbeat_at TEXT NOT NULL
-        )",
-    )
-    .execute(pool)
-    .await?;
+        )"
+        .to_string(),
+    );
+    db.execute(stmt).await?;
     Ok(())
 }
 
-async fn sweep_stale(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(), RuntimeLockError> {
+async fn sweep_stale(db: &DatabaseConnection, now: DateTime<Utc>) -> Result<(), RuntimeLockError> {
     let cutoff = now - chrono::Duration::from_std(STALE_AFTER).expect("stale threshold fits");
-    // SQLite-only table; can't macro-check.
-    #[allow(clippy::disallowed_methods)]
-    sqlx::query("DELETE FROM mydia_runtime_lock WHERE lock_key = ? AND heartbeat_at < ?")
-        .bind(LOCK_KEY_NAME)
-        .bind(cutoff.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
-        .execute(pool)
+    let cutoff_wrapper = DateTimeSecs::from(cutoff);
+    let backend = db.get_database_backend();
+    mydia_runtime_lock::Entity::delete_many()
+        .filter(mydia_runtime_lock::Column::LockKey.eq(LOCK_KEY_NAME))
+        .filter(
+            Expr::col(mydia_runtime_lock::Column::HeartbeatAt)
+                .lt(cutoff_wrapper.into_simple_expr(backend)),
+        )
+        .exec(db)
         .await?;
     Ok(())
 }
 
-async fn insert_claim(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(), RuntimeLockError> {
-    let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let pid = i64::from(std::process::id());
-    let hostname = hostname();
+async fn insert_claim(db: &DatabaseConnection, now: DateTime<Utc>) -> Result<(), RuntimeLockError> {
+    let now_wrapper = DateTimeSecs::from(now);
+    let pid = i32::try_from(std::process::id()).unwrap_or(i32::MAX);
+    let hostname_value = hostname();
 
-    // SQLite-only table; can't macro-check.
-    #[allow(clippy::disallowed_methods)]
-    let result = sqlx::query(
-        "INSERT INTO mydia_runtime_lock
-            (lock_key, pid, hostname, backend, started_at, heartbeat_at)
-         VALUES (?, ?, ?, ?, ?, ?)",
-    )
-    .bind(LOCK_KEY_NAME)
-    .bind(pid)
-    .bind(hostname.as_deref())
-    .bind("mydia-rs")
-    .bind(&now_iso)
-    .bind(&now_iso)
-    .execute(pool)
-    .await;
+    let am = mydia_runtime_lock::ActiveModel {
+        lock_key: Set(LOCK_KEY_NAME.to_owned()),
+        pid: Set(pid),
+        hostname: Set(hostname_value),
+        backend: Set("mydia-rs".to_owned()),
+        started_at: Set(now_wrapper),
+        heartbeat_at: Set(now_wrapper),
+    };
 
-    match result {
+    match mydia_rs_db::insert_active_model(am, db).await {
         Ok(_) => Ok(()),
-        Err(sqlx::Error::Database(dberr)) => {
+        Err(err) => {
             // SQLite raises a UNIQUE / PRIMARY KEY violation when the
             // row already exists. That's exactly the "another process
             // holds the lock and it isn't stale enough to sweep" path.
-            if dberr
-                .code()
-                .as_deref()
-                .is_some_and(|c| c.starts_with("2067") || c.starts_with("1555"))
-                || dberr.message().contains("UNIQUE")
-                || dberr.message().contains("PRIMARY KEY")
-            {
+            // SeaORM bubbles the sqlx error message through `DbErr::Exec`
+            // / `DbErr::Query`, so we sniff the rendered string for the
+            // SQLite-specific markers.
+            if is_unique_violation(&err) {
                 Err(RuntimeLockError::Held)
             } else {
-                Err(RuntimeLockError::Sqlx(Box::new(sqlx::Error::Database(
-                    dberr,
-                ))))
+                Err(RuntimeLockError::Db(Box::new(err)))
             }
         }
-        Err(err) => Err(RuntimeLockError::Sqlx(Box::new(err))),
     }
 }
 
-fn spawn_heartbeat(pool: sqlx::SqlitePool) -> JoinHandle<()> {
+fn is_unique_violation(err: &DbErr) -> bool {
+    let msg = err.to_string();
+    msg.contains("UNIQUE")
+        || msg.contains("PRIMARY KEY")
+        // SQLite error codes 2067 (SQLITE_CONSTRAINT_UNIQUE) and
+        // 1555 (SQLITE_CONSTRAINT_PRIMARYKEY) — surfaced via sqlx's
+        // `code` propagation when present.
+        || msg.contains("2067")
+        || msg.contains("1555")
+}
+
+fn spawn_heartbeat(db: DatabaseConnection) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut ticker = interval(HEARTBEAT_EVERY);
         // First tick fires immediately; skip it so we don't UPDATE
@@ -294,15 +236,16 @@ fn spawn_heartbeat(pool: sqlx::SqlitePool) -> JoinHandle<()> {
         ticker.tick().await;
         loop {
             ticker.tick().await;
-            let now_iso = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-            // SQLite-only table; can't macro-check.
-            #[allow(clippy::disallowed_methods)]
-            let res =
-                sqlx::query("UPDATE mydia_runtime_lock SET heartbeat_at = ? WHERE lock_key = ?")
-                    .bind(&now_iso)
-                    .bind(LOCK_KEY_NAME)
-                    .execute(&pool)
-                    .await;
+            let backend = db.get_database_backend();
+            let now_wrapper = DateTimeSecs::from(Utc::now());
+            let res = mydia_runtime_lock::Entity::update_many()
+                .col_expr(
+                    mydia_runtime_lock::Column::HeartbeatAt,
+                    now_wrapper.into_simple_expr(backend),
+                )
+                .filter(mydia_runtime_lock::Column::LockKey.eq(LOCK_KEY_NAME))
+                .exec(&db)
+                .await;
             if let Err(err) = res {
                 tracing::warn!(%err, "runtime-lock heartbeat update failed");
             }
