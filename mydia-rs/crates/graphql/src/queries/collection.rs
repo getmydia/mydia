@@ -109,26 +109,26 @@ fn require_user<'a>(ctx: &'a Context<'_>) -> async_graphql::Result<&'a CurrentUs
     maybe_user(ctx).ok_or_else(|| async_graphql::Error::new("Not authenticated"))
 }
 
-fn build_recently_added_item(row: &mydia_rs_models::MediaItem) -> RecentlyAddedItem {
-    let type_ = row
-        .r#type
-        .as_deref()
-        .and_then(MediaType::from_db_str)
-        .unwrap_or(MediaType::Movie);
-    let id = match row.r#type.as_deref() {
-        Some("tv_show") => NodeId::TvShow(NodeRef::Str(row.id.0.to_string())).encode(),
-        Some("episode") => NodeId::Episode(NodeRef::Str(row.id.0.to_string())).encode(),
+fn build_recently_added_item(row: &mydia_rs_entities::media_items::Model) -> RecentlyAddedItem {
+    let type_ = MediaType::from_db_str(&row.r#type).unwrap_or(MediaType::Movie);
+    let id = match row.r#type.as_str() {
+        "tv_show" => NodeId::TvShow(NodeRef::Str(row.id.0.to_string())).encode(),
+        "episode" => NodeId::Episode(NodeRef::Str(row.id.0.to_string())).encode(),
         _ => NodeId::Movie(NodeRef::Str(row.id.0.to_string())).encode(),
     };
-    let artwork = row.metadata.as_ref().and_then(|m| {
-        let poster =
-            m.0.get("poster_path")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned);
-        let backdrop =
-            m.0.get("backdrop_path")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned);
+    let metadata_value: Option<serde_json::Value> = row
+        .metadata
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok());
+    let artwork = metadata_value.as_ref().and_then(|m| {
+        let poster = m
+            .get("poster_path")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        let backdrop = m
+            .get("backdrop_path")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
         if poster.is_none() && backdrop.is_none() {
             None
         } else {
@@ -142,7 +142,7 @@ fn build_recently_added_item(row: &mydia_rs_models::MediaItem) -> RecentlyAddedI
     RecentlyAddedItem {
         id: ID(id),
         type_,
-        title: row.title.clone().unwrap_or_default(),
+        title: row.title.clone(),
         year: row.year,
         artwork,
         added_at: row.inserted_at.0,

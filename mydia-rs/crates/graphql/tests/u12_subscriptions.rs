@@ -4,55 +4,22 @@
 //! async-graphql exposes subscriptions through `Schema::execute_stream`,
 //! which returns a stream of Responses. The tests drive the bus via
 //! `Pubsub::publish` and assert the subscriber sees the same payload.
-//!
-//! Coverage:
-//! - happy path: publish → receive
-//! - topic matches the encoded global node ID exactly (Phoenix shape)
-//! - `device_status`: subscriber can watch their own user, gets blocked
-//!   from another user (non-admin)
-//! - admin can subscribe to any `user_id`'s device events
-//! - subscribe without auth is rejected
-//! - malformed payloads are dropped (not crash)
-//! - subscription on an episode topic resolves only episode events
+
+mod common;
 
 use std::time::Duration;
 
 use async_graphql::futures_util::StreamExt;
 use async_graphql::{Request, Variables};
 use mydia_rs_auth::role::Role;
-use mydia_rs_db::Db;
 use mydia_rs_graphql::context::{CurrentUser, GraphqlAppState, GraphqlRequestContext};
 use mydia_rs_graphql::{build_schema, MydiaSchema};
 use mydia_rs_pubsub::{Event, Pubsub};
+use sea_orm::DatabaseConnection;
 use serde_json::json;
 use uuid::Uuid;
 
-const SCHEMA_SQL: &str = include_str!("fixtures/u11_schema.sql");
-
-async fn fresh_db() -> (Db, tempfile::TempDir) {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("u12.db");
-    let config = mydia_rs_config::Config {
-        database: mydia_rs_config::DatabaseConfig {
-            db_type: mydia_rs_config::DatabaseType::Sqlite,
-            url: None,
-            path: Some(path.to_string_lossy().into_owned()),
-            pool_size: 2,
-            ..mydia_rs_config::DatabaseConfig::default()
-        },
-        ..mydia_rs_config::Config::default()
-    };
-    let db = mydia_rs_db::connect_from_config(&config).await.unwrap();
-    let pool = db.as_sqlite().unwrap();
-    for stmt in SCHEMA_SQL.split(";\n") {
-        let trimmed = stmt.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        sqlx::query(trimmed).execute(pool).await.unwrap();
-    }
-    (db, tmp)
-}
+use common::fresh_playback_db;
 
 fn user(id: Uuid, username: &str, role: Role) -> CurrentUser {
     CurrentUser {
@@ -62,7 +29,7 @@ fn user(id: Uuid, username: &str, role: Role) -> CurrentUser {
     }
 }
 
-fn build_state_with_pubsub(db: Db) -> (GraphqlAppState, Pubsub) {
+fn build_state_with_pubsub(db: DatabaseConnection) -> (GraphqlAppState, Pubsub) {
     let bus = Pubsub::new();
     let state = GraphqlAppState::with_pubsub(db, bus.clone());
     (state, bus)
@@ -102,7 +69,7 @@ fn progress_payload(position: i32, duration: i32) -> serde_json::Value {
 
 #[tokio::test]
 async fn progress_subscription_yields_event_for_movie_topic() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let alice = user(Uuid::new_v4(), "alice", Role::User);
@@ -146,7 +113,7 @@ async fn progress_subscription_yields_event_for_movie_topic() {
 
 #[tokio::test]
 async fn progress_subscription_filters_by_topic() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let alice = user(Uuid::new_v4(), "alice", Role::User);
@@ -162,8 +129,7 @@ async fn progress_subscription_filters_by_topic() {
     .data(GraphqlRequestContext::with_user(alice));
     let mut stream = schema.execute_stream(request);
 
-    // First publish — on the wrong topic. Spawn after a small delay so
-    // the stream has a chance to register its receiver first.
+    // First publish — on the wrong topic.
     let bus_clone = bus.clone();
     let topic_wrong = movie_b.clone();
     tokio::spawn(async move {
@@ -173,8 +139,7 @@ async fn progress_subscription_filters_by_topic() {
     let none = tokio::time::timeout(Duration::from_millis(150), stream.next()).await;
     assert!(none.is_err(), "should not have received an event");
 
-    // Now publish on the right topic — by now the receiver is alive
-    // (the prior timeout polled it).
+    // Now publish on the right topic.
     bus.publish(&movie_a, Event::from_json(progress_payload(60, 600)));
     let response = tokio::time::timeout(Duration::from_secs(1), stream.next())
         .await
@@ -188,7 +153,7 @@ async fn progress_subscription_filters_by_topic() {
 
 #[tokio::test]
 async fn progress_subscription_requires_authentication() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, _bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let request = Request::new(
@@ -205,7 +170,7 @@ async fn progress_subscription_requires_authentication() {
 
 #[tokio::test]
 async fn progress_subscription_drops_malformed_payload() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let alice = user(Uuid::new_v4(), "alice", Role::User);
@@ -220,7 +185,6 @@ async fn progress_subscription_drops_malformed_payload() {
     .data(GraphqlRequestContext::with_user(alice));
     let mut stream = schema.execute_stream(request);
 
-    // Spawn the publish so the receiver registers when the stream is polled.
     let bus_clone = bus.clone();
     let topic = movie_id.clone();
     tokio::spawn(async move {
@@ -257,7 +221,7 @@ fn device_payload() -> serde_json::Value {
 
 #[tokio::test]
 async fn device_status_subscription_yields_event_for_own_user() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let alice_id = Uuid::new_v4();
@@ -297,7 +261,7 @@ async fn device_status_subscription_yields_event_for_own_user() {
 
 #[tokio::test]
 async fn device_status_subscription_rejects_other_user_for_non_admin() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, _bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let alice = user(Uuid::new_v4(), "alice", Role::User);
@@ -322,7 +286,7 @@ async fn device_status_subscription_rejects_other_user_for_non_admin() {
 
 #[tokio::test]
 async fn device_status_subscription_allows_admin_to_watch_any_user() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let admin = user(Uuid::new_v4(), "root", Role::Admin);
@@ -351,7 +315,7 @@ async fn device_status_subscription_allows_admin_to_watch_any_user() {
 
 #[tokio::test]
 async fn device_status_subscription_requires_authentication() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, _bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let request = Request::new(r#"subscription { deviceStatusChanged(userId: "abc") { event } }"#)
@@ -366,7 +330,7 @@ async fn device_status_subscription_requires_authentication() {
 
 #[tokio::test]
 async fn two_subscribers_on_different_topics_do_not_cross_talk() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_playback_db().await;
     let (state, bus) = build_state_with_pubsub(db);
     let schema = build_schema(state);
     let alice = user(Uuid::new_v4(), "alice", Role::User);

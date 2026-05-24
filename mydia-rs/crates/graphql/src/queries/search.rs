@@ -89,36 +89,31 @@ fn type_filter_to_db(types: Option<&Vec<MediaType>>) -> Option<&'static str> {
     }
 }
 
-fn build_search_result(row: &mydia_rs_models::MediaItem) -> SearchResult {
-    let type_ = row
-        .r#type
-        .as_deref()
-        .and_then(MediaType::from_db_str)
-        .unwrap_or(MediaType::Movie);
-    let id = match row.r#type.as_deref() {
-        Some("tv_show") => NodeId::TvShow(NodeRef::Str(row.id.0.to_string())).encode(),
-        Some("episode") => NodeId::Episode(NodeRef::Str(row.id.0.to_string())).encode(),
+fn build_search_result(row: &mydia_rs_entities::media_items::Model) -> SearchResult {
+    let type_ = MediaType::from_db_str(&row.r#type).unwrap_or(MediaType::Movie);
+    let id = match row.r#type.as_str() {
+        "tv_show" => NodeId::TvShow(NodeRef::Str(row.id.0.to_string())).encode(),
+        "episode" => NodeId::Episode(NodeRef::Str(row.id.0.to_string())).encode(),
         _ => NodeId::Movie(NodeRef::Str(row.id.0.to_string())).encode(),
     };
     SearchResult {
         id: ID(id),
         type_,
-        title: row.title.clone().unwrap_or_default(),
+        title: row.title.clone(),
         year: row.year,
         artwork: build_artwork(row),
         score: None,
     }
 }
 
-fn build_artwork(row: &mydia_rs_models::MediaItem) -> Option<Artwork> {
-    let metadata = row.metadata.as_ref()?;
+fn build_artwork(row: &mydia_rs_entities::media_items::Model) -> Option<Artwork> {
+    let raw = row.metadata.as_deref()?;
+    let metadata: serde_json::Value = serde_json::from_str(raw).ok()?;
     let poster_path = metadata
-        .0
         .get("poster_path")
         .and_then(|v| v.as_str())
         .map(std::borrow::ToOwned::to_owned);
     let backdrop_path = metadata
-        .0
         .get("backdrop_path")
         .and_then(|v| v.as_str())
         .map(std::borrow::ToOwned::to_owned);

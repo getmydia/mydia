@@ -10,11 +10,19 @@
 //! Behavior follows `lib/mydia/collections.ex:250-270` —
 //! `toggle_favorite/2` lazily creates the user's Favorites collection
 //! on first use, then either inserts or deletes the membership row.
+//!
+//! Post-U13 cutover: SeaORM-native. Writes go through
+//! `insert_active_model` so the wrapper-typed `id` / `user_id` /
+//! `media_item_id` / `inserted_at` columns get the right Postgres
+//! casts. Reads use vanilla `Entity::find()`.
 
 use chrono::Utc;
 use mydia_rs_db::types::{DateTimeSecs, UuidText};
-use mydia_rs_db::Db;
-use sqlx::FromRow;
+use mydia_rs_entities::{collection_items, collections};
+use sea_orm::entity::prelude::*;
+use sea_orm::query::QuerySelect;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ActiveValue, DatabaseConnection, Set};
 use uuid::Uuid;
 
 /// Outcome of `toggle_favorite`. Mirrors Phoenix's
@@ -25,50 +33,25 @@ pub enum ToggleOutcome {
     Removed,
 }
 
-#[derive(Debug, Clone, FromRow)]
-struct CollectionRow {
-    pub id: UuidText,
-}
-
-#[derive(Debug, Clone, FromRow)]
-struct CollectionItemRow {
-    #[allow(dead_code)]
-    pub id: UuidText,
-}
-
 /// Return the user's Favorites collection ID, creating it lazily if
 /// necessary. Phoenix's `get_or_create_favorites/1` matches by
 /// `(user_id, is_system = true, name = "Favorites")`.
-async fn get_or_create_favorites(db: &Db, user_id: &str) -> Result<UuidText, sqlx::Error> {
+async fn get_or_create_favorites(
+    db: &DatabaseConnection,
+    user_id: &str,
+) -> Result<UuidText, DbErr> {
     let user_uuid = Uuid::parse_str(user_id)
         .map(UuidText::from)
-        .map_err(|_| sqlx::Error::RowNotFound)?;
-    let select_sql = "SELECT id FROM collections \
-                      WHERE user_id = $1 AND is_system = $2 AND name = $3 \
-                      LIMIT 1";
+        .map_err(|err| DbErr::Custom(err.to_string()))?;
+    let backend = db.get_database_backend();
 
-    let existing = match db {
-        Db::Sqlite(pool) => {
-            let sql = select_sql
-                .replace("$1", "?")
-                .replace("$2", "?")
-                .replace("$3", "?");
-            sqlx::query_as::<_, CollectionRow>(&sql)
-                .bind(user_uuid)
-                .bind(true)
-                .bind("Favorites")
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, CollectionRow>(select_sql)
-                .bind(user_uuid)
-                .bind(true)
-                .bind("Favorites")
-                .fetch_optional(pool)
-                .await?
-        }
-    };
+    let existing = collections::Entity::find()
+        .filter(Expr::col(collections::Column::UserId).eq(user_uuid.into_simple_expr(backend)))
+        .filter(collections::Column::IsSystem.eq(true))
+        .filter(collections::Column::Name.eq("Favorites".to_owned()))
+        .limit(1)
+        .one(db)
+        .await?;
 
     if let Some(row) = existing {
         return Ok(row.id);
@@ -76,106 +59,65 @@ async fn get_or_create_favorites(db: &Db, user_id: &str) -> Result<UuidText, sql
 
     let new_id = UuidText::new_v4();
     let now = DateTimeSecs::from(Utc::now());
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "INSERT INTO collections \
-                 (id, user_id, name, type, sort_order, visibility, is_system, position, \
-                  inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(new_id)
-            .bind(user_uuid)
-            .bind("Favorites")
-            .bind("manual")
-            .bind("position")
-            .bind("private")
-            .bind(true)
-            .bind(0i32)
-            .bind(now)
-            .bind(now)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "INSERT INTO collections \
-                 (id, user_id, name, type, sort_order, visibility, is_system, position, \
-                  inserted_at, updated_at) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-            )
-            .bind(new_id)
-            .bind(user_uuid)
-            .bind("Favorites")
-            .bind("manual")
-            .bind("position")
-            .bind("private")
-            .bind(true)
-            .bind(0i32)
-            .bind(now)
-            .bind(now)
-            .execute(pool)
-            .await?;
-        }
-    }
+    let am = collections::ActiveModel {
+        id: Set(new_id),
+        user_id: Set(user_uuid),
+        name: Set("Favorites".to_owned()),
+        description: ActiveValue::NotSet,
+        r#type: Set("manual".to_owned()),
+        poster_path: ActiveValue::NotSet,
+        sort_order: Set("position".to_owned()),
+        smart_rules: ActiveValue::NotSet,
+        visibility: Set("private".to_owned()),
+        is_system: Set(true),
+        position: Set(0),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+    };
+    let _ = mydia_rs_db::insert_active_model(am, db).await?;
     Ok(new_id)
 }
 
 async fn find_favorite_item(
-    db: &Db,
+    db: &DatabaseConnection,
     collection_id: UuidText,
     media_item_id: &str,
-) -> Result<Option<CollectionItemRow>, sqlx::Error> {
+) -> Result<Option<collection_items::Model>, DbErr> {
     let media_uuid = Uuid::parse_str(media_item_id)
         .map(UuidText::from)
-        .map_err(|_| sqlx::Error::RowNotFound)?;
-    let sql = "SELECT id FROM collection_items \
-               WHERE collection_id = $1 AND media_item_id = $2";
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?").replace("$2", "?");
-            sqlx::query_as::<_, CollectionItemRow>(&sql)
-                .bind(collection_id)
-                .bind(media_uuid)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, CollectionItemRow>(sql)
-                .bind(collection_id)
-                .bind(media_uuid)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+        .map_err(|err| DbErr::Custom(err.to_string()))?;
+    let backend = db.get_database_backend();
+    collection_items::Entity::find()
+        .filter(
+            Expr::col(collection_items::Column::CollectionId)
+                .eq(collection_id.into_simple_expr(backend)),
+        )
+        .filter(
+            Expr::col(collection_items::Column::MediaItemId)
+                .eq(media_uuid.into_simple_expr(backend)),
+        )
+        .one(db)
+        .await
 }
 
 /// Toggle a media item's membership in the user's Favorites
 /// collection. Returns the outcome for the GraphQL response.
 pub async fn toggle_favorite(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
     media_item_id: &str,
-) -> Result<ToggleOutcome, sqlx::Error> {
+) -> Result<ToggleOutcome, DbErr> {
     let collection_id = get_or_create_favorites(db, user_id).await?;
     let existing = find_favorite_item(db, collection_id, media_item_id).await?;
+    let backend = db.get_database_backend();
 
     if let Some(item) = existing {
-        let item_id = item.id.0.to_string();
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query("DELETE FROM collection_items WHERE id = ?")
-                    .bind(&item_id)
-                    .execute(pool)
-                    .await?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query("DELETE FROM collection_items WHERE id = $1")
-                    .bind(&item_id)
-                    .execute(pool)
-                    .await?;
-            }
-        }
+        collection_items::Entity::delete_many()
+            .filter(
+                Expr::col(collection_items::Column::Id).eq(item.id.into_simple_expr(backend)),
+            )
+            .exec(db)
+            .await?;
         return Ok(ToggleOutcome::Removed);
     }
 
@@ -183,36 +125,14 @@ pub async fn toggle_favorite(
     let now = DateTimeSecs::from(Utc::now());
     let media_uuid = Uuid::parse_str(media_item_id)
         .map(UuidText::from)
-        .map_err(|_| sqlx::Error::RowNotFound)?;
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "INSERT INTO collection_items \
-                 (id, collection_id, media_item_id, position, inserted_at) \
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(item_id)
-            .bind(collection_id)
-            .bind(media_uuid)
-            .bind(0i32)
-            .bind(now)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "INSERT INTO collection_items \
-                 (id, collection_id, media_item_id, position, inserted_at) \
-                 VALUES ($1, $2, $3, $4, $5)",
-            )
-            .bind(item_id)
-            .bind(collection_id)
-            .bind(media_uuid)
-            .bind(0i32)
-            .bind(now)
-            .execute(pool)
-            .await?;
-        }
-    }
+        .map_err(|err| DbErr::Custom(err.to_string()))?;
+    let am = collection_items::ActiveModel {
+        id: Set(item_id),
+        collection_id: Set(collection_id),
+        media_item_id: Set(media_uuid),
+        position: Set(0),
+        inserted_at: Set(now),
+    };
+    let _ = mydia_rs_db::insert_active_model(am, db).await?;
     Ok(ToggleOutcome::Added)
 }

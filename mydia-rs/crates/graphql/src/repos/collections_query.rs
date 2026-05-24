@@ -4,159 +4,115 @@
 //! module is the read-side. Smart collections (Phoenix's
 //! `Collections.SmartRules` evaluator) are not ported yet — U14
 //! returns empty item lists for `type = "smart"` and notes the gap.
+//!
+//! Post-U13 cutover: SeaORM-native.
 
-use mydia_rs_db::types::{DateTimeSecs, UuidText};
-use mydia_rs_db::Db;
-use mydia_rs_models::MediaItem;
+use mydia_rs_db::types::UuidText;
+use mydia_rs_entities::{collection_items, collections, media_items};
+use sea_orm::entity::prelude::*;
+use sea_orm::query::{QueryOrder, QuerySelect};
+use sea_orm::sea_query::{Expr, ExprTrait, JoinType};
+use sea_orm::DatabaseConnection;
 use serde_json::Value;
-use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, FromRow)]
-pub struct CollectionRow {
-    pub id: UuidText,
-    pub name: String,
-    pub description: Option<String>,
-    pub r#type: String,
-    pub visibility: String,
-    pub is_system: bool,
-    pub position: i32,
-    pub user_id: UuidText,
-    pub inserted_at: DateTimeSecs,
-    pub updated_at: DateTimeSecs,
-}
-
-const COLUMNS: &str = "id, name, description, type, visibility, is_system, position, user_id, \
-     inserted_at, updated_at";
-
 pub async fn list_collections_for_user(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
-) -> Result<Vec<CollectionRow>, sqlx::Error> {
-    let user_uuid = Uuid::parse_str(user_id)
-        .map(UuidText::from)
-        .map_err(|_| sqlx::Error::RowNotFound)?;
-    let sql = format!(
-        "SELECT {COLUMNS} FROM collections WHERE user_id = $1 ORDER BY position ASC, name ASC"
-    );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, CollectionRow>(&sql)
-                .bind(user_uuid)
-                .fetch_all(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, CollectionRow>(&sql)
-                .bind(user_uuid)
-                .fetch_all(pool)
-                .await
-        }
-    }
+) -> Result<Vec<collections::Model>, DbErr> {
+    let Ok(uuid) = Uuid::parse_str(user_id) else {
+        return Ok(Vec::new());
+    };
+    let wrapper = UuidText::from(uuid);
+    let backend = db.get_database_backend();
+    collections::Entity::find()
+        .filter(Expr::col(collections::Column::UserId).eq(wrapper.into_simple_expr(backend)))
+        .order_by_asc(collections::Column::Position)
+        .order_by_asc(collections::Column::Name)
+        .all(db)
+        .await
 }
 
 pub async fn get_collection_by_id(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
     id: &str,
-) -> Result<Option<CollectionRow>, sqlx::Error> {
-    let user_uuid = Uuid::parse_str(user_id)
-        .map(UuidText::from)
-        .map_err(|_| sqlx::Error::RowNotFound)?;
-    let row_uuid = Uuid::parse_str(id)
-        .map(UuidText::from)
-        .map_err(|_| sqlx::Error::RowNotFound)?;
-    let sql = format!("SELECT {COLUMNS} FROM collections WHERE user_id = $1 AND id = $2");
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?").replace("$2", "?");
-            sqlx::query_as::<_, CollectionRow>(&sql)
-                .bind(user_uuid)
-                .bind(row_uuid)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, CollectionRow>(&sql)
-                .bind(user_uuid)
-                .bind(row_uuid)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+) -> Result<Option<collections::Model>, DbErr> {
+    let Ok(user_uuid) = Uuid::parse_str(user_id) else {
+        return Ok(None);
+    };
+    let Ok(row_uuid) = Uuid::parse_str(id) else {
+        return Ok(None);
+    };
+    let user_wrapper = UuidText::from(user_uuid);
+    let row_wrapper = UuidText::from(row_uuid);
+    let backend = db.get_database_backend();
+    collections::Entity::find()
+        .filter(Expr::col(collections::Column::UserId).eq(user_wrapper.into_simple_expr(backend)))
+        .filter(Expr::col(collections::Column::Id).eq(row_wrapper.into_simple_expr(backend)))
+        .one(db)
+        .await
 }
 
-pub async fn item_count(db: &Db, collection_id: UuidText) -> Result<i64, sqlx::Error> {
-    let sql = "SELECT COUNT(*) FROM collection_items WHERE collection_id = $1";
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_scalar(&sql)
-                .bind(collection_id)
-                .fetch_one(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_scalar(sql)
-                .bind(collection_id)
-                .fetch_one(pool)
-                .await
-        }
-    }
+pub async fn item_count(db: &DatabaseConnection, collection_id: UuidText) -> Result<i64, DbErr> {
+    let backend = db.get_database_backend();
+    let count = collection_items::Entity::find()
+        .filter(
+            Expr::col(collection_items::Column::CollectionId)
+                .eq(collection_id.into_simple_expr(backend)),
+        )
+        .count(db)
+        .await?;
+    Ok(count as i64)
 }
-
-const MEDIA_ITEM_COLUMNS: &str =
-    "mi.id, mi.type, mi.title, mi.original_title, mi.year, mi.tmdb_id, mi.tvdb_id, \
-     mi.imdb_id, mi.metadata, mi.monitored, mi.monitoring_preset, mi.category, \
-     mi.category_override, mi.seasons_refreshed_at, mi.quality_profile_id, \
-     mi.inserted_at, mi.updated_at";
 
 pub async fn list_items(
-    db: &Db,
+    db: &DatabaseConnection,
     collection_id: UuidText,
     limit: i64,
-) -> Result<Vec<MediaItem>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {MEDIA_ITEM_COLUMNS} FROM collection_items ci \
-         JOIN media_items mi ON ci.media_item_id = mi.id \
-         WHERE ci.collection_id = $1 \
-         ORDER BY ci.position ASC \
-         LIMIT $2"
-    );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?").replace("$2", "?");
-            sqlx::query_as::<_, MediaItem>(&sql)
-                .bind(collection_id)
-                .bind(limit)
-                .fetch_all(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaItem>(&sql)
-                .bind(collection_id)
-                .bind(limit)
-                .fetch_all(pool)
-                .await
-        }
-    }
+) -> Result<Vec<media_items::Model>, DbErr> {
+    let backend = db.get_database_backend();
+    // SELECT media_items.* FROM collection_items
+    //   JOIN media_items ON collection_items.media_item_id = media_items.id
+    //  WHERE collection_items.collection_id = $1
+    //  ORDER BY collection_items.position ASC
+    //  LIMIT $2
+    media_items::Entity::find()
+        .join_rev(JoinType::InnerJoin, collection_items::Relation::MediaItems.def())
+        .filter(
+            Expr::col((
+                collection_items::Entity,
+                collection_items::Column::CollectionId,
+            ))
+            .eq(collection_id.into_simple_expr(backend)),
+        )
+        .order_by_asc(Expr::col((
+            collection_items::Entity,
+            collection_items::Column::Position,
+        )))
+        .limit(limit as u64)
+        .all(db)
+        .await
 }
 
 /// Up to `count` poster paths from the first items in a collection.
 /// Used to build the collection cover collage on the Phoenix side.
 pub async fn poster_paths(
-    db: &Db,
+    db: &DatabaseConnection,
     collection_id: UuidText,
     count: i64,
-) -> Result<Vec<String>, sqlx::Error> {
+) -> Result<Vec<String>, DbErr> {
     let rows = list_items(db, collection_id, count).await?;
+    // `media_items.metadata` is `Option<String>` (text-holding-JSON on
+    // both engines per the entity annotation). Parse each value lazily
+    // so an empty or invalid payload contributes no poster.
     let posters = rows
         .iter()
         .filter_map(|row| {
-            row.metadata
-                .as_ref()
-                .and_then(|m| m.0.get("poster_path"))
+            let raw = row.metadata.as_deref()?;
+            let value: Value = serde_json::from_str(raw).ok()?;
+            value
+                .get("poster_path")
                 .and_then(Value::as_str)
                 .map(std::borrow::ToOwned::to_owned)
         })

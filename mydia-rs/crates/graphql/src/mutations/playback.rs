@@ -220,10 +220,7 @@ impl PlaybackMutations {
         let raw_show_id = decode_id(show_id.as_str(), "show")?;
 
         let episodes = media::list_episodes(&state.db, &raw_show_id).await?;
-        for ep in episodes
-            .iter()
-            .filter(|e| e.season_number == Some(season_number))
-        {
+        for ep in episodes.iter().filter(|e| e.season_number == season_number) {
             let ep_id_str = ep.id.0.to_string();
             let parent = playback::Parent::Episode(&ep_id_str);
             if playback::mark_watched(&state.db, &user.id.to_string(), parent)

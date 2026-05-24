@@ -1,37 +1,26 @@
 //! Port of the slice of `Mydia.Media` that the browse + discovery +
 //! media resolvers consume. Each function targets a specific resolver
-//! call site; expand as new resolvers come online in U10 / U11 / U14.
+//! call site; expand as new resolvers come online.
 //!
-//! sqlx-level conventions:
+//! Post-U13 cutover: `SeaORM`-native. The dialect-divergent `Db` enum is
+//! gone; every read returns the entity's `Model` and resolvers shape
+//! those into the GraphQL surface. Wrapper-typed columns (`id`, `*_at`)
+//! route their bind through `into_simple_expr(backend)` so Postgres
+//! gets the `::uuid` / `::timestamptz` cast and `SQLite` gets the plain
+//! TEXT bind.
 //!
-//! - SQL is hand-written, not the `query!` macro, because the query
-//!   shape depends on the dialect (column list is fixed but the
-//!   parameter placeholder syntax `?` vs `$1` is rewritten by the
-//!   sqlx driver layer).
-//! - Column lists are explicit (`SELECT id, type, title, ...`) per
-//!   the plan's `SELECT *` ban — additive Phoenix migrations stay
-//!   tolerated.
-//! - Each function returns `sqlx::Error`; resolvers translate to
-//!   `async_graphql::Error` at the call site.
+//! The canonical pattern documented in U13 is [`list_media_items`]:
+//! dynamic filters via `Condition::all().add_option(...)`, the
+//! `COLLATE NOCASE` → `lower(title)` parity break for ordering, and
+//! sub-query `IN` membership via `Query::select`.
 
-use mydia_rs_db::Db;
-use mydia_rs_models::{Episode, MediaFile, MediaItem};
-use sqlx::{Postgres, QueryBuilder, Sqlite};
-
-const MEDIA_ITEM_COLUMNS: &str =
-    "id, type, title, original_title, year, tmdb_id, tvdb_id, imdb_id, metadata, monitored, \
-     monitoring_preset, category, category_override, seasons_refreshed_at, quality_profile_id, \
-     inserted_at, updated_at";
-
-const EPISODE_COLUMNS: &str =
-    "id, media_item_id, season_number, episode_number, title, air_date, metadata, monitored, \
-     inserted_at, updated_at";
-
-const MEDIA_FILE_COLUMNS: &str =
-    "id, media_item_id, episode_id, quality_profile_id, library_path_id, path, relative_path, \
-     size, resolution, codec, hdr_format, audio_codec, bitrate, verified_at, analyzed_at, \
-     analysis_attempts, last_analysis_error, metadata, cover_blob, sprite_blob, vtt_blob, \
-     preview_blob, phash, generated_at, trashed_at, inserted_at, updated_at";
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::{episodes, media_files, media_items};
+use sea_orm::entity::prelude::*;
+use sea_orm::query::{QueryOrder, QuerySelect};
+use sea_orm::sea_query::{Condition, Expr, ExprTrait, Func, Query, SimpleExpr};
+use sea_orm::DatabaseConnection;
+use uuid::Uuid;
 
 /// Filter set the browse resolvers apply. Mirrors the keyword opts
 /// `Mydia.Media.list_media_items/1` accepts.
@@ -53,296 +42,243 @@ pub struct ListMediaItemsOpts<'a> {
     pub search: Option<&'a str>,
 }
 
+/// Parse a `&str` UUID into the wrapper. Invalid input maps to `None`
+/// so callers can treat that as "no rows match" without raising a
+/// driver-level error.
+fn parse_uuid(s: &str) -> Option<UuidText> {
+    Uuid::parse_str(s).ok().map(UuidText::from)
+}
+
+/// Parse an RFC3339 datetime string into the `DateTimeSecs` wrapper.
+fn parse_added_since(s: &str) -> Option<DateTimeSecs> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .map(|dt| DateTimeSecs::from(dt.with_timezone(&chrono::Utc)))
+        .ok()
+}
+
 /// List media items, ordered by title ASC. Pagination and sort
 /// happen in-memory in the resolver, mirroring Phoenix today (the
 /// resolver `list_movies` fetches all, sorts, slices).
+///
+/// **Key Decision parity break (documented):** Phoenix's
+/// `ORDER BY title COLLATE NOCASE ASC` becomes `ORDER BY lower(title) ASC`
+/// for both engines — `SeaORM`'s typed builder cannot express `SQLite`'s
+/// `COLLATE NOCASE`, and `lower()` is the engine-portable equivalent
+/// the rest of the workspace uses.
 pub async fn list_media_items(
-    db: &Db,
+    db: &DatabaseConnection,
     opts: &ListMediaItemsOpts<'_>,
-) -> Result<Vec<MediaItem>, sqlx::Error> {
-    match db {
-        Db::Sqlite(pool) => {
-            let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
-            qb.push(MEDIA_ITEM_COLUMNS);
-            qb.push(" FROM media_items WHERE 1=1");
-            if let Some(kind) = opts.kind {
-                qb.push(" AND type = ").push_bind(kind);
-            }
-            if let Some(category) = opts.category {
-                qb.push(" AND category = ").push_bind(category);
-            }
-            if opts.has_files {
-                qb.push(
-                    " AND (\
-                        id IN (SELECT DISTINCT media_item_id FROM media_files \
-                                WHERE media_item_id IS NOT NULL) \
-                        OR id IN (SELECT DISTINCT e.media_item_id FROM media_files mf \
-                                  JOIN episodes e ON mf.episode_id = e.id))",
-                );
-            }
-            if let Some(since) = opts.added_since {
-                qb.push(" AND inserted_at >= ").push_bind(since);
-            }
-            if let Some(term) = opts.search {
-                let pattern = format!("%{}%", term.to_lowercase());
-                qb.push(" AND lower(title) LIKE ").push_bind(pattern);
-            }
-            qb.push(" ORDER BY title COLLATE NOCASE ASC");
-            qb.build_query_as::<MediaItem>().fetch_all(pool).await
-        }
-        Db::Postgres(pool) => {
-            let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("SELECT ");
-            qb.push(MEDIA_ITEM_COLUMNS);
-            qb.push(" FROM media_items WHERE 1=1");
-            if let Some(kind) = opts.kind {
-                qb.push(" AND type = ").push_bind(kind);
-            }
-            if let Some(category) = opts.category {
-                qb.push(" AND category = ").push_bind(category);
-            }
-            if opts.has_files {
-                qb.push(
-                    " AND (\
-                        id IN (SELECT DISTINCT media_item_id FROM media_files \
-                                WHERE media_item_id IS NOT NULL) \
-                        OR id IN (SELECT DISTINCT e.media_item_id FROM media_files mf \
-                                  JOIN episodes e ON mf.episode_id = e.id))",
-                );
-            }
-            if let Some(since) = opts.added_since {
-                qb.push(" AND inserted_at >= ").push_bind(since);
-            }
-            if let Some(term) = opts.search {
-                let pattern = format!("%{}%", term.to_lowercase());
-                qb.push(" AND lower(title) LIKE ").push_bind(pattern);
-            }
-            qb.push(" ORDER BY lower(title) ASC");
-            qb.build_query_as::<MediaItem>().fetch_all(pool).await
+) -> Result<Vec<media_items::Model>, DbErr> {
+    let backend = db.get_database_backend();
+    let mut q = media_items::Entity::find();
+
+    let mut cond = Condition::all();
+    if let Some(kind) = opts.kind {
+        cond = cond.add(media_items::Column::Type.eq(kind.to_owned()));
+    }
+    if let Some(category) = opts.category {
+        cond = cond.add(media_items::Column::Category.eq(category.to_owned()));
+    }
+    if opts.has_files {
+        // `id IN (SELECT media_item_id FROM media_files WHERE media_item_id IS NOT NULL)
+        //  OR id IN (SELECT e.media_item_id FROM media_files mf
+        //            JOIN episodes e ON mf.episode_id = e.id)`
+        let direct_files = Query::select()
+            .column(media_files::Column::MediaItemId)
+            .from(media_files::Entity)
+            .and_where(media_files::Column::MediaItemId.is_not_null())
+            .to_owned();
+        let via_episodes = Query::select()
+            .column((episodes::Entity, episodes::Column::MediaItemId))
+            .from(media_files::Entity)
+            .inner_join(
+                episodes::Entity,
+                Expr::col((media_files::Entity, media_files::Column::EpisodeId))
+                    .equals((episodes::Entity, episodes::Column::Id)),
+            )
+            .to_owned();
+        cond = cond.add(
+            Condition::any()
+                .add(Expr::col(media_items::Column::Id).in_subquery(direct_files))
+                .add(Expr::col(media_items::Column::Id).in_subquery(via_episodes)),
+        );
+    }
+    if let Some(since) = opts.added_since {
+        if let Some(dt) = parse_added_since(since) {
+            cond = cond.add(
+                Expr::col(media_items::Column::InsertedAt).gte(dt.into_simple_expr(backend)),
+            );
         }
     }
+    if let Some(term) = opts.search {
+        let pattern = format!("%{}%", term.to_lowercase());
+        cond = cond
+            .add(Expr::expr(Func::lower(Expr::col(media_items::Column::Title))).like(pattern));
+    }
+
+    q = q.filter(cond);
+    let lower_title: SimpleExpr = Func::lower(Expr::col(media_items::Column::Title)).into();
+    q.order_by(lower_title, sea_orm::Order::Asc)
+        .all(db)
+        .await
 }
 
 /// Fetch one media item by UUID. Returns `Ok(None)` when the row
 /// doesn't exist (resolvers translate to a GraphQL "not found"
 /// error).
-pub async fn get_media_item(db: &Db, id: &str) -> Result<Option<MediaItem>, sqlx::Error> {
-    let sql = format!("SELECT {MEDIA_ITEM_COLUMNS} FROM media_items WHERE id = $1");
-    match db {
-        Db::Sqlite(pool) => {
-            // SQLite uses `?` placeholders, but sqlx auto-rewrites
-            // for query_as via the prepared API.
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaItem>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaItem>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+pub async fn get_media_item(
+    db: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<media_items::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(id) else {
+        return Ok(None);
+    };
+    let backend = db.get_database_backend();
+    media_items::Entity::find()
+        .filter(Expr::col(media_items::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(db)
+        .await
 }
 
 /// Fetch one episode by UUID.
-pub async fn get_episode(db: &Db, id: &str) -> Result<Option<Episode>, sqlx::Error> {
-    let sql = format!("SELECT {EPISODE_COLUMNS} FROM episodes WHERE id = $1");
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, Episode>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, Episode>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+pub async fn get_episode(
+    db: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<episodes::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(id) else {
+        return Ok(None);
+    };
+    let backend = db.get_database_backend();
+    episodes::Entity::find()
+        .filter(Expr::col(episodes::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(db)
+        .await
 }
 
 /// List episodes for a given media item, ordered by season then
 /// episode number.
-pub async fn list_episodes(db: &Db, media_item_id: &str) -> Result<Vec<Episode>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {EPISODE_COLUMNS} FROM episodes WHERE media_item_id = $1 \
-         ORDER BY season_number ASC, episode_number ASC"
-    );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, Episode>(&sql)
-                .bind(media_item_id)
-                .fetch_all(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, Episode>(&sql)
-                .bind(media_item_id)
-                .fetch_all(pool)
-                .await
-        }
-    }
+pub async fn list_episodes(
+    db: &DatabaseConnection,
+    media_item_id: &str,
+) -> Result<Vec<episodes::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(media_item_id) else {
+        return Ok(Vec::new());
+    };
+    let backend = db.get_database_backend();
+    episodes::Entity::find()
+        .filter(Expr::col(episodes::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)))
+        .order_by_asc(episodes::Column::SeasonNumber)
+        .order_by_asc(episodes::Column::EpisodeNumber)
+        .all(db)
+        .await
 }
 
 /// Whether at least one media file exists for the given episode.
 /// Used by `get_season` to determine the `has_files` flag.
-pub async fn episode_has_files(db: &Db, episode_id: &str) -> Result<bool, sqlx::Error> {
-    let sql = "SELECT EXISTS(SELECT 1 FROM media_files WHERE episode_id = $1)";
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            let exists: bool = sqlx::query_scalar(&sql)
-                .bind(episode_id)
-                .fetch_one(pool)
-                .await?;
-            Ok(exists)
-        }
-        Db::Postgres(pool) => {
-            let exists: bool = sqlx::query_scalar(sql)
-                .bind(episode_id)
-                .fetch_one(pool)
-                .await?;
-            Ok(exists)
-        }
-    }
+pub async fn episode_has_files(db: &DatabaseConnection, episode_id: &str) -> Result<bool, DbErr> {
+    let Some(wrapper) = parse_uuid(episode_id) else {
+        return Ok(false);
+    };
+    let backend = db.get_database_backend();
+    let count = media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::EpisodeId).eq(wrapper.into_simple_expr(backend)))
+        .limit(1)
+        .count(db)
+        .await?;
+    Ok(count > 0)
 }
 
 /// List media files for a media item (movies — episode-less files).
 #[allow(dead_code)]
 pub async fn list_media_files_for_movie(
-    db: &Db,
+    db: &DatabaseConnection,
     media_item_id: &str,
-) -> Result<Vec<MediaFile>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {MEDIA_FILE_COLUMNS} FROM media_files \
-         WHERE media_item_id = $1 AND episode_id IS NULL AND trashed_at IS NULL \
-         ORDER BY inserted_at ASC"
-    );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(media_item_id)
-                .fetch_all(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(media_item_id)
-                .fetch_all(pool)
-                .await
-        }
-    }
+) -> Result<Vec<media_files::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(media_item_id) else {
+        return Ok(Vec::new());
+    };
+    let backend = db.get_database_backend();
+    media_files::Entity::find()
+        .filter(
+            Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
+        )
+        .filter(media_files::Column::EpisodeId.is_null())
+        .filter(media_files::Column::TrashedAt.is_null())
+        .order_by_asc(media_files::Column::InsertedAt)
+        .all(db)
+        .await
 }
 
 /// Fetch a single media file by ID. Used by the streaming resolvers
 /// to resolve `file_id` arguments to a `MediaFile` row before
 /// computing candidates or starting a session.
-pub async fn get_media_file(db: &Db, id: &str) -> Result<Option<MediaFile>, sqlx::Error> {
-    let sql = format!("SELECT {MEDIA_FILE_COLUMNS} FROM media_files WHERE id = $1");
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+pub async fn get_media_file(
+    db: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<media_files::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(id) else {
+        return Ok(None);
+    };
+    let backend = db.get_database_backend();
+    media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(db)
+        .await
 }
 
 /// Fetch the first media file associated with a media item (used for
 /// `streamingCandidates(contentType: "movie", id: ...)` lookup).
 pub async fn first_media_file_for_movie(
-    db: &Db,
+    db: &DatabaseConnection,
     media_item_id: &str,
-) -> Result<Option<MediaFile>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {MEDIA_FILE_COLUMNS} FROM media_files \
-         WHERE media_item_id = $1 AND episode_id IS NULL AND trashed_at IS NULL \
-         ORDER BY inserted_at ASC LIMIT 1"
-    );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(media_item_id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(media_item_id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+) -> Result<Option<media_files::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(media_item_id) else {
+        return Ok(None);
+    };
+    let backend = db.get_database_backend();
+    media_files::Entity::find()
+        .filter(
+            Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
+        )
+        .filter(media_files::Column::EpisodeId.is_null())
+        .filter(media_files::Column::TrashedAt.is_null())
+        .order_by_asc(media_files::Column::InsertedAt)
+        .one(db)
+        .await
 }
 
 /// Fetch the first media file for an episode (analog of
 /// `first_media_file_for_movie` but for episodes).
 pub async fn first_media_file_for_episode(
-    db: &Db,
+    db: &DatabaseConnection,
     episode_id: &str,
-) -> Result<Option<MediaFile>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {MEDIA_FILE_COLUMNS} FROM media_files \
-         WHERE episode_id = $1 AND trashed_at IS NULL \
-         ORDER BY inserted_at ASC LIMIT 1"
-    );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(episode_id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(episode_id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+) -> Result<Option<media_files::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(episode_id) else {
+        return Ok(None);
+    };
+    let backend = db.get_database_backend();
+    media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::EpisodeId).eq(wrapper.into_simple_expr(backend)))
+        .filter(media_files::Column::TrashedAt.is_null())
+        .order_by_asc(media_files::Column::InsertedAt)
+        .one(db)
+        .await
 }
 
 /// List media files for a single episode.
 #[allow(dead_code)]
 pub async fn list_media_files_for_episode(
-    db: &Db,
+    db: &DatabaseConnection,
     episode_id: &str,
-) -> Result<Vec<MediaFile>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {MEDIA_FILE_COLUMNS} FROM media_files \
-         WHERE episode_id = $1 AND trashed_at IS NULL \
-         ORDER BY inserted_at ASC"
-    );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(episode_id)
-                .fetch_all(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(episode_id)
-                .fetch_all(pool)
-                .await
-        }
-    }
+) -> Result<Vec<media_files::Model>, DbErr> {
+    let Some(wrapper) = parse_uuid(episode_id) else {
+        return Ok(Vec::new());
+    };
+    let backend = db.get_database_backend();
+    media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::EpisodeId).eq(wrapper.into_simple_expr(backend)))
+        .filter(media_files::Column::TrashedAt.is_null())
+        .order_by_asc(media_files::Column::InsertedAt)
+        .all(db)
+        .await
 }

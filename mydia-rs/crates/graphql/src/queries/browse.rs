@@ -226,7 +226,7 @@ impl BrowseQueries {
         let rows = media::list_episodes(&state.db, &show_id).await?;
         Ok(rows
             .into_iter()
-            .filter(|e| e.season_number == Some(season_number))
+            .filter(|e| e.season_number == season_number)
             .map(|e| Episode::from_row(&e))
             .collect())
     }
@@ -244,9 +244,9 @@ impl BrowseQueries {
             .await?
             .ok_or_else(|| async_graphql::Error::new("TV show not found"))?;
         let episodes = media::list_episodes(&state.db, &show_id).await?;
-        let season_eps: Vec<&mydia_rs_models::Episode> = episodes
+        let season_eps: Vec<&mydia_rs_entities::episodes::Model> = episodes
             .iter()
-            .filter(|e| e.season_number == Some(season_number))
+            .filter(|e| e.season_number == season_number)
             .collect();
         if season_eps.is_empty() {
             return Err(async_graphql::Error::new("Season not found"));
@@ -267,17 +267,12 @@ impl BrowseQueries {
 /// Phoenix sorts in-memory after the DB fetch; mirror that behavior
 /// to keep parity with the captured corpus.
 fn sort_media_items(
-    mut rows: Vec<mydia_rs_models::MediaItem>,
+    mut rows: Vec<mydia_rs_entities::media_items::Model>,
     sort: SortInput,
-) -> Vec<mydia_rs_models::MediaItem> {
+) -> Vec<mydia_rs_entities::media_items::Model> {
     rows.sort_by(|a, b| {
         let ord = match sort.field {
-            SortField::Title => a
-                .title
-                .as_deref()
-                .unwrap_or("")
-                .to_lowercase()
-                .cmp(&b.title.as_deref().unwrap_or("").to_lowercase()),
+            SortField::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
             SortField::Year => a.year.cmp(&b.year),
             SortField::AddedAt => a.inserted_at.0.cmp(&b.inserted_at.0),
             SortField::Rating => media_item_rating(a).total_cmp(&media_item_rating(b)),
@@ -291,10 +286,11 @@ fn sort_media_items(
     rows
 }
 
-fn media_item_rating(row: &mydia_rs_models::MediaItem) -> f64 {
+fn media_item_rating(row: &mydia_rs_entities::media_items::Model) -> f64 {
     row.metadata
-        .as_ref()
-        .and_then(|m| m.0.get("vote_average").and_then(serde_json::Value::as_f64))
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .and_then(|v| v.get("vote_average").and_then(serde_json::Value::as_f64))
         .unwrap_or(0.0)
 }
 
@@ -302,10 +298,13 @@ fn media_item_rating(row: &mydia_rs_models::MediaItem) -> f64 {
 /// Returns the page slice paired with cursor strings and the
 /// connection-level `PageInfo`.
 fn paginate(
-    items: &[mydia_rs_models::MediaItem],
+    items: &[mydia_rs_entities::media_items::Model],
     first: i32,
     after: Option<&str>,
-) -> (Vec<(mydia_rs_models::MediaItem, String)>, PageInfo) {
+) -> (
+    Vec<(mydia_rs_entities::media_items::Model, String)>,
+    PageInfo,
+) {
     let first = first.clamp(0, MAX_FIRST) as usize;
     let offset = after.and_then(decode_offset_cursor).map_or(0, |o| o + 1);
 
@@ -317,7 +316,7 @@ fn paginate(
         &[]
     };
 
-    let paginated: Vec<(mydia_rs_models::MediaItem, String)> = slice
+    let paginated: Vec<(mydia_rs_entities::media_items::Model, String)> = slice
         .iter()
         .enumerate()
         .map(|(i, item)| (item.clone(), offset_cursor(offset + i)))
@@ -421,7 +420,7 @@ pub async fn resolve_node(ctx: &Context<'_>, id: ID) -> async_graphql::Result<Op
                 &state.db,
                 &episodes
                     .iter()
-                    .filter(|e| e.season_number == Some(season_number))
+                    .filter(|e| e.season_number == season_number)
                     .collect::<Vec<_>>(),
             )
             .await?;
@@ -441,9 +440,9 @@ fn node_ref_to_string(reference: NodeRef) -> String {
 }
 
 async fn check_any_episode_has_files(
-    db: &mydia_rs_db::Db,
-    episodes: &[&mydia_rs_models::Episode],
-) -> Result<bool, sqlx::Error> {
+    db: &mydia_rs_db::DatabaseConnection,
+    episodes: &[&mydia_rs_entities::episodes::Model],
+) -> Result<bool, sea_orm::DbErr> {
     for ep in episodes {
         if media::episode_has_files(db, &ep.id.0.to_string()).await? {
             return Ok(true);

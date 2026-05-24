@@ -59,8 +59,9 @@ impl MediaFile {
 impl MediaFile {
     /// Build from the row model. The Rust DB model stores UUID as
     /// `UuidText`; the GraphQL surface emits the plain hyphenated
-    /// hex form.
-    pub fn from_row(row: &mydia_rs_models::MediaFile) -> Self {
+    /// hex form. `bitrate` is `i32` in the entity (matches Postgres'
+    /// `integer`) and surfaced as `i64` in the GraphQL schema.
+    pub fn from_row(row: &mydia_rs_entities::media_files::Model) -> Self {
         Self {
             id: row.id.0.to_string(),
             resolution: row.resolution.clone(),
@@ -68,7 +69,7 @@ impl MediaFile {
             audio_codec: row.audio_codec.clone(),
             hdr_format: row.hdr_format.clone(),
             size: row.size,
-            bitrate: row.bitrate,
+            bitrate: row.bitrate.map(i64::from),
         }
     }
 

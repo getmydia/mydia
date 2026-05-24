@@ -76,7 +76,7 @@ async fn resolve_media_file(
     state: &GraphqlAppState,
     content_type: &str,
     id: &str,
-) -> async_graphql::Result<Option<mydia_rs_models::MediaFile>> {
+) -> async_graphql::Result<Option<mydia_rs_entities::media_files::Model>> {
     match content_type {
         "movie" => Ok(media::first_media_file_for_movie(&state.db, id).await?),
         "episode" => Ok(media::first_media_file_for_episode(&state.db, id).await?),
@@ -87,28 +87,36 @@ async fn resolve_media_file(
     }
 }
 
-fn build_metadata(file: &mydia_rs_models::MediaFile) -> StreamingMetadata {
-    let raw = file.metadata.as_ref().map(|m| &m.0);
+fn build_metadata(file: &mydia_rs_entities::media_files::Model) -> StreamingMetadata {
+    // `media_files.metadata` is text-holding-JSON on both engines; parse
+    // lazily and treat invalid/missing payloads as an empty object.
+    let raw: Option<serde_json::Value> = file
+        .metadata
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok());
     StreamingMetadata {
-        duration: raw.and_then(|m| m.get("duration").and_then(serde_json::Value::as_f64)),
-        width: raw.and_then(|m| {
+        duration: raw
+            .as_ref()
+            .and_then(|m| m.get("duration").and_then(serde_json::Value::as_f64)),
+        width: raw.as_ref().and_then(|m| {
             m.get("width")
                 .and_then(serde_json::Value::as_i64)
                 .map(|n| n as i32)
         }),
-        height: raw.and_then(|m| {
+        height: raw.as_ref().and_then(|m| {
             m.get("height")
                 .and_then(serde_json::Value::as_i64)
                 .map(|n| n as i32)
         }),
-        bitrate: file
-            .bitrate
-            .or_else(|| raw.and_then(|m| m.get("bit_rate").and_then(serde_json::Value::as_i64))),
+        bitrate: file.bitrate.map(i64::from).or_else(|| {
+            raw.as_ref()
+                .and_then(|m| m.get("bit_rate").and_then(serde_json::Value::as_i64))
+        }),
         resolution: file.resolution.clone(),
         hdr_format: file.hdr_format.clone(),
         original_codec: file.codec.clone(),
         original_audio_codec: file.audio_codec.clone(),
-        container: raw.and_then(|m| {
+        container: raw.as_ref().and_then(|m| {
             m.get("container")
                 .and_then(|v| v.as_str())
                 .map(std::borrow::ToOwned::to_owned)

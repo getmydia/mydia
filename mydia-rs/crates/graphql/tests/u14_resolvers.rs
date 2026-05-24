@@ -8,135 +8,23 @@
 //! error so the parity replay harness in U13 can categorize them
 //! correctly.
 
+mod common;
+
 use async_graphql::{Request, Variables};
-use chrono::{TimeZone, Utc};
 use mydia_rs_auth::{hash_password, AccessTokenSigner};
-use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
-use mydia_rs_db::{
-    connect_from_config,
-    types::{DateTimeSecs, JsonMap, StringArray, UuidText},
-    Db,
-};
+use mydia_rs_db::types::UuidText;
+use mydia_rs_entities::api_keys;
 use mydia_rs_graphql::context::{CurrentUser, GraphqlAppState, GraphqlRequestContext};
 use mydia_rs_graphql::{build_schema, build_schema_with_signer, MydiaSchema};
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 use serde_json::json;
-use tempfile::TempDir;
 use uuid::Uuid;
 
-const SCHEMA_SQL: &str = include_str!("fixtures/u14_schema.sql");
-
-async fn fresh_db() -> (Db, TempDir) {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("u14.db");
-    let config = Config {
-        database: DatabaseConfig {
-            db_type: DatabaseType::Sqlite,
-            url: None,
-            path: Some(path.to_string_lossy().into_owned()),
-            pool_size: 2,
-            ..DatabaseConfig::default()
-        },
-        ..Config::default()
-    };
-    let db = connect_from_config(&config).await.unwrap();
-    let pool = db.as_sqlite().unwrap();
-    for stmt in SCHEMA_SQL.split(";\n") {
-        let trimmed = stmt.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        sqlx::query(trimmed).execute(pool).await.unwrap();
-    }
-    (db, tmp)
-}
-
-fn sample_dt() -> DateTimeSecs {
-    DateTimeSecs::from(Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap())
-}
-
-async fn seed_user(
-    db: &Db,
-    id: UuidText,
-    username: &str,
-    email: Option<&str>,
-    password_hash: Option<&str>,
-) {
-    let pool = db.as_sqlite().unwrap();
-    let now = sample_dt();
-    sqlx::query(
-        "INSERT INTO users (id, username, email, password_hash, role, display_name,
-            inserted_at, updated_at)
-         VALUES (?, ?, ?, ?, 'user', ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(username)
-    .bind(email)
-    .bind(password_hash)
-    .bind(username)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .expect("seed user");
-}
-
-async fn seed_movie(db: &Db, id: UuidText, title: &str) {
-    let pool = db.as_sqlite().unwrap();
-    let now = sample_dt();
-    sqlx::query(
-        "INSERT INTO media_items (id, type, title, year, tmdb_id, metadata,
-            monitored, monitoring_preset, category_override, inserted_at, updated_at)
-         VALUES (?, 'movie', ?, 2024, 42, ?, 1, 'all', 0, ?, ?)",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(JsonMap(json!({"poster_path": format!("/{title}.jpg")})))
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .expect("seed movie");
-}
-
-async fn seed_collection(db: &Db, id: UuidText, user_id: UuidText, name: &str, is_system: bool) {
-    let pool = db.as_sqlite().unwrap();
-    let now = sample_dt();
-    sqlx::query(
-        "INSERT INTO collections (id, name, type, sort_order, visibility, is_system,
-            position, user_id, inserted_at, updated_at)
-         VALUES (?, ?, 'manual', 'position', 'private', ?, 0, ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(name)
-    .bind(is_system)
-    .bind(user_id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .expect("seed collection");
-}
-
-async fn add_to_collection(
-    db: &Db,
-    collection_id: UuidText,
-    media_item_id: UuidText,
-    position: i32,
-) {
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query(
-        "INSERT INTO collection_items (id, collection_id, media_item_id, position, inserted_at)
-         VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(UuidText::new_v4())
-    .bind(collection_id)
-    .bind(media_item_id)
-    .bind(position)
-    .bind(sample_dt())
-    .execute(pool)
-    .await
-    .expect("seed collection_items");
-}
+use common::{
+    build_test_schema, fresh_u14_db, seed_api_key, seed_collection, seed_collection_item,
+    seed_movie_with_metadata, seed_user_with_password,
+};
 
 fn current_user(id: Uuid, username: &str) -> CurrentUser {
     CurrentUser {
@@ -173,15 +61,15 @@ async fn execute_anon(
 
 #[tokio::test]
 async fn login_with_valid_username_and_password_returns_token() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let user_id = Uuid::new_v4();
     let hash = hash_password("hunter2").unwrap();
-    seed_user(
+    seed_user_with_password(
         &db,
         UuidText::from(user_id),
         "alice",
         Some("alice@example.com"),
-        Some(&hash),
+        &hash,
     )
     .await;
 
@@ -216,14 +104,14 @@ async fn login_with_valid_username_and_password_returns_token() {
 
 #[tokio::test]
 async fn login_with_email_also_works() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let hash = hash_password("hunter2").unwrap();
-    seed_user(
+    seed_user_with_password(
         &db,
         UuidText::new_v4(),
         "alice",
         Some("alice@example.com"),
-        Some(&hash),
+        &hash,
     )
     .await;
 
@@ -250,14 +138,14 @@ async fn login_with_email_also_works() {
 
 #[tokio::test]
 async fn login_with_wrong_password_rejects_without_timing_leak() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let hash = hash_password("right-password").unwrap();
-    seed_user(
+    seed_user_with_password(
         &db,
         UuidText::new_v4(),
         "alice",
         Some("alice@example.com"),
-        Some(&hash),
+        &hash,
     )
     .await;
     let signer = AccessTokenSigner::new("test-secret", 5);
@@ -284,7 +172,7 @@ async fn login_with_wrong_password_rejects_without_timing_leak() {
 
 #[tokio::test]
 async fn login_with_unknown_user_rejects() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let signer = AccessTokenSigner::new("test-secret", 5);
     let schema = build_schema_with_signer(GraphqlAppState::new(db), signer);
     let resp = execute_anon(
@@ -307,9 +195,9 @@ async fn login_with_unknown_user_rejects() {
 
 #[tokio::test]
 async fn login_without_signer_returns_clear_error() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let hash = hash_password("hunter2").unwrap();
-    seed_user(&db, UuidText::new_v4(), "alice", None, Some(&hash)).await;
+    seed_user_with_password(&db, UuidText::new_v4(), "alice", None, &hash).await;
     let schema = build_schema(GraphqlAppState::new(db));
     let resp = execute_anon(
         &schema,
@@ -335,11 +223,11 @@ async fn login_without_signer_returns_clear_error() {
 
 #[tokio::test]
 async fn create_api_key_returns_plain_key_and_persists_hash() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let user_id = Uuid::new_v4();
-    seed_user(&db, UuidText::from(user_id), "alice", None, None).await;
+    seed_user_with_password(&db, UuidText::from(user_id), "alice", None, "x").await;
 
-    let schema = build_schema(GraphqlAppState::new(db.clone()));
+    let schema = build_test_schema(db.clone());
     let user = current_user(user_id, "alice");
     let resp = execute_authed(
         &schema,
@@ -365,44 +253,42 @@ async fn create_api_key_returns_plain_key_and_persists_hash() {
     assert_eq!(permissions[0], "read");
 
     // The DB stores the Argon2 hash, not the plain key.
-    let pool = db.as_sqlite().unwrap();
-    let stored_hash: String = sqlx::query_scalar("SELECT key_hash FROM api_keys WHERE name = ?")
-        .bind("test")
-        .fetch_one(pool)
+    let stored = api_keys::Entity::find()
+        .filter(api_keys::Column::Name.eq("test".to_owned()))
+        .one(&db)
         .await
-        .unwrap();
-    assert!(stored_hash.starts_with("$argon2"));
-    // Verifying the plaintext against the stored hash should pass.
-    mydia_rs_auth::verify_api_key_hash(key, &stored_hash).unwrap();
+        .unwrap()
+        .expect("api key row");
+    assert!(stored.key_hash.starts_with("$argon2"));
+    mydia_rs_auth::verify_api_key_hash(key, &stored.key_hash).unwrap();
 }
 
 #[tokio::test]
 async fn list_api_keys_returns_only_callers_own() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
     let bob = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
-    seed_user(&db, UuidText::from(bob), "bob", None, None).await;
-    // Seed one key per user directly.
-    let pool = db.as_sqlite().unwrap();
-    for (uid, name) in [(alice, "alice-key"), (bob, "bob-key")] {
-        sqlx::query(
-            "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, inserted_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
+    seed_user_with_password(&db, UuidText::from(bob), "bob", None, "x").await;
+    // Seed one key per user directly. `key_hash` is UNIQUE so each
+    // seeded row needs a distinct value.
+    for (uid, name, hash) in [
+        (alice, "alice-key", "$argon2id$alice"),
+        (bob, "bob-key", "$argon2id$bob"),
+    ] {
+        seed_api_key(
+            &db,
+            UuidText::new_v4(),
+            UuidText::from(uid),
+            name,
+            hash,
+            "prefix",
+            vec!["read".into()],
         )
-        .bind(UuidText::new_v4())
-        .bind(UuidText::from(uid))
-        .bind(name)
-        .bind("$argon2id$stub")
-        .bind("prefix")
-        .bind(StringArray(vec!["read".into()]))
-        .bind(sample_dt())
-        .execute(pool)
-        .await
-        .unwrap();
+        .await;
     }
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,
@@ -420,28 +306,24 @@ async fn list_api_keys_returns_only_callers_own() {
 
 #[tokio::test]
 async fn revoke_api_key_marks_row_and_blocks_other_users() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
     let bob = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
-    seed_user(&db, UuidText::from(bob), "bob", None, None).await;
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
+    seed_user_with_password(&db, UuidText::from(bob), "bob", None, "x").await;
     let key_id = UuidText::new_v4();
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query(
-        "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, inserted_at)
-         VALUES (?, ?, 'k', ?, ?, ?, ?)",
+    seed_api_key(
+        &db,
+        key_id,
+        UuidText::from(alice),
+        "k",
+        "$argon2id$stub",
+        "prefix",
+        vec!["read".into()],
     )
-    .bind(key_id)
-    .bind(UuidText::from(alice))
-    .bind("$argon2id$stub")
-    .bind("prefix")
-    .bind(StringArray(vec!["read".into()]))
-    .bind(sample_dt())
-    .execute(pool)
-    .await
-    .unwrap();
+    .await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     // Bob attempts to revoke alice's key — forbidden.
     let bob_user = current_user(bob, "bob");
     let resp_bob = execute_authed(
@@ -474,26 +356,22 @@ async fn revoke_api_key_marks_row_and_blocks_other_users() {
 
 #[tokio::test]
 async fn delete_api_key_removes_row() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
     let key_id = UuidText::new_v4();
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query(
-        "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, inserted_at)
-         VALUES (?, ?, 'k', ?, ?, ?, ?)",
+    seed_api_key(
+        &db,
+        key_id,
+        UuidText::from(alice),
+        "k",
+        "$argon2id$stub",
+        "prefix",
+        vec!["read".into()],
     )
-    .bind(key_id)
-    .bind(UuidText::from(alice))
-    .bind("$argon2id$stub")
-    .bind("prefix")
-    .bind(StringArray(vec!["read".into()]))
-    .bind(sample_dt())
-    .execute(pool)
-    .await
-    .unwrap();
+    .await;
 
-    let schema = build_schema(GraphqlAppState::new(db.clone()));
+    let schema = build_test_schema(db.clone());
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,
@@ -506,10 +384,10 @@ async fn delete_api_key_removes_row() {
     let data = resp.data.into_json().unwrap();
     assert_eq!(data["deleteApiKey"], true);
 
-    let pool = db.as_sqlite().unwrap();
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM api_keys WHERE id = ?")
-        .bind(key_id)
-        .fetch_one(pool)
+    let backend = db.get_database_backend();
+    let count = api_keys::Entity::find()
+        .filter(Expr::col(api_keys::Column::Id).eq(key_id.into_simple_expr(backend)))
+        .count(&db)
         .await
         .unwrap();
     assert_eq!(count, 0);
@@ -519,15 +397,17 @@ async fn delete_api_key_removes_row() {
 
 #[tokio::test]
 async fn list_collections_excludes_system_favorites() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
     seed_collection(
         &db,
         UuidText::new_v4(),
         UuidText::from(alice),
         "Favorites",
+        "manual",
         true,
+        0,
     )
     .await;
     seed_collection(
@@ -535,7 +415,9 @@ async fn list_collections_excludes_system_favorites() {
         UuidText::new_v4(),
         UuidText::from(alice),
         "Watchlist",
+        "manual",
         false,
+        0,
     )
     .await;
     seed_collection(
@@ -543,11 +425,13 @@ async fn list_collections_excludes_system_favorites() {
         UuidText::new_v4(),
         UuidText::from(alice),
         "Rewatch",
+        "manual",
         false,
+        0,
     )
     .await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,
@@ -572,8 +456,8 @@ async fn list_collections_excludes_system_favorites() {
 
 #[tokio::test]
 async fn list_collections_returns_empty_for_anonymous() {
-    let (db, _tmp) = fresh_db().await;
-    let schema = build_schema(GraphqlAppState::new(db));
+    let db = fresh_u14_db().await;
+    let schema = build_test_schema(db);
     let resp = execute_anon(&schema, r"{ collections { name } }", Variables::default()).await;
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     assert_eq!(
@@ -587,26 +471,34 @@ async fn list_collections_returns_empty_for_anonymous() {
 
 #[tokio::test]
 async fn collection_items_returns_recently_added_shape() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
     let collection_id = UuidText::new_v4();
     seed_collection(
         &db,
         collection_id,
         UuidText::from(alice),
         "Watchlist",
+        "manual",
         false,
+        0,
     )
     .await;
     let movie_a = UuidText::new_v4();
     let movie_b = UuidText::new_v4();
-    seed_movie(&db, movie_a, "Arrival").await;
-    seed_movie(&db, movie_b, "Dune").await;
-    add_to_collection(&db, collection_id, movie_a, 0).await;
-    add_to_collection(&db, collection_id, movie_b, 1).await;
+    seed_movie_with_metadata(
+        &db,
+        movie_a,
+        "Arrival",
+        json!({"poster_path": "/Arrival.jpg"}),
+    )
+    .await;
+    seed_movie_with_metadata(&db, movie_b, "Dune", json!({"poster_path": "/Dune.jpg"})).await;
+    seed_collection_item(&db, UuidText::new_v4(), collection_id, movie_a, 0).await;
+    seed_collection_item(&db, UuidText::new_v4(), collection_id, movie_b, 1).await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,
@@ -633,10 +525,10 @@ async fn collection_items_returns_recently_added_shape() {
 
 #[tokio::test]
 async fn remote_access_status_is_disabled_stub() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
-    let schema = build_schema(GraphqlAppState::new(db));
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
+    let schema = build_test_schema(db);
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,
@@ -648,16 +540,16 @@ async fn remote_access_status_is_disabled_stub() {
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
     assert_eq!(data["remoteAccessStatus"]["enabled"], false);
-    assert!(data["remoteAccessStatus"]["endpointAddr"].is_null());
+    assert!(serde_json::Value::is_null(&data["remoteAccessStatus"]["endpointAddr"]));
     assert_eq!(data["remoteAccessStatus"]["connectedPeers"], 0);
 }
 
 #[tokio::test]
 async fn devices_query_returns_empty_stub_for_now() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
-    let schema = build_schema(GraphqlAppState::new(db));
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
+    let schema = build_test_schema(db);
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,
@@ -673,8 +565,8 @@ async fn devices_query_returns_empty_stub_for_now() {
 
 #[tokio::test]
 async fn download_options_mutation_is_stubbed() {
-    let (db, _tmp) = fresh_db().await;
-    let schema = build_schema(GraphqlAppState::new(db));
+    let db = fresh_u14_db().await;
+    let schema = build_test_schema(db);
     let resp = execute_anon(
         &schema,
         r#"mutation { downloadOptions(contentType: "movie", id: "x") { resolution } }"#,
@@ -687,10 +579,10 @@ async fn download_options_mutation_is_stubbed() {
 
 #[tokio::test]
 async fn generate_claim_code_is_stubbed_for_authed_user() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
-    let schema = build_schema(GraphqlAppState::new(db));
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
+    let schema = build_test_schema(db);
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,
@@ -705,10 +597,10 @@ async fn generate_claim_code_is_stubbed_for_authed_user() {
 
 #[tokio::test]
 async fn revoke_device_is_stubbed() {
-    let (db, _tmp) = fresh_db().await;
+    let db = fresh_u14_db().await;
     let alice = Uuid::new_v4();
-    seed_user(&db, UuidText::from(alice), "alice", None, None).await;
-    let schema = build_schema(GraphqlAppState::new(db));
+    seed_user_with_password(&db, UuidText::from(alice), "alice", None, "x").await;
+    let schema = build_test_schema(db);
     let user = current_user(alice, "alice");
     let resp = execute_authed(
         &schema,

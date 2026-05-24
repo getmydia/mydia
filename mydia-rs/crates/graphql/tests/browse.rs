@@ -11,183 +11,28 @@
 //! - Edge nodes carry encoded global IDs (`movie:<uuid>`).
 //! - `PageInfo` has the expected boolean shape on first/last pages.
 
+mod common;
+
 use async_graphql::{Request, Variables};
-use chrono::{TimeZone, Utc};
-use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
-use mydia_rs_db::{
-    connect_from_config,
-    types::{DateTimeSecs, JsonMap, UuidText},
-    Db,
-};
-use mydia_rs_graphql::{build_schema, GraphqlAppState};
+use mydia_rs_db::types::UuidText;
 use serde_json::json;
-use tempfile::TempDir;
 use uuid::Uuid;
 
-const SCHEMA_SQL: &str = include_str!("fixtures/browse_schema.sql");
-
-async fn fresh_schema() -> (Db, TempDir) {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let path = tmp.path().join("browse.db");
-    let config = Config {
-        database: DatabaseConfig {
-            db_type: DatabaseType::Sqlite,
-            url: None,
-            path: Some(path.to_string_lossy().into_owned()),
-            pool_size: 2,
-            ..DatabaseConfig::default()
-        },
-        ..Config::default()
-    };
-    let db = connect_from_config(&config).await.expect("connect");
-    let pool = db.as_sqlite().expect("sqlite");
-
-    // Execute each statement separately — sqlite3 driver needs
-    // single-statement preparedness.
-    for stmt in SCHEMA_SQL.split(";\n") {
-        let trimmed = stmt.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        sqlx::query(trimmed).execute(pool).await.expect("schema");
-    }
-
-    (db, tmp)
-}
-
-fn sample_dt(year: i32, month: u32, day: u32) -> DateTimeSecs {
-    DateTimeSecs::from(Utc.with_ymd_and_hms(year, month, day, 0, 0, 0).unwrap())
-}
-
-async fn seed_movie(
-    db: &Db,
-    id: UuidText,
-    title: &str,
-    year: i32,
-    vote_average: f64,
-    inserted_at: DateTimeSecs,
-) {
-    let pool = db.as_sqlite().unwrap();
-    let metadata = JsonMap(json!({"vote_average": vote_average}));
-    sqlx::query(
-        "INSERT INTO media_items (id, type, title, year, tmdb_id, metadata,
-            monitored, monitoring_preset, category_override, inserted_at, updated_at)
-         VALUES (?, 'movie', ?, ?, ?, ?, 1, 'all', 0, ?, ?)",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(year)
-    .bind(i64::from(year)) // tmdb_id placeholder
-    .bind(metadata)
-    .bind(inserted_at)
-    .bind(inserted_at)
-    .execute(pool)
-    .await
-    .expect("seed movie");
-
-    // Seed at least one media file so the `has_files: true` filter
-    // doesn't exclude this movie.
-    let file_id = UuidText::new_v4();
-    sqlx::query(
-        "INSERT INTO media_files (id, media_item_id, analysis_attempts, inserted_at, updated_at)
-         VALUES (?, ?, 0, ?, ?)",
-    )
-    .bind(file_id)
-    .bind(id)
-    .bind(inserted_at)
-    .bind(inserted_at)
-    .execute(pool)
-    .await
-    .expect("seed media file");
-}
-
-async fn seed_tv_show(db: &Db, id: UuidText, title: &str, year: i32, inserted_at: DateTimeSecs) {
-    let pool = db.as_sqlite().unwrap();
-    let metadata = JsonMap(json!({}));
-    sqlx::query(
-        "INSERT INTO media_items (id, type, title, year, tmdb_id, metadata,
-            monitored, monitoring_preset, category_override, inserted_at, updated_at)
-         VALUES (?, 'tv_show', ?, ?, ?, ?, 1, 'all', 0, ?, ?)",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(year)
-    .bind(i64::from(year))
-    .bind(metadata)
-    .bind(inserted_at)
-    .bind(inserted_at)
-    .execute(pool)
-    .await
-    .expect("seed tv_show");
-}
-
-async fn seed_episode(
-    db: &Db,
-    id: UuidText,
-    media_item_id: UuidText,
-    season_number: i32,
-    episode_number: i32,
-    title: &str,
-    inserted_at: DateTimeSecs,
-) {
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query(
-        "INSERT INTO episodes (id, media_item_id, season_number, episode_number, title,
-            monitored, inserted_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
-    )
-    .bind(id)
-    .bind(media_item_id)
-    .bind(season_number)
-    .bind(episode_number)
-    .bind(title)
-    .bind(inserted_at)
-    .bind(inserted_at)
-    .execute(pool)
-    .await
-    .expect("seed episode");
-}
-
-async fn seed_library_path(
-    db: &Db,
-    id: UuidText,
-    path: &str,
-    kind: &str,
-    inserted_at: DateTimeSecs,
-) {
-    let pool = db.as_sqlite().unwrap();
-    let category_paths = JsonMap(std::collections::HashMap::<String, String>::new());
-    sqlx::query(
-        "INSERT INTO library_paths (id, path, type, monitored, scan_interval, from_env,
-            disabled, category_paths, auto_organize, auto_import, write_nfo, auto_rename,
-            inserted_at, updated_at)
-         VALUES (?, ?, ?, 1, 3600, 0, 0, ?, 0, 0, 0, 1, ?, ?)",
-    )
-    .bind(id)
-    .bind(path)
-    .bind(kind)
-    .bind(category_paths)
-    .bind(inserted_at)
-    .bind(inserted_at)
-    .execute(pool)
-    .await
-    .expect("seed library path");
-}
-
-async fn build_test_schema(db: Db) -> mydia_rs_graphql::MydiaSchema {
-    build_schema(GraphqlAppState::new(db))
-}
+use common::{
+    build_test_schema, fresh_browse_db, sample_dt, seed_episode, seed_library_path, seed_movie,
+    seed_tv_show,
+};
 
 #[tokio::test]
 async fn movies_query_returns_seeded_rows_with_phoenix_cursor() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
 
     let id_a = UuidText::new_v4();
     let id_b = UuidText::new_v4();
     seed_movie(&db, id_a, "Arrival", 2016, 7.5, sample_dt(2024, 1, 1)).await;
     seed_movie(&db, id_b, "Dune", 2021, 8.0, sample_dt(2024, 2, 1)).await;
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
 
     let response = schema
         .execute(
@@ -231,7 +76,7 @@ async fn movies_query_returns_seeded_rows_with_phoenix_cursor() {
 
 #[tokio::test]
 async fn movies_query_paginates_using_after_cursor() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
 
     for (i, title) in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]
         .iter()
@@ -248,7 +93,7 @@ async fn movies_query_paginates_using_after_cursor() {
         .await;
     }
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
 
     // First page of 2 — should include Alpha, Beta (title ASC).
     let resp1 = schema
@@ -284,7 +129,7 @@ async fn movies_query_paginates_using_after_cursor() {
 
 #[tokio::test]
 async fn movies_sort_year_desc() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
 
     seed_movie(
         &db,
@@ -305,7 +150,7 @@ async fn movies_sort_year_desc() {
     )
     .await;
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
 
     let resp = schema
         .execute(
@@ -326,7 +171,12 @@ async fn movies_sort_year_desc() {
 
 #[tokio::test]
 async fn tv_shows_query_filters_correctly() {
-    let (db, _tmp) = fresh_schema().await;
+    use mydia_rs_db::insert_active_model;
+    use mydia_rs_db::types::DateTimeSecs;
+    use mydia_rs_entities::media_files;
+    use sea_orm::Set;
+
+    let db = fresh_browse_db().await;
 
     seed_movie(
         &db,
@@ -340,22 +190,41 @@ async fn tv_shows_query_filters_correctly() {
     // Need to seed a media_file for the TV show too so `has_files` matches.
     let show_id = UuidText::new_v4();
     seed_tv_show(&db, show_id, "Some Show", 2018, sample_dt(2024, 1, 1)).await;
-    let pool = db.as_sqlite().unwrap();
-    let file_id = UuidText::new_v4();
-    let now = sample_dt(2024, 1, 1);
-    sqlx::query(
-        "INSERT INTO media_files (id, media_item_id, analysis_attempts, inserted_at, updated_at)
-         VALUES (?, ?, 0, ?, ?)",
-    )
-    .bind(file_id)
-    .bind(show_id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
 
-    let schema = build_test_schema(db).await;
+    let now: DateTimeSecs = sample_dt(2024, 1, 1);
+    let file_id = UuidText::new_v4();
+    let am = media_files::ActiveModel {
+        id: Set(file_id),
+        media_item_id: Set(Some(show_id)),
+        episode_id: Set(None),
+        path: Set(None),
+        size: Set(None),
+        quality_profile_id: Set(None),
+        resolution: Set(None),
+        codec: Set(None),
+        hdr_format: Set(None),
+        audio_codec: Set(None),
+        bitrate: Set(None),
+        verified_at: Set(None),
+        metadata: Set(None),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+        library_path_id: Set(None),
+        relative_path: Set(None),
+        cover_blob: Set(None),
+        sprite_blob: Set(None),
+        vtt_blob: Set(None),
+        preview_blob: Set(None),
+        phash: Set(None),
+        generated_at: Set(None),
+        trashed_at: Set(None),
+        analyzed_at: Set(None),
+        analysis_attempts: Set(0),
+        last_analysis_error: Set(None),
+    };
+    insert_active_model(am, &db).await.unwrap();
+
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(
             r"{
@@ -373,12 +242,12 @@ async fn tv_shows_query_filters_correctly() {
 
 #[tokio::test]
 async fn movie_by_id_handles_both_encoded_and_raw_uuid() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     let movie_uuid = Uuid::new_v4();
     let id = UuidText::from(movie_uuid);
     seed_movie(&db, id, "Pinned", 2024, 7.0, sample_dt(2024, 1, 1)).await;
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
 
     const MOVIE_QUERY: &str = r"query M($id: ID!) { movie(id: $id) { title } }";
 
@@ -406,8 +275,8 @@ async fn movie_by_id_handles_both_encoded_and_raw_uuid() {
 
 #[tokio::test]
 async fn movie_by_wrong_kind_id_rejects() {
-    let (db, _tmp) = fresh_schema().await;
-    let schema = build_test_schema(db).await;
+    let db = fresh_browse_db().await;
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(r#"{ movie(id: "show:abc") { title } }"#)
         .await;
@@ -417,13 +286,13 @@ async fn movie_by_wrong_kind_id_rejects() {
 
 #[tokio::test]
 async fn libraries_returns_seeded_paths() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     let id = UuidText::new_v4();
     seed_library_path(&db, id, "/media/movies", "movies", sample_dt(2024, 1, 1)).await;
     let id2 = UuidText::new_v4();
     seed_library_path(&db, id2, "/media/tv", "series", sample_dt(2024, 1, 1)).await;
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(r"{ libraries { id path type monitored } }")
         .await;
@@ -442,7 +311,7 @@ async fn libraries_returns_seeded_paths() {
 
 #[tokio::test]
 async fn season_query_aggregates_episodes() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     let show_id = UuidText::new_v4();
     seed_tv_show(&db, show_id, "Show", 2020, sample_dt(2024, 1, 1)).await;
     for ep_num in 1..=3 {
@@ -458,7 +327,7 @@ async fn season_query_aggregates_episodes() {
         .await;
     }
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
     let show_uuid_str = show_id.0.to_string();
     let resp = schema
         .execute(
@@ -483,7 +352,7 @@ async fn season_query_aggregates_episodes() {
 
 #[tokio::test]
 async fn season_episodes_query() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     let show_id = UuidText::new_v4();
     seed_tv_show(&db, show_id, "Show", 2020, sample_dt(2024, 1, 1)).await;
     for ep_num in [1, 2] {
@@ -509,7 +378,7 @@ async fn season_episodes_query() {
     )
     .await;
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(
             Request::new(
@@ -532,11 +401,11 @@ async fn season_episodes_query() {
 
 #[tokio::test]
 async fn node_query_dispatches_by_type() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     let movie_id = UuidText::new_v4();
     seed_movie(&db, movie_id, "M", 2020, 7.0, sample_dt(2024, 1, 1)).await;
 
-    let schema = build_test_schema(db).await;
+    let schema = build_test_schema(db);
     let encoded = format!("movie:{}", movie_id.0);
     let resp = schema
         .execute(

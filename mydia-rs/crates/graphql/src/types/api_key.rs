@@ -18,10 +18,10 @@ pub struct ApiKeyObject {
 }
 
 impl ApiKeyObject {
-    pub fn from_row(row: &mydia_rs_models::ApiKey) -> Self {
+    pub fn from_row(row: &mydia_rs_entities::api_keys::Model) -> Self {
         Self {
             id: ID(row.id.0.to_string()),
-            name: row.name.clone().unwrap_or_default(),
+            name: row.name.clone(),
             key_prefix: row.key_prefix.clone().unwrap_or_default(),
             permissions: row
                 .permissions

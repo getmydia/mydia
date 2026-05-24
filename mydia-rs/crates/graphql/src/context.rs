@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use async_graphql::dataloader::DataLoader;
 use mydia_rs_auth::role::Role;
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_pubsub::Pubsub;
 
 /// Long-lived shared state seeded into every GraphQL request.
@@ -25,7 +25,7 @@ use mydia_rs_pubsub::Pubsub;
 /// and the axum handler reuses it across requests.
 #[derive(Clone)]
 pub struct GraphqlAppState {
-    pub db: Db,
+    pub db: DatabaseConnection,
     pub pubsub: Pubsub,
 }
 
@@ -34,7 +34,7 @@ impl GraphqlAppState {
     /// the default boot path. Callers that need to inject a shared bus
     /// (e.g. workers publishing on the same instance) use
     /// [`GraphqlAppState::with_pubsub`].
-    pub fn new(db: Db) -> Self {
+    pub fn new(db: DatabaseConnection) -> Self {
         Self {
             db,
             pubsub: Pubsub::new(),
@@ -44,7 +44,7 @@ impl GraphqlAppState {
     /// Construct with an existing `Pubsub`. The workers crate (U15)
     /// passes its bus in here so workers and graphql subscribers
     /// reach the same broadcast channels.
-    pub fn with_pubsub(db: Db, pubsub: Pubsub) -> Self {
+    pub fn with_pubsub(db: DatabaseConnection, pubsub: Pubsub) -> Self {
         Self { db, pubsub }
     }
 }

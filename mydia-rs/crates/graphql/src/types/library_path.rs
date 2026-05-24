@@ -54,22 +54,21 @@ pub struct LibraryPath {
 }
 
 impl LibraryPath {
-    pub fn from_row(row: &mydia_rs_models::LibraryPath) -> Option<Self> {
-        let type_str = row.r#type.as_deref()?;
-        let type_ = LibraryType::from_db(type_str)?;
+    pub fn from_row(row: &mydia_rs_entities::library_paths::Model) -> Option<Self> {
+        let type_ = LibraryType::from_db(&row.r#type)?;
         Some(Self {
             id: NodeId::LibraryPath(NodeRef::Str(row.id.0.to_string()))
                 .encode()
                 .into(),
-            path: row.path.clone().unwrap_or_default(),
+            path: row.path.clone(),
             type_,
-            monitored: row.monitored,
-            scan_interval: Some(row.scan_interval),
+            monitored: row.monitored.unwrap_or(false),
+            scan_interval: row.scan_interval,
             last_scan_at: row.last_scan_at.as_ref().map(|t| t.0),
-            auto_organize: row.auto_organize,
-            auto_import: row.auto_import,
+            auto_organize: row.auto_organize.unwrap_or(false),
+            auto_import: row.auto_import.unwrap_or(false),
             write_nfo: row.write_nfo,
-            auto_rename: row.auto_rename,
+            auto_rename: row.auto_rename.unwrap_or(false),
         })
     }
 }

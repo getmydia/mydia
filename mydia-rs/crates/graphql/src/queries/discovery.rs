@@ -156,30 +156,27 @@ fn type_filter_to_db(types: Option<&Vec<MediaType>>) -> Option<&'static str> {
     }
 }
 
-fn build_recently_added_item(row: &mydia_rs_models::MediaItem) -> RecentlyAddedItem {
-    let type_ = row
-        .r#type
-        .as_deref()
-        .and_then(MediaType::from_db_str)
-        .unwrap_or(MediaType::Movie);
-    let id = match row.r#type.as_deref() {
-        Some("tv_show") => NodeId::TvShow(NodeRef::Str(row.id.0.to_string())).encode(),
+fn build_recently_added_item(row: &mydia_rs_entities::media_items::Model) -> RecentlyAddedItem {
+    let type_ = MediaType::from_db_str(&row.r#type).unwrap_or(MediaType::Movie);
+    let id = match row.r#type.as_str() {
+        "tv_show" => NodeId::TvShow(NodeRef::Str(row.id.0.to_string())).encode(),
         _ => NodeId::Movie(NodeRef::Str(row.id.0.to_string())).encode(),
     };
     RecentlyAddedItem {
         id: ID(id),
         type_,
-        title: row.title.clone().unwrap_or_default(),
+        title: row.title.clone(),
         year: row.year,
         artwork: build_artwork(row),
         added_at: row.inserted_at.0,
     }
 }
 
-fn build_artwork(row: &mydia_rs_models::MediaItem) -> Option<Artwork> {
-    let metadata = row.metadata.as_ref()?;
-    let poster_path = metadata.0.get("poster_path").and_then(|v| v.as_str());
-    let backdrop_path = metadata.0.get("backdrop_path").and_then(|v| v.as_str());
+fn build_artwork(row: &mydia_rs_entities::media_items::Model) -> Option<Artwork> {
+    let raw = row.metadata.as_deref()?;
+    let metadata: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let poster_path = metadata.get("poster_path").and_then(|v| v.as_str());
+    let backdrop_path = metadata.get("backdrop_path").and_then(|v| v.as_str());
     if poster_path.is_none() && backdrop_path.is_none() {
         return None;
     }

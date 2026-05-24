@@ -75,19 +75,22 @@ impl Episode {
 }
 
 impl Episode {
-    pub fn from_row(row: &mydia_rs_models::Episode) -> Self {
+    pub fn from_row(row: &mydia_rs_entities::episodes::Model) -> Self {
         Self {
             id: NodeId::Episode(NodeRef::Str(row.id.0.to_string()))
                 .encode()
                 .into(),
             media_item_id: row.media_item_id.0.to_string(),
-            season_number: row.season_number.unwrap_or(0),
-            episode_number: row.episode_number.unwrap_or(0),
+            season_number: row.season_number,
+            episode_number: row.episode_number,
             title: row.title.clone(),
             air_date: row.air_date,
-            monitored: row.monitored,
+            monitored: row.monitored.unwrap_or(false),
             plain_id: row.id.0.to_string(),
-            raw_metadata: row.metadata.as_ref().map(|m| m.0.clone()),
+            raw_metadata: row
+                .metadata
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok()),
         }
     }
 }

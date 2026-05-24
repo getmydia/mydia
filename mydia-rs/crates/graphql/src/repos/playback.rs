@@ -3,19 +3,24 @@
 //!
 //! The Phoenix module at `lib/mydia/playback.ex` wraps the
 //! `playback_progress` Ecto schema's upsert / get / delete operations.
-//! Mirrored here with sqlx, with the schema validations the
+//! Mirrored here with `SeaORM`, with the schema validations the
 //! changeset enforces translated into Rust checks at the call site.
 //!
 //! `completion_percentage` is derived from position/duration during the
 //! write (Phoenix does this inside the changeset; we mirror to keep
 //! the on-disk shape identical across backends). The `watched` flag is
 //! auto-true at >= 90% completion.
+//!
+//! Post-U13 cutover: SeaORM-native. Inserts use
+//! `mydia_rs_db::insert_active_model`; targeted UPDATEs use
+//! `Entity::update_many().col_expr(...)` with wrapper bind values.
 
 use chrono::{DateTime, Utc};
 use mydia_rs_db::types::{DateTimeSecs, UuidText};
-use mydia_rs_db::Db;
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use mydia_rs_entities::playback_progress;
+use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{DatabaseConnection, Set};
 use uuid::Uuid;
 
 /// Foreign-key form. A progress row is either tied to a media item
@@ -45,22 +50,10 @@ impl<'a> Parent<'a> {
     }
 }
 
-/// On-disk row shape. Field set mirrors
-/// `Mydia.Playback.Progress` at `lib/mydia/playback/progress.ex:11`.
-#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
-pub struct ProgressRow {
-    pub id: UuidText,
-    pub user_id: UuidText,
-    pub media_item_id: Option<UuidText>,
-    pub episode_id: Option<UuidText>,
-    pub position_seconds: i32,
-    pub duration_seconds: i32,
-    pub completion_percentage: f64,
-    pub watched: bool,
-    pub last_watched_at: DateTimeSecs,
-    pub inserted_at: DateTimeSecs,
-    pub updated_at: DateTimeSecs,
-}
+/// On-disk row shape — re-export of the entity's `Model`. Resolvers
+/// consume this type by field; the existing field names match
+/// Phoenix's column names so no remapping is needed.
+pub type ProgressRow = playback_progress::Model;
 
 /// Input bundle for a progress write. Optional fields default to
 /// preserving the existing row (insert: 0, update: existing value).
@@ -90,50 +83,53 @@ pub enum ProgressError {
     #[error("duration_seconds: is required")]
     MissingDuration,
     #[error(transparent)]
-    Db(#[from] sqlx::Error),
+    Db(#[from] DbErr),
 }
 
 /// Fetch the single progress row for (user, parent) or `None`.
 pub async fn get_progress(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
     parent: Parent<'_>,
-) -> Result<Option<ProgressRow>, sqlx::Error> {
-    let (column, value) = match parent {
-        Parent::MediaItem(id) => ("media_item_id", id),
-        Parent::Episode(id) => ("episode_id", id),
+) -> Result<Option<ProgressRow>, DbErr> {
+    let Ok(user_uuid) = Uuid::parse_str(user_id) else {
+        return Ok(None);
     };
-    let sql = format!(
-        "SELECT id, user_id, media_item_id, episode_id, position_seconds, \
-         duration_seconds, completion_percentage, watched, last_watched_at, \
-         inserted_at, updated_at \
-         FROM playback_progress \
-         WHERE user_id = $1 AND {column} = $2"
+    let user_wrapper = UuidText::from(user_uuid);
+    let backend = db.get_database_backend();
+    let mut q = playback_progress::Entity::find().filter(
+        Expr::col(playback_progress::Column::UserId).eq(user_wrapper.into_simple_expr(backend)),
     );
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?").replace("$2", "?");
-            sqlx::query_as::<_, ProgressRow>(&sql)
-                .bind(user_id)
-                .bind(value)
-                .fetch_optional(pool)
-                .await
+    match parent {
+        Parent::MediaItem(id) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(None);
+            };
+            let wrapper = UuidText::from(uuid);
+            q = q.filter(
+                Expr::col(playback_progress::Column::MediaItemId)
+                    .eq(wrapper.into_simple_expr(backend)),
+            );
         }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, ProgressRow>(&sql)
-                .bind(user_id)
-                .bind(value)
-                .fetch_optional(pool)
-                .await
+        Parent::Episode(id) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(None);
+            };
+            let wrapper = UuidText::from(uuid);
+            q = q.filter(
+                Expr::col(playback_progress::Column::EpisodeId)
+                    .eq(wrapper.into_simple_expr(backend)),
+            );
         }
     }
+    q.one(db).await
 }
 
 /// Upsert progress for (user, parent). When no row exists this inserts
 /// one with the supplied position/duration; otherwise it updates the
 /// fields the caller specified. Returns the resulting row.
 pub async fn upsert_progress(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
     parent: Parent<'_>,
     update: ProgressUpsert,
@@ -152,6 +148,7 @@ pub async fn upsert_progress(
     let existing = get_progress(db, user_id, parent).await?;
     let now = Utc::now();
     let last_watched_at = update.last_watched_at.unwrap_or(now);
+    let backend = db.get_database_backend();
 
     if let Some(row) = existing {
         let pos = update.position_seconds.unwrap_or(row.position_seconds);
@@ -164,52 +161,43 @@ pub async fn upsert_progress(
             .watched_override
             .unwrap_or(row.watched || percentage >= 90.0);
 
-        let row_id = row.id.0.to_string();
         let last_watched = DateTimeSecs::from(last_watched_at);
         let updated_at = DateTimeSecs::from(now);
 
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "UPDATE playback_progress SET \
-                        position_seconds = ?, duration_seconds = ?, \
-                        completion_percentage = ?, watched = ?, \
-                        last_watched_at = ?, updated_at = ? \
-                     WHERE id = ?",
-                )
-                .bind(pos)
-                .bind(dur)
-                .bind(percentage)
-                .bind(watched)
-                .bind(last_watched)
-                .bind(updated_at)
-                .bind(&row_id)
-                .execute(pool)
-                .await?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "UPDATE playback_progress SET \
-                        position_seconds = $1, duration_seconds = $2, \
-                        completion_percentage = $3, watched = $4, \
-                        last_watched_at = $5, updated_at = $6 \
-                     WHERE id = $7",
-                )
-                .bind(pos)
-                .bind(dur)
-                .bind(percentage)
-                .bind(watched)
-                .bind(last_watched)
-                .bind(updated_at)
-                .bind(&row_id)
-                .execute(pool)
-                .await?;
-            }
-        }
+        playback_progress::Entity::update_many()
+            .col_expr(
+                playback_progress::Column::PositionSeconds,
+                Expr::value(pos),
+            )
+            .col_expr(
+                playback_progress::Column::DurationSeconds,
+                Expr::value(dur),
+            )
+            .col_expr(
+                playback_progress::Column::CompletionPercentage,
+                Expr::value(percentage),
+            )
+            .col_expr(playback_progress::Column::Watched, Expr::value(watched))
+            .col_expr(
+                playback_progress::Column::LastWatchedAt,
+                last_watched.into_simple_expr(backend),
+            )
+            .col_expr(
+                playback_progress::Column::UpdatedAt,
+                updated_at.into_simple_expr(backend),
+            )
+            .filter(
+                Expr::col(playback_progress::Column::Id).eq(row.id.into_simple_expr(backend)),
+            )
+            .exec(db)
+            .await
+            .map_err(ProgressError::Db)?;
 
         get_progress(db, user_id, parent)
             .await?
-            .ok_or(ProgressError::Db(sqlx::Error::RowNotFound))
+            .ok_or(ProgressError::Db(DbErr::RecordNotFound(
+                "playback_progress".to_owned(),
+            )))
     } else {
         let pos = update
             .position_seconds
@@ -224,68 +212,35 @@ pub async fn upsert_progress(
             .as_movie_id()
             .map(|s| Uuid::parse_str(s).map(UuidText::from))
             .transpose()
-            .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
+            .map_err(|err| ProgressError::Db(DbErr::Custom(err.to_string())))?;
         let episode_id = parent
             .as_episode_id()
             .map(|s| Uuid::parse_str(s).map(UuidText::from))
             .transpose()
-            .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
+            .map_err(|err| ProgressError::Db(DbErr::Custom(err.to_string())))?;
         let user_uuid = Uuid::parse_str(user_id)
             .map(UuidText::from)
-            .map_err(|_| ProgressError::Db(sqlx::Error::RowNotFound))?;
+            .map_err(|err| ProgressError::Db(DbErr::Custom(err.to_string())))?;
         let last_watched = DateTimeSecs::from(last_watched_at);
         let timestamps = DateTimeSecs::from(now);
 
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO playback_progress \
-                     (id, user_id, media_item_id, episode_id, position_seconds, \
-                      duration_seconds, completion_percentage, watched, \
-                      last_watched_at, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(id)
-                .bind(user_uuid)
-                .bind(movie_id)
-                .bind(episode_id)
-                .bind(pos)
-                .bind(dur)
-                .bind(percentage)
-                .bind(watched)
-                .bind(last_watched)
-                .bind(timestamps)
-                .bind(timestamps)
-                .execute(pool)
-                .await?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO playback_progress \
-                     (id, user_id, media_item_id, episode_id, position_seconds, \
-                      duration_seconds, completion_percentage, watched, \
-                      last_watched_at, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
-                )
-                .bind(id)
-                .bind(user_uuid)
-                .bind(movie_id)
-                .bind(episode_id)
-                .bind(pos)
-                .bind(dur)
-                .bind(percentage)
-                .bind(watched)
-                .bind(last_watched)
-                .bind(timestamps)
-                .bind(timestamps)
-                .execute(pool)
-                .await?;
-            }
-        }
-
-        get_progress(db, user_id, parent)
-            .await?
-            .ok_or(ProgressError::Db(sqlx::Error::RowNotFound))
+        let am = playback_progress::ActiveModel {
+            id: Set(id),
+            user_id: Set(user_uuid),
+            media_item_id: Set(movie_id),
+            episode_id: Set(episode_id),
+            position_seconds: Set(pos),
+            duration_seconds: Set(dur),
+            completion_percentage: Set(percentage),
+            watched: Set(watched),
+            last_watched_at: Set(last_watched),
+            inserted_at: Set(timestamps),
+            updated_at: Set(timestamps),
+        };
+        let row = mydia_rs_db::insert_active_model(am, db)
+            .await
+            .map_err(ProgressError::Db)?;
+        Ok(row)
     }
 }
 
@@ -293,62 +248,44 @@ pub async fn upsert_progress(
 /// `Mydia.Playback.mark_watched/2`. Returns `Ok(None)` when no row
 /// exists (resolvers fall back to creating one).
 pub async fn mark_watched(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
     parent: Parent<'_>,
-) -> Result<Option<ProgressRow>, sqlx::Error> {
+) -> Result<Option<ProgressRow>, DbErr> {
     let existing = get_progress(db, user_id, parent).await?;
     let Some(row) = existing else {
         return Ok(None);
     };
-    let row_id = row.id.0.to_string();
+    let backend = db.get_database_backend();
     let updated_at = DateTimeSecs::from(Utc::now());
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query("UPDATE playback_progress SET watched = 1, updated_at = ? WHERE id = ?")
-                .bind(updated_at)
-                .bind(&row_id)
-                .execute(pool)
-                .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "UPDATE playback_progress SET watched = TRUE, updated_at = $1 WHERE id = $2",
-            )
-            .bind(updated_at)
-            .bind(&row_id)
-            .execute(pool)
-            .await?;
-        }
-    }
+    playback_progress::Entity::update_many()
+        .col_expr(playback_progress::Column::Watched, Expr::value(true))
+        .col_expr(
+            playback_progress::Column::UpdatedAt,
+            updated_at.into_simple_expr(backend),
+        )
+        .filter(Expr::col(playback_progress::Column::Id).eq(row.id.into_simple_expr(backend)))
+        .exec(db)
+        .await?;
     get_progress(db, user_id, parent).await
 }
 
 /// Delete the progress row, if any. Mirrors
 /// `Mydia.Playback.delete_progress/2`.
 pub async fn delete_progress(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
     parent: Parent<'_>,
-) -> Result<bool, sqlx::Error> {
+) -> Result<bool, DbErr> {
     let existing = get_progress(db, user_id, parent).await?;
     let Some(row) = existing else {
         return Ok(false);
     };
-    let row_id = row.id.0.to_string();
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query("DELETE FROM playback_progress WHERE id = ?")
-                .bind(&row_id)
-                .execute(pool)
-                .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query("DELETE FROM playback_progress WHERE id = $1")
-                .bind(&row_id)
-                .execute(pool)
-                .await?;
-        }
-    }
+    let backend = db.get_database_backend();
+    playback_progress::Entity::delete_many()
+        .filter(Expr::col(playback_progress::Column::Id).eq(row.id.into_simple_expr(backend)))
+        .exec(db)
+        .await?;
     Ok(true)
 }
+

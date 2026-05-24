@@ -135,24 +135,33 @@ impl Movie {
     /// Build a `Movie` GraphQL view from the underlying DB row.
     /// Returns `None` if the row's `type` column is not `"movie"`
     /// (mirrors Phoenix's `get_movie` error branch).
-    pub fn from_row(row: &mydia_rs_models::MediaItem) -> Option<Self> {
-        if row.r#type.as_deref() != Some("movie") {
+    ///
+    /// The entity types differ slightly from the legacy sqlx models:
+    /// `tmdb_id` / `tvdb_id` are `Option<i32>` (Postgres `integer`)
+    /// and widen to `i64` at the GraphQL boundary; `monitored` is
+    /// `Option<bool>` and falls back to `false`; `metadata` is
+    /// `Option<String>` (text-holding-JSON) and is parsed lazily here.
+    pub fn from_row(row: &mydia_rs_entities::media_items::Model) -> Option<Self> {
+        if row.r#type != "movie" {
             return None;
         }
         Some(Self {
             id: NodeId::Movie(NodeRef::Str(row.id.0.to_string()))
                 .encode()
                 .into(),
-            title: row.title.clone().unwrap_or_default(),
+            title: row.title.clone(),
             original_title: row.original_title.clone(),
             year: row.year,
-            tmdb_id: row.tmdb_id,
-            tvdb_id: row.tvdb_id,
+            tmdb_id: row.tmdb_id.map(i64::from),
+            tvdb_id: row.tvdb_id.map(i64::from),
             imdb_id: row.imdb_id.clone(),
-            monitored: row.monitored,
+            monitored: row.monitored.unwrap_or(false),
             added_at: row.inserted_at.0,
             plain_id: row.id.0.to_string(),
-            raw_metadata: row.metadata.as_ref().map(|m| m.0.clone()),
+            raw_metadata: row
+                .metadata
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok()),
             raw_category: row.category.clone(),
         })
     }

@@ -34,12 +34,12 @@ impl Season {
     pub fn build(
         show_id: &str,
         season_number: i32,
-        episodes: &[mydia_rs_models::Episode],
+        episodes: &[mydia_rs_entities::episodes::Model],
         has_files: bool,
     ) -> Option<Self> {
-        let season_episodes: Vec<&mydia_rs_models::Episode> = episodes
+        let season_episodes: Vec<&mydia_rs_entities::episodes::Model> = episodes
             .iter()
-            .filter(|e| e.season_number == Some(season_number))
+            .filter(|e| e.season_number == season_number)
             .collect();
         if season_episodes.is_empty() {
             return None;

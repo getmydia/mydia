@@ -5,91 +5,217 @@
 //! image URLs with the TMDB CDN, and run extra DB queries for
 //! `files`, `seasons`, `show`, and `hasFile`.
 
+mod common;
+
 use chrono::{TimeZone, Utc};
-use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
-use mydia_rs_db::{
-    connect_from_config,
-    types::{DateTimeSecs, JsonMap, UuidText},
-    Db,
-};
-use mydia_rs_graphql::{build_schema, GraphqlAppState};
+use mydia_rs_db::insert_active_model;
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::{episodes, media_files, media_items};
+use sea_orm::{DatabaseConnection, Set};
 use serde_json::json;
-use tempfile::TempDir;
 
-const SCHEMA_SQL: &str = include_str!("fixtures/browse_schema.sql");
-
-async fn fresh_schema() -> (Db, TempDir) {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let path = tmp.path().join("media_fields.db");
-    let config = Config {
-        database: DatabaseConfig {
-            db_type: DatabaseType::Sqlite,
-            url: None,
-            path: Some(path.to_string_lossy().into_owned()),
-            pool_size: 2,
-            ..DatabaseConfig::default()
-        },
-        ..Config::default()
-    };
-    let db = connect_from_config(&config).await.expect("connect");
-    let pool = db.as_sqlite().expect("sqlite");
-    for stmt in SCHEMA_SQL.split(";\n") {
-        let trimmed = stmt.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        sqlx::query(trimmed).execute(pool).await.expect("schema");
-    }
-    (db, tmp)
-}
+use common::{build_test_schema, fresh_browse_db};
 
 fn sample_dt() -> DateTimeSecs {
     DateTimeSecs::from(Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap())
 }
 
 async fn seed_movie_with_metadata(
-    db: &Db,
+    db: &DatabaseConnection,
     title: &str,
     metadata: serde_json::Value,
     category: Option<&str>,
 ) -> UuidText {
-    let pool = db.as_sqlite().unwrap();
     let id = UuidText::new_v4();
     let now = sample_dt();
-    let metadata_json = JsonMap(metadata);
-    sqlx::query(
-        "INSERT INTO media_items (id, type, title, year, tmdb_id, metadata,
-            monitored, monitoring_preset, category, category_override, inserted_at, updated_at)
-         VALUES (?, 'movie', ?, 2020, 1, ?, 1, 'all', ?, 0, ?, ?)",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(metadata_json)
-    .bind(category)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
-    let file_id = UuidText::new_v4();
-    sqlx::query(
-        "INSERT INTO media_files (id, media_item_id, codec, resolution, analysis_attempts,
-            inserted_at, updated_at)
-         VALUES (?, ?, 'h264', '1080p', 0, ?, ?)",
-    )
-    .bind(file_id)
-    .bind(id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
+    let metadata_text = serde_json::to_string(&metadata).unwrap();
+    let am = media_items::ActiveModel {
+        id: Set(id),
+        r#type: Set("movie".to_owned()),
+        title: Set(title.to_owned()),
+        original_title: Set(None),
+        year: Set(Some(2020)),
+        tmdb_id: Set(Some(1)),
+        imdb_id: Set(None),
+        metadata: Set(Some(metadata_text)),
+        monitored: Set(Some(true)),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+        quality_profile_id: Set(None),
+        category: Set(category.map(std::borrow::ToOwned::to_owned)),
+        category_override: Set(false),
+        monitoring_preset: Set(Some("all".to_owned())),
+        seasons_refreshed_at: Set(None),
+        tvdb_id: Set(None),
+    };
+    insert_active_model(am, db).await.unwrap();
+
+    let file_am = media_files::ActiveModel {
+        id: Set(UuidText::new_v4()),
+        media_item_id: Set(Some(id)),
+        episode_id: Set(None),
+        path: Set(None),
+        size: Set(None),
+        quality_profile_id: Set(None),
+        resolution: Set(Some("1080p".to_owned())),
+        codec: Set(Some("h264".to_owned())),
+        hdr_format: Set(None),
+        audio_codec: Set(None),
+        bitrate: Set(None),
+        verified_at: Set(None),
+        metadata: Set(None),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+        library_path_id: Set(None),
+        relative_path: Set(None),
+        cover_blob: Set(None),
+        sprite_blob: Set(None),
+        vtt_blob: Set(None),
+        preview_blob: Set(None),
+        phash: Set(None),
+        generated_at: Set(None),
+        trashed_at: Set(None),
+        analyzed_at: Set(None),
+        analysis_attempts: Set(0),
+        last_analysis_error: Set(None),
+    };
+    insert_active_model(file_am, db).await.unwrap();
     id
+}
+
+async fn seed_tv_show_with_metadata(
+    db: &DatabaseConnection,
+    title: &str,
+    metadata: serde_json::Value,
+    category: Option<&str>,
+) -> UuidText {
+    let id = UuidText::new_v4();
+    let now = sample_dt();
+    let metadata_text = serde_json::to_string(&metadata).unwrap();
+    let am = media_items::ActiveModel {
+        id: Set(id),
+        r#type: Set("tv_show".to_owned()),
+        title: Set(title.to_owned()),
+        original_title: Set(None),
+        year: Set(Some(2020)),
+        tmdb_id: Set(Some(2)),
+        imdb_id: Set(None),
+        metadata: Set(Some(metadata_text)),
+        monitored: Set(Some(true)),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+        quality_profile_id: Set(None),
+        category: Set(category.map(std::borrow::ToOwned::to_owned)),
+        category_override: Set(false),
+        monitoring_preset: Set(Some("all".to_owned())),
+        seasons_refreshed_at: Set(None),
+        tvdb_id: Set(None),
+    };
+    insert_active_model(am, db).await.unwrap();
+
+    // Seed a file so has_files matches.
+    let file_am = media_files::ActiveModel {
+        id: Set(UuidText::new_v4()),
+        media_item_id: Set(Some(id)),
+        episode_id: Set(None),
+        path: Set(None),
+        size: Set(None),
+        quality_profile_id: Set(None),
+        resolution: Set(None),
+        codec: Set(None),
+        hdr_format: Set(None),
+        audio_codec: Set(None),
+        bitrate: Set(None),
+        verified_at: Set(None),
+        metadata: Set(None),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+        library_path_id: Set(None),
+        relative_path: Set(None),
+        cover_blob: Set(None),
+        sprite_blob: Set(None),
+        vtt_blob: Set(None),
+        preview_blob: Set(None),
+        phash: Set(None),
+        generated_at: Set(None),
+        trashed_at: Set(None),
+        analyzed_at: Set(None),
+        analysis_attempts: Set(0),
+        last_analysis_error: Set(None),
+    };
+    insert_active_model(file_am, db).await.unwrap();
+    id
+}
+
+async fn seed_episode(
+    db: &DatabaseConnection,
+    media_item_id: UuidText,
+    season: i32,
+    episode: i32,
+    title: &str,
+    metadata: Option<serde_json::Value>,
+) -> UuidText {
+    let id = UuidText::new_v4();
+    let now = sample_dt();
+    let metadata_text = metadata.map(|m| serde_json::to_string(&m).unwrap());
+    let am = episodes::ActiveModel {
+        id: Set(id),
+        media_item_id: Set(media_item_id),
+        season_number: Set(season),
+        episode_number: Set(episode),
+        title: Set(Some(title.to_owned())),
+        air_date: Set(None),
+        metadata: Set(metadata_text),
+        monitored: Set(Some(true)),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+    };
+    insert_active_model(am, db).await.unwrap();
+    id
+}
+
+async fn seed_episode_file(
+    db: &DatabaseConnection,
+    media_item_id: UuidText,
+    episode_id: UuidText,
+    codec: &str,
+) {
+    let now = sample_dt();
+    let am = media_files::ActiveModel {
+        id: Set(UuidText::new_v4()),
+        media_item_id: Set(Some(media_item_id)),
+        episode_id: Set(Some(episode_id)),
+        path: Set(None),
+        size: Set(None),
+        quality_profile_id: Set(None),
+        resolution: Set(None),
+        codec: Set(Some(codec.to_owned())),
+        hdr_format: Set(None),
+        audio_codec: Set(None),
+        bitrate: Set(None),
+        verified_at: Set(None),
+        metadata: Set(None),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+        library_path_id: Set(None),
+        relative_path: Set(None),
+        cover_blob: Set(None),
+        sprite_blob: Set(None),
+        vtt_blob: Set(None),
+        preview_blob: Set(None),
+        phash: Set(None),
+        generated_at: Set(None),
+        trashed_at: Set(None),
+        analyzed_at: Set(None),
+        analysis_attempts: Set(0),
+        last_analysis_error: Set(None),
+    };
+    insert_active_model(am, db).await.unwrap();
 }
 
 #[tokio::test]
 async fn movie_derived_fields_resolve_from_metadata() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     seed_movie_with_metadata(
         &db,
         "Inception",
@@ -105,7 +231,7 @@ async fn movie_derived_fields_resolve_from_metadata() {
     )
     .await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(
             r"{
@@ -145,10 +271,10 @@ async fn movie_derived_fields_resolve_from_metadata() {
 
 #[tokio::test]
 async fn movie_artwork_returns_null_when_paths_absent() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     seed_movie_with_metadata(&db, "No Art", json!({"overview": "..."}), None).await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(r"{ movies(first: 10) { edges { node { artwork { posterUrl } } } } }")
         .await;
@@ -159,10 +285,10 @@ async fn movie_artwork_returns_null_when_paths_absent() {
 
 #[tokio::test]
 async fn movie_files_returns_seeded_media_file() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     seed_movie_with_metadata(&db, "A", json!({}), None).await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(
             r"{
@@ -193,10 +319,10 @@ async fn movie_files_returns_seeded_media_file() {
 
 #[tokio::test]
 async fn movie_progress_and_is_favorite_anonymous_fallback() {
-    let (db, _tmp) = fresh_schema().await;
+    let db = fresh_browse_db().await;
     seed_movie_with_metadata(&db, "A", json!({}), None).await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(
             r"{ movies(first: 10) { edges { node { progress { positionSeconds } isFavorite } } } }",
@@ -211,44 +337,22 @@ async fn movie_progress_and_is_favorite_anonymous_fallback() {
 
 #[tokio::test]
 async fn tv_show_derived_fields_resolve_from_metadata() {
-    let (db, _tmp) = fresh_schema().await;
-    let pool = db.as_sqlite().unwrap();
-    let id = UuidText::new_v4();
-    let now = sample_dt();
-    let metadata = JsonMap(json!({
-        "overview": "Big tent show",
-        "status": "Continuing",
-        "genres": ["Drama"],
-        "vote_average": 7.7,
-        "poster_path": "/show.jpg"
-    }));
-    sqlx::query(
-        "INSERT INTO media_items (id, type, title, year, tmdb_id, metadata,
-            monitored, monitoring_preset, category, category_override, inserted_at, updated_at)
-         VALUES (?, 'tv_show', 'A Show', 2020, 2, ?, 1, 'all', 'anime', 0, ?, ?)",
+    let db = fresh_browse_db().await;
+    seed_tv_show_with_metadata(
+        &db,
+        "A Show",
+        json!({
+            "overview": "Big tent show",
+            "status": "Continuing",
+            "genres": ["Drama"],
+            "vote_average": 7.7,
+            "poster_path": "/show.jpg"
+        }),
+        Some("anime"),
     )
-    .bind(id)
-    .bind(metadata)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
-    // Seed a file so has_files matches.
-    let file_id = UuidText::new_v4();
-    sqlx::query(
-        "INSERT INTO media_files (id, media_item_id, analysis_attempts, inserted_at, updated_at)
-         VALUES (?, ?, 0, ?, ?)",
-    )
-    .bind(file_id)
-    .bind(id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
+    .await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(
             r"{ tvShows(first: 10) { edges { node {
@@ -273,54 +377,14 @@ async fn tv_show_derived_fields_resolve_from_metadata() {
 
 #[tokio::test]
 async fn tv_show_aggregates_seasons_and_counts() {
-    let (db, _tmp) = fresh_schema().await;
-    let pool = db.as_sqlite().unwrap();
-    let show_id = UuidText::new_v4();
-    let now = sample_dt();
-    sqlx::query(
-        "INSERT INTO media_items (id, type, title, year, tmdb_id, metadata,
-            monitored, monitoring_preset, category_override, inserted_at, updated_at)
-         VALUES (?, 'tv_show', 'S', 2020, 2, '{}', 1, 'all', 0, ?, ?)",
-    )
-    .bind(show_id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
-    let file_id = UuidText::new_v4();
-    sqlx::query(
-        "INSERT INTO media_files (id, media_item_id, analysis_attempts, inserted_at, updated_at)
-         VALUES (?, ?, 0, ?, ?)",
-    )
-    .bind(file_id)
-    .bind(show_id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
-
+    let db = fresh_browse_db().await;
+    let show_id = seed_tv_show_with_metadata(&db, "S", json!({}), None).await;
     // 2 seasons, 3 episodes total.
     for &(season, episode) in &[(1, 1), (1, 2), (2, 1)] {
-        let ep_id = UuidText::new_v4();
-        sqlx::query(
-            "INSERT INTO episodes (id, media_item_id, season_number, episode_number, title,
-                monitored, inserted_at, updated_at)
-             VALUES (?, ?, ?, ?, 'X', 1, ?, ?)",
-        )
-        .bind(ep_id)
-        .bind(show_id)
-        .bind(season)
-        .bind(episode)
-        .bind(now)
-        .bind(now)
-        .execute(pool)
-        .await
-        .unwrap();
+        seed_episode(&db, show_id, season, episode, "X", None).await;
     }
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let resp = schema
         .execute(
             r"{ tvShows(first: 10) { edges { node {
@@ -347,57 +411,24 @@ async fn tv_show_aggregates_seasons_and_counts() {
 
 #[tokio::test]
 async fn episode_derived_fields_and_show_resolver() {
-    let (db, _tmp) = fresh_schema().await;
-    let pool = db.as_sqlite().unwrap();
-    let show_id = UuidText::new_v4();
-    let now = sample_dt();
-    sqlx::query(
-        "INSERT INTO media_items (id, type, title, year, tmdb_id, metadata,
-            monitored, monitoring_preset, category_override, inserted_at, updated_at)
-         VALUES (?, 'tv_show', 'Show', 2020, 2, '{}', 1, 'all', 0, ?, ?)",
+    let db = fresh_browse_db().await;
+    let show_id = seed_tv_show_with_metadata(&db, "Show", json!({}), None).await;
+    let ep_id = seed_episode(
+        &db,
+        show_id,
+        1,
+        1,
+        "Pilot",
+        Some(json!({
+            "overview": "Episode synopsis",
+            "runtime": 42,
+            "still_path": "/still.jpg"
+        })),
     )
-    .bind(show_id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
-    let ep_id = UuidText::new_v4();
-    let ep_metadata = JsonMap(json!({
-        "overview": "Episode synopsis",
-        "runtime": 42,
-        "still_path": "/still.jpg"
-    }));
-    sqlx::query(
-        "INSERT INTO episodes (id, media_item_id, season_number, episode_number, title,
-            metadata, monitored, inserted_at, updated_at)
-         VALUES (?, ?, 1, 1, 'Pilot', ?, 1, ?, ?)",
-    )
-    .bind(ep_id)
-    .bind(show_id)
-    .bind(ep_metadata)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
-    // Seed an episode-scoped media file so hasFile is true.
-    let file_id = UuidText::new_v4();
-    sqlx::query(
-        "INSERT INTO media_files (id, media_item_id, episode_id, codec, analysis_attempts,
-            inserted_at, updated_at)
-         VALUES (?, ?, ?, 'hevc', 0, ?, ?)",
-    )
-    .bind(file_id)
-    .bind(show_id)
-    .bind(ep_id)
-    .bind(now)
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
+    .await;
+    seed_episode_file(&db, show_id, ep_id, "hevc").await;
 
-    let schema = build_schema(GraphqlAppState::new(db));
+    let schema = build_test_schema(db);
     let ep_global_id = format!("episode:{}", ep_id.0);
     let query = format!(
         r#"{{

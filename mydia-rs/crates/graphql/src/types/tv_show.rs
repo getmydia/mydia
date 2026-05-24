@@ -104,7 +104,7 @@ impl TvShow {
         let state = ctx.data::<GraphqlAppState>()?;
         let episodes = media_repo::list_episodes(&state.db, &self.plain_id).await?;
         let unique: std::collections::HashSet<i32> =
-            episodes.iter().filter_map(|e| e.season_number).collect();
+            episodes.iter().map(|e| e.season_number).collect();
         Ok(unique.len() as i32)
     }
 
@@ -127,24 +127,27 @@ impl TvShow {
 }
 
 impl TvShow {
-    pub fn from_row(row: &mydia_rs_models::MediaItem) -> Option<Self> {
-        if row.r#type.as_deref() != Some("tv_show") {
+    pub fn from_row(row: &mydia_rs_entities::media_items::Model) -> Option<Self> {
+        if row.r#type != "tv_show" {
             return None;
         }
         Some(Self {
             id: NodeId::TvShow(NodeRef::Str(row.id.0.to_string()))
                 .encode()
                 .into(),
-            title: row.title.clone().unwrap_or_default(),
+            title: row.title.clone(),
             original_title: row.original_title.clone(),
             year: row.year,
-            tmdb_id: row.tmdb_id,
-            tvdb_id: row.tvdb_id,
+            tmdb_id: row.tmdb_id.map(i64::from),
+            tvdb_id: row.tvdb_id.map(i64::from),
             imdb_id: row.imdb_id.clone(),
-            monitored: row.monitored,
+            monitored: row.monitored.unwrap_or(false),
             added_at: row.inserted_at.0,
             plain_id: row.id.0.to_string(),
-            raw_metadata: row.metadata.as_ref().map(|m| m.0.clone()),
+            raw_metadata: row
+                .metadata
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok()),
             raw_category: row.category.clone(),
         })
     }
@@ -153,12 +156,13 @@ impl TvShow {
 /// Group an episode list into `Season` aggregates keyed by season
 /// number. Returns seasons sorted ascending. Used by the `seasons`
 /// resolver above.
-fn group_into_seasons(show_id: &str, episodes: &[mydia_rs_models::Episode]) -> Vec<Season> {
-    let mut buckets: BTreeMap<i32, Vec<&mydia_rs_models::Episode>> = BTreeMap::new();
+fn group_into_seasons(
+    show_id: &str,
+    episodes: &[mydia_rs_entities::episodes::Model],
+) -> Vec<Season> {
+    let mut buckets: BTreeMap<i32, Vec<&mydia_rs_entities::episodes::Model>> = BTreeMap::new();
     for ep in episodes {
-        if let Some(num) = ep.season_number {
-            buckets.entry(num).or_default().push(ep);
-        }
+        buckets.entry(ep.season_number).or_default().push(ep);
     }
     buckets
         .into_iter()
