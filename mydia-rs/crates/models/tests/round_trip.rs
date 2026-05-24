@@ -1,3 +1,8 @@
+// Tests: per-model CREATE TABLE + INSERT/SELECT round-trip fixtures
+// are tier-(b) by category — schema setup and raw assertion SQL is the
+// only sensible shape for the type-wrapper round-trip suite.
+#![allow(clippy::disallowed_methods)]
+
 //! Round-trip integration tests for the first batch of models.
 //!
 //! Each test:

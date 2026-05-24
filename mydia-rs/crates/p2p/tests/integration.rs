@@ -1,3 +1,9 @@
+// Tests: schema setup, raw INSERT seed fixtures, and direct UPDATEs
+// used to simulate revoke / pair-state mutations are tier-(b) by
+// category — runtime form is the only sensible shape for the
+// in-memory `users` / `remote_devices` rows the suite asserts against.
+#![allow(clippy::disallowed_methods)]
+
 //! Integration tests for the p2p crate.
 //!
 //! These tests exercise the pieces a real boot wires together:

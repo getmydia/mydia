@@ -1,3 +1,8 @@
+// Tests: the stale-heartbeat scenario backdates the lock row directly
+// via raw UPDATE — tier-(b) by category (SQLite-only `mydia_runtime_lock`
+// table, can't macro-check).
+#![allow(clippy::disallowed_methods)]
+
 //! Integration tests for the boot-time mutual exclusion lock.
 //!
 //! `SQLite` path covered end-to-end via tempfile DBs. Postgres path is

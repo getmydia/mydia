@@ -1,3 +1,8 @@
+// Tests: schema setup and seed fixtures are tier-(b) by category —
+// raw INSERT/CREATE used to bootstrap the in-memory state the
+// dispatch arms read against.
+#![allow(clippy::disallowed_methods)]
+
 //! Integration tests for the GraphQL and HLS dispatch arms of the
 //! [`MinimalRouter`] (U29 follow-up).
 //!

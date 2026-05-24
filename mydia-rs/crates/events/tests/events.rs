@@ -1,3 +1,8 @@
+// Tests: schema setup, raw INSERT fixtures, and direct COUNT(*) assertions
+// are tier-(b) by category — runtime form is the only sensible shape for
+// the in-memory `events` table the integration suite seeds.
+#![allow(clippy::disallowed_methods)]
+
 //! Integration tests for the events crate.
 //!
 //! Each test boots an in-memory `SQLite` pool, applies a minimal

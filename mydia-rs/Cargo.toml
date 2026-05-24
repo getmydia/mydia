@@ -50,15 +50,18 @@ anyhow = "1"
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
-# `disallowed_methods` is configured via the workspace `clippy.toml`
-# and flags runtime `sqlx::query` / `query_as` / `query_scalar` calls
-# so the tier-(a) macro conversion sweep can find them. Set to `allow`
-# at the workspace baseline because CI runs `clippy -- -D warnings`,
-# which would otherwise turn every existing runtime call into an
-# error and block unrelated work. Converted modules opt in with a
-# top-of-file `#![warn(clippy::disallowed_methods)]` so the lint
-# surfaces backsliding without escalating to a workspace-wide block.
-disallowed_methods = "allow"
+# `disallowed_methods` is configured via the workspace `clippy.toml` and
+# flags runtime `sqlx::query` / `query_as` / `query_scalar` calls so the
+# tier-(a) macro conversion sweep can find them. The workspace baseline
+# is `deny`: every runtime call site must either be promoted to the
+# compile-time-checked `sqlx::query!` / `query_as!` / `query_scalar!`
+# macro form (tier (a)) or carry a per-call `#[allow(clippy::disallowed_methods)]`
+# with a one-line reason describing the dialect divergence, dynamic
+# composition, or SQLite-only schema reach that makes it genuinely
+# tier (b). See `crates/db/README.md` for the per-call patterns. CI is
+# expected red while the workspace's pending runtime sites are walked
+# crate-by-crate; the deny gate is the forcing function.
+disallowed_methods = "deny"
 
 # Allowed pedantic lints, these flag idiomatic patterns we use widely
 # and the noise/value ratio doesn't justify suppressing per-call-site.
