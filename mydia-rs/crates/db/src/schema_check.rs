@@ -54,6 +54,8 @@ pub enum SchemaCheckOutcome {
 pub async fn schema_check(db: &Db) -> Result<SchemaCheckOutcome, DbError> {
     let raw_version = match db {
         Db::Sqlite(pool) => {
+            // Dialect-divergent: `sqlite_master` is SQLite-only.
+            #[allow(clippy::disallowed_methods)]
             let exists: Option<String> = sqlx::query_scalar(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
             )
@@ -67,12 +69,16 @@ pub async fn schema_check(db: &Db) -> Result<SchemaCheckOutcome, DbError> {
                 return Ok(SchemaCheckOutcome::SchemaMissing);
             }
 
-            sqlx::query("SELECT MAX(version) AS v FROM schema_migrations")
+            // schema_migrations is Phoenix-owned and absent from the macro prepare schema.
+            #[allow(clippy::disallowed_methods)]
+            let row = sqlx::query("SELECT MAX(version) AS v FROM schema_migrations")
                 .fetch_one(pool)
-                .await?
-                .try_get::<Option<i64>, _>("v")?
+                .await?;
+            row.try_get::<Option<i64>, _>("v")?
         }
         Db::Postgres(pool) => {
+            // Dialect-divergent: `to_regclass` is Postgres-only.
+            #[allow(clippy::disallowed_methods)]
             let exists: Option<String> =
                 sqlx::query_scalar("SELECT to_regclass('public.schema_migrations')::text")
                     .fetch_one(pool)
@@ -85,10 +91,12 @@ pub async fn schema_check(db: &Db) -> Result<SchemaCheckOutcome, DbError> {
                 return Ok(SchemaCheckOutcome::SchemaMissing);
             }
 
-            sqlx::query("SELECT MAX(version) AS v FROM schema_migrations")
+            // schema_migrations is Phoenix-owned and absent from the macro prepare schema.
+            #[allow(clippy::disallowed_methods)]
+            let row = sqlx::query("SELECT MAX(version) AS v FROM schema_migrations")
                 .fetch_one(pool)
-                .await?
-                .try_get::<Option<i64>, _>("v")?
+                .await?;
+            row.try_get::<Option<i64>, _>("v")?
         }
     };
 

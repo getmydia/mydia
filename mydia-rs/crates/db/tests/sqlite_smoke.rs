@@ -1,3 +1,9 @@
+// Tests: schema setup, raw INSERT/SELECT fixtures, and `sqlx::Type`
+// round-trip assertions are tier-(b) by category — runtime form is the
+// only sensible shape for ad-hoc CREATE TABLE / INSERT used to seed
+// in-memory test state.
+#![allow(clippy::disallowed_methods)]
+
 //! End-to-end `SQLite` tests: pool open, smoke query, schema-check probe,
 //! and the UUID/datetime `sqlx::Type` round-trip against Ecto's on-disk format.
 //!

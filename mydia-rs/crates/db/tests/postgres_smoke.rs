@@ -1,3 +1,9 @@
+// Tests: schema setup, raw INSERT/SELECT fixtures, and `sqlx::Type`
+// round-trip assertions are tier-(b) by category — runtime form is the
+// only sensible shape for ad-hoc CREATE TABLE / INSERT used to seed
+// per-test schema namespaces.
+#![allow(clippy::disallowed_methods)]
+
 //! Postgres counterpart of `sqlite_smoke.rs`. Gated on `DATABASE_URL`:
 //! local runs without a Postgres service skip cleanly, the CI matrix
 //! brings up a `postgres:16` service container and exercises every
