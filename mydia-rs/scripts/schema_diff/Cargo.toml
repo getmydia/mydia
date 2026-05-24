@@ -1,0 +1,27 @@
+[package]
+name = "mydia-rs-schema-diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Schema drift detector. Compares the schema described by
+# `mydia_rs_entities::*` against the live Postgres `information_schema`
+# of a Phoenix-migrated database. Runs as the `schema-diff-check` CI
+# job and locally via `./dev rs schema-diff`.
+#
+# Lives under `scripts/` (not `crates/`) so the workspace lints opt-out
+# is implicit -- this is operator tooling, not application code.
+
+[[bin]]
+name = "schema-diff"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+sea-orm.workspace = true
+mydia-rs-entities = { path = "../../crates/entities" }
+anyhow.workspace = true
+
+[lints]
+workspace = true

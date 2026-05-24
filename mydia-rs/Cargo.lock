@@ -5101,6 +5101,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mydia-rs-schema-diff"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mydia-rs-entities",
+ "sea-orm",
+ "tokio",
+]
+
+[[package]]
 name = "mydia-rs-streaming"
 version = "0.1.0"
 dependencies = [

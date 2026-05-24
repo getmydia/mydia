@@ -22,6 +22,7 @@ members = [
     "crates/subtitles",
     "crates/web",
     "bin/mydia-rs-cli",
+    "scripts/schema_diff",
 ]
 
 [workspace.package]

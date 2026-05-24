@@ -107,6 +107,7 @@ ${YELLOW}Rust Backend (mydia-rs, native via Nix devenv):${NC}
   rs fmt               Format code (cargo fmt)
   rs clippy            Run clippy lints (cargo clippy)
   rs sqlx-prepare      Refresh sqlx offline query cache
+  rs schema-diff       Check entity schema drift vs Phoenix-migrated Postgres
   rs <args>            Forward args verbatim to cargo
 
 ${YELLOW}Player E2E Options:${NC}
@@ -892,6 +893,13 @@ EOF
                 ;;
             sqlx-prepare)
                 rs_cmd="cargo sqlx prepare --workspace $*"
+                ;;
+            schema-diff)
+                # Drift check between hand-written entities and the
+                # Phoenix-migrated Postgres schema. Run after
+                # `./dev up -d postgres` and `./dev mix ecto.migrate` so
+                # the comparison runs against the current schema.
+                rs_cmd="cargo run -p mydia-rs-schema-diff $*"
                 ;;
             test|check|fmt|clippy)
                 rs_cmd="cargo $rs_subcmd $*"
