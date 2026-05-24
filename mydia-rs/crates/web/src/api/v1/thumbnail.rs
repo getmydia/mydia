@@ -131,7 +131,10 @@ async fn lookup_blob_checksum(
     use sea_orm::entity::prelude::*;
     use sea_orm::sea_query::{Expr, ExprTrait};
 
-    let Some(wrapper) = uuid::Uuid::parse_str(media_file_id).ok().map(UuidText::from) else {
+    let Some(wrapper) = uuid::Uuid::parse_str(media_file_id)
+        .ok()
+        .map(UuidText::from)
+    else {
         return Ok(None);
     };
     let backend = state.db.get_database_backend();

@@ -373,9 +373,7 @@ impl DownloadService {
                 transcode_jobs::Column::UpdatedAt,
                 now.into_simple_expr(backend),
             )
-            .filter(
-                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
             .exec(db)
             .await?;
         Ok(())
@@ -473,8 +471,7 @@ impl DownloadService {
         let row = media_files::Entity::find()
             .find_also_related(library_paths::Entity)
             .filter(
-                Expr::col(media_files::Column::MediaItemId)
-                    .eq(parent.into_simple_expr(backend)),
+                Expr::col(media_files::Column::MediaItemId).eq(parent.into_simple_expr(backend)),
             )
             .filter(media_files::Column::TrashedAt.is_null())
             .filter(media_files::Column::EpisodeId.is_null())
@@ -498,10 +495,7 @@ impl DownloadService {
         let backend = db.get_database_backend();
         let row = media_files::Entity::find()
             .find_also_related(library_paths::Entity)
-            .filter(
-                Expr::col(media_files::Column::EpisodeId)
-                    .eq(parent.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(media_files::Column::EpisodeId).eq(parent.into_simple_expr(backend)))
             .filter(media_files::Column::TrashedAt.is_null())
             .order_by_asc(media_files::Column::InsertedAt)
             .limit(1)
@@ -519,9 +513,7 @@ impl DownloadService {
         let backend = db.get_database_backend();
         let row = media_files::Entity::find()
             .find_also_related(library_paths::Entity)
-            .filter(
-                Expr::col(media_files::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(media_files::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
             .limit(1)
             .one(db)
             .await?;
@@ -569,9 +561,7 @@ impl DownloadService {
                     .fetch_job_by_key(media_file_id, resolution)
                     .await?
                     .ok_or_else(|| {
-                        ServiceError::Internal(
-                            "unique-conflict on insert but no row by key".into(),
-                        )
+                        ServiceError::Internal("unique-conflict on insert but no row by key".into())
                     })?;
                 Ok(job)
             }
@@ -586,9 +576,7 @@ impl DownloadService {
         let db = &self.inner.db;
         let backend = db.get_database_backend();
         let model = transcode_jobs::Entity::find()
-            .filter(
-                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
             .limit(1)
             .one(db)
             .await?;
@@ -639,9 +627,7 @@ impl DownloadService {
         let db = &self.inner.db;
         let backend = db.get_database_backend();
         transcode_jobs::Entity::delete_many()
-            .filter(
-                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
             .exec(db)
             .await?;
         Ok(())
@@ -672,10 +658,7 @@ impl DownloadService {
                 transcode_jobs::Column::OutputPath,
                 Expr::value(output_path.to_owned()),
             )
-            .col_expr(
-                transcode_jobs::Column::FileSize,
-                Expr::value(file_size_i32),
-            )
+            .col_expr(transcode_jobs::Column::FileSize, Expr::value(file_size_i32))
             .col_expr(
                 transcode_jobs::Column::CompletedAt,
                 now.into_simple_expr(backend),
@@ -688,9 +671,7 @@ impl DownloadService {
                 transcode_jobs::Column::UpdatedAt,
                 now.into_simple_expr(backend),
             )
-            .filter(
-                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
             .exec(db)
             .await?;
         self.broadcast_job_event(id, "job_completed", None, None);
@@ -828,9 +809,7 @@ impl MediaFileRow {
 /// — what `find_also_related` returns — into the service-shaped
 /// [`MediaFileRow`]. The optional second tuple captures the LEFT JOIN
 /// result (no row when `library_path_id` is NULL on the media file).
-fn media_file_from_join(
-    pair: (media_files::Model, Option<library_paths::Model>),
-) -> MediaFileRow {
+fn media_file_from_join(pair: (media_files::Model, Option<library_paths::Model>)) -> MediaFileRow {
     let (mf, lp) = pair;
     MediaFileRow {
         id: mf.id.0.to_string(),
@@ -1173,7 +1152,9 @@ mod db_tests {
     ) {
         let now = DateTimeSecs::from(Utc::now());
         let am = media_files::ActiveModel {
-            id: Set(UuidText::from(Uuid::parse_str(media_file_id).expect("uuid"))),
+            id: Set(UuidText::from(
+                Uuid::parse_str(media_file_id).expect("uuid"),
+            )),
             media_item_id: Set(Some(UuidText::from(
                 Uuid::parse_str(MOVIE_ID).expect("uuid"),
             ))),
@@ -1353,10 +1334,7 @@ mod db_tests {
         let id_wrapper = parse_uuid_wrapper(&info.job_id).expect("uuid");
         let backend = db.get_database_backend();
         let before = transcode_jobs::Entity::find()
-            .filter(
-                Expr::col(transcode_jobs::Column::Id)
-                    .eq(id_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
             .one(&db)
             .await
             .expect("read")
@@ -1370,10 +1348,7 @@ mod db_tests {
             .expect("touch");
 
         let after = transcode_jobs::Entity::find()
-            .filter(
-                Expr::col(transcode_jobs::Column::Id)
-                    .eq(id_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
             .one(&db)
             .await
             .expect("read again")

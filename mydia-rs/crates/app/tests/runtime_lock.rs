@@ -85,8 +85,11 @@ async fn stale_heartbeat_is_swept_and_lock_can_be_reclaimed() {
     // Simulate a stale heartbeat from a crashed peer by reaching into
     // the lock row and backdating it past the STALE_AFTER window.
     let backend = db1.get_database_backend();
-    let stale =
-        DateTimeSecs::from(chrono::DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z").unwrap().with_timezone(&chrono::Utc));
+    let stale = DateTimeSecs::from(
+        chrono::DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+    );
     mydia_runtime_lock::Entity::update_many()
         .col_expr(
             mydia_runtime_lock::Column::HeartbeatAt,

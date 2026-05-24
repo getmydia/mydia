@@ -427,7 +427,16 @@ pub async fn seed_episode_simple(
     title: &str,
 ) {
     let now = DateTimeSecs::from(Utc::now());
-    seed_episode(db, id, media_item_id, season_number, episode_number, title, now).await;
+    seed_episode(
+        db,
+        id,
+        media_item_id,
+        season_number,
+        episode_number,
+        title,
+        now,
+    )
+    .await;
 }
 
 pub async fn seed_media_file_with_metadata(
@@ -469,9 +478,7 @@ pub async fn seed_media_file_with_metadata(
         analysis_attempts: Set(0),
         last_analysis_error: Set(None),
     };
-    insert_active_model(am, db)
-        .await
-        .expect("seed media file");
+    insert_active_model(am, db).await.expect("seed media file");
 }
 
 pub async fn seed_api_key(

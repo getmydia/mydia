@@ -18,9 +18,7 @@ use std::time::Duration;
 
 use apalis::prelude::Data;
 use sea_orm::sea_query::{Expr, ExprTrait};
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -127,9 +125,7 @@ async fn fetch_media_item(db: &DatabaseConnection, id: &str) -> Result<UuidText,
     let row = media_items::Entity::find()
         .select_only()
         .column(media_items::Column::Id)
-        .filter(
-            Expr::col(media_items::Column::Id).eq(UuidText(uuid).into_simple_expr(backend)),
-        )
+        .filter(Expr::col(media_items::Column::Id).eq(UuidText(uuid).into_simple_expr(backend)))
         .into_tuple::<(UuidText,)>()
         .one(db)
         .await?;

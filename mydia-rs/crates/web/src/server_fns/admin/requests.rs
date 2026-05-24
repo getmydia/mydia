@@ -103,8 +103,8 @@ mod server {
         // `status=""` or `status="all"` mean "no filter"; any other
         // value binds into the WHERE clause.
         let trimmed = status.trim();
-        let mut q = media_requests::Entity::find()
-            .order_by_desc(media_requests::Column::InsertedAt);
+        let mut q =
+            media_requests::Entity::find().order_by_desc(media_requests::Column::InsertedAt);
         if !(trimmed.is_empty() || trimmed == "all") {
             q = q.filter(media_requests::Column::Status.eq(trimmed.to_owned()));
         }
@@ -120,10 +120,8 @@ mod server {
             .all(&state.db)
             .await
             .map_err(|err| ServerFnError::new(format!("query users: {err}")))?;
-        let user_map: std::collections::HashMap<UuidText, Option<String>> = user_rows
-            .into_iter()
-            .map(|u| (u.id, u.username))
-            .collect();
+        let user_map: std::collections::HashMap<UuidText, Option<String>> =
+            user_rows.into_iter().map(|u| (u.id, u.username)).collect();
 
         Ok(rows
             .into_iter()

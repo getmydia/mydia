@@ -103,10 +103,7 @@ pub async fn create(
     Ok(IssuedApiKey { row, plain_key })
 }
 
-pub async fn revoke(
-    db: &DatabaseConnection,
-    id: &str,
-) -> Result<Option<api_keys::Model>, DbErr> {
+pub async fn revoke(db: &DatabaseConnection, id: &str) -> Result<Option<api_keys::Model>, DbErr> {
     let Ok(uuid) = Uuid::parse_str(id) else {
         return Ok(None);
     };

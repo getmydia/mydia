@@ -69,8 +69,8 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::types::{DateTimeMicros, UuidText};
     use mydia_rs_db::insert_active_model;
+    use mydia_rs_db::types::{DateTimeMicros, UuidText};
     use mydia_rs_entities::release_blacklist;
     use sea_orm::entity::prelude::*;
     use sea_orm::query::QueryOrder;
@@ -157,9 +157,7 @@ mod server {
 
     fn validate(payload: &NewBlacklistEntry) -> Result<(), ServerFnError> {
         if payload.kind.trim().is_empty() {
-            return Err(ServerFnError::new(
-                "Indexer (kind) is required".to_owned(),
-            ));
+            return Err(ServerFnError::new("Indexer (kind) is required".to_owned()));
         }
         if payload.pattern.trim().is_empty() {
             return Err(ServerFnError::new("Pattern is required".to_owned()));

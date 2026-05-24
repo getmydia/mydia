@@ -275,8 +275,7 @@ mod server {
             if let Some(wrapper) = parse_uuid(id) {
                 let backend = db.get_database_backend();
                 q = q.filter(
-                    Expr::col(quality_profiles::Column::Id)
-                        .ne(wrapper.into_simple_expr(backend)),
+                    Expr::col(quality_profiles::Column::Id).ne(wrapper.into_simple_expr(backend)),
                 );
             }
         }

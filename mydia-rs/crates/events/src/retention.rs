@@ -35,9 +35,7 @@ pub async fn delete_old_events(
     let cutoff = DateTimeSecs::from(Utc::now() - Duration::days(retention_days));
 
     let result = events::Entity::delete_many()
-        .filter(
-            Expr::col(events::Column::InsertedAt).lt(cutoff.into_simple_expr(backend)),
-        )
+        .filter(Expr::col(events::Column::InsertedAt).lt(cutoff.into_simple_expr(backend)))
         .exec(db)
         .await?;
     Ok(result.rows_affected)

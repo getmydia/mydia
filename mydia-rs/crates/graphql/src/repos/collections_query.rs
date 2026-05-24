@@ -78,7 +78,10 @@ pub async fn list_items(
     //  ORDER BY collection_items.position ASC
     //  LIMIT $2
     media_items::Entity::find()
-        .join_rev(JoinType::InnerJoin, collection_items::Relation::MediaItems.def())
+        .join_rev(
+            JoinType::InnerJoin,
+            collection_items::Relation::MediaItems.def(),
+        )
         .filter(
             Expr::col((
                 collection_items::Entity,

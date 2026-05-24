@@ -426,7 +426,10 @@ mod server {
                 )
                 .col_expr(
                     config_settings::Column::UpdatedById,
-                    user_uuid.map_or_else(|| Expr::value(Option::<String>::None), |u| u.into_simple_expr(backend)),
+                    user_uuid.map_or_else(
+                        || Expr::value(Option::<String>::None),
+                        |u| u.into_simple_expr(backend),
+                    ),
                 )
                 .col_expr(
                     config_settings::Column::UpdatedAt,

@@ -362,10 +362,7 @@ mod server {
         // is bcrypt-path only.
         let backend = db.get_database_backend();
         users::Entity::update_many()
-            .col_expr(
-                users::Column::Email,
-                Expr::value(payload.email.clone()),
-            )
+            .col_expr(users::Column::Email, Expr::value(payload.email.clone()))
             .col_expr(
                 users::Column::DisplayName,
                 Expr::value(payload.display_name.clone()),
@@ -374,10 +371,7 @@ mod server {
                 users::Column::AvatarUrl,
                 Expr::value(payload.avatar_url.clone()),
             )
-            .col_expr(
-                users::Column::LastLoginAt,
-                now.into_simple_expr(backend),
-            )
+            .col_expr(users::Column::LastLoginAt, now.into_simple_expr(backend))
             .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
             .filter(Expr::col(users::Column::Id).eq((*id).into_simple_expr(backend)))
             .exec(db)
@@ -468,31 +462,20 @@ mod server {
             .await
             .map_err(|err| ServerFnError::new(format!("lookup user: {err}")))?;
         Ok(row.and_then(|u| {
-            u.username.clone().map(|name| {
-                (
-                    u.id.to_string(),
-                    name,
-                    u.password_hash,
-                    u.role,
-                )
-            })
+            u.username
+                .clone()
+                .map(|name| (u.id.to_string(), name, u.password_hash, u.role))
         }))
     }
 
-    async fn touch_last_login(
-        db: &DatabaseConnection,
-        id: &str,
-    ) -> Result<(), ServerFnError> {
+    async fn touch_last_login(db: &DatabaseConnection, id: &str) -> Result<(), ServerFnError> {
         let Some(wrapper) = parse_uuid_wrapper(id) else {
             return Ok(());
         };
         let backend = db.get_database_backend();
         let now = DateTimeSecs::from(chrono::Utc::now());
         users::Entity::update_many()
-            .col_expr(
-                users::Column::LastLoginAt,
-                now.into_simple_expr(backend),
-            )
+            .col_expr(users::Column::LastLoginAt, now.into_simple_expr(backend))
             .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
             .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
             .exec(db)

@@ -275,7 +275,9 @@ async fn media_item_round_trips_with_json_metadata() {
     assert_eq!(item.title, "Inception");
     assert_eq!(MediaKind::parse(&item.r#type), Some(MediaKind::Movie));
     assert_eq!(
-        item.monitoring_preset.as_deref().and_then(MonitoringPreset::parse),
+        item.monitoring_preset
+            .as_deref()
+            .and_then(MonitoringPreset::parse),
         Some(MonitoringPreset::All)
     );
     let parsed: serde_json::Value = serde_json::from_str(item.metadata.as_ref().unwrap()).unwrap();

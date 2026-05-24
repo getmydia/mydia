@@ -31,7 +31,6 @@ use http_body_util::BodyExt;
 mod common;
 
 use common::{apply_sql, fresh_db};
-use sea_orm::ConnectionTrait;
 use mydia_rs_auth::api_key::hash_api_key;
 use mydia_rs_auth::{MediaTokenCache, MediaTokenPermission, MediaTokenSigner};
 use mydia_rs_db::DatabaseConnection;
@@ -39,6 +38,7 @@ use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_pubsub::Pubsub;
 use mydia_rs_web::api;
 use mydia_rs_web::WebState;
+use sea_orm::ConnectionTrait;
 use tower::ServiceExt;
 
 const SETUP_SQL: &str = "
@@ -1338,7 +1338,10 @@ async fn revoked_api_key_returns_401() {
 // transcoding is exercised by the streaming crate's own tests.
 // ---------------------------------------------------------------------
 
-async fn insert_media_file(db: &DatabaseConnection, h264_aac: bool) -> (String, tempfile::NamedTempFile) {
+async fn insert_media_file(
+    db: &DatabaseConnection,
+    h264_aac: bool,
+) -> (String, tempfile::NamedTempFile) {
     use std::io::Write;
     let id = uuid::Uuid::new_v4().to_string();
     let media_item_id = uuid::Uuid::new_v4().to_string();
@@ -1886,7 +1889,11 @@ async fn indexer_reset_failures_returns_401_without_auth() {
 // `MydiaWeb.Api.DownloadController`.
 // ---------------------------------------------------------------------
 
-async fn insert_media_file_for_download(db: &DatabaseConnection, parent_id: &str, abs_path: &str) -> String {
+async fn insert_media_file_for_download(
+    db: &DatabaseConnection,
+    parent_id: &str,
+    abs_path: &str,
+) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     db.execute_unprepared(&format!(

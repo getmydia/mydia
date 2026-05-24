@@ -136,8 +136,7 @@ async fn search_with_types_filter_narrows_to_kind() {
 async fn search_respects_first_limit() {
     let db = fresh_playback_db().await;
     for i in 0..5 {
-        seed_movie_with_metadata(&db, UuidText::new_v4(), &format!("Match {i}"), json!({}))
-            .await;
+        seed_movie_with_metadata(&db, UuidText::new_v4(), &format!("Match {i}"), json!({})).await;
     }
     let schema = build_test_schema(db);
     let resp = schema

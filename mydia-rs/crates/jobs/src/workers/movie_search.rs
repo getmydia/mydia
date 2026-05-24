@@ -17,9 +17,7 @@
 //! `find().left_join(media_files).filter(Column::Id.is_null())`.
 
 use apalis::prelude::Data;
-use sea_orm::{
-    ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
-};
+use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait};
 use serde::{Deserialize, Serialize};
 
 use mydia_rs_db::types::UuidText;

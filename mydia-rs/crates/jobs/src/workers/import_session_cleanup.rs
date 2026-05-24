@@ -59,9 +59,7 @@ async fn delete_expired_sessions(db: &DatabaseConnection) -> Result<u64, JobsErr
     let now = DateTimeSecs::from(Utc::now());
     let res = import_sessions::Entity::delete_many()
         .filter(import_sessions::Column::ExpiresAt.is_not_null())
-        .filter(
-            Expr::col(import_sessions::Column::ExpiresAt).lt(now.into_simple_expr(backend)),
-        )
+        .filter(Expr::col(import_sessions::Column::ExpiresAt).lt(now.into_simple_expr(backend)))
         .exec(db)
         .await?;
     Ok(res.rows_affected)

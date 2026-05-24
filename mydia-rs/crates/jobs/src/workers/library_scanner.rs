@@ -138,10 +138,7 @@ async fn get_library_path(
     };
     let backend = db.get_database_backend();
     let row = library_paths::Entity::find()
-        .filter(
-            Expr::col(library_paths::Column::Id)
-                .eq(UuidText(uuid).into_simple_expr(backend)),
-        )
+        .filter(Expr::col(library_paths::Column::Id).eq(UuidText(uuid).into_simple_expr(backend)))
         .one(db)
         .await?;
     row.ok_or_else(|| JobsError::NotFound(format!("library_path {id}")))
@@ -285,10 +282,7 @@ async fn handle_scan_error(
     Err(JobsError::WorkerError(error.to_owned()))
 }
 
-async fn mark_scan_in_progress(
-    db: &DatabaseConnection,
-    id: &UuidText,
-) -> Result<(), JobsError> {
+async fn mark_scan_in_progress(db: &DatabaseConnection, id: &UuidText) -> Result<(), JobsError> {
     let backend = db.get_database_backend();
     let now = DateTimeSecs::from(Utc::now());
     library_paths::Entity::update_many()
@@ -310,10 +304,7 @@ async fn mark_scan_in_progress(
     Ok(())
 }
 
-async fn mark_scan_completed(
-    db: &DatabaseConnection,
-    id: &UuidText,
-) -> Result<(), JobsError> {
+async fn mark_scan_completed(db: &DatabaseConnection, id: &UuidText) -> Result<(), JobsError> {
     let backend = db.get_database_backend();
     let now = DateTimeSecs::from(Utc::now());
     library_paths::Entity::update_many()

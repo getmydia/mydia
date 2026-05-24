@@ -254,9 +254,7 @@ mod server {
         };
         let backend = st.db.get_database_backend();
         let media_present = media_items::Entity::find()
-            .filter(
-                Expr::col(media_items::Column::Id).eq(media_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(media_items::Column::Id).eq(media_wrapper.into_simple_expr(backend)))
             .one(&st.db)
             .await
             .map_err(|err| ServerFnError::new(format!("verify media_item: {err}")))?;
@@ -281,9 +279,7 @@ mod server {
                 downloads::Column::UpdatedAt,
                 now_secs.into_simple_expr(backend),
             )
-            .filter(
-                Expr::col(downloads::Column::Id).eq(download_wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(downloads::Column::Id).eq(download_wrapper.into_simple_expr(backend)))
             .exec(&st.db)
             .await
             .map_err(|err| ServerFnError::new(format!("manual match: {err}")))?;
@@ -318,10 +314,10 @@ mod server {
             }
             DownloadsTab::Issues => Condition::any()
                 .add(downloads::Column::ImportFailedAt.is_not_null())
-                .add(downloads::Column::MatchStatus.is_in([
-                    "unmatched".to_owned(),
-                    "unresolved_files".to_owned(),
-                ])),
+                .add(
+                    downloads::Column::MatchStatus
+                        .is_in(["unmatched".to_owned(), "unresolved_files".to_owned()]),
+                ),
         };
 
         let raw_rows = downloads::Entity::find()
@@ -336,42 +332,34 @@ mod server {
         // Hydrate parents in two side-band fetches to keep the SeaORM
         // surface vanilla — find_with_related would require explicit
         // join wiring for the optional FKs.
-        let media_ids: Vec<UuidText> = raw_rows
-            .iter()
-            .filter_map(|r| r.media_item_id)
-            .collect();
-        let media_map: std::collections::HashMap<UuidText, media_items::Model> = if media_ids
-            .is_empty()
-        {
-            std::collections::HashMap::new()
-        } else {
-            media_items::Entity::find()
-                .filter(media_items::Column::Id.is_in(media_ids))
-                .all(db)
-                .await
-                .map_err(|err| ServerFnError::new(format!("list downloads media: {err}")))?
-                .into_iter()
-                .map(|m| (m.id, m))
-                .collect()
-        };
-        let episode_ids: Vec<UuidText> = raw_rows
-            .iter()
-            .filter_map(|r| r.episode_id)
-            .collect();
-        let episode_map: std::collections::HashMap<UuidText, episodes::Model> = if episode_ids
-            .is_empty()
-        {
-            std::collections::HashMap::new()
-        } else {
-            episodes::Entity::find()
-                .filter(episodes::Column::Id.is_in(episode_ids))
-                .all(db)
-                .await
-                .map_err(|err| ServerFnError::new(format!("list downloads episodes: {err}")))?
-                .into_iter()
-                .map(|m| (m.id, m))
-                .collect()
-        };
+        let media_ids: Vec<UuidText> = raw_rows.iter().filter_map(|r| r.media_item_id).collect();
+        let media_map: std::collections::HashMap<UuidText, media_items::Model> =
+            if media_ids.is_empty() {
+                std::collections::HashMap::new()
+            } else {
+                media_items::Entity::find()
+                    .filter(media_items::Column::Id.is_in(media_ids))
+                    .all(db)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("list downloads media: {err}")))?
+                    .into_iter()
+                    .map(|m| (m.id, m))
+                    .collect()
+            };
+        let episode_ids: Vec<UuidText> = raw_rows.iter().filter_map(|r| r.episode_id).collect();
+        let episode_map: std::collections::HashMap<UuidText, episodes::Model> =
+            if episode_ids.is_empty() {
+                std::collections::HashMap::new()
+            } else {
+                episodes::Entity::find()
+                    .filter(episodes::Column::Id.is_in(episode_ids))
+                    .all(db)
+                    .await
+                    .map_err(|err| ServerFnError::new(format!("list downloads episodes: {err}")))?
+                    .into_iter()
+                    .map(|m| (m.id, m))
+                    .collect()
+            };
 
         Ok(raw_rows
             .into_iter()
@@ -425,5 +413,4 @@ mod server {
             "active"
         }
     }
-
 }

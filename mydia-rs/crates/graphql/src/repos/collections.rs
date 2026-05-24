@@ -113,9 +113,7 @@ pub async fn toggle_favorite(
 
     if let Some(item) = existing {
         collection_items::Entity::delete_many()
-            .filter(
-                Expr::col(collection_items::Column::Id).eq(item.id.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(collection_items::Column::Id).eq(item.id.into_simple_expr(backend)))
             .exec(db)
             .await?;
         return Ok(ToggleOutcome::Removed);

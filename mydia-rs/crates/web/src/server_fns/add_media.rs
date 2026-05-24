@@ -186,7 +186,8 @@ mod server {
         let id_str = id_uuid.to_string();
         let id = UuidText::from(id_uuid);
         let now = DateTimeSecs::from(chrono::Utc::now());
-        let qp_uuid = quality_profile_id.and_then(|s| uuid::Uuid::parse_str(s).ok().map(UuidText::from));
+        let qp_uuid =
+            quality_profile_id.and_then(|s| uuid::Uuid::parse_str(s).ok().map(UuidText::from));
         let tmdb_id_i32 = tmdb_id.and_then(|n| i32::try_from(n).ok());
         let am = media_items::ActiveModel {
             id: Set(id),
@@ -218,15 +219,16 @@ mod server {
 
     /// Verify a `quality_profile` row exists. Used by [`create`] to
     /// reject bogus FK ids before the insert lands.
-    async fn quality_profile_exists(db: &DatabaseConnection, id: &str) -> Result<bool, ServerFnError> {
+    async fn quality_profile_exists(
+        db: &DatabaseConnection,
+        id: &str,
+    ) -> Result<bool, ServerFnError> {
         let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
             return Ok(false);
         };
         let backend = db.get_database_backend();
         let count = quality_profiles::Entity::find()
-            .filter(
-                Expr::col(quality_profiles::Column::Id).eq(wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(quality_profiles::Column::Id).eq(wrapper.into_simple_expr(backend)))
             .count(db)
             .await
             .map_err(|err| ServerFnError::new(format!("verify quality_profile: {err}")))?;

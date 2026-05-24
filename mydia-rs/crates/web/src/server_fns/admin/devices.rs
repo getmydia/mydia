@@ -49,7 +49,7 @@ mod server {
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
     use mydia_rs_db::types::{DateTimeSecs, UuidText};
-    
+
     use mydia_rs_entities::remote_devices;
     use sea_orm::entity::prelude::*;
     use sea_orm::query::QueryOrder;

@@ -540,7 +540,9 @@ async fn remote_access_status_is_disabled_stub() {
     assert!(resp.errors.is_empty(), "errors: {:?}", resp.errors);
     let data = resp.data.into_json().unwrap();
     assert_eq!(data["remoteAccessStatus"]["enabled"], false);
-    assert!(serde_json::Value::is_null(&data["remoteAccessStatus"]["endpointAddr"]));
+    assert!(serde_json::Value::is_null(
+        &data["remoteAccessStatus"]["endpointAddr"]
+    ));
     assert_eq!(data["remoteAccessStatus"]["connectedPeers"], 0);
 }
 

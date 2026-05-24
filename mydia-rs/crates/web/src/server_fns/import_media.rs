@@ -342,8 +342,8 @@ mod server {
         tmdb_id: Option<i64>,
     ) -> Result<(), ServerFnError> {
         let now = DateTimeSecs::from(chrono::Utc::now());
-        let id_wrapper = parse_uuid(id)
-            .ok_or_else(|| ServerFnError::new(format!("invalid id {id}")))?;
+        let id_wrapper =
+            parse_uuid(id).ok_or_else(|| ServerFnError::new(format!("invalid id {id}")))?;
         let tmdb_id_i32 = tmdb_id.and_then(|n| i32::try_from(n).ok());
         let am = media_items::ActiveModel {
             id: Set(id_wrapper),

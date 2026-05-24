@@ -58,9 +58,10 @@ pub const SESSION_KEY_USER_ID: &str = "user_id";
 /// dispatches an entirely separate store type, not per-engine SQL.
 pub fn layer(db: &DatabaseConnection, secure: bool) -> SessionLayer {
     match db.get_database_backend() {
-        DatabaseBackend::Sqlite => {
-            SessionLayer::Sqlite(layer_sqlite(db.get_sqlite_connection_pool().clone(), secure))
-        }
+        DatabaseBackend::Sqlite => SessionLayer::Sqlite(layer_sqlite(
+            db.get_sqlite_connection_pool().clone(),
+            secure,
+        )),
         DatabaseBackend::Postgres => SessionLayer::Postgres(layer_postgres(
             db.get_postgres_connection_pool().clone(),
             secure,

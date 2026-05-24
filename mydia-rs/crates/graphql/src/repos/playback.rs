@@ -165,14 +165,8 @@ pub async fn upsert_progress(
         let updated_at = DateTimeSecs::from(now);
 
         playback_progress::Entity::update_many()
-            .col_expr(
-                playback_progress::Column::PositionSeconds,
-                Expr::value(pos),
-            )
-            .col_expr(
-                playback_progress::Column::DurationSeconds,
-                Expr::value(dur),
-            )
+            .col_expr(playback_progress::Column::PositionSeconds, Expr::value(pos))
+            .col_expr(playback_progress::Column::DurationSeconds, Expr::value(dur))
             .col_expr(
                 playback_progress::Column::CompletionPercentage,
                 Expr::value(percentage),
@@ -186,9 +180,7 @@ pub async fn upsert_progress(
                 playback_progress::Column::UpdatedAt,
                 updated_at.into_simple_expr(backend),
             )
-            .filter(
-                Expr::col(playback_progress::Column::Id).eq(row.id.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(playback_progress::Column::Id).eq(row.id.into_simple_expr(backend)))
             .exec(db)
             .await
             .map_err(ProgressError::Db)?;
@@ -288,4 +280,3 @@ pub async fn delete_progress(
         .await?;
     Ok(true)
 }
-

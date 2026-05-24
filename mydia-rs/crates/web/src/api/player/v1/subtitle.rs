@@ -489,9 +489,7 @@ async fn lookup_first_for_movie(
     };
     let backend = state.db.get_database_backend();
     let Some(mf) = media_files::Entity::find()
-        .filter(
-            Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
-        )
+        .filter(Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)))
         .filter(media_files::Column::EpisodeId.is_null())
         .filter(media_files::Column::TrashedAt.is_null())
         .order_by_asc(media_files::Column::InsertedAt)

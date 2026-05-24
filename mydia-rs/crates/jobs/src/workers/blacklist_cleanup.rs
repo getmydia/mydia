@@ -58,9 +58,7 @@ async fn sweep_expired(db: &DatabaseConnection) -> Result<u64, JobsError> {
     let now = DateTimeSecs::from(Utc::now());
     let res = release_blacklist::Entity::delete_many()
         .filter(release_blacklist::Column::ExpiresAt.is_not_null())
-        .filter(
-            Expr::col(release_blacklist::Column::ExpiresAt).lt(now.into_simple_expr(backend)),
-        )
+        .filter(Expr::col(release_blacklist::Column::ExpiresAt).lt(now.into_simple_expr(backend)))
         .exec(db)
         .await?;
     Ok(res.rows_affected)

@@ -369,8 +369,7 @@ async fn users_list_returns_inserted_row() {
 
     let rows = query_all(
         &fx.db,
-        "SELECT id, username, email, role, oidc_sub FROM users ORDER BY inserted_at ASC"
-            .to_owned(),
+        "SELECT id, username, email, role, oidc_sub FROM users ORDER BY inserted_at ASC".to_owned(),
     )
     .await;
     assert_eq!(rows.len(), 1);
@@ -562,7 +561,12 @@ async fn config_settings_upsert_updates_existing_row() {
 
 // ---------- download_clients ----------
 
-async fn insert_download_client(db: &DatabaseConnection, name: &str, kind: &str, enabled: bool) -> String {
+async fn insert_download_client(
+    db: &DatabaseConnection,
+    name: &str,
+    kind: &str,
+    enabled: bool,
+) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let enabled_int = i64::from(enabled);
@@ -1023,7 +1027,11 @@ async fn quality_profiles_delete_profile_removes_row() {
     };
     assert_eq!(res.rows_affected(), 1);
 
-    let row = query_one(&fx.db, "SELECT COUNT(*) AS n FROM quality_profiles".to_owned()).await;
+    let row = query_one(
+        &fx.db,
+        "SELECT COUNT(*) AS n FROM quality_profiles".to_owned(),
+    )
+    .await;
     let count: i64 = row.try_get_by("n").expect("n");
     assert_eq!(count, 0);
 }

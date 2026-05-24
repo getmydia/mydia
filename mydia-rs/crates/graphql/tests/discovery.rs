@@ -86,11 +86,7 @@ async fn seed_movie(
     id
 }
 
-async fn seed_tv_show(
-    db: &DatabaseConnection,
-    title: &str,
-    inserted_at: DateTimeSecs,
-) -> UuidText {
+async fn seed_tv_show(db: &DatabaseConnection, title: &str, inserted_at: DateTimeSecs) -> UuidText {
     use std::sync::atomic::{AtomicI32, Ordering};
     static TVDB_COUNTER: AtomicI32 = AtomicI32::new(10_000);
     let tmdb = TVDB_COUNTER.fetch_add(1, Ordering::Relaxed);

@@ -23,12 +23,12 @@ mod common;
 use chrono::Utc;
 use common::{apply_sql, fresh_db};
 use mydia_rs_db::DatabaseConnection;
-use sea_orm::ConnectionTrait;
 use mydia_rs_web::server_fns::collections::server::{
     fetch_collection_detail, fetch_collection_items, fetch_collections,
 };
 use mydia_rs_web::server_fns::collections::CollectionListQuery;
 use mydia_rs_web::server_fns::search::server::execute_search;
+use sea_orm::ConnectionTrait;
 
 const SETUP_SQL: &str = "
 CREATE TABLE IF NOT EXISTS users (

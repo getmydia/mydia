@@ -97,10 +97,7 @@ async fn get_import_list(
     };
     let backend = db.get_database_backend();
     let row = import_lists::Entity::find()
-        .filter(
-            Expr::col(import_lists::Column::Id)
-                .eq(UuidText(uuid).into_simple_expr(backend)),
-        )
+        .filter(Expr::col(import_lists::Column::Id).eq(UuidText(uuid).into_simple_expr(backend)))
         .one(db)
         .await?;
     Ok(row)

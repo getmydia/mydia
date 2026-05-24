@@ -83,16 +83,13 @@ impl From<events::Model> for Event {
         // `metadata` is text-holding-JSON on disk; Phoenix writes
         // `'{}'` when empty so we treat a missing/invalid payload as an
         // empty object rather than surfacing a parse error to callers.
-        let metadata_value = m
-            .metadata
-            .as_deref()
-            .map_or_else(
-                || serde_json::Value::Object(serde_json::Map::default()),
-                |s| {
-                    serde_json::from_str(s)
-                        .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::default()))
-                },
-            );
+        let metadata_value = m.metadata.as_deref().map_or_else(
+            || serde_json::Value::Object(serde_json::Map::default()),
+            |s| {
+                serde_json::from_str(s)
+                    .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::default()))
+            },
+        );
         Self {
             id: m.id,
             category: m.category,
@@ -209,10 +206,7 @@ pub async fn count_events(
 
     // `Entity::find().filter(...).count()` returns u64; the public API
     // exposes i64 (Phoenix returns an integer) so cast after the await.
-    let count = events::Entity::find()
-        .filter(condition)
-        .count(db)
-        .await?;
+    let count = events::Entity::find().filter(condition).count(db).await?;
     Ok(count as i64)
 }
 
@@ -247,9 +241,8 @@ fn filter_condition(db: &DatabaseConnection, filter: &EventFilter) -> Condition 
     if let Some(v) = filter.resource_id.as_deref() {
         if let Ok(uuid) = Uuid::parse_str(v) {
             let wrapper = UuidText(uuid);
-            cond = cond.add(
-                Expr::col(events::Column::ResourceId).eq(wrapper.into_simple_expr(backend)),
-            );
+            cond = cond
+                .add(Expr::col(events::Column::ResourceId).eq(wrapper.into_simple_expr(backend)));
         } else {
             warn!(value = %v, "ignoring resource_id filter; not a valid UUID");
         }
@@ -259,15 +252,13 @@ fn filter_condition(db: &DatabaseConnection, filter: &EventFilter) -> Condition 
     }
     if let Some(since) = filter.since {
         let wrapper = DateTimeSecs::from(since);
-        cond = cond.add(
-            Expr::col(events::Column::InsertedAt).gte(wrapper.into_simple_expr(backend)),
-        );
+        cond =
+            cond.add(Expr::col(events::Column::InsertedAt).gte(wrapper.into_simple_expr(backend)));
     }
     if let Some(until) = filter.until {
         let wrapper = DateTimeSecs::from(until);
-        cond = cond.add(
-            Expr::col(events::Column::InsertedAt).lte(wrapper.into_simple_expr(backend)),
-        );
+        cond =
+            cond.add(Expr::col(events::Column::InsertedAt).lte(wrapper.into_simple_expr(backend)));
     }
 
     cond

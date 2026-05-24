@@ -287,7 +287,7 @@ pub mod server {
     use sea_orm::entity::prelude::*;
     use sea_orm::query::{Order, QueryOrder, QuerySelect};
     use sea_orm::sea_query::{Condition, Expr, ExprTrait, Func, Query, SimpleExpr};
-    
+
     use std::collections::BTreeMap;
 
     fn parse_uuid(s: &str) -> Option<UuidText> {
@@ -389,11 +389,7 @@ pub mod server {
         })
     }
 
-    fn build_base_cond(
-        kind: &str,
-        monitored: MonitoredFilter,
-        search: Option<&str>,
-    ) -> Condition {
+    fn build_base_cond(kind: &str, monitored: MonitoredFilter, search: Option<&str>) -> Condition {
         let mut cond = Condition::all().add(media_items::Column::Type.eq(kind.to_owned()));
         match monitored {
             MonitoredFilter::All => {}
@@ -406,9 +402,8 @@ pub mod server {
         }
         if let Some(term) = search {
             let pattern = format!("%{}%", term.to_lowercase());
-            cond = cond.add(
-                Expr::expr(Func::lower(Expr::col(media_items::Column::Title))).like(pattern),
-            );
+            cond = cond
+                .add(Expr::expr(Func::lower(Expr::col(media_items::Column::Title))).like(pattern));
         }
         cond
     }
@@ -481,8 +476,7 @@ pub mod server {
                 .column(episodes::Column::Id)
                 .from(episodes::Entity)
                 .and_where(
-                    Expr::col(episodes::Column::MediaItemId)
-                        .eq(wrapper.into_simple_expr(backend)),
+                    Expr::col(episodes::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
                 )
                 .to_owned();
             let count = media_files::Entity::find()
@@ -630,8 +624,7 @@ pub mod server {
         let backend = db.get_database_backend();
         let rows = media_files::Entity::find()
             .filter(
-                Expr::col(media_files::Column::MediaItemId)
-                    .eq(wrapper.into_simple_expr(backend)),
+                Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
             )
             .filter(media_files::Column::TrashedAt.is_null())
             .order_by_asc(media_files::Column::Path)
@@ -675,9 +668,7 @@ pub mod server {
         };
         let backend = db.get_database_backend();
         let episode_rows = episodes::Entity::find()
-            .filter(
-                Expr::col(episodes::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(episodes::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)))
             .order_by_asc(episodes::Column::SeasonNumber)
             .order_by_asc(episodes::Column::EpisodeNumber)
             .all(db)
@@ -861,9 +852,7 @@ pub mod server {
             .await
             .map_err(|err| ServerFnError::new(format!("delete media files: {err}")))?;
         episodes::Entity::delete_many()
-            .filter(
-                Expr::col(episodes::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
-            )
+            .filter(Expr::col(episodes::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)))
             .exec(db)
             .await
             .map_err(|err| ServerFnError::new(format!("delete episodes: {err}")))?;

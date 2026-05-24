@@ -22,11 +22,11 @@ use std::sync::Arc;
 use chrono::Utc;
 use common::{apply_sql, fresh_db};
 use mydia_rs_db::DatabaseConnection;
-use sea_orm::{ConnectionTrait, Statement};
 use mydia_rs_jobs::storage::{self as jobs_storage, JobStorage};
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 use mydia_rs_pubsub::{topics, Event, Pubsub};
 use mydia_rs_web::realtime::library_scanner::LibraryScanEvent;
+use sea_orm::{ConnectionTrait, Statement};
 use tempfile::TempDir;
 use tokio::sync::broadcast::Receiver;
 

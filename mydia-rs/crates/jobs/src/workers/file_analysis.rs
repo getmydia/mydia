@@ -118,9 +118,7 @@ async fn apply_analysis(
         )
         .filter(
             Condition::all()
-                .add(
-                    Expr::col(media_files::Column::Id).eq((*id).into_simple_expr(backend)),
-                )
+                .add(Expr::col(media_files::Column::Id).eq((*id).into_simple_expr(backend)))
                 .add(media_files::Column::AnalyzedAt.is_null()),
         )
         .exec(db)

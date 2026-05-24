@@ -105,22 +105,19 @@ pub async fn list_media_items(
     }
     if let Some(since) = opts.added_since {
         if let Some(dt) = parse_added_since(since) {
-            cond = cond.add(
-                Expr::col(media_items::Column::InsertedAt).gte(dt.into_simple_expr(backend)),
-            );
+            cond = cond
+                .add(Expr::col(media_items::Column::InsertedAt).gte(dt.into_simple_expr(backend)));
         }
     }
     if let Some(term) = opts.search {
         let pattern = format!("%{}%", term.to_lowercase());
-        cond = cond
-            .add(Expr::expr(Func::lower(Expr::col(media_items::Column::Title))).like(pattern));
+        cond =
+            cond.add(Expr::expr(Func::lower(Expr::col(media_items::Column::Title))).like(pattern));
     }
 
     q = q.filter(cond);
     let lower_title: SimpleExpr = Func::lower(Expr::col(media_items::Column::Title)).into();
-    q.order_by(lower_title, sea_orm::Order::Asc)
-        .all(db)
-        .await
+    q.order_by(lower_title, sea_orm::Order::Asc).all(db).await
 }
 
 /// Fetch one media item by UUID. Returns `Ok(None)` when the row
@@ -199,9 +196,7 @@ pub async fn list_media_files_for_movie(
     };
     let backend = db.get_database_backend();
     media_files::Entity::find()
-        .filter(
-            Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
-        )
+        .filter(Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)))
         .filter(media_files::Column::EpisodeId.is_null())
         .filter(media_files::Column::TrashedAt.is_null())
         .order_by_asc(media_files::Column::InsertedAt)
@@ -237,9 +232,7 @@ pub async fn first_media_file_for_movie(
     };
     let backend = db.get_database_backend();
     media_files::Entity::find()
-        .filter(
-            Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
-        )
+        .filter(Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)))
         .filter(media_files::Column::EpisodeId.is_null())
         .filter(media_files::Column::TrashedAt.is_null())
         .order_by_asc(media_files::Column::InsertedAt)

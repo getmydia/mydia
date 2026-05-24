@@ -153,9 +153,7 @@ mod server {
             DatabaseBackend::Sqlite => {
                 "SELECT page_count * page_size AS s FROM pragma_page_count(), pragma_page_size()"
             }
-            DatabaseBackend::Postgres => {
-                "SELECT pg_database_size(current_database())::bigint AS s"
-            }
+            DatabaseBackend::Postgres => "SELECT pg_database_size(current_database())::bigint AS s",
             _ => {
                 return Ok(("unknown".to_owned(), "unhealthy".to_owned()));
             }

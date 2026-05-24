@@ -226,7 +226,11 @@ async fn insert_show(db: &DatabaseConnection, title: &str) -> String {
     id
 }
 
-async fn insert_movie_with_release_date(db: &DatabaseConnection, title: &str, release_date: &str) -> String {
+async fn insert_movie_with_release_date(
+    db: &DatabaseConnection,
+    title: &str,
+    release_date: &str,
+) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let metadata = serde_json::json!({"release_date": release_date}).to_string();
@@ -326,11 +330,7 @@ async fn calendar_movie_query_filters_by_release_date_metadata() {
     // logic.
     let in_range = rows
         .into_iter()
-        .filter_map(|r| {
-            r.try_get_by::<Option<String>, _>("metadata")
-                .ok()
-                .flatten()
-        })
+        .filter_map(|r| r.try_get_by::<Option<String>, _>("metadata").ok().flatten())
         .filter_map(|m| serde_json::from_str::<serde_json::Value>(&m).ok())
         .filter_map(|m| {
             m.get("release_date")
@@ -375,7 +375,12 @@ async fn calendar_empty_range_returns_nothing() {
 
 // ---------- activity ----------
 
-async fn insert_event(db: &DatabaseConnection, category: &str, event_type: &str, severity: &str) -> String {
+async fn insert_event(
+    db: &DatabaseConnection,
+    category: &str,
+    event_type: &str,
+    severity: &str,
+) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     db.execute_unprepared(&format!(
@@ -583,8 +588,7 @@ async fn downloads_manual_match_links_media_item() {
         format!("SELECT media_item_id, match_status FROM downloads WHERE id = '{dl}'"),
     )
     .await;
-    let pre_media_item_id: Option<String> =
-        pre.try_get_by("media_item_id").expect("media_item_id");
+    let pre_media_item_id: Option<String> = pre.try_get_by("media_item_id").expect("media_item_id");
     assert!(pre_media_item_id.is_none(), "download starts unmatched");
 
     // Run the same update the server fn issues.
@@ -672,7 +676,12 @@ async fn downloads_manual_match_unknown_download_id_is_no_op() {
 
 // ---------- my requests ----------
 
-async fn insert_request(db: &DatabaseConnection, requester_id: &str, status: &str, title: &str) -> String {
+async fn insert_request(
+    db: &DatabaseConnection,
+    requester_id: &str,
+    status: &str,
+    title: &str,
+) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let title_e = esc(title);

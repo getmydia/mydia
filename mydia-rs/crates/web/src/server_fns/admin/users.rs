@@ -85,8 +85,8 @@ mod server {
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
     use mydia_rs_auth::password::hash_password;
-    use mydia_rs_db::types::{DateTimeSecs, UuidText};
     use mydia_rs_db::insert_active_model;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
     use mydia_rs_entities::users;
     use sea_orm::entity::prelude::*;
     use sea_orm::query::QueryOrder;
@@ -191,7 +191,10 @@ mod server {
         }
         let state = state().await?;
         let Some(wrapper) = parse_uuid(&payload.id) else {
-            return Err(ServerFnError::new(format!("invalid user id {}", payload.id)));
+            return Err(ServerFnError::new(format!(
+                "invalid user id {}",
+                payload.id
+            )));
         };
         let backend = state.db.get_database_backend();
         let now = DateTimeSecs::from(chrono::Utc::now());
