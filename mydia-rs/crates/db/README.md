@@ -137,22 +137,23 @@ Commit every new `mydia-rs/.sqlx/query-*.json` file. CI builds with
 
 ### Sweep progress
 
-Per-crate conversion state. "Done" = every site is either tier-(a)
-macro or tier-(b) `#[allow]`, file-level `#![warn]` opted in, tests
-pass, offline build clean.
+Per-crate conversion state. Counts cover both `src/` and `tests/`
+because `cargo clippy --workspace --all-targets` lints tests too.
+"Done" = every site is either tier-(a) macro or tier-(b) `#[allow]`,
+file-level `#![warn]` opted in, tests pass, offline build clean.
 
-| Crate | Sites | Status |
-|---|---:|---|
-| `subtitles` | 4 | done (all 4 → tier (a) via `UuidText` refactor) |
-| `events` | ~12 | done (`retention.rs` + `persistence.rs` insert/by-id macroized; dynamic `QueryBuilder` stays for list/count) |
-| `app` | 8 | done (PG advisory-lock → macros; SQLite-only `mydia_runtime_lock` table → tier (b)) |
-| `models` | 21 | pending |
-| `downloads` | 22 | pending |
-| `p2p` | 24 | pending |
-| `db` | 40 | pending |
-| `jobs` | 45 | pending |
-| `graphql` | 107 | partial (`repos/accounts.rs` is the original pilot; the rest pending) |
-| `web` | 367 | pending |
+| Crate | `src/` runtime | `src/` macro | `tests/` runtime | Tier-(a) follow-up scope |
+|---|---:|---:|---:|---|
+| `subtitles` | 2 | 3 | 0 | done — SQLite arms of tier-(a) pairs |
+| `events` | 3 | 4 | 5 | done — `QueryBuilder` paths + SQLite arms (tests stay tier (b)) |
+| `app` | 5 | 3 | 1 | done — `mydia_runtime_lock` (SQLite-only) + SQLite arms |
+| `models` | 0 | 0 | 22 | none in `src/`; tests are fixture SQL — stay tier (b) |
+| `graphql` | 65 | 10 | 43 | partial — `accounts` pilot done; promote `repos/{collections,api_keys,playback,media,settings,collections_query}.rs` next |
+| `db` | 6 | 0 | 36 | mostly tier (b): DDL in `pool.rs` smoke query and `schema_check.rs`; tests are setup fixtures |
+| `p2p` | 14 | 0 | 10 | promote `service.rs` (single concentrated file) |
+| `downloads` | 22 | 0 | 0 | promote `service.rs` (single concentrated file, but ~half use dynamic SQL — tier (b)) |
+| `jobs` | 40 | 0 | 5 | promote `workers/library_scanner.rs` first (10 sites), then the smaller workers |
+| `web` | 236 | 0 | 131 | largest surface; promote in slices by route family (auth → admin → api/v1 → server_fns/*) |
 
 When the last row flips to "done", flip the workspace lint:
 `disallowed_methods = "allow"` → `"deny"` in `mydia-rs/Cargo.toml`'s
