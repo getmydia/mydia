@@ -25,13 +25,15 @@
 
 #![cfg(feature = "server")]
 
-use mydia_rs_db::Db;
+mod common;
+
+use common::{apply_sql, fresh_db, sqlite_pool};
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_web::server_fns::media::server::{
     count_media, delete_media_item_db_only, fetch_media, fetch_media_detail, fetch_movie_files,
     fetch_show_seasons, flip_episode_monitored, flip_media_monitored, row_has_files,
 };
 use mydia_rs_web::server_fns::media::{MediaSort, MonitoredFilter, FIRST_PAGE_SIZE};
-use sqlx::sqlite::SqlitePoolOptions;
 use uuid::Uuid;
 
 /// Deterministic UUID derived from a short test label. The Phoenix
@@ -111,21 +113,20 @@ CREATE TABLE IF NOT EXISTS media_files (
 );
 ";
 
-async fn setup() -> Db {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .expect("open in-memory sqlite");
-    sqlx::query(SETUP_SQL)
-        .execute(&pool)
-        .await
-        .expect("create tables");
-    Db::Sqlite(pool)
+async fn setup() -> DatabaseConnection {
+    let db = fresh_db().await;
+    apply_sql(&db, SETUP_SQL).await;
+    db
 }
 
-async fn insert_movie(db: &Db, id: &str, title: &str, year: Option<i32>, monitored: bool) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+async fn insert_movie(
+    db: &DatabaseConnection,
+    id: &str,
+    title: &str,
+    year: Option<i32>,
+    monitored: bool,
+) {
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query(
         "INSERT INTO media_items (id, type, title, year, monitored, monitoring_preset, \
@@ -143,8 +144,8 @@ async fn insert_movie(db: &Db, id: &str, title: &str, year: Option<i32>, monitor
     .expect("insert movie");
 }
 
-async fn insert_tv(db: &Db, id: &str, title: &str, year: Option<i32>) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+async fn insert_tv(db: &DatabaseConnection, id: &str, title: &str, year: Option<i32>) {
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query(
         "INSERT INTO media_items (id, type, title, year, monitored, monitoring_preset, \
@@ -161,8 +162,8 @@ async fn insert_tv(db: &Db, id: &str, title: &str, year: Option<i32>) {
     .expect("insert tv");
 }
 
-async fn insert_episode(db: &Db, id: &str, show_id: &str) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+async fn insert_episode(db: &DatabaseConnection, id: &str, show_id: &str) {
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query(
         "INSERT INTO episodes (id, media_item_id, monitored, inserted_at, updated_at) \
@@ -177,8 +178,8 @@ async fn insert_episode(db: &Db, id: &str, show_id: &str) {
     .expect("insert episode");
 }
 
-async fn insert_movie_file(db: &Db, id: &str, movie_id: &str, trashed: bool) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+async fn insert_movie_file(db: &DatabaseConnection, id: &str, movie_id: &str, trashed: bool) {
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let trashed_at = if trashed { Some(now.clone()) } else { None };
     sqlx::query(
@@ -196,8 +197,8 @@ async fn insert_movie_file(db: &Db, id: &str, movie_id: &str, trashed: bool) {
     .expect("insert movie file");
 }
 
-async fn insert_episode_file(db: &Db, id: &str, episode_id: &str) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+async fn insert_episode_file(db: &DatabaseConnection, id: &str, episode_id: &str) {
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query(
         "INSERT INTO media_files (id, episode_id, path, inserted_at, updated_at) \
@@ -505,13 +506,13 @@ async fn count_matches_fetch_size_under_filters() {
 // ---------- U25.b: detail page tests ----------
 
 async fn insert_movie_with_metadata(
-    db: &Db,
+    db: &DatabaseConnection,
     id: &str,
     title: &str,
     year: Option<i32>,
     metadata_json: &str,
 ) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query(
         "INSERT INTO media_items (id, type, title, year, metadata, monitored, monitoring_preset, \
@@ -531,7 +532,7 @@ async fn insert_movie_with_metadata(
 
 #[allow(clippy::too_many_arguments)]
 async fn insert_full_movie_file(
-    db: &Db,
+    db: &DatabaseConnection,
     id: &str,
     movie_id: &str,
     path: &str,
@@ -540,7 +541,7 @@ async fn insert_full_movie_file(
     audio_codec: Option<&str>,
     size: Option<i64>,
 ) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query(
         "INSERT INTO media_files (id, media_item_id, path, resolution, codec, audio_codec, size, \
@@ -563,7 +564,7 @@ async fn insert_full_movie_file(
 
 #[allow(clippy::too_many_arguments)]
 async fn insert_full_episode(
-    db: &Db,
+    db: &DatabaseConnection,
     id: &str,
     show_id: &str,
     season: i32,
@@ -572,7 +573,7 @@ async fn insert_full_episode(
     air_date: Option<&str>,
     monitored: bool,
 ) {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query(
         "INSERT INTO episodes (id, media_item_id, season_number, episode_number, title, air_date, \
@@ -819,8 +820,8 @@ async fn seasons_empty_when_no_episodes() {
 
 // ---------- U25.c: action endpoint tests ----------
 
-async fn read_monitored(db: &Db, table: &str, id: &str) -> bool {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+async fn read_monitored(db: &DatabaseConnection, table: &str, id: &str) -> bool {
+    let pool = sqlite_pool(db);
     let sql = format!("SELECT monitored FROM {table} WHERE id = ?");
     let (m,): (bool,) = sqlx::query_as(&sql)
         .bind(id)
@@ -830,8 +831,8 @@ async fn read_monitored(db: &Db, table: &str, id: &str) -> bool {
     m
 }
 
-async fn row_exists(db: &Db, table: &str, id: &str) -> bool {
-    let Db::Sqlite(pool) = db else { unreachable!() };
+async fn row_exists(db: &DatabaseConnection, table: &str, id: &str) -> bool {
+    let pool = sqlite_pool(db);
     let sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?)");
     let (exists,): (bool,) = sqlx::query_as(&sql)
         .bind(id)

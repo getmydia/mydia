@@ -12,10 +12,12 @@
 
 #![cfg(feature = "server")]
 
+mod common;
+
+use common::{apply_sql, fresh_db, sqlite_pool};
 use mydia_rs_auth::password::{hash_password, verify_password};
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_web::session::{self as web_session, SESSION_COOKIE_NAME};
-use sqlx::sqlite::SqlitePoolOptions;
 
 const USERS_TABLE_SQL: &str = "
 CREATE TABLE IF NOT EXISTS users (
@@ -34,17 +36,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ";
 
-async fn fixture_db() -> Db {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .expect("open in-memory sqlite");
-    sqlx::query(USERS_TABLE_SQL)
-        .execute(&pool)
-        .await
-        .expect("create users table");
-    let db = Db::Sqlite(pool);
+async fn fixture_db() -> DatabaseConnection {
+    let db = fresh_db().await;
+    apply_sql(&db, USERS_TABLE_SQL).await;
     web_session::migrate(&db)
         .await
         .expect("tower-sessions migrate");
@@ -81,9 +75,7 @@ async fn bcrypt_verifies_round_trip() {
 #[tokio::test]
 async fn user_row_round_trips_through_users_table() {
     let db = fixture_db().await;
-    let Db::Sqlite(pool) = &db else {
-        unreachable!()
-    };
+    let pool = sqlite_pool(&db);
     let hash = hash_password("correcthorse").expect("hash");
     let now = chrono::Utc::now().to_rfc3339();
     sqlx::query(
@@ -117,9 +109,7 @@ async fn user_row_round_trips_through_users_table() {
 #[tokio::test]
 async fn counting_users_drives_setup_required() {
     let db = fixture_db().await;
-    let Db::Sqlite(pool) = &db else {
-        unreachable!()
-    };
+    let pool = sqlite_pool(&db);
 
     let (before,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
         .fetch_one(pool)

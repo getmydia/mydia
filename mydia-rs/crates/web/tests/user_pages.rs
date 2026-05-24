@@ -18,11 +18,13 @@
 
 #![cfg(feature = "server")]
 
+mod common;
+
 use chrono::{NaiveDate, Utc};
-use mydia_rs_db::Db;
+use common::{apply_sql, fresh_db, sqlite_pool};
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_pubsub::{topics, Event, Pubsub};
 use mydia_rs_web::realtime::downloads::DownloadEvent;
-use sqlx::sqlite::SqlitePoolOptions;
 use tokio::sync::broadcast::Receiver;
 
 /// Subset of the production schema covering the columns the U27
@@ -150,36 +152,24 @@ CREATE TABLE IF NOT EXISTS media_requests (
 ";
 
 struct Fixture {
-    db: Db,
+    db: DatabaseConnection,
     pubsub: Pubsub,
 }
 
 async fn fixture() -> Fixture {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .expect("open in-memory sqlite");
-    for stmt in SETUP_SQL.split(';') {
-        let trimmed = stmt.trim();
-        if !trimmed.is_empty() {
-            sqlx::query(trimmed)
-                .execute(&pool)
-                .await
-                .expect("create table");
-        }
-    }
+    let db = fresh_db().await;
+    apply_sql(&db, SETUP_SQL).await;
     Fixture {
-        db: Db::Sqlite(pool),
+        db,
         pubsub: Pubsub::new(),
     }
 }
 
-async fn insert_user(db: &Db, role: &str) -> String {
+async fn insert_user(db: &DatabaseConnection, role: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?, ?)",
@@ -193,19 +183,17 @@ async fn insert_user(db: &Db, role: &str) -> String {
             .execute(pool)
             .await
             .expect("insert user");
-        }
-        Db::Postgres(_) => unreachable!("test uses sqlite"),
     }
     id
 }
 
 // ---------- calendar ----------
 
-async fn insert_show(db: &Db, title: &str) -> String {
+async fn insert_show(db: &DatabaseConnection, title: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
                  VALUES (?, 'tv_show', ?, 1, ?, ?)",
@@ -217,18 +205,16 @@ async fn insert_show(db: &Db, title: &str) -> String {
             .execute(pool)
             .await
             .expect("insert show");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
 
-async fn insert_movie_with_release_date(db: &Db, title: &str, release_date: &str) -> String {
+async fn insert_movie_with_release_date(db: &DatabaseConnection, title: &str, release_date: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let metadata = serde_json::json!({"release_date": release_date}).to_string();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO media_items (id, type, title, monitored, metadata, inserted_at, updated_at) \
                  VALUES (?, 'movie', ?, 1, ?, ?, ?)",
@@ -241,14 +227,12 @@ async fn insert_movie_with_release_date(db: &Db, title: &str, release_date: &str
             .execute(pool)
             .await
             .expect("insert movie");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
 
 async fn insert_episode(
-    db: &Db,
+    db: &DatabaseConnection,
     show_id: &str,
     air_date: NaiveDate,
     season: i64,
@@ -256,8 +240,8 @@ async fn insert_episode(
 ) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO episodes (id, media_item_id, season_number, episode_number, \
                         air_date, inserted_at, updated_at) \
@@ -273,8 +257,6 @@ async fn insert_episode(
             .execute(pool)
             .await
             .expect("insert episode");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -293,8 +275,9 @@ async fn calendar_episode_query_finds_in_range_row() {
         NaiveDate::from_ymd_opt(2026, 5, 31).unwrap(),
     );
     type Row = (String, NaiveDate);
-    let rows: Vec<Row> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<Row> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT e.id, e.air_date \
              FROM episodes e \
              INNER JOIN media_items m ON e.media_item_id = m.id \
@@ -307,8 +290,7 @@ async fn calendar_episode_query_finds_in_range_row() {
         .bind(end)
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert_eq!(rows.len(), 1, "in-range episode is returned");
     assert_eq!(rows[0].1, air);
@@ -322,8 +304,9 @@ async fn calendar_movie_query_filters_by_release_date_metadata() {
     let _no_date = {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
-        match &fx.db {
-            Db::Sqlite(pool) => sqlx::query(
+        {
+            let pool = sqlite_pool(&fx.db);
+            sqlx::query(
                 "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
                  VALUES (?, 'movie', 'No Date', 1, ?, ?)",
             )
@@ -332,22 +315,19 @@ async fn calendar_movie_query_filters_by_release_date_metadata() {
             .bind(&now)
             .execute(pool)
             .await
-            .expect("insert"),
-            Db::Postgres(_) => unreachable!(),
+            .expect("insert")
         };
         id
     };
 
     // All-movies fetch returns three rows; the server fn filters by
     // metadata.release_date in Rust.
-    let rows: Vec<(String, Option<String>)> = match &fx.db {
-        Db::Sqlite(pool) => {
+    let rows: Vec<(String, Option<String>)> = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT id, metadata FROM media_items WHERE type = 'movie'")
                 .fetch_all(pool)
                 .await
                 .expect("query")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(rows.len(), 3, "all movies fetched");
 
@@ -385,8 +365,9 @@ async fn calendar_empty_range_returns_nothing() {
         NaiveDate::from_ymd_opt(2026, 6, 30).unwrap(),
     );
     type Row = (String,);
-    let rows: Vec<Row> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<Row> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT e.id FROM episodes e \
              INNER JOIN media_items m ON e.media_item_id = m.id \
              WHERE e.air_date >= ? AND e.air_date <= ?",
@@ -395,19 +376,18 @@ async fn calendar_empty_range_returns_nothing() {
         .bind(end)
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert!(rows.is_empty(), "no episodes in June");
 }
 
 // ---------- activity ----------
 
-async fn insert_event(db: &Db, category: &str, event_type: &str, severity: &str) -> String {
+async fn insert_event(db: &DatabaseConnection, category: &str, event_type: &str, severity: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO events (id, category, type, severity, metadata, inserted_at) \
                  VALUES (?, ?, ?, ?, '{}', ?)",
@@ -420,8 +400,6 @@ async fn insert_event(db: &Db, category: &str, event_type: &str, severity: &str)
             .execute(pool)
             .await
             .expect("insert event");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -437,15 +415,15 @@ async fn activity_all_filter_excludes_deprecated_categories() {
     // The activity "all" filter scopes to media_item / download / job /
     // search. Run the same IN list directly so the test pins the
     // taxonomy.
-    let rows: Vec<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT id FROM events \
              WHERE category IN ('media_item', 'download', 'job', 'search')",
         )
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert_eq!(rows.len(), 2, "music + books are excluded");
 }
@@ -456,13 +434,13 @@ async fn activity_errors_filter_returns_only_error_severity() {
     let _info = insert_event(&fx.db, "download", "download.completed", "info").await;
     let _err = insert_event(&fx.db, "download", "download.failed", "error").await;
 
-    let rows: Vec<(String, String)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id, severity FROM events WHERE severity = ?")
+    let rows: Vec<(String, String)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id, severity FROM events WHERE severity = ?")
             .bind("error")
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].1, "error");
@@ -471,12 +449,12 @@ async fn activity_errors_filter_returns_only_error_severity() {
 #[tokio::test]
 async fn activity_empty_state_returns_nothing() {
     let fx = fixture().await;
-    let rows: Vec<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM events")
+    let rows: Vec<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM events")
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert!(rows.is_empty(), "no events seeded => no rows");
 }
@@ -500,7 +478,7 @@ enum DownloadState {
     Imported,
 }
 
-async fn insert_download(db: &Db, state: DownloadState, title: &str) -> String {
+async fn insert_download(db: &DatabaseConnection, state: DownloadState, title: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let (completed_at, import_failed_at, imported_at) = match state {
@@ -509,8 +487,8 @@ async fn insert_download(db: &Db, state: DownloadState, title: &str) -> String {
         DownloadState::Failed => (None, Some(now.clone()), None),
         DownloadState::Imported => (Some(now.clone()), None, Some(now.clone())),
     };
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO downloads (id, title, completed_at, import_failed_at, imported_at, \
                         inserted_at, updated_at) \
@@ -526,8 +504,6 @@ async fn insert_download(db: &Db, state: DownloadState, title: &str) -> String {
             .execute(pool)
             .await
             .expect("insert download");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -542,8 +518,9 @@ async fn downloads_queue_tab_returns_active_rows() {
     let _failed = insert_download(&fx.db, DownloadState::Failed, "Failed.mkv").await;
     let _imported = insert_download(&fx.db, DownloadState::Imported, "Imported.mkv").await;
 
-    let rows: Vec<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT id FROM downloads \
              WHERE imported_at IS NULL \
                AND completed_at IS NULL \
@@ -551,8 +528,7 @@ async fn downloads_queue_tab_returns_active_rows() {
         )
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert_eq!(rows.len(), 1, "queue tab returns only the active row");
     assert_eq!(rows[0].0, active);
@@ -567,24 +543,24 @@ async fn downloads_cancel_deletes_row() {
     let fx = fixture().await;
     let id = insert_download(&fx.db, DownloadState::Active, "Active.mkv").await;
 
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query("DELETE FROM downloads WHERE id = ?")
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query("DELETE FROM downloads WHERE id = ?")
             .bind(&id)
             .execute(pool)
             .await
             .expect("delete")
-            .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+            .rows_affected()
     };
     assert_eq!(affected, 1);
 
-    let row: Option<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM downloads WHERE id = ?")
+    let row: Option<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM downloads WHERE id = ?")
             .bind(&id)
             .fetch_optional(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert!(row.is_none(), "cancel removes the row");
 }
@@ -616,12 +592,12 @@ async fn downloads_pubsub_event_decodes_into_typed_event() {
 #[tokio::test]
 async fn downloads_empty_state_returns_nothing() {
     let fx = fixture().await;
-    let rows: Vec<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM downloads")
+    let rows: Vec<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM downloads")
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert!(rows.is_empty());
 }
@@ -637,22 +613,21 @@ async fn downloads_manual_match_links_media_item() {
 
     // Pre-condition: download row has no media_item_id (insert_download
     // doesn't set one).
-    let pre: (Option<String>, Option<String>) = match &fx.db {
-        Db::Sqlite(pool) => {
+    let pre: (Option<String>, Option<String>) = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT media_item_id, match_status FROM downloads WHERE id = ?")
                 .bind(&dl)
                 .fetch_one(pool)
                 .await
                 .expect("read pre")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert!(pre.0.is_none(), "download starts unmatched");
 
     // Run the same update the server fn issues.
     let now = Utc::now().to_rfc3339();
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "UPDATE downloads SET media_item_id = ?, match_status = 'matched', updated_at = ? \
              WHERE id = ?",
         )
@@ -662,20 +637,17 @@ async fn downloads_manual_match_links_media_item() {
         .execute(pool)
         .await
         .expect("update")
-        .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+        .rows_affected()
     };
     assert_eq!(affected, 1);
 
-    let post: (Option<String>, Option<String>) = match &fx.db {
-        Db::Sqlite(pool) => {
+    let post: (Option<String>, Option<String>) = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT media_item_id, match_status FROM downloads WHERE id = ?")
                 .bind(&dl)
                 .fetch_one(pool)
                 .await
                 .expect("read post")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(post.0.as_deref(), Some(show.as_str()));
     assert_eq!(post.1.as_deref(), Some("matched"));
@@ -690,24 +662,24 @@ async fn downloads_manual_match_rejects_missing_media_item() {
     let dl = insert_download(&fx.db, DownloadState::Active, "Mystery.mkv").await;
     let bogus_media_id = "no-such-id";
 
-    let present: Option<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM media_items WHERE id = ?")
+    let present: Option<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM media_items WHERE id = ?")
             .bind(bogus_media_id)
             .fetch_optional(pool)
             .await
-            .expect("lookup"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("lookup")
     };
     assert!(present.is_none(), "media_item with that id doesn't exist");
 
     // Verify the download is untouched.
-    let row: (Option<String>,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT media_item_id FROM downloads WHERE id = ?")
+    let row: (Option<String>,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT media_item_id FROM downloads WHERE id = ?")
             .bind(&dl)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert!(row.0.is_none(), "download stays unmatched");
 }
@@ -721,8 +693,9 @@ async fn downloads_manual_match_unknown_download_id_is_no_op() {
     let show = insert_show(&fx.db, "Inception").await;
 
     let now = Utc::now().to_rfc3339();
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "UPDATE downloads SET media_item_id = ?, match_status = 'matched', updated_at = ? \
              WHERE id = ?",
         )
@@ -732,19 +705,18 @@ async fn downloads_manual_match_unknown_download_id_is_no_op() {
         .execute(pool)
         .await
         .expect("update")
-        .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+        .rows_affected()
     };
     assert_eq!(affected, 0, "no rows touched when download_id is bogus");
 }
 
 // ---------- my requests ----------
 
-async fn insert_request(db: &Db, requester_id: &str, status: &str, title: &str) -> String {
+async fn insert_request(db: &DatabaseConnection, requester_id: &str, status: &str, title: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO media_requests (id, media_type, title, status, requester_id, \
                         inserted_at, updated_at) \
@@ -759,8 +731,6 @@ async fn insert_request(db: &Db, requester_id: &str, status: &str, title: &str) 
             .execute(pool)
             .await
             .expect("insert media_request");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -773,15 +743,13 @@ async fn my_requests_scoped_to_session_user() {
     let _r_a = insert_request(&fx.db, &user_a, "pending", "Inception").await;
     let _r_b = insert_request(&fx.db, &user_b, "pending", "Dune").await;
 
-    let rows: Vec<(String, String)> = match &fx.db {
-        Db::Sqlite(pool) => {
+    let rows: Vec<(String, String)> = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT id, title FROM media_requests WHERE requester_id = ?")
                 .bind(&user_a)
                 .fetch_all(pool)
                 .await
                 .expect("query")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].1, "Inception", "user A only sees their own");
@@ -794,16 +762,16 @@ async fn my_requests_status_filter_round_trip() {
     let _pending = insert_request(&fx.db, &user, "pending", "P").await;
     let _approved = insert_request(&fx.db, &user, "approved", "A").await;
 
-    let rows: Vec<(String, String)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<(String, String)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT id, status FROM media_requests WHERE requester_id = ? AND status = ?",
         )
         .bind(&user)
         .bind("approved")
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].1, "approved");
@@ -813,24 +781,24 @@ async fn my_requests_status_filter_round_trip() {
 async fn my_requests_empty_state_returns_nothing() {
     let fx = fixture().await;
     let user = insert_user(&fx.db, "guest").await;
-    let rows: Vec<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM media_requests WHERE requester_id = ?")
+    let rows: Vec<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM media_requests WHERE requester_id = ?")
             .bind(&user)
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert!(rows.is_empty(), "fresh user has no requests");
 }
 
 // ---------- add_media: quality profile picker ----------
 
-async fn insert_quality_profile(db: &Db, name: &str) -> String {
+async fn insert_quality_profile(db: &DatabaseConnection, name: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO quality_profiles (id, name, qualities, inserted_at, updated_at) \
                  VALUES (?, ?, '[\"1080p\"]', ?, ?)",
@@ -842,8 +810,6 @@ async fn insert_quality_profile(db: &Db, name: &str) -> String {
             .execute(pool)
             .await
             .expect("insert quality profile");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -856,14 +822,12 @@ async fn add_media_quality_profiles_listed_alphabetically() {
     let _b = insert_quality_profile(&fx.db, "Bronze").await;
     let _a = insert_quality_profile(&fx.db, "Anytime").await;
 
-    let rows: Vec<(String, String)> = match &fx.db {
-        Db::Sqlite(pool) => {
+    let rows: Vec<(String, String)> = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT id, name FROM quality_profiles ORDER BY name ASC")
                 .fetch_all(pool)
                 .await
                 .expect("query")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].1, "Anytime");
@@ -879,8 +843,9 @@ async fn add_media_creates_with_quality_profile_id() {
 
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "INSERT INTO media_items (id, type, title, year, tmdb_id, quality_profile_id, monitored, inserted_at, updated_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
@@ -895,19 +860,16 @@ async fn add_media_creates_with_quality_profile_id() {
         .bind(&now)
         .execute(pool)
         .await
-        .expect("insert"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("insert")
     };
 
-    let row: (String, Option<String>) = match &fx.db {
-        Db::Sqlite(pool) => {
+    let row: (String, Option<String>) = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT id, quality_profile_id FROM media_items WHERE id = ?")
                 .bind(&id)
                 .fetch_one(pool)
                 .await
                 .expect("readback")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(row.1.as_deref(), Some(qp.as_str()));
 }
@@ -918,19 +880,20 @@ async fn add_media_empty_quality_profiles_does_not_block_add() {
     // operator add media — quality_profile_id stays null and the
     // pipeline downstream uses the default behavior.
     let fx = fixture().await;
-    let rows: Vec<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM quality_profiles")
+    let rows: Vec<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM quality_profiles")
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert!(rows.is_empty(), "no profiles seeded");
 
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
              VALUES (?, 'movie', 'X', 1, ?, ?)",
         )
@@ -939,19 +902,16 @@ async fn add_media_empty_quality_profiles_does_not_block_add() {
         .bind(&now)
         .execute(pool)
         .await
-        .expect("insert"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("insert")
     };
 
-    let (qp,): (Option<String>,) = match &fx.db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT quality_profile_id FROM media_items WHERE id = ?")
-                .bind(&id)
-                .fetch_one(pool)
-                .await
-                .expect("readback")
-        }
-        Db::Postgres(_) => unreachable!(),
+    let (qp,): (Option<String>,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT quality_profile_id FROM media_items WHERE id = ?")
+            .bind(&id)
+            .fetch_one(pool)
+            .await
+            .expect("readback")
     };
     assert!(qp.is_none(), "quality_profile_id stays null");
 }
@@ -962,13 +922,13 @@ async fn add_media_invalid_quality_profile_id_rejected() {
     // must be rejected before the insert lands. The server fn
     // checks via `quality_profile_exists`; mirror the check here.
     let fx = fixture().await;
-    let present: Option<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM quality_profiles WHERE id = ?")
+    let present: Option<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM quality_profiles WHERE id = ?")
             .bind("ghost-id")
             .fetch_optional(pool)
             .await
-            .expect("lookup"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("lookup")
     };
     assert!(present.is_none(), "no quality_profile with that id exists");
 }
@@ -1120,14 +1080,11 @@ fn import_finalize_accepts_only_movie_or_tv_show_categories() {
 // SELECT shape the server fn executes against the DB so a SQL drift
 // regression surfaces here.
 
-async fn count_media_items(db: &Db) -> i64 {
-    let (n,): (i64,) = match db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM media_items")
-            .fetch_one(pool)
-            .await
-            .expect("count"),
-        Db::Postgres(_) => unreachable!(),
-    };
+async fn count_media_items(db: &DatabaseConnection) -> i64 {
+    let (n,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM media_items")
+        .fetch_one(sqlite_pool(db))
+        .await
+        .expect("count");
     n
 }
 
@@ -1137,8 +1094,8 @@ async fn import_finalize_insert_writes_media_item_row() {
     // Replicate the server fn's INSERT shape.
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1154,20 +1111,16 @@ async fn import_finalize_insert_writes_media_item_row() {
             .execute(pool)
             .await
             .expect("insert media_item");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
     type Row = (String, String, Option<i32>, Option<i64>);
-    let (db_id, db_type, db_year, db_tmdb): Row = match &fx.db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT id, type, year, tmdb_id FROM media_items WHERE id = ?")
-                .bind(&id)
-                .fetch_one(pool)
-                .await
-                .expect("readback")
-        }
-        Db::Postgres(_) => unreachable!(),
+    let (db_id, db_type, db_year, db_tmdb): Row = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id, type, year, tmdb_id FROM media_items WHERE id = ?")
+            .bind(&id)
+            .fetch_one(pool)
+            .await
+            .expect("readback")
     };
     assert_eq!(db_id, id);
     assert_eq!(db_type, "movie");
@@ -1182,8 +1135,8 @@ async fn import_finalize_dedup_by_tmdb_and_type() {
     // Pre-seed with a movie at tmdb_id=603.
     let id_first = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO media_items (id, type, title, tmdb_id, monitored, inserted_at, updated_at) \
                  VALUES (?, 'movie', 'The Matrix', 603, 1, ?, ?)",
@@ -1194,22 +1147,18 @@ async fn import_finalize_dedup_by_tmdb_and_type() {
             .execute(pool)
             .await
             .expect("seed");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
     // The server fn's de-dup SELECT against (tmdb_id, type) returns
     // the existing row — no second INSERT happens.
-    let existing: Option<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => {
+    let existing: Option<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT id FROM media_items WHERE tmdb_id = ? AND type = ? LIMIT 1")
                 .bind(603_i64)
                 .bind("movie")
                 .fetch_optional(pool)
                 .await
                 .expect("lookup")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(existing.map(|(id,)| id), Some(id_first.clone()));
     assert_eq!(count_media_items(&fx.db).await, 1);
@@ -1217,8 +1166,8 @@ async fn import_finalize_dedup_by_tmdb_and_type() {
     // A movie and a tv_show sharing the same tmdb id are NOT the
     // same row — verify the SELECT scopes by type.
     let id_show = uuid::Uuid::new_v4().to_string();
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO media_items (id, type, title, tmdb_id, monitored, inserted_at, updated_at) \
                  VALUES (?, 'tv_show', 'Matrix Show', 603, 1, ?, ?)",
@@ -1229,19 +1178,15 @@ async fn import_finalize_dedup_by_tmdb_and_type() {
             .execute(pool)
             .await
             .expect("insert tv");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
-    let tv_match: Option<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => {
+    let tv_match: Option<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT id FROM media_items WHERE tmdb_id = ? AND type = ? LIMIT 1")
                 .bind(603_i64)
                 .bind("tv_show")
                 .fetch_optional(pool)
                 .await
                 .expect("lookup")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(tv_match.map(|(id,)| id), Some(id_show));
     assert_eq!(count_media_items(&fx.db).await, 2);
@@ -1254,8 +1199,8 @@ async fn import_finalize_file_association_updates_media_item_id() {
     let item_id = uuid::Uuid::new_v4().to_string();
     let file_id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
                  VALUES (?, 'movie', 'Inception', 1, ?, ?)",
@@ -1276,13 +1221,11 @@ async fn import_finalize_file_association_updates_media_item_id() {
             .execute(pool)
             .await
             .expect("seed file");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
     // Replicate the server fn's UPDATE shape.
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => {
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query("UPDATE media_files SET media_item_id = ?, updated_at = ? WHERE id = ?")
                 .bind(&item_id)
                 .bind(&now)
@@ -1291,19 +1234,16 @@ async fn import_finalize_file_association_updates_media_item_id() {
                 .await
                 .expect("update")
                 .rows_affected()
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(affected, 1);
 
-    let (mi_id,): (Option<String>,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT media_item_id FROM media_files WHERE id = ?")
-            .bind(&file_id)
-            .fetch_one(pool)
-            .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
-    };
+    let (mi_id,): (Option<String>,) = sqlx::query_as(
+        "SELECT media_item_id FROM media_files WHERE id = ?",
+    )
+    .bind(&file_id)
+    .fetch_one(sqlite_pool(&fx.db))
+    .await
+    .expect("readback");
     assert_eq!(mi_id, Some(item_id));
 }
 
@@ -1312,8 +1252,8 @@ async fn import_finalize_file_association_missing_file_returns_zero_rows() {
     let fx = fixture().await;
     let item_id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO media_items (id, type, title, monitored, inserted_at, updated_at) \
                  VALUES (?, 'movie', 'M', 1, ?, ?)",
@@ -1324,15 +1264,13 @@ async fn import_finalize_file_association_missing_file_returns_zero_rows() {
             .execute(pool)
             .await
             .expect("seed item");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
     // The server fn surfaces a missing media_files row as a
     // ServerFnError — verify the underlying UPDATE returns zero
     // rows_affected, which is the condition the server fn checks.
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => {
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query("UPDATE media_files SET media_item_id = ?, updated_at = ? WHERE id = ?")
                 .bind(&item_id)
                 .bind(&now)
@@ -1341,8 +1279,6 @@ async fn import_finalize_file_association_missing_file_returns_zero_rows() {
                 .await
                 .expect("update")
                 .rows_affected()
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(affected, 0);
 }

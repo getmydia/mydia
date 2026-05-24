@@ -28,14 +28,16 @@ use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use chrono::Utc;
 use http_body_util::BodyExt;
+mod common;
+
+use common::{apply_sql, fresh_db, sqlite_pool};
 use mydia_rs_auth::api_key::hash_api_key;
 use mydia_rs_auth::{MediaTokenCache, MediaTokenPermission, MediaTokenSigner};
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_pubsub::Pubsub;
 use mydia_rs_web::api;
 use mydia_rs_web::WebState;
-use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
 
 const SETUP_SQL: &str = "
@@ -44,7 +46,12 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT,
     email TEXT,
     password_hash TEXT,
+    oidc_sub TEXT,
+    oidc_issuer TEXT,
     role TEXT NOT NULL DEFAULT 'user',
+    display_name TEXT,
+    avatar_url TEXT,
+    last_login_at TEXT,
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -52,7 +59,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
-    name TEXT,
+    name TEXT NOT NULL,
     key_hash TEXT NOT NULL,
     key_prefix TEXT,
     permissions TEXT,
@@ -78,6 +85,11 @@ CREATE TABLE IF NOT EXISTS download_client_configs (
     category TEXT,
     download_directory TEXT,
     connection_settings TEXT,
+    updated_by_id TEXT,
+    remove_completed INTEGER,
+    categories TEXT,
+    priority_profile TEXT,
+    incomplete_grace_minutes INTEGER,
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -94,6 +106,9 @@ CREATE TABLE IF NOT EXISTS indexer_configs (
     categories TEXT,
     rate_limit INTEGER,
     connection_settings TEXT,
+    updated_by_id TEXT,
+    env_name TEXT,
+    min_post_age_minutes INTEGER,
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -130,10 +145,15 @@ CREATE TABLE IF NOT EXISTS media_files (
 
 CREATE TABLE IF NOT EXISTS library_paths (
     id TEXT PRIMARY KEY,
-    path TEXT,
-    type TEXT,
+    path TEXT NOT NULL,
+    type TEXT NOT NULL,
     monitored INTEGER NOT NULL DEFAULT 1,
     scan_interval INTEGER NOT NULL DEFAULT 3600,
+    last_scan_at TEXT,
+    last_scan_status TEXT,
+    last_scan_error TEXT,
+    quality_profile_id TEXT,
+    updated_by_id TEXT,
     from_env INTEGER NOT NULL DEFAULT 0,
     disabled INTEGER NOT NULL DEFAULT 0,
     category_paths TEXT NOT NULL DEFAULT '{}',
@@ -351,21 +371,8 @@ struct AuthFixture {
 }
 
 async fn auth_fixture() -> AuthFixture {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .expect("open in-memory sqlite");
-    for stmt in SETUP_SQL.split(';') {
-        let trimmed = stmt.trim();
-        if !trimmed.is_empty() {
-            sqlx::query(trimmed)
-                .execute(&pool)
-                .await
-                .expect("apply schema");
-        }
-    }
-    let db = Db::Sqlite(pool);
+    let db = fresh_db().await;
+    apply_sql(&db, SETUP_SQL).await;
 
     let user_id = insert_user(&db, "user").await;
     let admin_id = insert_user(&db, "admin").await;
@@ -430,47 +437,46 @@ async fn auth_fixture() -> AuthFixture {
     }
 }
 
-async fn insert_user(db: &Db, role: &str) -> String {
+async fn insert_user(db: &DatabaseConnection, role: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    if let Db::Sqlite(pool) = db {
-        sqlx::query(
-            "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&id)
-        .bind(format!("user-{}", &id[..8]))
-        .bind(format!("{}@example.com", &id[..8]))
-        .bind(role)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert user");
-    }
+    sqlx::query(
+        "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(format!("user-{}", &id[..8]))
+    .bind(format!("{}@example.com", &id[..8]))
+    .bind(role)
+    .bind(&now)
+    .bind(&now)
+    .execute(sqlite_pool(db))
+    .await
+    .expect("insert user");
     id
 }
 
-async fn insert_api_key(db: &Db, user_id: &str, plaintext: &str) {
+async fn insert_api_key(db: &DatabaseConnection, user_id: &str, plaintext: &str) {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let hash = hash_api_key(plaintext).expect("hash api key");
-    if let Db::Sqlite(pool) = db {
-        sqlx::query(
-            "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, \
-             inserted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&id)
-        .bind(user_id)
-        .bind("test")
-        .bind(&hash)
-        .bind(&plaintext[..8.min(plaintext.len())])
-        .bind("read,write")
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert api_key");
-    }
+    sqlx::query(
+        "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, \
+         inserted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(user_id)
+    .bind("test")
+    .bind(&hash)
+    .bind(&plaintext[..8.min(plaintext.len())])
+    // `permissions` is a `StringArray` (text[] on Postgres, JSON-text on
+    // SQLite per the wrapper's TryGetable). Seed it as a JSON array so
+    // the wrapper round-trips cleanly.
+    .bind(r#"["read","write"]"#)
+    .bind(&now)
+    .execute(sqlite_pool(db))
+    .await
+    .expect("insert api_key");
 }
 
 /// Attach the `WebState` extension to a request so the auth layer can
@@ -1088,10 +1094,11 @@ async fn player_v1_subtitle_index_includes_external_tracks() {
 // Insert a media_files row with a given absolute path; returns the id.
 // Mirrors the columns the subtitle handler's lookup_media_file
 // projection touches: id, path, trashed_at IS NULL.
-async fn insert_media_file_with_path(db: &Db, path: &str) -> String {
+async fn insert_media_file_with_path(db: &DatabaseConnection, path: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    if let Db::Sqlite(pool) = db {
+    {
+        let pool = sqlite_pool(db);
         sqlx::query(
             "INSERT INTO media_files \
              (id, media_item_id, path, analysis_attempts, inserted_at, updated_at) \
@@ -1110,7 +1117,7 @@ async fn insert_media_file_with_path(db: &Db, path: &str) -> String {
 }
 
 async fn insert_subtitle(
-    db: &Db,
+    db: &DatabaseConnection,
     id: &str,
     media_file_id: &str,
     file_path: &str,
@@ -1118,7 +1125,8 @@ async fn insert_subtitle(
     language: &str,
 ) {
     let now = Utc::now().to_rfc3339();
-    if let Db::Sqlite(pool) = db {
+    {
+        let pool = sqlite_pool(db);
         sqlx::query(
             "INSERT INTO subtitles \
              (id, media_file_id, language, provider, subtitle_hash, file_path, \
@@ -1141,10 +1149,11 @@ async fn insert_subtitle(
 
 // ---------- wired adapters: download_client + indexer ----------
 
-async fn insert_download_client(db: &Db, name: &str, kind: &str) -> String {
+async fn insert_download_client(db: &DatabaseConnection, name: &str, kind: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    if let Db::Sqlite(pool) = db {
+    {
+        let pool = sqlite_pool(db);
         sqlx::query(
             "INSERT INTO download_client_configs \
              (id, name, type, enabled, priority, host, port, use_ssl, inserted_at, updated_at) \
@@ -1162,10 +1171,11 @@ async fn insert_download_client(db: &Db, name: &str, kind: &str) -> String {
     id
 }
 
-async fn insert_indexer(db: &Db, name: &str, kind: &str) -> String {
+async fn insert_indexer(db: &DatabaseConnection, name: &str, kind: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    if let Db::Sqlite(pool) = db {
+    {
+        let pool = sqlite_pool(db);
         sqlx::query(
             "INSERT INTO indexer_configs \
              (id, name, type, enabled, priority, base_url, api_key, inserted_at, updated_at) \
@@ -1340,7 +1350,8 @@ async fn indexer_show_returns_404_for_missing_id() {
 async fn revoked_api_key_returns_401() {
     let fx = auth_fixture().await;
     // Revoke the user key.
-    if let Db::Sqlite(pool) = &fx.state.db {
+    {
+        let pool = sqlite_pool(&fx.state.db);
         let now = Utc::now().to_rfc3339();
         sqlx::query("UPDATE api_keys SET revoked_at = ? WHERE user_id = ?")
             .bind(&now)
@@ -1374,7 +1385,7 @@ async fn revoked_api_key_returns_401() {
 // transcoding is exercised by the streaming crate's own tests.
 // ---------------------------------------------------------------------
 
-async fn insert_media_file(db: &Db, h264_aac: bool) -> (String, tempfile::NamedTempFile) {
+async fn insert_media_file(db: &DatabaseConnection, h264_aac: bool) -> (String, tempfile::NamedTempFile) {
     use std::io::Write;
     let id = uuid::Uuid::new_v4().to_string();
     let media_item_id = uuid::Uuid::new_v4().to_string();
@@ -1395,7 +1406,8 @@ async fn insert_media_file(db: &Db, h264_aac: bool) -> (String, tempfile::NamedT
         ("hevc", "ac3")
     };
 
-    if let Db::Sqlite(pool) = db {
+    {
+        let pool = sqlite_pool(db);
         sqlx::query(
             "INSERT INTO media_files (id, media_item_id, path, codec, audio_codec, \
              analysis_attempts, inserted_at, updated_at) \
@@ -1932,10 +1944,11 @@ async fn indexer_reset_failures_returns_401_without_auth() {
 // `MydiaWeb.Api.DownloadController`.
 // ---------------------------------------------------------------------
 
-async fn insert_media_file_for_download(db: &Db, parent_id: &str, abs_path: &str) -> String {
+async fn insert_media_file_for_download(db: &DatabaseConnection, parent_id: &str, abs_path: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    if let Db::Sqlite(pool) = db {
+    {
+        let pool = sqlite_pool(db);
         sqlx::query(
             "INSERT INTO media_files (id, media_item_id, episode_id, path, size, resolution, \
              analysis_attempts, inserted_at, updated_at) \
@@ -1973,12 +1986,13 @@ async fn download_route_returns_401_without_auth() {
 #[tokio::test]
 async fn download_options_returns_quality_list_for_movie() {
     let fx = auth_fixture().await;
-    insert_media_file_for_download(&fx.state.db, "movie-1", "/tmp/movie-1.mkv").await;
+    let movie_id = uuid::Uuid::new_v4().to_string();
+    insert_media_file_for_download(&fx.state.db, &movie_id, "/tmp/movie-1.mkv").await;
     let router = router_with_state(fx.state);
     let response = router
         .oneshot(
             Request::builder()
-                .uri("/api/v1/download/movie/movie-1/options")
+                .uri(format!("/api/v1/download/movie/{movie_id}/options"))
                 .header("X-API-Key", &fx.api_key)
                 .body(Body::empty())
                 .unwrap(),
@@ -2035,13 +2049,14 @@ async fn download_options_400s_for_invalid_content_type() {
 #[tokio::test]
 async fn download_prepare_original_returns_ready_job() {
     let fx = auth_fixture().await;
-    insert_media_file_for_download(&fx.state.db, "movie-prep", "/tmp/movie-prep.mkv").await;
+    let movie_id = uuid::Uuid::new_v4().to_string();
+    insert_media_file_for_download(&fx.state.db, &movie_id, "/tmp/movie-prep.mkv").await;
     let router = router_with_state(fx.state);
     let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/download/movie/movie-prep/prepare")
+                .uri(format!("/api/v1/download/movie/{movie_id}/prepare"))
                 .header("X-API-Key", &fx.api_key)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"resolution":"original"}"#))
@@ -2081,7 +2096,8 @@ async fn download_prepare_invalid_resolution_returns_400() {
 #[tokio::test]
 async fn download_prepare_is_idempotent() {
     let fx = auth_fixture().await;
-    insert_media_file_for_download(&fx.state.db, "movie-idem", "/tmp/movie-idem.mkv").await;
+    let movie_id = uuid::Uuid::new_v4().to_string();
+    insert_media_file_for_download(&fx.state.db, &movie_id, "/tmp/movie-idem.mkv").await;
     let api_key = fx.api_key.clone();
 
     let router = router_with_state(fx.state.clone());
@@ -2089,7 +2105,7 @@ async fn download_prepare_is_idempotent() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/download/movie/movie-idem/prepare")
+                .uri(format!("/api/v1/download/movie/{movie_id}/prepare"))
                 .header("X-API-Key", &api_key)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"resolution":"original"}"#))
@@ -2106,7 +2122,7 @@ async fn download_prepare_is_idempotent() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/download/movie/movie-idem/prepare")
+                .uri(format!("/api/v1/download/movie/{movie_id}/prepare"))
                 .header("X-API-Key", &api_key)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"resolution":"original"}"#))
@@ -2144,7 +2160,8 @@ async fn download_job_status_returns_404_for_unknown_id() {
 #[tokio::test]
 async fn download_cancel_deletes_job_row() {
     let fx = auth_fixture().await;
-    insert_media_file_for_download(&fx.state.db, "movie-cancel", "/tmp/movie-cancel.mkv").await;
+    let movie_id = uuid::Uuid::new_v4().to_string();
+    insert_media_file_for_download(&fx.state.db, &movie_id, "/tmp/movie-cancel.mkv").await;
     let api_key = fx.api_key.clone();
 
     // Prepare an "original" job (no real ffmpeg involved).
@@ -2153,7 +2170,7 @@ async fn download_cancel_deletes_job_row() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/download/movie/movie-cancel/prepare")
+                .uri(format!("/api/v1/download/movie/{movie_id}/prepare"))
                 .header("X-API-Key", &api_key)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"resolution":"original"}"#))

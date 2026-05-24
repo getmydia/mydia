@@ -17,12 +17,14 @@
 
 #![cfg(feature = "server")]
 
+mod common;
+
 use chrono::Utc;
-use mydia_rs_db::Db;
+use common::{apply_sql, fresh_db, sqlite_pool};
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_pubsub::{topics, Event, Pubsub};
 use mydia_rs_web::realtime::jobs_status::JobStatusEvent;
 use mydia_rs_web::realtime::transcodes::TranscodeEvent;
-use sqlx::sqlite::SqlitePoolOptions;
 use tokio::sync::broadcast::Receiver;
 
 /// Minimal stand-in schema for the U28 admin pages. Phoenix
@@ -175,36 +177,24 @@ CREATE TABLE IF NOT EXISTS quality_profiles (
 ";
 
 struct Fixture {
-    db: Db,
+    db: DatabaseConnection,
     pubsub: Pubsub,
 }
 
 async fn fixture() -> Fixture {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .expect("open in-memory sqlite");
-    for stmt in SETUP_SQL.split(';') {
-        let trimmed = stmt.trim();
-        if !trimmed.is_empty() {
-            sqlx::query(trimmed)
-                .execute(&pool)
-                .await
-                .expect("create table");
-        }
-    }
+    let db = fresh_db().await;
+    apply_sql(&db, SETUP_SQL).await;
     Fixture {
-        db: Db::Sqlite(pool),
+        db,
         pubsub: Pubsub::new(),
     }
 }
 
-async fn insert_user(db: &Db, role: &str) -> String {
+async fn insert_user(db: &DatabaseConnection, role: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?, ?)",
@@ -218,8 +208,6 @@ async fn insert_user(db: &Db, role: &str) -> String {
             .execute(pool)
             .await
             .expect("insert user");
-        }
-        Db::Postgres(_) => unreachable!("test uses sqlite"),
     }
     id
 }
@@ -251,12 +239,12 @@ async fn jobs_pubsub_event_decodes_into_typed_event() {
 
 // ---------- transcodes ----------
 
-async fn insert_transcode(db: &Db, status: &str) -> (String, String) {
+async fn insert_transcode(db: &DatabaseConnection, status: &str) -> (String, String) {
     let mf_id = uuid::Uuid::new_v4().to_string();
     let job_id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO media_files (id, file_name, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?)",
@@ -284,8 +272,6 @@ async fn insert_transcode(db: &Db, status: &str) -> (String, String) {
             .execute(pool)
             .await
             .expect("insert transcode");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     (job_id, mf_id)
 }
@@ -299,8 +285,9 @@ async fn transcodes_list_query_round_trips() {
 
     // Re-run the read query directly to confirm the join + ordering
     // mirror what the server fn returns.
-    let rows: Vec<TranscodeReadRow> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<TranscodeReadRow> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT t.id, t.media_file_id, mf.file_name, t.resolution, t.status, t.progress \
              FROM transcode_jobs t \
              LEFT JOIN media_files mf ON mf.id = t.media_file_id \
@@ -308,8 +295,7 @@ async fn transcodes_list_query_round_trips() {
         )
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
 
     assert_eq!(rows.len(), 1);
@@ -326,8 +312,9 @@ async fn transcodes_cancel_flips_status() {
 
     // Run the cancel update directly (mirrors the server fn body).
     let now = Utc::now().to_rfc3339();
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "UPDATE transcode_jobs SET status = 'cancelled', updated_at = ? WHERE id = ?",
         )
         .bind(&now)
@@ -335,18 +322,17 @@ async fn transcodes_cancel_flips_status() {
         .execute(pool)
         .await
         .expect("update")
-        .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+        .rows_affected()
     };
     assert_eq!(affected, 1);
 
-    let (status,): (String,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT status FROM transcode_jobs WHERE id = ?")
+    let (status,): (String,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT status FROM transcode_jobs WHERE id = ?")
             .bind(&job_id)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert_eq!(status, "cancelled");
 }
@@ -390,14 +376,14 @@ async fn users_list_returns_inserted_row() {
     let fx = fixture().await;
     let id = insert_user(&fx.db, "guest").await;
 
-    let rows: Vec<UserReadRow> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<UserReadRow> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT id, username, email, role, oidc_sub FROM users ORDER BY inserted_at ASC",
         )
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].0, id);
@@ -411,36 +397,36 @@ async fn users_role_update_writes_through() {
     let id = insert_user(&fx.db, "guest").await;
 
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => sqlx::query("UPDATE users SET role = ?, updated_at = ? WHERE id = ?")
+    {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query("UPDATE users SET role = ?, updated_at = ? WHERE id = ?")
             .bind("admin")
             .bind(&now)
             .bind(&id)
             .execute(pool)
             .await
-            .expect("update"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("update")
     };
 
-    let (role,): (String,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT role FROM users WHERE id = ?")
+    let (role,): (String,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT role FROM users WHERE id = ?")
             .bind(&id)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert_eq!(role, "admin");
 }
 
 // ---------- devices ----------
 
-async fn insert_device(db: &Db, user_id: &str, revoked: bool) -> String {
+async fn insert_device(db: &DatabaseConnection, user_id: &str, revoked: bool) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let revoked_at = if revoked { Some(now.clone()) } else { None };
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO remote_devices (id, device_name, platform, last_seen_at, revoked_at, \
                         user_id, inserted_at, updated_at) \
@@ -457,8 +443,6 @@ async fn insert_device(db: &Db, user_id: &str, revoked: bool) -> String {
             .execute(pool)
             .await
             .expect("insert device");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -471,13 +455,13 @@ async fn devices_list_scopes_to_user() {
     let _device_a = insert_device(&fx.db, &user_a, false).await;
     let _device_b = insert_device(&fx.db, &user_b, false).await;
 
-    let rows: Vec<(String,)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM remote_devices WHERE user_id = ?")
+    let rows: Vec<(String,)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT id FROM remote_devices WHERE user_id = ?")
             .bind(&user_a)
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert_eq!(rows.len(), 1, "user A only sees their own device");
 }
@@ -489,8 +473,9 @@ async fn devices_revoke_writes_revoked_at() {
     let device = insert_device(&fx.db, &user, false).await;
 
     let now = Utc::now().to_rfc3339();
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "UPDATE remote_devices SET revoked_at = ?, updated_at = ? \
              WHERE id = ? AND user_id = ?",
         )
@@ -501,29 +486,28 @@ async fn devices_revoke_writes_revoked_at() {
         .execute(pool)
         .await
         .expect("update")
-        .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+        .rows_affected()
     };
     assert_eq!(affected, 1);
 
-    let (revoked_at,): (Option<String>,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT revoked_at FROM remote_devices WHERE id = ?")
+    let (revoked_at,): (Option<String>,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT revoked_at FROM remote_devices WHERE id = ?")
             .bind(&device)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert!(revoked_at.is_some(), "revoke wrote a timestamp");
 }
 
 // ---------- requests ----------
 
-async fn insert_request(db: &Db, requester_id: &str, status: &str) -> String {
+async fn insert_request(db: &DatabaseConnection, requester_id: &str, status: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO media_requests (id, media_type, title, status, requester_id, \
                         inserted_at, updated_at) \
@@ -539,8 +523,6 @@ async fn insert_request(db: &Db, requester_id: &str, status: &str) -> String {
             .execute(pool)
             .await
             .expect("insert media_request");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -552,8 +534,9 @@ async fn requests_filter_by_pending_matches_phoenix_default() {
     let _pending = insert_request(&fx.db, &requester, "pending").await;
     let _approved = insert_request(&fx.db, &requester, "approved").await;
 
-    let rows: Vec<(String, String)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<(String, String)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT r.id, r.status \
              FROM media_requests r \
              LEFT JOIN users u ON u.id = r.requester_id \
@@ -563,8 +546,7 @@ async fn requests_filter_by_pending_matches_phoenix_default() {
         .bind("pending")
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert_eq!(rows.len(), 1, "pending filter shows only pending request");
     assert_eq!(rows[0].1, "pending");
@@ -578,8 +560,8 @@ async fn requests_approve_updates_status() {
     let request = insert_request(&fx.db, &requester, "pending").await;
 
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "UPDATE media_requests SET status = 'approved', \
                         approved_by_id = ?, approved_at = ?, updated_at = ? WHERE id = ?",
@@ -591,19 +573,15 @@ async fn requests_approve_updates_status() {
             .execute(pool)
             .await
             .expect("approve");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
-    let (status, approved_by): (String, Option<String>) = match &fx.db {
-        Db::Sqlite(pool) => {
+    let (status, approved_by): (String, Option<String>) = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT status, approved_by_id FROM media_requests WHERE id = ?")
                 .bind(&request)
                 .fetch_one(pool)
                 .await
                 .expect("readback")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(status, "approved");
     assert_eq!(approved_by.as_deref(), Some(admin.as_str()));
@@ -617,8 +595,8 @@ async fn config_settings_upsert_updates_existing_row() {
     let admin = insert_user(&fx.db, "admin").await;
     let now = Utc::now().to_rfc3339();
 
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?, ?) \
@@ -649,16 +627,14 @@ async fn config_settings_upsert_updates_existing_row() {
             .execute(pool)
             .await
             .expect("update via upsert");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
-    let rows: Vec<(String, String)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT key, value FROM config_settings")
+    let rows: Vec<(String, String)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT key, value FROM config_settings")
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert_eq!(rows.len(), 1, "upsert collapses to one row");
     assert_eq!(rows[0].0, "server.port");
@@ -667,11 +643,11 @@ async fn config_settings_upsert_updates_existing_row() {
 
 // ---------- download_clients ----------
 
-async fn insert_download_client(db: &Db, name: &str, kind: &str, enabled: bool) -> String {
+async fn insert_download_client(db: &DatabaseConnection, name: &str, kind: &str, enabled: bool) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO download_clients (id, name, kind, url, enabled, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -686,8 +662,6 @@ async fn insert_download_client(db: &Db, name: &str, kind: &str, enabled: bool) 
             .execute(pool)
             .await
             .expect("insert download_client");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -698,14 +672,14 @@ async fn download_clients_list_returns_inserted_rows_ordered() {
     let _qb = insert_download_client(&fx.db, "qb1", "qbittorrent", true).await;
     let _tr = insert_download_client(&fx.db, "tr1", "transmission", true).await;
 
-    let rows: Vec<(String, String, bool)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<(String, String, bool)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT name, kind, enabled FROM download_clients ORDER BY inserted_at ASC",
         )
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].0, "qb1");
@@ -718,25 +692,25 @@ async fn download_clients_toggle_flips_enabled() {
     let id = insert_download_client(&fx.db, "qb", "qbittorrent", true).await;
 
     let now = Utc::now().to_rfc3339();
-    match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "UPDATE download_clients SET enabled = NOT enabled, updated_at = ? WHERE id = ?",
         )
         .bind(&now)
         .bind(&id)
         .execute(pool)
         .await
-        .expect("toggle"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("toggle")
     };
 
-    let (enabled,): (bool,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT enabled FROM download_clients WHERE id = ?")
+    let (enabled,): (bool,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT enabled FROM download_clients WHERE id = ?")
             .bind(&id)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert!(!enabled, "toggle flipped enabled to false");
 }
@@ -882,8 +856,9 @@ async fn indexers_insert_and_list_round_trip() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "INSERT INTO indexers (id, name, definition, base_url, enabled, inserted_at, updated_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
@@ -896,16 +871,15 @@ async fn indexers_insert_and_list_round_trip() {
         .bind(&now)
         .execute(pool)
         .await
-        .expect("insert indexer"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("insert indexer")
     };
 
-    let rows: Vec<(String, String, String)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT name, definition, base_url FROM indexers")
+    let rows: Vec<(String, String, String)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT name, definition, base_url FROM indexers")
             .fetch_all(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].0, "iptorrents");
@@ -920,8 +894,8 @@ async fn media_servers_delete_removes_row() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO media_servers (id, name, kind, base_url, enabled, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -936,27 +910,25 @@ async fn media_servers_delete_removes_row() {
             .execute(pool)
             .await
             .expect("insert");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query("DELETE FROM media_servers WHERE id = ?")
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query("DELETE FROM media_servers WHERE id = ?")
             .bind(&id)
             .execute(pool)
             .await
             .expect("delete")
-            .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+            .rows_affected()
     };
     assert_eq!(affected, 1);
 
-    let (count,): (i64,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM media_servers")
+    let (count,): (i64,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT COUNT(*) FROM media_servers")
             .fetch_one(pool)
             .await
-            .expect("count"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("count")
     };
     assert_eq!(count, 0);
 }
@@ -971,8 +943,9 @@ async fn import_lists_kind_constraint_via_validation() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "INSERT INTO import_lists (id, name, kind, url_or_id, enabled, inserted_at, updated_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
@@ -985,17 +958,16 @@ async fn import_lists_kind_constraint_via_validation() {
         .bind(&now)
         .execute(pool)
         .await
-        .expect("insert"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("insert")
     };
 
-    let (kind,): (String,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT kind FROM import_lists WHERE id = ?")
+    let (kind,): (String,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT kind FROM import_lists WHERE id = ?")
             .bind(&id)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert_eq!(kind, "trakt");
 }
@@ -1008,8 +980,8 @@ async fn release_blacklist_insert_and_delete_round_trip() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query(
                 "INSERT INTO release_blacklist (id, kind, pattern, reason, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?, ?)",
@@ -1023,28 +995,26 @@ async fn release_blacklist_insert_and_delete_round_trip() {
             .execute(pool)
             .await
             .expect("insert");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
 
-    let (pattern,): (String,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT pattern FROM release_blacklist WHERE id = ?")
+    let (pattern,): (String,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT pattern FROM release_blacklist WHERE id = ?")
             .bind(&id)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     assert_eq!(pattern, "*CAM*");
 
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query("DELETE FROM release_blacklist WHERE id = ?")
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query("DELETE FROM release_blacklist WHERE id = ?")
             .bind(&id)
             .execute(pool)
             .await
             .expect("delete")
-            .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+            .rows_affected()
     };
     assert_eq!(affected, 1);
 }
@@ -1055,12 +1025,12 @@ use mydia_rs_web::server_fns::admin::quality_profiles::{
     validate_profile, ValidationError, VALID_RESOLUTIONS,
 };
 
-async fn insert_profile(db: &Db, name: &str, qualities: &[&str]) -> String {
+async fn insert_profile(db: &DatabaseConnection, name: &str, qualities: &[&str]) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let qualities_json = serde_json::to_string(qualities).expect("serialise qualities");
-    match db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(db);
             sqlx::query(
                 "INSERT INTO quality_profiles (id, name, qualities, inserted_at, updated_at) \
                  VALUES (?, ?, ?, ?, ?)",
@@ -1073,8 +1043,6 @@ async fn insert_profile(db: &Db, name: &str, qualities: &[&str]) -> String {
             .execute(pool)
             .await
             .expect("insert profile");
-        }
-        Db::Postgres(_) => unreachable!(),
     }
     id
 }
@@ -1094,14 +1062,14 @@ async fn quality_profiles_list_counts_qualities_from_json_column() {
     let fx = fixture().await;
     let _id = insert_profile(&fx.db, "Any", &["480p", "720p", "1080p"]).await;
 
-    let rows: Vec<(String, String, Option<String>)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
+    let rows: Vec<(String, String, Option<String>)> = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as(
             "SELECT id, name, qualities FROM quality_profiles ORDER BY inserted_at ASC",
         )
         .fetch_all(pool)
         .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+        .expect("query")
     };
 
     assert_eq!(rows.len(), 1);
@@ -1116,13 +1084,13 @@ async fn quality_profiles_create_and_reload_renders_ordered_qualities() {
     let fx = fixture().await;
     let _id = insert_profile(&fx.db, "HD Only", &["1080p", "720p"]).await;
 
-    let (qualities_json,): (Option<String>,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT qualities FROM quality_profiles WHERE name = ?")
+    let (qualities_json,): (Option<String>,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT qualities FROM quality_profiles WHERE name = ?")
             .bind("HD Only")
             .fetch_one(pool)
             .await
-            .expect("query"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("query")
     };
     let decoded: Vec<String> =
         serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
@@ -1137,8 +1105,9 @@ async fn quality_profiles_update_renames_and_reorders() {
 
     let now = Utc::now().to_rfc3339();
     let new_qualities = serde_json::to_string(&["720p", "1080p"]).expect("encode");
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query(
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query(
             "UPDATE quality_profiles SET name = ?, qualities = ?, updated_at = ? WHERE id = ?",
         )
         .bind("Renamed")
@@ -1148,20 +1117,17 @@ async fn quality_profiles_update_renames_and_reorders() {
         .execute(pool)
         .await
         .expect("update")
-        .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+        .rows_affected()
     };
     assert_eq!(affected, 1);
 
-    let (name, qualities_json): (String, Option<String>) = match &fx.db {
-        Db::Sqlite(pool) => {
+    let (name, qualities_json): (String, Option<String>) = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT name, qualities FROM quality_profiles WHERE id = ?")
                 .bind(&id)
                 .fetch_one(pool)
                 .await
                 .expect("readback")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(name, "Renamed");
     let decoded: Vec<String> =
@@ -1178,8 +1144,8 @@ async fn quality_profiles_delete_removes_row() {
 
     let now = Utc::now().to_rfc3339();
     let new_qualities = serde_json::to_string(&["1080p", "720p"]).expect("encode");
-    match &fx.db {
-        Db::Sqlite(pool) => {
+    {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query("UPDATE quality_profiles SET qualities = ?, updated_at = ? WHERE id = ?")
                 .bind(&new_qualities)
                 .bind(&now)
@@ -1187,17 +1153,15 @@ async fn quality_profiles_delete_removes_row() {
                 .execute(pool)
                 .await
                 .expect("update")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
 
-    let (qualities_json,): (Option<String>,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT qualities FROM quality_profiles WHERE id = ?")
+    let (qualities_json,): (Option<String>,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT qualities FROM quality_profiles WHERE id = ?")
             .bind(&id)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     let decoded: Vec<String> =
         serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
@@ -1210,23 +1174,23 @@ async fn quality_profiles_delete_profile_removes_row() {
     let fx = fixture().await;
     let id = insert_profile(&fx.db, "Doomed", &["1080p"]).await;
 
-    let affected = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
+    let affected = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
             .bind(&id)
             .execute(pool)
             .await
             .expect("delete")
-            .rows_affected(),
-        Db::Postgres(_) => unreachable!(),
+            .rows_affected()
     };
     assert_eq!(affected, 1);
 
-    let (count,): (i64,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM quality_profiles")
+    let (count,): (i64,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT COUNT(*) FROM quality_profiles")
             .fetch_one(pool)
             .await
-            .expect("count"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("count")
     };
     assert_eq!(count, 0);
 }
@@ -1290,13 +1254,13 @@ async fn quality_profiles_admin_gate_rejects_guest_role() {
     let fx = fixture().await;
     let guest = insert_user(&fx.db, "guest").await;
 
-    let (role,): (String,) = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as("SELECT role FROM users WHERE id = ?")
+    let (role,): (String,) = {
+        let pool = sqlite_pool(&fx.db);
+        sqlx::query_as("SELECT role FROM users WHERE id = ?")
             .bind(&guest)
             .fetch_one(pool)
             .await
-            .expect("readback"),
-        Db::Postgres(_) => unreachable!(),
+            .expect("readback")
     };
     // Same predicate `require_admin_user_id` uses inline — a non-admin
     // role causes the helper to short-circuit with "not authorized"
@@ -1314,23 +1278,19 @@ async fn remote_access_status_counts_active_vs_revoked() {
     let _live2 = insert_device(&fx.db, &user, false).await;
     let _dead = insert_device(&fx.db, &user, true).await;
 
-    let (paired,): (i64,) = match &fx.db {
-        Db::Sqlite(pool) => {
+    let (paired,): (i64,) = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NULL")
                 .fetch_one(pool)
                 .await
                 .expect("count")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
-    let (revoked,): (i64,) = match &fx.db {
-        Db::Sqlite(pool) => {
+    let (revoked,): (i64,) = {
+        let pool = sqlite_pool(&fx.db);
             sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NOT NULL")
                 .fetch_one(pool)
                 .await
                 .expect("count")
-        }
-        Db::Postgres(_) => unreachable!(),
     };
     assert_eq!(paired, 2, "two paired devices stay live");
     assert_eq!(revoked, 1, "one revoked device is counted separately");

@@ -15,15 +15,17 @@
 
 #![cfg(feature = "server")]
 
+mod common;
+
 use std::sync::Arc;
 
 use chrono::Utc;
-use mydia_rs_db::Db;
+use common::{apply_sql, fresh_db, sqlite_pool};
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_jobs::storage::{self as jobs_storage, JobStorage};
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 use mydia_rs_pubsub::{topics, Event, Pubsub};
 use mydia_rs_web::realtime::library_scanner::LibraryScanEvent;
-use sqlx::sqlite::SqlitePoolOptions;
 use tempfile::TempDir;
 use tokio::sync::broadcast::Receiver;
 
@@ -46,7 +48,7 @@ CREATE TABLE IF NOT EXISTS library_paths (
 ";
 
 struct Fixture {
-    db: Db,
+    db: DatabaseConnection,
     pubsub: Pubsub,
     storage: JobStorage<LibraryScannerArgs>,
     _media_dir: Arc<TempDir>,
@@ -54,16 +56,8 @@ struct Fixture {
 }
 
 async fn fixture() -> Fixture {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .expect("open in-memory sqlite");
-    sqlx::query(SETUP_SQL)
-        .execute(&pool)
-        .await
-        .expect("create library_paths table");
-    let db = Db::Sqlite(pool);
+    let db = fresh_db().await;
+    apply_sql(&db, SETUP_SQL).await;
 
     jobs_storage::setup(&db).await.expect("apalis setup");
 
@@ -84,25 +78,22 @@ async fn fixture() -> Fixture {
 /// depend on the server-fn extension-extraction (`FullstackContext`) —
 /// which would need an axum request to populate. The server-fn paths
 /// are still covered indirectly: list, delete, and `trigger_scan` all
-/// share these same sqlx queries through the same `Db` enum dispatch.
-async fn insert_path(db: &Db, path: &str, kind: &str) -> String {
+/// share the same SeaORM queries threaded through `&DatabaseConnection`.
+async fn insert_path(db: &DatabaseConnection, path: &str, kind: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    match db {
-        Db::Sqlite(pool) => sqlx::query(
-            "INSERT INTO library_paths (id, path, type, monitored, inserted_at, updated_at) \
-             VALUES (?, ?, ?, 1, ?, ?)",
-        )
-        .bind(&id)
-        .bind(path)
-        .bind(kind)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert library_path"),
-        Db::Postgres(_) => unreachable!("test uses sqlite"),
-    };
+    sqlx::query(
+        "INSERT INTO library_paths (id, path, type, monitored, inserted_at, updated_at) \
+         VALUES (?, ?, ?, 1, ?, ?)",
+    )
+    .bind(&id)
+    .bind(path)
+    .bind(kind)
+    .bind(&now)
+    .bind(&now)
+    .execute(sqlite_pool(db))
+    .await
+    .expect("insert library_path");
     id
 }
 
@@ -113,15 +104,12 @@ async fn list_library_paths_sees_inserted_row() {
 
     // Re-run the list query directly to confirm round-trip — this is
     // exactly what the server fn returns.
-    let rows: Vec<(String, String, String, bool)> = match &fx.db {
-        Db::Sqlite(pool) => sqlx::query_as(
-            "SELECT id, path, type, monitored FROM library_paths ORDER BY inserted_at ASC",
-        )
-        .fetch_all(pool)
-        .await
-        .expect("query"),
-        Db::Postgres(_) => unreachable!(),
-    };
+    let rows: Vec<(String, String, String, bool)> = sqlx::query_as(
+        "SELECT id, path, type, monitored FROM library_paths ORDER BY inserted_at ASC",
+    )
+    .fetch_all(sqlite_pool(&fx.db))
+    .await
+    .expect("query");
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].0, id);
     assert_eq!(rows[0].1, fx.media_path);

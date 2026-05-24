@@ -18,14 +18,16 @@
 
 #![cfg(feature = "server")]
 
+mod common;
+
 use chrono::Utc;
-use mydia_rs_db::Db;
+use common::{apply_sql, fresh_db, sqlite_pool};
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_web::server_fns::collections::server::{
     fetch_collection_detail, fetch_collection_items, fetch_collections,
 };
 use mydia_rs_web::server_fns::collections::CollectionListQuery;
 use mydia_rs_web::server_fns::search::server::execute_search;
-use sqlx::sqlite::SqlitePoolOptions;
 
 const SETUP_SQL: &str = "
 CREATE TABLE IF NOT EXISTS users (
@@ -38,13 +40,19 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS media_items (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
-    title TEXT,
+    title TEXT NOT NULL,
     original_title TEXT,
     year INTEGER,
     tmdb_id INTEGER,
+    tvdb_id INTEGER,
     imdb_id TEXT,
     metadata TEXT,
     monitored INTEGER DEFAULT 1,
+    monitoring_preset TEXT,
+    category TEXT,
+    category_override INTEGER NOT NULL DEFAULT 0,
+    seasons_refreshed_at TEXT,
+    quality_profile_id TEXT,
     inserted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -74,28 +82,16 @@ CREATE TABLE IF NOT EXISTS collection_items (
 );
 ";
 
-async fn fixture() -> Db {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
-        .await
-        .expect("open in-memory sqlite");
-    for stmt in SETUP_SQL.split(';') {
-        let trimmed = stmt.trim();
-        if !trimmed.is_empty() {
-            sqlx::query(trimmed)
-                .execute(&pool)
-                .await
-                .expect("create table");
-        }
-    }
-    Db::Sqlite(pool)
+async fn fixture() -> DatabaseConnection {
+    let db = fresh_db().await;
+    apply_sql(&db, SETUP_SQL).await;
+    db
 }
 
-async fn insert_user(db: &Db) -> String {
+async fn insert_user(db: &DatabaseConnection) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let Db::Sqlite(pool) = db else { unreachable!() };
+    let pool = sqlite_pool(db);
     sqlx::query("INSERT INTO users (id, role, inserted_at, updated_at) VALUES (?, 'user', ?, ?)")
         .bind(&id)
         .bind(&now)
@@ -108,7 +104,7 @@ async fn insert_user(db: &Db) -> String {
 
 #[allow(clippy::too_many_arguments)]
 async fn insert_collection(
-    db: &Db,
+    db: &DatabaseConnection,
     user_id: &str,
     name: &str,
     kind: &str,
@@ -118,7 +114,7 @@ async fn insert_collection(
 ) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let Db::Sqlite(pool) = db else { unreachable!() };
+    let pool = sqlite_pool(db);
     sqlx::query(
         "INSERT INTO collections (id, name, type, visibility, is_system, position, user_id, \
          sort_order, inserted_at, updated_at) \
@@ -139,12 +135,17 @@ async fn insert_collection(
     id
 }
 
-async fn insert_media(db: &Db, kind: &str, title: &str, year: Option<i32>) -> String {
+async fn insert_media(
+    db: &DatabaseConnection,
+    kind: &str,
+    title: &str,
+    year: Option<i32>,
+) -> String {
     insert_media_with_metadata(db, kind, title, None, year, None).await
 }
 
 async fn insert_media_with_metadata(
-    db: &Db,
+    db: &DatabaseConnection,
     kind: &str,
     title: &str,
     original_title: Option<&str>,
@@ -153,7 +154,7 @@ async fn insert_media_with_metadata(
 ) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let Db::Sqlite(pool) = db else { unreachable!() };
+    let pool = sqlite_pool(db);
     sqlx::query(
         "INSERT INTO media_items (id, type, title, original_title, year, metadata, monitored, \
          inserted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
@@ -172,10 +173,15 @@ async fn insert_media_with_metadata(
     id
 }
 
-async fn add_to_collection(db: &Db, collection_id: &str, media_id: &str, position: i64) {
+async fn add_to_collection(
+    db: &DatabaseConnection,
+    collection_id: &str,
+    media_id: &str,
+    position: i64,
+) {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let Db::Sqlite(pool) = db else { unreachable!() };
+    let pool = sqlite_pool(db);
     sqlx::query(
         "INSERT INTO collection_items (id, collection_id, media_item_id, position, inserted_at) \
          VALUES (?, ?, ?, ?, ?)",
