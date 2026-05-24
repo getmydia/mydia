@@ -1,3 +1,9 @@
+// Opt this module into the disallowed-methods lint so a future patch
+// that backslides into runtime `sqlx::query`/`query_as` (instead of the
+// compile-time-checked macros or the legitimate QueryBuilder dynamic
+// composer) is flagged at clippy time.
+#![warn(clippy::disallowed_methods)]
+
 //! sqlx-backed persistence for the `events` table.
 //!
 //! The schema lives in `priv/repo/migrations/20251106191246_create_events.exs`
@@ -104,54 +110,58 @@ pub async fn insert_event(db: &Db, input: EventInput) -> Result<Event, EventsErr
     let inserted_at = DateTimeSecs::from(Utc::now());
     let metadata = JsonMap::new(serde_json::Value::Object(input.metadata.clone()));
 
+    // Fixed-shape INSERT — tier (a). Postgres arm is macro-checked
+    // against the schema; SQLite arm is byte-equal runtime SQL.
+    let id_uuid = UuidText(id);
+    let actor_type_str = input.actor_type.map(|a| a.as_str().to_owned());
+    let resource_id_uuid = input
+        .resource_id
+        .as_deref()
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .map(UuidText);
+    let severity_str = input.severity.as_str().to_owned();
+
     match db {
         Db::Sqlite(pool) => {
-            let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("INSERT INTO events (");
-            qb.push(COLUMNS);
-            qb.push(") VALUES (");
-            qb.push_bind(UuidText(id));
-            qb.push(", ").push_bind(input.category.clone());
-            qb.push(", ").push_bind(input.event_type.clone());
-            qb.push(", ")
-                .push_bind(input.actor_type.map(|a| a.as_str().to_owned()));
-            qb.push(", ").push_bind(input.actor_id.clone());
-            qb.push(", ").push_bind(input.resource_type.clone());
-            qb.push(", ").push_bind(
-                input
-                    .resource_id
-                    .as_deref()
-                    .and_then(|s| Uuid::parse_str(s).ok())
-                    .map(UuidText),
-            );
-            qb.push(", ").push_bind(input.severity.as_str().to_owned());
-            qb.push(", ").push_bind(metadata);
-            qb.push(", ").push_bind(inserted_at);
-            qb.push(")");
-            qb.build().execute(pool).await?;
+            #[allow(clippy::disallowed_methods)]
+            sqlx::query(
+                "INSERT INTO events \
+                 (id, category, type, actor_type, actor_id, resource_type, resource_id, \
+                  severity, metadata, inserted_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            )
+            .bind(id_uuid)
+            .bind(input.category.clone())
+            .bind(input.event_type.clone())
+            .bind(actor_type_str.clone())
+            .bind(input.actor_id.clone())
+            .bind(input.resource_type.clone())
+            .bind(resource_id_uuid)
+            .bind(severity_str.clone())
+            .bind(metadata.clone())
+            .bind(inserted_at)
+            .execute(pool)
+            .await?;
         }
         Db::Postgres(pool) => {
-            let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("INSERT INTO events (");
-            qb.push(COLUMNS);
-            qb.push(") VALUES (");
-            qb.push_bind(UuidText(id));
-            qb.push(", ").push_bind(input.category.clone());
-            qb.push(", ").push_bind(input.event_type.clone());
-            qb.push(", ")
-                .push_bind(input.actor_type.map(|a| a.as_str().to_owned()));
-            qb.push(", ").push_bind(input.actor_id.clone());
-            qb.push(", ").push_bind(input.resource_type.clone());
-            qb.push(", ").push_bind(
-                input
-                    .resource_id
-                    .as_deref()
-                    .and_then(|s| Uuid::parse_str(s).ok())
-                    .map(UuidText),
-            );
-            qb.push(", ").push_bind(input.severity.as_str().to_owned());
-            qb.push(", ").push_bind(metadata);
-            qb.push(", ").push_bind(inserted_at);
-            qb.push(")");
-            qb.build().execute(pool).await?;
+            sqlx::query!(
+                "INSERT INTO events \
+                 (id, category, type, actor_type, actor_id, resource_type, resource_id, \
+                  severity, metadata, inserted_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                id_uuid as UuidText,
+                input.category,
+                input.event_type,
+                actor_type_str,
+                input.actor_id,
+                input.resource_type,
+                resource_id_uuid as Option<UuidText>,
+                severity_str,
+                metadata as JsonMap<serde_json::Value>,
+                inserted_at as DateTimeSecs,
+            )
+            .execute(pool)
+            .await?;
         }
     }
 
@@ -172,21 +182,44 @@ async fn list_events_by_id(
     id: Uuid,
     _filter: &EventFilter,
 ) -> Result<Vec<Event>, EventsError> {
+    // Fixed-shape SELECT by PK — tier (a). Postgres arm is macro-checked;
+    // SQLite arm is byte-equal runtime SQL. The `type` column is a
+    // reserved keyword on Postgres but works in SELECT position without
+    // quoting; aliased to `event_type` so the macro's field-mapping
+    // matches the `Event` struct's `event_type: String` field.
+    let id_uuid = UuidText(id);
     match db {
         Db::Sqlite(pool) => {
-            let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
-            qb.push(COLUMNS);
-            qb.push(" FROM events WHERE id = ");
-            qb.push_bind(UuidText(id));
-            let rows = qb.build_query_as::<Event>().fetch_all(pool).await?;
+            #[allow(clippy::disallowed_methods)]
+            let rows = sqlx::query_as::<_, Event>(
+                "SELECT id, category, type, actor_type, actor_id, resource_type, \
+                 resource_id, severity, metadata, inserted_at \
+                 FROM events WHERE id = $1",
+            )
+            .bind(id_uuid)
+            .fetch_all(pool)
+            .await?;
             Ok(rows)
         }
         Db::Postgres(pool) => {
-            let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("SELECT ");
-            qb.push(COLUMNS);
-            qb.push(" FROM events WHERE id = ");
-            qb.push_bind(UuidText(id));
-            let rows = qb.build_query_as::<Event>().fetch_all(pool).await?;
+            let rows = sqlx::query_as!(
+                Event,
+                r#"SELECT
+                    id as "id!: UuidText",
+                    category as "category!",
+                    type as "event_type!",
+                    actor_type,
+                    actor_id,
+                    resource_type,
+                    resource_id as "resource_id?: UuidText",
+                    severity as "severity!",
+                    metadata as "metadata!: JsonMap<serde_json::Value>",
+                    inserted_at as "inserted_at!: DateTimeSecs"
+                  FROM events WHERE id = $1"#,
+                id_uuid as UuidText
+            )
+            .fetch_all(pool)
+            .await?;
             Ok(rows)
         }
     }

@@ -21,10 +21,14 @@ sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio",
     "sqlite",
     "postgres",
+    "macros",
+    "chrono",
+    "uuid",
 ] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "process", "time"] }
 tracing = { workspace = true }
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 mydia-rs-config = { path = "../config" }

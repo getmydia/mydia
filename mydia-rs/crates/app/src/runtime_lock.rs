@@ -1,3 +1,12 @@
+// Opt this module into the disallowed-methods lint. The SQLite arm
+// writes to `mydia_runtime_lock` — a table mydia-rs creates itself
+// (the ONE schema write the rewrite is allowed to make per the plan's
+// scope boundary). It doesn't exist in the Postgres prepare DB, so
+// those queries can't go through `sqlx::query!`. They stay runtime
+// with a documented `#[allow]` per call. The Postgres pg_advisory_lock
+// queries DO go through the macros — those are tier (a).
+#![warn(clippy::disallowed_methods)]
+
 //! Boot-time mutual exclusion lock.
 //!
 //! Prevents two mydia-rs instances (or, once Phoenix grows the
@@ -115,9 +124,11 @@ impl RuntimeLockHandle {
                 if let Some(mut c) = conn.take() {
                     // pg_advisory_unlock is best-effort; closing the
                     // connection releases the lock unconditionally.
-                    let _ = sqlx::query("SELECT pg_advisory_unlock($1)")
-                        .bind(LOCK_KEY)
-                        .execute(&mut *c)
+                    // `SELECT pg_advisory_unlock(...)` is treated as a
+                    // row-returning query by the macro, so use
+                    // `fetch_optional` (we don't care about the bool).
+                    let _ = sqlx::query_scalar!("SELECT pg_advisory_unlock($1)", LOCK_KEY)
+                        .fetch_optional(&mut *c)
                         .await;
                 }
             }
@@ -130,6 +141,9 @@ impl RuntimeLockHandle {
                     handle.abort();
                 }
                 if !*released {
+                    // SQLite-only table; not in PG prepare schema so can't
+                    // be macro-checked. Runtime form is the only option.
+                    #[allow(clippy::disallowed_methods)]
                     sqlx::query("DELETE FROM mydia_runtime_lock WHERE lock_key = ?")
                         .bind(LOCK_KEY_NAME)
                         .execute(&*pool)
@@ -164,12 +178,11 @@ pub async fn acquire(db: &Db) -> Result<RuntimeLockHandle, RuntimeLockError> {
 
 async fn acquire_postgres(pool: sqlx::PgPool) -> Result<RuntimeLockHandle, RuntimeLockError> {
     let mut conn = pool.acquire().await?;
-    let got: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
-        .bind(LOCK_KEY)
+    let got: Option<bool> = sqlx::query_scalar!("SELECT pg_try_advisory_lock($1)", LOCK_KEY)
         .fetch_one(&mut *conn)
         .await?;
 
-    if !got {
+    if !got.unwrap_or(false) {
         return Err(RuntimeLockError::Held);
     }
 
@@ -198,6 +211,9 @@ async fn acquire_sqlite(pool: sqlx::SqlitePool) -> Result<RuntimeLockHandle, Run
 }
 
 async fn ensure_lock_table(pool: &sqlx::SqlitePool) -> Result<(), RuntimeLockError> {
+    // DDL — sqlx macros cannot validate this regardless of dialect.
+    // Plus the table is SQLite-only (Phoenix uses pg_advisory_lock on PG).
+    #[allow(clippy::disallowed_methods)]
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS mydia_runtime_lock (
             lock_key TEXT PRIMARY KEY,
@@ -215,6 +231,8 @@ async fn ensure_lock_table(pool: &sqlx::SqlitePool) -> Result<(), RuntimeLockErr
 
 async fn sweep_stale(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(), RuntimeLockError> {
     let cutoff = now - chrono::Duration::from_std(STALE_AFTER).expect("stale threshold fits");
+    // SQLite-only table; can't macro-check.
+    #[allow(clippy::disallowed_methods)]
     sqlx::query("DELETE FROM mydia_runtime_lock WHERE lock_key = ? AND heartbeat_at < ?")
         .bind(LOCK_KEY_NAME)
         .bind(cutoff.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
@@ -228,6 +246,8 @@ async fn insert_claim(pool: &sqlx::SqlitePool, now: DateTime<Utc>) -> Result<(),
     let pid = i64::from(std::process::id());
     let hostname = hostname();
 
+    // SQLite-only table; can't macro-check.
+    #[allow(clippy::disallowed_methods)]
     let result = sqlx::query(
         "INSERT INTO mydia_runtime_lock
             (lock_key, pid, hostname, backend, started_at, heartbeat_at)
@@ -275,13 +295,15 @@ fn spawn_heartbeat(pool: sqlx::SqlitePool) -> JoinHandle<()> {
         loop {
             ticker.tick().await;
             let now_iso = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-            if let Err(err) =
+            // SQLite-only table; can't macro-check.
+            #[allow(clippy::disallowed_methods)]
+            let res =
                 sqlx::query("UPDATE mydia_runtime_lock SET heartbeat_at = ? WHERE lock_key = ?")
                     .bind(&now_iso)
                     .bind(LOCK_KEY_NAME)
                     .execute(&pool)
-                    .await
-            {
+                    .await;
+            if let Err(err) = res {
                 tracing::warn!(%err, "runtime-lock heartbeat update failed");
             }
         }

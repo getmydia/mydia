@@ -1,8 +1,17 @@
+// Opt this module into the disallowed-methods lint so a future patch
+// that backslides into runtime `sqlx::query` (instead of the
+// compile-time-checked macro) is flagged at clippy time.
+#![warn(clippy::disallowed_methods)]
+
 //! Retention sweep: delete events older than the configured threshold.
 //!
 //! Port of `Mydia.Events.delete_old_events/1`. The Phoenix worker
 //! `Mydia.Jobs.EventCleanup` runs this on a cron schedule; the Rust
 //! port exposes the function so U17's apalis worker can call it.
+//!
+//! Tier-(a) portable SQL: byte-equal between engines (sqlx-sqlite
+//! accepts `$N` placeholders). The `Postgres` arm is macro-checked
+//! against the offline cache; the `SQLite` arm mirrors verbatim.
 
 use chrono::{Duration, Utc};
 use mydia_rs_db::types::DateTimeSecs;
@@ -23,17 +32,23 @@ pub async fn delete_old_events(db: &Db, retention_days: i64) -> Result<u64, Even
     let cutoff = DateTimeSecs::from(Utc::now() - Duration::days(retention_days));
     match db {
         Db::Sqlite(pool) => {
-            let result = sqlx::query("DELETE FROM events WHERE inserted_at < ?")
+            // SQLite arm is runtime form (sqlx::query! is single-dialect
+            // and our prepare target is Postgres); SQL is byte-equal to
+            // the macro-checked Postgres arm.
+            #[allow(clippy::disallowed_methods)]
+            let result = sqlx::query("DELETE FROM events WHERE inserted_at < $1")
                 .bind(cutoff)
                 .execute(pool)
                 .await?;
             Ok(result.rows_affected())
         }
         Db::Postgres(pool) => {
-            let result = sqlx::query("DELETE FROM events WHERE inserted_at < $1")
-                .bind(cutoff)
-                .execute(pool)
-                .await?;
+            let result = sqlx::query!(
+                "DELETE FROM events WHERE inserted_at < $1",
+                cutoff as DateTimeSecs
+            )
+            .execute(pool)
+            .await?;
             Ok(result.rows_affected())
         }
     }
