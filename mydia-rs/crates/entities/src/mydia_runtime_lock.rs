@@ -19,8 +19,8 @@
 //! - `heartbeat_at TEXT NOT NULL` — ISO 8601 UTC of the most recent
 //!   heartbeat, used by stale-sweep to reclaim abandoned locks.
 
-use sea_orm::entity::prelude::*;
 use mydia_rs_db::types::DateTimeSecs;
+use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]

@@ -62,13 +62,19 @@ async fn main() -> Result<()> {
     check_all_entities(&pg, &mut findings);
 
     if findings.is_empty() {
-        println!("schema-diff-check: clean. {} entity tables verified.", count_known_tables(&pg));
+        println!(
+            "schema-diff-check: clean. {} entity tables verified.",
+            count_known_tables(&pg)
+        );
         Ok(())
     } else {
         for finding in &findings {
             println!("{finding}");
         }
-        Err(anyhow!("schema-diff-check: {} drift(s) detected", findings.len()))
+        Err(anyhow!(
+            "schema-diff-check: {} drift(s) detected",
+            findings.len()
+        ))
     }
 }
 
@@ -94,10 +100,13 @@ async fn load_postgres_schema(db: &DatabaseConnection) -> Result<PgSchema> {
         let column: String = row.try_get_by("column_name").context("read column_name")?;
         let data_type: String = row.try_get_by("data_type").context("read data_type")?;
         let udt_name: String = row.try_get_by("udt_name").context("read udt_name")?;
-        schema
-            .entry(table)
-            .or_default()
-            .insert(column, PgColumn { data_type, udt_name });
+        schema.entry(table).or_default().insert(
+            column,
+            PgColumn {
+                data_type,
+                udt_name,
+            },
+        );
     }
     Ok(schema)
 }
@@ -257,7 +266,9 @@ fn column_types_compatible(entity: &ColumnType, pg: &PgColumn) -> bool {
             }
             // udt_name is `_text` for `text[]`, `_int4` for `integer[]`, etc.
             match inner.as_ref() {
-                ColumnType::Text | ColumnType::String(_) | ColumnType::Char(_) => udt == "_text" || udt == "_varchar",
+                ColumnType::Text | ColumnType::String(_) | ColumnType::Char(_) => {
+                    udt == "_text" || udt == "_varchar"
+                }
                 ColumnType::Integer | ColumnType::Unsigned => udt == "_int4",
                 ColumnType::BigInteger | ColumnType::BigUnsigned => udt == "_int8",
                 _ => true, // unknown inner — don't false-positive

@@ -987,10 +987,12 @@ async fn handle_dial(
     tracing::info!("Connected to peer: {} ({:?})", node_id, connection_type);
 
     connected_peers.insert(node_id.clone(), conn.clone());
-    let _ = event_tx.send(Event::Connected {
-        peer_id: node_id.clone(),
-        connection_type,
-    }).await;
+    let _ = event_tx
+        .send(Event::Connected {
+            peer_id: node_id.clone(),
+            connection_type,
+        })
+        .await;
 
     // Spawn a task to handle incoming streams from this peer
     let event_tx_clone = event_tx.clone();
@@ -998,7 +1000,13 @@ async fn handle_dial(
     let conn_clone = conn.clone();
     let node_id_clone = node_id.clone();
     tokio::spawn(async move {
-        handle_connection(conn_clone, node_id_clone, event_tx_clone, shared_state_clone).await;
+        handle_connection(
+            conn_clone,
+            node_id_clone,
+            event_tx_clone,
+            shared_state_clone,
+        )
+        .await;
     });
 
     // Monitor connection type changes (relay -> direct)
@@ -1013,11 +1021,7 @@ async fn handle_dial(
 /// Monitor a peer connection for type changes (e.g. relay -> direct after hole-punching).
 /// Awaits PathEvent notifications from iroh and emits ConnectionTypeChanged on transitions.
 /// Stops after 2 minutes (hole-punching window) or when Direct is reached.
-async fn monitor_connection_type(
-    conn: Connection,
-    peer_id: String,
-    event_tx: mpsc::Sender<Event>,
-) {
+async fn monitor_connection_type(conn: Connection, peer_id: String, event_tx: mpsc::Sender<Event>) {
     let mut current_type = PeerConnectionType::from_connection(&conn);
     let mut events = conn.path_events();
 
@@ -1129,7 +1133,11 @@ async fn stream_file_to_quic(
                 Ok(_) => {}
                 Err(e) => {
                     tracing::error!("Read error: {}", e);
-                    return (io_nanos / 1_000_000, backpressure_nanos / 1_000_000, chunk_count);
+                    return (
+                        io_nanos / 1_000_000,
+                        backpressure_nanos / 1_000_000,
+                        chunk_count,
+                    );
                 }
             }
             io_nanos += io_start.elapsed().as_nanos() as u64;
@@ -1142,12 +1150,20 @@ async fn stream_file_to_quic(
             if chunk_tx.blocking_send(buf).is_err() {
                 // Receiver dropped (QUIC write failed or stream cancelled)
                 tracing::debug!("stream_file_to_quic: receiver dropped, stopping read");
-                return (io_nanos / 1_000_000, backpressure_nanos / 1_000_000, chunk_count);
+                return (
+                    io_nanos / 1_000_000,
+                    backpressure_nanos / 1_000_000,
+                    chunk_count,
+                );
             }
             backpressure_nanos += bp_start.elapsed().as_nanos() as u64;
         }
         // chunk_tx is dropped here, signalling end of data
-        (io_nanos / 1_000_000, backpressure_nanos / 1_000_000, chunk_count)
+        (
+            io_nanos / 1_000_000,
+            backpressure_nanos / 1_000_000,
+            chunk_count,
+        )
     });
 
     // Async QUIC writer: receives chunks and writes length-prefixed data
@@ -1679,5 +1695,4 @@ mod tests {
         let decoded: MydiaResponse = serde_cbor::from_slice(&data).unwrap();
         assert_eq!(response, decoded);
     }
-
 }

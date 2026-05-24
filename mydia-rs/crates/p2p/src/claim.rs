@@ -270,9 +270,10 @@ async fn load_by_code(db: &Db, code: &str) -> Result<PairingClaim, ClaimCodeErro
             .fetch_optional(pool)
             .await
         }
-        Db::Postgres(pool) => sqlx::query_as!(
-            PairingClaim,
-            r#"SELECT
+        Db::Postgres(pool) => {
+            sqlx::query_as!(
+                PairingClaim,
+                r#"SELECT
                 id as "id!: UuidText",
                 code,
                 user_id as "user_id!: UuidText",
@@ -282,10 +283,11 @@ async fn load_by_code(db: &Db, code: &str) -> Result<PairingClaim, ClaimCodeErro
                 inserted_at as "inserted_at!: DateTimeSecs",
                 updated_at as "updated_at!: DateTimeSecs"
               FROM pairing_claims WHERE code = $1"#,
-            code
-        )
-        .fetch_optional(pool)
-        .await,
+                code
+            )
+            .fetch_optional(pool)
+            .await
+        }
     }
     .map_err(|err| ClaimCodeError::Database(err.to_string()))?;
 

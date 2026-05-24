@@ -158,9 +158,10 @@ impl MediaTokenValidator {
                 .fetch_optional(pool)
                 .await
             }
-            Db::Postgres(pool) => sqlx::query_as!(
-                RemoteDevice,
-                r#"SELECT
+            Db::Postgres(pool) => {
+                sqlx::query_as!(
+                    RemoteDevice,
+                    r#"SELECT
                     id as "id!: UuidText",
                     device_name,
                     platform,
@@ -172,11 +173,12 @@ impl MediaTokenValidator {
                     inserted_at as "inserted_at!: DateTimeSecs",
                     updated_at as "updated_at!: DateTimeSecs"
                   FROM remote_devices WHERE id = $1 AND user_id = $2"#,
-                device_id_text as UuidText,
-                user_id_text as UuidText
-            )
-            .fetch_optional(pool)
-            .await,
+                    device_id_text as UuidText,
+                    user_id_text as UuidText
+                )
+                .fetch_optional(pool)
+                .await
+            }
         }
         .map_err(|err| ValidationError::Database(err.to_string()))?;
 
