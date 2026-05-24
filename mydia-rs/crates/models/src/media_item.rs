@@ -9,7 +9,7 @@
 use mydia_rs_db::types::{DateTimeSecs, JsonMap, UuidText};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaItem {
     pub id: UuidText,
     pub r#type: Option<String>,

@@ -135,36 +135,12 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --all-targets
 
-  sqlx-prepare-check:
-    name: sqlx offline cache covers every macro
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: mydia-rs
-
-      - name: Verify .sqlx cache covers every query!/query_as! macro
-        # The committed cache under mydia-rs/.sqlx/ has to satisfy every
-        # query!/query_as! macro in the workspace; if a developer added
-        # or modified a macro without running `./dev rs sqlx-prepare` the
-        # offline check fails here. SQLX_OFFLINE forces the sqlx-macros
-        # crate to read from the cache instead of trying to connect to
-        # a live DB, which means CI doesn't have to populate a Postgres
-        # prepare DB on every run (the populate step is a one-time local
-        # workflow). The accounts.rs pilot landed the first four cache
-        # entries; every subsequent macro addition adds more.
-        env:
-          SQLX_OFFLINE: "true"
-        run: cargo check --workspace --all-targets
+  # The `sqlx-prepare-check` job was retired in U19 of the SeaORM data
+  # layer unification plan
+  # (docs/plans/2026-05-24-001-refactor-seaorm-data-layer-unification-plan.md).
+  # mydia-rs no longer ships any `sqlx::query!` / `query_as!` macros;
+  # `schema-diff-check` below replaces it as the entities-vs-Phoenix
+  # parity gate.
 
   schema-diff-check:
     name: Schema / Phoenix-vs-entities drift
@@ -263,7 +239,7 @@ jobs:
   mydia-rs-ci-status:
     name: mydia-rs CI Status
     runs-on: ubuntu-latest
-    needs: [changes, lint, test-sqlite, test-postgres, sqlx-prepare-check, schema-diff-check, docker-build]
+    needs: [changes, lint, test-sqlite, test-postgres, schema-diff-check, docker-build]
     if: always()
     defaults:
       run:
@@ -283,7 +259,6 @@ jobs:
             "lint:${{ needs.lint.result }}" \
             "test-sqlite:${{ needs.test-sqlite.result }}" \
             "test-postgres:${{ needs.test-postgres.result }}" \
-            "sqlx-prepare-check:${{ needs.sqlx-prepare-check.result }}" \
             "schema-diff-check:${{ needs.schema-diff-check.result }}" \
             "docker-build:${{ needs.docker-build.result }}"; do
             name="${pair%%:*}"

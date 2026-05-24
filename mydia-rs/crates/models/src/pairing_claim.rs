@@ -9,7 +9,7 @@
 use mydia_rs_db::types::{DateTimeSecs, UuidText};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PairingClaim {
     pub id: UuidText,
     pub code: String,

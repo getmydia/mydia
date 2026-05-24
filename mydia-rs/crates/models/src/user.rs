@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Row from `users`. `role` is stored as TEXT; use [`UserRole::parse`]
 /// to recover a typed value at the application layer.
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: UuidText,
     pub username: Option<String>,

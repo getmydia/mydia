@@ -51,10 +51,6 @@ pub enum StreamingError {
     /// the running backend.
     #[error("input path is not readable: {path}")]
     InputNotReadable { path: PathBuf },
-
-    /// A database query (session row insert / delete) failed.
-    #[error(transparent)]
-    Db(#[from] sqlx::Error),
 }
 
 impl StreamingError {
@@ -71,6 +67,6 @@ impl StreamingError {
     /// (apalis would retry these). Used by the supervisor when
     /// deciding whether to surface a `session_failed` event.
     pub fn is_transient(&self) -> bool {
-        matches!(self, Self::Spawn(_) | Self::Filesystem { .. } | Self::Db(_))
+        matches!(self, Self::Spawn(_) | Self::Filesystem { .. })
     }
 }

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use mydia_rs_db::types::{DateTimeSecs, JsonMap, UuidText};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryPath {
     pub id: UuidText,
     pub path: Option<String>,

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// `Vec<u8>` rather than a fixed-size array because Ecto allows
 /// historical rows with non-32-byte values during the parallel
 /// window; downstream validation lives at the issue/consume seam.
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteDevice {
     pub id: UuidText,
     pub device_name: String,

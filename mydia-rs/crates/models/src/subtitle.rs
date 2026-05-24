@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// validator. Mirrors the wire shape consumed by the player.
 pub const SUPPORTED_FORMATS: &[&str] = &["srt", "ass", "vtt"];
 
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subtitle {
     pub id: UuidText,
     pub media_file_id: UuidText,

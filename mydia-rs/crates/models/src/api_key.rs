@@ -10,7 +10,7 @@
 use mydia_rs_db::types::{DateTimeSecs, StringArray, UuidText};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
     pub id: UuidText,
     pub user_id: UuidText,

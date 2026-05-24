@@ -7,12 +7,6 @@ publish = false
 
 [dependencies]
 tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "process", "io-util", "fs"] }
-sqlx = { version = "0.8", default-features = false, features = [
-    "runtime-tokio",
-    "sqlite",
-    "postgres",
-    "chrono",
-] }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 dashmap = "6"
 serde = { workspace = true }
