@@ -131,35 +131,43 @@ pub async fn consume_claim_code(
     let normalised = normalize_claim_code(code);
     let now_dt = Utc::now();
     let now = DateTimeSecs::from(now_dt);
-    let device_text = device_id.to_string();
+    let device_id_text = UuidText(device_id);
 
     // We do a conditional UPDATE that only matches an unused, unexpired
     // row, then re-fetch to return the up-to-date PairingClaim. The
     // sqlx Sqlite / Postgres query handles produce distinct result
     // types, so we extract `rows_affected()` from each arm.
-    let sql = "UPDATE pairing_claims \
-               SET used_at = $1, device_id = $2, updated_at = $1 \
-               WHERE code = $3 AND used_at IS NULL AND expires_at > $4";
-
     let updated_rows: u64 = match db {
-        Db::Sqlite(pool) => sqlx::query(sql)
+        Db::Sqlite(pool) => {
+            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
+            #[allow(clippy::disallowed_methods)]
+            sqlx::query(
+                "UPDATE pairing_claims \
+                 SET used_at = $1, device_id = $2, updated_at = $1 \
+                 WHERE code = $3 AND used_at IS NULL AND expires_at > $4",
+            )
             .bind(now)
-            .bind(device_text.as_str())
+            .bind(device_id_text)
             .bind(normalised.as_str())
             .bind(now)
             .execute(pool)
             .await
             .map_err(|err| ClaimCodeError::Database(err.to_string()))?
-            .rows_affected(),
-        Db::Postgres(pool) => sqlx::query(sql)
-            .bind(now)
-            .bind(device_id)
-            .bind(normalised.as_str())
-            .bind(now)
-            .execute(pool)
-            .await
-            .map_err(|err| ClaimCodeError::Database(err.to_string()))?
-            .rows_affected(),
+            .rows_affected()
+        }
+        Db::Postgres(pool) => sqlx::query!(
+            "UPDATE pairing_claims \
+             SET used_at = $1, device_id = $2, updated_at = $1 \
+             WHERE code = $3 AND used_at IS NULL AND expires_at > $4",
+            now as DateTimeSecs,
+            device_id_text as UuidText,
+            normalised,
+            now as DateTimeSecs,
+        )
+        .execute(pool)
+        .await
+        .map_err(|err| ClaimCodeError::Database(err.to_string()))?
+        .rows_affected(),
     };
 
     if updated_rows == 0 {
@@ -196,34 +204,44 @@ pub async fn insert_claim(
         + ChronoDuration::from_std(ttl).map_err(|err| ClaimCodeError::Database(err.to_string()))?;
     let expires = DateTimeSecs::from(expires_dt);
     let id = Uuid::new_v4();
-    let id_text = id.to_string();
-    let user_text = user_id.to_string();
-
-    let sql = "INSERT INTO pairing_claims \
-               (id, code, user_id, expires_at, used_at, device_id, inserted_at, updated_at) \
-               VALUES ($1, $2, $3, $4, NULL, NULL, $5, $5)";
+    let id_text = UuidText(id);
+    let user_id_text = UuidText(user_id);
 
     match db {
-        Db::Sqlite(pool) => sqlx::query(sql)
-            .bind(id_text.as_str())
+        Db::Sqlite(pool) => {
+            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
+            #[allow(clippy::disallowed_methods)]
+            sqlx::query(
+                "INSERT INTO pairing_claims \
+                 (id, code, user_id, expires_at, used_at, device_id, inserted_at, updated_at) \
+                 VALUES ($1, $2, $3, $4, NULL, NULL, $5, $5)",
+            )
+            .bind(id_text)
             .bind(normalised.as_str())
-            .bind(user_text.as_str())
+            .bind(user_id_text)
             .bind(expires)
             .bind(now)
             .execute(pool)
             .await
             .map(|_| ())
-            .map_err(|err| ClaimCodeError::Database(err.to_string()))?,
-        Db::Postgres(pool) => sqlx::query(sql)
-            .bind(id)
-            .bind(normalised.as_str())
-            .bind(user_id)
-            .bind(expires)
-            .bind(now)
+            .map_err(|err| ClaimCodeError::Database(err.to_string()))?;
+        }
+        Db::Postgres(pool) => {
+            sqlx::query!(
+                "INSERT INTO pairing_claims \
+                 (id, code, user_id, expires_at, used_at, device_id, inserted_at, updated_at) \
+                 VALUES ($1, $2, $3, $4, NULL, NULL, $5, $5)",
+                id_text as UuidText,
+                normalised,
+                user_id_text as UuidText,
+                expires as DateTimeSecs,
+                now as DateTimeSecs,
+            )
             .execute(pool)
             .await
             .map(|_| ())
-            .map_err(|err| ClaimCodeError::Database(err.to_string()))?,
+            .map_err(|err| ClaimCodeError::Database(err.to_string()))?;
+        }
     }
 
     Ok(PairingClaim {
@@ -239,22 +257,35 @@ pub async fn insert_claim(
 }
 
 async fn load_by_code(db: &Db, code: &str) -> Result<PairingClaim, ClaimCodeError> {
-    let sql = "SELECT id, code, user_id, expires_at, used_at, device_id, inserted_at, updated_at \
-               FROM pairing_claims WHERE code = $1";
-
     let claim: Option<PairingClaim> = match db {
         Db::Sqlite(pool) => {
-            sqlx::query_as::<_, PairingClaim>(sql)
-                .bind(code)
-                .fetch_optional(pool)
-                .await
+            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
+            #[allow(clippy::disallowed_methods)]
+            sqlx::query_as::<_, PairingClaim>(
+                "SELECT id, code, user_id, expires_at, used_at, device_id, \
+                 inserted_at, updated_at \
+                 FROM pairing_claims WHERE code = $1",
+            )
+            .bind(code)
+            .fetch_optional(pool)
+            .await
         }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, PairingClaim>(sql)
-                .bind(code)
-                .fetch_optional(pool)
-                .await
-        }
+        Db::Postgres(pool) => sqlx::query_as!(
+            PairingClaim,
+            r#"SELECT
+                id as "id!: UuidText",
+                code,
+                user_id as "user_id!: UuidText",
+                expires_at as "expires_at!: DateTimeSecs",
+                used_at as "used_at?: DateTimeSecs",
+                device_id as "device_id?: UuidText",
+                inserted_at as "inserted_at!: DateTimeSecs",
+                updated_at as "updated_at!: DateTimeSecs"
+              FROM pairing_claims WHERE code = $1"#,
+            code
+        )
+        .fetch_optional(pool)
+        .await,
     }
     .map_err(|err| ClaimCodeError::Database(err.to_string()))?;
 

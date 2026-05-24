@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE pairing_claims SET used_at = $1, device_id = $2, updated_at = $1 WHERE code = $3 AND used_at IS NULL AND expires_at > $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamp",
+        "Uuid",
+        "Text",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d8e2eb9c3e85ef66920bd803d536cf725e249954618bf6fa5abf700b288c4faa"
+}

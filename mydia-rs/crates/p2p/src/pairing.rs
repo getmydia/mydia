@@ -122,39 +122,50 @@ pub async fn complete_pairing(
     let now = DateTimeSecs::from(now_dt);
     let device_static_public_key = random_static_public_key();
 
-    let insert_sql = "INSERT INTO remote_devices \
-                      (id, device_name, platform, device_static_public_key, token_hash, \
-                       last_seen_at, revoked_at, user_id, inserted_at, updated_at) \
-                      VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $6, $6)";
-
-    let id_text = device_id.to_string();
-    let user_text = user_id.to_string();
+    let device_id_text = UuidText(device_id);
+    let user_id_text = UuidText(user_id);
 
     match db {
-        Db::Sqlite(pool) => sqlx::query(insert_sql)
-            .bind(id_text.as_str())
+        Db::Sqlite(pool) => {
+            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
+            #[allow(clippy::disallowed_methods)]
+            sqlx::query(
+                "INSERT INTO remote_devices \
+                 (id, device_name, platform, device_static_public_key, token_hash, \
+                  last_seen_at, revoked_at, user_id, inserted_at, updated_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $6, $6)",
+            )
+            .bind(device_id_text)
             .bind(attrs.device_name.as_str())
             .bind(attrs.platform.as_str())
             .bind(device_static_public_key.as_slice())
             .bind(token_hash.as_str())
             .bind(now)
-            .bind(user_text.as_str())
+            .bind(user_id_text)
             .execute(pool)
             .await
             .map(|_| ())
-            .map_err(|err| PairingError::Database(err.to_string()))?,
-        Db::Postgres(pool) => sqlx::query(insert_sql)
-            .bind(device_id)
-            .bind(attrs.device_name.as_str())
-            .bind(attrs.platform.as_str())
-            .bind(device_static_public_key.as_slice())
-            .bind(token_hash.as_str())
-            .bind(now)
-            .bind(user_id)
+            .map_err(|err| PairingError::Database(err.to_string()))?;
+        }
+        Db::Postgres(pool) => {
+            sqlx::query!(
+                "INSERT INTO remote_devices \
+                 (id, device_name, platform, device_static_public_key, token_hash, \
+                  last_seen_at, revoked_at, user_id, inserted_at, updated_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $6, $6)",
+                device_id_text as UuidText,
+                attrs.device_name,
+                attrs.platform,
+                device_static_public_key,
+                token_hash,
+                now as DateTimeSecs,
+                user_id_text as UuidText,
+            )
             .execute(pool)
             .await
             .map(|_| ())
-            .map_err(|err| PairingError::Database(err.to_string()))?,
+            .map_err(|err| PairingError::Database(err.to_string()))?;
+        }
     }
 
     // Step 5: consume the claim. The atomic UPDATE inside
@@ -241,16 +252,23 @@ fn random_static_public_key() -> Vec<u8> {
 }
 
 async fn delete_device(db: &Db, device_id: Uuid) -> Result<(), sqlx::Error> {
-    let sql = "DELETE FROM remote_devices WHERE id = $1";
+    let device_id_text = UuidText(device_id);
     match db {
         Db::Sqlite(pool) => {
-            sqlx::query(sql)
-                .bind(device_id.to_string())
+            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
+            #[allow(clippy::disallowed_methods)]
+            sqlx::query("DELETE FROM remote_devices WHERE id = $1")
+                .bind(device_id_text)
                 .execute(pool)
                 .await?;
         }
         Db::Postgres(pool) => {
-            sqlx::query(sql).bind(device_id).execute(pool).await?;
+            sqlx::query!(
+                "DELETE FROM remote_devices WHERE id = $1",
+                device_id_text as UuidText
+            )
+            .execute(pool)
+            .await?;
         }
     }
     Ok(())

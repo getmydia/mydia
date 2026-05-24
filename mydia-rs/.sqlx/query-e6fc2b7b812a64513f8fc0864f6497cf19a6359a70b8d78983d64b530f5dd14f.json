@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id as \"id!: UuidText\",\n                    device_name,\n                    platform,\n                    device_static_public_key,\n                    token_hash,\n                    last_seen_at as \"last_seen_at?: DateTimeSecs\",\n                    revoked_at as \"revoked_at?: DateTimeSecs\",\n                    user_id as \"user_id!: UuidText\",\n                    inserted_at as \"inserted_at!: DateTimeSecs\",\n                    updated_at as \"updated_at!: DateTimeSecs\"\n                  FROM remote_devices WHERE id = $1 AND user_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: UuidText",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "platform",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "device_static_public_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "token_hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_seen_at?: DateTimeSecs",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 6,
+        "name": "revoked_at?: DateTimeSecs",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 7,
+        "name": "user_id!: UuidText",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "inserted_at!: DateTimeSecs",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at!: DateTimeSecs",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e6fc2b7b812a64513f8fc0864f6497cf19a6359a70b8d78983d64b530f5dd14f"
+}

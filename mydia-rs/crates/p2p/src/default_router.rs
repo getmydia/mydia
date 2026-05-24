@@ -35,6 +35,7 @@ use mydia_p2p_core::{
     PairingResponse, ReadMediaRequest,
 };
 use mydia_rs_auth::{AccessTokenSigner, MediaTokenCache, MediaTokenSigner};
+use mydia_rs_db::types::UuidText;
 use mydia_rs_db::Db;
 use mydia_rs_graphql::{CurrentUser, GraphqlRequestContext, MydiaSchema};
 use mydia_rs_streaming::Supervisor;
@@ -478,28 +479,32 @@ async fn build_current_user(db: &Db, user_id: &str) -> Result<Option<CurrentUser
     let Ok(user_uuid) = Uuid::parse_str(user_id) else {
         return Ok(None);
     };
+    let user_uuid_text = UuidText(user_uuid);
 
     // Select the small slice the GraphQL context needs. The full
     // user-row repo lives in `mydia-rs-graphql::repos::accounts`; we
     // duplicate the lookup here rather than depend on that internal
     // module so the p2p crate stays free of GraphQL repo internals.
-    let sql = "SELECT id, username, role FROM users WHERE id = $1";
-    let row: Option<(String, Option<String>, String)> = match db {
+    let row: Option<(Option<String>, String)> = match db {
         Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as(&sql)
-                .bind(user_uuid.to_string())
-                .fetch_optional(pool)
-                .await?
+            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
+            #[allow(clippy::disallowed_methods)]
+            sqlx::query_as::<_, (Option<String>, String)>(
+                "SELECT username, role FROM users WHERE id = $1",
+            )
+            .bind(user_uuid_text)
+            .fetch_optional(pool)
+            .await?
         }
-        Db::Postgres(pool) => {
-            sqlx::query_as(sql)
-                .bind(user_uuid)
-                .fetch_optional(pool)
-                .await?
-        }
+        Db::Postgres(pool) => sqlx::query!(
+            r#"SELECT username, role as "role!" FROM users WHERE id = $1"#,
+            user_uuid_text as UuidText
+        )
+        .fetch_optional(pool)
+        .await?
+        .map(|r| (r.username, r.role)),
     };
-    let Some((_, username_opt, role_str)) = row else {
+    let Some((username_opt, role_str)) = row else {
         return Ok(None);
     };
     let role =

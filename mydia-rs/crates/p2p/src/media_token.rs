@@ -31,6 +31,7 @@
 //!   (`lib/mydia/media/token_cache.ex:88-104`).
 
 use mydia_rs_auth::{MediaTokenCache, MediaTokenClaims, MediaTokenError, MediaTokenSigner};
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
 use mydia_rs_db::Db;
 use mydia_rs_models::RemoteDevice;
 use thiserror::Error;
@@ -140,31 +141,42 @@ impl MediaTokenValidator {
         let user_id =
             Uuid::parse_str(&claims.user_id).map_err(|_| ValidationError::InvalidDeviceId)?;
 
-        let sql = "SELECT id, device_name, platform, device_static_public_key, \
-                   token_hash, last_seen_at, revoked_at, user_id, inserted_at, updated_at \
-                   FROM remote_devices WHERE id = $1 AND user_id = $2";
-
-        let device_text = device_id.to_string();
-        let user_text = user_id.to_string();
+        let device_id_text = UuidText(device_id);
+        let user_id_text = UuidText(user_id);
 
         let device: Option<RemoteDevice> = match &self.db {
             Db::Sqlite(pool) => {
-                // SQLite paths bind UUIDs as text strings (see
-                // mydia_rs_db::types::UuidText) and treat $N as
-                // positional placeholders.
-                sqlx::query_as::<_, RemoteDevice>(sql)
-                    .bind(&device_text)
-                    .bind(&user_text)
-                    .fetch_optional(pool)
-                    .await
+                // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
+                #[allow(clippy::disallowed_methods)]
+                sqlx::query_as::<_, RemoteDevice>(
+                    "SELECT id, device_name, platform, device_static_public_key, \
+                     token_hash, last_seen_at, revoked_at, user_id, inserted_at, updated_at \
+                     FROM remote_devices WHERE id = $1 AND user_id = $2",
+                )
+                .bind(device_id_text)
+                .bind(user_id_text)
+                .fetch_optional(pool)
+                .await
             }
-            Db::Postgres(pool) => {
-                sqlx::query_as::<_, RemoteDevice>(sql)
-                    .bind(device_id)
-                    .bind(user_id)
-                    .fetch_optional(pool)
-                    .await
-            }
+            Db::Postgres(pool) => sqlx::query_as!(
+                RemoteDevice,
+                r#"SELECT
+                    id as "id!: UuidText",
+                    device_name,
+                    platform,
+                    device_static_public_key,
+                    token_hash,
+                    last_seen_at as "last_seen_at?: DateTimeSecs",
+                    revoked_at as "revoked_at?: DateTimeSecs",
+                    user_id as "user_id!: UuidText",
+                    inserted_at as "inserted_at!: DateTimeSecs",
+                    updated_at as "updated_at!: DateTimeSecs"
+                  FROM remote_devices WHERE id = $1 AND user_id = $2"#,
+                device_id_text as UuidText,
+                user_id_text as UuidText
+            )
+            .fetch_optional(pool)
+            .await,
         }
         .map_err(|err| ValidationError::Database(err.to_string()))?;
 
