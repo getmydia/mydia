@@ -1,9 +1,9 @@
-//! Smoke test that exercises a representative entity through the SeaORM
-//! API against a live database. Gated on `DATABASE_URL` (Postgres) and
-//! `MYDIA_RS_TEST_SQLITE_URL` (SQLite). Unset envs skip cleanly so local
-//! `cargo test -p mydia-rs-entities` is a no-op without a DB available.
-//! CI's `test-postgres` and `test-sqlite` matrices set the appropriate
-//! variable and execute the real probe.
+//! Smoke test that exercises a representative entity through the
+//! `SeaORM` API against a live database. Gated on `DATABASE_URL`
+//! (Postgres) and `MYDIA_RS_TEST_SQLITE_URL` (`SQLite`). Unset envs
+//! skip cleanly so local `cargo test -p mydia-rs-entities` is a no-op
+//! without a DB available. CI's `test-postgres` and `test-sqlite`
+//! matrices set the appropriate variable and execute the real probe.
 
 use std::env;
 

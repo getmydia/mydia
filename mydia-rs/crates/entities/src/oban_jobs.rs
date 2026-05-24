@@ -2,6 +2,7 @@
 
 use super::sea_orm_active_enums::ObanJobState;
 use sea_orm::entity::prelude::*;
+use mydia_rs_db::types::{DateTimeSecs, JsonMap, StringArray};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
@@ -15,21 +16,23 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub worker: String,
     #[sea_orm(column_type = "JsonBinary")]
-    pub args: Json,
+    pub args: JsonMap<serde_json::Value>,
     pub errors: Vec<Json>,
     pub attempt: i32,
     pub max_attempts: i32,
-    pub inserted_at: DateTime,
-    pub scheduled_at: DateTime,
-    pub attempted_at: Option<DateTime>,
-    pub completed_at: Option<DateTime>,
-    pub attempted_by: Option<Vec<String>>,
-    pub discarded_at: Option<DateTime>,
+    pub inserted_at: DateTimeSecs,
+    pub scheduled_at: DateTimeSecs,
+    pub attempted_at: Option<DateTimeSecs>,
+    pub completed_at: Option<DateTimeSecs>,
+    #[sea_orm(column_type = "Array(ColumnType::Text.into())", nullable)]
+    pub attempted_by: Option<StringArray>,
+    pub discarded_at: Option<DateTimeSecs>,
     pub priority: i32,
-    pub tags: Option<Vec<String>>,
+    #[sea_orm(column_type = "Array(ColumnType::Text.into())", nullable)]
+    pub tags: Option<StringArray>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
-    pub meta: Option<Json>,
-    pub cancelled_at: Option<DateTime>,
+    pub meta: Option<JsonMap<serde_json::Value>>,
+    pub cancelled_at: Option<DateTimeSecs>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
