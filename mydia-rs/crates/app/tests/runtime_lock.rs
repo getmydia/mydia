@@ -1,6 +1,6 @@
 //! Integration tests for the boot-time mutual exclusion lock.
 //!
-//! `SQLite`-only post-U9 — runtime_lock is now a SQLite-only feature
+//! `SQLite`-only post-U9 — `runtime_lock` is now a SQLite-only feature
 //! gated at the call site. The pre-U9 Postgres path used
 //! `pg_try_advisory_lock` against a held connection; the rewrite drops
 //! that surface because Phoenix's advisory-lock path owns Postgres

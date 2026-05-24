@@ -2,7 +2,7 @@
 //!
 //! Each worker family gets at least one happy-path test that pushes
 //! an args payload through the matching `handle` fn. The test
-//! fixture spins up an in-memory SeaORM `SQLite` connection and
+//! fixture spins up an in-memory `SeaORM` `SQLite` connection and
 //! creates the minimal schema tables the worker reads via
 //! `Schema::create_table_from_entity`.
 //!
@@ -52,12 +52,12 @@ use mydia_rs_jobs::AppContext;
 use mydia_rs_metadata::ProviderRegistry;
 use mydia_rs_pubsub::{topics, Pubsub};
 
-/// Build a fresh in-memory `SQLite` SeaORM connection with the tables
+/// Build a fresh in-memory `SQLite` `SeaORM` connection with the tables
 /// the workers under test touch. Entity-driven DDL via
 /// `Schema::create_table_from_entity` keeps the fixture column set in
 /// sync with the entity declarations; foreign-key enforcement is
 /// disabled because the entity DDL references sibling tables (users,
-/// quality_profiles, ...) that the workers under test never read.
+/// `quality_profiles`, ...) that the workers under test never read.
 async fn fixture_db() -> DatabaseConnection {
     let db = Database::connect("sqlite::memory:")
         .await

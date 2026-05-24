@@ -119,7 +119,7 @@ async fn apply_analysis(
         .filter(
             Condition::all()
                 .add(
-                    Expr::col(media_files::Column::Id).eq(id.clone().into_simple_expr(backend)),
+                    Expr::col(media_files::Column::Id).eq((*id).into_simple_expr(backend)),
                 )
                 .add(media_files::Column::AnalyzedAt.is_null()),
         )
@@ -135,7 +135,7 @@ async fn increment_attempts(db: &DatabaseConnection, id: &UuidText) -> Result<()
             media_files::Column::AnalysisAttempts,
             Expr::col(media_files::Column::AnalysisAttempts).add(1),
         )
-        .filter(Expr::col(media_files::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .filter(Expr::col(media_files::Column::Id).eq((*id).into_simple_expr(backend)))
         .exec(db)
         .await?;
     Ok(())

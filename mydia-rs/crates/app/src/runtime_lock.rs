@@ -84,7 +84,7 @@ impl std::fmt::Debug for RuntimeLockHandle {
         f.debug_struct("RuntimeLockHandle")
             .field("backend", &"sqlite")
             .field("released", &self.released)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

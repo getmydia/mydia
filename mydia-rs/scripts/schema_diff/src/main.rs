@@ -1,6 +1,6 @@
 //! Schema drift detector.
 //!
-//! For each entity in `mydia_rs_entities`, ask SeaORM what columns the
+//! For each entity in `mydia_rs_entities`, ask `SeaORM` what columns the
 //! committed source describes (via `Column::iter()` + `col.def()`),
 //! then ask Postgres what columns the migrated database actually has
 //! (via `information_schema.columns`), and diff. Failures point at the
@@ -21,9 +21,9 @@
 //! avoid false positives needs more careful handling than this initial
 //! gate carries.
 //!
-//! Connects via `DATABASE_URL` (Postgres only — SQLite is checked via
+//! Connects via `DATABASE_URL` (Postgres only — `SQLite` is checked via
 //! the cross-engine wrapper round-trip tests rather than schema diff,
-//! since SQLite's `pragma_table_info` semantics differ enough from
+//! since `SQLite`'s `pragma_table_info` semantics differ enough from
 //! Postgres's `information_schema` to warrant separate machinery).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -232,7 +232,7 @@ where
     }
 }
 
-/// Compare a SeaORM `ColumnType` against the Postgres column metadata,
+/// Compare a `SeaORM` `ColumnType` against the Postgres column metadata,
 /// returning true if the entity's declared type is consistent with the
 /// migrated schema's `data_type` / `udt_name`. Normalization handles
 /// the small spelling differences between sea-query's enum and

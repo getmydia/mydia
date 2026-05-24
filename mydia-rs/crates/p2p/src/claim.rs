@@ -233,11 +233,11 @@ async fn load_by_code(db: &DatabaseConnection, code: &str) -> Result<PairingClai
     model.map(model_to_claim).ok_or(ClaimCodeError::NotFound)
 }
 
-/// Convert the SeaORM entity Model into the `PairingClaim` row struct
+/// Convert the `SeaORM` entity Model into the `PairingClaim` row struct
 /// that the rest of the crate (and downstream models) consumes. The
 /// shapes match field-for-field; we keep `PairingClaim` distinct from
 /// `pairing_claims::Model` so the models crate stays free of any
-/// SeaORM trait derivations.
+/// `SeaORM` trait derivations.
 fn model_to_claim(model: pairing_claims::Model) -> PairingClaim {
     PairingClaim {
         id: model.id,

@@ -92,7 +92,7 @@ async fn fixture() -> DatabaseConnection {
 /// Escape a string for inlining inside single-quoted SQL string
 /// literal. Test inputs are controlled but a couple of fixture names
 /// contain apostrophes (`Bob's …`); doubling the quote is the
-/// standard-SQL escape that SQLite + Postgres both accept.
+/// standard-SQL escape that `SQLite` + Postgres both accept.
 fn esc(s: &str) -> String {
     s.replace('\'', "''")
 }

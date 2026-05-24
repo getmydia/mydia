@@ -176,7 +176,7 @@ mod server {
             return Ok(Vec::new());
         }
 
-        let media_item_ids: Vec<_> = eps.iter().map(|e| e.media_item_id.clone()).collect();
+        let media_item_ids: Vec<_> = eps.iter().map(|e| e.media_item_id).collect();
         let parents = media_items::Entity::find()
             .filter(media_items::Column::Id.is_in(media_item_ids))
             .filter(media_items::Column::Monitored.eq(true))
@@ -185,10 +185,10 @@ mod server {
             .map_err(|err| ServerFnError::new(format!("list media_items: {err}")))?;
         let mut parent_map = std::collections::HashMap::new();
         for parent in parents {
-            parent_map.insert(parent.id.clone(), parent);
+            parent_map.insert(parent.id, parent);
         }
 
-        let episode_ids: Vec<_> = eps.iter().map(|e| e.id.clone()).collect();
+        let episode_ids: Vec<_> = eps.iter().map(|e| e.id).collect();
         let files = media_files::Entity::find()
             .select_only()
             .column(media_files::Column::EpisodeId)

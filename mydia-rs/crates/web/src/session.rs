@@ -133,7 +133,9 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<(), sqlx::Error> {
             let store = PostgresStore::new(db.get_postgres_connection_pool().clone());
             store.migrate().await
         }
-        DatabaseBackend::MySql => Ok(()),
+        // mydia-rs is dual-engine SQLite/Postgres only; other backends are
+        // never reachable in landed code but stay covered as a no-op so
+        // future SeaORM additions don't trigger an exhaustiveness break.
         _ => Ok(()),
     }
 }

@@ -156,7 +156,7 @@ async fn refresh_one(
         )
         .filter(
             Expr::col(user_integrations::Column::Id)
-                .eq(integration.id.clone().into_simple_expr(backend)),
+                .eq(integration.id.into_simple_expr(backend)),
         )
         .exec(db)
         .await?;

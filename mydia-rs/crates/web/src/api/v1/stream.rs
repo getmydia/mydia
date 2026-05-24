@@ -175,7 +175,7 @@ struct ResolvedMediaFile {
     absolute_path: PathBuf,
 }
 
-/// Compose absolute path from a media_files Model + optional library_paths row.
+/// Compose absolute path from a `media_files` Model + optional `library_paths` row.
 fn resolve_abs_path(
     m: &mydia_rs_entities::media_files::Model,
     lp: Option<&mydia_rs_entities::library_paths::Model>,

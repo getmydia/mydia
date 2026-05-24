@@ -76,7 +76,7 @@ impl Supervisor {
     }
 
     /// Set up the apalis-sql migration set against the active
-    /// SeaORM connection. Convenience wrapper — equivalent to calling
+    /// `SeaORM` connection. Convenience wrapper — equivalent to calling
     /// [`storage::setup`] directly.
     pub async fn setup(db: &DatabaseConnection) -> Result<(), JobsError> {
         storage::setup(db).await

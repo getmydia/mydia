@@ -6,7 +6,7 @@
 //!
 //! Post-U12 cutover: SeaORM-native against `import_lists`. The
 //! dialect-specific date arithmetic that the prior raw-SQL path used
-//! (`datetime(last_sync_at, '+N hours')` on SQLite vs.
+//! (`datetime(last_sync_at, '+N hours')` on `SQLite` vs.
 //! `last_sync_at + INTERVAL '1 hour'` on Postgres) collapses to a
 //! single Rust-side filter: fetch enabled rows, decide due-ness in
 //! Rust. Volume is low (handful of import lists per instance) so the

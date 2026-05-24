@@ -35,7 +35,7 @@ use mydia_rs_db::types::UuidText;
 use mydia_rs_entities::remote_devices;
 use mydia_rs_models::RemoteDevice;
 use sea_orm::sea_query::{Expr, ExprTrait};
-use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
+use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -178,7 +178,7 @@ impl MediaTokenValidator {
     }
 }
 
-/// Translate the SeaORM entity Model to the `RemoteDevice` row struct
+/// Translate the `SeaORM` entity Model to the `RemoteDevice` row struct
 /// consumers expect. Fields match one-for-one.
 pub(crate) fn model_to_remote_device(model: remote_devices::Model) -> RemoteDevice {
     RemoteDevice {

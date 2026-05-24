@@ -29,7 +29,7 @@ use mydia_rs_pubsub::Pubsub;
 /// fresh from the DB).
 #[derive(Clone)]
 pub struct AppContext {
-    /// SeaORM database connection.
+    /// `SeaORM` database connection.
     pub db: DatabaseConnection,
 
     /// In-process pubsub bus for progress / status broadcasts. The

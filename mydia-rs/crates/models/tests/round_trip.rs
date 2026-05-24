@@ -11,7 +11,7 @@
 //!   1. Spinning up an in-process `SQLite` connection via
 //!      `mydia_rs_db::connect_from_config`.
 //!   2. Creating the table with engine-specific DDL that matches the
-//!      Phoenix schema (TEXT for wrapper columns on SQLite, matching the
+//!      Phoenix schema (TEXT for wrapper columns on `SQLite`, matching the
 //!      Ecto adapter's storage shape).
 //!   3. Inserting a row via `mydia_rs_db::insert_active_model` so the
 //!      wrapper-typed columns flow through the engine-aware write path.
@@ -19,13 +19,13 @@
 //!      values round-trip.
 //!
 //! `Schema::create_table_from_entity` is not used here because it panics
-//! on SQLite for entities with `ColumnType::Array(_)` columns (api_keys'
+//! on `SQLite` for entities with `ColumnType::Array(_)` columns (`api_keys`'
 //! `permissions`), and it would emit foreign-key constraints for tables
 //! whose FK targets aren't created in scope. Hand-written DDL is the
 //! pattern `crates/entities/tests/insert_helper.rs` already uses for the
 //! same reasons.
 //!
-//! Foreign-key constraints are disabled at the SQLite level via the
+//! Foreign-key constraints are disabled at the `SQLite` level via the
 //! `foreign_keys = OFF` PRAGMA because tests like `episode_round_trips`
 //! reference a parent `media_items.id` without seeding the parent row.
 //! Phoenix's Ecto migrations declare those FKs; production code seeds
@@ -54,9 +54,9 @@ use sea_orm::{ActiveValue::Set, ConnectionTrait, DatabaseConnection, EntityTrait
 use tempfile::TempDir;
 use uuid::Uuid;
 
-/// Spin up a fresh SQLite database, disable foreign keys (each test
+/// Spin up a fresh `SQLite` database, disable foreign keys (each test
 /// table is created in isolation without its FK parents), and return
-/// the SeaORM `DatabaseConnection` plus the holding `TempDir` so the
+/// the `SeaORM` `DatabaseConnection` plus the holding `TempDir` so the
 /// caller can keep the file alive.
 async fn fresh_sqlite() -> (DatabaseConnection, TempDir) {
     let tmp = tempfile::tempdir().expect("tempdir");

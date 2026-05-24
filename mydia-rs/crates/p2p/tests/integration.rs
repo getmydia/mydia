@@ -4,7 +4,7 @@
 //! pairing happy-path, atomic rate limiter under concurrency, media
 //! token cache hit/miss + synchronous device-revoke, and the
 //! cross-backend JWT compatibility surface, against an in-memory
-//! `SQLite` SeaORM connection. They do NOT boot a real
+//! `SQLite` `SeaORM` connection. They do NOT boot a real
 //! `mydia_p2p_core::Host` (that would require iroh + the network); the
 //! routing seam between the Server event loop and the trait surface
 //! is covered by `crates/p2p/src/router.rs` unit tests.
@@ -29,14 +29,13 @@ use mydia_rs_p2p::{
 };
 use sea_orm::sea_query::{Expr, ExprTrait};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, QueryFilter, Schema,
-    Set,
+    ConnectionTrait, Database, DatabaseConnection, EntityTrait, QueryFilter, Schema, Set,
 };
 use uuid::Uuid;
 
 const SECRET: &str = "shared-test-guardian-secret-for-jwt-parity";
 
-/// Build a fresh in-memory `SQLite` SeaORM connection with the tables
+/// Build a fresh in-memory `SQLite` `SeaORM` connection with the tables
 /// the p2p crate touches. The entity schemas are the source of truth:
 /// `Schema::create_table_from_entity` emits DDL matching the column
 /// annotations the entities declare. We turn off FK enforcement

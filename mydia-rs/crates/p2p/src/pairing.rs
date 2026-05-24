@@ -35,7 +35,7 @@ use mydia_rs_entities::remote_devices;
 use mydia_rs_models::RemoteDevice;
 use rand::RngCore;
 use sea_orm::sea_query::{Expr, ExprTrait};
-use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, Set};
+use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QueryFilter, Set};
 use thiserror::Error;
 use uuid::Uuid;
 

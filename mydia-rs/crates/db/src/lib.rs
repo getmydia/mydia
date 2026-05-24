@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 //! Database access layer.
 //!
 //! Post-U6 cutover: the workspace's data API is `SeaORM`-only. The legacy

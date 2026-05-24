@@ -5,7 +5,7 @@
 //! [`apalis_sql::postgres::PostgresStorage`]) are concrete per backend
 //! and own their own tables (`Jobs` on `SQLite`, `apalis.jobs` on
 //! Postgres). The jobs crate extracts the underlying `sqlx` pool from
-//! the SeaORM `DatabaseConnection` via
+//! the `SeaORM` `DatabaseConnection` via
 //! [`DatabaseConnection::get_sqlite_connection_pool`] /
 //! [`DatabaseConnection::get_postgres_connection_pool`] and hands it
 //! to the per-backend storage constructor. [`JobStorage`] mirrors the
@@ -18,7 +18,7 @@
 //! The apalis tables remain managed by apalis itself (its `setup()`
 //! runs the apalis-sql migration set); they're independent of any
 //! `oban_jobs` row in the Phoenix-owned schema. Workers reach for
-//! application tables through the SeaORM entities + `insert_active_model`
+//! application tables through the `SeaORM` entities + `insert_active_model`
 //! / `update_active_model` helpers, never raw sqlx.
 
 use std::marker::PhantomData;
@@ -32,7 +32,7 @@ use thiserror::Error;
 /// Runtime-dispatched apalis storage for a single job type `T`.
 ///
 /// Construct via [`Self::from_db`]; the variant is selected by the
-/// underlying SeaORM backend, not by the caller. Callers that need to
+/// underlying `SeaORM` backend, not by the caller. Callers that need to
 /// inspect the backend (e.g., to apply a Postgres `LISTEN`
 /// subscription for faster pickup) pattern-match on the enum.
 #[derive(Debug, Clone)]
@@ -59,7 +59,7 @@ pub enum JobsError {
     #[error("required record not found: {0}")]
     NotFound(String),
 
-    /// SeaORM error surfaced from a worker's DB call (not from the
+    /// `SeaORM` error surfaced from a worker's DB call (not from the
     /// apalis storage). Distinct from `Storage` so callers can tell
     /// whether the job machinery or the worker's business logic
     /// broke.
@@ -84,7 +84,7 @@ impl<T> JobStorage<T>
 where
     T: Serialize + DeserializeOwned + Send + Sync + Unpin + 'static,
 {
-    /// Build a storage for `T` against the active SeaORM connection.
+    /// Build a storage for `T` against the active `SeaORM` connection.
     /// The returned storage is ready to `push()` jobs; the backing
     /// table (`Jobs` on `SQLite`, `apalis.jobs` on Postgres) must
     /// already exist — call [`setup`] once at app boot before any

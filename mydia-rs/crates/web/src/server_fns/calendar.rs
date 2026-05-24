@@ -76,7 +76,7 @@ mod server {
     use mydia_rs_entities::{downloads, episodes, media_files, media_items};
     use sea_orm::entity::prelude::*;
     use sea_orm::query::{QueryOrder, QuerySelect};
-    use sea_orm::sea_query::{Expr, ExprTrait, Query};
+    use sea_orm::sea_query::Query;
     use std::collections::HashSet;
 
     fn state() -> Result<WebState, ServerFnError> {
@@ -158,7 +158,7 @@ mod server {
         }
 
         // Pull the parent media_items in one shot.
-        let media_item_ids: Vec<_> = eps.iter().map(|e| e.media_item_id.clone()).collect();
+        let media_item_ids: Vec<_> = eps.iter().map(|e| e.media_item_id).collect();
         let parents = media_items::Entity::find()
             .filter(media_items::Column::Id.is_in(media_item_ids.clone()))
             .filter(media_items::Column::Type.eq("tv_show".to_owned()))
@@ -167,10 +167,10 @@ mod server {
             .map_err(|err| ServerFnError::new(format!("list media_items: {err}")))?;
         let mut parent_map = std::collections::HashMap::new();
         for parent in parents {
-            parent_map.insert(parent.id.clone(), parent);
+            parent_map.insert(parent.id, parent);
         }
 
-        let episode_ids: Vec<_> = eps.iter().map(|e| e.id.clone()).collect();
+        let episode_ids: Vec<_> = eps.iter().map(|e| e.id).collect();
         let files = media_files::Entity::find()
             .select_only()
             .column(media_files::Column::EpisodeId)
@@ -237,7 +237,7 @@ mod server {
             return Ok(Vec::new());
         }
 
-        let movie_ids: Vec<_> = movies.iter().map(|m| m.id.clone()).collect();
+        let movie_ids: Vec<_> = movies.iter().map(|m| m.id).collect();
         let files = media_files::Entity::find()
             .select_only()
             .column(media_files::Column::MediaItemId)

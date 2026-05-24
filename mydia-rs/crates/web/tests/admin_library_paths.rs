@@ -79,7 +79,7 @@ async fn fixture() -> Fixture {
 /// depend on the server-fn extension-extraction (`FullstackContext`) —
 /// which would need an axum request to populate. The server-fn paths
 /// are still covered indirectly: list, delete, and `trigger_scan` all
-/// share the same SeaORM queries threaded through `&DatabaseConnection`.
+/// share the same `SeaORM` queries threaded through `&DatabaseConnection`.
 async fn insert_path(db: &DatabaseConnection, path: &str, kind: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();

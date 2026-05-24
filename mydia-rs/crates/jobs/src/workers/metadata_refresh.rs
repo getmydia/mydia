@@ -9,7 +9,7 @@
 //!   relay.
 //!
 //! Post-U12 cutover: SeaORM-native against `media_items`. The
-//! filter on `monitored = true` is portable across engines (SeaORM
+//! filter on `monitored = true` is portable across engines (`SeaORM`
 //! emits dialect-correct boolean literals); UUID lookups bind through
 //! `UuidText::into_simple_expr`.
 

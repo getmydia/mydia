@@ -3,7 +3,7 @@
 //! Phoenix uses `ecto_sqlite3`'s default `:binary_id_type = :string`,
 //! which stores UUIDs as 36-character lowercase-hyphenated TEXT on
 //! `SQLite` (e.g. `0186fa3d-1c2f-7c4f-9aaa-1234567890ab`). Postgres uses
-//! the native `uuid` type. SeaORM's own `Value::Uuid` writes a BLOB to
+//! the native `uuid` type. `SeaORM`'s own `Value::Uuid` writes a BLOB to
 //! `SQLite` via sqlx-sqlite's default `Encode`, which would corrupt
 //! cross-backend reads; the [`UuidText`] wrapper routes the value
 //! through `Value::String` instead, with the Postgres cast applied via

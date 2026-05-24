@@ -1,12 +1,12 @@
 //! Shared test helpers for the web crate.
 //!
-//! Each test opens a fresh in-memory SQLite `DatabaseConnection` and
-//! applies the schema it needs. The U14 SeaORM conversion replaced the
+//! Each test opens a fresh in-memory `SQLite` `DatabaseConnection` and
+//! applies the schema it needs. The U14 `SeaORM` conversion replaced the
 //! legacy `Db` enum + raw sqlx with `DatabaseConnection`; the U17 sweep
 //! that followed removed the remaining raw-sqlx seeders, so test fixture
 //! writes now route through `db.execute_unprepared(...)` directly. The
 //! production server fns under test take `&DatabaseConnection` directly,
-//! so the test threads the SeaORM connection straight through.
+//! so the test threads the `SeaORM` connection straight through.
 //!
 //! FK enforcement is disabled because most fixture schemas reference
 //! sibling tables (`users`, `quality_profiles`, ...) that the tests
@@ -17,7 +17,7 @@
 
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection};
 
-/// Build a fresh in-memory SQLite `DatabaseConnection` with FK
+/// Build a fresh in-memory `SQLite` `DatabaseConnection` with FK
 /// enforcement disabled. Apply schema DDL via [`apply_sql`] or
 /// `db.execute_unprepared(...)` after this returns.
 pub async fn fresh_db() -> DatabaseConnection {

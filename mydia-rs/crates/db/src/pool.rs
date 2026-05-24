@@ -6,7 +6,7 @@
 //! `from_sqlx_*_pool` bridging seam, and no per-engine accessor.
 //! Downstream crates thread `&DatabaseConnection` everywhere; engine
 //! awareness lives inside [`crate::types`] (wrapper write helpers and
-//! `TryGetable` reads) and [`crate::insert_helper`] (ActiveModel
+//! `TryGetable` reads) and [`crate::insert_helper`] (`ActiveModel`
 //! dispatch). Callers don't branch on backend at all unless they're
 //! gating an engine-specific feature outright (e.g. `mydia_runtime_lock`
 //! on `SQLite`-only).

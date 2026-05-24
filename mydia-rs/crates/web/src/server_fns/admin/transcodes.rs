@@ -51,7 +51,7 @@ mod server {
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
     use mydia_rs_db::types::{DateTimeSecs, UuidText};
-    use mydia_rs_db::DatabaseConnection;
+    
     use mydia_rs_entities::{media_files, transcode_jobs};
     use sea_orm::entity::prelude::*;
     use sea_orm::query::QueryOrder;
@@ -85,7 +85,7 @@ mod server {
         // Bulk-load the referenced media files for a cheap "file name"
         // column on the page (Phoenix preloads :media_file with a
         // nilable association — we do the same with a hash lookup).
-        let file_ids: Vec<_> = jobs.iter().map(|j| j.media_file_id.clone()).collect();
+        let file_ids: Vec<_> = jobs.iter().map(|j| j.media_file_id).collect();
         let files = media_files::Entity::find()
             .filter(media_files::Column::Id.is_in(file_ids))
             .all(&state.db)
@@ -93,7 +93,7 @@ mod server {
             .map_err(|err| ServerFnError::new(format!("query media_files: {err}")))?;
         let mut file_map = std::collections::HashMap::new();
         for f in files {
-            file_map.insert(f.id.clone(), f.path);
+            file_map.insert(f.id, f.path);
         }
 
         Ok(jobs

@@ -32,7 +32,7 @@ use uuid::Uuid;
 
 const SECRET: &str = "shared-test-guardian-secret-for-jwt-parity";
 
-/// Build a fresh in-memory `SQLite` SeaORM connection with the tables
+/// Build a fresh in-memory `SQLite` `SeaORM` connection with the tables
 /// the p2p crate's dispatch arms touch. Matches the shape used in
 /// `tests/integration.rs`.
 async fn fresh_sqlite() -> DatabaseConnection {

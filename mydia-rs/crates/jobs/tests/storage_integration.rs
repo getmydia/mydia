@@ -5,12 +5,12 @@
 //! exercise a real (in-memory) `SQLite` pool through the migration
 //! set.
 //!
-//! Post-U12 cutover: the fixture builds a SeaORM
+//! Post-U12 cutover: the fixture builds a `SeaORM`
 //! `DatabaseConnection` against `sqlite::memory:` and the apalis
 //! adapter extracts the underlying sqlx pool for the apalis migration
 //! set + storage. The cross-check against the native
 //! `apalis_sql::sqlite::SqliteStorage` proves the two paths share a
-//! single sqlx pool — apalis is unaware that SeaORM is sitting on
+//! single sqlx pool — apalis is unaware that `SeaORM` is sitting on
 //! top.
 
 use apalis::prelude::Storage;

@@ -304,7 +304,7 @@ async fn mark_scan_in_progress(
             library_paths::Column::UpdatedAt,
             now.into_simple_expr(backend),
         )
-        .filter(Expr::col(library_paths::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .filter(Expr::col(library_paths::Column::Id).eq((*id).into_simple_expr(backend)))
         .exec(db)
         .await?;
     Ok(())
@@ -333,7 +333,7 @@ async fn mark_scan_completed(
             library_paths::Column::UpdatedAt,
             now.into_simple_expr(backend),
         )
-        .filter(Expr::col(library_paths::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .filter(Expr::col(library_paths::Column::Id).eq((*id).into_simple_expr(backend)))
         .exec(db)
         .await?;
     Ok(())
@@ -353,7 +353,7 @@ async fn mark_scan_failed(
             library_paths::Column::UpdatedAt,
             now.into_simple_expr(backend),
         )
-        .filter(Expr::col(library_paths::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .filter(Expr::col(library_paths::Column::Id).eq((*id).into_simple_expr(backend)))
         .exec(db)
         .await?;
     Ok(())

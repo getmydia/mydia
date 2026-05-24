@@ -379,7 +379,7 @@ mod server {
                 now.into_simple_expr(backend),
             )
             .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
-            .filter(Expr::col(users::Column::Id).eq(id.clone().into_simple_expr(backend)))
+            .filter(Expr::col(users::Column::Id).eq((*id).into_simple_expr(backend)))
             .exec(db)
             .await
             .map_err(|err| ServerFnError::new(format!("update oidc user: {err}")))?;
