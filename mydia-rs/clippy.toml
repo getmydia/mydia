@@ -20,4 +20,13 @@ disallowed-methods = [
     { path = "sqlx::query", reason = "prefer sqlx::query! (tier a) or document the dialect-divergence reason via #[allow] (tier b). See crates/db/README.md." },
     { path = "sqlx::query_as", reason = "prefer sqlx::query_as! (tier a) or document the dialect-divergence reason via #[allow] (tier b). See crates/db/README.md." },
     { path = "sqlx::query_scalar", reason = "prefer sqlx::query_scalar! (tier a) or document the dialect-divergence reason via #[allow] (tier b). See crates/db/README.md." },
+    # SeaORM ActiveModel writes for wrapper-typed entities. The vanilla
+    # `am.insert(&db)` / `am.update(&db)` paths cannot inject the
+    # `$N::uuid` / `$N::timestamptz` / `$N::jsonb` / `text[]` casts that
+    # the 2026-05-24 wrapper spike proved are mandatory on Postgres for
+    # any column carrying one of the `mydia_rs_db::types` wrappers. Use
+    # `mydia_rs_db::insert_active_model` / `update_active_model` instead.
+    # See docs/plans/2026-05-24-001-refactor-seaorm-data-layer-unification-plan.md.
+    { path = "sea_orm::ActiveModelTrait::insert", reason = "use mydia_rs_db::insert_active_model — vanilla insert can't emit the engine-aware wrapper casts." },
+    { path = "sea_orm::ActiveModelTrait::update", reason = "use mydia_rs_db::update_active_model — vanilla update can't emit the engine-aware wrapper casts." },
 ]

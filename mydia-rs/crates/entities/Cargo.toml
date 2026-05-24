@@ -23,6 +23,13 @@ mydia-rs-db = { path = "../db" }
 
 [dev-dependencies]
 tokio = { workspace = true }
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+serde_json = "1"
+# Serializes Postgres integration tests that share the test database.
+# Tests using the same table name (e.g. multiple scenarios against
+# `remote_access_config`) race when run in parallel; `#[serial]` from
+# this crate forces sequential execution on the marked tests.
+serial_test = "3"
 
 [lints]
 workspace = true
