@@ -11,7 +11,7 @@
 //!
 //! - [`taxonomy`] — `Category`, `EventType`, `ActorType`, `Severity`
 //!   enums and the canonical string values they round-trip to.
-//! - [`persistence`] — sqlx-backed CRUD against the `events` table.
+//! - [`persistence`] — SeaORM-backed CRUD against the `events` table.
 //! - [`retention`] — `delete_old_events(retention_days)` used by U17's
 //!   `EventCleanup` worker.
 //!
@@ -28,9 +28,9 @@ pub mod taxonomy;
 
 use std::sync::Arc;
 
+use sea_orm::DatabaseConnection;
 use tracing::{debug, error};
 
-use mydia_rs_db::Db;
 use mydia_rs_pubsub::{topics, Event as PubsubEvent, Pubsub};
 
 pub use persistence::{Event, EventFilter, EventsError};
@@ -41,12 +41,12 @@ pub use taxonomy::{ActorType, Category, EventInput, Severity};
 /// DB pool and the in-process pubsub bus.
 #[derive(Clone)]
 pub struct EventsContext {
-    db: Db,
+    db: DatabaseConnection,
     pubsub: Arc<Pubsub>,
 }
 
 impl EventsContext {
-    pub fn new(db: Db, pubsub: Arc<Pubsub>) -> Self {
+    pub fn new(db: DatabaseConnection, pubsub: Arc<Pubsub>) -> Self {
         Self { db, pubsub }
     }
 
@@ -89,7 +89,7 @@ impl EventsContext {
 
     /// Borrow the underlying DB handle. Workers use this for
     /// transactions that span events + other tables.
-    pub fn db(&self) -> &Db {
+    pub fn db(&self) -> &DatabaseConnection {
         &self.db
     }
 

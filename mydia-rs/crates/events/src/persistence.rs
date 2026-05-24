@@ -1,10 +1,4 @@
-// Opt this module into the disallowed-methods lint so a future patch
-// that backslides into runtime `sqlx::query`/`query_as` (instead of the
-// compile-time-checked macros or the legitimate QueryBuilder dynamic
-// composer) is flagged at clippy time.
-#![warn(clippy::disallowed_methods)]
-
-//! sqlx-backed persistence for the `events` table.
+//! SeaORM-backed persistence for the `events` table.
 //!
 //! The schema lives in `priv/repo/migrations/20251106191246_create_events.exs`
 //! and `priv/repo/migrations/20251125032719_change_event_actor_id_to_string.exs`.
@@ -25,28 +19,40 @@
 //!
 //! mydia-rs writes the same shape so Phoenix and mydia-rs round-trip
 //! events transparently during the parallel window.
+//!
+//! Post-U8 cutover: SeaORM-native. Dynamic filter assembly is built
+//! through `Condition::all()` rather than `sqlx::QueryBuilder`. Inserts
+//! flow through `mydia_rs_db::insert_active_model` so the wrapper-typed
+//! `id` / `resource_id` / `inserted_at` columns get the right Postgres
+//! casts.
 
 use chrono::{DateTime, Utc};
-use mydia_rs_db::types::{DateTimeSecs, JsonMap, UuidText};
-use mydia_rs_db::Db;
+use sea_orm::entity::prelude::*;
+use sea_orm::query::{QueryOrder, QuerySelect};
+use sea_orm::sea_query::{Condition, Expr, ExprTrait};
+use sea_orm::{DatabaseConnection, Set};
 use serde::{Deserialize, Serialize};
-use sqlx::{Postgres, QueryBuilder, Sqlite};
 use thiserror::Error;
 use tracing::warn;
 use uuid::Uuid;
 
+use mydia_rs_db::types::{DateTimeSecs, JsonMap, UuidText};
+use mydia_rs_entities::events;
+
 use crate::taxonomy::{ActorType, EventInput, Severity, TaxonomyError};
 
-const COLUMNS: &str =
-    "id, category, type, actor_type, actor_id, resource_type, resource_id, severity, metadata, \
-     inserted_at";
-
 /// One row from the `events` table.
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+///
+/// The on-disk `metadata` column is TEXT-holding-JSON on both engines
+/// (Phoenix's events context never reaches for `jsonb`, since callers
+/// query the column for presence rather than nested extraction). The
+/// public surface decodes that string into a `serde_json::Value` via
+/// the `JsonMap` wrapper so consumers can treat it as structured data
+/// without re-parsing at every call site.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub id: UuidText,
     pub category: String,
-    #[sqlx(rename = "type")]
     #[serde(rename = "type")]
     pub event_type: String,
     pub actor_type: Option<String>,
@@ -72,6 +78,36 @@ impl Event {
     }
 }
 
+impl From<events::Model> for Event {
+    fn from(m: events::Model) -> Self {
+        // `metadata` is text-holding-JSON on disk; Phoenix writes
+        // `'{}'` when empty so we treat a missing/invalid payload as an
+        // empty object rather than surfacing a parse error to callers.
+        let metadata_value = m
+            .metadata
+            .as_deref()
+            .map_or_else(
+                || serde_json::Value::Object(serde_json::Map::default()),
+                |s| {
+                    serde_json::from_str(s)
+                        .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::default()))
+                },
+            );
+        Self {
+            id: m.id,
+            category: m.category,
+            event_type: m.r#type,
+            actor_type: m.actor_type,
+            actor_id: m.actor_id,
+            resource_type: m.resource_type,
+            resource_id: m.resource_id,
+            severity: m.severity,
+            metadata: JsonMap::new(metadata_value),
+            inserted_at: m.inserted_at,
+        }
+    }
+}
+
 /// Filters the resolver / activity feed pass to `query`. Mirrors the
 /// keyword opts `Mydia.Events.list_events/1` accepts.
 #[derive(Debug, Clone, Default)]
@@ -93,7 +129,7 @@ pub struct EventFilter {
 #[derive(Debug, Error)]
 pub enum EventsError {
     #[error(transparent)]
-    Db(#[from] sqlx::Error),
+    Db(#[from] DbErr),
     #[error(transparent)]
     Taxonomy(#[from] TaxonomyError),
     #[error("serde error: {0}")]
@@ -104,248 +140,141 @@ pub enum EventsError {
 ///
 /// Mirrors `Mydia.Events.create_event/1`. Caller is responsible for
 /// dispatching the pubsub broadcast — done by [`crate::EventsContext::record`].
-pub async fn insert_event(db: &Db, input: EventInput) -> Result<Event, EventsError> {
+pub async fn insert_event(
+    db: &DatabaseConnection,
+    input: EventInput,
+) -> Result<Event, EventsError> {
     input.validate()?;
-    let id = Uuid::new_v4();
-    let inserted_at = DateTimeSecs::from(Utc::now());
-    let metadata = JsonMap::new(serde_json::Value::Object(input.metadata.clone()));
 
-    // Fixed-shape INSERT — tier (a). Postgres arm is macro-checked
-    // against the schema; SQLite arm is byte-equal runtime SQL.
-    let id_uuid = UuidText(id);
-    let actor_type_str = input.actor_type.map(|a| a.as_str().to_owned());
+    let id = UuidText(Uuid::new_v4());
+    let inserted_at = DateTimeSecs::from(Utc::now());
+    let metadata_json = serde_json::Value::Object(input.metadata.clone());
+    // Phoenix stores `'{}'` (TEXT) when the metadata map is empty. The
+    // entity column is `Option<String>` (Text), so we marshal to string
+    // up front rather than going through `JsonMap`'s `into_simple_expr`
+    // (the column type is plain TEXT on both engines, not `jsonb`).
+    let metadata_text = serde_json::to_string(&metadata_json)?;
+
     let resource_id_uuid = input
         .resource_id
         .as_deref()
         .and_then(|s| Uuid::parse_str(s).ok())
         .map(UuidText);
-    let severity_str = input.severity.as_str().to_owned();
 
-    match db {
-        Db::Sqlite(pool) => {
-            #[allow(clippy::disallowed_methods)]
-            sqlx::query(
-                "INSERT INTO events \
-                 (id, category, type, actor_type, actor_id, resource_type, resource_id, \
-                  severity, metadata, inserted_at) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-            )
-            .bind(id_uuid)
-            .bind(input.category.clone())
-            .bind(input.event_type.clone())
-            .bind(actor_type_str.clone())
-            .bind(input.actor_id.clone())
-            .bind(input.resource_type.clone())
-            .bind(resource_id_uuid)
-            .bind(severity_str.clone())
-            .bind(metadata.clone())
-            .bind(inserted_at)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query!(
-                "INSERT INTO events \
-                 (id, category, type, actor_type, actor_id, resource_type, resource_id, \
-                  severity, metadata, inserted_at) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-                id_uuid as UuidText,
-                input.category,
-                input.event_type,
-                actor_type_str,
-                input.actor_id,
-                input.resource_type,
-                resource_id_uuid as Option<UuidText>,
-                severity_str,
-                metadata as JsonMap<serde_json::Value>,
-                inserted_at as DateTimeSecs,
-            )
-            .execute(pool)
-            .await?;
-        }
-    }
-
-    // Read it back so the caller gets the persisted row (Phoenix's
-    // `Repo.insert` returns the inserted struct).
-    let filter = EventFilter {
-        limit: Some(1),
-        ..Default::default()
+    let am = events::ActiveModel {
+        id: Set(id),
+        category: Set(input.category.clone()),
+        r#type: Set(input.event_type.clone()),
+        actor_type: Set(input.actor_type.map(|a| a.as_str().to_owned())),
+        actor_id: Set(input.actor_id.clone()),
+        resource_type: Set(input.resource_type.clone()),
+        resource_id: Set(resource_id_uuid),
+        severity: Set(input.severity.as_str().to_owned()),
+        metadata: Set(Some(metadata_text)),
+        inserted_at: Set(inserted_at),
     };
-    let rows = list_events_by_id(db, id, &filter).await?;
-    rows.into_iter()
-        .next()
-        .ok_or_else(|| EventsError::Db(sqlx::Error::RowNotFound))
-}
 
-async fn list_events_by_id(
-    db: &Db,
-    id: Uuid,
-    _filter: &EventFilter,
-) -> Result<Vec<Event>, EventsError> {
-    // Fixed-shape SELECT by PK — tier (a). Postgres arm is macro-checked;
-    // SQLite arm is byte-equal runtime SQL. The `type` column is a
-    // reserved keyword on Postgres but works in SELECT position without
-    // quoting; aliased to `event_type` so the macro's field-mapping
-    // matches the `Event` struct's `event_type: String` field.
-    let id_uuid = UuidText(id);
-    match db {
-        Db::Sqlite(pool) => {
-            #[allow(clippy::disallowed_methods)]
-            let rows = sqlx::query_as::<_, Event>(
-                "SELECT id, category, type, actor_type, actor_id, resource_type, \
-                 resource_id, severity, metadata, inserted_at \
-                 FROM events WHERE id = $1",
-            )
-            .bind(id_uuid)
-            .fetch_all(pool)
-            .await?;
-            Ok(rows)
-        }
-        Db::Postgres(pool) => {
-            let rows = sqlx::query_as!(
-                Event,
-                r#"SELECT
-                    id as "id!: UuidText",
-                    category as "category!",
-                    type as "event_type!",
-                    actor_type,
-                    actor_id,
-                    resource_type,
-                    resource_id as "resource_id?: UuidText",
-                    severity as "severity!",
-                    metadata as "metadata!: JsonMap<serde_json::Value>",
-                    inserted_at as "inserted_at!: DateTimeSecs"
-                  FROM events WHERE id = $1"#,
-                id_uuid as UuidText
-            )
-            .fetch_all(pool)
-            .await?;
-            Ok(rows)
-        }
-    }
+    let model = mydia_rs_db::insert_active_model(am, db).await?;
+    Ok(Event::from(model))
 }
 
 /// List events matching `filter`, ordered by `inserted_at` DESC then
 /// `id` DESC. Default limit is 50.
-pub async fn list_events(db: &Db, filter: &EventFilter) -> Result<Vec<Event>, EventsError> {
+pub async fn list_events(
+    db: &DatabaseConnection,
+    filter: &EventFilter,
+) -> Result<Vec<Event>, EventsError> {
     let limit = filter.limit.unwrap_or(50);
     let offset = filter.offset.unwrap_or(0);
-    match db {
-        Db::Sqlite(pool) => {
-            let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
-            qb.push(COLUMNS);
-            qb.push(" FROM events WHERE 1=1");
-            apply_filters_sqlite(&mut qb, filter);
-            qb.push(" ORDER BY inserted_at DESC, id DESC");
-            qb.push(" LIMIT ").push_bind(limit);
-            qb.push(" OFFSET ").push_bind(offset);
-            let rows = qb.build_query_as::<Event>().fetch_all(pool).await?;
-            Ok(rows)
-        }
-        Db::Postgres(pool) => {
-            let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("SELECT ");
-            qb.push(COLUMNS);
-            qb.push(" FROM events WHERE 1=1");
-            apply_filters_postgres(&mut qb, filter);
-            qb.push(" ORDER BY inserted_at DESC, id DESC");
-            qb.push(" LIMIT ").push_bind(limit);
-            qb.push(" OFFSET ").push_bind(offset);
-            let rows = qb.build_query_as::<Event>().fetch_all(pool).await?;
-            Ok(rows)
-        }
-    }
+    let condition = filter_condition(db, filter);
+
+    let models = events::Entity::find()
+        .filter(condition)
+        .order_by_desc(events::Column::InsertedAt)
+        .order_by_desc(events::Column::Id)
+        .limit(limit as u64)
+        .offset(offset as u64)
+        .all(db)
+        .await?;
+
+    Ok(models.into_iter().map(Event::from).collect())
 }
 
 /// Count events matching `filter`.
-pub async fn count_events(db: &Db, filter: &EventFilter) -> Result<i64, EventsError> {
-    match db {
-        Db::Sqlite(pool) => {
-            let mut qb: QueryBuilder<Sqlite> =
-                QueryBuilder::new("SELECT COUNT(*) FROM events WHERE 1=1");
-            apply_filters_sqlite(&mut qb, filter);
-            let count: (i64,) = qb.build_query_as().fetch_one(pool).await?;
-            Ok(count.0)
-        }
-        Db::Postgres(pool) => {
-            let mut qb: QueryBuilder<Postgres> =
-                QueryBuilder::new("SELECT COUNT(*) FROM events WHERE 1=1");
-            apply_filters_postgres(&mut qb, filter);
-            let count: (i64,) = qb.build_query_as().fetch_one(pool).await?;
-            Ok(count.0)
-        }
-    }
+pub async fn count_events(
+    db: &DatabaseConnection,
+    filter: &EventFilter,
+) -> Result<i64, EventsError> {
+    let condition = filter_condition(db, filter);
+
+    // `Entity::find().filter(...).count()` returns u64; the public API
+    // exposes i64 (Phoenix returns an integer) so cast after the await.
+    let count = events::Entity::find()
+        .filter(condition)
+        .count(db)
+        .await?;
+    Ok(count as i64)
 }
 
-fn apply_filters_sqlite(qb: &mut QueryBuilder<'_, Sqlite>, filter: &EventFilter) {
+/// Translate an [`EventFilter`] into a `SeaORM` `Condition` that ANDs
+/// together every non-`None` predicate.
+///
+/// Wrapper-typed columns (`resource_id` is `UuidText`; `inserted_at` is
+/// `DateTimeSecs`) route their bind through `into_simple_expr(backend)`
+/// so Postgres gets the `::uuid` / `::timestamptz` cast on the parameter
+/// and `SQLite` gets the plain TEXT bind. Plain TEXT columns
+/// (`category`, `type`, `severity`, ...) flow through `ColumnTrait::eq`
+/// directly.
+fn filter_condition(db: &DatabaseConnection, filter: &EventFilter) -> Condition {
+    let backend = db.get_database_backend();
+    let mut cond = Condition::all();
+
     if let Some(v) = filter.category.as_deref() {
-        qb.push(" AND category = ").push_bind(v.to_owned());
+        cond = cond.add(events::Column::Category.eq(v.to_owned()));
     }
     if let Some(v) = filter.event_type.as_deref() {
-        qb.push(" AND type = ").push_bind(v.to_owned());
+        cond = cond.add(events::Column::Type.eq(v.to_owned()));
     }
     if let Some(v) = filter.actor_type {
-        qb.push(" AND actor_type = ")
-            .push_bind(v.as_str().to_owned());
+        cond = cond.add(events::Column::ActorType.eq(v.as_str().to_owned()));
     }
     if let Some(v) = filter.actor_id.as_deref() {
-        qb.push(" AND actor_id = ").push_bind(v.to_owned());
+        cond = cond.add(events::Column::ActorId.eq(v.to_owned()));
     }
     if let Some(v) = filter.resource_type.as_deref() {
-        qb.push(" AND resource_type = ").push_bind(v.to_owned());
+        cond = cond.add(events::Column::ResourceType.eq(v.to_owned()));
     }
     if let Some(v) = filter.resource_id.as_deref() {
         if let Ok(uuid) = Uuid::parse_str(v) {
-            qb.push(" AND resource_id = ").push_bind(UuidText(uuid));
+            let wrapper = UuidText(uuid);
+            cond = cond.add(
+                Expr::col(events::Column::ResourceId).eq(wrapper.into_simple_expr(backend)),
+            );
         } else {
             warn!(value = %v, "ignoring resource_id filter; not a valid UUID");
         }
     }
     if let Some(v) = filter.severity {
-        qb.push(" AND severity = ").push_bind(v.as_str().to_owned());
+        cond = cond.add(events::Column::Severity.eq(v.as_str().to_owned()));
     }
     if let Some(since) = filter.since {
-        qb.push(" AND inserted_at >= ")
-            .push_bind(DateTimeSecs::from(since));
+        let wrapper = DateTimeSecs::from(since);
+        cond = cond.add(
+            Expr::col(events::Column::InsertedAt).gte(wrapper.into_simple_expr(backend)),
+        );
     }
     if let Some(until) = filter.until {
-        qb.push(" AND inserted_at <= ")
-            .push_bind(DateTimeSecs::from(until));
+        let wrapper = DateTimeSecs::from(until);
+        cond = cond.add(
+            Expr::col(events::Column::InsertedAt).lte(wrapper.into_simple_expr(backend)),
+        );
     }
+
+    cond
 }
 
-fn apply_filters_postgres(qb: &mut QueryBuilder<'_, Postgres>, filter: &EventFilter) {
-    if let Some(v) = filter.category.as_deref() {
-        qb.push(" AND category = ").push_bind(v.to_owned());
-    }
-    if let Some(v) = filter.event_type.as_deref() {
-        qb.push(" AND type = ").push_bind(v.to_owned());
-    }
-    if let Some(v) = filter.actor_type {
-        qb.push(" AND actor_type = ")
-            .push_bind(v.as_str().to_owned());
-    }
-    if let Some(v) = filter.actor_id.as_deref() {
-        qb.push(" AND actor_id = ").push_bind(v.to_owned());
-    }
-    if let Some(v) = filter.resource_type.as_deref() {
-        qb.push(" AND resource_type = ").push_bind(v.to_owned());
-    }
-    if let Some(v) = filter.resource_id.as_deref() {
-        if let Ok(uuid) = Uuid::parse_str(v) {
-            qb.push(" AND resource_id = ").push_bind(UuidText(uuid));
-        } else {
-            warn!(value = %v, "ignoring resource_id filter; not a valid UUID");
-        }
-    }
-    if let Some(v) = filter.severity {
-        qb.push(" AND severity = ").push_bind(v.as_str().to_owned());
-    }
-    if let Some(since) = filter.since {
-        qb.push(" AND inserted_at >= ")
-            .push_bind(DateTimeSecs::from(since));
-    }
-    if let Some(until) = filter.until {
-        qb.push(" AND inserted_at <= ")
-            .push_bind(DateTimeSecs::from(until));
-    }
-}
+// Note: the `events.metadata` column is plain TEXT on both engines (not
+// `jsonb` on Postgres — see `priv/repo/migrations/20251106191246_create_events.exs`).
+// Routing through `JsonMap`'s `TryGetable` would mis-parse on Postgres
+// because the wrapper's Postgres branch reads a native `serde_json::Value`.
+// The conversion lives in `From<events::Model> for Event` instead.

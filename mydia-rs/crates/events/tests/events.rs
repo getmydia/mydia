@@ -1,62 +1,66 @@
-// Tests: schema setup, raw INSERT fixtures, and direct COUNT(*) assertions
-// are tier-(b) by category — runtime form is the only sensible shape for
-// the in-memory `events` table the integration suite seeds.
-#![allow(clippy::disallowed_methods)]
-
 //! Integration tests for the events crate.
 //!
-//! Each test boots an in-memory `SQLite` pool, applies a minimal
-//! `events` table matching the Phoenix schema, and exercises the
-//! crate's public surface end-to-end.
+//! Each test boots an in-memory `SQLite` pool, applies the `events`
+//! table via `Schema::create_table_from_entity` (the SeaORM-native
+//! equivalent of the prior `.sql` fixture), and exercises the crate's
+//! public surface end-to-end.
 
 use std::sync::Arc;
 
 use chrono::{Duration, Utc};
-use mydia_rs_db::types::DateTimeSecs;
-use mydia_rs_db::Db;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{
+    ConnectionTrait, Database, DatabaseConnection, DbBackend, EntityTrait, PaginatorTrait,
+    QueryFilter, Schema, Set,
+};
+
+use mydia_rs_db::insert_active_model;
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::events;
 use mydia_rs_events::{
     delete_old_events, ActorType, EventFilter, EventInput, EventsContext, Severity,
 };
 use mydia_rs_pubsub::Pubsub;
-use sqlx::sqlite::SqlitePoolOptions;
 
-const CREATE_EVENTS_SQL: &str = r"
-CREATE TABLE events (
-    id TEXT PRIMARY KEY NOT NULL,
-    category TEXT NOT NULL,
-    type TEXT NOT NULL,
-    actor_type TEXT,
-    actor_id TEXT,
-    resource_type TEXT,
-    resource_id TEXT,
-    severity TEXT NOT NULL DEFAULT 'info',
-    metadata TEXT,
-    inserted_at TEXT NOT NULL
-);
-CREATE INDEX events_type ON events(type);
-CREATE INDEX events_category ON events(category);
-CREATE INDEX events_actor ON events(actor_type, actor_id);
-CREATE INDEX events_resource ON events(resource_type, resource_id);
-CREATE INDEX events_inserted_at ON events(inserted_at);
-";
-
-async fn fresh_db() -> Db {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(2)
-        .connect("sqlite::memory:")
+async fn fresh_db() -> DatabaseConnection {
+    let db = Database::connect("sqlite::memory:")
         .await
-        .unwrap();
-    for stmt in CREATE_EVENTS_SQL
-        .split(';')
-        .filter(|s| !s.trim().is_empty())
-    {
-        sqlx::query(stmt).execute(&pool).await.unwrap();
-    }
-    Db::Sqlite(pool)
+        .expect("connect in-memory sqlite");
+    let backend = db.get_database_backend();
+    assert_eq!(backend, DbBackend::Sqlite);
+
+    let schema = Schema::new(backend);
+    let stmt = schema.create_table_from_entity(events::Entity);
+    db.execute(&stmt).await.expect("create events table");
+    db
 }
 
 fn pubsub() -> Arc<Pubsub> {
     Arc::new(Pubsub::new())
+}
+
+/// Insert a row with an arbitrary `inserted_at` via the workspace
+/// `insert_active_model` helper. Tests use this to seed historical
+/// rows that the `record` API would always stamp with `Utc::now()`.
+async fn seed_event_at(
+    db: &DatabaseConnection,
+    category: &str,
+    event_type: &str,
+    inserted_at: chrono::DateTime<Utc>,
+) {
+    let am = events::ActiveModel {
+        id: Set(UuidText(uuid::Uuid::new_v4())),
+        category: Set(category.to_owned()),
+        r#type: Set(event_type.to_owned()),
+        actor_type: Set(None),
+        actor_id: Set(None),
+        resource_type: Set(None),
+        resource_id: Set(None),
+        severity: Set("info".to_owned()),
+        metadata: Set(Some("{}".to_owned())),
+        inserted_at: Set(DateTimeSecs::from(inserted_at)),
+    };
+    insert_active_model(am, db).await.expect("seed event");
 }
 
 #[tokio::test]
@@ -134,21 +138,13 @@ async fn filter_by_date_range_includes_only_in_window() {
     let ctx = EventsContext::new(db.clone(), pubsub());
 
     // Insert a row directly with an old timestamp.
-    let old_id = uuid::Uuid::new_v4();
-    let old_ts = Utc::now() - Duration::days(10);
-    sqlx::query(
-        "INSERT INTO events (id, category, type, severity, metadata, inserted_at) \
-         VALUES (?, ?, ?, ?, ?, ?)",
+    seed_event_at(
+        &db,
+        "media",
+        "media_item.added",
+        Utc::now() - Duration::days(10),
     )
-    .bind(mydia_rs_db::types::UuidText(old_id))
-    .bind("media")
-    .bind("media_item.added")
-    .bind("info")
-    .bind("{}")
-    .bind(DateTimeSecs::from(old_ts))
-    .execute(db.as_sqlite().unwrap())
-    .await
-    .unwrap();
+    .await;
 
     // Now record a fresh one.
     ctx.record(EventInput::new("media", "media_item.added"))
@@ -200,44 +196,26 @@ async fn delete_old_events_removes_only_old_rows() {
     let db = fresh_db().await;
 
     // Old row.
-    let old_ts = Utc::now() - Duration::days(60);
-    sqlx::query(
-        "INSERT INTO events (id, category, type, severity, metadata, inserted_at) \
-         VALUES (?, ?, ?, ?, ?, ?)",
+    seed_event_at(
+        &db,
+        "media",
+        "media_item.added",
+        Utc::now() - Duration::days(60),
     )
-    .bind(mydia_rs_db::types::UuidText(uuid::Uuid::new_v4()))
-    .bind("media")
-    .bind("media_item.added")
-    .bind("info")
-    .bind("{}")
-    .bind(DateTimeSecs::from(old_ts))
-    .execute(db.as_sqlite().unwrap())
-    .await
-    .unwrap();
-
+    .await;
     // Recent row.
-    sqlx::query(
-        "INSERT INTO events (id, category, type, severity, metadata, inserted_at) \
-         VALUES (?, ?, ?, ?, ?, ?)",
-    )
-    .bind(mydia_rs_db::types::UuidText(uuid::Uuid::new_v4()))
-    .bind("media")
-    .bind("media_item.added")
-    .bind("info")
-    .bind("{}")
-    .bind(DateTimeSecs::from(Utc::now()))
-    .execute(db.as_sqlite().unwrap())
-    .await
-    .unwrap();
+    seed_event_at(&db, "media", "media_item.added", Utc::now()).await;
 
     let deleted = delete_old_events(&db, 30).await.unwrap();
     assert_eq!(deleted, 1, "old row should be deleted, recent kept");
 
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
-        .fetch_one(db.as_sqlite().unwrap())
+    // Count via SeaORM rather than raw SQL.
+    let remaining = events::Entity::find()
+        .filter(Expr::col(events::Column::Category).eq("media".to_owned()))
+        .count(&db)
         .await
         .unwrap();
-    assert_eq!(count, 1);
+    assert_eq!(remaining, 1);
 }
 
 #[tokio::test]
@@ -253,7 +231,7 @@ async fn delete_old_events_rejects_zero_retention() {
 #[tokio::test]
 async fn concurrent_inserts_succeed_on_sqlite() {
     let db = fresh_db().await;
-    let ctx = EventsContext::new(db.clone(), pubsub());
+    let ctx = EventsContext::new(db, pubsub());
 
     let h1 = {
         let ctx = ctx.clone();
