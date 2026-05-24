@@ -30,7 +30,7 @@ use chrono::{DateTime, Utc};
 use sea_orm::sea_query::{Expr, ExprTrait};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, DbErr, EntityTrait, QueryFilter,
-    Set, Statement,
+    Schema, Set,
 };
 use tokio::task::JoinHandle;
 use tokio::time::interval;
@@ -147,26 +147,17 @@ pub async fn acquire(db: &DatabaseConnection) -> Result<RuntimeLockHandle, Runti
 }
 
 async fn ensure_lock_table(db: &DatabaseConnection) -> Result<(), RuntimeLockError> {
-    // TODO(U18): replace this raw DDL with
-    // `Schema::create_table_from_entity(mydia_runtime_lock::Entity)`.
-    // U9 deliberately leaves the CREATE TABLE in raw form so the
-    // SeaORM-native DDL emission lands as one focused unit alongside
-    // the tower-sessions table conversion. Until then, the schema
-    // shape is mirrored by hand against the entity in
-    // `mydia-rs-entities/src/mydia_runtime_lock.rs`.
-    let stmt = Statement::from_string(
-        DbBackend::Sqlite,
-        "CREATE TABLE IF NOT EXISTS mydia_runtime_lock (
-            lock_key TEXT PRIMARY KEY,
-            pid INTEGER NOT NULL,
-            hostname TEXT,
-            backend TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            heartbeat_at TEXT NOT NULL
-        )"
-        .to_string(),
-    );
-    db.execute_raw(stmt).await?;
+    // SeaORM-native DDL via the `mydia_runtime_lock` entity. The entity
+    // declaration is the source of truth for the column set; this
+    // `Schema::create_table_from_entity` call emits dialect-correct SQL
+    // through the active connection. The CREATE is gated `if_not_exists`
+    // so repeated boots are no-ops, and the call site in `acquire` has
+    // already guarded on `DbBackend::Sqlite` (the lock is SQLite-only —
+    // Postgres relies on Phoenix's advisory locks).
+    let schema = Schema::new(DbBackend::Sqlite);
+    let mut stmt = schema.create_table_from_entity(mydia_runtime_lock::Entity);
+    stmt.if_not_exists();
+    db.execute(&stmt).await?;
     Ok(())
 }
 
