@@ -11,10 +11,10 @@ base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 dashmap = "6"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies", "multipart"] }
+sea-orm.workspace = true
 serde = { workspace = true }
 serde_json = "1"
 sha1 = "0.10"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "chrono"] }
 strsim = "0.11"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "process", "io-util", "fs"] }
@@ -23,6 +23,7 @@ url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 
 mydia-rs-db = { path = "../db" }
+mydia-rs-entities = { path = "../entities" }
 mydia-rs-pubsub = { path = "../pubsub" }
 
 [dev-dependencies]

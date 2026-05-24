@@ -41,17 +41,31 @@
 //! [`JobManager`] is shared with the U17 worker monitor so this
 //! service and a background poller can agree on what's currently
 //! running.
+//!
+//! Post-U10 cutover: SeaORM-native against the `transcode_jobs` and
+//! `media_files` entities. Wrapper-typed columns (`id`, `media_file_id`,
+//! `last_accessed_at`, …) route through `into_simple_expr(backend)` so
+//! the Postgres `$N::uuid` / `$N::timestamptz` casts come along for the
+//! ride. Vanilla `ActiveModel::insert(&db)` is forbidden by the
+//! workspace clippy lint — writes flow through
+//! [`mydia_rs_db::insert_active_model`] / [`update_active_model`]
+//! instead.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
-use mydia_rs_db::Db;
-use mydia_rs_pubsub::{topics, Event, Pubsub};
+use chrono::Utc;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{
+    ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use tracing::{info, warn};
 use uuid::Uuid;
+
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::{library_paths, media_files, transcode_jobs};
+use mydia_rs_pubsub::{topics, Event, Pubsub};
 
 use crate::error::DownloadError;
 use crate::job_manager::JobManager;
@@ -129,7 +143,7 @@ pub enum ServiceError {
     JobNotFound,
     /// Backing-store failure.
     #[error("database: {0}")]
-    Db(#[from] sqlx::Error),
+    Db(#[from] DbErr),
     /// Unexpected internal error.
     #[error("internal: {0}")]
     Internal(String),
@@ -175,7 +189,7 @@ pub struct DownloadService {
 }
 
 struct Inner {
-    db: Db,
+    db: DatabaseConnection,
     job_manager: JobManager,
     pubsub: Pubsub,
     config: ServiceConfig,
@@ -185,7 +199,12 @@ impl DownloadService {
     /// Build the orchestrator from the shared handles. Boot path uses
     /// this once and stashes the result on `WebState`.
     #[must_use]
-    pub fn new(db: Db, job_manager: JobManager, pubsub: Pubsub, config: ServiceConfig) -> Self {
+    pub fn new(
+        db: DatabaseConnection,
+        job_manager: JobManager,
+        pubsub: Pubsub,
+        config: ServiceConfig,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 db,
@@ -336,29 +355,29 @@ impl DownloadService {
     /// handler on every range request so the LRU cleanup worker has
     /// fresh signal.
     pub async fn touch_last_accessed(&self, job_id: &str) -> Result<()> {
-        let now = Utc::now();
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "UPDATE transcode_jobs SET last_accessed_at = ?, updated_at = ? WHERE id = ?",
-                )
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .bind(job_id)
-                .execute(pool)
-                .await?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "UPDATE transcode_jobs SET last_accessed_at = $1, updated_at = $2 WHERE id = $3",
-                )
-                .bind(now)
-                .bind(now)
-                .bind(job_id)
-                .execute(pool)
-                .await?;
-            }
-        }
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let now = DateTimeSecs::from(Utc::now());
+        let Some(id_wrapper) = parse_uuid_wrapper(job_id) else {
+            // Phoenix accepts only well-formed binary_id strings here;
+            // anything else can't match a real row. Treat as a no-op so
+            // the file handler doesn't 500 on garbage input.
+            return Ok(());
+        };
+        transcode_jobs::Entity::update_many()
+            .col_expr(
+                transcode_jobs::Column::LastAccessedAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(
+                transcode_jobs::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(
+                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
+            )
+            .exec(db)
+            .await?;
         Ok(())
     }
 
@@ -426,80 +445,87 @@ impl DownloadService {
     async fn lookup_media_file(&self, content_type: &str, id: &str) -> Result<MediaFileRow> {
         match content_type {
             "movie" => {
-                let row = self
-                    .fetch_first_media_file_for_parent("media_item_id", id, true)
-                    .await?;
+                let row = self.fetch_first_media_file_for_movie(id).await?;
                 row.ok_or(ServiceError::NoMediaFile)
             }
             "episode" => {
-                let row = self
-                    .fetch_first_media_file_for_parent("episode_id", id, false)
-                    .await?;
+                let row = self.fetch_first_media_file_for_episode(id).await?;
                 row.ok_or(ServiceError::NoMediaFile)
             }
             _ => Err(ServiceError::NotFound),
         }
     }
 
-    /// Pull the first non-trashed media file for the given parent
-    /// column. Mirrors the Phoenix helper. Returns `None` when the
-    /// parent has no files.
-    async fn fetch_first_media_file_for_parent(
+    /// Pull the first non-trashed media file for a movie. The "movie"
+    /// branch additionally restricts to rows with `episode_id IS NULL`
+    /// so series-attached files aren't mistakenly returned. Joins
+    /// `library_paths` so the caller can resolve absolute paths via the
+    /// `library_path + relative_path` pair.
+    async fn fetch_first_media_file_for_movie(
         &self,
-        parent_col: &str,
-        parent_id: &str,
-        movie: bool,
+        media_item_id: &str,
     ) -> Result<Option<MediaFileRow>> {
-        let extra = if movie {
-            " AND mf.episode_id IS NULL"
-        } else {
-            ""
+        let Some(parent) = parse_uuid_wrapper(media_item_id) else {
+            return Ok(None);
         };
-        let sql_pg = format!(
-            "SELECT mf.id, mf.size, mf.resolution, mf.path, mf.relative_path, lp.path AS lp_path \
-             FROM media_files mf \
-             LEFT JOIN library_paths lp ON lp.id = mf.library_path_id \
-             WHERE mf.{parent_col} = $1 AND mf.trashed_at IS NULL{extra} \
-             ORDER BY mf.inserted_at ASC \
-             LIMIT 1"
-        );
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                let sql = sql_pg.replace("$1", "?");
-                let row = sqlx::query(&sql)
-                    .bind(parent_id)
-                    .fetch_optional(pool)
-                    .await?;
-                Ok(row.as_ref().map(media_file_from_row))
-            }
-            Db::Postgres(pool) => {
-                let row = sqlx::query(&sql_pg)
-                    .bind(parent_id)
-                    .fetch_optional(pool)
-                    .await?;
-                Ok(row.as_ref().map(media_file_from_row))
-            }
-        }
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let row = media_files::Entity::find()
+            .find_also_related(library_paths::Entity)
+            .filter(
+                Expr::col(media_files::Column::MediaItemId)
+                    .eq(parent.into_simple_expr(backend)),
+            )
+            .filter(media_files::Column::TrashedAt.is_null())
+            .filter(media_files::Column::EpisodeId.is_null())
+            .order_by_asc(media_files::Column::InsertedAt)
+            .limit(1)
+            .one(db)
+            .await?;
+        Ok(row.map(media_file_from_join))
+    }
+
+    /// Pull the first non-trashed media file for an episode. Mirrors the
+    /// episode branch of the Phoenix helper.
+    async fn fetch_first_media_file_for_episode(
+        &self,
+        episode_id: &str,
+    ) -> Result<Option<MediaFileRow>> {
+        let Some(parent) = parse_uuid_wrapper(episode_id) else {
+            return Ok(None);
+        };
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let row = media_files::Entity::find()
+            .find_also_related(library_paths::Entity)
+            .filter(
+                Expr::col(media_files::Column::EpisodeId)
+                    .eq(parent.into_simple_expr(backend)),
+            )
+            .filter(media_files::Column::TrashedAt.is_null())
+            .order_by_asc(media_files::Column::InsertedAt)
+            .limit(1)
+            .one(db)
+            .await?;
+        Ok(row.map(media_file_from_join))
     }
 
     /// Fetch a media file by its own id. Used by `prepare_by_file`.
     async fn fetch_media_file_by_id(&self, id: &str) -> Result<Option<MediaFileRow>> {
-        let sql_pg =
-            "SELECT mf.id, mf.size, mf.resolution, mf.path, mf.relative_path, lp.path AS lp_path \
-             FROM media_files mf \
-             LEFT JOIN library_paths lp ON lp.id = mf.library_path_id \
-             WHERE mf.id = $1 LIMIT 1";
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                let sql = sql_pg.replace("$1", "?");
-                let row = sqlx::query(&sql).bind(id).fetch_optional(pool).await?;
-                Ok(row.as_ref().map(media_file_from_row))
-            }
-            Db::Postgres(pool) => {
-                let row = sqlx::query(sql_pg).bind(id).fetch_optional(pool).await?;
-                Ok(row.as_ref().map(media_file_from_row))
-            }
-        }
+        let Some(id_wrapper) = parse_uuid_wrapper(id) else {
+            return Ok(None);
+        };
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let row = media_files::Entity::find()
+            .find_also_related(library_paths::Entity)
+            .filter(
+                Expr::col(media_files::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
+            )
+            .limit(1)
+            .one(db)
+            .await?;
+        Ok(row.map(media_file_from_join))
     }
 
     /// Idempotent insert. Returns an existing
@@ -513,29 +539,39 @@ impl DownloadService {
             return Ok(existing);
         }
 
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now();
-        let insert_result = self
-            .try_insert_job(&id, media_file_id, resolution, &now)
-            .await;
+        let id = Uuid::new_v4();
+        let media_file_uuid = parse_uuid_wrapper(media_file_id)
+            .ok_or_else(|| ServiceError::Internal("media_file_id is not a UUID".into()))?;
+        let now = DateTimeSecs::from(Utc::now());
 
-        match insert_result {
-            Ok(()) => {
-                let job = self
-                    .fetch_job(&id)
-                    .await?
-                    .ok_or_else(|| ServiceError::Internal("inserted job vanished".into()))?;
+        let am = transcode_jobs::ActiveModel {
+            id: Set(UuidText::from(id)),
+            media_file_id: Set(media_file_uuid),
+            resolution: Set(resolution.to_owned()),
+            r#type: Set("download".to_owned()),
+            status: Set("pending".to_owned()),
+            progress: Set(Some(0.0)),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        };
+
+        match mydia_rs_db::insert_active_model(am, &self.inner.db).await {
+            Ok(model) => {
+                let job = job_from_model(model);
                 self.broadcast_job_event(&job.id, "job_started", None, None);
                 Ok(job)
             }
-            Err(sqlx::Error::Database(db_err)) if is_unique_violation(db_err.as_ref()) => {
+            Err(err) if is_unique_violation(&err) => {
                 // Another caller raced ahead — re-read the row they
                 // inserted under the same key.
                 let job = self
                     .fetch_job_by_key(media_file_id, resolution)
                     .await?
                     .ok_or_else(|| {
-                        ServiceError::Internal("unique-conflict on insert but no row by key".into())
+                        ServiceError::Internal(
+                            "unique-conflict on insert but no row by key".into(),
+                        )
                     })?;
                 Ok(job)
             }
@@ -543,126 +579,71 @@ impl DownloadService {
         }
     }
 
-    async fn try_insert_job(
-        &self,
-        id: &str,
-        media_file_id: &str,
-        resolution: &str,
-        now: &DateTime<Utc>,
-    ) -> std::result::Result<(), sqlx::Error> {
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO transcode_jobs \
-                     (id, media_file_id, resolution, type, status, progress, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, 'download', 'pending', 0.0, ?, ?)",
-                )
-                .bind(id)
-                .bind(media_file_id)
-                .bind(resolution)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO transcode_jobs \
-                     (id, media_file_id, resolution, type, status, progress, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, 'download', 'pending', 0.0, $4, $5)",
-                )
-                .bind(id)
-                .bind(media_file_id)
-                .bind(resolution)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await?;
-            }
-        }
-        Ok(())
-    }
-
     async fn fetch_job(&self, id: &str) -> Result<Option<Job>> {
-        let sql_pg = "SELECT id, media_file_id, resolution, status, COALESCE(progress, 0.0), \
-                      output_path, file_size, error FROM transcode_jobs WHERE id = $1 LIMIT 1";
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                let sql = sql_pg.replace("$1", "?");
-                let row = sqlx::query(&sql).bind(id).fetch_optional(pool).await?;
-                Ok(row.as_ref().map(job_from_row))
-            }
-            Db::Postgres(pool) => {
-                let row = sqlx::query(sql_pg).bind(id).fetch_optional(pool).await?;
-                Ok(row.as_ref().map(job_from_row))
-            }
-        }
+        let Some(id_wrapper) = parse_uuid_wrapper(id) else {
+            return Ok(None);
+        };
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let model = transcode_jobs::Entity::find()
+            .filter(
+                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
+            )
+            .limit(1)
+            .one(db)
+            .await?;
+        Ok(model.map(job_from_model))
     }
 
     async fn fetch_job_by_key(&self, media_file_id: &str, resolution: &str) -> Result<Option<Job>> {
-        let sql_pg = "SELECT id, media_file_id, resolution, status, COALESCE(progress, 0.0), \
-                      output_path, file_size, error FROM transcode_jobs \
-                      WHERE media_file_id = $1 AND resolution = $2 AND type = 'download' LIMIT 1";
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                let sql = sql_pg.replace("$1", "?").replace("$2", "?");
-                let row = sqlx::query(&sql)
-                    .bind(media_file_id)
-                    .bind(resolution)
-                    .fetch_optional(pool)
-                    .await?;
-                Ok(row.as_ref().map(job_from_row))
-            }
-            Db::Postgres(pool) => {
-                let row = sqlx::query(sql_pg)
-                    .bind(media_file_id)
-                    .bind(resolution)
-                    .fetch_optional(pool)
-                    .await?;
-                Ok(row.as_ref().map(job_from_row))
-            }
-        }
+        let Some(media_file_uuid) = parse_uuid_wrapper(media_file_id) else {
+            return Ok(None);
+        };
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let model = transcode_jobs::Entity::find()
+            .filter(
+                Expr::col(transcode_jobs::Column::MediaFileId)
+                    .eq(media_file_uuid.into_simple_expr(backend)),
+            )
+            .filter(transcode_jobs::Column::Resolution.eq(resolution.to_owned()))
+            .filter(transcode_jobs::Column::Type.eq("download".to_owned()))
+            .limit(1)
+            .one(db)
+            .await?;
+        Ok(model.map(job_from_model))
     }
 
     async fn list_jobs_for_media_file(&self, media_file_id: &str) -> Result<Vec<Job>> {
-        let sql_pg = "SELECT id, media_file_id, resolution, status, COALESCE(progress, 0.0), \
-                      output_path, file_size, error FROM transcode_jobs \
-                      WHERE media_file_id = $1 AND type = 'download' \
-                      ORDER BY updated_at DESC";
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                let sql = sql_pg.replace("$1", "?");
-                let rows = sqlx::query(&sql)
-                    .bind(media_file_id)
-                    .fetch_all(pool)
-                    .await?;
-                Ok(rows.iter().map(job_from_row).collect())
-            }
-            Db::Postgres(pool) => {
-                let rows = sqlx::query(sql_pg)
-                    .bind(media_file_id)
-                    .fetch_all(pool)
-                    .await?;
-                Ok(rows.iter().map(job_from_row).collect())
-            }
-        }
+        let Some(media_file_uuid) = parse_uuid_wrapper(media_file_id) else {
+            return Ok(Vec::new());
+        };
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let models = transcode_jobs::Entity::find()
+            .filter(
+                Expr::col(transcode_jobs::Column::MediaFileId)
+                    .eq(media_file_uuid.into_simple_expr(backend)),
+            )
+            .filter(transcode_jobs::Column::Type.eq("download".to_owned()))
+            .order_by_desc(transcode_jobs::Column::UpdatedAt)
+            .all(db)
+            .await?;
+        Ok(models.into_iter().map(job_from_model).collect())
     }
 
     async fn delete_job(&self, id: &str) -> Result<()> {
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                sqlx::query("DELETE FROM transcode_jobs WHERE id = ?")
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query("DELETE FROM transcode_jobs WHERE id = $1")
-                    .bind(id)
-                    .execute(pool)
-                    .await?;
-            }
-        }
+        let Some(id_wrapper) = parse_uuid_wrapper(id) else {
+            return Ok(());
+        };
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        transcode_jobs::Entity::delete_many()
+            .filter(
+                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
+            )
+            .exec(db)
+            .await?;
         Ok(())
     }
 
@@ -670,39 +651,48 @@ impl DownloadService {
     /// for the `"original"` short-circuit and (eventually) the
     /// transcode-completion callback.
     async fn complete_job(&self, id: &str, output_path: &str, file_size: i64) -> Result<()> {
-        let now = Utc::now();
-        match &self.inner.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "UPDATE transcode_jobs SET status = 'ready', progress = 1.0, \
-                     output_path = ?, file_size = ?, completed_at = ?, last_accessed_at = ?, \
-                     updated_at = ? WHERE id = ?",
-                )
-                .bind(output_path)
-                .bind(file_size)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .bind(id)
-                .execute(pool)
-                .await?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "UPDATE transcode_jobs SET status = 'ready', progress = 1.0, \
-                     output_path = $1, file_size = $2, completed_at = $3, last_accessed_at = $4, \
-                     updated_at = $5 WHERE id = $6",
-                )
-                .bind(output_path)
-                .bind(file_size)
-                .bind(now)
-                .bind(now)
-                .bind(now)
-                .bind(id)
-                .execute(pool)
-                .await?;
-            }
-        }
+        let Some(id_wrapper) = parse_uuid_wrapper(id) else {
+            return Err(ServiceError::Internal("complete_job: id not a UUID".into()));
+        };
+        let db = &self.inner.db;
+        let backend = db.get_database_backend();
+        let now = DateTimeSecs::from(Utc::now());
+        // `transcode_jobs.file_size` is `Option<i32>` on the SeaORM
+        // entity (mirrors the Ecto schema). Clamp to i32::MAX on the
+        // unlikely chance the source file exceeds 2 GiB — Phoenix
+        // accepts whatever fits, which is the same semantics.
+        let file_size_i32 = i32::try_from(file_size).unwrap_or(i32::MAX);
+        transcode_jobs::Entity::update_many()
+            .col_expr(
+                transcode_jobs::Column::Status,
+                Expr::value("ready".to_owned()),
+            )
+            .col_expr(transcode_jobs::Column::Progress, Expr::value(1.0_f64))
+            .col_expr(
+                transcode_jobs::Column::OutputPath,
+                Expr::value(output_path.to_owned()),
+            )
+            .col_expr(
+                transcode_jobs::Column::FileSize,
+                Expr::value(file_size_i32),
+            )
+            .col_expr(
+                transcode_jobs::Column::CompletedAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(
+                transcode_jobs::Column::LastAccessedAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(
+                transcode_jobs::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(
+                Expr::col(transcode_jobs::Column::Id).eq(id_wrapper.into_simple_expr(backend)),
+            )
+            .exec(db)
+            .await?;
         self.broadcast_job_event(id, "job_completed", None, None);
         Ok(())
     }
@@ -834,40 +824,36 @@ impl MediaFileRow {
     }
 }
 
-fn media_file_from_row<R: Row>(row: &R) -> MediaFileRow
-where
-    for<'r> String: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
-    for<'r> Option<String>: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
-    for<'r> Option<i64>: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
-    usize: sqlx::ColumnIndex<R>,
-{
+/// Project a `(media_files::Model, Option<library_paths::Model>)` pair
+/// — what `find_also_related` returns — into the service-shaped
+/// [`MediaFileRow`]. The optional second tuple captures the LEFT JOIN
+/// result (no row when `library_path_id` is NULL on the media file).
+fn media_file_from_join(
+    pair: (media_files::Model, Option<library_paths::Model>),
+) -> MediaFileRow {
+    let (mf, lp) = pair;
     MediaFileRow {
-        id: row.get(0),
-        size: row.get(1),
-        resolution: row.get(2),
-        path: row.get(3),
-        relative_path: row.get(4),
-        library_path: row.get(5),
+        id: mf.id.0.to_string(),
+        size: mf.size,
+        resolution: mf.resolution,
+        path: mf.path,
+        relative_path: mf.relative_path,
+        library_path: lp.map(|l| l.path),
     }
 }
 
-fn job_from_row<R: Row>(row: &R) -> Job
-where
-    for<'r> String: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
-    for<'r> Option<String>: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
-    for<'r> Option<i64>: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
-    for<'r> f64: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
-    usize: sqlx::ColumnIndex<R>,
-{
+fn job_from_model(model: transcode_jobs::Model) -> Job {
     Job {
-        id: row.get(0),
-        media_file_id: row.get(1),
-        resolution: row.get(2),
-        status: row.get(3),
-        progress: row.get(4),
-        output_path: row.get(5),
-        file_size: row.get(6),
-        error: row.get(7),
+        id: model.id.0.to_string(),
+        media_file_id: model.media_file_id.0.to_string(),
+        resolution: model.resolution,
+        status: model.status,
+        progress: model.progress.unwrap_or(0.0),
+        output_path: model.output_path,
+        // entity column is `Option<i32>`; surface as `Option<i64>` so
+        // the public `Job` shape stays stable for downstream consumers.
+        file_size: model.file_size.map(i64::from),
+        error: model.error,
     }
 }
 
@@ -890,18 +876,25 @@ fn enrich_with_status(mut option: QualityOption, job: Option<&Job>) -> QualityOp
     option
 }
 
-/// Crude SQLite-vs-Postgres unique-constraint detection. Phoenix's
-/// equivalent reaches into the changeset error map; the Rust path
-/// pattern-matches on the underlying driver error.
-fn is_unique_violation(err: &(dyn sqlx::error::DatabaseError + 'static)) -> bool {
-    // SQLite reports "UNIQUE constraint failed: ..." in the message.
-    // Postgres reports SQLSTATE 23505.
-    if let Some(code) = err.code() {
-        if code == "23505" || code == "2067" {
-            return true;
-        }
-    }
-    err.message().contains("UNIQUE constraint") || err.message().contains("duplicate key")
+/// Parse a `&str` UUID into the wrapper used by the workspace's
+/// `SeaORM` bind path. Invalid input maps to `None` — callers treat
+/// that as "no rows match" without surfacing a parse error.
+fn parse_uuid_wrapper(s: &str) -> Option<UuidText> {
+    Uuid::parse_str(s).ok().map(UuidText::from)
+}
+
+/// Crude `SQLite`-vs-Postgres unique-constraint detection against the
+/// `SeaORM` `DbErr`. `SeaORM` bubbles the underlying sqlx error message
+/// through `DbErr::Exec` / `DbErr::Query`, so we sniff the rendered
+/// string for the `SQLite`-specific markers (`UNIQUE constraint`,
+/// `SQLITE_CONSTRAINT_UNIQUE` = 2067) and the Postgres `SQLSTATE`
+/// `23505` (`duplicate key`).
+fn is_unique_violation(err: &DbErr) -> bool {
+    let msg = err.to_string();
+    msg.contains("UNIQUE constraint")
+        || msg.contains("duplicate key")
+        || msg.contains("23505")
+        || msg.contains("2067")
 }
 
 fn validate_resolution(resolution: &str) -> Result<ResolutionString> {
@@ -1113,70 +1106,47 @@ mod tests {
 
 // ---------------------------------------------------------------------
 // Integration-shaped tests that exercise the DB-backed paths through a
-// real sqlx pool. Hidden behind the standard `cfg(test)` gate. The
-// suite uses an in-memory SQLite pool plus the minimal schema slice
-// these calls touch.
+// real SeaORM connection. Hidden behind the standard `cfg(test)` gate.
+// The suite uses an in-memory SQLite connection plus the minimal schema
+// slice these calls touch, materialized via
+// `Schema::create_table_from_entity`.
 // ---------------------------------------------------------------------
 
 #[cfg(test)]
 mod db_tests {
     use super::*;
     use mydia_rs_pubsub::Pubsub;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Schema};
 
-    const SCHEMA: &str = "
-        CREATE TABLE media_files (
-            id TEXT PRIMARY KEY,
-            media_item_id TEXT,
-            episode_id TEXT,
-            library_path_id TEXT,
-            path TEXT,
-            relative_path TEXT,
-            size INTEGER,
-            resolution TEXT,
-            trashed_at TEXT,
-            inserted_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE library_paths (
-            id TEXT PRIMARY KEY,
-            path TEXT NOT NULL
-        );
-        CREATE TABLE transcode_jobs (
-            id TEXT PRIMARY KEY,
-            media_file_id TEXT NOT NULL,
-            resolution TEXT NOT NULL,
-            type TEXT NOT NULL DEFAULT 'download',
-            status TEXT NOT NULL,
-            progress REAL,
-            output_path TEXT,
-            file_size INTEGER,
-            error TEXT,
-            started_at TEXT,
-            completed_at TEXT,
-            last_accessed_at TEXT,
-            user_id TEXT,
-            inserted_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE UNIQUE INDEX transcode_jobs_media_file_id_resolution_index
-            ON transcode_jobs (media_file_id, resolution)
-            WHERE type = 'download';
-    ";
-
-    async fn build_service() -> (DownloadService, Db) {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
+    /// Boot a fresh in-memory `SQLite` connection and apply the entity
+    /// tables this service touches. `create_table_from_entity` emits
+    /// every FK declared on the entity, and `SeaORM`'s `sqlx-sqlite`
+    /// adapter enables `PRAGMA foreign_keys = ON` by default — so we
+    /// disable FK enforcement up front to avoid materializing the
+    /// full schema (`media_files` alone touches seven neighbouring
+    /// tables). The production callers operate against the real
+    /// Phoenix-managed schema where every referenced table exists.
+    async fn fresh_db() -> DatabaseConnection {
+        let db = Database::connect("sqlite::memory:")
             .await
-            .expect("open in-memory sqlite");
-        for stmt in SCHEMA.split(';') {
-            let trimmed = stmt.trim();
-            if !trimmed.is_empty() {
-                sqlx::query(trimmed).execute(&pool).await.expect("schema");
-            }
+            .expect("connect in-memory sqlite");
+        let backend = db.get_database_backend();
+        db.execute_unprepared("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable foreign_keys");
+        let schema = Schema::new(backend);
+        for stmt in [
+            schema.create_table_from_entity(library_paths::Entity),
+            schema.create_table_from_entity(media_files::Entity),
+            schema.create_table_from_entity(transcode_jobs::Entity),
+        ] {
+            db.execute(&stmt).await.expect("create table");
         }
-        let db = Db::Sqlite(pool);
+        db
+    }
+
+    async fn build_service() -> (DownloadService, DatabaseConnection) {
+        let db = fresh_db().await;
         let manager = JobManager::new(2);
         let pubsub = Pubsub::new();
         // Point ffmpeg at a missing binary so spawn fails — the
@@ -1190,29 +1160,47 @@ mod db_tests {
         (service, db)
     }
 
-    async fn insert_media_file(db: &Db, id: &str, size: i64, abs_path: &str) {
-        let Db::Sqlite(pool) = db else { unreachable!() };
-        let now = Utc::now().to_rfc3339();
-        sqlx::query(
-            "INSERT INTO media_files (id, media_item_id, episode_id, path, size, resolution, \
-             inserted_at, updated_at) VALUES (?, ?, NULL, ?, ?, '1080p', ?, ?)",
-        )
-        .bind(id)
-        .bind("movie-1")
-        .bind(abs_path)
-        .bind(size)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert media_file");
+    /// Stable test UUIDs for the movie parent + its single media file.
+    /// Strings get parsed back into `UuidText` so the production code's
+    /// `parse_uuid_wrapper` happy-path is exercised end-to-end.
+    const MOVIE_ID: &str = "11111111-1111-1111-1111-111111111111";
+
+    async fn insert_media_file(
+        db: &DatabaseConnection,
+        media_file_id: &str,
+        size: i64,
+        abs_path: &str,
+    ) {
+        let now = DateTimeSecs::from(Utc::now());
+        let am = media_files::ActiveModel {
+            id: Set(UuidText::from(Uuid::parse_str(media_file_id).expect("uuid"))),
+            media_item_id: Set(Some(UuidText::from(
+                Uuid::parse_str(MOVIE_ID).expect("uuid"),
+            ))),
+            episode_id: Set(None),
+            path: Set(Some(abs_path.to_owned())),
+            size: Set(Some(size)),
+            resolution: Set(Some("1080p".to_owned())),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            analysis_attempts: Set(0),
+            ..Default::default()
+        };
+        mydia_rs_db::insert_active_model(am, db)
+            .await
+            .expect("insert media_file");
+    }
+
+    fn fresh_media_file_id() -> String {
+        Uuid::new_v4().to_string()
     }
 
     #[tokio::test]
     async fn get_options_lists_original_plus_downscales() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 1_073_741_824, "/tmp/fake.mkv").await;
-        let options = service.get_options("movie", "movie-1").await.expect("opts");
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 1_073_741_824, "/tmp/fake.mkv").await;
+        let options = service.get_options("movie", MOVIE_ID).await.expect("opts");
         // Original + 1080p + 720p + 480p == 4 entries for a 1080p source.
         assert_eq!(options.len(), 4);
         assert_eq!(options[0].resolution, "original");
@@ -1230,7 +1218,7 @@ mod db_tests {
     async fn get_options_missing_media_returns_no_media_file() {
         let (service, _db) = build_service().await;
         let err = service
-            .get_options("movie", "does-not-exist")
+            .get_options("movie", MOVIE_ID)
             .await
             .expect_err("no media");
         assert!(matches!(err, ServiceError::NoMediaFile));
@@ -1249,9 +1237,10 @@ mod db_tests {
     #[tokio::test]
     async fn prepare_original_short_circuits_to_ready() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 100, "/tmp/fake.mkv").await;
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 100, "/tmp/fake.mkv").await;
         let info = service
-            .prepare("movie", "movie-1", "original")
+            .prepare("movie", MOVIE_ID, "original")
             .await
             .expect("prepare");
         assert_eq!(info.status, "ready");
@@ -1262,13 +1251,14 @@ mod db_tests {
     #[tokio::test]
     async fn prepare_is_idempotent() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 100, "/tmp/fake.mkv").await;
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 100, "/tmp/fake.mkv").await;
         let first = service
-            .prepare("movie", "movie-1", "original")
+            .prepare("movie", MOVIE_ID, "original")
             .await
             .expect("first");
         let second = service
-            .prepare("movie", "movie-1", "original")
+            .prepare("movie", MOVIE_ID, "original")
             .await
             .expect("second");
         assert_eq!(first.job_id, second.job_id);
@@ -1277,9 +1267,10 @@ mod db_tests {
     #[tokio::test]
     async fn prepare_invalid_resolution_rejects_before_db_work() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 100, "/tmp/fake.mkv").await;
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 100, "/tmp/fake.mkv").await;
         let err = service
-            .prepare("movie", "movie-1", "9000p")
+            .prepare("movie", MOVIE_ID, "9000p")
             .await
             .expect_err("rejected");
         assert!(matches!(err, ServiceError::InvalidResolution));
@@ -1288,9 +1279,10 @@ mod db_tests {
     #[tokio::test]
     async fn prepare_non_original_creates_pending_row() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 100, "/tmp/fake.mkv").await;
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 100, "/tmp/fake.mkv").await;
         let info = service
-            .prepare("movie", "movie-1", "720p")
+            .prepare("movie", MOVIE_ID, "720p")
             .await
             .expect("prepare");
         // ffmpeg spawn failed (binary doesn't exist), but the row was
@@ -1307,16 +1299,22 @@ mod db_tests {
     #[tokio::test]
     async fn get_job_status_returns_not_found_for_unknown_id() {
         let (service, _db) = build_service().await;
-        let err = service.get_job_status("nonexistent").await.expect_err("nf");
+        // Use a real UUID so parse_uuid_wrapper accepts it; the row
+        // doesn't exist so the service still returns JobNotFound.
+        let err = service
+            .get_job_status(&Uuid::new_v4().to_string())
+            .await
+            .expect_err("nf");
         assert!(matches!(err, ServiceError::JobNotFound));
     }
 
     #[tokio::test]
     async fn cancel_job_deletes_row() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 100, "/tmp/fake.mkv").await;
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 100, "/tmp/fake.mkv").await;
         let info = service
-            .prepare("movie", "movie-1", "original")
+            .prepare("movie", MOVIE_ID, "original")
             .await
             .expect("prepare");
         service.cancel_job(&info.job_id).await.expect("cancel");
@@ -1330,61 +1328,74 @@ mod db_tests {
     #[tokio::test]
     async fn cancel_job_unknown_id_returns_not_found() {
         let (service, _db) = build_service().await;
-        let err = service.cancel_job("nope").await.expect_err("nf");
+        let err = service
+            .cancel_job(&Uuid::new_v4().to_string())
+            .await
+            .expect_err("nf");
         assert!(matches!(err, ServiceError::JobNotFound));
     }
 
     #[tokio::test]
     async fn touch_last_accessed_updates_timestamp() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 100, "/tmp/fake.mkv").await;
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 100, "/tmp/fake.mkv").await;
         let info = service
-            .prepare("movie", "movie-1", "original")
+            .prepare("movie", MOVIE_ID, "original")
             .await
             .expect("prepare");
 
         // Read the current last_accessed_at, touch, then verify it
-        // moved forward. We compare strings (rfc3339) — close enough
-        // for an integration test, and we sleep 1ms to ensure the new
-        // value is different.
-        let Db::Sqlite(pool) = &db else {
-            unreachable!()
-        };
-        let (before,): (Option<String>,) =
-            sqlx::query_as("SELECT last_accessed_at FROM transcode_jobs WHERE id = ?")
-                .bind(&info.job_id)
-                .fetch_one(pool)
-                .await
-                .expect("read");
+        // moved forward. We compare the wrapper's inner DateTime —
+        // close enough for an integration test, and we sleep 10ms so
+        // the new value is guaranteed to be different at one-second
+        // precision.
+        let id_wrapper = parse_uuid_wrapper(&info.job_id).expect("uuid");
+        let backend = db.get_database_backend();
+        let before = transcode_jobs::Entity::find()
+            .filter(
+                Expr::col(transcode_jobs::Column::Id)
+                    .eq(id_wrapper.into_simple_expr(backend)),
+            )
+            .one(&db)
+            .await
+            .expect("read")
+            .expect("row exists")
+            .last_accessed_at;
 
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
         service
             .touch_last_accessed(&info.job_id)
             .await
             .expect("touch");
 
-        let (after,): (Option<String>,) =
-            sqlx::query_as("SELECT last_accessed_at FROM transcode_jobs WHERE id = ?")
-                .bind(&info.job_id)
-                .fetch_one(pool)
-                .await
-                .expect("read again");
+        let after = transcode_jobs::Entity::find()
+            .filter(
+                Expr::col(transcode_jobs::Column::Id)
+                    .eq(id_wrapper.into_simple_expr(backend)),
+            )
+            .one(&db)
+            .await
+            .expect("read again")
+            .expect("row exists")
+            .last_accessed_at;
         // Both should be present; after >= before.
         assert!(before.is_some());
         assert!(after.is_some());
-        assert!(after.unwrap() >= before.unwrap());
+        assert!(after.unwrap().0 >= before.unwrap().0);
     }
 
     #[tokio::test]
     async fn list_jobs_for_media_file_decorates_quality_options() {
         let (service, db) = build_service().await;
-        insert_media_file(&db, "mf-1", 100, "/tmp/fake.mkv").await;
+        let mf_id = fresh_media_file_id();
+        insert_media_file(&db, &mf_id, 100, "/tmp/fake.mkv").await;
         // Prepare original to get a ready job.
         let _ = service
-            .prepare("movie", "movie-1", "original")
+            .prepare("movie", MOVIE_ID, "original")
             .await
             .expect("prepare");
-        let options = service.get_options("movie", "movie-1").await.expect("opts");
+        let options = service.get_options("movie", MOVIE_ID).await.expect("opts");
         let original = options.iter().find(|o| o.resolution == "original").unwrap();
         assert_eq!(original.transcode_status.as_deref(), Some("ready"));
         assert!((original.transcode_progress.unwrap() - 1.0).abs() < f64::EPSILON);
