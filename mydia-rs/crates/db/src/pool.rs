@@ -14,7 +14,6 @@ use sqlx::{PgPool, SqlitePool};
 
 use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
 
-use crate::dialect::Dialect;
 use crate::error::DbError;
 
 /// Active connection pool plus the dialect it talks.
@@ -25,14 +24,6 @@ pub enum Db {
 }
 
 impl Db {
-    /// Dialect the pool talks. Use with [`crate::dialect`] helpers.
-    pub fn dialect(&self) -> Dialect {
-        match self {
-            Self::Sqlite(_) => Dialect::Sqlite,
-            Self::Postgres(_) => Dialect::Postgres,
-        }
-    }
-
     /// Borrow the `SQLite` pool. Returns `None` when the active backend is
     /// Postgres. Use this only in code paths that genuinely need the
     /// concrete `SqlitePool` (e.g. SQLite-specific PRAGMAs).

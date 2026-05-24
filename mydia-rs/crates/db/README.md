@@ -1,12 +1,42 @@
 # mydia-rs-db
 
-sqlx-backed dual SQLite/Postgres data layer. Talks the Phoenix-created
-schema unchanged; mydia-rs never writes a schema migration.
+Dual SQLite/Postgres data layer. Mid-cutover between two surfaces:
 
-## Query tier policy
+- **Legacy (Phase A coexistence):** sqlx-backed `Db` enum, with the
+  tier-(a) macro / tier-(b) `#[allow]` policy below.
+- **Destination (post-U6):** SeaORM 2.0 `DatabaseConnection`, with the
+  cross-engine wrapper types in [`types`] and the engine-aware
+  [`insert_active_model`] / [`update_active_model`] write helpers.
 
-Three classes of query exist in mydia-rs. Pick the right tier per query;
-the compile-time vs runtime tradeoff is intentional.
+Talks the Phoenix-created schema unchanged; mydia-rs never writes a
+schema migration.
+
+## SeaORM cutover
+
+See `docs/plans/2026-05-24-001-refactor-seaorm-data-layer-unification-plan.md`
+for the full plan. Active Phase A units land alongside the legacy
+sqlx layer; Phase B's U6 cutover deletes the `Db` enum and switches
+every consumer to threading a SeaORM `DatabaseConnection`.
+
+The wrappers in [`types`] are the load-bearing piece: each carries
+both legacy `sqlx::Type` impls and SeaORM-native
+`DeriveValueType<String>` + engine-branched `TryGetable` + an
+`into_simple_expr(backend)` write helper. Writes to any
+wrapper-typed column flow through [`insert_active_model`] /
+[`update_active_model`] in [`crate::insert_helper`] so the
+`$N::uuid` / `$N::timestamptz` / `$N::jsonb` /
+`ARRAY(SELECT jsonb_array_elements_text($N::jsonb))` casts land on
+Postgres while SQLite gets the Ecto-compat TEXT form.
+
+`clippy.toml` denies vanilla `sea_orm::ActiveModelTrait::insert` and
+`::update` workspace-wide so Phase B per-crate units cannot bypass
+the helper.
+
+## Query tier policy (legacy sqlx — applies until U6)
+
+Two classes of query exist in the unconverted sqlx layer. Pick the
+right tier per query; the compile-time vs runtime tradeoff is
+intentional.
 
 ### (a) Portable SQL — `sqlx::query_as!` / `sqlx::query!` macros
 
@@ -18,10 +48,13 @@ committed.
 ### (b) Dialect-divergent SQL — runtime `sqlx::query` / `sqlx::query_as`
 
 Use for queries that need different SQL per engine: `json_extract` on
-SQLite vs `->>` on Postgres, `julianday` vs `EXTRACT(EPOCH ...)`, casts.
-Compose the SQL via the helpers in [`mydia_rs_db::dialect`]; runtime
-dispatch chooses based on `db.dialect()`. No compile-time SQL check —
-the test suite is the safety net.
+SQLite vs `->>` on Postgres, `julianday` vs `EXTRACT(EPOCH ...)`,
+casts. Compose the SQL inline at the call site with engine-branched
+arms; no shared dialect helper module — the previous
+`mydia_rs_db::dialect` helpers were deleted in U4 once zero external
+consumers remained. Runtime dispatch chooses based on the `Db` enum
+variant. No compile-time SQL check — the test suite is the safety
+net.
 
 ### (c) Schema migrations
 
@@ -38,26 +71,28 @@ deserialization paths that don't expect them.
 
 See [`mydia_rs_db::types`]. UUIDs are TEXT-on-SQLite and native uuid
 on Postgres; UTC datetimes are RFC3339-Z on SQLite and `TIMESTAMPTZ`
-on Postgres. Both encodings round-trip with Ecto's defaults
-(`ecto_sqlite3` `:binary_id_type = :string`,
+on Postgres. JSON columns are TEXT-JSON on SQLite and `JSONB` on
+Postgres. `{:array, :string}` columns are TEXT-JSON-array on SQLite
+and `text[]` on Postgres. Every encoding round-trips with Ecto's
+defaults (`ecto_sqlite3` `:binary_id_type = :string`,
 `@default_datetime_type :iso8601`).
 
 ## Conversion sweep — tier-(a) macro adoption
 
-The workspace baseline keeps `clippy::disallowed_methods = "allow"` so
+The workspace baseline is `clippy::disallowed_methods = "deny"`, so
 unconverted runtime `sqlx::query` / `query_as` / `query_scalar` calls
-don't block CI. Each file that finishes its conversion opts in with
-`#![warn(clippy::disallowed_methods)]` so backsliding gets flagged.
+fail CI. Per-call `#[allow(clippy::disallowed_methods)]` annotations
+suppress with a one-line reason — used for dialect-divergent SQL and
+dynamic SQL composition.
 
-When every site is either tier-(a) macro or annotated tier-(b), the
-workspace baseline flips to `"deny"` and every new query is gated at
-compile time.
+The SeaORM unification plan supersedes the strict-zero sqlx tier-(a)
+sweep: every site eventually becomes a SeaORM call, and the
+`disallowed_methods` lint will then also disallow vanilla
+`ActiveModelTrait::insert` / `::update` for wrapper-touched tables.
 
-### Per-call patterns
+### Per-call patterns (legacy)
 
 **Tier (a) — fixed-shape SQL, portable across both engines.**
-Pattern (per [`crates/graphql/src/repos/accounts.rs`] and
-[`crates/subtitles/src/external.rs`]):
 
 ```rust
 match db {
@@ -76,7 +111,7 @@ match db {
         sqlx::query_as!(
             MyRow,
             r#"SELECT ... FROM ... WHERE x = $1"#,
-            my_value as UuidText  // type annotations as needed
+            my_value as UuidText
         )
         .fetch_all(pool)
         .await
@@ -89,10 +124,10 @@ compiles against `cargo sqlx prepare --workspace`, the SQLite arm
 is correct by construction.
 
 **Tier (b) — dialect-divergent or dynamic SQL.** Examples: queries
-using `mydia_rs_db::dialect::json_extract` for cross-engine JSON
-access, `QueryBuilder` for runtime-composed WHERE clauses, queries
-against SQLite-only tables (`mydia_runtime_lock`) that don't exist
-in the PG prepare schema.
+using `json_extract` for cross-engine JSON access on SQLite vs `->>`
+on Postgres, `QueryBuilder` for runtime-composed WHERE clauses,
+queries against SQLite-only tables (`mydia_runtime_lock`) that don't
+exist in the PG prepare schema.
 
 ```rust
 // Reason: SQLite-only table / dynamic filter composition / dialect-divergent JSON.
@@ -102,24 +137,6 @@ sqlx::query("...").bind(...).execute(pool).await?;
 
 Every tier-(b) `#[allow]` should carry a one-line reason comment so
 future readers know why it's not in the macro tier.
-
-### Aggressive refactor — what unlocks tier (a)
-
-Most "naturally tier (b)" queries become tier (a) after small
-type-wrapper refactors:
-
-- **UUID columns**: type the field as `UuidText` (not `String`). The
-  wrapper has `sqlx::Type` impls for both engines, so SQL no longer
-  needs `id::text AS id` casts.
-- **String inputs that are UUIDs**: parse to `UuidText` at the top of
-  the function and bind the wrapper. The function signature can keep
-  `&str` for caller convenience.
-- **`NULLS LAST/FIRST`**: supported on SQLite ≥3.30; safe to use on
-  both arms.
-
-Resist macroizing queries where the SQL genuinely diverges. The
-`#[allow]` annotation is a valid permanent state when divergence is
-real.
 
 ### Regenerating the `.sqlx/` offline cache
 
@@ -135,27 +152,5 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/mydia_dev \
 Commit every new `mydia-rs/.sqlx/query-*.json` file. CI builds with
 `SQLX_OFFLINE=true` against the cache; no live DB needed.
 
-### Sweep progress
-
-Per-crate conversion state. Counts cover both `src/` and `tests/`
-because `cargo clippy --workspace --all-targets` lints tests too.
-"Done" = every site is either tier-(a) macro or tier-(b) `#[allow]`,
-file-level `#![warn]` opted in, tests pass, offline build clean.
-
-| Crate | `src/` runtime | `src/` macro | `tests/` runtime | Tier-(a) follow-up scope |
-|---|---:|---:|---:|---|
-| `subtitles` | 2 | 3 | 0 | done — SQLite arms of tier-(a) pairs |
-| `events` | 3 | 4 | 5 | done — `QueryBuilder` paths + SQLite arms (tests stay tier (b)) |
-| `app` | 5 | 3 | 1 | done — `mydia_runtime_lock` (SQLite-only) + SQLite arms |
-| `models` | 0 | 0 | 22 | none in `src/`; tests are fixture SQL — stay tier (b) |
-| `graphql` | 65 | 10 | 43 | partial — `accounts` pilot done; promote `repos/{collections,api_keys,playback,media,settings,collections_query}.rs` next |
-| `db` | 6 | 0 | 36 | mostly tier (b): DDL in `pool.rs` smoke query and `schema_check.rs`; tests are setup fixtures |
-| `p2p` | 14 | 0 | 10 | promote `service.rs` (single concentrated file) |
-| `downloads` | 22 | 0 | 0 | promote `service.rs` (single concentrated file, but ~half use dynamic SQL — tier (b)) |
-| `jobs` | 40 | 0 | 5 | promote `workers/library_scanner.rs` first (10 sites), then the smaller workers |
-| `web` | 236 | 0 | 131 | largest surface; promote in slices by route family (auth → admin → api/v1 → server_fns/*) |
-
-When the last row flips to "done", flip the workspace lint:
-`disallowed_methods = "allow"` → `"deny"` in `mydia-rs/Cargo.toml`'s
-`[workspace.lints.clippy]` block. From that point on, every new
-runtime `sqlx::query` is a compile error unless explicitly annotated.
+The `.sqlx/` cache and the `sqlx-prepare-check` CI job both go away
+in U19 once the SeaORM cutover completes.

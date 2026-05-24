@@ -11,8 +11,6 @@
 //! - [`pool`] owns the [`Db`] enum that legacy callers route every query
 //!   through, plus the new `SeaORM` `connect_from_config_seaorm` entry
 //!   point that Phase B converts to.
-//! - [`dialect`] (scheduled for deletion in U4) mirrors the macros from
-//!   `lib/mydia/db.ex` for dialect-divergent fragments.
 //! - [`types`] holds the cross-engine wrapper types (`UuidText`,
 //!   `DateTimeSecs`, `DateTimeMicros`, `JsonMap`, `StringArray`). Each
 //!   carries both the legacy `sqlx::Type` impls and the `SeaORM`-native
@@ -27,7 +25,6 @@
 //!   cast templates onto every wrapper column.
 //! - [`schema_check`] runs the boot-time `schema_migrations` probe.
 
-pub mod dialect;
 pub mod insert_helper;
 pub mod pool;
 pub mod schema_check;
@@ -35,7 +32,6 @@ pub mod types;
 
 mod error;
 
-pub use dialect::Dialect;
 pub use error::DbError;
 pub use insert_helper::{insert_active_model, update_active_model};
 pub use pool::{connect_from_config, connect_from_config_seaorm, Db};
