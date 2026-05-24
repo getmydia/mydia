@@ -31,9 +31,11 @@ use mydia_rs_auth::{
     AccessTokenError, AccessTokenSigner, MediaTokenError, MediaTokenPermission, MediaTokenSigner,
 };
 use mydia_rs_db::types::{DateTimeSecs, UuidText};
-use mydia_rs_db::Db;
+use mydia_rs_entities::remote_devices;
 use mydia_rs_models::RemoteDevice;
 use rand::RngCore;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, Set};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -80,6 +82,12 @@ pub enum PairingError {
     Hash(String),
 }
 
+impl From<DbErr> for PairingError {
+    fn from(err: DbErr) -> Self {
+        Self::Database(err.to_string())
+    }
+}
+
 impl From<MediaTokenError> for PairingError {
     fn from(err: MediaTokenError) -> Self {
         Self::Token(err.to_string())
@@ -100,7 +108,7 @@ impl From<AccessTokenError> for PairingError {
 /// `Mydia.RemoteAccess.Pairing.complete_pairing/2` is just a function
 /// on a module.
 pub async fn complete_pairing(
-    db: &Db,
+    db: &DatabaseConnection,
     media_signer: &MediaTokenSigner,
     access_signer: &AccessTokenSigner,
     claim_code: &str,
@@ -122,51 +130,19 @@ pub async fn complete_pairing(
     let now = DateTimeSecs::from(now_dt);
     let device_static_public_key = random_static_public_key();
 
-    let device_id_text = UuidText(device_id);
-    let user_id_text = UuidText(user_id);
-
-    match db {
-        Db::Sqlite(pool) => {
-            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
-            #[allow(clippy::disallowed_methods)]
-            sqlx::query(
-                "INSERT INTO remote_devices \
-                 (id, device_name, platform, device_static_public_key, token_hash, \
-                  last_seen_at, revoked_at, user_id, inserted_at, updated_at) \
-                 VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $6, $6)",
-            )
-            .bind(device_id_text)
-            .bind(attrs.device_name.as_str())
-            .bind(attrs.platform.as_str())
-            .bind(device_static_public_key.as_slice())
-            .bind(token_hash.as_str())
-            .bind(now)
-            .bind(user_id_text)
-            .execute(pool)
-            .await
-            .map(|_| ())
-            .map_err(|err| PairingError::Database(err.to_string()))?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query!(
-                "INSERT INTO remote_devices \
-                 (id, device_name, platform, device_static_public_key, token_hash, \
-                  last_seen_at, revoked_at, user_id, inserted_at, updated_at) \
-                 VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $6, $6)",
-                device_id_text as UuidText,
-                attrs.device_name,
-                attrs.platform,
-                device_static_public_key,
-                token_hash,
-                now as DateTimeSecs,
-                user_id_text as UuidText,
-            )
-            .execute(pool)
-            .await
-            .map(|_| ())
-            .map_err(|err| PairingError::Database(err.to_string()))?;
-        }
-    }
+    let am = remote_devices::ActiveModel {
+        id: Set(UuidText(device_id)),
+        device_name: Set(attrs.device_name.clone()),
+        platform: Set(attrs.platform.clone()),
+        device_static_public_key: Set(device_static_public_key.clone()),
+        token_hash: Set(token_hash.clone()),
+        last_seen_at: Set(Some(now)),
+        revoked_at: Set(None),
+        user_id: Set(UuidText(user_id)),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+    };
+    mydia_rs_db::insert_active_model(am, db).await?;
 
     // Step 5: consume the claim. The atomic UPDATE inside
     // `consume_claim_code` keeps this safe under concurrent claim use.
@@ -251,25 +227,12 @@ fn random_static_public_key() -> Vec<u8> {
     bytes
 }
 
-async fn delete_device(db: &Db, device_id: Uuid) -> Result<(), sqlx::Error> {
+async fn delete_device(db: &DatabaseConnection, device_id: Uuid) -> Result<(), DbErr> {
     let device_id_text = UuidText(device_id);
-    match db {
-        Db::Sqlite(pool) => {
-            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
-            #[allow(clippy::disallowed_methods)]
-            sqlx::query("DELETE FROM remote_devices WHERE id = $1")
-                .bind(device_id_text)
-                .execute(pool)
-                .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query!(
-                "DELETE FROM remote_devices WHERE id = $1",
-                device_id_text as UuidText
-            )
-            .execute(pool)
-            .await?;
-        }
-    }
+    let backend = db.get_database_backend();
+    remote_devices::Entity::delete_many()
+        .filter(Expr::col(remote_devices::Column::Id).eq(device_id_text.into_simple_expr(backend)))
+        .exec(db)
+        .await?;
     Ok(())
 }

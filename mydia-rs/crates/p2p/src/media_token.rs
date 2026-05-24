@@ -31,9 +31,11 @@
 //!   (`lib/mydia/media/token_cache.ex:88-104`).
 
 use mydia_rs_auth::{MediaTokenCache, MediaTokenClaims, MediaTokenError, MediaTokenSigner};
-use mydia_rs_db::types::{DateTimeSecs, UuidText};
-use mydia_rs_db::Db;
+use mydia_rs_db::types::UuidText;
+use mydia_rs_entities::remote_devices;
 use mydia_rs_models::RemoteDevice;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -68,6 +70,12 @@ impl From<MediaTokenError> for ValidationError {
     }
 }
 
+impl From<DbErr> for ValidationError {
+    fn from(err: DbErr) -> Self {
+        Self::Database(err.to_string())
+    }
+}
+
 /// Successful validation surface: the verified claims plus the
 /// matching device row.
 #[derive(Debug, Clone)]
@@ -85,11 +93,11 @@ pub struct ValidatedToken {
 pub struct MediaTokenValidator {
     signer: MediaTokenSigner,
     cache: MediaTokenCache,
-    db: Db,
+    db: DatabaseConnection,
 }
 
 impl MediaTokenValidator {
-    pub fn new(signer: MediaTokenSigner, cache: MediaTokenCache, db: Db) -> Self {
+    pub fn new(signer: MediaTokenSigner, cache: MediaTokenCache, db: DatabaseConnection) -> Self {
         Self { signer, cache, db }
     }
 
@@ -143,46 +151,21 @@ impl MediaTokenValidator {
 
         let device_id_text = UuidText(device_id);
         let user_id_text = UuidText(user_id);
+        let backend = self.db.get_database_backend();
 
-        let device: Option<RemoteDevice> = match &self.db {
-            Db::Sqlite(pool) => {
-                // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
-                #[allow(clippy::disallowed_methods)]
-                sqlx::query_as::<_, RemoteDevice>(
-                    "SELECT id, device_name, platform, device_static_public_key, \
-                     token_hash, last_seen_at, revoked_at, user_id, inserted_at, updated_at \
-                     FROM remote_devices WHERE id = $1 AND user_id = $2",
-                )
-                .bind(device_id_text)
-                .bind(user_id_text)
-                .fetch_optional(pool)
-                .await
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as!(
-                    RemoteDevice,
-                    r#"SELECT
-                    id as "id!: UuidText",
-                    device_name,
-                    platform,
-                    device_static_public_key,
-                    token_hash,
-                    last_seen_at as "last_seen_at?: DateTimeSecs",
-                    revoked_at as "revoked_at?: DateTimeSecs",
-                    user_id as "user_id!: UuidText",
-                    inserted_at as "inserted_at!: DateTimeSecs",
-                    updated_at as "updated_at!: DateTimeSecs"
-                  FROM remote_devices WHERE id = $1 AND user_id = $2"#,
-                    device_id_text as UuidText,
-                    user_id_text as UuidText
-                )
-                .fetch_optional(pool)
-                .await
-            }
-        }
-        .map_err(|err| ValidationError::Database(err.to_string()))?;
+        let model = remote_devices::Entity::find()
+            .filter(
+                Expr::col(remote_devices::Column::Id).eq(device_id_text.into_simple_expr(backend)),
+            )
+            .filter(
+                Expr::col(remote_devices::Column::UserId)
+                    .eq(user_id_text.into_simple_expr(backend)),
+            )
+            .one(&self.db)
+            .await?;
 
-        let device = device.ok_or(ValidationError::DeviceNotFound)?;
+        let model = model.ok_or(ValidationError::DeviceNotFound)?;
+        let device = model_to_remote_device(model);
         if device.is_revoked() {
             // Belt-and-braces: also evict from cache so subsequent
             // requests don't read the stale cached entry. Matches the
@@ -192,5 +175,22 @@ impl MediaTokenValidator {
         }
 
         Ok(device)
+    }
+}
+
+/// Translate the SeaORM entity Model to the `RemoteDevice` row struct
+/// consumers expect. Fields match one-for-one.
+pub(crate) fn model_to_remote_device(model: remote_devices::Model) -> RemoteDevice {
+    RemoteDevice {
+        id: model.id,
+        device_name: model.device_name,
+        platform: model.platform,
+        device_static_public_key: model.device_static_public_key,
+        token_hash: model.token_hash,
+        last_seen_at: model.last_seen_at,
+        revoked_at: model.revoked_at,
+        user_id: model.user_id,
+        inserted_at: model.inserted_at,
+        updated_at: model.updated_at,
     }
 }

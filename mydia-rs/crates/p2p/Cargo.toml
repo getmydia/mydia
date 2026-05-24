@@ -17,6 +17,7 @@ mydia_p2p_core = { path = "../../../native/mydia_p2p_core" }
 mydia-rs-auth = { path = "../auth" }
 mydia-rs-config = { path = "../config" }
 mydia-rs-db = { path = "../db" }
+mydia-rs-entities = { path = "../entities" }
 mydia-rs-models = { path = "../models" }
 # U29 follow-up: GraphQL + HLS dispatch adapters. The GraphQL crate
 # owns the async-graphql schema; we hand it a verified user context
@@ -42,10 +43,7 @@ argon2 = "0.5"
 base64 = "0.22"
 
 # DB / time / serialisation.
-sqlx = { version = "0.8", default-features = false, features = [
-    "runtime-tokio",
-    "macros",
-] }
+sea-orm.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 serde.workspace = true
 serde_json = "1"
@@ -59,17 +57,9 @@ tracing.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 tempfile = "3"
-# Dispatch-arm integration tests need a real pubsub bus + sqlite pool
-# to drive the supervisor and graphql adapter through a realistic boot
-# shape. The `sqlite` feature on sqlx is enabled transitively via
-# `mydia-rs-db`; we just need the in-process bus and a direct sqlx
-# pool builder for the in-memory schema test helper.
+# Dispatch-arm integration tests need a real pubsub bus to drive the
+# supervisor and graphql adapter through a realistic boot shape.
 mydia-rs-pubsub = { path = "../pubsub" }
-sqlx = { version = "0.8", default-features = false, features = [
-    "runtime-tokio",
-    "macros",
-    "sqlite",
-] }
 
 [lints]
 workspace = true

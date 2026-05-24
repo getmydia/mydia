@@ -1,8 +1,3 @@
-// Tests: schema setup and seed fixtures are tier-(b) by category —
-// raw INSERT/CREATE used to bootstrap the in-memory state the
-// dispatch arms read against.
-#![allow(clippy::disallowed_methods)]
-
 //! Integration tests for the GraphQL and HLS dispatch arms of the
 //! [`MinimalRouter`] (U29 follow-up).
 //!
@@ -11,6 +6,10 @@
 //! `mydia_p2p_core::Host`; the [`mydia_rs_p2p::router::HlsStreamHandleApi`]
 //! trait lets us hand the router a fake handle that captures the
 //! header + chunks the router writes, then assert against those.
+//!
+//! Schema bootstrap is via `Schema::create_table_from_entity` against
+//! the `mydia-rs-entities` crate, with FK enforcement disabled for the
+//! same reason as `tests/integration.rs`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,114 +19,79 @@ use async_trait::async_trait;
 use chrono::Utc;
 use mydia_p2p_core::{GraphQLRequest, HlsRequest, HlsResponseHeader};
 use mydia_rs_auth::{AccessTokenSigner, MediaTokenCache, MediaTokenPermission, MediaTokenSigner};
-use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
-use mydia_rs_db::{connect_from_config, Db};
+use mydia_rs_db::insert_active_model;
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::{remote_devices, users};
 use mydia_rs_p2p::router::{HlsStreamHandle, HlsStreamHandleApi, P2pRouter, RouterContext};
 use mydia_rs_p2p::{ClaimRateLimiter, MinimalRouter};
 use mydia_rs_pubsub::Pubsub;
 use mydia_rs_streaming::{Supervisor, SupervisorConfig};
-use tempfile::TempDir;
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Schema, Set};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 const SECRET: &str = "shared-test-guardian-secret-for-jwt-parity";
 
-/// Build a fresh on-disk `SQLite` database with the columns the p2p
-/// crate's dispatch arms touch. Matches the shape used in
+/// Build a fresh in-memory `SQLite` SeaORM connection with the tables
+/// the p2p crate's dispatch arms touch. Matches the shape used in
 /// `tests/integration.rs`.
-async fn fresh_sqlite() -> (Db, TempDir) {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let path = tmp.path().join("p2p.db");
-    let config = Config {
-        database: DatabaseConfig {
-            db_type: DatabaseType::Sqlite,
-            url: None,
-            path: Some(path.to_string_lossy().into_owned()),
-            pool_size: 2,
-            ..DatabaseConfig::default()
-        },
-        ..Config::default()
-    };
-    let db = connect_from_config(&config).await.expect("connect");
-    create_schema(&db).await;
-    (db, tmp)
+async fn fresh_sqlite() -> DatabaseConnection {
+    let db = Database::connect("sqlite::memory:")
+        .await
+        .expect("connect in-memory sqlite");
+    db.execute_unprepared("PRAGMA foreign_keys = OFF")
+        .await
+        .expect("disable fk");
+    let backend = db.get_database_backend();
+    let schema = Schema::new(backend);
+    for stmt in [
+        schema.create_table_from_entity(users::Entity),
+        schema.create_table_from_entity(remote_devices::Entity),
+    ] {
+        db.execute(&stmt).await.expect("create table");
+    }
+    db
 }
 
-async fn create_schema(db: &Db) {
-    let pool = db.as_sqlite().expect("sqlite-only fixture");
-
-    sqlx::query(
-        "CREATE TABLE users (
-            id TEXT PRIMARY KEY,
-            username TEXT,
-            email TEXT,
-            password_hash TEXT,
-            oidc_sub TEXT,
-            oidc_issuer TEXT,
-            role TEXT NOT NULL,
-            display_name TEXT,
-            avatar_url TEXT,
-            last_login_at TEXT,
-            inserted_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-    )
-    .execute(pool)
-    .await
-    .unwrap();
-
-    sqlx::query(
-        "CREATE TABLE remote_devices (
-            id TEXT PRIMARY KEY,
-            device_name TEXT NOT NULL,
-            platform TEXT NOT NULL,
-            device_static_public_key BLOB NOT NULL,
-            token_hash TEXT NOT NULL,
-            last_seen_at TEXT,
-            revoked_at TEXT,
-            user_id TEXT NOT NULL,
-            inserted_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-    )
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-async fn insert_user(db: &Db) -> Uuid {
+async fn insert_user(db: &DatabaseConnection) -> Uuid {
     let id = Uuid::new_v4();
-    let now = "2026-05-23T00:00:00Z";
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query(
-        "INSERT INTO users (id, username, role, inserted_at, updated_at) \
-         VALUES ($1, $2, 'user', $3, $3)",
-    )
-    .bind(id.to_string())
-    .bind("alice")
-    .bind(now)
-    .execute(pool)
-    .await
-    .unwrap();
+    let now = DateTimeSecs::from(Utc::now());
+    let am = users::ActiveModel {
+        id: Set(UuidText(id)),
+        username: Set(Some("alice".to_owned())),
+        email: Set(None),
+        password_hash: Set(None),
+        oidc_sub: Set(None),
+        oidc_issuer: Set(None),
+        role: Set("user".to_owned()),
+        display_name: Set(None),
+        avatar_url: Set(None),
+        last_login_at: Set(None),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+    };
+    insert_active_model(am, db).await.expect("insert user");
     id
 }
 
-async fn insert_remote_device(db: &Db, user_id: Uuid) -> Uuid {
+async fn insert_remote_device(db: &DatabaseConnection, user_id: Uuid) -> Uuid {
     let id = Uuid::new_v4();
-    let now = "2026-05-23T00:00:00Z";
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query(
-        "INSERT INTO remote_devices \
-         (id, device_name, platform, device_static_public_key, token_hash, \
-          last_seen_at, revoked_at, user_id, inserted_at, updated_at) \
-         VALUES ($1, 'Test Device', 'android', X'00', 'argon2hash', $2, NULL, $3, $2, $2)",
-    )
-    .bind(id.to_string())
-    .bind(now)
-    .bind(user_id.to_string())
-    .execute(pool)
-    .await
-    .unwrap();
+    let now = DateTimeSecs::from(Utc::now());
+    let am = remote_devices::ActiveModel {
+        id: Set(UuidText(id)),
+        device_name: Set("Test Device".to_owned()),
+        platform: Set("android".to_owned()),
+        device_static_public_key: Set(vec![0_u8]),
+        token_hash: Set("argon2hash".to_owned()),
+        last_seen_at: Set(Some(now)),
+        revoked_at: Set(None),
+        user_id: Set(UuidText(user_id)),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+    };
+    insert_active_model(am, db)
+        .await
+        .expect("insert remote device");
     id
 }
 
@@ -205,7 +169,7 @@ impl HlsStreamHandleApi for FakeStream {
     }
 }
 
-fn build_router(db: Db) -> MinimalRouter {
+fn build_router(db: DatabaseConnection) -> MinimalRouter {
     let media_signer = MediaTokenSigner::new(SECRET, 2);
     let access_signer = AccessTokenSigner::new(SECRET, 2);
     let rate_limiter = ClaimRateLimiter::new_default();
@@ -218,23 +182,20 @@ fn build_router(db: Db) -> MinimalRouter {
 
 /// A tiny schema we can build without any DB plumbing. We use this
 /// for the dispatch-shape tests so they don't depend on the full
-/// mydia-rs-graphql resolver tree at runtime.
-fn echo_schema() -> mydia_rs_graphql::MydiaSchema {
-    // Build the real schema with an in-memory state. We're not
-    // calling any DB-backed resolvers; introspection works against the
-    // schema's type system directly.
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_lazy("sqlite::memory:")
-        .expect("lazy connect");
-    let db = Db::Sqlite(pool);
+/// mydia-rs-graphql resolver tree at runtime. The state needs *some*
+/// DB handle, but the test never executes any DB-backed query against
+/// it — introspection works directly against the schema's type system.
+async fn echo_schema() -> mydia_rs_graphql::MydiaSchema {
+    let db = Database::connect("sqlite::memory:")
+        .await
+        .expect("connect in-memory sqlite for schema");
     let state = mydia_rs_graphql::GraphqlAppState::new(db);
     mydia_rs_graphql::build_schema(state)
 }
 
 #[tokio::test]
 async fn graphql_dispatch_returns_response_when_no_schema_configured() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let router = build_router(db);
     let req = GraphQLRequest {
         query: "{ __typename }".into(),
@@ -257,8 +218,8 @@ async fn graphql_dispatch_returns_response_when_no_schema_configured() {
 
 #[tokio::test]
 async fn graphql_dispatch_anonymous_introspection_returns_query_root() {
-    let (db, _tmp) = fresh_sqlite().await;
-    let router = build_router(db).with_graphql_schema(echo_schema());
+    let db = fresh_sqlite().await;
+    let router = build_router(db).with_graphql_schema(echo_schema().await);
     let req = GraphQLRequest {
         query: "{ __schema { queryType { name } } }".into(),
         variables: None,
@@ -281,9 +242,9 @@ async fn graphql_dispatch_anonymous_introspection_returns_query_root() {
 
 #[tokio::test]
 async fn graphql_dispatch_with_valid_access_token_authenticates() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let user_id = insert_user(&db).await;
-    let router = build_router(db).with_graphql_schema(echo_schema());
+    let router = build_router(db).with_graphql_schema(echo_schema().await);
 
     // Issue a valid access token for the inserted user.
     let access_signer = AccessTokenSigner::new(SECRET, 2);
@@ -317,8 +278,8 @@ async fn graphql_dispatch_with_valid_access_token_authenticates() {
 
 #[tokio::test]
 async fn graphql_dispatch_with_invalid_token_falls_back_to_anonymous() {
-    let (db, _tmp) = fresh_sqlite().await;
-    let router = build_router(db).with_graphql_schema(echo_schema());
+    let db = fresh_sqlite().await;
+    let router = build_router(db).with_graphql_schema(echo_schema().await);
     let req = GraphQLRequest {
         query: "{ schemaVersion }".into(),
         variables: None,
@@ -344,8 +305,8 @@ async fn graphql_dispatch_parses_variables_json() {
     // using GraphQL introspection's `__type(name: $n)` which takes a
     // string variable. If the parser drops variables on the floor,
     // `__type` resolves to null.
-    let (db, _tmp) = fresh_sqlite().await;
-    let router = build_router(db).with_graphql_schema(echo_schema());
+    let db = fresh_sqlite().await;
+    let router = build_router(db).with_graphql_schema(echo_schema().await);
     let req = GraphQLRequest {
         query: r"query Q($n: String!) { __type(name: $n) { name } }".into(),
         variables: Some(r#"{"n": "Query"}"#.into()),
@@ -372,7 +333,7 @@ async fn graphql_dispatch_parses_variables_json() {
 
 #[tokio::test]
 async fn hls_dispatch_replies_501_when_no_supervisor_configured() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let router = build_router(db);
     let stream = FakeStream::new();
     let handle = HlsStreamHandle::new(Arc::new(stream.clone()));
@@ -398,7 +359,7 @@ async fn hls_dispatch_replies_501_when_no_supervisor_configured() {
 
 #[tokio::test]
 async fn hls_dispatch_replies_401_when_no_auth_token() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let pubsub = Pubsub::new();
     let supervisor = Supervisor::new(SupervisorConfig::default(), pubsub);
     let cache = MediaTokenCache::new(Duration::from_secs(300));
@@ -426,7 +387,7 @@ async fn hls_dispatch_replies_401_when_no_auth_token() {
 
 #[tokio::test]
 async fn hls_dispatch_replies_404_when_session_id_missing() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let user_id = insert_user(&db).await;
     let device_id = insert_remote_device(&db, user_id).await;
 
@@ -470,7 +431,7 @@ async fn hls_dispatch_replies_404_when_session_id_missing() {
 
 #[tokio::test]
 async fn hls_dispatch_streams_playlist_for_ready_direct_play_session() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let user_id = insert_user(&db).await;
     let device_id = insert_remote_device(&db, user_id).await;
 
@@ -580,7 +541,7 @@ async fn hls_dispatch_streams_playlist_for_ready_direct_play_session() {
 
 #[tokio::test]
 async fn hls_dispatch_rejects_path_traversal() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let user_id = insert_user(&db).await;
     let device_id = insert_remote_device(&db, user_id).await;
 
@@ -672,7 +633,7 @@ async fn hls_dispatch_rejects_path_traversal() {
 /// handler).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hls_dispatch_burst_completes_under_load() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let router = build_router(db);
 
     // Without a configured supervisor, the dispatch arm short-circuits

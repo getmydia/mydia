@@ -36,9 +36,11 @@ use mydia_p2p_core::{
 };
 use mydia_rs_auth::{AccessTokenSigner, MediaTokenCache, MediaTokenSigner};
 use mydia_rs_db::types::UuidText;
-use mydia_rs_db::Db;
+use mydia_rs_entities::users;
 use mydia_rs_graphql::{CurrentUser, GraphqlRequestContext, MydiaSchema};
 use mydia_rs_streaming::Supervisor;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 use uuid::Uuid;
 
 use crate::media_token::{MediaTokenValidator, ValidationError};
@@ -53,7 +55,7 @@ use crate::router::{
 /// request branch needs.
 #[derive(Clone)]
 pub struct MinimalRouter {
-    db: Db,
+    db: DatabaseConnection,
     media_signer: MediaTokenSigner,
     access_signer: AccessTokenSigner,
     rate_limiter: ClaimRateLimiter,
@@ -75,7 +77,7 @@ pub struct MinimalRouter {
 
 impl MinimalRouter {
     pub fn new(
-        db: Db,
+        db: DatabaseConnection,
         media_signer: MediaTokenSigner,
         access_signer: AccessTokenSigner,
         rate_limiter: ClaimRateLimiter,
@@ -475,43 +477,32 @@ async fn send_hls_error(
 /// Load the user row + role for the given user id, mapping into the
 /// GraphQL crate's `CurrentUser` shape. Returns `Ok(None)` when the
 /// row is missing (token verified but user has since been deleted).
-async fn build_current_user(db: &Db, user_id: &str) -> Result<Option<CurrentUser>, sqlx::Error> {
+async fn build_current_user(
+    db: &DatabaseConnection,
+    user_id: &str,
+) -> Result<Option<CurrentUser>, DbErr> {
     let Ok(user_uuid) = Uuid::parse_str(user_id) else {
         return Ok(None);
     };
     let user_uuid_text = UuidText(user_uuid);
+    let backend = db.get_database_backend();
 
     // Select the small slice the GraphQL context needs. The full
     // user-row repo lives in `mydia-rs-graphql::repos::accounts`; we
     // duplicate the lookup here rather than depend on that internal
     // module so the p2p crate stays free of GraphQL repo internals.
-    let row: Option<(Option<String>, String)> = match db {
-        Db::Sqlite(pool) => {
-            // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
-            #[allow(clippy::disallowed_methods)]
-            sqlx::query_as::<_, (Option<String>, String)>(
-                "SELECT username, role FROM users WHERE id = $1",
-            )
-            .bind(user_uuid_text)
-            .fetch_optional(pool)
-            .await?
-        }
-        Db::Postgres(pool) => sqlx::query!(
-            r#"SELECT username, role as "role!" FROM users WHERE id = $1"#,
-            user_uuid_text as UuidText
-        )
-        .fetch_optional(pool)
-        .await?
-        .map(|r| (r.username, r.role)),
-    };
-    let Some((username_opt, role_str)) = row else {
+    let model = users::Entity::find()
+        .filter(Expr::col(users::Column::Id).eq(user_uuid_text.into_simple_expr(backend)))
+        .one(db)
+        .await?;
+    let Some(model) = model else {
         return Ok(None);
     };
     let role =
-        mydia_rs_auth::role::Role::parse(&role_str).unwrap_or(mydia_rs_auth::role::Role::Guest);
+        mydia_rs_auth::role::Role::parse(&model.role).unwrap_or(mydia_rs_auth::role::Role::Guest);
     Ok(Some(CurrentUser {
         id: user_uuid,
-        username: username_opt.unwrap_or_default(),
+        username: model.username.unwrap_or_default(),
         role,
     }))
 }

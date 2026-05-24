@@ -1,124 +1,84 @@
-// Tests: schema setup, raw INSERT seed fixtures, and direct UPDATEs
-// used to simulate revoke / pair-state mutations are tier-(b) by
-// category — runtime form is the only sensible shape for the
-// in-memory `users` / `remote_devices` rows the suite asserts against.
-#![allow(clippy::disallowed_methods)]
-
 //! Integration tests for the p2p crate.
 //!
 //! These tests exercise the pieces a real boot wires together:
 //! pairing happy-path, atomic rate limiter under concurrency, media
 //! token cache hit/miss + synchronous device-revoke, and the
-//! cross-backend JWT compatibility surface, against a temp `SQLite`
-//! pool. They do NOT boot a real `mydia_p2p_core::Host` (that would
-//! require iroh + the network); the routing seam between the Server
-//! event loop and the trait surface is covered by `crates/p2p/src/router.rs`
-//! unit tests.
+//! cross-backend JWT compatibility surface, against an in-memory
+//! `SQLite` SeaORM connection. They do NOT boot a real
+//! `mydia_p2p_core::Host` (that would require iroh + the network); the
+//! routing seam between the Server event loop and the trait surface
+//! is covered by `crates/p2p/src/router.rs` unit tests.
 //!
-//! The `Host` integration itself is covered by smoke tests in U35's
-//! e2e harness once the player + backend are mounted in the same
-//! compose stack.
+//! Schema bootstrap is via `Schema::create_table_from_entity` against
+//! the `mydia-rs-entities` crate. The `users` row is satisfied by a
+//! minimal `ActiveModel` seed; `pairing_claims` and `remote_devices`
+//! are managed through the crate's own write surface
+//! (`insert_claim`, `complete_pairing`).
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{TimeZone, Utc};
 use mydia_rs_auth::{AccessTokenSigner, MediaTokenCache, MediaTokenSigner};
-use mydia_rs_config::{Config, DatabaseConfig, DatabaseType};
-use mydia_rs_db::{connect_from_config, Db};
+use mydia_rs_db::insert_active_model;
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::{pairing_claims, remote_devices, users};
 use mydia_rs_p2p::{
     claim::insert_claim, complete_pairing, ClaimRateLimiter, DeviceAttrs, MediaTokenValidator,
     PairingError, RateLimitOutcome, ValidationError,
 };
-use tempfile::TempDir;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, QueryFilter, Schema,
+    Set,
+};
 use uuid::Uuid;
 
 const SECRET: &str = "shared-test-guardian-secret-for-jwt-parity";
 
-/// Build a fresh on-disk `SQLite` database with the columns the p2p
-/// crate touches. Matches the Phoenix migrations
-/// `20251225060000_create_remote_access_tables.exs` and
-/// `20251225132113_create_pairing_claims.exs`.
-async fn fresh_sqlite() -> (Db, TempDir) {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let path = tmp.path().join("p2p.db");
-    let config = Config {
-        database: DatabaseConfig {
-            db_type: DatabaseType::Sqlite,
-            url: None,
-            path: Some(path.to_string_lossy().into_owned()),
-            pool_size: 2,
-            ..DatabaseConfig::default()
-        },
-        ..Config::default()
-    };
-    let db = connect_from_config(&config).await.expect("connect");
-    create_schema(&db).await;
-    (db, tmp)
-}
-
-async fn create_schema(db: &Db) {
-    let pool = db.as_sqlite().expect("sqlite-only fixture");
-
-    // The `users` table only carries the FK target we need. Production
-    // schema has many more columns; we don't model them here because
-    // none of the p2p flows reach them.
-    sqlx::query(
-        "CREATE TABLE users (
-            id TEXT PRIMARY KEY,
-            inserted_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-    )
-    .execute(pool)
-    .await
-    .unwrap();
-
-    sqlx::query(
-        "CREATE TABLE remote_devices (
-            id TEXT PRIMARY KEY,
-            device_name TEXT NOT NULL,
-            platform TEXT NOT NULL,
-            device_static_public_key BLOB NOT NULL,
-            token_hash TEXT NOT NULL,
-            last_seen_at TEXT,
-            revoked_at TEXT,
-            user_id TEXT NOT NULL,
-            inserted_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-    )
-    .execute(pool)
-    .await
-    .unwrap();
-
-    sqlx::query(
-        "CREATE TABLE pairing_claims (
-            id TEXT PRIMARY KEY,
-            code TEXT NOT NULL UNIQUE,
-            user_id TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            used_at TEXT,
-            device_id TEXT,
-            inserted_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-    )
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-async fn insert_user(db: &Db) -> Uuid {
-    let id = Uuid::new_v4();
-    let now = "2026-05-22T00:00:00Z";
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query("INSERT INTO users (id, inserted_at, updated_at) VALUES ($1, $2, $2)")
-        .bind(id.to_string())
-        .bind(now)
-        .execute(pool)
+/// Build a fresh in-memory `SQLite` SeaORM connection with the tables
+/// the p2p crate touches. The entity schemas are the source of truth:
+/// `Schema::create_table_from_entity` emits DDL matching the column
+/// annotations the entities declare. We turn off FK enforcement
+/// because the `users` entity references a handful of sibling tables
+/// the p2p crate never reads (those tables stay un-created here).
+async fn fresh_sqlite() -> DatabaseConnection {
+    let db = Database::connect("sqlite::memory:")
         .await
-        .unwrap();
+        .expect("connect in-memory sqlite");
+    db.execute_unprepared("PRAGMA foreign_keys = OFF")
+        .await
+        .expect("disable fk");
+    let backend = db.get_database_backend();
+    let schema = Schema::new(backend);
+    for stmt in [
+        schema.create_table_from_entity(users::Entity),
+        schema.create_table_from_entity(remote_devices::Entity),
+        schema.create_table_from_entity(pairing_claims::Entity),
+    ] {
+        db.execute(&stmt).await.expect("create table");
+    }
+    db
+}
+
+async fn insert_user(db: &DatabaseConnection) -> Uuid {
+    let id = Uuid::new_v4();
+    let now = DateTimeSecs::from(Utc::now());
+    let am = users::ActiveModel {
+        id: Set(UuidText(id)),
+        username: Set(Some(format!("user-{id}"))),
+        email: Set(None),
+        password_hash: Set(None),
+        oidc_sub: Set(None),
+        oidc_issuer: Set(None),
+        role: Set("user".to_owned()),
+        display_name: Set(None),
+        avatar_url: Set(None),
+        last_login_at: Set(None),
+        inserted_at: Set(now),
+        updated_at: Set(now),
+    };
+    insert_active_model(am, db).await.expect("insert user");
     id
 }
 
@@ -127,7 +87,7 @@ async fn insert_user(db: &Db) -> Uuid {
 /// against the same signing key.
 #[tokio::test]
 async fn pairing_happy_path() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let media_signer = MediaTokenSigner::new(SECRET, 2);
     let access_signer = AccessTokenSigner::new(SECRET, 2);
 
@@ -170,7 +130,7 @@ async fn pairing_happy_path() {
 /// `claim_used`, demonstrating the atomic consume.
 #[tokio::test]
 async fn second_pairing_with_same_claim_fails_as_used() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let media_signer = MediaTokenSigner::new(SECRET, 2);
     let access_signer = AccessTokenSigner::new(SECRET, 2);
 
@@ -200,25 +160,25 @@ async fn second_pairing_with_same_claim_fails_as_used() {
 /// Expired claim is rejected even on the first attempt.
 #[tokio::test]
 async fn expired_claim_is_rejected() {
-    let (db, _tmp) = fresh_sqlite().await;
-    let pool = db.as_sqlite().unwrap();
+    let db = fresh_sqlite().await;
     let user_id = insert_user(&db).await;
 
-    // Insert a claim that already expired five minutes ago.
+    // Insert a claim that already expired five minutes ago. Uses the
+    // `pairing_claims` ActiveModel + workspace insert helper so the
+    // bind path is identical to production.
     let past = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
-    let past_text = past.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
-        "INSERT INTO pairing_claims \
-         (id, code, user_id, expires_at, used_at, device_id, inserted_at, updated_at) \
-         VALUES ($1, $2, $3, $4, NULL, NULL, $4, $4)",
-    )
-    .bind(Uuid::new_v4().to_string())
-    .bind("EXPI-RED1")
-    .bind(user_id.to_string())
-    .bind(&past_text)
-    .execute(pool)
-    .await
-    .unwrap();
+    let past_secs = DateTimeSecs::from(past);
+    let am = pairing_claims::ActiveModel {
+        id: Set(UuidText(Uuid::new_v4())),
+        code: Set("EXPI-RED1".to_owned()),
+        user_id: Set(UuidText(user_id)),
+        expires_at: Set(past_secs),
+        used_at: Set(None),
+        device_id: Set(None),
+        inserted_at: Set(past_secs),
+        updated_at: Set(past_secs),
+    };
+    insert_active_model(am, &db).await.expect("insert claim");
 
     let media_signer = MediaTokenSigner::new(SECRET, 2);
     let access_signer = AccessTokenSigner::new(SECRET, 2);
@@ -240,7 +200,7 @@ async fn expired_claim_is_rejected() {
 /// cache synchronously.
 #[tokio::test]
 async fn media_token_cache_miss_then_hit_then_evict() {
-    let (db, _tmp) = fresh_sqlite().await;
+    let db = fresh_sqlite().await;
     let media_signer = MediaTokenSigner::new(SECRET, 2);
     let access_signer = AccessTokenSigner::new(SECRET, 2);
 
@@ -275,15 +235,22 @@ async fn media_token_cache_miss_then_hit_then_evict() {
     let _ = validator.validate(&outcome.media_token).await.unwrap();
     assert_eq!(cache.len(), 1);
 
-    // Revoke the device synchronously. The next validate must fail
-    // with DeviceRevoked, not return the cached entry.
-    let pool = db.as_sqlite().unwrap();
-    sqlx::query("UPDATE remote_devices SET revoked_at = $1 WHERE id = $2")
-        .bind("2026-05-23T00:00:00Z")
-        .bind(outcome.device.id.0.to_string())
-        .execute(pool)
+    // Revoke the device synchronously via a targeted UPDATE. Then
+    // evict the cache and confirm the next validate fails with
+    // DeviceRevoked.
+    let backend = db.get_database_backend();
+    let revoked = DateTimeSecs::from(Utc::now());
+    remote_devices::Entity::update_many()
+        .col_expr(
+            remote_devices::Column::RevokedAt,
+            revoked.into_simple_expr(backend),
+        )
+        .filter(
+            Expr::col(remote_devices::Column::Id).eq(outcome.device.id.into_simple_expr(backend)),
+        )
+        .exec(&db)
         .await
-        .unwrap();
+        .expect("revoke device");
     validator.evict_device(&outcome.device.id.0.to_string());
 
     let err = validator
