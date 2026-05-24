@@ -11,11 +11,17 @@ apalis-core = "0.7"
 tower = { version = "0.5", features = ["util"] }
 apalis-sql = { version = "0.7", default-features = false, features = ["sqlite", "postgres", "tokio-comp", "migrate"] }
 apalis-cron = "0.7"
+# `sqlx` is still a direct dep because apalis-sql's `SqliteStorage::new` /
+# `PostgresStorage::new` take `sqlx::SqlitePool` / `sqlx::PgPool`. The jobs
+# crate extracts those pools from the SeaORM `DatabaseConnection` via
+# `get_sqlite_connection_pool` / `get_postgres_connection_pool`; no
+# direct sqlx queries live in this crate post-U12.
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio",
     "sqlite",
     "postgres",
 ] }
+sea-orm.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 cron = "0.15"
 serde.workspace = true
@@ -28,6 +34,7 @@ futures = "0.3"
 async-trait = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 mydia-rs-db = { path = "../db" }
+mydia-rs-entities = { path = "../entities" }
 mydia-rs-pubsub = { path = "../pubsub" }
 mydia-rs-library = { path = "../library" }
 mydia-rs-metadata = { path = "../metadata" }

@@ -1,35 +1,40 @@
-//! Runtime-dispatched apalis storage backed by the active [`Db`] pool.
+//! Runtime-dispatched apalis storage backed by the active
+//! [`DatabaseConnection`].
 //!
 //! apalis 0.7's storage types ([`apalis_sql::sqlite::SqliteStorage`] and
-//! [`apalis_sql::postgres::PostgresStorage`]) are concrete per backend.
-//! The crate-level [`Db`] enum already runtime-selects sqlx pools;
-//! [`JobStorage`] mirrors that shape so callers can enqueue and operate
-//! a queue without branching on the backend at every call site.
+//! [`apalis_sql::postgres::PostgresStorage`]) are concrete per backend
+//! and own their own tables (`Jobs` on `SQLite`, `apalis.jobs` on
+//! Postgres). The jobs crate extracts the underlying `sqlx` pool from
+//! the SeaORM `DatabaseConnection` via
+//! [`DatabaseConnection::get_sqlite_connection_pool`] /
+//! [`DatabaseConnection::get_postgres_connection_pool`] and hands it
+//! to the per-backend storage constructor. [`JobStorage`] mirrors the
+//! shape so callers can enqueue and operate a queue without branching
+//! on the backend at every call site.
 //!
-//! ## Scope at U15
+//! ## Post-U12 cutover
 //!
-//! Only the enqueue + setup surface lands here. Worker dispatch — the
-//! `monitor.run()` / `WorkerBuilder` integration — comes with the
-//! actual worker structs in U17, when there's something to dispatch.
-//! The shape of the per-backend `WorkerBuilder` differs enough that
-//! abstracting it without a concrete worker is premature; U17 wires
-//! each worker type once and uses `match db { ... }` at the wiring
-//! site.
+//! The workspace's data API is `SeaORM`-only — the `Db` enum is gone.
+//! The apalis tables remain managed by apalis itself (its `setup()`
+//! runs the apalis-sql migration set); they're independent of any
+//! `oban_jobs` row in the Phoenix-owned schema. Workers reach for
+//! application tables through the SeaORM entities + `insert_active_model`
+//! / `update_active_model` helpers, never raw sqlx.
 
 use std::marker::PhantomData;
 
 use apalis_sql::postgres::PostgresStorage;
 use apalis_sql::sqlite::SqliteStorage;
-use mydia_rs_db::Db;
+use sea_orm::{DatabaseConnection, DbBackend};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 
 /// Runtime-dispatched apalis storage for a single job type `T`.
 ///
 /// Construct via [`Self::from_db`]; the variant is selected by the
-/// underlying pool, not by the caller. Callers that need to inspect
-/// the backend (e.g., to apply a Postgres `LISTEN` subscription for
-/// faster pickup) pattern-match on the enum.
+/// underlying SeaORM backend, not by the caller. Callers that need to
+/// inspect the backend (e.g., to apply a Postgres `LISTEN`
+/// subscription for faster pickup) pattern-match on the enum.
 #[derive(Debug, Clone)]
 pub enum JobStorage<T> {
     Sqlite(SqliteStorage<T>),
@@ -54,12 +59,12 @@ pub enum JobsError {
     #[error("required record not found: {0}")]
     NotFound(String),
 
-    /// Sqlx error surfaced from a worker's DB call (not from the
+    /// SeaORM error surfaced from a worker's DB call (not from the
     /// apalis storage). Distinct from `Storage` so callers can tell
     /// whether the job machinery or the worker's business logic
     /// broke.
     #[error("worker database error: {0}")]
-    Db(#[from] sqlx::Error),
+    Db(#[from] sea_orm::DbErr),
 
     /// Per-worker business error wrapped as a string. Workers wrap
     /// `IntegrationError`, `IndexerError`, etc. into this when they
@@ -79,15 +84,25 @@ impl<T> JobStorage<T>
 where
     T: Serialize + DeserializeOwned + Send + Sync + Unpin + 'static,
 {
-    /// Build a storage for `T` against the active [`Db`] backend. The
-    /// returned storage is ready to `push()` jobs; the backing table
-    /// (`Jobs` on `SQLite`, `apalis.jobs` on Postgres) must already exist
-    /// — call [`setup`] once at app boot before any workers attach.
+    /// Build a storage for `T` against the active SeaORM connection.
+    /// The returned storage is ready to `push()` jobs; the backing
+    /// table (`Jobs` on `SQLite`, `apalis.jobs` on Postgres) must
+    /// already exist — call [`setup`] once at app boot before any
+    /// workers attach.
     #[must_use]
-    pub fn from_db(db: &Db) -> Self {
-        match db {
-            Db::Sqlite(pool) => Self::Sqlite(SqliteStorage::new(pool.clone())),
-            Db::Postgres(pool) => Self::Postgres(PostgresStorage::new(pool.clone())),
+    pub fn from_db(db: &DatabaseConnection) -> Self {
+        match db.get_database_backend() {
+            DbBackend::Sqlite => {
+                let pool = db.get_sqlite_connection_pool().clone();
+                Self::Sqlite(SqliteStorage::new(pool))
+            }
+            DbBackend::Postgres => {
+                let pool = db.get_postgres_connection_pool().clone();
+                Self::Postgres(PostgresStorage::new(pool))
+            }
+            other => {
+                panic!("unsupported backend for mydia-rs job storage: {other:?}");
+            }
         }
     }
 
@@ -125,27 +140,32 @@ where
     }
 }
 
-/// Run the apalis-sql migration set against the active [`Db`]. Idempotent
-/// — re-running creates no rows. Must be called once at boot, before
-/// the first push.
+/// Run the apalis-sql migration set against the active connection.
+/// Idempotent — re-running creates no rows. Must be called once at
+/// boot, before the first push.
 ///
 /// Phoenix's Oban tables (`oban_jobs`, `oban_peers`, `oban_producers`)
 /// are independent — apalis writes to its own tables (`Jobs` on
-/// `SQLite`, `apalis.jobs` on Postgres) and never touches Oban's. The two
-/// can coexist in the same DB during the parallel window. See the
+/// `SQLite`, `apalis.jobs` on Postgres) and never touches Oban's. The
+/// two can coexist in the same DB during the parallel window. See the
 /// "apalis vs Oban table coexistence" section in the rewrite plan for
 /// the full reasoning.
-pub async fn setup(db: &Db) -> Result<(), JobsError> {
-    // The type parameter is irrelevant for the migration; we use `()`
-    // to satisfy the generics on the bare `setup` constructor.
-    match db {
-        Db::Sqlite(pool) => {
+pub async fn setup(db: &DatabaseConnection) -> Result<(), JobsError> {
+    // The type parameter is irrelevant for the migration; we use the
+    // bare `setup` constructor on each storage type.
+    match db.get_database_backend() {
+        DbBackend::Sqlite => {
+            let pool = db.get_sqlite_connection_pool();
             SqliteStorage::setup(pool).await.map_err(JobsError::Setup)?;
         }
-        Db::Postgres(pool) => {
+        DbBackend::Postgres => {
+            let pool = db.get_postgres_connection_pool();
             PostgresStorage::setup(pool)
                 .await
                 .map_err(JobsError::Setup)?;
+        }
+        other => {
+            panic!("unsupported backend for mydia-rs job storage: {other:?}");
         }
     }
     Ok(())
@@ -156,8 +176,8 @@ pub async fn setup(db: &Db) -> Result<(), JobsError> {
 /// useful as a future seam — U17's supervision-tree code builds a
 /// vector of trait objects to iterate over for shutdown / metrics.
 ///
-/// Currently unimplemented at U15 (no workers exist yet); kept as a
-/// shape declaration so U17 can fill it in without renaming.
+/// Currently unimplemented (no workers exist yet); kept as a shape
+/// declaration so the supervisor can fill it in without renaming.
 #[allow(dead_code)]
 struct _Erased<T> {
     _phantom: PhantomData<T>,
@@ -166,22 +186,18 @@ struct _Erased<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mydia_rs_db::Db;
+    use sea_orm::Database;
     use serde::Deserialize;
-    use sqlx::sqlite::SqlitePoolOptions;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     struct TestJob {
         payload: String,
     }
 
-    async fn sqlite_db() -> Db {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
+    async fn sqlite_db() -> DatabaseConnection {
+        Database::connect("sqlite::memory:")
             .await
-            .expect("open in-memory sqlite");
-        Db::Sqlite(pool)
+            .expect("open in-memory sqlite")
     }
 
     #[tokio::test]

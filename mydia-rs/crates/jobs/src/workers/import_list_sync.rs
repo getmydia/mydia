@@ -4,10 +4,22 @@
 //! custom URL, ...), compares them against existing items, and upserts
 //! new items as pending. If `auto_add` is enabled, enqueues a
 //! follow-up `ImportListAutoAdd` job.
+//!
+//! Post-U12 cutover: SeaORM-native against `import_lists`. Caller
+//! identifies the row by its UUID string; the lookup binds through
+//! `UuidText::into_simple_expr` for engine-aware comparison.
+
+use std::str::FromStr;
 
 use apalis::prelude::Data;
-use mydia_rs_pubsub::{topics, Event};
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use mydia_rs_db::types::UuidText;
+use mydia_rs_entities::import_lists;
+use mydia_rs_pubsub::{topics, Event};
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -51,7 +63,7 @@ pub async fn import_list_sync(
     // adds an `ImportListItem` repository.
     tracing::warn!(
         import_list_id = %args.import_list_id,
-        list_type = %import_list.list_type,
+        list_type = %import_list.r#type,
         "import_list_sync upsert delegated to Phoenix during cutover window"
     );
 
@@ -74,38 +86,22 @@ pub async fn import_list_sync(
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-struct ImportListRow {
-    #[allow(dead_code)]
-    id: String,
-    enabled: bool,
-    auto_add: bool,
-    list_type: String,
-}
-
 async fn get_import_list(
-    db: &mydia_rs_db::Db,
+    db: &DatabaseConnection,
     id: &str,
-) -> Result<Option<ImportListRow>, JobsError> {
-    use mydia_rs_db::Db;
-    let row: Option<(String, bool, bool, String)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT id, enabled, auto_add, type FROM import_lists WHERE id = ?")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as("SELECT id, enabled, auto_add, type FROM import_lists WHERE id = $1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
+) -> Result<Option<import_lists::Model>, JobsError> {
+    // Phoenix `binary_id`s are UUID strings; a non-UUID input cannot
+    // match a real row, treat as "not found".
+    let Ok(uuid) = Uuid::from_str(id) else {
+        return Ok(None);
     };
-    Ok(row.map(|(id, enabled, auto_add, list_type)| ImportListRow {
-        id,
-        enabled,
-        auto_add,
-        list_type,
-    }))
+    let backend = db.get_database_backend();
+    let row = import_lists::Entity::find()
+        .filter(
+            Expr::col(import_lists::Column::Id)
+                .eq(UuidText(uuid).into_simple_expr(backend)),
+        )
+        .one(db)
+        .await?;
+    Ok(row)
 }

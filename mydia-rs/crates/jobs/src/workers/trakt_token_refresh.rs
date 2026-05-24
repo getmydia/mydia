@@ -6,11 +6,20 @@
 //! The actual refresh call goes through
 //! [`mydia_rs_integrations::trakt::TraktClient`], which proxies the call
 //! through the metadata-relay (relay holds the `client_id`/`client_secret`).
+//!
+//! Post-U12 cutover: SeaORM-native against `user_integrations`. The
+//! token-expiry cutoff binds through `DateTimeSecs::into_simple_expr`
+//! so the Postgres `$N::timestamptz` cast is applied automatically.
 
 use apalis::prelude::Data;
 use chrono::{Duration, Utc};
-use mydia_rs_integrations::trakt::TraktClient;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::user_integrations;
+use mydia_rs_integrations::trakt::TraktClient;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -46,7 +55,7 @@ pub async fn trakt_token_refresh(
     );
 
     // The client base URL is resolved from `MetadataRelayConfig` at boot
-    // — for U17 we accept that it lives behind an env var checked by
+    // — accept that it lives behind an env var checked by
     // `TraktClient::new`. Workers that hit external services should
     // never embed the relay URL.
     let base_url = std::env::var("MYDIA_METADATA_RELAY_URL")
@@ -81,67 +90,42 @@ pub async fn trakt_token_refresh(
 /// the full struct lives in [`mydia_rs_integrations::user_integration`]
 /// but the refresh path only needs three fields.
 struct TraktIntegrationRow {
-    id: String,
-    user_id: String,
+    id: UuidText,
+    user_id: UuidText,
     refresh_token: Option<String>,
 }
 
 async fn list_integrations_needing_refresh(
-    db: &mydia_rs_db::Db,
+    db: &DatabaseConnection,
     window_days: i64,
 ) -> Result<Vec<TraktIntegrationRow>, JobsError> {
-    use mydia_rs_db::Db;
-    let cutoff = Utc::now() + Duration::days(window_days);
-    match db {
-        Db::Sqlite(pool) => {
-            let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
-                "SELECT id, user_id, refresh_token FROM user_integrations \
-                 WHERE provider = 'trakt' \
-                   AND enabled = 1 \
-                   AND token_expires_at IS NOT NULL \
-                   AND token_expires_at < ?",
-            )
-            .bind(cutoff.to_rfc3339())
-            .fetch_all(pool)
-            .await?;
-            Ok(rows
-                .into_iter()
-                .map(|(id, user_id, refresh_token)| TraktIntegrationRow {
-                    id,
-                    user_id,
-                    refresh_token,
-                })
-                .collect())
-        }
-        Db::Postgres(pool) => {
-            let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
-                "SELECT id, user_id, refresh_token FROM user_integrations \
-                 WHERE provider = 'trakt' \
-                   AND enabled = true \
-                   AND token_expires_at IS NOT NULL \
-                   AND token_expires_at < $1",
-            )
-            .bind(cutoff)
-            .fetch_all(pool)
-            .await?;
-            Ok(rows
-                .into_iter()
-                .map(|(id, user_id, refresh_token)| TraktIntegrationRow {
-                    id,
-                    user_id,
-                    refresh_token,
-                })
-                .collect())
-        }
-    }
+    let backend = db.get_database_backend();
+    let cutoff = DateTimeSecs::from(Utc::now() + Duration::days(window_days));
+    let rows = user_integrations::Entity::find()
+        .filter(user_integrations::Column::Provider.eq("trakt"))
+        .filter(user_integrations::Column::Enabled.eq(true))
+        .filter(user_integrations::Column::TokenExpiresAt.is_not_null())
+        .filter(
+            Expr::col(user_integrations::Column::TokenExpiresAt)
+                .lt(cutoff.into_simple_expr(backend)),
+        )
+        .all(db)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| TraktIntegrationRow {
+            id: row.id,
+            user_id: row.user_id,
+            refresh_token: row.refresh_token,
+        })
+        .collect())
 }
 
 async fn refresh_one(
     client: &TraktClient,
-    db: &mydia_rs_db::Db,
+    db: &DatabaseConnection,
     integration: &TraktIntegrationRow,
 ) -> Result<(), JobsError> {
-    use mydia_rs_db::Db;
     let refresh_token = integration
         .refresh_token
         .as_deref()
@@ -154,35 +138,27 @@ async fn refresh_one(
     // Persist the new tokens. Trakt returns expiry in seconds-from-now;
     // default to a 90-day expiry when the API doesn't supply one (the
     // long Trakt default).
-    let expires_in = new_token.expires_in.unwrap_or(7_776_000).max(0);
-    let expires_at = Utc::now() + Duration::seconds(expires_in);
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "UPDATE user_integrations \
-                 SET access_token = ?, refresh_token = ?, token_expires_at = ? \
-                 WHERE id = ?",
-            )
-            .bind(&new_token.access_token)
-            .bind(&new_token.refresh_token)
-            .bind(expires_at.to_rfc3339())
-            .bind(&integration.id)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "UPDATE user_integrations \
-                 SET access_token = $1, refresh_token = $2, token_expires_at = $3 \
-                 WHERE id = $4",
-            )
-            .bind(&new_token.access_token)
-            .bind(&new_token.refresh_token)
-            .bind(expires_at)
-            .bind(&integration.id)
-            .execute(pool)
-            .await?;
-        }
-    }
+    let expires_in = std::cmp::Ord::max(new_token.expires_in.unwrap_or(7_776_000), 0);
+    let expires_at = DateTimeSecs::from(Utc::now() + Duration::seconds(expires_in));
+    let backend = db.get_database_backend();
+    user_integrations::Entity::update_many()
+        .col_expr(
+            user_integrations::Column::AccessToken,
+            Expr::value(new_token.access_token.clone()),
+        )
+        .col_expr(
+            user_integrations::Column::RefreshToken,
+            Expr::value(new_token.refresh_token.clone()),
+        )
+        .col_expr(
+            user_integrations::Column::TokenExpiresAt,
+            expires_at.into_simple_expr(backend),
+        )
+        .filter(
+            Expr::col(user_integrations::Column::Id)
+                .eq(integration.id.clone().into_simple_expr(backend)),
+        )
+        .exec(db)
+        .await?;
     Ok(())
 }

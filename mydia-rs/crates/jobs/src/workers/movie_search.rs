@@ -11,9 +11,20 @@
 //! [`mydia_rs_indexers::release_ranker`] and
 //! [`mydia_rs_indexers::search_scorer`]; the indexer registry lives on
 //! the [`AppContext`].
+//!
+//! Post-U12 cutover: SeaORM-native against `media_items` /
+//! `media_files`. The LEFT JOIN-with-NULL idiom maps to
+//! `find().left_join(media_files).filter(Column::Id.is_null())`.
 
 use apalis::prelude::Data;
+use sea_orm::{
+    ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
+};
 use serde::{Deserialize, Serialize};
+
+use mydia_rs_db::types::UuidText;
+use mydia_rs_db::DatabaseConnection;
+use mydia_rs_entities::{media_files, media_items};
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -103,27 +114,21 @@ async fn search_specific(
     Ok(())
 }
 
-async fn monitored_movies_without_files(db: &mydia_rs_db::Db) -> Result<Vec<String>, JobsError> {
-    use mydia_rs_db::Db;
-    let rows: Vec<(String,)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT m.id FROM media_items m \
-             LEFT JOIN media_files f ON f.media_item_id = m.id \
-             WHERE m.type = 'movie' AND m.monitored = 1 AND f.id IS NULL",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT m.id FROM media_items m \
-             LEFT JOIN media_files f ON f.media_item_id = m.id \
-             WHERE m.type = 'movie' AND m.monitored = true AND f.id IS NULL",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-    };
+async fn monitored_movies_without_files(
+    db: &DatabaseConnection,
+) -> Result<Vec<UuidText>, JobsError> {
+    // SELECT m.id FROM media_items m
+    //   LEFT JOIN media_files f ON f.media_item_id = m.id
+    //  WHERE m.type = 'movie' AND m.monitored = true AND f.id IS NULL
+    let rows = media_items::Entity::find()
+        .select_only()
+        .column(media_items::Column::Id)
+        .join(JoinType::LeftJoin, media_items::Relation::MediaFiles.def())
+        .filter(media_items::Column::Type.eq("movie"))
+        .filter(media_items::Column::Monitored.eq(true))
+        .filter(media_files::Column::Id.is_null())
+        .into_tuple::<(UuidText,)>()
+        .all(db)
+        .await?;
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }

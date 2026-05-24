@@ -4,9 +4,17 @@
 //! - Deletes `import_sessions` rows past `expires_at`.
 //! - Deletes `import_sessions` rows marked `completed` older than
 //!   7 days.
+//!
+//! Post-U12 cutover: SeaORM-native against `import_sessions`.
 
 use apalis::prelude::Data;
+use chrono::{Duration, Utc};
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+
+use mydia_rs_db::types::DateTimeSecs;
+use mydia_rs_entities::import_sessions;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -46,51 +54,32 @@ pub async fn import_session_cleanup(
     Ok(())
 }
 
-async fn delete_expired_sessions(db: &mydia_rs_db::Db) -> Result<u64, JobsError> {
-    use mydia_rs_db::Db;
-    let now = chrono::Utc::now();
-    let rows_affected = match db {
-        Db::Sqlite(pool) => sqlx::query(
-            "DELETE FROM import_sessions WHERE expires_at IS NOT NULL AND expires_at < ?",
+async fn delete_expired_sessions(db: &DatabaseConnection) -> Result<u64, JobsError> {
+    let backend = db.get_database_backend();
+    let now = DateTimeSecs::from(Utc::now());
+    let res = import_sessions::Entity::delete_many()
+        .filter(import_sessions::Column::ExpiresAt.is_not_null())
+        .filter(
+            Expr::col(import_sessions::Column::ExpiresAt).lt(now.into_simple_expr(backend)),
         )
-        .bind(now.to_rfc3339())
-        .execute(pool)
-        .await?
-        .rows_affected(),
-        Db::Postgres(pool) => sqlx::query(
-            "DELETE FROM import_sessions WHERE expires_at IS NOT NULL AND expires_at < $1",
-        )
-        .bind(now)
-        .execute(pool)
-        .await?
-        .rows_affected(),
-    };
-    Ok(rows_affected)
+        .exec(db)
+        .await?;
+    Ok(res.rows_affected)
 }
 
 async fn delete_old_completed_sessions(
-    db: &mydia_rs_db::Db,
+    db: &DatabaseConnection,
     retention_days: i64,
 ) -> Result<u64, JobsError> {
-    use mydia_rs_db::Db;
-    let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days);
-    let rows_affected = match db {
-        Db::Sqlite(pool) => sqlx::query(
-            "DELETE FROM import_sessions \
-             WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < ?",
+    let backend = db.get_database_backend();
+    let cutoff = DateTimeSecs::from(Utc::now() - Duration::days(retention_days));
+    let res = import_sessions::Entity::delete_many()
+        .filter(import_sessions::Column::Status.eq("completed"))
+        .filter(import_sessions::Column::CompletedAt.is_not_null())
+        .filter(
+            Expr::col(import_sessions::Column::CompletedAt).lt(cutoff.into_simple_expr(backend)),
         )
-        .bind(cutoff.to_rfc3339())
-        .execute(pool)
-        .await?
-        .rows_affected(),
-        Db::Postgres(pool) => sqlx::query(
-            "DELETE FROM import_sessions \
-             WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < $1",
-        )
-        .bind(cutoff)
-        .execute(pool)
-        .await?
-        .rows_affected(),
-    };
-    Ok(rows_affected)
+        .exec(db)
+        .await?;
+    Ok(res.rows_affected)
 }

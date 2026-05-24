@@ -3,9 +3,16 @@
 //! Sweep for `media_items` rows whose `type = 'tv_show'` and
 //! `tvdb_id IS NULL`. For each, query the metadata-relay TVDB endpoint
 //! by `title + year` and persist the resolved id.
+//!
+//! Post-U12 cutover: SeaORM-native against `media_items`.
 
 use apalis::prelude::Data;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::{Deserialize, Serialize};
+
+use mydia_rs_db::types::UuidText;
+use mydia_rs_db::DatabaseConnection;
+use mydia_rs_entities::media_items;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -42,8 +49,8 @@ pub async fn tvdb_id_backfill(
     // The actual search-and-resolve call uses
     // `mydia_rs_metadata::Relay::search(...)` with the title + year.
     // Per-row resolution + UPDATE writes live behind the U5 model
-    // layer; for U17 we record the work plan and rate-limit-friendly
-    // batching shape so the parallel window observes apalis-shaped
+    // layer; the work plan + rate-limit-friendly batching shape is
+    // captured here so the parallel window observes apalis-shaped
     // ticks.
     for chunk in rows.chunks(batch_size) {
         tracing::debug!(chunk_size = chunk.len(), "processing TVDB backfill chunk");
@@ -59,28 +66,18 @@ pub async fn tvdb_id_backfill(
 }
 
 async fn fetch_tv_shows_missing_tvdb(
-    db: &mydia_rs_db::Db,
-) -> Result<Vec<(String, String, Option<i32>)>, JobsError> {
-    use mydia_rs_db::Db;
-    let rows: Vec<(String, String, Option<i32>)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT id, title, year FROM media_items \
-             WHERE type = 'tv_show' AND tvdb_id IS NULL \
-             ORDER BY title ASC",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT id, title, year FROM media_items \
-             WHERE type = 'tv_show' AND tvdb_id IS NULL \
-             ORDER BY title ASC",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-    };
+    db: &DatabaseConnection,
+) -> Result<Vec<(UuidText, String, Option<i32>)>, JobsError> {
+    let rows = media_items::Entity::find()
+        .select_only()
+        .column(media_items::Column::Id)
+        .column(media_items::Column::Title)
+        .column(media_items::Column::Year)
+        .filter(media_items::Column::Type.eq("tv_show"))
+        .filter(media_items::Column::TvdbId.is_null())
+        .order_by_asc(media_items::Column::Title)
+        .into_tuple::<(UuidText, String, Option<i32>)>()
+        .all(db)
+        .await?;
     Ok(rows)
 }

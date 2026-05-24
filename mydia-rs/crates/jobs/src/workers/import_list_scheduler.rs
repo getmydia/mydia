@@ -1,11 +1,25 @@
 //! Port of `lib/mydia/jobs/import_list_scheduler.ex`.
 //!
 //! Cron worker (every 15 minutes) that checks every enabled import
-//! list against its `last_sync_at + sync_interval_hours`. For each list
+//! list against its `last_synced_at + sync_interval`. For each list
 //! due for sync, enqueues an `ImportListSync` job.
+//!
+//! Post-U12 cutover: SeaORM-native against `import_lists`. The
+//! dialect-specific date arithmetic that the prior raw-SQL path used
+//! (`datetime(last_sync_at, '+N hours')` on SQLite vs.
+//! `last_sync_at + INTERVAL '1 hour'` on Postgres) collapses to a
+//! single Rust-side filter: fetch enabled rows, decide due-ness in
+//! Rust. Volume is low (handful of import lists per instance) so the
+//! engine-side filter buys nothing here.
 
 use apalis::prelude::Data;
+use chrono::{Duration, Utc};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
+
+use mydia_rs_db::types::UuidText;
+use mydia_rs_db::DatabaseConnection;
+use mydia_rs_entities::import_lists;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -26,10 +40,10 @@ pub async fn import_list_scheduler(
     tracing::info!(count = due.len(), "import lists due for sync");
 
     // The actual enqueue uses `JobStorage<ImportListSyncArgs>` via the
-    // supervisor-injected handle. For U17 we log the work plan; the
-    // supervision tree in `crate::supervisor` will register a per-type
-    // storage that this worker can push into once the storage handles
-    // are surfaced as `Data` extractors.
+    // supervisor-injected handle. For the cutover window we log the
+    // work plan; the supervision tree in `crate::supervisor` will
+    // register a per-type storage that this worker can push into once
+    // the storage handles are surfaced as `Data` extractors.
     for id in &due {
         tracing::debug!(import_list_id = %id, "would enqueue ImportListSync");
     }
@@ -40,36 +54,29 @@ pub async fn import_list_scheduler(
     Ok(())
 }
 
-async fn list_sync_due_lists(db: &mydia_rs_db::Db) -> Result<Vec<String>, JobsError> {
-    use mydia_rs_db::Db;
-    let now = chrono::Utc::now();
-    // Rough port: enabled lists whose `last_sync_at + sync_interval_hours`
-    // is in the past, plus lists never synced.
-    let rows: Vec<(String,)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT id FROM import_lists \
-             WHERE enabled = 1 \
-             AND (last_sync_at IS NULL OR \
-                  datetime(last_sync_at, '+' || sync_interval_hours || ' hours') < ?) \
-             ORDER BY inserted_at ASC",
-            )
-            .bind(now.to_rfc3339())
-            .fetch_all(pool)
-            .await?
+async fn list_sync_due_lists(db: &DatabaseConnection) -> Result<Vec<UuidText>, JobsError> {
+    let now = Utc::now();
+    // Fetch every enabled list and decide due-ness in Rust. Phoenix
+    // stores `sync_interval` as hours (i32); a list is due when
+    // `last_synced_at + sync_interval hours < now`, OR when it was
+    // never synced.
+    let rows = import_lists::Entity::find()
+        .filter(import_lists::Column::Enabled.eq(true))
+        .order_by_asc(import_lists::Column::InsertedAt)
+        .all(db)
+        .await?;
+    let mut due = Vec::new();
+    for row in rows {
+        let is_due = match row.last_synced_at {
+            None => true,
+            Some(last) => {
+                let next = last.0 + Duration::hours(i64::from(row.sync_interval));
+                next < now
+            }
+        };
+        if is_due {
+            due.push(row.id);
         }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT id FROM import_lists \
-             WHERE enabled = true \
-             AND (last_sync_at IS NULL OR \
-                  last_sync_at + (sync_interval_hours * INTERVAL '1 hour') < $1) \
-             ORDER BY inserted_at ASC",
-            )
-            .bind(now)
-            .fetch_all(pool)
-            .await?
-        }
-    };
-    Ok(rows.into_iter().map(|(id,)| id).collect())
+    }
+    Ok(due)
 }

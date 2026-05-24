@@ -5,9 +5,21 @@
 //! `expires_at = NULL` (blocked forever) are left alone.
 //!
 //! Scheduled daily via the cron entry registered in `cron::schedule()`.
+//!
+//! Post-U12 cutover: SeaORM-native against the `release_blacklist`
+//! entity. The dialect-specific `expires_at < ?` predicate routes
+//! through the `DateTimeSecs` wrapper via
+//! `into_simple_expr(backend)`, so the Postgres `$N::timestamptz`
+//! cast is applied automatically.
 
 use apalis::prelude::Data;
+use chrono::Utc;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+
+use mydia_rs_db::types::DateTimeSecs;
+use mydia_rs_entities::release_blacklist;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -38,29 +50,18 @@ pub async fn blacklist_cleanup(
     Ok(())
 }
 
-/// Delete every `download_release_blacklist` row whose `expires_at`
-/// is strictly less than `now`. Mirrors
+/// Delete every `release_blacklist` row whose `expires_at` is
+/// strictly less than `now`. Mirrors
 /// `Mydia.Downloads.Blacklists.cleanup_expired/0`.
-async fn sweep_expired(db: &mydia_rs_db::Db) -> Result<u64, JobsError> {
-    use mydia_rs_db::Db;
-    let now = chrono::Utc::now();
-    let rows_affected = match db {
-        Db::Sqlite(pool) => sqlx::query(
-            "DELETE FROM download_release_blacklist \
-                 WHERE expires_at IS NOT NULL AND expires_at < ?",
+async fn sweep_expired(db: &DatabaseConnection) -> Result<u64, JobsError> {
+    let backend = db.get_database_backend();
+    let now = DateTimeSecs::from(Utc::now());
+    let res = release_blacklist::Entity::delete_many()
+        .filter(release_blacklist::Column::ExpiresAt.is_not_null())
+        .filter(
+            Expr::col(release_blacklist::Column::ExpiresAt).lt(now.into_simple_expr(backend)),
         )
-        .bind(now.to_rfc3339())
-        .execute(pool)
-        .await?
-        .rows_affected(),
-        Db::Postgres(pool) => sqlx::query(
-            "DELETE FROM download_release_blacklist \
-                 WHERE expires_at IS NOT NULL AND expires_at < $1",
-        )
-        .bind(now)
-        .execute(pool)
-        .await?
-        .rows_affected(),
-    };
-    Ok(rows_affected)
+        .exec(db)
+        .await?;
+    Ok(res.rows_affected)
 }

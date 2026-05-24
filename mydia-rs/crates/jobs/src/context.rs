@@ -13,7 +13,8 @@
 
 use std::sync::Arc;
 
-use mydia_rs_db::Db;
+use sea_orm::DatabaseConnection;
+
 use mydia_rs_downloads::ClientRegistry as DownloadClientRegistry;
 use mydia_rs_indexers::IndexerRegistry;
 use mydia_rs_metadata::ProviderRegistry;
@@ -28,8 +29,8 @@ use mydia_rs_pubsub::Pubsub;
 /// fresh from the DB).
 #[derive(Clone)]
 pub struct AppContext {
-    /// Runtime-dispatched sqlx pool (`SQLite` or Postgres).
-    pub db: Db,
+    /// SeaORM database connection.
+    pub db: DatabaseConnection,
 
     /// In-process pubsub bus for progress / status broadcasts. The
     /// graphql subscription resolvers subscribe to the same bus, so
@@ -57,7 +58,7 @@ impl std::fmt::Debug for AppContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Most fields don't impl Debug usefully — print the shape.
         f.debug_struct("AppContext")
-            .field("db", &self.db)
+            .field("db_backend", &self.db.get_database_backend())
             .field("pubsub_attached", &true)
             .field("metadata_provider_count", &self.metadata.len())
             .field("indexers_attached", &true)
@@ -71,7 +72,7 @@ impl AppContext {
     /// once at boot and clones the result into every worker.
     #[must_use]
     pub fn new(
-        db: Db,
+        db: DatabaseConnection,
         pubsub: Pubsub,
         metadata: Arc<ProviderRegistry>,
         indexers: Arc<IndexerRegistry>,

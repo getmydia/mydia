@@ -9,15 +9,27 @@
 //! `LibraryPath` row, optionally applies the random startup delay (for
 //! the cron-driven "scan all" mode), and dispatches to one of three
 //! sub-flows.
+//!
+//! Post-U12 cutover: SeaORM-native against the `library_paths`
+//! entity. The `last_scan_status` / `last_scan_at` / `last_scan_error`
+//! writes route through `update_many().col_expr(...)` for surgical
+//! column updates while bumping `updated_at`.
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::str::FromStr;
+use std::time::Duration as StdDuration;
 
 use apalis::prelude::Data;
 use chrono::Utc;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::library_paths;
 use mydia_rs_library::{ScanOptions, Scanner};
 use mydia_rs_pubsub::{topics, Event};
-use serde::{Deserialize, Serialize};
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -27,7 +39,7 @@ use crate::storage::JobsError;
 /// run. Phoenix uses 30 minutes; the spread reduces metadata-relay
 /// load across self-hosted instances all ticking at the top of the
 /// hour.
-pub const MAX_STARTUP_DELAY: Duration = Duration::from_secs(30 * 60);
+pub const MAX_STARTUP_DELAY: StdDuration = StdDuration::from_secs(30 * 60);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LibraryScannerArgs {
@@ -91,7 +103,7 @@ pub async fn library_scanner(
     result
 }
 
-fn random_startup_delay() -> Duration {
+fn random_startup_delay() -> StdDuration {
     use std::time::SystemTime;
     // Simple stdlib-only random — converting nanoseconds-since-epoch
     // mod max_delay is good enough for staggered startups. Avoids a
@@ -104,76 +116,44 @@ fn random_startup_delay() -> Duration {
     );
     let max_secs = MAX_STARTUP_DELAY.as_secs();
     let seconds = nanos.checked_rem(max_secs).unwrap_or(0);
-    Duration::from_secs(seconds)
+    StdDuration::from_secs(seconds)
 }
 
-/// Row shape we select from `library_paths`. Narrow on purpose.
-#[derive(Debug, Clone)]
-struct LibraryPathRow {
-    id: String,
-    path: String,
-    kind: String,
-    monitored: bool,
+async fn list_library_paths(
+    db: &DatabaseConnection,
+) -> Result<Vec<library_paths::Model>, JobsError> {
+    let rows = library_paths::Entity::find()
+        .order_by_asc(library_paths::Column::InsertedAt)
+        .all(db)
+        .await?;
+    Ok(rows)
 }
 
-async fn list_library_paths(db: &mydia_rs_db::Db) -> Result<Vec<LibraryPathRow>, JobsError> {
-    use mydia_rs_db::Db;
-    let rows: Vec<(String, String, String, bool)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT id, path, type, monitored FROM library_paths ORDER BY inserted_at",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT id, path, type, monitored FROM library_paths ORDER BY inserted_at",
-            )
-            .fetch_all(pool)
-            .await?
-        }
+async fn get_library_path(
+    db: &DatabaseConnection,
+    id: &str,
+) -> Result<library_paths::Model, JobsError> {
+    let Ok(uuid) = Uuid::from_str(id) else {
+        return Err(JobsError::NotFound(format!("library_path {id}")));
     };
-    Ok(rows
-        .into_iter()
-        .map(|(id, path, kind, monitored)| LibraryPathRow {
-            id,
-            path,
-            kind,
-            monitored,
-        })
-        .collect())
-}
-
-async fn get_library_path(db: &mydia_rs_db::Db, id: &str) -> Result<LibraryPathRow, JobsError> {
-    use mydia_rs_db::Db;
-    let row: Option<(String, String, String, bool)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT id, path, type, monitored FROM library_paths WHERE id = ?")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as("SELECT id, path, type, monitored FROM library_paths WHERE id = $1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
-    };
-    row.map(|(id, path, kind, monitored)| LibraryPathRow {
-        id,
-        path,
-        kind,
-        monitored,
-    })
-    .ok_or_else(|| JobsError::NotFound(format!("library_path {id}")))
+    let backend = db.get_database_backend();
+    let row = library_paths::Entity::find()
+        .filter(
+            Expr::col(library_paths::Column::Id)
+                .eq(UuidText(uuid).into_simple_expr(backend)),
+        )
+        .one(db)
+        .await?;
+    row.ok_or_else(|| JobsError::NotFound(format!("library_path {id}")))
 }
 
 async fn scan_all_libraries(ctx: &AppContext) -> Result<(), JobsError> {
     tracing::info!("starting scan of all monitored library paths");
     let paths = list_library_paths(&ctx.db).await?;
-    let monitored: Vec<_> = paths.into_iter().filter(|p| p.monitored).collect();
+    let monitored: Vec<_> = paths
+        .into_iter()
+        .filter(|p| p.monitored.unwrap_or(false))
+        .collect();
     tracing::info!(count = monitored.len(), "found monitored library paths");
 
     let mut successful = 0u32;
@@ -196,7 +176,7 @@ async fn scan_libraries_by_type(ctx: &AppContext, library_type: &str) -> Result<
     let paths = list_library_paths(&ctx.db).await?;
     let of_type: Vec<_> = paths
         .into_iter()
-        .filter(|p| p.kind == library_type)
+        .filter(|p| p.r#type == library_type)
         .collect();
     tracing::info!(library_type, count = of_type.len(), "matched paths");
 
@@ -223,12 +203,12 @@ async fn scan_single_library(ctx: &AppContext, id: &str) -> Result<(), JobsError
 
 async fn scan_library_path(
     ctx: &AppContext,
-    library_path: &LibraryPathRow,
+    library_path: &library_paths::Model,
 ) -> Result<(), JobsError> {
     tracing::debug!(
         id = %library_path.id,
         path = %library_path.path,
-        kind = %library_path.kind,
+        kind = %library_path.r#type,
         "scanning library path"
     );
 
@@ -238,8 +218,8 @@ async fn scan_library_path(
         topics::LIBRARY_SCANNER,
         Event::from_json(serde_json::json!({
             "event": "scan_started",
-            "library_path_id": library_path.id,
-            "type": library_path.kind,
+            "library_path_id": library_path.id.0.to_string(),
+            "type": library_path.r#type,
         })),
     );
 
@@ -279,7 +259,7 @@ async fn scan_library_path(
     // diff against `media_files` (new / modified / deleted),
     // enqueues per-file `MediaImport`, `FileAnalysis`, and
     // `ThumbnailGeneration` jobs, and writes back NFO sidecars. Those
-    // writes need the U5 model layer to land; for U17 the orchestrator
+    // writes need the U5 model layer to land; for now the orchestrator
     // shape and progress reporting are wire-compatible with Phoenix
     // while the actual diffing remains delegated to Phoenix during the
     // parallel window.
@@ -289,112 +269,92 @@ async fn scan_library_path(
 
 async fn handle_scan_error(
     ctx: &AppContext,
-    library_path_id: &str,
+    library_path_id: &UuidText,
     error: &str,
 ) -> Result<(), JobsError> {
-    tracing::error!(library_path_id, %error, "library scan error");
+    tracing::error!(library_path_id = %library_path_id, %error, "library scan error");
     mark_scan_failed(&ctx.db, library_path_id, error).await.ok();
     ctx.pubsub.publish(
         topics::LIBRARY_SCANNER,
         Event::from_json(serde_json::json!({
             "event": "scan_failed",
-            "library_path_id": library_path_id,
+            "library_path_id": library_path_id.0.to_string(),
             "error": error,
         })),
     );
     Err(JobsError::WorkerError(error.to_owned()))
 }
 
-async fn mark_scan_in_progress(db: &mydia_rs_db::Db, id: &str) -> Result<(), JobsError> {
-    use mydia_rs_db::Db;
-    let now = Utc::now();
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "UPDATE library_paths \
-                 SET last_scan_status = 'in_progress', last_scan_error = NULL, updated_at = ? \
-                 WHERE id = ?",
-            )
-            .bind(now.to_rfc3339())
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "UPDATE library_paths \
-                 SET last_scan_status = 'in_progress', last_scan_error = NULL, updated_at = $1 \
-                 WHERE id = $2",
-            )
-            .bind(now)
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-    }
+async fn mark_scan_in_progress(
+    db: &DatabaseConnection,
+    id: &UuidText,
+) -> Result<(), JobsError> {
+    let backend = db.get_database_backend();
+    let now = DateTimeSecs::from(Utc::now());
+    library_paths::Entity::update_many()
+        .col_expr(
+            library_paths::Column::LastScanStatus,
+            Expr::value("in_progress"),
+        )
+        .col_expr(
+            library_paths::Column::LastScanError,
+            Expr::value(Option::<String>::None),
+        )
+        .col_expr(
+            library_paths::Column::UpdatedAt,
+            now.into_simple_expr(backend),
+        )
+        .filter(Expr::col(library_paths::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .exec(db)
+        .await?;
     Ok(())
 }
 
-async fn mark_scan_completed(db: &mydia_rs_db::Db, id: &str) -> Result<(), JobsError> {
-    use mydia_rs_db::Db;
-    let now = Utc::now();
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "UPDATE library_paths \
-                 SET last_scan_status = 'completed', last_scan_at = ?, last_scan_error = NULL, updated_at = ? \
-                 WHERE id = ?",
-            )
-            .bind(now.to_rfc3339())
-            .bind(now.to_rfc3339())
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "UPDATE library_paths \
-                 SET last_scan_status = 'completed', last_scan_at = $1, last_scan_error = NULL, updated_at = $2 \
-                 WHERE id = $3",
-            )
-            .bind(now)
-            .bind(now)
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-    }
+async fn mark_scan_completed(
+    db: &DatabaseConnection,
+    id: &UuidText,
+) -> Result<(), JobsError> {
+    let backend = db.get_database_backend();
+    let now = DateTimeSecs::from(Utc::now());
+    library_paths::Entity::update_many()
+        .col_expr(
+            library_paths::Column::LastScanStatus,
+            Expr::value("completed"),
+        )
+        .col_expr(
+            library_paths::Column::LastScanAt,
+            now.into_simple_expr(backend),
+        )
+        .col_expr(
+            library_paths::Column::LastScanError,
+            Expr::value(Option::<String>::None),
+        )
+        .col_expr(
+            library_paths::Column::UpdatedAt,
+            now.into_simple_expr(backend),
+        )
+        .filter(Expr::col(library_paths::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .exec(db)
+        .await?;
     Ok(())
 }
 
-async fn mark_scan_failed(db: &mydia_rs_db::Db, id: &str, error: &str) -> Result<(), JobsError> {
-    use mydia_rs_db::Db;
-    let now = Utc::now();
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "UPDATE library_paths \
-                 SET last_scan_status = 'failed', last_scan_error = ?, updated_at = ? \
-                 WHERE id = ?",
-            )
-            .bind(error)
-            .bind(now.to_rfc3339())
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "UPDATE library_paths \
-                 SET last_scan_status = 'failed', last_scan_error = $1, updated_at = $2 \
-                 WHERE id = $3",
-            )
-            .bind(error)
-            .bind(now)
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-    }
+async fn mark_scan_failed(
+    db: &DatabaseConnection,
+    id: &UuidText,
+    error: &str,
+) -> Result<(), JobsError> {
+    let backend = db.get_database_backend();
+    let now = DateTimeSecs::from(Utc::now());
+    library_paths::Entity::update_many()
+        .col_expr(library_paths::Column::LastScanStatus, Expr::value("failed"))
+        .col_expr(library_paths::Column::LastScanError, Expr::value(error))
+        .col_expr(
+            library_paths::Column::UpdatedAt,
+            now.into_simple_expr(backend),
+        )
+        .filter(Expr::col(library_paths::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .exec(db)
+        .await?;
     Ok(())
 }

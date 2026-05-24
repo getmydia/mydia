@@ -1,15 +1,24 @@
 //! End-to-end checks for the apalis storage layer.
 //!
-//! These cover the U15 plan's "happy path" and "edge case" scenarios
-//! that the unit tests inside `storage.rs` don't reach because they
-//! exercise a real (in-memory) `SQLite` pool through the migration set.
+//! These cover the plan's "happy path" and "edge case" scenarios that
+//! the unit tests inside `storage.rs` don't reach because they
+//! exercise a real (in-memory) `SQLite` pool through the migration
+//! set.
+//!
+//! Post-U12 cutover: the fixture builds a SeaORM
+//! `DatabaseConnection` against `sqlite::memory:` and the apalis
+//! adapter extracts the underlying sqlx pool for the apalis migration
+//! set + storage. The cross-check against the native
+//! `apalis_sql::sqlite::SqliteStorage` proves the two paths share a
+//! single sqlx pool — apalis is unaware that SeaORM is sitting on
+//! top.
 
 use apalis::prelude::Storage;
 use apalis_sql::sqlite::SqliteStorage;
-use mydia_rs_db::Db;
-use mydia_rs_jobs::{setup, JobStorage, Queue};
+use sea_orm::{Database, DatabaseConnection};
 use serde::{Deserialize, Serialize};
-use sqlx::sqlite::SqlitePoolOptions;
+
+use mydia_rs_jobs::{setup, JobStorage, Queue};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SmokeJob {
@@ -17,13 +26,10 @@ struct SmokeJob {
     n: u32,
 }
 
-async fn sqlite_db() -> Db {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
+async fn sqlite_db() -> DatabaseConnection {
+    Database::connect("sqlite::memory:")
         .await
-        .expect("open in-memory sqlite");
-    Db::Sqlite(pool)
+        .expect("open in-memory sqlite")
 }
 
 #[tokio::test]
@@ -49,7 +55,7 @@ async fn enqueued_jobs_are_visible_to_native_storage() {
     let task_id = storage.push(job).await.expect("push");
 
     // Cross-check the apalis-sql native handle sees the same row.
-    let pool = db.as_sqlite().expect("sqlite pool").clone();
+    let pool = db.get_sqlite_connection_pool().clone();
     let mut native: SqliteStorage<SmokeJob> = SqliteStorage::new(pool);
     let len = native.len().await.expect("native len");
     assert_eq!(len, 1, "native storage observes pushed job");

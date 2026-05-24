@@ -7,7 +7,7 @@
 //! - [`cron`] — the fourteen cron entries mirroring
 //!   `config/config.exs:270-300`.
 //! - [`storage`] — runtime-dispatched apalis storage backed by the
-//!   active [`mydia_rs_db::Db`] pool.
+//!   sqlx pool extracted from the active SeaORM `DatabaseConnection`.
 //!
 //! ## Scope at U17 (next)
 //!

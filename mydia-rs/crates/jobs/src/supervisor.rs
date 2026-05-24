@@ -42,7 +42,8 @@
 //! [`Supervisor::run_with_signal`] are still available.
 
 use apalis::prelude::Monitor;
-use mydia_rs_db::Db;
+use sea_orm::DatabaseConnection;
+
 use mydia_rs_pubsub::Pubsub;
 
 use crate::broadcaster;
@@ -74,10 +75,10 @@ impl Supervisor {
         Self { monitor }
     }
 
-    /// Set up the apalis-sql migration set against the active [`Db`].
-    /// Convenience wrapper — equivalent to calling [`storage::setup`]
-    /// directly.
-    pub async fn setup(db: &Db) -> Result<(), JobsError> {
+    /// Set up the apalis-sql migration set against the active
+    /// SeaORM connection. Convenience wrapper — equivalent to calling
+    /// [`storage::setup`] directly.
+    pub async fn setup(db: &DatabaseConnection) -> Result<(), JobsError> {
         storage::setup(db).await
     }
 

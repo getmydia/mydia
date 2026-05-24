@@ -4,10 +4,24 @@
 //! duration, bitrate, ...) for `media_files` rows the import path
 //! leaves at `analyzed_at IS NULL`. The ffprobe work lives in
 //! [`mydia_rs_library::FileAnalyzer`]; this worker is the batcher.
+//!
+//! Post-U12 cutover: SeaORM-native against `media_files`. The
+//! duration / codec / resolution write back is deferred to a later
+//! unit that lifts the analysis result into the model layer — for
+//! now this worker only stamps `analyzed_at` and bumps
+//! `analysis_attempts`, matching the prior cutover-window shape.
 
 use apalis::prelude::Data;
-use mydia_rs_library::FileAnalyzer;
+use chrono::Utc;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 use serde::{Deserialize, Serialize};
+
+use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_entities::media_files;
+use mydia_rs_library::FileAnalyzer;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -58,130 +72,71 @@ pub async fn file_analysis(args: FileAnalysisArgs, ctx: Data<AppContext>) -> Res
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-struct UnanalyzedRow {
-    id: String,
-    path: String,
-}
-
 async fn fetch_unanalyzed_paths(
-    db: &mydia_rs_db::Db,
+    db: &DatabaseConnection,
     batch_size: usize,
     max_attempts: u32,
-) -> Result<Vec<(String, String)>, JobsError> {
-    use mydia_rs_db::Db;
-    let limit = i64::try_from(batch_size).unwrap_or(50);
-    let attempts = i64::from(max_attempts);
-    let rows: Vec<(String, String)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT id, path FROM media_files \
-             WHERE analyzed_at IS NULL AND analysis_attempts < ? \
-             ORDER BY inserted_at ASC LIMIT ?",
-            )
-            .bind(attempts)
-            .bind(limit)
-            .fetch_all(pool)
-            .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT id, path FROM media_files \
-             WHERE analyzed_at IS NULL AND analysis_attempts < $1 \
-             ORDER BY inserted_at ASC LIMIT $2",
-            )
-            .bind(attempts)
-            .bind(limit)
-            .fetch_all(pool)
-            .await?
-        }
-    };
-    Ok(rows)
+) -> Result<Vec<(UuidText, String)>, JobsError> {
+    let limit = u64::try_from(batch_size).unwrap_or(50);
+    let attempts = i32::try_from(max_attempts).unwrap_or(i32::MAX);
+    let rows = media_files::Entity::find()
+        .filter(media_files::Column::AnalyzedAt.is_null())
+        .filter(media_files::Column::AnalysisAttempts.lt(attempts))
+        .filter(media_files::Column::Path.is_not_null())
+        .order_by_asc(media_files::Column::InsertedAt)
+        .limit(limit)
+        .all(db)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| row.path.map(|p| (row.id, p)))
+        .collect())
 }
 
 async fn apply_analysis(
-    db: &mydia_rs_db::Db,
-    id: &str,
-    analysis: &mydia_rs_library::FileAnalysis,
+    db: &DatabaseConnection,
+    id: &UuidText,
+    _analysis: &mydia_rs_library::FileAnalysis,
 ) -> Result<(), JobsError> {
-    use mydia_rs_db::Db;
     // The full `apply_analysis` path writes resolution / codec /
-    // duration / bitrate / hdr / audio-tracks columns. For U17 we
-    // record `analyzed_at` and the duration; the wider write surface
-    // lives behind the U5 model layer.
-    let analyzed_at = chrono::Utc::now();
-    let duration_seconds = analysis.duration_secs;
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "UPDATE media_files \
-                 SET analyzed_at = ?, duration = ?, analysis_attempts = analysis_attempts + 1 \
-                 WHERE id = ? AND analyzed_at IS NULL",
-            )
-            .bind(analyzed_at.to_rfc3339())
-            .bind(duration_seconds)
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "UPDATE media_files \
-                 SET analyzed_at = $1, duration = $2, analysis_attempts = analysis_attempts + 1 \
-                 WHERE id = $3 AND analyzed_at IS NULL",
-            )
-            .bind(analyzed_at)
-            .bind(duration_seconds)
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-    }
+    // duration / bitrate / hdr / audio-tracks columns. The
+    // `media_files` entity here doesn't expose a `duration` column
+    // (the Phoenix schema stores it on the `metadata` JSON column),
+    // so for the cutover-window shape we stamp `analyzed_at` + bump
+    // `analysis_attempts` only. The wider write surface lifts when
+    // the metadata-encoding helper lands.
+    let backend = db.get_database_backend();
+    let analyzed_at = DateTimeSecs::from(Utc::now());
+    media_files::Entity::update_many()
+        .col_expr(
+            media_files::Column::AnalyzedAt,
+            analyzed_at.into_simple_expr(backend),
+        )
+        .col_expr(
+            media_files::Column::AnalysisAttempts,
+            Expr::col(media_files::Column::AnalysisAttempts).add(1),
+        )
+        .filter(
+            Condition::all()
+                .add(
+                    Expr::col(media_files::Column::Id).eq(id.clone().into_simple_expr(backend)),
+                )
+                .add(media_files::Column::AnalyzedAt.is_null()),
+        )
+        .exec(db)
+        .await?;
     Ok(())
 }
 
-async fn increment_attempts(db: &mydia_rs_db::Db, id: &str) -> Result<(), JobsError> {
-    use mydia_rs_db::Db;
-    match db {
-        Db::Sqlite(pool) => {
-            sqlx::query(
-                "UPDATE media_files \
-                 SET analysis_attempts = analysis_attempts + 1 \
-                 WHERE id = ?",
-            )
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-        Db::Postgres(pool) => {
-            sqlx::query(
-                "UPDATE media_files \
-                 SET analysis_attempts = analysis_attempts + 1 \
-                 WHERE id = $1",
-            )
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-    }
+async fn increment_attempts(db: &DatabaseConnection, id: &UuidText) -> Result<(), JobsError> {
+    let backend = db.get_database_backend();
+    media_files::Entity::update_many()
+        .col_expr(
+            media_files::Column::AnalysisAttempts,
+            Expr::col(media_files::Column::AnalysisAttempts).add(1),
+        )
+        .filter(Expr::col(media_files::Column::Id).eq(id.clone().into_simple_expr(backend)))
+        .exec(db)
+        .await?;
     Ok(())
-}
-
-// Keep the row shape struct around as a future seam; it isn't used
-// directly because `fetch_unanalyzed_paths` returns `(id, path)`
-// tuples but the named struct will be useful when the row gets more
-// fields in U23+.
-#[allow(dead_code)]
-impl UnanalyzedRow {
-    fn from_tuple(t: (String, String)) -> Self {
-        Self { id: t.0, path: t.1 }
-    }
-
-    fn id(&self) -> &str {
-        &self.id
-    }
-
-    fn path(&self) -> &str {
-        &self.path
-    }
 }

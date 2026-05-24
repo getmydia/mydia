@@ -7,11 +7,25 @@
 //! - All (`refresh_all: true`) — Cron sweep. Random 0-30 min startup
 //!   delay to spread load across self-hosted instances hitting the
 //!   relay.
+//!
+//! Post-U12 cutover: SeaORM-native against `media_items`. The
+//! filter on `monitored = true` is portable across engines (SeaORM
+//! emits dialect-correct boolean literals); UUID lookups bind through
+//! `UuidText::into_simple_expr`.
 
+use std::str::FromStr;
 use std::time::Duration;
 
 use apalis::prelude::Data;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{
+    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use mydia_rs_db::types::UuidText;
+use mydia_rs_entities::media_items;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
@@ -83,9 +97,9 @@ async fn refresh_single(
     let _row = fetch_media_item(&ctx.db, media_item_id).await?;
     // The full flow uses `ProviderRegistry::iter_in_priority()` to
     // pick the first provider that handles the row's `type` + external
-    // ids, then writes the result back via the U5 model layer. For U17
-    // the row lookup + provider selection are wired here; the write
-    // half waits on the U5 schema port.
+    // ids, then writes the result back via the U5 model layer. The
+    // row lookup + provider selection are wired here; the write half
+    // waits on the U5 schema port.
     tracing::warn!(
         media_item_id,
         "metadata_refresh write half delegated to Phoenix during cutover window"
@@ -105,41 +119,32 @@ async fn refresh_all_monitored(ctx: &AppContext) -> Result<(), JobsError> {
     Ok(())
 }
 
-async fn fetch_media_item(db: &mydia_rs_db::Db, id: &str) -> Result<String, JobsError> {
-    use mydia_rs_db::Db;
-    let row: Option<(String,)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT id FROM media_items WHERE id = ?")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as("SELECT id FROM media_items WHERE id = $1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
+async fn fetch_media_item(db: &DatabaseConnection, id: &str) -> Result<UuidText, JobsError> {
+    let Ok(uuid) = Uuid::from_str(id) else {
+        return Err(JobsError::NotFound(format!("media_item {id}")));
     };
+    let backend = db.get_database_backend();
+    let row = media_items::Entity::find()
+        .select_only()
+        .column(media_items::Column::Id)
+        .filter(
+            Expr::col(media_items::Column::Id).eq(UuidText(uuid).into_simple_expr(backend)),
+        )
+        .into_tuple::<(UuidText,)>()
+        .one(db)
+        .await?;
     row.map(|(id,)| id)
         .ok_or_else(|| JobsError::NotFound(format!("media_item {id}")))
 }
 
-async fn list_monitored_ids(db: &mydia_rs_db::Db) -> Result<Vec<String>, JobsError> {
-    use mydia_rs_db::Db;
-    let rows: Vec<(String,)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT id FROM media_items WHERE monitored = 1 ORDER BY updated_at ASC")
-                .fetch_all(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT id FROM media_items WHERE monitored = true ORDER BY updated_at ASC",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-    };
+async fn list_monitored_ids(db: &DatabaseConnection) -> Result<Vec<UuidText>, JobsError> {
+    let rows = media_items::Entity::find()
+        .select_only()
+        .column(media_items::Column::Id)
+        .filter(media_items::Column::Monitored.eq(true))
+        .order_by_asc(media_items::Column::UpdatedAt)
+        .into_tuple::<(UuidText,)>()
+        .all(db)
+        .await?;
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
