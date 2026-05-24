@@ -16,6 +16,10 @@ sqlx = { version = "0.8", default-features = false, features = [
     "uuid",
     "json",
 ] }
+# SeaORM joins the workspace alongside sqlx for the cross-engine data layer
+# unification sweep (Phase A U1). The two coexist during Phase B; sqlx
+# eventually drops once every call site converts.
+sea-orm.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 serde.workspace = true
@@ -27,6 +31,7 @@ mydia-rs-config = { path = "../config" }
 
 [dev-dependencies]
 tempfile = "3"
+sea-orm-cli.workspace = true
 
 [lints]
 workspace = true

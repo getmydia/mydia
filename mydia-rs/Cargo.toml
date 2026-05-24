@@ -39,6 +39,25 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 thiserror = "2"
 anyhow = "1"
+# SeaORM 2.0 is the cross-engine data API for the workspace. Adopted via
+# `docs/plans/2026-05-24-001-refactor-seaorm-data-layer-unification-plan.md`
+# (Phase A U1). MSRV 1.85, satisfied by stable rustc 1.94+. Default features
+# disabled because SeaORM's default set pulls many backends; we opt in to
+# the cross-engine combo the workspace actually serves.
+#
+# Pinned to a 2.0 RC since 2.0 hasn't shipped a stable release as of
+# 2026-05-24. Bump conservatively; pre-release point bumps may carry
+# breaking changes inside the 2.x line until stabilization.
+sea-orm = { version = "=2.0.0-rc.38", default-features = false, features = [
+    "sqlx-sqlite",
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+    "with-uuid",
+    "with-chrono",
+    "with-json",
+] }
+sea-orm-cli = { version = "=2.0.0-rc.38", default-features = false }
 
 # Workspace-wide lint configuration. Default clippy presets stay at the
 # `warn` level (CI escalates to error via `-D warnings`); `pedantic` is

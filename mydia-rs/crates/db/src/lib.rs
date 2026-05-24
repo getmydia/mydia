@@ -30,3 +30,10 @@ pub use dialect::Dialect;
 pub use error::DbError;
 pub use pool::{connect_from_config, Db};
 pub use schema_check::{schema_check, SchemaCheckOutcome, MAX_KNOWN_MIGRATION};
+
+// SeaORM connection type re-export. Phase B conversion units thread this
+// type through repo / service function signatures so consumer crates don't
+// need to take a direct sea-orm dependency until they convert. The Db
+// enum's `seaorm()` bridge (U4) returns a value of this type wrapping the
+// existing sqlx pool.
+pub use sea_orm::DatabaseConnection;
