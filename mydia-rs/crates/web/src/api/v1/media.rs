@@ -50,83 +50,57 @@ async fn match_handler(Path(_id): Path<String>) -> Response {
     not_implemented("U33.media.match")
 }
 
-/// Minimal projection of the `media_items` row — only the columns the
-/// REST `show` response needs. The full struct lives in
-/// `mydia_rs_models::MediaItem`; using a narrower row keeps this
-/// handler independent of the model crate's `FromRow` impl, which
-/// requires the join shape and includes columns the JSON response
-/// doesn't expose.
-#[derive(sqlx::FromRow)]
-struct MediaItemRow {
-    id: String,
-    title: Option<String>,
-    r#type: Option<String>,
-    year: Option<i64>,
-    tmdb_id: Option<String>,
-    tvdb_id: Option<String>,
-    overview: Option<String>,
-    poster_url: Option<String>,
-    backdrop_url: Option<String>,
-    runtime: Option<i64>,
-    status: Option<String>,
-    monitored: Option<bool>,
-    library_path_id: Option<String>,
-    quality_profile_id: Option<String>,
-    inserted_at: Option<String>,
-    updated_at: Option<String>,
-}
-
 async fn lookup_media_item(
     state: &WebState,
     id: &str,
-) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    use mydia_rs_db::Db;
+) -> Result<Option<mydia_rs_entities::media_items::Model>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::media_items;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    let sql = "
-        SELECT
-          id, title, type, year, tmdb_id, tvdb_id, overview, poster_url,
-          backdrop_url, runtime, status, monitored, library_path_id,
-          quality_profile_id, inserted_at, updated_at
-        FROM media_items
-        WHERE id = $1
-        LIMIT 1
-    ";
-
-    match &state.db {
-        Db::Sqlite(pool) => {
-            let sql_sqlite = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaItemRow>(&sql_sqlite)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaItemRow>(sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(None);
+    };
+    let backend = state.db.get_database_backend();
+    media_items::Entity::find()
+        .filter(Expr::col(media_items::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(&state.db)
+        .await
 }
 
-fn serialize_media_item(row: &MediaItemRow) -> serde_json::Value {
+fn serialize_media_item(row: &mydia_rs_entities::media_items::Model) -> serde_json::Value {
+    // The entity has columns: id, type, title, year, tmdb_id, imdb_id,
+    // metadata (json text), monitored, quality_profile_id, category,
+    // category_override, monitoring_preset, tvdb_id, inserted_at, updated_at.
+    // The pre-conversion query referenced `overview`, `poster_url`,
+    // `backdrop_url`, `runtime`, `status`, `library_path_id` — none of
+    // which exist as columns on the entity. The full metadata lives in
+    // `metadata`, a JSON-encoded blob. Extract these from the metadata
+    // JSON when present so the REST shape stays compatible.
+    let meta: serde_json::Value = row
+        .metadata
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(serde_json::Value::Null);
+    let extract = |key: &str| meta.get(key).cloned().unwrap_or(serde_json::Value::Null);
     json!({
-        "id": row.id,
-        "title": row.title,
-        "type": row.r#type,
+        "id": row.id.to_string(),
+        "title": row.title.clone(),
+        "type": row.r#type.clone(),
         "year": row.year,
         "tmdb_id": row.tmdb_id,
         "tvdb_id": row.tvdb_id,
-        "overview": row.overview,
-        "poster_url": row.poster_url,
-        "backdrop_url": row.backdrop_url,
-        "runtime": row.runtime,
-        "status": row.status,
+        "overview": extract("overview"),
+        "poster_url": extract("poster_url"),
+        "backdrop_url": extract("backdrop_url"),
+        "runtime": extract("runtime"),
+        "status": extract("status"),
         "monitored": row.monitored.unwrap_or(false),
-        "library_path_id": row.library_path_id,
-        "quality_profile_id": row.quality_profile_id,
-        "inserted_at": row.inserted_at,
-        "updated_at": row.updated_at,
+        "library_path_id": serde_json::Value::Null,
+        "quality_profile_id": row.quality_profile_id.as_ref().map(ToString::to_string),
+        "inserted_at": row.inserted_at.0.to_rfc3339(),
+        "updated_at": row.updated_at.0.to_rfc3339(),
         "episodes": serde_json::Value::Null,
     })
 }

@@ -79,7 +79,11 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_entities::{media_requests, users};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -88,18 +92,9 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type RequestTuple = (
-        String,
-        String,
-        String,
-        Option<i32>,
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     pub(super) async fn list(status: String) -> Result<Vec<RequestRow>, ServerFnError> {
         let _ = require_admin_user_id().await?;
@@ -108,122 +103,87 @@ mod server {
         // `status=""` or `status="all"` mean "no filter"; any other
         // value binds into the WHERE clause.
         let trimmed = status.trim();
-        let status_filter = if trimmed.is_empty() || trimmed == "all" {
-            None
-        } else {
-            Some(trimmed)
-        };
+        let mut q = media_requests::Entity::find()
+            .order_by_desc(media_requests::Column::InsertedAt);
+        if !(trimmed.is_empty() || trimmed == "all") {
+            q = q.filter(media_requests::Column::Status.eq(trimmed.to_owned()));
+        }
+        let rows = q
+            .all(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query media_requests: {err}")))?;
 
-        const SELECT_COLS: &str = "r.id, r.media_type, r.title, r.year, r.status, u.username, \
-             r.requester_notes, r.admin_notes, r.rejection_reason, r.inserted_at";
-
-        let rows: Vec<RequestTuple> = match (&state.db, status_filter) {
-            (Db::Sqlite(pool), None) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} \
-                 FROM media_requests r \
-                 LEFT JOIN users u ON u.id = r.requester_id \
-                 ORDER BY r.inserted_at DESC"
-            ))
-            .fetch_all(pool)
+        // Pull requester usernames in one round-trip.
+        let user_ids: Vec<UuidText> = rows.iter().map(|r| r.requester_id).collect();
+        let user_rows = users::Entity::find()
+            .filter(users::Column::Id.is_in(user_ids))
+            .all(&state.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query media_requests: {err}")))?,
-            (Db::Sqlite(pool), Some(filter)) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} \
-                 FROM media_requests r \
-                 LEFT JOIN users u ON u.id = r.requester_id \
-                 WHERE r.status = ? \
-                 ORDER BY r.inserted_at DESC"
-            ))
-            .bind(filter)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query media_requests: {err}")))?,
-            (Db::Postgres(pool), None) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} \
-                 FROM media_requests r \
-                 LEFT JOIN users u ON u.id = r.requester_id \
-                 ORDER BY r.inserted_at DESC"
-            ))
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query media_requests: {err}")))?,
-            (Db::Postgres(pool), Some(filter)) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} \
-                 FROM media_requests r \
-                 LEFT JOIN users u ON u.id = r.requester_id \
-                 WHERE r.status = $1 \
-                 ORDER BY r.inserted_at DESC"
-            ))
-            .bind(filter)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query media_requests: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("query users: {err}")))?;
+        let user_map: std::collections::HashMap<UuidText, Option<String>> = user_rows
+            .into_iter()
+            .map(|u| (u.id, u.username))
+            .collect();
 
         Ok(rows
             .into_iter()
-            .map(
-                |(
-                    id,
-                    media_type,
-                    title,
-                    year,
-                    status,
-                    requester_label,
-                    requester_notes,
-                    admin_notes,
-                    rejection_reason,
-                    inserted_at,
-                )| RequestRow {
-                    id,
-                    media_type,
-                    title,
-                    year,
-                    status,
-                    requester_label,
-                    requester_notes,
-                    admin_notes,
-                    rejection_reason,
-                    inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-                },
-            )
+            .map(|r| RequestRow {
+                id: r.id.to_string(),
+                media_type: r.media_type,
+                title: r.title,
+                year: r.year,
+                status: r.status,
+                requester_label: user_map.get(&r.requester_id).cloned().flatten(),
+                requester_notes: r.requester_notes,
+                admin_notes: r.admin_notes,
+                rejection_reason: r.rejection_reason,
+                inserted_at: Some(r.inserted_at.0.to_rfc3339()),
+            })
             .collect())
     }
 
     pub(super) async fn approve(payload: ApproveRequest) -> Result<RequestRow, ServerFnError> {
         let acting = require_admin_user_id().await?;
         let state = state().await?;
-        let now = chrono::Utc::now();
-
-        let affected = match &state.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE media_requests SET status = 'approved', admin_notes = ?, \
-                        approved_by_id = ?, approved_at = ?, updated_at = ? WHERE id = ?",
-            )
-            .bind(payload.admin_notes.as_deref())
-            .bind(&acting)
-            .bind(now.to_rfc3339())
-            .bind(now.to_rfc3339())
-            .bind(&payload.id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("approve request: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE media_requests SET status = 'approved', admin_notes = $1, \
-                        approved_by_id = $2, approved_at = $3, updated_at = $4 WHERE id = $5",
-            )
-            .bind(payload.admin_notes.as_deref())
-            .bind(&acting)
-            .bind(now)
-            .bind(now)
-            .bind(&payload.id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("approve request: {err}")))?
-            .rows_affected(),
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let Some(wrapper) = parse_uuid(&payload.id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid media_request id {}",
+                payload.id
+            )));
         };
-        if affected == 0 {
+        let Some(acting_uuid) = parse_uuid(&acting) else {
+            return Err(ServerFnError::new(format!(
+                "invalid acting user id {acting}"
+            )));
+        };
+        let backend = state.db.get_database_backend();
+        let res = media_requests::Entity::update_many()
+            .col_expr(
+                media_requests::Column::Status,
+                Expr::value("approved".to_owned()),
+            )
+            .col_expr(
+                media_requests::Column::AdminNotes,
+                Expr::value(payload.admin_notes.clone()),
+            )
+            .col_expr(
+                media_requests::Column::ApprovedById,
+                acting_uuid.into_simple_expr(backend),
+            )
+            .col_expr(
+                media_requests::Column::ApprovedAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(
+                media_requests::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(media_requests::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("approve request: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no media_request with id {}",
                 payload.id
@@ -240,41 +200,49 @@ mod server {
             ));
         }
         let state = state().await?;
-        let now = chrono::Utc::now();
-
-        let affected = match &state.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE media_requests SET status = 'rejected', rejection_reason = ?, \
-                        admin_notes = ?, approved_by_id = ?, rejected_at = ?, updated_at = ? \
-                 WHERE id = ?",
-            )
-            .bind(&payload.rejection_reason)
-            .bind(payload.admin_notes.as_deref())
-            .bind(&acting)
-            .bind(now.to_rfc3339())
-            .bind(now.to_rfc3339())
-            .bind(&payload.id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("reject request: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE media_requests SET status = 'rejected', rejection_reason = $1, \
-                        admin_notes = $2, approved_by_id = $3, rejected_at = $4, updated_at = $5 \
-                 WHERE id = $6",
-            )
-            .bind(&payload.rejection_reason)
-            .bind(payload.admin_notes.as_deref())
-            .bind(&acting)
-            .bind(now)
-            .bind(now)
-            .bind(&payload.id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("reject request: {err}")))?
-            .rows_affected(),
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let Some(wrapper) = parse_uuid(&payload.id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid media_request id {}",
+                payload.id
+            )));
         };
-        if affected == 0 {
+        let Some(acting_uuid) = parse_uuid(&acting) else {
+            return Err(ServerFnError::new(format!(
+                "invalid acting user id {acting}"
+            )));
+        };
+        let backend = state.db.get_database_backend();
+        let res = media_requests::Entity::update_many()
+            .col_expr(
+                media_requests::Column::Status,
+                Expr::value("rejected".to_owned()),
+            )
+            .col_expr(
+                media_requests::Column::RejectionReason,
+                Expr::value(payload.rejection_reason.clone()),
+            )
+            .col_expr(
+                media_requests::Column::AdminNotes,
+                Expr::value(payload.admin_notes.clone()),
+            )
+            .col_expr(
+                media_requests::Column::ApprovedById,
+                acting_uuid.into_simple_expr(backend),
+            )
+            .col_expr(
+                media_requests::Column::RejectedAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(
+                media_requests::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(media_requests::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("reject request: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no media_request with id {}",
                 payload.id

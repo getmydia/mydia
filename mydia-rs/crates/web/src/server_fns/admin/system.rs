@@ -49,7 +49,12 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::{
+        download_client_configs, indexer_configs, library_paths, transcode_jobs,
+    };
+    use sea_orm::entity::prelude::*;
+    use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
     use std::sync::OnceLock;
     use std::time::Instant;
 
@@ -81,20 +86,38 @@ mod server {
             }
         };
 
-        let library_paths_count = count_rows(&st.db, "library_paths").await.unwrap_or(0);
-        let download_clients_count = count_rows(&st.db, "download_clients").await.unwrap_or(0);
-        let indexers_count = count_rows(&st.db, "indexers").await.unwrap_or(0);
-        let active_transcodes = count_rows_where(
-            &st.db,
-            "transcode_jobs",
-            "status IN ('pending', 'transcoding', 'playing')",
-        )
-        .await
-        .unwrap_or(0);
-        let active_streaming_sessions =
-            count_rows_where(&st.db, "streaming_sessions", "ended_at IS NULL")
-                .await
-                .unwrap_or(0);
+        let library_paths_count = library_paths::Entity::find()
+            .count(&st.db)
+            .await
+            .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
+            .unwrap_or(0);
+        let download_clients_count = download_client_configs::Entity::find()
+            .count(&st.db)
+            .await
+            .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
+            .unwrap_or(0);
+        let indexers_count = indexer_configs::Entity::find()
+            .count(&st.db)
+            .await
+            .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
+            .unwrap_or(0);
+        let active_transcodes = transcode_jobs::Entity::find()
+            .filter(transcode_jobs::Column::Status.is_in([
+                "pending".to_owned(),
+                "transcoding".to_owned(),
+                "playing".to_owned(),
+            ]))
+            .count(&st.db)
+            .await
+            .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
+            .unwrap_or(0);
+        // `streaming_sessions` doesn't exist as an entity (Phoenix's
+        // streaming-session state lives in process memory, not the DB);
+        // surface zero so the page renders without an extra plumbing
+        // step. TODO(broken-pre-conversion): swap to whatever sentinel
+        // the streaming supervisor surfaces once it grows an
+        // active-session count getter.
+        let active_streaming_sessions = 0i64;
 
         Ok(SystemStatus {
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -112,61 +135,42 @@ mod server {
         })
     }
 
-    fn describe_db(db: &Db) -> (&'static str, String) {
-        match db {
-            // Connection-string introspection isn't on sqlx's public
+    fn describe_db(db: &DatabaseConnection) -> (&'static str, String) {
+        match db.get_database_backend() {
+            // Connection-string introspection isn't on sea-orm's public
             // surface; the pool location read is the Phoenix
             // equivalent and we fall back to a stable "configured"
             // label when no path-like info is available.
-            Db::Sqlite(_) => ("sqlite", "(configured)".to_owned()),
-            Db::Postgres(_) => ("postgres", "(configured)".to_owned()),
+            DatabaseBackend::Sqlite => ("sqlite", "(configured)".to_owned()),
+            DatabaseBackend::Postgres => ("postgres", "(configured)".to_owned()),
+            _ => ("unknown", "(configured)".to_owned()),
         }
     }
 
-    async fn probe_db(db: &Db) -> Result<(String, String), ServerFnError> {
-        match db {
-            Db::Sqlite(pool) => {
-                let (size_bytes,): (i64,) = sqlx::query_as(
-                    "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
-                )
-                .fetch_one(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("sqlite size: {err}")))?;
-                Ok((format_bytes(size_bytes), "healthy".to_owned()))
+    async fn probe_db(db: &DatabaseConnection) -> Result<(String, String), ServerFnError> {
+        let backend = db.get_database_backend();
+        let sql = match backend {
+            DatabaseBackend::Sqlite => {
+                "SELECT page_count * page_size AS s FROM pragma_page_count(), pragma_page_size()"
             }
-            Db::Postgres(pool) => {
-                let (size_bytes,): (i64,) =
-                    sqlx::query_as("SELECT pg_database_size(current_database())::bigint")
-                        .fetch_one(pool)
-                        .await
-                        .map_err(|err| ServerFnError::new(format!("postgres size: {err}")))?;
-                Ok((format_bytes(size_bytes), "healthy".to_owned()))
+            DatabaseBackend::Postgres => {
+                "SELECT pg_database_size(current_database())::bigint AS s"
             }
-        }
-    }
-
-    async fn count_rows(db: &Db, table: &str) -> Result<i64, ServerFnError> {
-        // `table` is a hard-coded string from this module's call
-        // sites; bind-parameter substitution doesn't apply to
-        // identifiers anyway. Caller controls the identifier so
-        // injection isn't a concern here.
-        let query = format!("SELECT COUNT(*) FROM {table}");
-        let (n,): (i64,) = match db {
-            Db::Sqlite(pool) => sqlx::query_as(&query).fetch_one(pool).await,
-            Db::Postgres(pool) => sqlx::query_as(&query).fetch_one(pool).await,
-        }
-        .map_err(|err| ServerFnError::new(format!("count {table}: {err}")))?;
-        Ok(n)
-    }
-
-    async fn count_rows_where(db: &Db, table: &str, predicate: &str) -> Result<i64, ServerFnError> {
-        let query = format!("SELECT COUNT(*) FROM {table} WHERE {predicate}");
-        let (n,): (i64,) = match db {
-            Db::Sqlite(pool) => sqlx::query_as(&query).fetch_one(pool).await,
-            Db::Postgres(pool) => sqlx::query_as(&query).fetch_one(pool).await,
-        }
-        .map_err(|err| ServerFnError::new(format!("count {table}: {err}")))?;
-        Ok(n)
+            _ => {
+                return Ok(("unknown".to_owned(), "unhealthy".to_owned()));
+            }
+        };
+        let row = db
+            .query_one_raw(Statement::from_string(backend, sql.to_owned()))
+            .await
+            .map_err(|err| ServerFnError::new(format!("db size: {err}")))?;
+        let size_bytes = match row {
+            Some(r) => r
+                .try_get::<i64>("", "s")
+                .map_err(|err| ServerFnError::new(format!("db size decode: {err}")))?,
+            None => 0,
+        };
+        Ok((format_bytes(size_bytes), "healthy".to_owned()))
     }
 
     fn format_bytes(bytes: i64) -> String {

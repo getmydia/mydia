@@ -175,121 +175,116 @@ struct ResolvedMediaFile {
     absolute_path: PathBuf,
 }
 
+/// Compose absolute path from a media_files Model + optional library_paths row.
+fn resolve_abs_path(
+    m: &mydia_rs_entities::media_files::Model,
+    lp: Option<&mydia_rs_entities::library_paths::Model>,
+) -> Option<PathBuf> {
+    if let Some(p) = m.path.as_deref() {
+        return Some(PathBuf::from(p));
+    }
+    if let (Some(lp), Some(rel)) = (lp, m.relative_path.as_deref()) {
+        return Some(PathBuf::from(format!("{}/{}", lp.path, rel)));
+    }
+    None
+}
+
+async fn fetch_lp_for(
+    db: &mydia_rs_db::DatabaseConnection,
+    lp_id: Option<mydia_rs_db::types::UuidText>,
+) -> Result<Option<mydia_rs_entities::library_paths::Model>, sea_orm::DbErr> {
+    use mydia_rs_entities::library_paths;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+
+    let Some(id) = lp_id else { return Ok(None) };
+    let backend = db.get_database_backend();
+    library_paths::Entity::find()
+        .filter(Expr::col(library_paths::Column::Id).eq(id.into_simple_expr(backend)))
+        .one(db)
+        .await
+}
+
 async fn lookup_media_file(
     state: &WebState,
     id: &str,
-) -> Result<Option<ResolvedMediaFile>, sqlx::Error> {
-    use mydia_rs_db::Db;
+) -> Result<Option<ResolvedMediaFile>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::media_files;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    // Query joins media_files to library_paths so we can build the
-    // absolute path in a single round-trip. The schema allows either
-    // (path) or (library_path_id + relative_path); the SQL below
-    // produces the absolute path inline using SQLite's `||` and
-    // Postgres's `||` (both behave identically for TEXT concatenation
-    // with NULL propagation).
-    let sql = "
-        SELECT
-          CASE
-            WHEN mf.path IS NOT NULL THEN mf.path
-            WHEN lp.path IS NOT NULL AND mf.relative_path IS NOT NULL
-              THEN lp.path || '/' || mf.relative_path
-            ELSE NULL
-          END AS abs_path
-        FROM media_files mf
-        LEFT JOIN library_paths lp ON lp.id = mf.library_path_id
-        WHERE mf.id = $1 AND mf.trashed_at IS NULL
-        LIMIT 1
-    ";
-
-    let abs_path: Option<Option<String>> = match &state.db {
-        Db::Sqlite(pool) => {
-            let sql_sqlite = sql.replace("$1", "?");
-            sqlx::query_scalar(&sql_sqlite)
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_scalar(sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(None);
     };
-
-    Ok(abs_path.flatten().map(|p| ResolvedMediaFile {
-        absolute_path: PathBuf::from(p),
-    }))
+    let backend = state.db.get_database_backend();
+    let Some(mf) = media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .filter(media_files::Column::TrashedAt.is_null())
+        .one(&state.db)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let lp = fetch_lp_for(&state.db, mf.library_path_id).await?;
+    Ok(resolve_abs_path(&mf, lp.as_ref()).map(|p| ResolvedMediaFile { absolute_path: p }))
 }
 
 async fn lookup_first_media_file_for_movie(
     state: &WebState,
     media_item_id: &str,
-) -> Result<Option<ResolvedMediaFile>, sqlx::Error> {
-    lookup_first_for_parent(state, "media_item_id", media_item_id, true).await
+) -> Result<Option<ResolvedMediaFile>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::media_files;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+
+    let Some(wrapper) = uuid::Uuid::parse_str(media_item_id).ok().map(UuidText::from) else {
+        return Ok(None);
+    };
+    let backend = state.db.get_database_backend();
+    let Some(mf) = media_files::Entity::find()
+        .filter(
+            Expr::col(media_files::Column::MediaItemId).eq(wrapper.into_simple_expr(backend)),
+        )
+        .filter(media_files::Column::EpisodeId.is_null())
+        .filter(media_files::Column::TrashedAt.is_null())
+        .order_by_asc(media_files::Column::InsertedAt)
+        .one(&state.db)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let lp = fetch_lp_for(&state.db, mf.library_path_id).await?;
+    Ok(resolve_abs_path(&mf, lp.as_ref()).map(|p| ResolvedMediaFile { absolute_path: p }))
 }
 
 async fn lookup_first_media_file_for_episode(
     state: &WebState,
     episode_id: &str,
-) -> Result<Option<ResolvedMediaFile>, sqlx::Error> {
-    lookup_first_for_parent(state, "episode_id", episode_id, false).await
-}
+) -> Result<Option<ResolvedMediaFile>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::media_files;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-async fn lookup_first_for_parent(
-    state: &WebState,
-    parent_col: &str,
-    parent_id: &str,
-    movie: bool,
-) -> Result<Option<ResolvedMediaFile>, sqlx::Error> {
-    use mydia_rs_db::Db;
-
-    // For movies we explicitly require `episode_id IS NULL` because
-    // some Phoenix migration paths leave both columns populated on
-    // historical rows. For episodes the parent column itself is the
-    // discriminant.
-    let extra_predicate = if movie {
-        " AND mf.episode_id IS NULL"
-    } else {
-        ""
+    let Some(wrapper) = uuid::Uuid::parse_str(episode_id).ok().map(UuidText::from) else {
+        return Ok(None);
     };
-    let sql = format!(
-        "
-        SELECT
-          CASE
-            WHEN mf.path IS NOT NULL THEN mf.path
-            WHEN lp.path IS NOT NULL AND mf.relative_path IS NOT NULL
-              THEN lp.path || '/' || mf.relative_path
-            ELSE NULL
-          END AS abs_path
-        FROM media_files mf
-        LEFT JOIN library_paths lp ON lp.id = mf.library_path_id
-        WHERE mf.{parent_col} = $1
-          AND mf.trashed_at IS NULL{extra_predicate}
-        ORDER BY mf.inserted_at ASC
-        LIMIT 1
-        "
-    );
-
-    let abs_path: Option<Option<String>> = match &state.db {
-        Db::Sqlite(pool) => {
-            let sql_sqlite = sql.replace("$1", "?");
-            sqlx::query_scalar(&sql_sqlite)
-                .bind(parent_id)
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_scalar(&sql)
-                .bind(parent_id)
-                .fetch_optional(pool)
-                .await?
-        }
+    let backend = state.db.get_database_backend();
+    let Some(mf) = media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::EpisodeId).eq(wrapper.into_simple_expr(backend)))
+        .filter(media_files::Column::TrashedAt.is_null())
+        .order_by_asc(media_files::Column::InsertedAt)
+        .one(&state.db)
+        .await?
+    else {
+        return Ok(None);
     };
-
-    Ok(abs_path.flatten().map(|p| ResolvedMediaFile {
-        absolute_path: PathBuf::from(p),
-    }))
+    let lp = fetch_lp_for(&state.db, mf.library_path_id).await?;
+    Ok(resolve_abs_path(&mf, lp.as_ref()).map(|p| ResolvedMediaFile { absolute_path: p }))
 }
 
 /// Open the media file, evaluate the `Range:` header, and produce

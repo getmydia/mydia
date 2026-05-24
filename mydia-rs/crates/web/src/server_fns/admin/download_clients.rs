@@ -103,12 +103,20 @@ pub async fn test_download_client(id: String) -> Result<ConnectionTest, ServerFn
 
 #[cfg(feature = "server")]
 mod server {
+    // The page's wire payload uses `kind` and `url`; the entity's
+    // columns are `r#type` and `host`. Map back-and-forth at the seam.
     use super::{ConnectionTest, DownloadClientRow, NewDownloadClient, VALID_KINDS};
     use crate::server_fns::auth::require_admin_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::insert_active_model;
+    use mydia_rs_entities::download_client_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -117,49 +125,31 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type Row = (
-        String,
-        String,
-        String,
-        String,
-        Option<String>,
-        bool,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
+
+    fn model_to_row(m: &download_client_configs::Model) -> DownloadClientRow {
+        DownloadClientRow {
+            id: m.id.to_string(),
+            name: m.name.clone(),
+            kind: m.r#type.clone(),
+            url: m.host.clone().unwrap_or_default(),
+            username: m.username.clone(),
+            enabled: m.enabled.unwrap_or(false),
+            inserted_at: Some(m.inserted_at.0.to_rfc3339()),
+        }
+    }
 
     pub(super) async fn list() -> Result<Vec<DownloadClientRow>, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let rows: Vec<Row> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, name, kind, url, username, enabled, inserted_at \
-                 FROM download_clients ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
+        let rows = download_client_configs::Entity::find()
+            .order_by_asc(download_client_configs::Column::InsertedAt)
+            .all(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query download_clients: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, name, kind, url, username, enabled, inserted_at \
-                 FROM download_clients ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query download_clients: {err}")))?,
-        };
-        Ok(rows
-            .into_iter()
-            .map(
-                |(id, name, kind, url, username, enabled, inserted_at)| DownloadClientRow {
-                    id,
-                    name,
-                    kind,
-                    url,
-                    username,
-                    enabled,
-                    inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-                },
-            )
-            .collect())
+            .map_err(|err| ServerFnError::new(format!("query download_clients: {err}")))?;
+        Ok(rows.iter().map(model_to_row).collect())
     }
 
     pub(super) async fn create(
@@ -169,76 +159,67 @@ mod server {
         validate(&payload)?;
         let st = state().await?;
 
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
-        match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO download_clients (id, name, kind, url, username, password, enabled, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(payload.name.trim())
-                .bind(payload.kind.trim())
-                .bind(payload.url.trim())
-                .bind(payload.username.as_deref())
-                .bind(payload.password.as_deref())
-                .bind(payload.enabled)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert download_client: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO download_clients (id, name, kind, url, username, password, enabled, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                )
-                .bind(&id)
-                .bind(payload.name.trim())
-                .bind(payload.kind.trim())
-                .bind(payload.url.trim())
-                .bind(payload.username.as_deref())
-                .bind(payload.password.as_deref())
-                .bind(payload.enabled)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert download_client: {err}")))?;
-            }
-        }
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let am = download_client_configs::ActiveModel {
+            id: Set(id),
+            name: Set(payload.name.trim().to_owned()),
+            r#type: Set(payload.kind.trim().to_owned()),
+            enabled: Set(Some(payload.enabled)),
+            priority: Set(None),
+            host: Set(Some(payload.url.trim().to_owned())),
+            port: Set(None),
+            use_ssl: Set(None),
+            url_base: Set(None),
+            username: Set(payload.username.clone()),
+            password: Set(payload.password.clone()),
+            api_key: Set(None),
+            category: Set(None),
+            download_directory: Set(None),
+            connection_settings: Set(None),
+            updated_by_id: Set(None),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            remove_completed: Set(None),
+            categories: Set(None),
+            priority_profile: Set(None),
+            incomplete_grace_minutes: Set(None),
+        };
+        insert_active_model(am, &st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("insert download_client: {err}")))?;
 
         Ok(DownloadClientRow {
-            id,
+            id: id_str,
             name: payload.name.trim().to_owned(),
             kind: payload.kind.trim().to_owned(),
             url: payload.url.trim().to_owned(),
             username: payload.username.clone(),
             enabled: payload.enabled,
-            inserted_at: Some(now.to_rfc3339()),
+            inserted_at: Some(now.0.to_rfc3339()),
         })
     }
 
     pub(super) async fn delete(id: String) -> Result<(), ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query("DELETE FROM download_clients WHERE id = ?")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete download_client: {err}")))?
-                .rows_affected(),
-            Db::Postgres(pool) => sqlx::query("DELETE FROM download_clients WHERE id = $1")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete download_client: {err}")))?
-                .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid download_client id {id}"
+            )));
         };
-        if affected == 0 {
+        let backend = st.db.get_database_backend();
+        let res = download_client_configs::Entity::delete_many()
+            .filter(
+                Expr::col(download_client_configs::Column::Id)
+                    .eq(wrapper.into_simple_expr(backend)),
+            )
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("delete download_client: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no download_client with id {id}"
             )));
@@ -250,34 +231,43 @@ mod server {
     pub(super) async fn toggle(id: String) -> Result<DownloadClientRow, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let now = chrono::Utc::now();
-        // SQLite + Postgres both support `NOT enabled` in an
-        // expression; one query covers both adapters.
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE download_clients SET enabled = NOT enabled, updated_at = ? WHERE id = ?",
-            )
-            .bind(now.to_rfc3339())
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("toggle download_client: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE download_clients SET enabled = NOT enabled, updated_at = $1 WHERE id = $2",
-            )
-            .bind(now)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("toggle download_client: {err}")))?
-            .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid download_client id {id}"
+            )));
         };
-        if affected == 0 {
+        let backend = st.db.get_database_backend();
+        let Some(row) = download_client_configs::Entity::find()
+            .filter(
+                Expr::col(download_client_configs::Column::Id)
+                    .eq(wrapper.into_simple_expr(backend)),
+            )
+            .one(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?
+        else {
             return Err(ServerFnError::new(format!(
                 "no download_client with id {id}"
             )));
-        }
+        };
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let new_enabled = !row.enabled.unwrap_or(false);
+        download_client_configs::Entity::update_many()
+            .col_expr(
+                download_client_configs::Column::Enabled,
+                Expr::value(new_enabled),
+            )
+            .col_expr(
+                download_client_configs::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(
+                Expr::col(download_client_configs::Column::Id)
+                    .eq(wrapper.into_simple_expr(backend)),
+            )
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("toggle download_client: {err}")))?;
         // Toggling enabled doesn't change connectivity, but the
         // operator's intent on this surface is "I changed something"
         // — drop the cached entry so the next Test reflects the
@@ -296,30 +286,29 @@ mod server {
     pub(super) async fn test(id: String) -> Result<ConnectionTest, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        type Row = (String, String, String, Option<String>, Option<String>);
-        let row: Option<Row> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT kind, url, name, username, password FROM download_clients \
-                 WHERE id = ? LIMIT 1",
-            )
-            .bind(&id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT kind, url, name, username, password FROM download_clients \
-                 WHERE id = $1 LIMIT 1",
-            )
-            .bind(&id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?,
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid download_client id {id}"
+            )));
         };
-        let Some((kind, url, _name, username, password)) = row else {
+        let backend = st.db.get_database_backend();
+        let Some(row) = download_client_configs::Entity::find()
+            .filter(
+                Expr::col(download_client_configs::Column::Id)
+                    .eq(wrapper.into_simple_expr(backend)),
+            )
+            .one(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read download_client: {err}")))?
+        else {
             return Err(ServerFnError::new(format!(
                 "no download_client with id {id}"
             )));
         };
+        let kind = row.r#type;
+        let url = row.host.unwrap_or_default();
+        let username = row.username;
+        let password = row.password;
 
         if !VALID_KINDS.contains(&kind.as_str()) {
             return Ok(ConnectionTest {

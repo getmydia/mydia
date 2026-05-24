@@ -69,7 +69,13 @@ mod server {
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::media_requests;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -78,87 +84,45 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState extension missing"))
     }
 
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
+
     pub(super) async fn list_mine(filter: String) -> Result<Vec<MyRequest>, ServerFnError> {
         let user_id = require_session_user_id().await?;
         let st = state()?;
+        let Some(user_wrapper) = parse_uuid(&user_id) else {
+            return Err(ServerFnError::new("invalid session user id"));
+        };
+        let backend = st.db.get_database_backend();
         let trimmed = filter.trim();
-        let status_filter = if trimmed.is_empty() || trimmed == "all" {
-            None
-        } else {
-            Some(trimmed)
-        };
-
-        type Row = (
-            String,
-            String,
-            String,
-            Option<i32>,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<chrono::DateTime<chrono::Utc>>,
-            Option<chrono::DateTime<chrono::Utc>>,
-            Option<chrono::DateTime<chrono::Utc>>,
-        );
-
-        const SELECT_COLS: &str =
-            "id, media_type, title, year, status, rejection_reason, requester_notes, \
-             admin_notes, inserted_at, approved_at, rejected_at";
-
-        let rows: Vec<Row> = match (&st.db, status_filter) {
-            (Db::Sqlite(pool), None) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} FROM media_requests WHERE requester_id = ? \
-                 ORDER BY inserted_at DESC"
-            ))
-            .bind(&user_id)
-            .fetch_all(pool)
+        let mut q = media_requests::Entity::find()
+            .filter(
+                Expr::col(media_requests::Column::RequesterId)
+                    .eq(user_wrapper.into_simple_expr(backend)),
+            )
+            .order_by_desc(media_requests::Column::InsertedAt);
+        if !(trimmed.is_empty() || trimmed == "all") {
+            q = q.filter(media_requests::Column::Status.eq(trimmed.to_owned()));
+        }
+        let rows = q
+            .all(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("list my requests: {err}")))?,
-            (Db::Sqlite(pool), Some(filter)) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} FROM media_requests \
-                 WHERE requester_id = ? AND status = ? \
-                 ORDER BY inserted_at DESC"
-            ))
-            .bind(&user_id)
-            .bind(filter)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("list my requests: {err}")))?,
-            (Db::Postgres(pool), None) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} FROM media_requests WHERE requester_id = $1 \
-                 ORDER BY inserted_at DESC"
-            ))
-            .bind(&user_id)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("list my requests: {err}")))?,
-            (Db::Postgres(pool), Some(filter)) => sqlx::query_as(&format!(
-                "SELECT {SELECT_COLS} FROM media_requests \
-                 WHERE requester_id = $1 AND status = $2 \
-                 ORDER BY inserted_at DESC"
-            ))
-            .bind(&user_id)
-            .bind(filter)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("list my requests: {err}")))?,
-        };
-
+            .map_err(|err| ServerFnError::new(format!("list my requests: {err}")))?;
         Ok(rows
             .into_iter()
             .map(|r| MyRequest {
-                id: r.0,
-                media_type: r.1,
-                title: r.2,
-                year: r.3,
-                status: r.4,
-                rejection_reason: r.5,
-                requester_notes: r.6,
-                admin_notes: r.7,
-                inserted_at: r.8.map(|dt| dt.to_rfc3339()),
-                approved_at: r.9.map(|dt| dt.to_rfc3339()),
-                rejected_at: r.10.map(|dt| dt.to_rfc3339()),
+                id: r.id.to_string(),
+                media_type: r.media_type,
+                title: r.title,
+                year: r.year,
+                status: r.status,
+                rejection_reason: r.rejection_reason,
+                requester_notes: r.requester_notes,
+                admin_notes: r.admin_notes,
+                inserted_at: Some(r.inserted_at.0.to_rfc3339()),
+                approved_at: r.approved_at.map(|dt| dt.0.to_rfc3339()),
+                rejected_at: r.rejected_at.map(|dt| dt.0.to_rfc3339()),
             })
             .collect())
     }
@@ -176,98 +140,79 @@ mod server {
             _ => return Err(ServerFnError::new("Invalid media type")),
         };
 
+        let Some(user_wrapper) = parse_uuid(&user_id) else {
+            return Err(ServerFnError::new("invalid session user id"));
+        };
+
         // De-dup against an existing request from the same user for the
         // same TMDB id. Phoenix's `MediaRequests.create_request` returns
         // `{:error, :duplicate_request}` in this case.
         if let Some(tmdb_id) = payload.tmdb_id {
-            if let Some(existing) = find_duplicate(&st.db, &user_id, tmdb_id, media_type).await? {
+            if let Some(existing) =
+                find_duplicate(&st.db, user_wrapper, tmdb_id, media_type).await?
+            {
                 return Ok(CreateRequestAck { id: existing });
             }
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let tmdb_id_i32 = payload.tmdb_id.and_then(|n| i32::try_from(n).ok());
+        let tvdb_id_i32 = payload.tvdb_id.and_then(|n| i32::try_from(n).ok());
+        let am = media_requests::ActiveModel {
+            id: Set(id),
+            media_type: Set(media_type.to_owned()),
+            title: Set(payload.title.trim().to_owned()),
+            original_title: Set(payload.original_title.clone()),
+            year: Set(payload.year),
+            tmdb_id: Set(tmdb_id_i32),
+            imdb_id: Set(payload.imdb_id.clone()),
+            status: Set("pending".to_owned()),
+            requester_notes: Set(payload.requester_notes.clone()),
+            admin_notes: Set(None),
+            rejection_reason: Set(None),
+            approved_at: Set(None),
+            rejected_at: Set(None),
+            requester_id: Set(user_wrapper),
+            approved_by_id: Set(None),
+            media_item_id: Set(None),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            tvdb_id: Set(tvdb_id_i32),
+        };
+        insert_active_model(am, &st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("create request: {err}")))?;
 
-        match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO media_requests \
-                       (id, media_type, title, original_title, year, tmdb_id, imdb_id, \
-                        status, requester_notes, requester_id, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(media_type)
-                .bind(payload.title.trim())
-                .bind(payload.original_title.as_deref())
-                .bind(payload.year)
-                .bind(payload.tmdb_id)
-                .bind(payload.imdb_id.as_deref())
-                .bind(payload.requester_notes.as_deref())
-                .bind(&user_id)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create request: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO media_requests \
-                       (id, media_type, title, original_title, year, tmdb_id, imdb_id, \
-                        status, requester_notes, requester_id, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11)",
-                )
-                .bind(&id)
-                .bind(media_type)
-                .bind(payload.title.trim())
-                .bind(payload.original_title.as_deref())
-                .bind(payload.year)
-                .bind(payload.tmdb_id)
-                .bind(payload.imdb_id.as_deref())
-                .bind(payload.requester_notes.as_deref())
-                .bind(&user_id)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create request: {err}")))?;
-            }
-        }
-
-        Ok(CreateRequestAck { id })
+        Ok(CreateRequestAck { id: id_str })
     }
 
     async fn find_duplicate(
-        db: &Db,
-        user_id: &str,
+        db: &DatabaseConnection,
+        user_wrapper: UuidText,
         tmdb_id: i64,
         media_type: &str,
     ) -> Result<Option<String>, ServerFnError> {
-        let row: Option<(String,)> = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id FROM media_requests \
-                 WHERE requester_id = ? AND tmdb_id = ? AND media_type = ? AND status != 'rejected' \
-                 LIMIT 1",
+        let backend = db.get_database_backend();
+        let tmdb_id_i32 = i32::try_from(tmdb_id).ok();
+        let mut q = media_requests::Entity::find()
+            .filter(
+                Expr::col(media_requests::Column::RequesterId)
+                    .eq(user_wrapper.into_simple_expr(backend)),
             )
-            .bind(user_id)
-            .bind(tmdb_id)
-            .bind(media_type)
-            .fetch_optional(pool)
+            .filter(media_requests::Column::MediaType.eq(media_type.to_owned()))
+            .filter(media_requests::Column::Status.ne("rejected".to_owned()));
+        if let Some(id) = tmdb_id_i32 {
+            q = q.filter(media_requests::Column::TmdbId.eq(id));
+        } else {
+            return Ok(None);
+        }
+        let row = q
+            .one(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("dup lookup: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id FROM media_requests \
-                 WHERE requester_id = $1 AND tmdb_id = $2 AND media_type = $3 AND status != 'rejected' \
-                 LIMIT 1",
-            )
-            .bind(user_id)
-            .bind(tmdb_id)
-            .bind(media_type)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("dup lookup: {err}")))?,
-        };
-        Ok(row.map(|(id,)| id))
+            .map_err(|err| ServerFnError::new(format!("dup lookup: {err}")))?;
+        Ok(row.map(|r| r.id.to_string()))
     }
 }

@@ -45,20 +45,7 @@ pub fn router() -> Router {
         .layer(from_fn(api_key_auth))
 }
 
-#[derive(sqlx::FromRow)]
-struct IndexerRow {
-    id: String,
-    name: Option<String>,
-    r#type: Option<String>,
-    enabled: Option<bool>,
-    priority: Option<i64>,
-    base_url: Option<String>,
-    api_key: Option<String>,
-    indexer_ids: Option<String>,
-    categories: Option<String>,
-    rate_limit: Option<i64>,
-    connection_settings: Option<String>,
-}
+type IndexerRow = mydia_rs_entities::indexer_configs::Model;
 
 async fn index(Extension(state): Extension<WebState>) -> Response {
     match list_indexers(&state).await {
@@ -66,8 +53,9 @@ async fn index(Extension(state): Extension<WebState>) -> Response {
             let indexers: Vec<serde_json::Value> = rows
                 .iter()
                 .map(|row| {
-                    let cached = state.indexer_probes.cached(&row.id);
-                    let failures = state.indexer_probes.failure_count(&row.id);
+                    let id_str = row.id.to_string();
+                    let cached = state.indexer_probes.cached(&id_str);
+                    let failures = state.indexer_probes.failure_count(&id_str);
                     let health = cached
                         .as_ref()
                         .map_or_else(health_unknown, serialize_health);
@@ -87,8 +75,9 @@ async fn index(Extension(state): Extension<WebState>) -> Response {
 async fn show(Extension(state): Extension<WebState>, Path(id): Path<String>) -> Response {
     match lookup_indexer(&state, &id).await {
         Ok(Some(row)) => {
-            let cached = state.indexer_probes.cached(&row.id);
-            let failures = state.indexer_probes.failure_count(&row.id);
+            let id_str = row.id.to_string();
+            let cached = state.indexer_probes.cached(&id_str);
+            let failures = state.indexer_probes.failure_count(&id_str);
             let health = cached
                 .as_ref()
                 .map_or_else(health_unknown, serialize_health);
@@ -185,56 +174,43 @@ struct ProbeTarget {
 async fn lookup_probe_target(
     state: &WebState,
     id: &str,
-) -> Result<Option<ProbeTarget>, sqlx::Error> {
-    use mydia_rs_db::Db;
+) -> Result<Option<ProbeTarget>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::indexer_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    type Row = (String, String, Option<String>, Option<String>);
-    let row: Option<Row> = match &state.db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT type, name, base_url, api_key FROM indexer_configs \
-                 WHERE id = ? LIMIT 1",
-            )
-            .bind(id)
-            .fetch_optional(pool)
-            .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT type, name, base_url, api_key FROM indexer_configs \
-                 WHERE id = $1 LIMIT 1",
-            )
-            .bind(id)
-            .fetch_optional(pool)
-            .await?
-        }
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(None);
     };
-    Ok(row.map(|(kind, name, base_url, api_key)| ProbeTarget {
-        kind,
-        name,
-        base_url: base_url.unwrap_or_default(),
-        api_key,
+    let backend = state.db.get_database_backend();
+    let row = indexer_configs::Entity::find()
+        .filter(Expr::col(indexer_configs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(&state.db)
+        .await?;
+    Ok(row.map(|m| ProbeTarget {
+        kind: m.r#type,
+        name: m.name,
+        base_url: m.base_url.unwrap_or_default(),
+        api_key: m.api_key,
     }))
 }
 
-async fn indexer_exists(state: &WebState, id: &str) -> Result<bool, sqlx::Error> {
-    use mydia_rs_db::Db;
+async fn indexer_exists(state: &WebState, id: &str) -> Result<bool, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::indexer_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    let row: Option<(i64,)> = match &state.db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT 1 FROM indexer_configs WHERE id = ? LIMIT 1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as("SELECT 1 FROM indexer_configs WHERE id = $1 LIMIT 1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await?
-        }
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(false);
     };
-    Ok(row.is_some())
+    let backend = state.db.get_database_backend();
+    let count = indexer_configs::Entity::find()
+        .filter(Expr::col(indexer_configs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .count(&state.db)
+        .await?;
+    Ok(count > 0)
 }
 
 async fn probe_target(state: &WebState, id: &str, target: ProbeTarget) -> IndexerProbeEntry {
@@ -302,48 +278,32 @@ fn serialize_health(entry: &IndexerProbeEntry) -> serde_json::Value {
     })
 }
 
-async fn list_indexers(state: &WebState) -> Result<Vec<IndexerRow>, sqlx::Error> {
-    use mydia_rs_db::Db;
+async fn list_indexers(state: &WebState) -> Result<Vec<IndexerRow>, sea_orm::DbErr> {
+    use mydia_rs_entities::indexer_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
 
-    let sql = "
-        SELECT id, name, type, enabled, priority, base_url, api_key, indexer_ids, \
-               categories, rate_limit, connection_settings
-        FROM indexer_configs
-        ORDER BY priority ASC, name ASC
-    ";
-
-    match &state.db {
-        Db::Sqlite(pool) => sqlx::query_as::<_, IndexerRow>(sql).fetch_all(pool).await,
-        Db::Postgres(pool) => sqlx::query_as::<_, IndexerRow>(sql).fetch_all(pool).await,
-    }
+    indexer_configs::Entity::find()
+        .order_by_asc(indexer_configs::Column::Priority)
+        .order_by_asc(indexer_configs::Column::Name)
+        .all(&state.db)
+        .await
 }
 
-async fn lookup_indexer(state: &WebState, id: &str) -> Result<Option<IndexerRow>, sqlx::Error> {
-    use mydia_rs_db::Db;
+async fn lookup_indexer(state: &WebState, id: &str) -> Result<Option<IndexerRow>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::indexer_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    let sql = "
-        SELECT id, name, type, enabled, priority, base_url, api_key, indexer_ids, \
-               categories, rate_limit, connection_settings
-        FROM indexer_configs
-        WHERE id = $1
-        LIMIT 1
-    ";
-
-    match &state.db {
-        Db::Sqlite(pool) => {
-            let sql_sqlite = sql.replace("$1", "?");
-            sqlx::query_as::<_, IndexerRow>(&sql_sqlite)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, IndexerRow>(sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(None);
+    };
+    let backend = state.db.get_database_backend();
+    indexer_configs::Entity::find()
+        .filter(Expr::col(indexer_configs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(&state.db)
+        .await
 }
 
 fn serialize_summary(
@@ -352,7 +312,7 @@ fn serialize_summary(
     consecutive_failures: u32,
 ) -> serde_json::Value {
     json!({
-        "id": row.id,
+        "id": row.id.to_string(),
         "name": row.name,
         "type": row.r#type,
         "enabled": row.enabled.unwrap_or(false),
@@ -376,15 +336,15 @@ fn serialize_detail(
     let api_key_redacted = row.api_key.as_ref().map(|_| "***");
 
     json!({
-        "id": row.id,
+        "id": row.id.to_string(),
         "name": row.name,
         "type": row.r#type,
         "enabled": row.enabled.unwrap_or(false),
         "priority": row.priority,
         "base_url": row.base_url,
         "api_key": api_key_redacted,
-        "indexer_ids": row.indexer_ids,
-        "categories": row.categories,
+        "indexer_ids": row.indexer_ids.as_ref().map(|sa| sa.0.clone()),
+        "categories": row.categories.as_ref().map(|sa| sa.0.clone()),
         "rate_limit": row.rate_limit,
         "connection_settings": row.connection_settings,
         "health": health,

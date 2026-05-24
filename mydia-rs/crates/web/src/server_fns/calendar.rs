@@ -75,7 +75,7 @@ mod server {
     use mydia_rs_db::DatabaseConnection;
     use mydia_rs_entities::{downloads, episodes, media_files, media_items};
     use sea_orm::entity::prelude::*;
-    use sea_orm::query::QueryOrder;
+    use sea_orm::query::{QueryOrder, QuerySelect};
     use sea_orm::sea_query::{Expr, ExprTrait, Query};
     use std::collections::HashSet;
 

@@ -96,10 +96,16 @@ mod server {
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::{media_items, quality_profiles};
     use mydia_rs_metadata::provider::{Provider, ProviderConfig, SearchOpts};
     use mydia_rs_metadata::relay::Relay;
     use mydia_rs_metadata::structs::{MediaType, SearchResult};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -176,70 +182,55 @@ mod server {
             }
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
-        match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO media_items (id, type, title, year, tmdb_id, quality_profile_id, monitored, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(media_type)
-                .bind(&payload.title)
-                .bind(payload.year)
-                .bind(tmdb_id)
-                .bind(quality_profile_id)
-                .bind(true)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create media_item: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO media_items (id, type, title, year, tmdb_id, quality_profile_id, monitored, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                )
-                .bind(&id)
-                .bind(media_type)
-                .bind(&payload.title)
-                .bind(payload.year)
-                .bind(tmdb_id)
-                .bind(quality_profile_id)
-                .bind(true)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create media_item: {err}")))?;
-            }
-        }
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let qp_uuid = quality_profile_id.and_then(|s| uuid::Uuid::parse_str(s).ok().map(UuidText::from));
+        let tmdb_id_i32 = tmdb_id.and_then(|n| i32::try_from(n).ok());
+        let am = media_items::ActiveModel {
+            id: Set(id),
+            r#type: Set(media_type.to_owned()),
+            title: Set(payload.title.clone()),
+            original_title: Set(None),
+            year: Set(payload.year),
+            tmdb_id: Set(tmdb_id_i32),
+            imdb_id: Set(None),
+            metadata: Set(None),
+            monitored: Set(Some(true)),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            quality_profile_id: Set(qp_uuid),
+            category: Set(None),
+            category_override: Set(false),
+            monitoring_preset: Set(Some("all".to_owned())),
+            seasons_refreshed_at: Set(None),
+            tvdb_id: Set(None),
+        };
+        insert_active_model(am, &st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("create media_item: {err}")))?;
 
-        Ok(AddMediaAck { media_item_id: id })
+        Ok(AddMediaAck {
+            media_item_id: id_str,
+        })
     }
 
     /// Verify a `quality_profile` row exists. Used by [`create`] to
     /// reject bogus FK ids before the insert lands.
-    async fn quality_profile_exists(db: &Db, id: &str) -> Result<bool, ServerFnError> {
-        let row: Option<(String,)> = match db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT id FROM quality_profiles WHERE id = ? LIMIT 1")
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("verify quality_profile: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT id FROM quality_profiles WHERE id = $1 LIMIT 1")
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("verify quality_profile: {err}")))?
-            }
+    async fn quality_profile_exists(db: &DatabaseConnection, id: &str) -> Result<bool, ServerFnError> {
+        let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+            return Ok(false);
         };
-        Ok(row.is_some())
+        let backend = db.get_database_backend();
+        let count = quality_profiles::Entity::find()
+            .filter(
+                Expr::col(quality_profiles::Column::Id).eq(wrapper.into_simple_expr(backend)),
+            )
+            .count(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("verify quality_profile: {err}")))?;
+        Ok(count > 0)
     }
 
     /// Lightweight picker fetch — every quality profile's id + name,
@@ -250,53 +241,38 @@ mod server {
     ) -> Result<Vec<QualityProfileOption>, ServerFnError> {
         require_session_user_id().await?;
         let st = state()?;
-        let rows: Vec<(String, String)> = match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT id, name FROM quality_profiles ORDER BY name ASC")
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list quality_profiles: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT id, name FROM quality_profiles ORDER BY name ASC")
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list quality_profiles: {err}")))?
-            }
-        };
+        let rows = quality_profiles::Entity::find()
+            .order_by_asc(quality_profiles::Column::Name)
+            .all(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("list quality_profiles: {err}")))?;
         Ok(rows
             .into_iter()
-            .map(|(id, name)| QualityProfileOption { id, name })
+            .map(|m| QualityProfileOption {
+                id: m.id.to_string(),
+                name: m.name,
+            })
             .collect())
     }
 
     async fn find_by_tmdb(
-        db: &Db,
+        db: &DatabaseConnection,
         tmdb_id: Option<i64>,
         media_type: &str,
     ) -> Result<Option<String>, ServerFnError> {
         let Some(tmdb_id) = tmdb_id else {
             return Ok(None);
         };
-        let row: Option<(String,)> = match db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT id FROM media_items WHERE tmdb_id = ? AND type = ? LIMIT 1")
-                    .bind(tmdb_id)
-                    .bind(media_type)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("lookup by tmdb_id: {err}")))?
-            }
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id FROM media_items WHERE tmdb_id = $1 AND type = $2 LIMIT 1",
-            )
-            .bind(tmdb_id)
-            .bind(media_type)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("lookup by tmdb_id: {err}")))?,
+        let Some(tmdb_id_i32) = i32::try_from(tmdb_id).ok() else {
+            return Ok(None);
         };
-        Ok(row.map(|(id,)| id))
+        let row = media_items::Entity::find()
+            .filter(media_items::Column::TmdbId.eq(tmdb_id_i32))
+            .filter(media_items::Column::Type.eq(media_type.to_owned()))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("lookup by tmdb_id: {err}")))?;
+        Ok(row.map(|r| r.id.to_string()))
     }
 
     fn parse_media_type(s: &str) -> MediaType {

@@ -105,7 +105,7 @@ mod server {
         // Phoenix asks for `PAGE_SIZE + 1` and uses the +1 to detect
         // "has_more"; we do the same so the wire contract stays the
         // same.
-        let page = query.page.max(0);
+        let page = Ord::max(query.page, 0);
         let offset = page * PAGE_SIZE;
         let limit = PAGE_SIZE + 1;
 

@@ -182,7 +182,13 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::quality_profiles;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -191,23 +197,19 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type ListRow = (
-        String,
-        String,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     /// Decode a JSON `qualities` column to a Vec of strings. Tolerates
-    /// `NULL`, empty strings, and `[]`. Anything else falls back to an
+    /// empty strings and `[]`. Anything else falls back to an
     /// empty list rather than failing the read — older rows with
     /// malformed JSON shouldn't crash the admin page.
-    fn decode_qualities(raw: Option<&str>) -> Vec<String> {
-        match raw {
-            None => Vec::new(),
-            Some(s) if s.trim().is_empty() => Vec::new(),
-            Some(s) => serde_json::from_str::<Vec<String>>(s).unwrap_or_default(),
+    fn decode_qualities(raw: &str) -> Vec<String> {
+        if raw.trim().is_empty() {
+            return Vec::new();
         }
+        serde_json::from_str::<Vec<String>>(raw).unwrap_or_default()
     }
 
     fn encode_qualities(qualities: &[String]) -> String {
@@ -217,116 +219,71 @@ mod server {
     pub(super) async fn list() -> Result<Vec<QualityProfileRow>, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let rows: Vec<ListRow> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, name, qualities, inserted_at \
-                 FROM quality_profiles ORDER BY inserted_at ASC, name ASC",
-            )
-            .fetch_all(pool)
+        let rows = quality_profiles::Entity::find()
+            .order_by_asc(quality_profiles::Column::InsertedAt)
+            .order_by_asc(quality_profiles::Column::Name)
+            .all(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query quality_profiles: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, name, qualities, inserted_at \
-                 FROM quality_profiles ORDER BY inserted_at ASC, name ASC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query quality_profiles: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("query quality_profiles: {err}")))?;
         Ok(rows
             .into_iter()
-            .map(|(id, name, raw_qualities, inserted_at)| {
-                let count = decode_qualities(raw_qualities.as_deref()).len() as i64;
+            .map(|m| {
+                let count = decode_qualities(&m.qualities).len() as i64;
                 QualityProfileRow {
-                    id,
-                    name,
+                    id: m.id.to_string(),
+                    name: m.name,
                     cutoff_count: count,
-                    inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
+                    inserted_at: Some(m.inserted_at.0.to_rfc3339()),
                 }
             })
             .collect())
     }
 
-    type DetailRow = (
-        String,
-        String,
-        Option<String>,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
-
     pub(super) async fn get(id: String) -> Result<QualityProfileDetail, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let row: Option<DetailRow> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, name, description, qualities, inserted_at, updated_at \
-                 FROM quality_profiles WHERE id = ? LIMIT 1",
-            )
-            .bind(&id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query quality_profile: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, name, description, qualities, inserted_at, updated_at \
-                 FROM quality_profiles WHERE id = $1 LIMIT 1",
-            )
-            .bind(&id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query quality_profile: {err}")))?,
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new("quality profile not found"));
         };
-        let Some((id, name, description, raw_qualities, inserted_at, updated_at)) = row else {
+        let backend = st.db.get_database_backend();
+        let row = quality_profiles::Entity::find()
+            .filter(Expr::col(quality_profiles::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query quality_profile: {err}")))?;
+        let Some(m) = row else {
             return Err(ServerFnError::new("quality profile not found"));
         };
         Ok(QualityProfileDetail {
-            id,
-            name,
-            description,
-            qualities: decode_qualities(raw_qualities.as_deref()),
-            inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-            updated_at: updated_at.map(|dt| dt.to_rfc3339()),
+            id: m.id.to_string(),
+            name: m.name,
+            description: m.description,
+            qualities: decode_qualities(&m.qualities),
+            inserted_at: Some(m.inserted_at.0.to_rfc3339()),
+            updated_at: Some(m.updated_at.0.to_rfc3339()),
         })
     }
 
     async fn name_taken(
-        db: &Db,
+        db: &DatabaseConnection,
         name: &str,
         except_id: Option<&str>,
     ) -> Result<bool, ServerFnError> {
-        let (count,): (i64,) = match (db, except_id) {
-            (Db::Sqlite(pool), None) => {
-                sqlx::query_as("SELECT COUNT(*) FROM quality_profiles WHERE name = ?")
-                    .bind(name)
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("name uniqueness: {err}")))?
+        let mut q = quality_profiles::Entity::find()
+            .filter(quality_profiles::Column::Name.eq(name.to_owned()));
+        if let Some(id) = except_id {
+            if let Some(wrapper) = parse_uuid(id) {
+                let backend = db.get_database_backend();
+                q = q.filter(
+                    Expr::col(quality_profiles::Column::Id)
+                        .ne(wrapper.into_simple_expr(backend)),
+                );
             }
-            (Db::Sqlite(pool), Some(id)) => {
-                sqlx::query_as("SELECT COUNT(*) FROM quality_profiles WHERE name = ? AND id != ?")
-                    .bind(name)
-                    .bind(id)
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("name uniqueness: {err}")))?
-            }
-            (Db::Postgres(pool), None) => {
-                sqlx::query_as("SELECT COUNT(*) FROM quality_profiles WHERE name = $1")
-                    .bind(name)
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("name uniqueness: {err}")))?
-            }
-            (Db::Postgres(pool), Some(id)) => {
-                sqlx::query_as("SELECT COUNT(*) FROM quality_profiles WHERE name = $1 AND id != $2")
-                    .bind(name)
-                    .bind(id)
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("name uniqueness: {err}")))?
-            }
-        };
+        }
+        let count = q
+            .count(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("name uniqueness: {err}")))?;
         Ok(count > 0)
     }
 
@@ -345,8 +302,10 @@ mod server {
             )));
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
         let qualities_json = encode_qualities(&payload.qualities);
         let description = payload
             .description
@@ -355,46 +314,34 @@ mod server {
             .filter(|s| !s.is_empty())
             .map(str::to_owned);
 
-        match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO quality_profiles (id, name, description, qualities, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(&name)
-                .bind(description.as_deref())
-                .bind(&qualities_json)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert quality_profile: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO quality_profiles (id, name, description, qualities, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6)",
-                )
-                .bind(&id)
-                .bind(&name)
-                .bind(description.as_deref())
-                .bind(&qualities_json)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert quality_profile: {err}")))?;
-            }
-        }
+        let am = quality_profiles::ActiveModel {
+            id: Set(id),
+            name: Set(name.clone()),
+            upgrades_allowed: Set(Some(true)),
+            upgrade_until_quality: Set(None),
+            qualities: Set(qualities_json),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            description: Set(description.clone()),
+            is_system: Set(Some(false)),
+            version: Set(None),
+            source_url: Set(None),
+            last_synced_at: Set(None),
+            quality_standards: Set(None),
+            metadata_preferences: Set(None),
+            customizations: Set(None),
+        };
+        insert_active_model(am, &st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("insert quality_profile: {err}")))?;
 
         Ok(QualityProfileDetail {
-            id,
+            id: id_str,
             name,
             description,
             qualities: payload.qualities,
-            inserted_at: Some(now.to_rfc3339()),
-            updated_at: Some(now.to_rfc3339()),
+            inserted_at: Some(now.0.to_rfc3339()),
+            updated_at: Some(now.0.to_rfc3339()),
         })
     }
 
@@ -412,7 +359,11 @@ mod server {
                 "A quality profile named {name:?} already exists"
             )));
         }
-        let now = chrono::Utc::now();
+        let Some(wrapper) = parse_uuid(&payload.id) else {
+            return Err(ServerFnError::new("quality profile not found"));
+        };
+        let backend = st.db.get_database_backend();
+        let now = DateTimeSecs::from(chrono::Utc::now());
         let qualities_json = encode_qualities(&payload.qualities);
         let description = payload
             .description
@@ -421,37 +372,25 @@ mod server {
             .filter(|s| !s.is_empty())
             .map(str::to_owned);
 
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE quality_profiles \
-                 SET name = ?, description = ?, qualities = ?, updated_at = ? \
-                 WHERE id = ?",
+        let res = quality_profiles::Entity::update_many()
+            .col_expr(quality_profiles::Column::Name, Expr::value(name.clone()))
+            .col_expr(
+                quality_profiles::Column::Description,
+                Expr::value(description.clone()),
             )
-            .bind(&name)
-            .bind(description.as_deref())
-            .bind(&qualities_json)
-            .bind(now.to_rfc3339())
-            .bind(&payload.id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("update quality_profile: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE quality_profiles \
-                 SET name = $1, description = $2, qualities = $3, updated_at = $4 \
-                 WHERE id = $5",
+            .col_expr(
+                quality_profiles::Column::Qualities,
+                Expr::value(qualities_json),
             )
-            .bind(&name)
-            .bind(description.as_deref())
-            .bind(&qualities_json)
-            .bind(now)
-            .bind(&payload.id)
-            .execute(pool)
+            .col_expr(
+                quality_profiles::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(quality_profiles::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("update quality_profile: {err}")))?
-            .rows_affected(),
-        };
-        if affected == 0 {
+            .map_err(|err| ServerFnError::new(format!("update quality_profile: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new("quality profile not found"));
         }
 
@@ -461,21 +400,16 @@ mod server {
     pub(super) async fn delete(id: String) -> Result<(), ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete quality_profile: {err}")))?
-                .rows_affected(),
-            Db::Postgres(pool) => sqlx::query("DELETE FROM quality_profiles WHERE id = $1")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete quality_profile: {err}")))?
-                .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new("quality profile not found"));
         };
-        if affected == 0 {
+        let backend = st.db.get_database_backend();
+        let res = quality_profiles::Entity::delete_many()
+            .filter(Expr::col(quality_profiles::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("delete quality_profile: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new("quality profile not found"));
         }
         Ok(())

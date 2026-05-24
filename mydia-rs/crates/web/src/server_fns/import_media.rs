@@ -179,10 +179,19 @@ mod server {
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::{media_files, media_items};
     use mydia_rs_metadata::provider::{FetchOpts, Provider, ProviderConfig, SearchOpts};
     use mydia_rs_metadata::relay::Relay;
     use mydia_rs_metadata::structs::{MediaMetadata, MediaType, ProviderKind, SearchResult};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
+
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -306,110 +315,90 @@ mod server {
     }
 
     async fn find_by_tmdb(
-        db: &Db,
+        db: &DatabaseConnection,
         tmdb_id: Option<i64>,
         media_type: &str,
     ) -> Result<Option<String>, ServerFnError> {
         let Some(tmdb_id) = tmdb_id else {
             return Ok(None);
         };
-        let row: Option<(String,)> = match db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT id FROM media_items WHERE tmdb_id = ? AND type = ? LIMIT 1")
-                    .bind(tmdb_id)
-                    .bind(media_type)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("lookup by tmdb_id: {err}")))?
-            }
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id FROM media_items WHERE tmdb_id = $1 AND type = $2 LIMIT 1",
-            )
-            .bind(tmdb_id)
-            .bind(media_type)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("lookup by tmdb_id: {err}")))?,
+        let Some(id_i32) = i32::try_from(tmdb_id).ok() else {
+            return Ok(None);
         };
-        Ok(row.map(|(id,)| id))
+        let row = media_items::Entity::find()
+            .filter(media_items::Column::TmdbId.eq(id_i32))
+            .filter(media_items::Column::Type.eq(media_type.to_owned()))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("lookup by tmdb_id: {err}")))?;
+        Ok(row.map(|r| r.id.to_string()))
     }
 
     async fn insert_media_item(
-        db: &Db,
+        db: &DatabaseConnection,
         id: &str,
         media_type: &str,
         payload: &ImportFinalize,
         tmdb_id: Option<i64>,
     ) -> Result<(), ServerFnError> {
-        let now = chrono::Utc::now();
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(id)
-                .bind(media_type)
-                .bind(&payload.title)
-                .bind(payload.year)
-                .bind(tmdb_id)
-                .bind(true)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create media_item: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO media_items (id, type, title, year, tmdb_id, monitored, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-                )
-                .bind(id)
-                .bind(media_type)
-                .bind(&payload.title)
-                .bind(payload.year)
-                .bind(tmdb_id)
-                .bind(true)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create media_item: {err}")))?;
-            }
-        }
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let id_wrapper = parse_uuid(id)
+            .ok_or_else(|| ServerFnError::new(format!("invalid id {id}")))?;
+        let tmdb_id_i32 = tmdb_id.and_then(|n| i32::try_from(n).ok());
+        let am = media_items::ActiveModel {
+            id: Set(id_wrapper),
+            r#type: Set(media_type.to_owned()),
+            title: Set(payload.title.clone()),
+            original_title: Set(None),
+            year: Set(payload.year),
+            tmdb_id: Set(tmdb_id_i32),
+            imdb_id: Set(None),
+            metadata: Set(None),
+            monitored: Set(Some(true)),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            quality_profile_id: Set(None),
+            category: Set(None),
+            category_override: Set(false),
+            monitoring_preset: Set(Some("all".to_owned())),
+            seasons_refreshed_at: Set(None),
+            tvdb_id: Set(None),
+        };
+        insert_active_model(am, db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("create media_item: {err}")))?;
         Ok(())
     }
 
     async fn associate_file(
-        db: &Db,
+        db: &DatabaseConnection,
         file_id: &str,
         media_item_id: &str,
     ) -> Result<(), ServerFnError> {
-        let now = chrono::Utc::now();
-        let affected = match db {
-            Db::Sqlite(pool) => {
-                sqlx::query("UPDATE media_files SET media_item_id = ?, updated_at = ? WHERE id = ?")
-                    .bind(media_item_id)
-                    .bind(now.to_rfc3339())
-                    .bind(file_id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("associate file: {err}")))?
-                    .rows_affected()
-            }
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE media_files SET media_item_id = $1, updated_at = $2 WHERE id = $3",
-            )
-            .bind(media_item_id)
-            .bind(now)
-            .bind(file_id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("associate file: {err}")))?
-            .rows_affected(),
+        let Some(file_wrapper) = parse_uuid(file_id) else {
+            return Err(ServerFnError::new(format!("invalid file id {file_id}")));
         };
-        if affected == 0 {
+        let Some(media_wrapper) = parse_uuid(media_item_id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid media_item id {media_item_id}"
+            )));
+        };
+        let backend = db.get_database_backend();
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let res = media_files::Entity::update_many()
+            .col_expr(
+                media_files::Column::MediaItemId,
+                media_wrapper.into_simple_expr(backend),
+            )
+            .col_expr(
+                media_files::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(media_files::Column::Id).eq(file_wrapper.into_simple_expr(backend)))
+            .exec(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("associate file: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no media_files row with id {file_id}"
             )));

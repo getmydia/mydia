@@ -39,7 +39,7 @@ use axum::{
     routing::{delete, get, post},
     Extension, Json, Router,
 };
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_models::MediaFile;
 use serde::Deserialize;
 use tokio_util::io::ReaderStream;
@@ -48,15 +48,6 @@ use uuid::Uuid;
 use crate::api::auth_layer::{media_token_auth, AuthenticatedUser};
 use crate::api::v1::json_error;
 use crate::WebState;
-
-/// Subset of `media_files` columns we need to spawn a session. Mirrors
-/// the columns the `mydia_rs_streaming::Supervisor` consumes off the
-/// `MediaFile` model.
-const MEDIA_FILE_COLUMNS: &str =
-    "id, media_item_id, episode_id, quality_profile_id, library_path_id, path, relative_path, \
-     size, resolution, codec, hdr_format, audio_codec, bitrate, verified_at, analyzed_at, \
-     analysis_attempts, last_analysis_error, metadata, cover_blob, sprite_blob, vtt_blob, \
-     preview_blob, phash, generated_at, trashed_at, inserted_at, updated_at";
 
 pub fn router() -> Router {
     Router::new()
@@ -390,23 +381,68 @@ fn segment_mime_type(name: &str) -> &'static str {
     }
 }
 
-async fn lookup_media_file(db: &Db, id: &str) -> Result<Option<MediaFile>, sqlx::Error> {
-    let sql = format!("SELECT {MEDIA_FILE_COLUMNS} FROM media_files WHERE id = $1");
-    match db {
-        Db::Sqlite(pool) => {
-            let sql = sql.replace("$1", "?");
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, MediaFile>(&sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+async fn lookup_media_file(
+    db: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<MediaFile>, sea_orm::DbErr> {
+    use mydia_rs_db::types::{JsonMap, UuidText};
+    use mydia_rs_entities::media_files;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(None);
+    };
+    let backend = db.get_database_backend();
+    let Some(m) = media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(db)
+        .await?
+    else {
+        return Ok(None);
+    };
+
+    // The entity allows nullable `media_item_id` because the wider
+    // schema does, but the streaming supervisor's `MediaFile` model
+    // requires it (media files always have a parent for playback).
+    // Skip the row if missing — the caller surfaces this as 404.
+    let Some(media_item_id) = m.media_item_id else {
+        return Ok(None);
+    };
+    let metadata = m
+        .metadata
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .map(JsonMap);
+    Ok(Some(MediaFile {
+        id: m.id,
+        media_item_id,
+        episode_id: m.episode_id,
+        quality_profile_id: m.quality_profile_id,
+        library_path_id: m.library_path_id,
+        path: m.path,
+        relative_path: m.relative_path,
+        size: m.size,
+        resolution: m.resolution,
+        codec: m.codec,
+        hdr_format: m.hdr_format,
+        audio_codec: m.audio_codec,
+        bitrate: m.bitrate.map(i64::from),
+        verified_at: m.verified_at,
+        analyzed_at: m.analyzed_at,
+        analysis_attempts: m.analysis_attempts,
+        last_analysis_error: m.last_analysis_error,
+        metadata,
+        cover_blob: m.cover_blob,
+        sprite_blob: m.sprite_blob,
+        vtt_blob: m.vtt_blob,
+        preview_blob: m.preview_blob,
+        phash: m.phash,
+        generated_at: m.generated_at,
+        trashed_at: m.trashed_at,
+        inserted_at: m.inserted_at,
+        updated_at: m.updated_at,
+    }))
 }
 
 /// Reach the path joiner from tests so they don't need to duplicate

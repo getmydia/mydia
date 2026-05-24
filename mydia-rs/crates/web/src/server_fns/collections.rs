@@ -115,13 +115,22 @@ pub mod server {
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::{collection_items, collections, media_items};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::{QueryOrder, QuerySelect};
+    use sea_orm::sea_query::{Condition, Expr, ExprTrait, Func};
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
             .ok_or_else(|| ServerFnError::new("no fullstack context"))?;
         ctx.extension::<WebState>()
             .ok_or_else(|| ServerFnError::new("WebState extension missing"))
+    }
+
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
     }
 
     pub(super) async fn list_collections(
@@ -168,7 +177,7 @@ pub mod server {
     /// (the operator can still re-order via the Phoenix UI during the
     /// cutover window; future Rust UI work covers reordering).
     pub async fn fetch_collections(
-        db: &Db,
+        db: &DatabaseConnection,
         user_id: &str,
         query: &CollectionListQuery,
     ) -> Result<Vec<CollectionListItem>, ServerFnError> {
@@ -217,7 +226,7 @@ pub mod server {
     }
 
     pub async fn fetch_collection_detail(
-        db: &Db,
+        db: &DatabaseConnection,
         user_id: &str,
         id: &str,
     ) -> Result<CollectionDetail, ServerFnError> {
@@ -241,7 +250,7 @@ pub mod server {
     }
 
     pub async fn fetch_collection_items(
-        db: &Db,
+        db: &DatabaseConnection,
         user_id: &str,
         id: &str,
     ) -> Result<Vec<CollectionMember>, ServerFnError> {
@@ -255,174 +264,140 @@ pub mod server {
         fetch_manual_members(db, id).await
     }
 
+    fn model_to_row(m: collections::Model) -> CollectionRow {
+        (
+            m.id.to_string(),
+            m.name,
+            m.description,
+            m.r#type,
+            m.visibility,
+            m.is_system,
+            m.user_id.to_string(),
+        )
+    }
+
     async fn fetch_collection_rows(
-        db: &Db,
+        db: &DatabaseConnection,
         user_id: &str,
         search: Option<&str>,
         kind: Option<&str>,
         visibility: Option<&str>,
     ) -> Result<Vec<CollectionRow>, ServerFnError> {
-        // We build the query with sqlx::QueryBuilder to keep optional
-        // filters out of the SQL string when they aren't set. The
-        // `(user_id = ? OR visibility = 'shared')` predicate mirrors
-        // `Collections.list_collections/2` with `include_shared: true`.
-        use sqlx::{Postgres, QueryBuilder, Sqlite};
-
-        const COLS: &str = "id, name, description, type, visibility, is_system, user_id";
-
-        match db {
-            Db::Sqlite(pool) => {
-                let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
-                qb.push(COLS);
-                qb.push(" FROM collections WHERE (user_id = ");
-                qb.push_bind(user_id.to_owned());
-                qb.push(" OR visibility = 'shared')");
-                if let Some(term) = search {
-                    qb.push(" AND lower(name) LIKE ");
-                    qb.push_bind(format!("%{term}%"));
-                }
-                if let Some(k) = kind {
-                    qb.push(" AND type = ");
-                    qb.push_bind(k.to_owned());
-                }
-                if let Some(v) = visibility {
-                    qb.push(" AND visibility = ");
-                    qb.push_bind(v.to_owned());
-                }
-                qb.push(" ORDER BY position ASC, name ASC");
-                qb.build_query_as::<CollectionRow>()
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list collections: {err}")))
-            }
-            Db::Postgres(pool) => {
-                let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("SELECT ");
-                qb.push(COLS);
-                qb.push(" FROM collections WHERE (user_id = ");
-                qb.push_bind(user_id.to_owned());
-                qb.push(" OR visibility = 'shared')");
-                if let Some(term) = search {
-                    qb.push(" AND lower(name) LIKE ");
-                    qb.push_bind(format!("%{term}%"));
-                }
-                if let Some(k) = kind {
-                    qb.push(" AND type = ");
-                    qb.push_bind(k.to_owned());
-                }
-                if let Some(v) = visibility {
-                    qb.push(" AND visibility = ");
-                    qb.push_bind(v.to_owned());
-                }
-                qb.push(" ORDER BY position ASC, name ASC");
-                qb.build_query_as::<CollectionRow>()
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list collections: {err}")))
-            }
+        let Some(user_wrapper) = parse_uuid(user_id) else {
+            return Ok(Vec::new());
+        };
+        let backend = db.get_database_backend();
+        let mut cond = Condition::all();
+        cond = cond.add(
+            Condition::any()
+                .add(
+                    Expr::col(collections::Column::UserId)
+                        .eq(user_wrapper.into_simple_expr(backend)),
+                )
+                .add(collections::Column::Visibility.eq("shared".to_owned())),
+        );
+        if let Some(term) = search {
+            cond = cond.add(
+                Expr::expr(Func::lower(Expr::col(collections::Column::Name)))
+                    .like(format!("%{term}%")),
+            );
         }
+        if let Some(k) = kind {
+            cond = cond.add(collections::Column::Type.eq(k.to_owned()));
+        }
+        if let Some(v) = visibility {
+            cond = cond.add(collections::Column::Visibility.eq(v.to_owned()));
+        }
+        let rows = collections::Entity::find()
+            .filter(cond)
+            .order_by_asc(collections::Column::Position)
+            .order_by_asc(collections::Column::Name)
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("list collections: {err}")))?;
+        Ok(rows.into_iter().map(model_to_row).collect())
     }
 
     async fn fetch_collection_row(
-        db: &Db,
+        db: &DatabaseConnection,
         user_id: &str,
         id: &str,
     ) -> Result<CollectionRow, ServerFnError> {
-        const COLS: &str = "id, name, description, type, visibility, is_system, user_id";
-
-        let row: Option<CollectionRow> = match db {
-            Db::Sqlite(pool) => {
-                let sql = format!(
-                    "SELECT {COLS} FROM collections \
-                     WHERE id = ? AND (user_id = ? OR visibility = 'shared')"
-                );
-                sqlx::query_as(&sql)
-                    .bind(id)
-                    .bind(user_id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("collection detail: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                let sql = format!(
-                    "SELECT {COLS} FROM collections \
-                     WHERE id = $1 AND (user_id = $2 OR visibility = 'shared')"
-                );
-                sqlx::query_as(&sql)
-                    .bind(id)
-                    .bind(user_id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("collection detail: {err}")))?
-            }
+        let Some(id_wrapper) = parse_uuid(id) else {
+            return Err(ServerFnError::new("Collection not found"));
         };
-
-        row.ok_or_else(|| ServerFnError::new("Collection not found"))
+        let backend = db.get_database_backend();
+        let row = collections::Entity::find()
+            .filter(Expr::col(collections::Column::Id).eq(id_wrapper.into_simple_expr(backend)))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("collection detail: {err}")))?
+            .ok_or_else(|| ServerFnError::new("Collection not found"))?;
+        // Authz check: belongs to user or shared visibility.
+        let user_match = user_id == row.user_id.to_string();
+        if !user_match && row.visibility != "shared" {
+            return Err(ServerFnError::new("Collection not found"));
+        }
+        Ok(model_to_row(row))
     }
 
-    async fn count_manual_items(db: &Db, collection_id: &str) -> Result<i64, ServerFnError> {
-        match db {
-            Db::Sqlite(pool) => {
-                let (n,): (i64,) =
-                    sqlx::query_as("SELECT COUNT(*) FROM collection_items WHERE collection_id = ?")
-                        .bind(collection_id)
-                        .fetch_one(pool)
-                        .await
-                        .map_err(|err| ServerFnError::new(format!("count items: {err}")))?;
-                Ok(n)
-            }
-            Db::Postgres(pool) => {
-                let (n,): (i64,) = sqlx::query_as(
-                    "SELECT COUNT(*) FROM collection_items WHERE collection_id = $1",
-                )
-                .bind(collection_id)
-                .fetch_one(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("count items: {err}")))?;
-                Ok(n)
-            }
-        }
+    async fn count_manual_items(
+        db: &DatabaseConnection,
+        collection_id: &str,
+    ) -> Result<i64, ServerFnError> {
+        let Some(wrapper) = parse_uuid(collection_id) else {
+            return Ok(0);
+        };
+        let backend = db.get_database_backend();
+        let n = collection_items::Entity::find()
+            .filter(
+                Expr::col(collection_items::Column::CollectionId)
+                    .eq(wrapper.into_simple_expr(backend)),
+            )
+            .count(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("count items: {err}")))?;
+        Ok(i64::try_from(n).unwrap_or(i64::MAX))
     }
 
     async fn manual_poster_paths(
-        db: &Db,
+        db: &DatabaseConnection,
         collection_id: &str,
         limit: i64,
     ) -> Result<Vec<String>, ServerFnError> {
-        // Walk the join in position order and pluck poster paths from
-        // the embedded `metadata` JSON. The Phoenix helper does the same
-        // shape — `metadata.poster_path` first, falling back to
-        // collection-level `poster_path` (handled by the front-end via
-        // a placeholder, not in this query).
-        let sql_sqlite = "SELECT m.metadata FROM collection_items ci \
-                          JOIN media_items m ON ci.media_item_id = m.id \
-                          WHERE ci.collection_id = ? \
-                          ORDER BY ci.position ASC LIMIT ?";
-        let sql_pg = "SELECT m.metadata FROM collection_items ci \
-                      JOIN media_items m ON ci.media_item_id = m.id \
-                      WHERE ci.collection_id = $1 \
-                      ORDER BY ci.position ASC LIMIT $2";
-
-        let rows: Vec<(Option<String>,)> = match db {
-            Db::Sqlite(pool) => sqlx::query_as(sql_sqlite)
-                .bind(collection_id)
-                .bind(limit)
-                .fetch_all(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("poster paths: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(sql_pg)
-                .bind(collection_id)
-                .bind(limit)
-                .fetch_all(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("poster paths: {err}")))?,
+        let Some(wrapper) = parse_uuid(collection_id) else {
+            return Ok(Vec::new());
         };
-
-        let mut out = Vec::with_capacity(rows.len());
-        for (maybe_json,) in rows {
-            if let Some(json) = maybe_json {
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
-                    if let Some(p) = v.get("poster_path").and_then(|v| v.as_str()) {
-                        out.push(p.to_owned());
+        let backend = db.get_database_backend();
+        let items = collection_items::Entity::find()
+            .filter(
+                Expr::col(collection_items::Column::CollectionId)
+                    .eq(wrapper.into_simple_expr(backend)),
+            )
+            .order_by_asc(collection_items::Column::Position)
+            .limit(u64::try_from(limit).unwrap_or(4))
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("poster paths: {err}")))?;
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+        let media_ids: Vec<UuidText> = items.iter().map(|ci| ci.media_item_id).collect();
+        let media = media_items::Entity::find()
+            .filter(media_items::Column::Id.is_in(media_ids))
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("poster paths media_items: {err}")))?;
+        let by_id: std::collections::HashMap<UuidText, media_items::Model> =
+            media.into_iter().map(|m| (m.id, m)).collect();
+        let mut out = Vec::with_capacity(items.len());
+        for ci in items {
+            if let Some(m) = by_id.get(&ci.media_item_id) {
+                if let Some(json) = m.metadata.as_deref() {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(json) {
+                        if let Some(p) = v.get("poster_path").and_then(|x| x.as_str()) {
+                            out.push(p.to_owned());
+                        }
                     }
                 }
             }
@@ -431,40 +406,39 @@ pub mod server {
     }
 
     async fn fetch_manual_members(
-        db: &Db,
+        db: &DatabaseConnection,
         collection_id: &str,
     ) -> Result<Vec<CollectionMember>, ServerFnError> {
-        type Row = (String, Option<String>, Option<i32>, String, Option<String>);
-
-        let rows: Vec<Row> = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT m.id, m.title, m.year, m.type, m.metadata \
-                 FROM collection_items ci \
-                 JOIN media_items m ON ci.media_item_id = m.id \
-                 WHERE ci.collection_id = ? \
-                 ORDER BY ci.position ASC",
-            )
-            .bind(collection_id)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("collection items: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT m.id, m.title, m.year, m.type, m.metadata \
-                 FROM collection_items ci \
-                 JOIN media_items m ON ci.media_item_id = m.id \
-                 WHERE ci.collection_id = $1 \
-                 ORDER BY ci.position ASC",
-            )
-            .bind(collection_id)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("collection items: {err}")))?,
+        let Some(wrapper) = parse_uuid(collection_id) else {
+            return Ok(Vec::new());
         };
-
-        Ok(rows
+        let backend = db.get_database_backend();
+        let items = collection_items::Entity::find()
+            .filter(
+                Expr::col(collection_items::Column::CollectionId)
+                    .eq(wrapper.into_simple_expr(backend)),
+            )
+            .order_by_asc(collection_items::Column::Position)
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("collection items: {err}")))?;
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+        let media_ids: Vec<UuidText> = items.iter().map(|ci| ci.media_item_id).collect();
+        let media = media_items::Entity::find()
+            .filter(media_items::Column::Id.is_in(media_ids))
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("collection items media: {err}")))?;
+        let by_id: std::collections::HashMap<UuidText, media_items::Model> =
+            media.into_iter().map(|m| (m.id, m)).collect();
+        Ok(items
             .into_iter()
-            .map(|(id, title, year, kind, metadata)| {
-                let poster_path = metadata
+            .filter_map(|ci| {
+                let m = by_id.get(&ci.media_item_id)?;
+                let poster_path = m
+                    .metadata
                     .as_deref()
                     .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
                     .and_then(|v| {
@@ -472,13 +446,13 @@ pub mod server {
                             .and_then(|p| p.as_str())
                             .map(std::borrow::ToOwned::to_owned)
                     });
-                CollectionMember {
-                    id,
-                    title: title.unwrap_or_default(),
-                    year,
-                    kind,
+                Some(CollectionMember {
+                    id: m.id.to_string(),
+                    title: m.title.clone(),
+                    year: m.year,
+                    kind: m.r#type.clone(),
                     poster_path,
-                }
+                })
             })
             .collect())
     }

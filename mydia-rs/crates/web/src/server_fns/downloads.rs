@@ -149,7 +149,16 @@ mod server {
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::{downloads, episodes, media_items};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::{QueryOrder, QuerySelect};
+    use sea_orm::sea_query::{Condition, Expr, ExprTrait};
+
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -163,7 +172,7 @@ mod server {
         let st = state()?;
 
         let tab = DownloadsTab::parse(&query.tab);
-        let page = query.page.max(0);
+        let page = Ord::max(query.page, 0);
         let offset = page * PAGE_SIZE;
         let limit = PAGE_SIZE + 1;
 
@@ -193,22 +202,20 @@ mod server {
         //   Client.remove_download(adapter, config, client_id, opts)
         //   |> History.delete_download
         // sequence so cancelling here also stops the underlying client.
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query("DELETE FROM downloads WHERE id = ?")
-                .bind(&payload.id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("cancel download: {err}")))?
-                .rows_affected(),
-            Db::Postgres(pool) => sqlx::query("DELETE FROM downloads WHERE id = $1")
-                .bind(&payload.id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("cancel download: {err}")))?
-                .rows_affected(),
+        let Some(wrapper) = parse_uuid(&payload.id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid download id {}",
+                payload.id
+            )));
         };
+        let backend = st.db.get_database_backend();
+        let res = downloads::Entity::delete_many()
+            .filter(Expr::col(downloads::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("cancel download: {err}")))?;
 
-        if affected == 0 {
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no download with id {}",
                 payload.id
@@ -233,23 +240,26 @@ mod server {
         let now = chrono::Utc::now();
 
         // Guard: the media_items row must exist before we wire it in.
-        // SQLite happily lets a FK violation through unless the FK
-        // pragma is on (it isn't on by default); we do the lookup
-        // explicitly so the operator gets a clear error.
-        let media_present: Option<(String,)> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM media_items WHERE id = ? LIMIT 1")
-                .bind(&payload.media_item_id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("verify media_item: {err}")))?,
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT id FROM media_items WHERE id = $1 LIMIT 1")
-                    .bind(&payload.media_item_id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("verify media_item: {err}")))?
-            }
+        let Some(media_wrapper) = parse_uuid(&payload.media_item_id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid media_item id {}",
+                payload.media_item_id
+            )));
         };
+        let Some(download_wrapper) = parse_uuid(&payload.download_id) else {
+            return Err(ServerFnError::new(format!(
+                "invalid download id {}",
+                payload.download_id
+            )));
+        };
+        let backend = st.db.get_database_backend();
+        let media_present = media_items::Entity::find()
+            .filter(
+                Expr::col(media_items::Column::Id).eq(media_wrapper.into_simple_expr(backend)),
+            )
+            .one(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("verify media_item: {err}")))?;
         if media_present.is_none() {
             return Err(ServerFnError::new(format!(
                 "no media_item with id {}",
@@ -257,31 +267,27 @@ mod server {
             )));
         }
 
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE downloads SET media_item_id = ?, match_status = 'matched', updated_at = ? \
-                 WHERE id = ?",
+        let now_secs = DateTimeSecs::from(now);
+        let res = downloads::Entity::update_many()
+            .col_expr(
+                downloads::Column::MediaItemId,
+                media_wrapper.into_simple_expr(backend),
             )
-            .bind(&payload.media_item_id)
-            .bind(now.to_rfc3339())
-            .bind(&payload.download_id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("manual match: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE downloads SET media_item_id = $1, match_status = 'matched', updated_at = $2 \
-                 WHERE id = $3",
+            .col_expr(
+                downloads::Column::MatchStatus,
+                Expr::value("matched".to_owned()),
             )
-            .bind(&payload.media_item_id)
-            .bind(now)
-            .bind(&payload.download_id)
-            .execute(pool)
+            .col_expr(
+                downloads::Column::UpdatedAt,
+                now_secs.into_simple_expr(backend),
+            )
+            .filter(
+                Expr::col(downloads::Column::Id).eq(download_wrapper.into_simple_expr(backend)),
+            )
+            .exec(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("manual match: {err}")))?
-            .rows_affected(),
-        };
-        if affected == 0 {
+            .map_err(|err| ServerFnError::new(format!("manual match: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no download with id {}",
                 payload.download_id
@@ -293,108 +299,111 @@ mod server {
         Ok(())
     }
 
-    /// Internal SQL row shape. The `status` and `progress` columns
-    /// dropped in migration 20251105033610 are NOT selected — `status`
-    /// is derived in [`decode_row`] from `imported_at` / `completed_at`
-    /// / `import_failed_at`, and `progress` is left as `None` until the
-    /// adapter-probe layer is ported.
-    #[derive(sqlx::FromRow)]
-    struct CoreRow {
-        id: String,
-        title: String,
-        indexer: Option<String>,
-        download_client: Option<String>,
-        error_message: Option<String>,
-        inserted_at: chrono::DateTime<chrono::Utc>,
-        completed_at: Option<chrono::DateTime<chrono::Utc>>,
-        imported_at: Option<chrono::DateTime<chrono::Utc>>,
-        bytes_pulled: Option<i64>,
-        import_failed_at: Option<chrono::DateTime<chrono::Utc>>,
-        match_status: Option<String>,
-        media_item_title: Option<String>,
-        media_item_id: Option<String>,
-        media_item_type: Option<String>,
-        episode_season: Option<i64>,
-        episode_number: Option<i64>,
-    }
-
     async fn fetch_rows(
-        db: &Db,
+        db: &DatabaseConnection,
         tab: DownloadsTab,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<DownloadRow>, ServerFnError> {
-        // Column aliases lift the joined columns into stable names so
-        // the `FromRow` derive can find them regardless of the join
-        // shape.
-        //
-        // Without the dropped `status` column we can't filter the Queue
-        // / Issues tabs purely in SQL — Phoenix filters in-memory after
-        // hydrating each row from the adapter (see
-        // `Mydia.Downloads.History.apply_status_filters/2`). We mirror
-        // that by selecting the candidate set in SQL and finishing the
-        // tab filter in Rust against the derived status.
-        const SELECT_COLS: &str = "d.id AS id, d.title AS title, \
-             d.indexer AS indexer, d.download_client AS download_client, \
-             d.error_message AS error_message, d.inserted_at AS inserted_at, \
-             d.completed_at AS completed_at, d.imported_at AS imported_at, \
-             d.bytes_pulled AS bytes_pulled, d.import_failed_at AS import_failed_at, \
-             d.match_status AS match_status, \
-             m.title AS media_item_title, m.id AS media_item_id, m.type AS media_item_type, \
-             e.season_number AS episode_season, e.episode_number AS episode_number";
-
-        // SQL pre-filter narrows the candidate set as much as the
-        // remaining columns allow. Each tab adds a Rust-side post-filter
-        // on the derived status below.
-        let where_clause = match tab {
-            DownloadsTab::Queue => {
-                " WHERE d.imported_at IS NULL \
-                  AND d.completed_at IS NULL \
-                  AND d.import_failed_at IS NULL "
+        // Build the WHERE clause from the tab; SeaORM `Condition`
+        // composes per-tab predicates rather than the prior raw-SQL
+        // CASE chain.
+        let cond = match tab {
+            DownloadsTab::Queue => Condition::all()
+                .add(downloads::Column::ImportedAt.is_null())
+                .add(downloads::Column::CompletedAt.is_null())
+                .add(downloads::Column::ImportFailedAt.is_null()),
+            DownloadsTab::Completed => {
+                Condition::all().add(downloads::Column::ImportedAt.is_not_null())
             }
-            DownloadsTab::Completed => " WHERE d.imported_at IS NOT NULL ",
-            DownloadsTab::Issues => {
-                " WHERE d.import_failed_at IS NOT NULL \
-                  OR d.match_status IN ('unmatched', 'unresolved_files') "
-            }
+            DownloadsTab::Issues => Condition::any()
+                .add(downloads::Column::ImportFailedAt.is_not_null())
+                .add(downloads::Column::MatchStatus.is_in([
+                    "unmatched".to_owned(),
+                    "unresolved_files".to_owned(),
+                ])),
         };
 
-        let rows: Vec<CoreRow> = match db {
-            Db::Sqlite(pool) => {
-                let sql = format!(
-                    "SELECT {SELECT_COLS} \
-                     FROM downloads d \
-                     LEFT JOIN media_items m ON m.id = d.media_item_id \
-                     LEFT JOIN episodes e ON e.id = d.episode_id \
-                     {where_clause} \
-                     ORDER BY d.inserted_at DESC LIMIT ? OFFSET ?"
-                );
-                sqlx::query_as(&sql)
-                    .bind(limit)
-                    .bind(offset)
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list downloads: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                let sql = format!(
-                    "SELECT {SELECT_COLS} \
-                     FROM downloads d \
-                     LEFT JOIN media_items m ON m.id = d.media_item_id \
-                     LEFT JOIN episodes e ON e.id = d.episode_id \
-                     {where_clause} \
-                     ORDER BY d.inserted_at DESC LIMIT $1 OFFSET $2"
-                );
-                sqlx::query_as(&sql)
-                    .bind(limit)
-                    .bind(offset)
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list downloads: {err}")))?
-            }
+        let raw_rows = downloads::Entity::find()
+            .filter(cond)
+            .order_by_desc(downloads::Column::InsertedAt)
+            .offset(u64::try_from(offset).unwrap_or(0))
+            .limit(u64::try_from(limit).unwrap_or(50))
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("list downloads: {err}")))?;
+
+        // Hydrate parents in two side-band fetches to keep the SeaORM
+        // surface vanilla — find_with_related would require explicit
+        // join wiring for the optional FKs.
+        let media_ids: Vec<UuidText> = raw_rows
+            .iter()
+            .filter_map(|r| r.media_item_id)
+            .collect();
+        let media_map: std::collections::HashMap<UuidText, media_items::Model> = if media_ids
+            .is_empty()
+        {
+            std::collections::HashMap::new()
+        } else {
+            media_items::Entity::find()
+                .filter(media_items::Column::Id.is_in(media_ids))
+                .all(db)
+                .await
+                .map_err(|err| ServerFnError::new(format!("list downloads media: {err}")))?
+                .into_iter()
+                .map(|m| (m.id, m))
+                .collect()
+        };
+        let episode_ids: Vec<UuidText> = raw_rows
+            .iter()
+            .filter_map(|r| r.episode_id)
+            .collect();
+        let episode_map: std::collections::HashMap<UuidText, episodes::Model> = if episode_ids
+            .is_empty()
+        {
+            std::collections::HashMap::new()
+        } else {
+            episodes::Entity::find()
+                .filter(episodes::Column::Id.is_in(episode_ids))
+                .all(db)
+                .await
+                .map_err(|err| ServerFnError::new(format!("list downloads episodes: {err}")))?
+                .into_iter()
+                .map(|m| (m.id, m))
+                .collect()
         };
 
-        Ok(rows.into_iter().map(decode_row).collect())
+        Ok(raw_rows
+            .into_iter()
+            .map(|d| {
+                let m = d.media_item_id.and_then(|id| media_map.get(&id));
+                let e = d.episode_id.and_then(|id| episode_map.get(&id));
+                let status = derive_status(
+                    d.completed_at.as_ref().map(|dt| &dt.0),
+                    d.imported_at.as_ref().map(|dt| &dt.0),
+                    d.import_failed_at.as_ref().map(|dt| &dt.0),
+                );
+                DownloadRow {
+                    id: d.id.to_string(),
+                    title: d.title,
+                    status: status.to_owned(),
+                    progress: None,
+                    indexer: d.indexer,
+                    download_client: d.download_client,
+                    error_message: d.error_message,
+                    inserted_at: d.inserted_at.0.to_rfc3339(),
+                    completed_at: d.completed_at.map(|dt| dt.0.to_rfc3339()),
+                    media_item_title: m.map(|m| m.title.clone()),
+                    media_item_id: m.map(|m| m.id.to_string()),
+                    media_item_type: m.map(|m| m.r#type.clone()),
+                    episode_season: e.map(|e| i64::from(e.season_number)),
+                    episode_number: e.map(|e| i64::from(e.episode_number)),
+                    bytes_pulled: d.bytes_pulled,
+                    import_failed_at: d.import_failed_at.map(|dt| dt.0.to_rfc3339()),
+                    match_status: d.match_status,
+                }
+            })
+            .collect())
     }
 
     /// Coarse status derived from the surviving columns. Mirrors the
@@ -417,32 +426,4 @@ mod server {
         }
     }
 
-    fn decode_row(r: CoreRow) -> DownloadRow {
-        let status = derive_status(
-            r.completed_at.as_ref(),
-            r.imported_at.as_ref(),
-            r.import_failed_at.as_ref(),
-        );
-        DownloadRow {
-            id: r.id,
-            title: r.title,
-            status: status.to_owned(),
-            // TODO(U27.downloads-followup): populate from the adapter
-            // probe's `progress` field once that layer lands.
-            progress: None,
-            indexer: r.indexer,
-            download_client: r.download_client,
-            error_message: r.error_message,
-            inserted_at: r.inserted_at.to_rfc3339(),
-            completed_at: r.completed_at.map(|dt| dt.to_rfc3339()),
-            media_item_title: r.media_item_title,
-            media_item_id: r.media_item_id,
-            media_item_type: r.media_item_type,
-            episode_season: r.episode_season,
-            episode_number: r.episode_number,
-            bytes_pulled: r.bytes_pulled,
-            import_failed_at: r.import_failed_at.map(|dt| dt.to_rfc3339()),
-            match_status: r.match_status,
-        }
-    }
 }

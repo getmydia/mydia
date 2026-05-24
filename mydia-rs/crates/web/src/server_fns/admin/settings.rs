@@ -81,7 +81,12 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::config_settings;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
     use std::collections::HashMap;
 
     /// Descriptor for one configurable setting. Mirrors the
@@ -379,65 +384,75 @@ mod server {
         }
     }
 
-    async fn read_db_settings(db: &Db) -> Result<Vec<(String, String)>, ServerFnError> {
-        let rows: Vec<(String, String)> = match db {
-            Db::Sqlite(pool) => sqlx::query_as("SELECT key, value FROM config_settings")
-                .fetch_all(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("read settings: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as("SELECT key, value FROM config_settings")
-                .fetch_all(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("read settings: {err}")))?,
-        };
-        Ok(rows)
+    async fn read_db_settings(
+        db: &DatabaseConnection,
+    ) -> Result<Vec<(String, String)>, ServerFnError> {
+        let rows = config_settings::Entity::find()
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read settings: {err}")))?;
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.key, r.value.unwrap_or_default()))
+            .collect())
     }
 
     async fn upsert_setting(
-        db: &Db,
+        db: &DatabaseConnection,
         key: &str,
         category: &str,
         value: &str,
         user_id: &str,
     ) -> Result<(), ServerFnError> {
-        let now = chrono::Utc::now();
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?) \
-                     ON CONFLICT(key) DO UPDATE SET value = excluded.value, \
-                     category = excluded.category, updated_by_id = excluded.updated_by_id, \
-                     updated_at = excluded.updated_at",
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let user_uuid = uuid::Uuid::parse_str(user_id).ok().map(UuidText::from);
+        // Read first to decide insert vs update; on_conflict surfaces
+        // don't compose cleanly with the wrapper-typed PK on Postgres.
+        let existing = config_settings::Entity::find()
+            .filter(config_settings::Column::Key.eq(key.to_owned()))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read setting: {err}")))?;
+        if let Some(row) = existing {
+            let backend = db.get_database_backend();
+            config_settings::Entity::update_many()
+                .col_expr(
+                    config_settings::Column::Value,
+                    Expr::value(value.to_owned()),
                 )
-                .bind(key)
-                .bind(value)
-                .bind(category)
-                .bind(user_id)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("upsert setting: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6) \
-                     ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, \
-                     category = EXCLUDED.category, updated_by_id = EXCLUDED.updated_by_id, \
-                     updated_at = EXCLUDED.updated_at",
+                .col_expr(
+                    config_settings::Column::Category,
+                    Expr::value(category.to_owned()),
                 )
-                .bind(key)
-                .bind(value)
-                .bind(category)
-                .bind(user_id)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
+                .col_expr(
+                    config_settings::Column::UpdatedById,
+                    user_uuid
+                        .map(|u| u.into_simple_expr(backend))
+                        .unwrap_or_else(|| Expr::value(Option::<String>::None)),
+                )
+                .col_expr(
+                    config_settings::Column::UpdatedAt,
+                    now.into_simple_expr(backend),
+                )
+                .filter(Expr::col(config_settings::Column::Id).eq(row.id.into_simple_expr(backend)))
+                .exec(db)
                 .await
-                .map_err(|err| ServerFnError::new(format!("upsert setting: {err}")))?;
-            }
+                .map_err(|err| ServerFnError::new(format!("update setting: {err}")))?;
+        } else {
+            let id = UuidText::from(uuid::Uuid::new_v4());
+            let am = config_settings::ActiveModel {
+                id: Set(id),
+                key: Set(key.to_owned()),
+                value: Set(Some(value.to_owned())),
+                category: Set(category.to_owned()),
+                description: Set(None),
+                updated_by_id: Set(user_uuid),
+                inserted_at: Set(now),
+                updated_at: Set(now),
+            };
+            insert_active_model(am, db)
+                .await
+                .map_err(|err| ServerFnError::new(format!("insert setting: {err}")))?;
         }
         Ok(())
     }

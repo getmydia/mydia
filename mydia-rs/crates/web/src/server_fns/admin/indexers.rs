@@ -83,13 +83,25 @@ pub async fn test_indexer(id: String) -> Result<ConnectionTest, ServerFnError> {
 
 #[cfg(feature = "server")]
 mod server {
+    // TODO(broken-pre-conversion): the wire payload references a
+    // `definition` column that the entity (`indexer_configs`) doesn't
+    // have. The entity stores `type` (cardigann/prowlarr/jackett/
+    // nzbhydra2) instead. Map `definition` → `r#type` so callers see a
+    // working CRUD surface; the cardigann-YAML-name story will need a
+    // separate column or a per-row JSON blob when the feature surfaces.
     use super::{ConnectionTest, IndexerRow, NewIndexer};
     use crate::server_fns::auth::require_admin_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::indexer_configs;
     use mydia_rs_indexers::adapter::{AdapterConfig, AdapterKind};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -98,47 +110,30 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type Row = (
-        String,
-        String,
-        String,
-        String,
-        bool,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
+
+    fn model_to_row(m: &indexer_configs::Model) -> IndexerRow {
+        IndexerRow {
+            id: m.id.to_string(),
+            name: m.name.clone(),
+            definition: m.r#type.clone(),
+            base_url: m.base_url.clone().unwrap_or_default(),
+            enabled: m.enabled.unwrap_or(false),
+            inserted_at: Some(m.inserted_at.0.to_rfc3339()),
+        }
+    }
 
     pub(super) async fn list() -> Result<Vec<IndexerRow>, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let rows: Vec<Row> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, name, definition, base_url, enabled, inserted_at \
-                 FROM indexers ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
+        let rows = indexer_configs::Entity::find()
+            .order_by_asc(indexer_configs::Column::InsertedAt)
+            .all(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query indexers: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, name, definition, base_url, enabled, inserted_at \
-                 FROM indexers ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query indexers: {err}")))?,
-        };
-        Ok(rows
-            .into_iter()
-            .map(
-                |(id, name, definition, base_url, enabled, inserted_at)| IndexerRow {
-                    id,
-                    name,
-                    definition,
-                    base_url,
-                    enabled,
-                    inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-                },
-            )
-            .collect())
+            .map_err(|err| ServerFnError::new(format!("query indexers: {err}")))?;
+        Ok(rows.iter().map(model_to_row).collect())
     }
 
     pub(super) async fn create(payload: NewIndexer) -> Result<IndexerRow, ServerFnError> {
@@ -146,72 +141,54 @@ mod server {
         validate(&payload)?;
         let st = state().await?;
 
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
-        match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO indexers (id, name, definition, base_url, api_key, enabled, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(payload.name.trim())
-                .bind(payload.definition.trim())
-                .bind(payload.base_url.trim())
-                .bind(payload.api_key.as_deref())
-                .bind(payload.enabled)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert indexer: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO indexers (id, name, definition, base_url, api_key, enabled, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-                )
-                .bind(&id)
-                .bind(payload.name.trim())
-                .bind(payload.definition.trim())
-                .bind(payload.base_url.trim())
-                .bind(payload.api_key.as_deref())
-                .bind(payload.enabled)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert indexer: {err}")))?;
-            }
-        }
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let am = indexer_configs::ActiveModel {
+            id: Set(id),
+            name: Set(payload.name.trim().to_owned()),
+            r#type: Set(payload.definition.trim().to_owned()),
+            enabled: Set(Some(payload.enabled)),
+            priority: Set(None),
+            base_url: Set(Some(payload.base_url.trim().to_owned())),
+            api_key: Set(payload.api_key.clone()),
+            rate_limit: Set(None),
+            connection_settings: Set(None),
+            updated_by_id: Set(None),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            env_name: Set(None),
+            indexer_ids: Set(None),
+            categories: Set(None),
+            min_post_age_minutes: Set(None),
+        };
+        insert_active_model(am, &st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("insert indexer: {err}")))?;
         Ok(IndexerRow {
-            id,
+            id: id_str,
             name: payload.name.trim().to_owned(),
             definition: payload.definition.trim().to_owned(),
             base_url: payload.base_url.trim().to_owned(),
             enabled: payload.enabled,
-            inserted_at: Some(now.to_rfc3339()),
+            inserted_at: Some(now.0.to_rfc3339()),
         })
     }
 
     pub(super) async fn delete(id: String) -> Result<(), ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query("DELETE FROM indexers WHERE id = ?")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete indexer: {err}")))?
-                .rows_affected(),
-            Db::Postgres(pool) => sqlx::query("DELETE FROM indexers WHERE id = $1")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete indexer: {err}")))?
-                .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid indexer id {id}")));
         };
-        if affected == 0 {
+        let backend = st.db.get_database_backend();
+        let res = indexer_configs::Entity::delete_many()
+            .filter(Expr::col(indexer_configs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("delete indexer: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!("no indexer with id {id}")));
         }
         st.indexer_probes.invalidate(&id);
@@ -221,30 +198,33 @@ mod server {
     pub(super) async fn toggle(id: String) -> Result<IndexerRow, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let now = chrono::Utc::now();
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE indexers SET enabled = NOT enabled, updated_at = ? WHERE id = ?",
-            )
-            .bind(now.to_rfc3339())
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("toggle indexer: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE indexers SET enabled = NOT enabled, updated_at = $1 WHERE id = $2",
-            )
-            .bind(now)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("toggle indexer: {err}")))?
-            .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid indexer id {id}")));
         };
-        if affected == 0 {
+        // SeaORM's typed builder doesn't have a "negate column" op so
+        // read-then-write. This is a per-row toggle; the round-trip is
+        // negligible.
+        let backend = st.db.get_database_backend();
+        let Some(row) = indexer_configs::Entity::find()
+            .filter(Expr::col(indexer_configs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read indexer: {err}")))?
+        else {
             return Err(ServerFnError::new(format!("no indexer with id {id}")));
-        }
+        };
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let new_enabled = !row.enabled.unwrap_or(false);
+        indexer_configs::Entity::update_many()
+            .col_expr(indexer_configs::Column::Enabled, Expr::value(new_enabled))
+            .col_expr(
+                indexer_configs::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(indexer_configs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("toggle indexer: {err}")))?;
         // Operator-intent invalidation: toggling enabled doesn't change
         // connectivity, but the operator's intent on this surface is "I
         // changed something" — drop the cached entry so the next Test
@@ -263,39 +243,29 @@ mod server {
     pub(super) async fn test(id: String) -> Result<ConnectionTest, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        type Row = (String, String, String, Option<String>);
-        let row: Option<Row> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT name, definition, base_url, api_key FROM indexers \
-                 WHERE id = ? LIMIT 1",
-            )
-            .bind(&id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("read indexer: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT name, definition, base_url, api_key FROM indexers \
-                 WHERE id = $1 LIMIT 1",
-            )
-            .bind(&id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("read indexer: {err}")))?,
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid indexer id {id}")));
         };
-        let Some((name, _definition, base_url, api_key)) = row else {
+        let backend = st.db.get_database_backend();
+        let Some(row) = indexer_configs::Entity::find()
+            .filter(Expr::col(indexer_configs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read indexer: {err}")))?
+        else {
             return Err(ServerFnError::new(format!("no indexer with id {id}")));
         };
 
         // The admin page treats every row as Cardigann-backed (the
         // page is explicitly named the "Cardigann-backed sources"
-        // surface in its description); the per-row `definition`
+        // surface in its description); the per-row `r#type`
         // identifies which YAML drives the engine, not a different
         // adapter kind.
         let config = AdapterConfig {
             r#type: AdapterKind::Cardigann,
-            name,
-            base_url,
-            api_key,
+            name: row.name,
+            base_url: row.base_url.unwrap_or_default(),
+            api_key: row.api_key,
             options: serde_json::Value::Null,
             id: id.clone(),
             rate_limit: None,
@@ -310,6 +280,9 @@ mod server {
             message: entry.message,
         })
     }
+    // Stop unused-import warnings in case some imports above end up unused.
+    #[allow(dead_code)]
+    fn _silence_warnings(_db: &DatabaseConnection) {}
 
     fn validate(payload: &NewIndexer) -> Result<(), ServerFnError> {
         if payload.name.trim().is_empty() {

@@ -38,19 +38,10 @@ pub fn router() -> Router {
         .layer(from_fn(api_key_auth))
 }
 
-#[derive(sqlx::FromRow)]
-struct DownloadClientRow {
-    id: String,
-    name: Option<String>,
-    r#type: Option<String>,
-    enabled: Option<bool>,
-    priority: Option<i64>,
-    host: Option<String>,
-    port: Option<i64>,
-    use_ssl: Option<bool>,
-    url_base: Option<String>,
-    category: Option<String>,
-    download_directory: Option<String>,
+type DownloadClientRow = mydia_rs_entities::download_client_configs::Model;
+
+fn row_id_str(row: &DownloadClientRow) -> String {
+    row.id.to_string()
 }
 
 async fn index(Extension(state): Extension<WebState>) -> Response {
@@ -59,9 +50,10 @@ async fn index(Extension(state): Extension<WebState>) -> Response {
             let clients: Vec<serde_json::Value> = rows
                 .iter()
                 .map(|row| {
+                    let id_str = row_id_str(row);
                     let health = state
                         .download_probes
-                        .cached(&row.id)
+                        .cached(&id_str)
                         .as_ref()
                         .map_or_else(health_unknown, serialize_health);
                     serialize_summary(row, &health)
@@ -80,9 +72,10 @@ async fn index(Extension(state): Extension<WebState>) -> Response {
 async fn show(Extension(state): Extension<WebState>, Path(id): Path<String>) -> Response {
     match lookup_client(&state, &id).await {
         Ok(Some(row)) => {
+            let id_str = row_id_str(&row);
             let health = state
                 .download_probes
-                .cached(&row.id)
+                .cached(&id_str)
                 .as_ref()
                 .map_or_else(health_unknown, serialize_health);
             let body = json!({ "data": serialize_detail(&row, &health) });
@@ -161,41 +154,33 @@ struct ProbeTarget {
 async fn lookup_probe_target(
     state: &WebState,
     id: &str,
-) -> Result<Option<ProbeTarget>, sqlx::Error> {
-    use mydia_rs_db::Db;
+) -> Result<Option<ProbeTarget>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::download_client_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    type Row = (String, Option<String>, Option<String>, Option<String>);
-    let row: Option<Row> = match &state.db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT type, host, username, password FROM download_client_configs \
-             WHERE id = ? LIMIT 1",
-            )
-            .bind(id)
-            .fetch_optional(pool)
-            .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT type, host, username, password FROM download_client_configs \
-             WHERE id = $1 LIMIT 1",
-            )
-            .bind(id)
-            .fetch_optional(pool)
-            .await?
-        }
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(None);
     };
+    let backend = state.db.get_database_backend();
+    let row = download_client_configs::Entity::find()
+        .filter(
+            Expr::col(download_client_configs::Column::Id).eq(wrapper.into_simple_expr(backend)),
+        )
+        .one(&state.db)
+        .await?;
 
-    Ok(row.map(|(kind, host, username, password)| ProbeTarget {
-        kind,
+    Ok(row.map(|model| ProbeTarget {
+        kind: model.r#type,
         // Phoenix stores `host` + `port` + `use_ssl` separately and
         // builds the URL in the adapter; the REST `test` endpoint only
         // needs the host string to feed `config_from_url`. We compose
         // a placeholder when the host is empty so the probe surfaces a
         // human-readable error instead of an SQL surprise.
-        url: host.unwrap_or_default(),
-        username,
-        password,
+        url: model.host.unwrap_or_default(),
+        username: model.username,
+        password: model.password,
     }))
 }
 
@@ -264,64 +249,42 @@ fn serialize_health(entry: &ProbeEntry) -> serde_json::Value {
     })
 }
 
-async fn list_clients(state: &WebState) -> Result<Vec<DownloadClientRow>, sqlx::Error> {
-    use mydia_rs_db::Db;
+async fn list_clients(state: &WebState) -> Result<Vec<DownloadClientRow>, sea_orm::DbErr> {
+    use mydia_rs_entities::download_client_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
 
-    let sql = "
-        SELECT id, name, type, enabled, priority, host, port, use_ssl, url_base, \
-               category, download_directory
-        FROM download_client_configs
-        ORDER BY priority ASC, name ASC
-    ";
-
-    match &state.db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as::<_, DownloadClientRow>(sql)
-                .fetch_all(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, DownloadClientRow>(sql)
-                .fetch_all(pool)
-                .await
-        }
-    }
+    download_client_configs::Entity::find()
+        .order_by_asc(download_client_configs::Column::Priority)
+        .order_by_asc(download_client_configs::Column::Name)
+        .all(&state.db)
+        .await
 }
 
 async fn lookup_client(
     state: &WebState,
     id: &str,
-) -> Result<Option<DownloadClientRow>, sqlx::Error> {
-    use mydia_rs_db::Db;
+) -> Result<Option<DownloadClientRow>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::download_client_configs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    let sql = "
-        SELECT id, name, type, enabled, priority, host, port, use_ssl, url_base, \
-               category, download_directory
-        FROM download_client_configs
-        WHERE id = $1
-        LIMIT 1
-    ";
-
-    match &state.db {
-        Db::Sqlite(pool) => {
-            let sql_sqlite = sql.replace("$1", "?");
-            sqlx::query_as::<_, DownloadClientRow>(&sql_sqlite)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as::<_, DownloadClientRow>(sql)
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+    let Some(wrapper) = uuid::Uuid::parse_str(id).ok().map(UuidText::from) else {
+        return Ok(None);
+    };
+    let backend = state.db.get_database_backend();
+    download_client_configs::Entity::find()
+        .filter(
+            Expr::col(download_client_configs::Column::Id).eq(wrapper.into_simple_expr(backend)),
+        )
+        .one(&state.db)
+        .await
 }
 
 fn serialize_summary(row: &DownloadClientRow, health: &serde_json::Value) -> serde_json::Value {
     json!({
-        "id": row.id,
+        "id": row.id.to_string(),
         "name": row.name,
         "type": row.r#type,
         "enabled": row.enabled.unwrap_or(false),
@@ -335,7 +298,7 @@ fn serialize_summary(row: &DownloadClientRow, health: &serde_json::Value) -> ser
 
 fn serialize_detail(row: &DownloadClientRow, health: &serde_json::Value) -> serde_json::Value {
     json!({
-        "id": row.id,
+        "id": row.id.to_string(),
         "name": row.name,
         "type": row.r#type,
         "enabled": row.enabled.unwrap_or(false),

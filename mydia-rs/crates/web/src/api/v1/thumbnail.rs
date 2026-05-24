@@ -57,13 +57,6 @@ enum BlobKind {
 }
 
 impl BlobKind {
-    fn column(self) -> &'static str {
-        match self {
-            Self::Vtt => "vtt_blob",
-            Self::Sprite => "sprite_blob",
-        }
-    }
-
     fn subdir(self) -> &'static str {
         match self {
             Self::Vtt => "vtt",
@@ -132,27 +125,28 @@ async fn lookup_blob_checksum(
     state: &WebState,
     media_file_id: &str,
     kind: BlobKind,
-) -> Result<Option<Option<String>>, sqlx::Error> {
-    use mydia_rs_db::Db;
+) -> Result<Option<Option<String>>, sea_orm::DbErr> {
+    use mydia_rs_db::types::UuidText;
+    use mydia_rs_entities::media_files;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
-    let column = kind.column();
-    let sql = format!("SELECT {column} FROM media_files WHERE id = $1 LIMIT 1");
-
-    match &state.db {
-        Db::Sqlite(pool) => {
-            let sql_sqlite = sql.replace("$1", "?");
-            sqlx::query_scalar::<_, Option<String>>(&sql_sqlite)
-                .bind(media_file_id)
-                .fetch_optional(pool)
-                .await
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_scalar::<_, Option<String>>(&sql)
-                .bind(media_file_id)
-                .fetch_optional(pool)
-                .await
-        }
-    }
+    let Some(wrapper) = uuid::Uuid::parse_str(media_file_id).ok().map(UuidText::from) else {
+        return Ok(None);
+    };
+    let backend = state.db.get_database_backend();
+    let Some(model) = media_files::Entity::find()
+        .filter(Expr::col(media_files::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(&state.db)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let checksum = match kind {
+        BlobKind::Vtt => model.vtt_blob,
+        BlobKind::Sprite => model.sprite_blob,
+    };
+    Ok(Some(checksum))
 }
 
 /// Resolve a generated-media checksum to an absolute path. Mirrors

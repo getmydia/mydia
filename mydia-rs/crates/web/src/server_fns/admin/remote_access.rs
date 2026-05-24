@@ -90,7 +90,12 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_entities::{remote_devices, users};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -99,136 +104,95 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type Row = (
-        String,
-        String,
-        String,
-        String,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     pub(super) async fn list() -> Result<Vec<PairedDeviceRow>, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let rows: Vec<Row> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT d.id, d.device_name, d.platform, d.user_id, \
-                        COALESCE(u.username, u.email, u.id), \
-                        d.last_seen_at, d.revoked_at, d.inserted_at \
-                 FROM remote_devices d \
-                 LEFT JOIN users u ON u.id = d.user_id \
-                 ORDER BY d.inserted_at DESC",
-            )
-            .fetch_all(pool)
+        let devices = remote_devices::Entity::find()
+            .order_by_desc(remote_devices::Column::InsertedAt)
+            .all(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query remote_devices: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT d.id, d.device_name, d.platform, d.user_id, \
-                        COALESCE(u.username, u.email, u.id), \
-                        d.last_seen_at, d.revoked_at, d.inserted_at \
-                 FROM remote_devices d \
-                 LEFT JOIN users u ON u.id = d.user_id \
-                 ORDER BY d.inserted_at DESC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query remote_devices: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("query remote_devices: {err}")))?;
 
-        Ok(rows
+        // Pull users with a single round-trip for the label.
+        let user_ids: Vec<UuidText> = devices.iter().map(|d| d.user_id).collect();
+        let user_rows = users::Entity::find()
+            .filter(users::Column::Id.is_in(user_ids))
+            .all(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query users: {err}")))?;
+        let user_map: std::collections::HashMap<UuidText, users::Model> =
+            user_rows.into_iter().map(|u| (u.id, u)).collect();
+
+        Ok(devices
             .into_iter()
-            .map(
-                |(
-                    id,
-                    device_name,
-                    platform,
-                    user_id,
+            .map(|d| {
+                let user_label = user_map.get(&d.user_id).and_then(|u| {
+                    u.username
+                        .clone()
+                        .or_else(|| u.email.clone())
+                        .or_else(|| Some(u.id.to_string()))
+                });
+                PairedDeviceRow {
+                    id: d.id.to_string(),
+                    device_name: d.device_name,
+                    platform: d.platform,
+                    user_id: d.user_id.to_string(),
                     user_label,
-                    last_seen_at,
-                    revoked_at,
-                    inserted_at,
-                )| {
-                    PairedDeviceRow {
-                        id,
-                        device_name,
-                        platform,
-                        user_id,
-                        user_label,
-                        last_seen_at: last_seen_at.map(|dt| dt.to_rfc3339()),
-                        revoked_at: revoked_at.map(|dt| dt.to_rfc3339()),
-                        inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-                    }
-                },
-            )
+                    last_seen_at: d.last_seen_at.map(|dt| dt.0.to_rfc3339()),
+                    revoked_at: d.revoked_at.map(|dt| dt.0.to_rfc3339()),
+                    inserted_at: Some(d.inserted_at.0.to_rfc3339()),
+                }
+            })
             .collect())
     }
 
     pub(super) async fn revoke(id: String) -> Result<(), ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let now = chrono::Utc::now();
-        let affected = match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query("UPDATE remote_devices SET revoked_at = ?, updated_at = ? WHERE id = ?")
-                    .bind(now.to_rfc3339())
-                    .bind(now.to_rfc3339())
-                    .bind(&id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("revoke device: {err}")))?
-                    .rows_affected()
-            }
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE remote_devices SET revoked_at = $1, updated_at = $2 WHERE id = $3",
-            )
-            .bind(now)
-            .bind(now)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("revoke device: {err}")))?
-            .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid device id {id}")));
         };
-        if affected == 0 {
+        let backend = st.db.get_database_backend();
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let res = remote_devices::Entity::update_many()
+            .col_expr(
+                remote_devices::Column::RevokedAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(
+                remote_devices::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(remote_devices::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("revoke device: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!("no device with id {id}")));
         }
+        let _ = Set::<DateTimeSecs>; // silence unused-import lint when Set is otherwise not used
         Ok(())
     }
 
     pub(super) async fn status() -> Result<P2pStatus, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let (paired,): (i64,) = match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NULL")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("count paired: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NULL")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("count paired: {err}")))?
-            }
-        };
-        let (revoked,): (i64,) = match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NOT NULL")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("count revoked: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NOT NULL")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("count revoked: {err}")))?
-            }
-        };
+        let paired = remote_devices::Entity::find()
+            .filter(remote_devices::Column::RevokedAt.is_null())
+            .count(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("count paired: {err}")))?;
+        let paired = i64::try_from(paired).unwrap_or(i64::MAX);
+        let revoked = remote_devices::Entity::find()
+            .filter(remote_devices::Column::RevokedAt.is_not_null())
+            .count(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("count revoked: {err}")))?;
+        let revoked = i64::try_from(revoked).unwrap_or(i64::MAX);
 
         // The live p2p Server handle (U28 follow-up) — when present,
         // ask it for the Iroh node id, connection counts, and relay

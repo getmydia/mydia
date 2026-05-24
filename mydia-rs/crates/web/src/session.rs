@@ -68,6 +68,7 @@ pub fn layer(db: &DatabaseConnection, secure: bool) -> SessionLayer {
         DatabaseBackend::MySql => {
             panic!("MySQL backend is not supported by mydia-rs sessions")
         }
+        _ => panic!("Unsupported database backend for mydia-rs sessions"),
     }
 }
 
@@ -133,5 +134,6 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<(), sqlx::Error> {
             store.migrate().await
         }
         DatabaseBackend::MySql => Ok(()),
+        _ => Ok(()),
     }
 }

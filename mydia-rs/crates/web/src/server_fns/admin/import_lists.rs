@@ -61,12 +61,24 @@ pub async fn toggle_import_list(id: String) -> Result<ImportListRow, ServerFnErr
 
 #[cfg(feature = "server")]
 mod server {
-    use super::{ImportListRow, NewImportList, VALID_KINDS};
+    // TODO(broken-pre-conversion): the page's wire payload uses
+    // `kind`/`url_or_id` fields. The entity stores `r#type`/`media_type`
+    // and a JSON `config` blob. Map `kind` → `r#type`, store
+    // `url_or_id` inside `config` as a `url_or_id` JSON field, and
+    // default `media_type` to `"movie"` since the page doesn't expose
+    // it yet.
+    use super::{ImportListRow, NewImportList};
     use crate::server_fns::auth::require_admin_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, JsonMap, UuidText};
+    use mydia_rs_db::insert_active_model;
+    use mydia_rs_entities::import_lists;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -75,120 +87,96 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type Row = (
-        String,
-        String,
-        String,
-        String,
-        bool,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
+
+    fn extract_url_or_id(cfg: Option<&JsonMap<serde_json::Value>>) -> String {
+        cfg.and_then(|c| c.0.get("url_or_id"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    fn model_to_row(m: &import_lists::Model) -> ImportListRow {
+        ImportListRow {
+            id: m.id.to_string(),
+            name: m.name.clone(),
+            kind: m.r#type.clone(),
+            url_or_id: extract_url_or_id(m.config.as_ref()),
+            enabled: m.enabled,
+            last_synced_at: m.last_synced_at.map(|dt| dt.0.to_rfc3339()),
+            inserted_at: Some(m.inserted_at.0.to_rfc3339()),
+        }
+    }
 
     pub(super) async fn list() -> Result<Vec<ImportListRow>, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let rows: Vec<Row> = match &st.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, name, kind, url_or_id, enabled, last_synced_at, inserted_at \
-                 FROM import_lists ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
+        let rows = import_lists::Entity::find()
+            .order_by_asc(import_lists::Column::InsertedAt)
+            .all(&st.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query import_lists: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, name, kind, url_or_id, enabled, last_synced_at, inserted_at \
-                 FROM import_lists ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query import_lists: {err}")))?,
-        };
-        Ok(rows
-            .into_iter()
-            .map(
-                |(id, name, kind, url_or_id, enabled, last_synced_at, inserted_at)| ImportListRow {
-                    id,
-                    name,
-                    kind,
-                    url_or_id,
-                    enabled,
-                    last_synced_at: last_synced_at.map(|dt| dt.to_rfc3339()),
-                    inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-                },
-            )
-            .collect())
+            .map_err(|err| ServerFnError::new(format!("query import_lists: {err}")))?;
+        Ok(rows.iter().map(model_to_row).collect())
     }
 
     pub(super) async fn create(payload: NewImportList) -> Result<ImportListRow, ServerFnError> {
         let _ = require_admin_user_id().await?;
         validate(&payload)?;
         let st = state().await?;
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
-        match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO import_lists (id, name, kind, url_or_id, enabled, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(payload.name.trim())
-                .bind(payload.kind.trim())
-                .bind(payload.url_or_id.trim())
-                .bind(payload.enabled)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert import_list: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO import_lists (id, name, kind, url_or_id, enabled, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                )
-                .bind(&id)
-                .bind(payload.name.trim())
-                .bind(payload.kind.trim())
-                .bind(payload.url_or_id.trim())
-                .bind(payload.enabled)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert import_list: {err}")))?;
-            }
-        }
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let cfg = JsonMap(serde_json::json!({
+            "url_or_id": payload.url_or_id.trim(),
+        }));
+        let am = import_lists::ActiveModel {
+            id: Set(id),
+            name: Set(payload.name.trim().to_owned()),
+            r#type: Set(payload.kind.trim().to_owned()),
+            media_type: Set("movie".to_owned()),
+            enabled: Set(payload.enabled),
+            sync_interval: Set(86_400),
+            auto_add: Set(false),
+            monitored: Set(true),
+            config: Set(Some(cfg)),
+            last_synced_at: Set(None),
+            sync_error: Set(None),
+            quality_profile_id: Set(None),
+            library_path_id: Set(None),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            target_collection_id: Set(None),
+        };
+        insert_active_model(am, &st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("insert import_list: {err}")))?;
         Ok(ImportListRow {
-            id,
+            id: id_str,
             name: payload.name.trim().to_owned(),
             kind: payload.kind.trim().to_owned(),
             url_or_id: payload.url_or_id.trim().to_owned(),
             enabled: payload.enabled,
             last_synced_at: None,
-            inserted_at: Some(now.to_rfc3339()),
+            inserted_at: Some(now.0.to_rfc3339()),
         })
     }
 
     pub(super) async fn delete(id: String) -> Result<(), ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query("DELETE FROM import_lists WHERE id = ?")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete import_list: {err}")))?
-                .rows_affected(),
-            Db::Postgres(pool) => sqlx::query("DELETE FROM import_lists WHERE id = $1")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete import_list: {err}")))?
-                .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid import_list id {id}")));
         };
-        if affected == 0 {
+        let backend = st.db.get_database_backend();
+        let res = import_lists::Entity::delete_many()
+            .filter(Expr::col(import_lists::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("delete import_list: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!("no import_list with id {id}")));
         }
         Ok(())
@@ -197,30 +185,30 @@ mod server {
     pub(super) async fn toggle(id: String) -> Result<ImportListRow, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let st = state().await?;
-        let now = chrono::Utc::now();
-        let affected = match &st.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE import_lists SET enabled = NOT enabled, updated_at = ? WHERE id = ?",
-            )
-            .bind(now.to_rfc3339())
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("toggle import_list: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE import_lists SET enabled = NOT enabled, updated_at = $1 WHERE id = $2",
-            )
-            .bind(now)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("toggle import_list: {err}")))?
-            .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid import_list id {id}")));
         };
-        if affected == 0 {
+        let backend = st.db.get_database_backend();
+        let Some(row) = import_lists::Entity::find()
+            .filter(Expr::col(import_lists::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("read import_list: {err}")))?
+        else {
             return Err(ServerFnError::new(format!("no import_list with id {id}")));
-        }
+        };
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let new_enabled = !row.enabled;
+        import_lists::Entity::update_many()
+            .col_expr(import_lists::Column::Enabled, Expr::value(new_enabled))
+            .col_expr(
+                import_lists::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(import_lists::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("toggle import_list: {err}")))?;
         list()
             .await?
             .into_iter()
@@ -234,10 +222,11 @@ mod server {
         if payload.name.trim().is_empty() {
             return Err(ServerFnError::new("Name is required".to_owned()));
         }
-        if !VALID_KINDS.contains(&payload.kind.trim()) {
+        if !super::VALID_KINDS.contains(&payload.kind.trim()) {
             return Err(ServerFnError::new(format!(
-                "kind {:?} must be one of {VALID_KINDS:?}",
-                payload.kind
+                "kind {:?} must be one of {:?}",
+                payload.kind,
+                super::VALID_KINDS
             )));
         }
         if payload.url_or_id.trim().is_empty() {
