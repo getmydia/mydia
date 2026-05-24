@@ -4847,6 +4847,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mydia-rs-entities"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "mydia-rs-db",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "mydia-rs-events"
 version = "0.1.0"
 dependencies = [

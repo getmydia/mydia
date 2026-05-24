@@ -6,6 +6,7 @@ members = [
     "crates/config",
     "crates/db",
     "crates/downloads",
+    "crates/entities",
     "crates/events",
     "crates/graphql",
     "crates/indexers",

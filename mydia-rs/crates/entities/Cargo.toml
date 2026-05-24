@@ -1,0 +1,28 @@
+[package]
+name = "mydia-rs-entities"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Server-only crate. SeaORM pulls sqlx which is wasm-incompatible per
+# `reference_mydia_rs_wasm_constraints.md` — entities cannot live in
+# `crates/models/` (shared with the Dioxus wasm web client). Consumer
+# crates that need entities are server-only by definition.
+
+[dependencies]
+sea-orm.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+# Type wrappers live here so generated entities can use UuidText /
+# DateTimeSecs / DateTimeMicros / JsonMap / StringArray for columns that
+# need cross-engine encoding parity (Phase A U3).
+mydia-rs-db = { path = "../db" }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[lints]
+workspace = true
