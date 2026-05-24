@@ -27,8 +27,9 @@
 
 mod common;
 
-use common::{apply_sql, fresh_db, sqlite_pool};
+use common::{apply_sql, fresh_db};
 use mydia_rs_db::DatabaseConnection;
+use sea_orm::{ConnectionTrait, Statement};
 use mydia_rs_web::server_fns::media::server::{
     count_media, delete_media_item_db_only, fetch_media, fetch_media_detail, fetch_movie_files,
     fetch_show_seasons, flip_episode_monitored, flip_media_monitored, row_has_files,
@@ -119,6 +120,13 @@ async fn setup() -> DatabaseConnection {
     db
 }
 
+/// Escape a string for inlining inside a single-quoted SQL string
+/// literal. The test inputs are controlled, but keep this here in case
+/// a future fixture introduces an apostrophe.
+fn esc(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
 async fn insert_movie(
     db: &DatabaseConnection,
     id: &str,
@@ -126,90 +134,69 @@ async fn insert_movie(
     year: Option<i32>,
     monitored: bool,
 ) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
+    let title_e = esc(title);
+    let year_sql = match year {
+        Some(y) => y.to_string(),
+        None => "NULL".to_owned(),
+    };
+    let monitored_int = i64::from(monitored);
+    db.execute_unprepared(&format!(
         "INSERT INTO media_items (id, type, title, year, monitored, monitoring_preset, \
          category_override, inserted_at, updated_at) \
-         VALUES (?, 'movie', ?, ?, ?, 'all', 0, ?, ?)",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(year)
-    .bind(i64::from(monitored))
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', 'movie', '{title_e}', {year_sql}, {monitored_int}, 'all', 0, '{now}', '{now}')"
+    ))
     .await
     .expect("insert movie");
 }
 
 async fn insert_tv(db: &DatabaseConnection, id: &str, title: &str, year: Option<i32>) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
+    let title_e = esc(title);
+    let year_sql = match year {
+        Some(y) => y.to_string(),
+        None => "NULL".to_owned(),
+    };
+    db.execute_unprepared(&format!(
         "INSERT INTO media_items (id, type, title, year, monitored, monitoring_preset, \
          category_override, inserted_at, updated_at) \
-         VALUES (?, 'tv_show', ?, ?, 1, 'all', 0, ?, ?)",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(year)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', 'tv_show', '{title_e}', {year_sql}, 1, 'all', 0, '{now}', '{now}')"
+    ))
     .await
     .expect("insert tv");
 }
 
 async fn insert_episode(db: &DatabaseConnection, id: &str, show_id: &str) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
+    db.execute_unprepared(&format!(
         "INSERT INTO episodes (id, media_item_id, monitored, inserted_at, updated_at) \
-         VALUES (?, ?, 1, ?, ?)",
-    )
-    .bind(id)
-    .bind(show_id)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', '{show_id}', 1, '{now}', '{now}')"
+    ))
     .await
     .expect("insert episode");
 }
 
 async fn insert_movie_file(db: &DatabaseConnection, id: &str, movie_id: &str, trashed: bool) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let trashed_at = if trashed { Some(now.clone()) } else { None };
-    sqlx::query(
+    let trashed_at_sql = if trashed {
+        format!("'{now}'")
+    } else {
+        "NULL".to_owned()
+    };
+    db.execute_unprepared(&format!(
         "INSERT INTO media_files (id, media_item_id, path, trashed_at, inserted_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(movie_id)
-    .bind(format!("/media/{id}.mkv"))
-    .bind(trashed_at)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', '{movie_id}', '/media/{id}.mkv', {trashed_at_sql}, '{now}', '{now}')"
+    ))
     .await
     .expect("insert movie file");
 }
 
 async fn insert_episode_file(db: &DatabaseConnection, id: &str, episode_id: &str) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
+    db.execute_unprepared(&format!(
         "INSERT INTO media_files (id, episode_id, path, inserted_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(episode_id)
-    .bind(format!("/media/{id}.mkv"))
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', '{episode_id}', '/media/{id}.mkv', '{now}', '{now}')"
+    ))
     .await
     .expect("insert episode file");
 }
@@ -512,20 +499,18 @@ async fn insert_movie_with_metadata(
     year: Option<i32>,
     metadata_json: &str,
 ) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
+    let title_e = esc(title);
+    let year_sql = match year {
+        Some(y) => y.to_string(),
+        None => "NULL".to_owned(),
+    };
+    let metadata_e = esc(metadata_json);
+    db.execute_unprepared(&format!(
         "INSERT INTO media_items (id, type, title, year, metadata, monitored, monitoring_preset, \
          category_override, inserted_at, updated_at) \
-         VALUES (?, 'movie', ?, ?, ?, 1, 'all', 0, ?, ?)",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(year)
-    .bind(metadata_json)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', 'movie', '{title_e}', {year_sql}, '{metadata_e}', 1, 'all', 0, '{now}', '{now}')"
+    ))
     .await
     .expect("insert movie with metadata");
 }
@@ -541,23 +526,30 @@ async fn insert_full_movie_file(
     audio_codec: Option<&str>,
     size: Option<i64>,
 ) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
+    let path_e = esc(path);
+    let resolution_sql = match resolution {
+        Some(s) => format!("'{}'", esc(s)),
+        None => "NULL".to_owned(),
+    };
+    let codec_sql = match codec {
+        Some(s) => format!("'{}'", esc(s)),
+        None => "NULL".to_owned(),
+    };
+    let audio_codec_sql = match audio_codec {
+        Some(s) => format!("'{}'", esc(s)),
+        None => "NULL".to_owned(),
+    };
+    let size_sql = match size {
+        Some(n) => n.to_string(),
+        None => "NULL".to_owned(),
+    };
+    db.execute_unprepared(&format!(
         "INSERT INTO media_files (id, media_item_id, path, resolution, codec, audio_codec, size, \
          inserted_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(movie_id)
-    .bind(path)
-    .bind(resolution)
-    .bind(codec)
-    .bind(audio_codec)
-    .bind(size)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', '{movie_id}', '{path_e}', {resolution_sql}, {codec_sql}, \
+         {audio_codec_sql}, {size_sql}, '{now}', '{now}')"
+    ))
     .await
     .expect("insert movie file with details");
 }
@@ -573,23 +565,22 @@ async fn insert_full_episode(
     air_date: Option<&str>,
     monitored: bool,
 ) {
-    let pool = sqlite_pool(db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query(
+    let title_sql = match title {
+        Some(s) => format!("'{}'", esc(s)),
+        None => "NULL".to_owned(),
+    };
+    let air_date_sql = match air_date {
+        Some(s) => format!("'{}'", esc(s)),
+        None => "NULL".to_owned(),
+    };
+    let monitored_int = i64::from(monitored);
+    db.execute_unprepared(&format!(
         "INSERT INTO episodes (id, media_item_id, season_number, episode_number, title, air_date, \
          monitored, inserted_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(show_id)
-    .bind(season)
-    .bind(episode)
-    .bind(title)
-    .bind(air_date)
-    .bind(i64::from(monitored))
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', '{show_id}', {season}, {episode}, {title_sql}, {air_date_sql}, \
+         {monitored_int}, '{now}', '{now}')"
+    ))
     .await
     .expect("insert full episode");
 }
@@ -821,25 +812,31 @@ async fn seasons_empty_when_no_episodes() {
 // ---------- U25.c: action endpoint tests ----------
 
 async fn read_monitored(db: &DatabaseConnection, table: &str, id: &str) -> bool {
-    let pool = sqlite_pool(db);
-    let sql = format!("SELECT monitored FROM {table} WHERE id = ?");
-    let (m,): (bool,) = sqlx::query_as(&sql)
-        .bind(id)
-        .fetch_one(pool)
+    let backend = db.get_database_backend();
+    let row = db
+        .query_one_raw(Statement::from_string(
+            backend,
+            format!("SELECT monitored FROM {table} WHERE id = '{id}'"),
+        ))
         .await
-        .expect("read monitored");
-    m
+        .expect("read monitored")
+        .expect("row");
+    let m: i32 = row.try_get_by("monitored").expect("monitored");
+    m != 0
 }
 
 async fn row_exists(db: &DatabaseConnection, table: &str, id: &str) -> bool {
-    let pool = sqlite_pool(db);
-    let sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?)");
-    let (exists,): (bool,) = sqlx::query_as(&sql)
-        .bind(id)
-        .fetch_one(pool)
+    let backend = db.get_database_backend();
+    let row = db
+        .query_one_raw(Statement::from_string(
+            backend,
+            format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = '{id}') AS e"),
+        ))
         .await
-        .expect("exists check");
-    exists
+        .expect("exists check")
+        .expect("row");
+    let exists: i32 = row.try_get_by("e").expect("e");
+    exists != 0
 }
 
 #[tokio::test]

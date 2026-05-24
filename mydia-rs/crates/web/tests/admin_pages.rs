@@ -20,12 +20,45 @@
 mod common;
 
 use chrono::Utc;
-use common::{apply_sql, fresh_db, sqlite_pool};
+use common::{apply_sql, fresh_db};
 use mydia_rs_db::DatabaseConnection;
 use mydia_rs_pubsub::{topics, Event, Pubsub};
 use mydia_rs_web::realtime::jobs_status::JobStatusEvent;
 use mydia_rs_web::realtime::transcodes::TranscodeEvent;
+use sea_orm::{ConnectionTrait, QueryResult, Statement};
 use tokio::sync::broadcast::Receiver;
+
+/// Escape a string for inlining inside a single-quoted SQL string
+/// literal. Test inputs are controlled; this is a defensive escape.
+fn esc(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
+/// Convenience helper: run a SELECT and fetch all rows.
+async fn query_all(db: &DatabaseConnection, sql: String) -> Vec<QueryResult> {
+    let backend = db.get_database_backend();
+    db.query_all_raw(Statement::from_string(backend, sql))
+        .await
+        .expect("query_all_raw")
+}
+
+/// Convenience helper: run a SELECT and fetch a single row (must exist).
+async fn query_one(db: &DatabaseConnection, sql: String) -> QueryResult {
+    let backend = db.get_database_backend();
+    db.query_one_raw(Statement::from_string(backend, sql))
+        .await
+        .expect("query_one_raw")
+        .expect("row")
+}
+
+/// Convenience helper: run a SELECT and fetch a single row if present.
+#[allow(dead_code)]
+async fn query_optional(db: &DatabaseConnection, sql: String) -> Option<QueryResult> {
+    let backend = db.get_database_backend();
+    db.query_one_raw(Statement::from_string(backend, sql))
+        .await
+        .expect("query_one_raw")
+}
 
 /// Minimal stand-in schema for the U28 admin pages. Phoenix
 /// migrations are out of scope per the rewrite plan; this constant
@@ -193,22 +226,14 @@ async fn fixture() -> Fixture {
 async fn insert_user(db: &DatabaseConnection, role: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-            sqlx::query(
-                "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&id)
-            .bind(format!("user-{}", &id[..8]))
-            .bind(format!("{}@example.com", &id[..8]))
-            .bind(role)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert user");
-    }
+    let username = format!("user-{}", &id[..8]);
+    let email = format!("{}@example.com", &id[..8]);
+    db.execute_unprepared(&format!(
+        "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
+         VALUES ('{id}', '{username}', '{email}', '{role}', '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert user");
     id
 }
 
@@ -243,40 +268,22 @@ async fn insert_transcode(db: &DatabaseConnection, status: &str) -> (String, Str
     let mf_id = uuid::Uuid::new_v4().to_string();
     let job_id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-            sqlx::query(
-                "INSERT INTO media_files (id, file_name, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?)",
-            )
-            .bind(&mf_id)
-            .bind("S01E01.mkv")
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert media_file");
+    db.execute_unprepared(&format!(
+        "INSERT INTO media_files (id, file_name, inserted_at, updated_at) \
+         VALUES ('{mf_id}', 'S01E01.mkv', '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert media_file");
 
-            sqlx::query(
-                "INSERT INTO transcode_jobs (id, media_file_id, resolution, status, progress, \
-                        inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&job_id)
-            .bind(&mf_id)
-            .bind("1080p")
-            .bind(status)
-            .bind(0.5_f64)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert transcode");
-    }
+    db.execute_unprepared(&format!(
+        "INSERT INTO transcode_jobs (id, media_file_id, resolution, status, progress, \
+                inserted_at, updated_at) \
+         VALUES ('{job_id}', '{mf_id}', '1080p', '{status}', 0.5, '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert transcode");
     (job_id, mf_id)
 }
-
-type TranscodeReadRow = (String, String, Option<String>, String, String, Option<f64>);
 
 #[tokio::test]
 async fn transcodes_list_query_round_trips() {
@@ -285,24 +292,25 @@ async fn transcodes_list_query_round_trips() {
 
     // Re-run the read query directly to confirm the join + ordering
     // mirror what the server fn returns.
-    let rows: Vec<TranscodeReadRow> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as(
-            "SELECT t.id, t.media_file_id, mf.file_name, t.resolution, t.status, t.progress \
-             FROM transcode_jobs t \
-             LEFT JOIN media_files mf ON mf.id = t.media_file_id \
-             ORDER BY t.inserted_at DESC",
-        )
-        .fetch_all(pool)
-        .await
-        .expect("query")
-    };
+    let rows = query_all(
+        &fx.db,
+        "SELECT t.id, t.media_file_id, mf.file_name, t.resolution, t.status, t.progress \
+         FROM transcode_jobs t \
+         LEFT JOIN media_files mf ON mf.id = t.media_file_id \
+         ORDER BY t.inserted_at DESC"
+            .to_owned(),
+    )
+    .await;
 
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].0, job_id);
-    assert_eq!(rows[0].2.as_deref(), Some("S01E01.mkv"));
-    assert_eq!(rows[0].3, "1080p");
-    assert_eq!(rows[0].4, "transcoding");
+    let r_id: String = rows[0].try_get_by("id").expect("id");
+    let r_file_name: Option<String> = rows[0].try_get_by("file_name").expect("file_name");
+    let r_resolution: String = rows[0].try_get_by("resolution").expect("resolution");
+    let r_status: String = rows[0].try_get_by("status").expect("status");
+    assert_eq!(r_id, job_id);
+    assert_eq!(r_file_name.as_deref(), Some("S01E01.mkv"));
+    assert_eq!(r_resolution, "1080p");
+    assert_eq!(r_status, "transcoding");
 }
 
 #[tokio::test]
@@ -312,28 +320,19 @@ async fn transcodes_cancel_flips_status() {
 
     // Run the cancel update directly (mirrors the server fn body).
     let now = Utc::now().to_rfc3339();
-    let affected = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query(
-            "UPDATE transcode_jobs SET status = 'cancelled', updated_at = ? WHERE id = ?",
-        )
-        .bind(&now)
-        .bind(&job_id)
-        .execute(pool)
+    fx.db
+        .execute_unprepared(&format!(
+            "UPDATE transcode_jobs SET status = 'cancelled', updated_at = '{now}' WHERE id = '{job_id}'"
+        ))
         .await
-        .expect("update")
-        .rows_affected()
-    };
-    assert_eq!(affected, 1);
+        .expect("update");
 
-    let (status,): (String,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT status FROM transcode_jobs WHERE id = ?")
-            .bind(&job_id)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT status FROM transcode_jobs WHERE id = '{job_id}'"),
+    )
+    .await;
+    let status: String = row.try_get_by("status").expect("status");
     assert_eq!(status, "cancelled");
 }
 
@@ -363,32 +362,24 @@ async fn transcodes_pubsub_event_decodes_into_typed_event() {
 
 // ---------- users ----------
 
-type UserReadRow = (
-    String,
-    Option<String>,
-    Option<String>,
-    String,
-    Option<String>,
-);
-
 #[tokio::test]
 async fn users_list_returns_inserted_row() {
     let fx = fixture().await;
     let id = insert_user(&fx.db, "guest").await;
 
-    let rows: Vec<UserReadRow> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as(
-            "SELECT id, username, email, role, oidc_sub FROM users ORDER BY inserted_at ASC",
-        )
-        .fetch_all(pool)
-        .await
-        .expect("query")
-    };
+    let rows = query_all(
+        &fx.db,
+        "SELECT id, username, email, role, oidc_sub FROM users ORDER BY inserted_at ASC"
+            .to_owned(),
+    )
+    .await;
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].0, id);
-    assert_eq!(rows[0].3, "guest");
-    assert!(rows[0].4.is_none(), "non-OIDC user has no oidc_sub");
+    let r_id: String = rows[0].try_get_by("id").expect("id");
+    let r_role: String = rows[0].try_get_by("role").expect("role");
+    let r_oidc_sub: Option<String> = rows[0].try_get_by("oidc_sub").expect("oidc_sub");
+    assert_eq!(r_id, id);
+    assert_eq!(r_role, "guest");
+    assert!(r_oidc_sub.is_none(), "non-OIDC user has no oidc_sub");
 }
 
 #[tokio::test]
@@ -397,25 +388,15 @@ async fn users_role_update_writes_through() {
     let id = insert_user(&fx.db, "guest").await;
 
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query("UPDATE users SET role = ?, updated_at = ? WHERE id = ?")
-            .bind("admin")
-            .bind(&now)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .expect("update")
-    };
+    fx.db
+        .execute_unprepared(&format!(
+            "UPDATE users SET role = 'admin', updated_at = '{now}' WHERE id = '{id}'"
+        ))
+        .await
+        .expect("update");
 
-    let (role,): (String,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT role FROM users WHERE id = ?")
-            .bind(&id)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
+    let row = query_one(&fx.db, format!("SELECT role FROM users WHERE id = '{id}'")).await;
+    let role: String = row.try_get_by("role").expect("role");
     assert_eq!(role, "admin");
 }
 
@@ -424,26 +405,18 @@ async fn users_role_update_writes_through() {
 async fn insert_device(db: &DatabaseConnection, user_id: &str, revoked: bool) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let revoked_at = if revoked { Some(now.clone()) } else { None };
-    {
-        let pool = sqlite_pool(db);
-            sqlx::query(
-                "INSERT INTO remote_devices (id, device_name, platform, last_seen_at, revoked_at, \
-                        user_id, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&id)
-            .bind("Pixel 8")
-            .bind("android")
-            .bind(&now)
-            .bind(revoked_at.as_deref())
-            .bind(user_id)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert device");
-    }
+    let revoked_at_sql = if revoked {
+        format!("'{now}'")
+    } else {
+        "NULL".to_owned()
+    };
+    db.execute_unprepared(&format!(
+        "INSERT INTO remote_devices (id, device_name, platform, last_seen_at, revoked_at, \
+                user_id, inserted_at, updated_at) \
+         VALUES ('{id}', 'Pixel 8', 'android', '{now}', {revoked_at_sql}, '{user_id}', '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert device");
     id
 }
 
@@ -455,14 +428,11 @@ async fn devices_list_scopes_to_user() {
     let _device_a = insert_device(&fx.db, &user_a, false).await;
     let _device_b = insert_device(&fx.db, &user_b, false).await;
 
-    let rows: Vec<(String,)> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT id FROM remote_devices WHERE user_id = ?")
-            .bind(&user_a)
-            .fetch_all(pool)
-            .await
-            .expect("query")
-    };
+    let rows = query_all(
+        &fx.db,
+        format!("SELECT id FROM remote_devices WHERE user_id = '{user_a}'"),
+    )
+    .await;
     assert_eq!(rows.len(), 1, "user A only sees their own device");
 }
 
@@ -473,31 +443,20 @@ async fn devices_revoke_writes_revoked_at() {
     let device = insert_device(&fx.db, &user, false).await;
 
     let now = Utc::now().to_rfc3339();
-    let affected = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query(
-            "UPDATE remote_devices SET revoked_at = ?, updated_at = ? \
-             WHERE id = ? AND user_id = ?",
-        )
-        .bind(&now)
-        .bind(&now)
-        .bind(&device)
-        .bind(&user)
-        .execute(pool)
+    fx.db
+        .execute_unprepared(&format!(
+            "UPDATE remote_devices SET revoked_at = '{now}', updated_at = '{now}' \
+             WHERE id = '{device}' AND user_id = '{user}'"
+        ))
         .await
-        .expect("update")
-        .rows_affected()
-    };
-    assert_eq!(affected, 1);
+        .expect("update");
 
-    let (revoked_at,): (Option<String>,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT revoked_at FROM remote_devices WHERE id = ?")
-            .bind(&device)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT revoked_at FROM remote_devices WHERE id = '{device}'"),
+    )
+    .await;
+    let revoked_at: Option<String> = row.try_get_by("revoked_at").expect("revoked_at");
     assert!(revoked_at.is_some(), "revoke wrote a timestamp");
 }
 
@@ -506,24 +465,13 @@ async fn devices_revoke_writes_revoked_at() {
 async fn insert_request(db: &DatabaseConnection, requester_id: &str, status: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-            sqlx::query(
-                "INSERT INTO media_requests (id, media_type, title, status, requester_id, \
-                        inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&id)
-            .bind("movie")
-            .bind("Inception")
-            .bind(status)
-            .bind(requester_id)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert media_request");
-    }
+    db.execute_unprepared(&format!(
+        "INSERT INTO media_requests (id, media_type, title, status, requester_id, \
+                inserted_at, updated_at) \
+         VALUES ('{id}', 'movie', 'Inception', '{status}', '{requester_id}', '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert media_request");
     id
 }
 
@@ -534,22 +482,19 @@ async fn requests_filter_by_pending_matches_phoenix_default() {
     let _pending = insert_request(&fx.db, &requester, "pending").await;
     let _approved = insert_request(&fx.db, &requester, "approved").await;
 
-    let rows: Vec<(String, String)> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as(
-            "SELECT r.id, r.status \
-             FROM media_requests r \
-             LEFT JOIN users u ON u.id = r.requester_id \
-             WHERE r.status = ? \
-             ORDER BY r.inserted_at DESC",
-        )
-        .bind("pending")
-        .fetch_all(pool)
-        .await
-        .expect("query")
-    };
+    let rows = query_all(
+        &fx.db,
+        "SELECT r.id, r.status \
+         FROM media_requests r \
+         LEFT JOIN users u ON u.id = r.requester_id \
+         WHERE r.status = 'pending' \
+         ORDER BY r.inserted_at DESC"
+            .to_owned(),
+    )
+    .await;
     assert_eq!(rows.len(), 1, "pending filter shows only pending request");
-    assert_eq!(rows[0].1, "pending");
+    let r_status: String = rows[0].try_get_by("status").expect("status");
+    assert_eq!(r_status, "pending");
 }
 
 #[tokio::test]
@@ -560,29 +505,22 @@ async fn requests_approve_updates_status() {
     let request = insert_request(&fx.db, &requester, "pending").await;
 
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query(
-                "UPDATE media_requests SET status = 'approved', \
-                        approved_by_id = ?, approved_at = ?, updated_at = ? WHERE id = ?",
-            )
-            .bind(&admin)
-            .bind(&now)
-            .bind(&now)
-            .bind(&request)
-            .execute(pool)
-            .await
-            .expect("approve");
-    }
+    fx.db
+        .execute_unprepared(&format!(
+            "UPDATE media_requests SET status = 'approved', \
+                    approved_by_id = '{admin}', approved_at = '{now}', updated_at = '{now}' \
+             WHERE id = '{request}'"
+        ))
+        .await
+        .expect("approve");
 
-    let (status, approved_by): (String, Option<String>) = {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query_as("SELECT status, approved_by_id FROM media_requests WHERE id = ?")
-                .bind(&request)
-                .fetch_one(pool)
-                .await
-                .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT status, approved_by_id FROM media_requests WHERE id = '{request}'"),
+    )
+    .await;
+    let status: String = row.try_get_by("status").expect("status");
+    let approved_by: Option<String> = row.try_get_by("approved_by_id").expect("approved_by_id");
     assert_eq!(status, "approved");
     assert_eq!(approved_by.as_deref(), Some(admin.as_str()));
 }
@@ -595,50 +533,31 @@ async fn config_settings_upsert_updates_existing_row() {
     let admin = insert_user(&fx.db, "admin").await;
     let now = Utc::now().to_rfc3339();
 
-    {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query(
-                "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?) \
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-            )
-            .bind("server.port")
-            .bind("4000")
-            .bind("Server")
-            .bind(&admin)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert");
+    fx.db
+        .execute_unprepared(&format!(
+            "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
+             VALUES ('server.port', '4000', 'Server', '{admin}', '{now}', '{now}') \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+        ))
+        .await
+        .expect("insert");
 
-            // Second upsert on the same key changes the value, not the row count.
-            sqlx::query(
-                "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?) \
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-            )
-            .bind("server.port")
-            .bind("5555")
-            .bind("Server")
-            .bind(&admin)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("update via upsert");
-    }
+    // Second upsert on the same key changes the value, not the row count.
+    fx.db
+        .execute_unprepared(&format!(
+            "INSERT INTO config_settings (key, value, category, updated_by_id, inserted_at, updated_at) \
+             VALUES ('server.port', '5555', 'Server', '{admin}', '{now}', '{now}') \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+        ))
+        .await
+        .expect("update via upsert");
 
-    let rows: Vec<(String, String)> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT key, value FROM config_settings")
-            .fetch_all(pool)
-            .await
-            .expect("query")
-    };
+    let rows = query_all(&fx.db, "SELECT key, value FROM config_settings".to_owned()).await;
     assert_eq!(rows.len(), 1, "upsert collapses to one row");
-    assert_eq!(rows[0].0, "server.port");
-    assert_eq!(rows[0].1, "5555");
+    let r_key: String = rows[0].try_get_by("key").expect("key");
+    let r_value: String = rows[0].try_get_by("value").expect("value");
+    assert_eq!(r_key, "server.port");
+    assert_eq!(r_value, "5555");
 }
 
 // ---------- download_clients ----------
@@ -646,23 +565,13 @@ async fn config_settings_upsert_updates_existing_row() {
 async fn insert_download_client(db: &DatabaseConnection, name: &str, kind: &str, enabled: bool) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-            sqlx::query(
-                "INSERT INTO download_clients (id, name, kind, url, enabled, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&id)
-            .bind(name)
-            .bind(kind)
-            .bind("http://localhost:8080")
-            .bind(enabled)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert download_client");
-    }
+    let enabled_int = i64::from(enabled);
+    db.execute_unprepared(&format!(
+        "INSERT INTO download_clients (id, name, kind, url, enabled, inserted_at, updated_at) \
+         VALUES ('{id}', '{name}', '{kind}', 'http://localhost:8080', {enabled_int}, '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert download_client");
     id
 }
 
@@ -672,18 +581,16 @@ async fn download_clients_list_returns_inserted_rows_ordered() {
     let _qb = insert_download_client(&fx.db, "qb1", "qbittorrent", true).await;
     let _tr = insert_download_client(&fx.db, "tr1", "transmission", true).await;
 
-    let rows: Vec<(String, String, bool)> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as(
-            "SELECT name, kind, enabled FROM download_clients ORDER BY inserted_at ASC",
-        )
-        .fetch_all(pool)
-        .await
-        .expect("query")
-    };
+    let rows = query_all(
+        &fx.db,
+        "SELECT name, kind, enabled FROM download_clients ORDER BY inserted_at ASC".to_owned(),
+    )
+    .await;
     assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0].0, "qb1");
-    assert_eq!(rows[1].0, "tr1");
+    let r0_name: String = rows[0].try_get_by("name").expect("name");
+    let r1_name: String = rows[1].try_get_by("name").expect("name");
+    assert_eq!(r0_name, "qb1");
+    assert_eq!(r1_name, "tr1");
 }
 
 #[tokio::test]
@@ -692,27 +599,20 @@ async fn download_clients_toggle_flips_enabled() {
     let id = insert_download_client(&fx.db, "qb", "qbittorrent", true).await;
 
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query(
-            "UPDATE download_clients SET enabled = NOT enabled, updated_at = ? WHERE id = ?",
-        )
-        .bind(&now)
-        .bind(&id)
-        .execute(pool)
+    fx.db
+        .execute_unprepared(&format!(
+            "UPDATE download_clients SET enabled = NOT enabled, updated_at = '{now}' WHERE id = '{id}'"
+        ))
         .await
-        .expect("toggle")
-    };
+        .expect("toggle");
 
-    let (enabled,): (bool,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT enabled FROM download_clients WHERE id = ?")
-            .bind(&id)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
-    assert!(!enabled, "toggle flipped enabled to false");
+    let row = query_one(
+        &fx.db,
+        format!("SELECT enabled FROM download_clients WHERE id = '{id}'"),
+    )
+    .await;
+    let enabled: i32 = row.try_get_by("enabled").expect("enabled");
+    assert_eq!(enabled, 0, "toggle flipped enabled to false");
 }
 
 // ---------- download_clients: probe cache ----------
@@ -856,34 +756,24 @@ async fn indexers_insert_and_list_round_trip() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query(
+    fx.db
+        .execute_unprepared(&format!(
             "INSERT INTO indexers (id, name, definition, base_url, enabled, inserted_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&id)
-        .bind("iptorrents")
-        .bind("iptorrents")
-        .bind("https://iptorrents.com")
-        .bind(true)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
+             VALUES ('{id}', 'iptorrents', 'iptorrents', 'https://iptorrents.com', 1, '{now}', '{now}')"
+        ))
         .await
-        .expect("insert indexer")
-    };
+        .expect("insert indexer");
 
-    let rows: Vec<(String, String, String)> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT name, definition, base_url FROM indexers")
-            .fetch_all(pool)
-            .await
-            .expect("query")
-    };
+    let rows = query_all(
+        &fx.db,
+        "SELECT name, definition, base_url FROM indexers".to_owned(),
+    )
+    .await;
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].0, "iptorrents");
-    assert_eq!(rows[0].2, "https://iptorrents.com");
+    let r_name: String = rows[0].try_get_by("name").expect("name");
+    let r_base_url: String = rows[0].try_get_by("base_url").expect("base_url");
+    assert_eq!(r_name, "iptorrents");
+    assert_eq!(r_base_url, "https://iptorrents.com");
 }
 
 // ---------- media_servers ----------
@@ -894,42 +784,28 @@ async fn media_servers_delete_removes_row() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query(
-                "INSERT INTO media_servers (id, name, kind, base_url, enabled, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&id)
-            .bind("jellyfin")
-            .bind("jellyfin")
-            .bind("http://jellyfin:8096")
-            .bind(true)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert");
-    }
+    fx.db
+        .execute_unprepared(&format!(
+            "INSERT INTO media_servers (id, name, kind, base_url, enabled, inserted_at, updated_at) \
+             VALUES ('{id}', 'jellyfin', 'jellyfin', 'http://jellyfin:8096', 1, '{now}', '{now}')"
+        ))
+        .await
+        .expect("insert");
 
-    let affected = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query("DELETE FROM media_servers WHERE id = ?")
-            .bind(&id)
-            .execute(pool)
+    let res = {
+        let backend = fx.db.get_database_backend();
+        fx.db
+            .execute_raw(Statement::from_string(
+                backend,
+                format!("DELETE FROM media_servers WHERE id = '{id}'"),
+            ))
             .await
             .expect("delete")
-            .rows_affected()
     };
-    assert_eq!(affected, 1);
+    assert_eq!(res.rows_affected(), 1);
 
-    let (count,): (i64,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT COUNT(*) FROM media_servers")
-            .fetch_one(pool)
-            .await
-            .expect("count")
-    };
+    let row = query_one(&fx.db, "SELECT COUNT(*) AS n FROM media_servers".to_owned()).await;
+    let count: i64 = row.try_get_by("n").expect("n");
     assert_eq!(count, 0);
 }
 
@@ -943,32 +819,20 @@ async fn import_lists_kind_constraint_via_validation() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query(
+    fx.db
+        .execute_unprepared(&format!(
             "INSERT INTO import_lists (id, name, kind, url_or_id, enabled, inserted_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&id)
-        .bind("trending")
-        .bind("trakt")
-        .bind("user/mylist")
-        .bind(true)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
+             VALUES ('{id}', 'trending', 'trakt', 'user/mylist', 1, '{now}', '{now}')"
+        ))
         .await
-        .expect("insert")
-    };
+        .expect("insert");
 
-    let (kind,): (String,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT kind FROM import_lists WHERE id = ?")
-            .bind(&id)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT kind FROM import_lists WHERE id = '{id}'"),
+    )
+    .await;
+    let kind: String = row.try_get_by("kind").expect("kind");
     assert_eq!(kind, "trakt");
 }
 
@@ -980,43 +844,33 @@ async fn release_blacklist_insert_and_delete_round_trip() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
-    {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query(
-                "INSERT INTO release_blacklist (id, kind, pattern, reason, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&id)
-            .bind("title")
-            .bind("*CAM*")
-            .bind(Some("camrip quality unacceptable".to_owned()))
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert");
-    }
+    fx.db
+        .execute_unprepared(&format!(
+            "INSERT INTO release_blacklist (id, kind, pattern, reason, inserted_at, updated_at) \
+             VALUES ('{id}', 'title', '*CAM*', 'camrip quality unacceptable', '{now}', '{now}')"
+        ))
+        .await
+        .expect("insert");
 
-    let (pattern,): (String,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT pattern FROM release_blacklist WHERE id = ?")
-            .bind(&id)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT pattern FROM release_blacklist WHERE id = '{id}'"),
+    )
+    .await;
+    let pattern: String = row.try_get_by("pattern").expect("pattern");
     assert_eq!(pattern, "*CAM*");
 
-    let affected = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query("DELETE FROM release_blacklist WHERE id = ?")
-            .bind(&id)
-            .execute(pool)
+    let res = {
+        let backend = fx.db.get_database_backend();
+        fx.db
+            .execute_raw(Statement::from_string(
+                backend,
+                format!("DELETE FROM release_blacklist WHERE id = '{id}'"),
+            ))
             .await
             .expect("delete")
-            .rows_affected()
     };
-    assert_eq!(affected, 1);
+    assert_eq!(res.rows_affected(), 1);
 }
 
 // ---------- quality_profiles ----------
@@ -1029,21 +883,13 @@ async fn insert_profile(db: &DatabaseConnection, name: &str, qualities: &[&str])
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let qualities_json = serde_json::to_string(qualities).expect("serialise qualities");
-    {
-        let pool = sqlite_pool(db);
-            sqlx::query(
-                "INSERT INTO quality_profiles (id, name, qualities, inserted_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(&id)
-            .bind(name)
-            .bind(&qualities_json)
-            .bind(&now)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .expect("insert profile");
-    }
+    let qualities_e = esc(&qualities_json);
+    db.execute_unprepared(&format!(
+        "INSERT INTO quality_profiles (id, name, qualities, inserted_at, updated_at) \
+         VALUES ('{id}', '{name}', '{qualities_e}', '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert profile");
     id
 }
 
@@ -1062,19 +908,17 @@ async fn quality_profiles_list_counts_qualities_from_json_column() {
     let fx = fixture().await;
     let _id = insert_profile(&fx.db, "Any", &["480p", "720p", "1080p"]).await;
 
-    let rows: Vec<(String, String, Option<String>)> = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as(
-            "SELECT id, name, qualities FROM quality_profiles ORDER BY inserted_at ASC",
-        )
-        .fetch_all(pool)
-        .await
-        .expect("query")
-    };
+    let rows = query_all(
+        &fx.db,
+        "SELECT id, name, qualities FROM quality_profiles ORDER BY inserted_at ASC".to_owned(),
+    )
+    .await;
 
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].1, "Any");
-    assert_eq!(quality_count(rows[0].2.as_deref()), 3);
+    let r_name: String = rows[0].try_get_by("name").expect("name");
+    let r_qualities: Option<String> = rows[0].try_get_by("qualities").expect("qualities");
+    assert_eq!(r_name, "Any");
+    assert_eq!(quality_count(r_qualities.as_deref()), 3);
 }
 
 #[tokio::test]
@@ -1084,14 +928,12 @@ async fn quality_profiles_create_and_reload_renders_ordered_qualities() {
     let fx = fixture().await;
     let _id = insert_profile(&fx.db, "HD Only", &["1080p", "720p"]).await;
 
-    let (qualities_json,): (Option<String>,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT qualities FROM quality_profiles WHERE name = ?")
-            .bind("HD Only")
-            .fetch_one(pool)
-            .await
-            .expect("query")
-    };
+    let row = query_one(
+        &fx.db,
+        "SELECT qualities FROM quality_profiles WHERE name = 'HD Only'".to_owned(),
+    )
+    .await;
+    let qualities_json: Option<String> = row.try_get_by("qualities").expect("qualities");
     let decoded: Vec<String> =
         serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
     assert_eq!(decoded, vec!["1080p".to_owned(), "720p".to_owned()]);
@@ -1105,30 +947,29 @@ async fn quality_profiles_update_renames_and_reorders() {
 
     let now = Utc::now().to_rfc3339();
     let new_qualities = serde_json::to_string(&["720p", "1080p"]).expect("encode");
-    let affected = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query(
-            "UPDATE quality_profiles SET name = ?, qualities = ?, updated_at = ? WHERE id = ?",
-        )
-        .bind("Renamed")
-        .bind(&new_qualities)
-        .bind(&now)
-        .bind(&id)
-        .execute(pool)
-        .await
-        .expect("update")
-        .rows_affected()
+    let new_qualities_e = esc(&new_qualities);
+    let res = {
+        let backend = fx.db.get_database_backend();
+        fx.db
+            .execute_raw(Statement::from_string(
+                backend,
+                format!(
+                    "UPDATE quality_profiles SET name = 'Renamed', qualities = '{new_qualities_e}', \
+                     updated_at = '{now}' WHERE id = '{id}'"
+                ),
+            ))
+            .await
+            .expect("update")
     };
-    assert_eq!(affected, 1);
+    assert_eq!(res.rows_affected(), 1);
 
-    let (name, qualities_json): (String, Option<String>) = {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query_as("SELECT name, qualities FROM quality_profiles WHERE id = ?")
-                .bind(&id)
-                .fetch_one(pool)
-                .await
-                .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT name, qualities FROM quality_profiles WHERE id = '{id}'"),
+    )
+    .await;
+    let name: String = row.try_get_by("name").expect("name");
+    let qualities_json: Option<String> = row.try_get_by("qualities").expect("qualities");
     assert_eq!(name, "Renamed");
     let decoded: Vec<String> =
         serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
@@ -1144,25 +985,21 @@ async fn quality_profiles_delete_removes_row() {
 
     let now = Utc::now().to_rfc3339();
     let new_qualities = serde_json::to_string(&["1080p", "720p"]).expect("encode");
-    {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query("UPDATE quality_profiles SET qualities = ?, updated_at = ? WHERE id = ?")
-                .bind(&new_qualities)
-                .bind(&now)
-                .bind(&id)
-                .execute(pool)
-                .await
-                .expect("update")
-    };
+    let new_qualities_e = esc(&new_qualities);
+    fx.db
+        .execute_unprepared(&format!(
+            "UPDATE quality_profiles SET qualities = '{new_qualities_e}', updated_at = '{now}' \
+             WHERE id = '{id}'"
+        ))
+        .await
+        .expect("update");
 
-    let (qualities_json,): (Option<String>,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT qualities FROM quality_profiles WHERE id = ?")
-            .bind(&id)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT qualities FROM quality_profiles WHERE id = '{id}'"),
+    )
+    .await;
+    let qualities_json: Option<String> = row.try_get_by("qualities").expect("qualities");
     let decoded: Vec<String> =
         serde_json::from_str(qualities_json.as_deref().unwrap_or("[]")).expect("decode");
     assert_eq!(decoded, vec!["1080p".to_owned(), "720p".to_owned()]);
@@ -1174,24 +1011,20 @@ async fn quality_profiles_delete_profile_removes_row() {
     let fx = fixture().await;
     let id = insert_profile(&fx.db, "Doomed", &["1080p"]).await;
 
-    let affected = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
-            .bind(&id)
-            .execute(pool)
+    let res = {
+        let backend = fx.db.get_database_backend();
+        fx.db
+            .execute_raw(Statement::from_string(
+                backend,
+                format!("DELETE FROM quality_profiles WHERE id = '{id}'"),
+            ))
             .await
             .expect("delete")
-            .rows_affected()
     };
-    assert_eq!(affected, 1);
+    assert_eq!(res.rows_affected(), 1);
 
-    let (count,): (i64,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT COUNT(*) FROM quality_profiles")
-            .fetch_one(pool)
-            .await
-            .expect("count")
-    };
+    let row = query_one(&fx.db, "SELECT COUNT(*) AS n FROM quality_profiles".to_owned()).await;
+    let count: i64 = row.try_get_by("n").expect("n");
     assert_eq!(count, 0);
 }
 
@@ -1254,14 +1087,12 @@ async fn quality_profiles_admin_gate_rejects_guest_role() {
     let fx = fixture().await;
     let guest = insert_user(&fx.db, "guest").await;
 
-    let (role,): (String,) = {
-        let pool = sqlite_pool(&fx.db);
-        sqlx::query_as("SELECT role FROM users WHERE id = ?")
-            .bind(&guest)
-            .fetch_one(pool)
-            .await
-            .expect("readback")
-    };
+    let row = query_one(
+        &fx.db,
+        format!("SELECT role FROM users WHERE id = '{guest}'"),
+    )
+    .await;
+    let role: String = row.try_get_by("role").expect("role");
     // Same predicate `require_admin_user_id` uses inline — a non-admin
     // role causes the helper to short-circuit with "not authorized"
     // before any CRUD server fn touches the database.
@@ -1278,20 +1109,18 @@ async fn remote_access_status_counts_active_vs_revoked() {
     let _live2 = insert_device(&fx.db, &user, false).await;
     let _dead = insert_device(&fx.db, &user, true).await;
 
-    let (paired,): (i64,) = {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NULL")
-                .fetch_one(pool)
-                .await
-                .expect("count")
-    };
-    let (revoked,): (i64,) = {
-        let pool = sqlite_pool(&fx.db);
-            sqlx::query_as("SELECT COUNT(*) FROM remote_devices WHERE revoked_at IS NOT NULL")
-                .fetch_one(pool)
-                .await
-                .expect("count")
-    };
+    let row = query_one(
+        &fx.db,
+        "SELECT COUNT(*) AS n FROM remote_devices WHERE revoked_at IS NULL".to_owned(),
+    )
+    .await;
+    let paired: i64 = row.try_get_by("n").expect("n");
+    let row = query_one(
+        &fx.db,
+        "SELECT COUNT(*) AS n FROM remote_devices WHERE revoked_at IS NOT NULL".to_owned(),
+    )
+    .await;
+    let revoked: i64 = row.try_get_by("n").expect("n");
     assert_eq!(paired, 2, "two paired devices stay live");
     assert_eq!(revoked, 1, "one revoked device is counted separately");
 }

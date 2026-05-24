@@ -30,7 +30,8 @@ use chrono::Utc;
 use http_body_util::BodyExt;
 mod common;
 
-use common::{apply_sql, fresh_db, sqlite_pool};
+use common::{apply_sql, fresh_db};
+use sea_orm::ConnectionTrait;
 use mydia_rs_auth::api_key::hash_api_key;
 use mydia_rs_auth::{MediaTokenCache, MediaTokenPermission, MediaTokenSigner};
 use mydia_rs_db::DatabaseConnection;
@@ -440,17 +441,12 @@ async fn auth_fixture() -> AuthFixture {
 async fn insert_user(db: &DatabaseConnection, role: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    sqlx::query(
+    let username = format!("user-{}", &id[..8]);
+    let email = format!("{}@example.com", &id[..8]);
+    db.execute_unprepared(&format!(
         "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(format!("user-{}", &id[..8]))
-    .bind(format!("{}@example.com", &id[..8]))
-    .bind(role)
-    .bind(&now)
-    .bind(&now)
-    .execute(sqlite_pool(db))
+         VALUES ('{id}', '{username}', '{email}', '{role}', '{now}', '{now}')"
+    ))
     .await
     .expect("insert user");
     id
@@ -460,21 +456,14 @@ async fn insert_api_key(db: &DatabaseConnection, user_id: &str, plaintext: &str)
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let hash = hash_api_key(plaintext).expect("hash api key");
-    sqlx::query(
-        "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, \
-         inserted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(user_id)
-    .bind("test")
-    .bind(&hash)
-    .bind(&plaintext[..8.min(plaintext.len())])
-    // `permissions` is a `StringArray` (text[] on Postgres, JSON-text on
-    // SQLite per the wrapper's TryGetable). Seed it as a JSON array so
-    // the wrapper round-trips cleanly.
-    .bind(r#"["read","write"]"#)
-    .bind(&now)
-    .execute(sqlite_pool(db))
+    let prefix = &plaintext[..8.min(plaintext.len())];
+    db.execute_unprepared(&format!(
+        // `permissions` is a `StringArray` (text[] on Postgres, JSON-text on
+        // SQLite per the wrapper's TryGetable). Seed it as a JSON array so
+        // the wrapper round-trips cleanly.
+        "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, permissions, inserted_at) \
+         VALUES ('{id}', '{user_id}', 'test', '{hash}', '{prefix}', '[\"read\",\"write\"]', '{now}')"
+    ))
     .await
     .expect("insert api_key");
 }
@@ -1096,23 +1085,15 @@ async fn player_v1_subtitle_index_includes_external_tracks() {
 // projection touches: id, path, trashed_at IS NULL.
 async fn insert_media_file_with_path(db: &DatabaseConnection, path: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
+    let media_item_id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-        sqlx::query(
-            "INSERT INTO media_files \
-             (id, media_item_id, path, analysis_attempts, inserted_at, updated_at) \
-             VALUES (?, ?, ?, 0, ?, ?)",
-        )
-        .bind(&id)
-        .bind(uuid::Uuid::new_v4().to_string())
-        .bind(path)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert media_file");
-    }
+    db.execute_unprepared(&format!(
+        "INSERT INTO media_files \
+         (id, media_item_id, path, analysis_attempts, inserted_at, updated_at) \
+         VALUES ('{id}', '{media_item_id}', '{path}', 0, '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert media_file");
     id
 }
 
@@ -1125,26 +1106,15 @@ async fn insert_subtitle(
     language: &str,
 ) {
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-        sqlx::query(
-            "INSERT INTO subtitles \
-             (id, media_file_id, language, provider, subtitle_hash, file_path, \
-              sync_offset, format, hearing_impaired, inserted_at, updated_at) \
-             VALUES (?, ?, ?, 'test', ?, ?, 0, ?, 0, ?, ?)",
-        )
-        .bind(id)
-        .bind(media_file_id)
-        .bind(language)
-        .bind(uuid::Uuid::new_v4().to_string()) // unique hash
-        .bind(file_path)
-        .bind(format)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert subtitle");
-    }
+    let hash = uuid::Uuid::new_v4().to_string();
+    db.execute_unprepared(&format!(
+        "INSERT INTO subtitles \
+         (id, media_file_id, language, provider, subtitle_hash, file_path, \
+          sync_offset, format, hearing_impaired, inserted_at, updated_at) \
+         VALUES ('{id}', '{media_file_id}', '{language}', 'test', '{hash}', '{file_path}', 0, '{format}', 0, '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert subtitle");
 }
 
 // ---------- wired adapters: download_client + indexer ----------
@@ -1152,44 +1122,26 @@ async fn insert_subtitle(
 async fn insert_download_client(db: &DatabaseConnection, name: &str, kind: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-        sqlx::query(
-            "INSERT INTO download_client_configs \
-             (id, name, type, enabled, priority, host, port, use_ssl, inserted_at, updated_at) \
-             VALUES (?, ?, ?, 1, 1, 'localhost', 8080, 0, ?, ?)",
-        )
-        .bind(&id)
-        .bind(name)
-        .bind(kind)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert download_client");
-    }
+    db.execute_unprepared(&format!(
+        "INSERT INTO download_client_configs \
+         (id, name, type, enabled, priority, host, port, use_ssl, inserted_at, updated_at) \
+         VALUES ('{id}', '{name}', '{kind}', 1, 1, 'localhost', 8080, 0, '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert download_client");
     id
 }
 
 async fn insert_indexer(db: &DatabaseConnection, name: &str, kind: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-        sqlx::query(
-            "INSERT INTO indexer_configs \
-             (id, name, type, enabled, priority, base_url, api_key, inserted_at, updated_at) \
-             VALUES (?, ?, ?, 1, 1, 'https://indexer.test', 'secret-key', ?, ?)",
-        )
-        .bind(&id)
-        .bind(name)
-        .bind(kind)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert indexer");
-    }
+    db.execute_unprepared(&format!(
+        "INSERT INTO indexer_configs \
+         (id, name, type, enabled, priority, base_url, api_key, inserted_at, updated_at) \
+         VALUES ('{id}', '{name}', '{kind}', 1, 1, 'https://indexer.test', 'secret-key', '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert indexer");
     id
 }
 
@@ -1351,12 +1303,13 @@ async fn revoked_api_key_returns_401() {
     let fx = auth_fixture().await;
     // Revoke the user key.
     {
-        let pool = sqlite_pool(&fx.state.db);
         let now = Utc::now().to_rfc3339();
-        sqlx::query("UPDATE api_keys SET revoked_at = ? WHERE user_id = ?")
-            .bind(&now)
-            .bind(&fx.user_id)
-            .execute(pool)
+        let user_id = &fx.user_id;
+        fx.state
+            .db
+            .execute_unprepared(&format!(
+                "UPDATE api_keys SET revoked_at = '{now}' WHERE user_id = '{user_id}'"
+            ))
             .await
             .expect("revoke");
     }
@@ -1406,24 +1359,13 @@ async fn insert_media_file(db: &DatabaseConnection, h264_aac: bool) -> (String, 
         ("hevc", "ac3")
     };
 
-    {
-        let pool = sqlite_pool(db);
-        sqlx::query(
-            "INSERT INTO media_files (id, media_item_id, path, codec, audio_codec, \
-             analysis_attempts, inserted_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
-        )
-        .bind(&id)
-        .bind(&media_item_id)
-        .bind(&path)
-        .bind(codec)
-        .bind(audio_codec)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert media_file");
-    }
+    db.execute_unprepared(&format!(
+        "INSERT INTO media_files (id, media_item_id, path, codec, audio_codec, \
+         analysis_attempts, inserted_at, updated_at) \
+         VALUES ('{id}', '{media_item_id}', '{path}', '{codec}', '{audio_codec}', 0, '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert media_file");
     (id, file)
 }
 
@@ -1947,23 +1889,13 @@ async fn indexer_reset_failures_returns_401_without_auth() {
 async fn insert_media_file_for_download(db: &DatabaseConnection, parent_id: &str, abs_path: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    {
-        let pool = sqlite_pool(db);
-        sqlx::query(
-            "INSERT INTO media_files (id, media_item_id, episode_id, path, size, resolution, \
-             analysis_attempts, inserted_at, updated_at) \
-             VALUES (?, ?, NULL, ?, ?, '1080p', 0, ?, ?)",
-        )
-        .bind(&id)
-        .bind(parent_id)
-        .bind(abs_path)
-        .bind(100_i64)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert media_file");
-    }
+    db.execute_unprepared(&format!(
+        "INSERT INTO media_files (id, media_item_id, episode_id, path, size, resolution, \
+         analysis_attempts, inserted_at, updated_at) \
+         VALUES ('{id}', '{parent_id}', NULL, '{abs_path}', 100, '1080p', 0, '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert media_file");
     id
 }
 

@@ -2,13 +2,9 @@
 //!
 //! Each test opens a fresh in-memory SQLite `DatabaseConnection` and
 //! applies the schema it needs. The U14 SeaORM conversion replaced the
-//! legacy `Db` enum + raw sqlx with `DatabaseConnection`; tests keep
-//! their hand-written DDL because the schemas used here are SQLite-
-//! shaped subsets of the Phoenix migrations (no Postgres-only columns).
-//!
-//! When a test wants to seed via raw sqlx (the original pre-U14 path),
-//! it pulls the underlying sqlx pool via
-//! [`sea_orm::DatabaseConnection::get_sqlite_connection_pool`]. The
+//! legacy `Db` enum + raw sqlx with `DatabaseConnection`; the U17 sweep
+//! that followed removed the remaining raw-sqlx seeders, so test fixture
+//! writes now route through `db.execute_unprepared(...)` directly. The
 //! production server fns under test take `&DatabaseConnection` directly,
 //! so the test threads the SeaORM connection straight through.
 //!
@@ -20,7 +16,6 @@
 #![cfg(feature = "server")]
 
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection};
-use sqlx::sqlite::SqlitePool;
 
 /// Build a fresh in-memory SQLite `DatabaseConnection` with FK
 /// enforcement disabled. Apply schema DDL via [`apply_sql`] or
@@ -47,13 +42,4 @@ pub async fn apply_sql(db: &DatabaseConnection, sql: &str) {
                 .expect("apply DDL statement");
         }
     }
-}
-
-/// Borrow the underlying sqlx `SqlitePool` from a SeaORM
-/// `DatabaseConnection`. Test seeders keep their original raw-sqlx
-/// shape and route through this accessor instead of the removed
-/// `Db::Sqlite(pool)` enum match.
-#[must_use]
-pub fn sqlite_pool(db: &DatabaseConnection) -> &SqlitePool {
-    db.get_sqlite_connection_pool()
 }

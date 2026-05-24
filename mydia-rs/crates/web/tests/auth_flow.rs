@@ -14,10 +14,11 @@
 
 mod common;
 
-use common::{apply_sql, fresh_db, sqlite_pool};
+use common::{apply_sql, fresh_db};
 use mydia_rs_auth::password::{hash_password, verify_password};
 use mydia_rs_db::DatabaseConnection;
 use mydia_rs_web::session::{self as web_session, SESSION_COOKIE_NAME};
+use sea_orm::{ConnectionTrait, Statement};
 
 const USERS_TABLE_SQL: &str = "
 CREATE TABLE IF NOT EXISTS users (
@@ -75,29 +76,29 @@ async fn bcrypt_verifies_round_trip() {
 #[tokio::test]
 async fn user_row_round_trips_through_users_table() {
     let db = fixture_db().await;
-    let pool = sqlite_pool(&db);
     let hash = hash_password("correcthorse").expect("hash");
     let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
+    db.execute_unprepared(&format!(
         "INSERT INTO users (id, username, email, password_hash, role, inserted_at, updated_at) \
-         VALUES (?, ?, ?, ?, 'admin', ?, ?)",
-    )
-    .bind("setup-uuid")
-    .bind("admin")
-    .bind("admin@example.com")
-    .bind(&hash)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('setup-uuid', 'admin', 'admin@example.com', '{hash}', 'admin', '{now}', '{now}')"
+    ))
     .await
     .expect("insert");
 
-    let (id, username, password_hash, role): (String, String, Option<String>, String) =
-        sqlx::query_as("SELECT id, username, password_hash, role FROM users WHERE username = ?")
-            .bind("admin")
-            .fetch_one(pool)
-            .await
-            .expect("select");
+    let backend = db.get_database_backend();
+    let row = db
+        .query_one_raw(Statement::from_string(
+            backend,
+            "SELECT id, username, password_hash, role FROM users WHERE username = 'admin'"
+                .to_owned(),
+        ))
+        .await
+        .expect("select")
+        .expect("row");
+    let id: String = row.try_get_by("id").expect("id");
+    let username: String = row.try_get_by("username").expect("username");
+    let password_hash: Option<String> = row.try_get_by("password_hash").expect("password_hash");
+    let role: String = row.try_get_by("role").expect("role");
 
     assert_eq!(id, "setup-uuid");
     assert_eq!(username, "admin");
@@ -109,31 +110,35 @@ async fn user_row_round_trips_through_users_table() {
 #[tokio::test]
 async fn counting_users_drives_setup_required() {
     let db = fixture_db().await;
-    let pool = sqlite_pool(&db);
+    let backend = db.get_database_backend();
 
-    let (before,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(pool)
+    let row = db
+        .query_one_raw(Statement::from_string(
+            backend,
+            "SELECT COUNT(*) AS n FROM users".to_owned(),
+        ))
         .await
-        .expect("count");
+        .expect("count")
+        .expect("row");
+    let before: i64 = row.try_get_by("n").expect("n");
     assert_eq!(before, 0, "fresh fixture has no users; setup_required=true");
 
     let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
+    db.execute_unprepared(&format!(
         "INSERT INTO users (id, username, email, role, inserted_at, updated_at) \
-         VALUES (?, ?, ?, 'admin', ?, ?)",
-    )
-    .bind("u1")
-    .bind("admin")
-    .bind("admin@example.com")
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('u1', 'admin', 'admin@example.com', 'admin', '{now}', '{now}')"
+    ))
     .await
     .expect("insert admin");
 
-    let (after,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(pool)
+    let row = db
+        .query_one_raw(Statement::from_string(
+            backend,
+            "SELECT COUNT(*) AS n FROM users".to_owned(),
+        ))
         .await
-        .expect("count");
+        .expect("count")
+        .expect("row");
+    let after: i64 = row.try_get_by("n").expect("n");
     assert_eq!(after, 1, "after first admin, setup_required must flip");
 }

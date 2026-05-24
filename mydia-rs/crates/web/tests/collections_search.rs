@@ -21,8 +21,9 @@
 mod common;
 
 use chrono::Utc;
-use common::{apply_sql, fresh_db, sqlite_pool};
+use common::{apply_sql, fresh_db};
 use mydia_rs_db::DatabaseConnection;
+use sea_orm::ConnectionTrait;
 use mydia_rs_web::server_fns::collections::server::{
     fetch_collection_detail, fetch_collection_items, fetch_collections,
 };
@@ -88,17 +89,22 @@ async fn fixture() -> DatabaseConnection {
     db
 }
 
+/// Escape a string for inlining inside single-quoted SQL string
+/// literal. Test inputs are controlled but a couple of fixture names
+/// contain apostrophes (`Bob's …`); doubling the quote is the
+/// standard-SQL escape that SQLite + Postgres both accept.
+fn esc(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
 async fn insert_user(db: &DatabaseConnection) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let pool = sqlite_pool(db);
-    sqlx::query("INSERT INTO users (id, role, inserted_at, updated_at) VALUES (?, 'user', ?, ?)")
-        .bind(&id)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await
-        .expect("insert user");
+    db.execute_unprepared(&format!(
+        "INSERT INTO users (id, role, inserted_at, updated_at) VALUES ('{id}', 'user', '{now}', '{now}')"
+    ))
+    .await
+    .expect("insert user");
     id
 }
 
@@ -114,22 +120,14 @@ async fn insert_collection(
 ) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let pool = sqlite_pool(db);
-    sqlx::query(
+    let is_system_int = i64::from(is_system);
+    let name_e = esc(name);
+    db.execute_unprepared(&format!(
         "INSERT INTO collections (id, name, type, visibility, is_system, position, user_id, \
          sort_order, inserted_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'position', ?, ?)",
-    )
-    .bind(&id)
-    .bind(name)
-    .bind(kind)
-    .bind(visibility)
-    .bind(i64::from(is_system))
-    .bind(position)
-    .bind(user_id)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', '{name_e}', '{kind}', '{visibility}', {is_system_int}, {position}, \
+         '{user_id}', 'position', '{now}', '{now}')"
+    ))
     .await
     .expect("insert collection");
     id
@@ -154,20 +152,24 @@ async fn insert_media_with_metadata(
 ) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let pool = sqlite_pool(db);
-    sqlx::query(
+    let title_e = esc(title);
+    let original_title_sql = match original_title {
+        Some(s) => format!("'{}'", esc(s)),
+        None => "NULL".to_owned(),
+    };
+    let year_sql = match year {
+        Some(y) => y.to_string(),
+        None => "NULL".to_owned(),
+    };
+    let metadata_sql = match metadata_json {
+        Some(s) => format!("'{}'", esc(s)),
+        None => "NULL".to_owned(),
+    };
+    db.execute_unprepared(&format!(
         "INSERT INTO media_items (id, type, title, original_title, year, metadata, monitored, \
-         inserted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
-    )
-    .bind(&id)
-    .bind(kind)
-    .bind(title)
-    .bind(original_title)
-    .bind(year)
-    .bind(metadata_json)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
+         inserted_at, updated_at) VALUES ('{id}', '{kind}', '{title_e}', {original_title_sql}, \
+         {year_sql}, {metadata_sql}, 1, '{now}', '{now}')"
+    ))
     .await
     .expect("insert media");
     id
@@ -181,17 +183,10 @@ async fn add_to_collection(
 ) {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    let pool = sqlite_pool(db);
-    sqlx::query(
+    db.execute_unprepared(&format!(
         "INSERT INTO collection_items (id, collection_id, media_item_id, position, inserted_at) \
-         VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(collection_id)
-    .bind(media_id)
-    .bind(position)
-    .bind(&now)
-    .execute(pool)
+         VALUES ('{id}', '{collection_id}', '{media_id}', {position}, '{now}')"
+    ))
     .await
     .expect("insert collection_item");
 }

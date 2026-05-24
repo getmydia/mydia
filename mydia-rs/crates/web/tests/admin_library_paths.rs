@@ -20,8 +20,9 @@ mod common;
 use std::sync::Arc;
 
 use chrono::Utc;
-use common::{apply_sql, fresh_db, sqlite_pool};
+use common::{apply_sql, fresh_db};
 use mydia_rs_db::DatabaseConnection;
+use sea_orm::{ConnectionTrait, Statement};
 use mydia_rs_jobs::storage::{self as jobs_storage, JobStorage};
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 use mydia_rs_pubsub::{topics, Event, Pubsub};
@@ -82,16 +83,10 @@ async fn fixture() -> Fixture {
 async fn insert_path(db: &DatabaseConnection, path: &str, kind: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
-    sqlx::query(
+    db.execute_unprepared(&format!(
         "INSERT INTO library_paths (id, path, type, monitored, inserted_at, updated_at) \
-         VALUES (?, ?, ?, 1, ?, ?)",
-    )
-    .bind(&id)
-    .bind(path)
-    .bind(kind)
-    .bind(&now)
-    .bind(&now)
-    .execute(sqlite_pool(db))
+         VALUES ('{id}', '{path}', '{kind}', 1, '{now}', '{now}')"
+    ))
     .await
     .expect("insert library_path");
     id
@@ -104,17 +99,25 @@ async fn list_library_paths_sees_inserted_row() {
 
     // Re-run the list query directly to confirm round-trip — this is
     // exactly what the server fn returns.
-    let rows: Vec<(String, String, String, bool)> = sqlx::query_as(
-        "SELECT id, path, type, monitored FROM library_paths ORDER BY inserted_at ASC",
-    )
-    .fetch_all(sqlite_pool(&fx.db))
-    .await
-    .expect("query");
+    let backend = fx.db.get_database_backend();
+    let rows = fx
+        .db
+        .query_all_raw(Statement::from_string(
+            backend,
+            "SELECT id, path, type, monitored FROM library_paths ORDER BY inserted_at ASC"
+                .to_owned(),
+        ))
+        .await
+        .expect("query");
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].0, id);
-    assert_eq!(rows[0].1, fx.media_path);
-    assert_eq!(rows[0].2, "movies");
-    assert!(rows[0].3);
+    let row0_id: String = rows[0].try_get_by("id").expect("id");
+    let row0_path: String = rows[0].try_get_by("path").expect("path");
+    let row0_type: String = rows[0].try_get_by("type").expect("type");
+    let row0_monitored: i32 = rows[0].try_get_by("monitored").expect("monitored");
+    assert_eq!(row0_id, id);
+    assert_eq!(row0_path, fx.media_path);
+    assert_eq!(row0_type, "movies");
+    assert_eq!(row0_monitored, 1);
 }
 
 #[tokio::test]
