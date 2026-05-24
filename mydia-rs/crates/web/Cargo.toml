@@ -11,10 +11,10 @@ path = "src/lib.rs"
 
 # Per Dioxus 0.7's dual-target model, this crate must compile to both
 # wasm32-unknown-unknown (client / hydration) and the native server
-# target. Server-only logic (sqlx, tokio, pubsub, jobs) is gated behind
-# the `server` feature so the wasm build never sees those deps; client-
-# side `#[server]` callers still compile against the same signatures
-# because the macro stubs them out on the wasm target.
+# target. Server-only logic (SeaORM, tokio, pubsub, jobs) is gated
+# behind the `server` feature so the wasm build never sees those deps;
+# client-side `#[server]` callers still compile against the same
+# signatures because the macro stubs them out on the wasm target.
 [dependencies]
 # The `dioxus` umbrella crate is the only Dioxus dep we touch directly per
 # the 0.7 convention. `fullstack` pulls in dioxus-fullstack, `router` pulls
@@ -39,8 +39,13 @@ mydia-rs-streaming = { path = "../streaming", optional = true }
 mydia-rs-p2p       = { path = "../p2p",       optional = true }
 mydia-rs-downloads = { path = "../downloads", optional = true }
 mydia-rs-indexers  = { path = "../indexers",  optional = true }
+mydia-rs-entities  = { path = "../entities",  optional = true }
 dashmap            = { version = "6",           optional = true }
-sqlx               = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "chrono", "uuid"], optional = true }
+# `sqlx` is kept on a thin server-only surface (session.rs hands the
+# raw pool to tower-sessions-sqlx-store; the `sqlx::Error` type bubbles
+# up through `migrate()`'s signature). All query code is `SeaORM`.
+sqlx               = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres"], optional = true }
+sea-orm            = { workspace = true, optional = true }
 tokio              = { workspace = true, optional = true }
 chrono             = { version = "0.4", default-features = false, features = ["serde", "clock"], optional = true }
 futures            = { version = "0.3", optional = true }
@@ -81,8 +86,10 @@ server = [
     "dep:mydia-rs-p2p",
     "dep:mydia-rs-downloads",
     "dep:mydia-rs-indexers",
+    "dep:mydia-rs-entities",
     "dep:dashmap",
     "dep:sqlx",
+    "dep:sea-orm",
     "dep:tokio",
     "dep:chrono",
     "dep:futures",
@@ -109,12 +116,13 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 async-trait = "0.1"
 mydia-rs-downloads = { path = "../downloads" }
 mydia-rs-indexers = { path = "../indexers" }
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "chrono", "uuid"] }
 mydia-rs-db = { path = "../db" }
+mydia-rs-entities = { path = "../entities" }
 mydia-rs-pubsub = { path = "../pubsub" }
 mydia-rs-jobs = { path = "../jobs" }
 mydia-rs-streaming = { path = "../streaming" }
 mydia-rs-models = { path = "../models" }
+sea-orm = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 serde_json = "1"

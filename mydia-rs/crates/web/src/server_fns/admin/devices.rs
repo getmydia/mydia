@@ -48,7 +48,12 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::remote_devices;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -57,98 +62,79 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type DeviceTuple = (
-        String,
-        String,
-        String,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     pub(super) async fn list() -> Result<Vec<DeviceRow>, ServerFnError> {
         let user_id = require_admin_user_id().await?;
         let state = state().await?;
-        let rows: Vec<DeviceTuple> = match &state.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, device_name, platform, last_seen_at, revoked_at, inserted_at \
-                 FROM remote_devices WHERE user_id = ? \
-                 ORDER BY inserted_at DESC",
-            )
-            .bind(&user_id)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query remote_devices: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, device_name, platform, last_seen_at, revoked_at, inserted_at \
-                 FROM remote_devices WHERE user_id = $1 \
-                 ORDER BY inserted_at DESC",
-            )
-            .bind(&user_id)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query remote_devices: {err}")))?,
+        let Some(user_wrapper) = parse_uuid(&user_id) else {
+            return Ok(Vec::new());
         };
+        let backend = state.db.get_database_backend();
+        let rows = remote_devices::Entity::find()
+            .filter(
+                Expr::col(remote_devices::Column::UserId)
+                    .eq(user_wrapper.into_simple_expr(backend)),
+            )
+            .order_by_desc(remote_devices::Column::InsertedAt)
+            .all(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query remote_devices: {err}")))?;
         let cutoff = chrono::Utc::now() - chrono::Duration::days(7);
         Ok(rows
             .into_iter()
-            .map(
-                |(id, device_name, platform, last_seen_at, revoked_at, inserted_at)| {
-                    let status = if revoked_at.is_some() {
-                        "revoked"
-                    } else if last_seen_at.is_some_and(|dt| dt > cutoff) {
-                        "active"
-                    } else {
-                        "inactive"
-                    };
-                    DeviceRow {
-                        id,
-                        device_name,
-                        platform,
-                        last_seen_at: last_seen_at.map(|dt| dt.to_rfc3339()),
-                        revoked_at: revoked_at.map(|dt| dt.to_rfc3339()),
-                        inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-                        status: status.to_owned(),
-                    }
-                },
-            )
+            .map(|row| {
+                let status = if row.revoked_at.is_some() {
+                    "revoked"
+                } else if row.last_seen_at.as_ref().is_some_and(|dt| dt.0 > cutoff) {
+                    "active"
+                } else {
+                    "inactive"
+                };
+                DeviceRow {
+                    id: row.id.to_string(),
+                    device_name: row.device_name,
+                    platform: row.platform,
+                    last_seen_at: row.last_seen_at.map(|dt| dt.0.to_rfc3339()),
+                    revoked_at: row.revoked_at.map(|dt| dt.0.to_rfc3339()),
+                    inserted_at: Some(row.inserted_at.0.to_rfc3339()),
+                    status: status.to_owned(),
+                }
+            })
             .collect())
     }
 
     pub(super) async fn revoke(id: String) -> Result<(), ServerFnError> {
         let user_id = require_admin_user_id().await?;
         let state = state().await?;
-        let now = chrono::Utc::now();
-
-        // Constrain to the current user so an operator can't revoke
-        // someone else's device by guessing IDs.
-        let affected = match &state.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE remote_devices SET revoked_at = ?, updated_at = ? \
-                 WHERE id = ? AND user_id = ?",
-            )
-            .bind(now.to_rfc3339())
-            .bind(now.to_rfc3339())
-            .bind(&id)
-            .bind(&user_id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("revoke device: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE remote_devices SET revoked_at = $1, updated_at = $2 \
-                 WHERE id = $3 AND user_id = $4",
-            )
-            .bind(now)
-            .bind(now)
-            .bind(&id)
-            .bind(&user_id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("revoke device: {err}")))?
-            .rows_affected(),
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let Some(dev_wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid device id {id}")));
         };
-        if affected == 0 {
+        let Some(user_wrapper) = parse_uuid(&user_id) else {
+            return Err(ServerFnError::new("invalid user id".to_owned()));
+        };
+        let backend = state.db.get_database_backend();
+        let res = remote_devices::Entity::update_many()
+            .col_expr(
+                remote_devices::Column::RevokedAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(
+                remote_devices::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(remote_devices::Column::Id).eq(dev_wrapper.into_simple_expr(backend)))
+            .filter(
+                Expr::col(remote_devices::Column::UserId)
+                    .eq(user_wrapper.into_simple_expr(backend)),
+            )
+            .exec(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("revoke device: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no device with id {id} owned by the current user"
             )));

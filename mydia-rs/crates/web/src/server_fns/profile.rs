@@ -79,7 +79,15 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
     use mydia_rs_auth::password::{hash_password, verify_password, PasswordError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::users;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -178,174 +186,100 @@ mod server {
         Ok(())
     }
 
-    /// Row shape coming back from sqlx for the profile read. Listed
-    /// out as a typedef because clippy's `type_complexity` lint
-    /// (enabled via -D warnings) rejects the inline tuple.
-    type ProfileRowSqlite = (
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        String,
-        Option<String>,
-        Option<String>,
-    );
-    type ProfileRowPg = (
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        String,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
-
-    async fn load_profile(db: &Db, id: &str) -> Result<Option<ProfileView>, ServerFnError> {
-        let view = match db {
-            Db::Sqlite(pool) => {
-                let raw: Option<ProfileRowSqlite> = sqlx::query_as(
-                    "SELECT id, username, email, display_name, avatar_url, role, oidc_sub, last_login_at \
-                     FROM users WHERE id = ? LIMIT 1",
-                )
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("load profile: {err}")))?;
-                raw.map(|(uid, un, em, dn, av, role, sub, llogin)| {
-                    let last_login = llogin.as_deref().and_then(|s| {
-                        chrono::DateTime::parse_from_rfc3339(s)
-                            .ok()
-                            .map(|dt| dt.to_rfc3339())
-                    });
-                    ProfileView {
-                        is_oidc: sub.is_some(),
-                        user_id: uid,
-                        username: un,
-                        email: em,
-                        display_name: dn,
-                        avatar_url: av,
-                        role,
-                        last_login_at: last_login,
-                    }
-                })
-            }
-            Db::Postgres(pool) => {
-                let raw: Option<ProfileRowPg> = sqlx::query_as(
-                    "SELECT id, username, email, display_name, avatar_url, role, oidc_sub, last_login_at \
-                     FROM users WHERE id = $1 LIMIT 1",
-                )
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("load profile: {err}")))?;
-                raw.map(|(uid, un, em, dn, av, role, sub, llogin)| ProfileView {
-                    is_oidc: sub.is_some(),
-                    user_id: uid,
-                    username: un,
-                    email: em,
-                    display_name: dn,
-                    avatar_url: av,
-                    role,
-                    last_login_at: llogin.map(|dt| dt.to_rfc3339()),
-                })
-            }
+    async fn load_profile(
+        db: &DatabaseConnection,
+        id: &str,
+    ) -> Result<Option<ProfileView>, ServerFnError> {
+        let Some(wrapper) = parse_uuid(id) else {
+            return Ok(None);
         };
-
-        Ok(view)
+        let backend = db.get_database_backend();
+        let row = users::Entity::find()
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("load profile: {err}")))?;
+        Ok(row.map(|u| ProfileView {
+            is_oidc: u.oidc_sub.is_some(),
+            user_id: u.id.to_string(),
+            username: u.username,
+            email: u.email,
+            display_name: u.display_name,
+            avatar_url: u.avatar_url,
+            role: u.role,
+            last_login_at: u.last_login_at.map(|dt| dt.0.to_rfc3339()),
+        }))
     }
 
     async fn write_profile(
-        db: &Db,
+        db: &DatabaseConnection,
         id: &str,
         payload: &ProfilePayload,
     ) -> Result<(), ServerFnError> {
-        let now = chrono::Utc::now();
+        let Some(wrapper) = parse_uuid(id) else {
+            return Err(ServerFnError::new(format!("invalid user id {id}")));
+        };
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let backend = db.get_database_backend();
         // An empty-string avatar payload is treated as NULL — matches
         // Phoenix's allow_blank semantics on the regex validator.
         let avatar_url = payload
             .avatar_url
             .as_deref()
             .map(str::trim)
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
         let display_name = payload
             .display_name
             .as_deref()
             .map(str::trim)
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
 
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "UPDATE users SET display_name = ?, avatar_url = ?, updated_at = ? WHERE id = ?",
-                )
-                .bind(display_name)
-                .bind(avatar_url)
-                .bind(now.to_rfc3339())
-                .bind(id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("update profile: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "UPDATE users SET display_name = $1, avatar_url = $2, updated_at = $3 WHERE id = $4",
-                )
-                .bind(display_name)
-                .bind(avatar_url)
-                .bind(now)
-                .bind(id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("update profile: {err}")))?;
-            }
-        }
+        users::Entity::update_many()
+            .col_expr(users::Column::DisplayName, Expr::value(display_name))
+            .col_expr(users::Column::AvatarUrl, Expr::value(avatar_url))
+            .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("update profile: {err}")))?;
         Ok(())
     }
 
-    async fn load_password_hash(db: &Db, id: &str) -> Result<Option<String>, ServerFnError> {
-        let row: Option<(Option<String>,)> = match db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT password_hash FROM users WHERE id = ? LIMIT 1")
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("load password_hash: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT password_hash FROM users WHERE id = $1 LIMIT 1")
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("load password_hash: {err}")))?
-            }
+    async fn load_password_hash(
+        db: &DatabaseConnection,
+        id: &str,
+    ) -> Result<Option<String>, ServerFnError> {
+        let Some(wrapper) = parse_uuid(id) else {
+            return Ok(None);
         };
-        Ok(row.and_then(|(h,)| h))
+        let backend = db.get_database_backend();
+        let row = users::Entity::find()
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("load password_hash: {err}")))?;
+        Ok(row.and_then(|u| u.password_hash))
     }
 
-    async fn write_password_hash(db: &Db, id: &str, hash: &str) -> Result<(), ServerFnError> {
-        let now = chrono::Utc::now();
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
-                    .bind(hash)
-                    .bind(now.to_rfc3339())
-                    .bind(id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("update password_hash: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query("UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3")
-                    .bind(hash)
-                    .bind(now)
-                    .bind(id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("update password_hash: {err}")))?;
-            }
-        }
+    async fn write_password_hash(
+        db: &DatabaseConnection,
+        id: &str,
+        hash: &str,
+    ) -> Result<(), ServerFnError> {
+        let Some(wrapper) = parse_uuid(id) else {
+            return Err(ServerFnError::new(format!("invalid user id {id}")));
+        };
+        let backend = db.get_database_backend();
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        users::Entity::update_many()
+            .col_expr(users::Column::PasswordHash, Expr::value(hash.to_owned()))
+            .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("update password_hash: {err}")))?;
         Ok(())
     }
 }

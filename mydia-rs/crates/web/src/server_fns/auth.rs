@@ -82,7 +82,7 @@ pub async fn oidc_available() -> Result<bool, ServerFnError> {
 /// into the server-fn private module path.
 #[cfg(feature = "server")]
 pub async fn upsert_oidc_user(
-    db: &mydia_rs_db::Db,
+    db: &mydia_rs_db::DatabaseConnection,
     payload: &crate::oidc::OidcUserPayload,
 ) -> Result<String, ServerFnError> {
     server::upsert_oidc_user(db, payload).await
@@ -115,8 +115,18 @@ mod server {
     use crate::session::SESSION_KEY_USER_ID;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
     use mydia_rs_auth::password::{hash_password, verify_password, PasswordError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::users;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QuerySelect;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
     use tower_sessions::Session;
+
+    fn parse_uuid_wrapper(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     pub(crate) async fn require_session_user_id() -> Result<String, ServerFnError> {
         let session = session_handle().await?;
@@ -145,20 +155,20 @@ mod server {
         }
     }
 
-    async fn lookup_user_role(db: &Db, id: &str) -> Result<Option<String>, ServerFnError> {
-        let row: Option<(String,)> = match db {
-            Db::Sqlite(pool) => sqlx::query_as("SELECT role FROM users WHERE id = ? LIMIT 1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("lookup role: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as("SELECT role FROM users WHERE id = $1 LIMIT 1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("lookup role: {err}")))?,
+    async fn lookup_user_role(
+        db: &DatabaseConnection,
+        id: &str,
+    ) -> Result<Option<String>, ServerFnError> {
+        let Some(wrapper) = parse_uuid_wrapper(id) else {
+            return Ok(None);
         };
-        Ok(row.map(|(role,)| role))
+        let backend = db.get_database_backend();
+        let row = users::Entity::find()
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("lookup role: {err}")))?;
+        Ok(row.map(|u| u.role))
     }
 
     /// Server-fn-helpers that the dual-target functions delegate to.
@@ -283,136 +293,96 @@ mod server {
     /// `oidc::extract_user_payload`); group/role-claim mapping is a
     /// follow-up tied to a `MydiaAdditionalClaims` shape.
     pub(crate) async fn upsert_oidc_user(
-        db: &mydia_rs_db::Db,
+        db: &DatabaseConnection,
         payload: &crate::oidc::OidcUserPayload,
     ) -> Result<String, ServerFnError> {
         let existing = lookup_oidc_user(db, &payload.sub, &payload.issuer).await?;
         let now = chrono::Utc::now();
+        let now_wrapper = DateTimeSecs::from(now);
 
         if let Some(existing_id) = existing {
-            update_oidc_user(db, &existing_id, payload, now).await?;
-            return Ok(existing_id);
+            update_oidc_user(db, &existing_id, payload, now_wrapper).await?;
+            return Ok(existing_id.to_string());
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
-        insert_oidc_user(db, &id, payload, now).await?;
-        Ok(id)
+        let id_uuid = uuid::Uuid::new_v4();
+        let id = UuidText::from(id_uuid);
+        insert_oidc_user(db, id, payload, now_wrapper).await?;
+        Ok(id_uuid.to_string())
     }
 
     async fn lookup_oidc_user(
-        db: &mydia_rs_db::Db,
+        db: &DatabaseConnection,
         sub: &str,
         issuer: &str,
-    ) -> Result<Option<String>, ServerFnError> {
-        let row: Option<(String,)> = match db {
-            mydia_rs_db::Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id FROM users WHERE oidc_sub = ? AND oidc_issuer = ? LIMIT 1",
-            )
-            .bind(sub)
-            .bind(issuer)
-            .fetch_optional(pool)
+    ) -> Result<Option<UuidText>, ServerFnError> {
+        let row = users::Entity::find()
+            .filter(users::Column::OidcSub.eq(sub.to_owned()))
+            .filter(users::Column::OidcIssuer.eq(issuer.to_owned()))
+            .one(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("lookup oidc user: {err}")))?,
-            mydia_rs_db::Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id FROM users WHERE oidc_sub = $1 AND oidc_issuer = $2 LIMIT 1",
-            )
-            .bind(sub)
-            .bind(issuer)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("lookup oidc user: {err}")))?,
-        };
-        Ok(row.map(|(id,)| id))
+            .map_err(|err| ServerFnError::new(format!("lookup oidc user: {err}")))?;
+        Ok(row.map(|u| u.id))
     }
 
     async fn insert_oidc_user(
-        db: &mydia_rs_db::Db,
-        id: &str,
+        db: &DatabaseConnection,
+        id: UuidText,
         payload: &crate::oidc::OidcUserPayload,
-        now: chrono::DateTime<chrono::Utc>,
+        now: DateTimeSecs,
     ) -> Result<(), ServerFnError> {
-        match db {
-            mydia_rs_db::Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO users (id, email, display_name, avatar_url, oidc_sub, oidc_issuer, role, last_login_at, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(id)
-                .bind(payload.email.as_deref())
-                .bind(payload.display_name.as_deref())
-                .bind(payload.avatar_url.as_deref())
-                .bind(&payload.sub)
-                .bind(&payload.issuer)
-                .bind(&payload.role)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert oidc user: {err}")))?;
-            }
-            mydia_rs_db::Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO users (id, email, display_name, avatar_url, oidc_sub, oidc_issuer, role, last_login_at, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-                )
-                .bind(id)
-                .bind(payload.email.as_deref())
-                .bind(payload.display_name.as_deref())
-                .bind(payload.avatar_url.as_deref())
-                .bind(&payload.sub)
-                .bind(&payload.issuer)
-                .bind(&payload.role)
-                .bind(now)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert oidc user: {err}")))?;
-            }
-        }
+        let am = users::ActiveModel {
+            id: Set(id),
+            username: Set(None),
+            email: Set(payload.email.clone()),
+            password_hash: Set(None),
+            oidc_sub: Set(Some(payload.sub.clone())),
+            oidc_issuer: Set(Some(payload.issuer.clone())),
+            role: Set(payload.role.clone()),
+            display_name: Set(payload.display_name.clone()),
+            avatar_url: Set(payload.avatar_url.clone()),
+            last_login_at: Set(Some(now)),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+        };
+        insert_active_model(am, db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("insert oidc user: {err}")))?;
         Ok(())
     }
 
     async fn update_oidc_user(
-        db: &mydia_rs_db::Db,
-        id: &str,
+        db: &DatabaseConnection,
+        id: &UuidText,
         payload: &crate::oidc::OidcUserPayload,
-        now: chrono::DateTime<chrono::Utc>,
+        now: DateTimeSecs,
     ) -> Result<(), ServerFnError> {
         // last_login_at is bumped here as well so OIDC users see a
         // current timestamp on the profile page — touch_last_login
         // is bcrypt-path only.
-        match db {
-            mydia_rs_db::Db::Sqlite(pool) => {
-                sqlx::query(
-                    "UPDATE users SET email = ?, display_name = ?, avatar_url = ?, last_login_at = ?, updated_at = ? WHERE id = ?",
-                )
-                .bind(payload.email.as_deref())
-                .bind(payload.display_name.as_deref())
-                .bind(payload.avatar_url.as_deref())
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .bind(id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("update oidc user: {err}")))?;
-            }
-            mydia_rs_db::Db::Postgres(pool) => {
-                sqlx::query(
-                    "UPDATE users SET email = $1, display_name = $2, avatar_url = $3, last_login_at = $4, updated_at = $5 WHERE id = $6",
-                )
-                .bind(payload.email.as_deref())
-                .bind(payload.display_name.as_deref())
-                .bind(payload.avatar_url.as_deref())
-                .bind(now)
-                .bind(now)
-                .bind(id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("update oidc user: {err}")))?;
-            }
-        }
+        let backend = db.get_database_backend();
+        users::Entity::update_many()
+            .col_expr(
+                users::Column::Email,
+                Expr::value(payload.email.clone()),
+            )
+            .col_expr(
+                users::Column::DisplayName,
+                Expr::value(payload.display_name.clone()),
+            )
+            .col_expr(
+                users::Column::AvatarUrl,
+                Expr::value(payload.avatar_url.clone()),
+            )
+            .col_expr(
+                users::Column::LastLoginAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
+            .filter(Expr::col(users::Column::Id).eq(id.clone().into_simple_expr(backend)))
+            .exec(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("update oidc user: {err}")))?;
         Ok(())
     }
 
@@ -425,45 +395,31 @@ mod server {
             ));
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
         let now = chrono::Utc::now();
+        let now_wrapper = DateTimeSecs::from(now);
         let hash = hash_password(&payload.password)
             .map_err(|err| ServerFnError::new(format!("hash password: {err}")))?;
 
-        match &st.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO users (id, username, email, password_hash, role, last_login_at, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, 'admin', ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(payload.username.trim())
-                .bind(payload.email.trim())
-                .bind(&hash)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create admin: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO users (id, username, email, password_hash, role, last_login_at, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, 'admin', $5, $6, $7)",
-                )
-                .bind(&id)
-                .bind(payload.username.trim())
-                .bind(payload.email.trim())
-                .bind(&hash)
-                .bind(now)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("create admin: {err}")))?;
-            }
-        }
+        let am = users::ActiveModel {
+            id: Set(id),
+            username: Set(Some(payload.username.trim().to_owned())),
+            email: Set(Some(payload.email.trim().to_owned())),
+            password_hash: Set(Some(hash)),
+            oidc_sub: Set(None),
+            oidc_issuer: Set(None),
+            role: Set("admin".to_owned()),
+            display_name: Set(None),
+            avatar_url: Set(None),
+            last_login_at: Set(Some(now_wrapper)),
+            inserted_at: Set(now_wrapper),
+            updated_at: Set(now_wrapper),
+        };
+        insert_active_model(am, &st.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("create admin: {err}")))?;
 
         // Sign the new admin in immediately so they land on the home
         // page logged-in, matching Phoenix's
@@ -475,12 +431,12 @@ mod server {
             .await
             .map_err(|err| ServerFnError::new(format!("session cycle_id: {err}")))?;
         session
-            .insert(SESSION_KEY_USER_ID, &id)
+            .insert(SESSION_KEY_USER_ID, &id_str)
             .await
             .map_err(|err| ServerFnError::new(format!("session insert: {err}")))?;
 
         Ok(AuthAck {
-            user_id: id,
+            user_id: id_str,
             username: Some(payload.username.trim().to_owned()),
             role: "admin".to_owned(),
         })
@@ -502,90 +458,74 @@ mod server {
     }
 
     async fn lookup_user_for_login(
-        db: &Db,
+        db: &DatabaseConnection,
         username: &str,
     ) -> Result<Option<(String, String, Option<String>, String)>, ServerFnError> {
-        type LoginRow = (String, String, Option<String>, String);
-        let row: Option<LoginRow> = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, username, password_hash, role FROM users WHERE username = ? LIMIT 1",
-            )
-            .bind(username)
-            .fetch_optional(pool)
+        let row = users::Entity::find()
+            .filter(users::Column::Username.eq(username.to_owned()))
+            .limit(1)
+            .one(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("lookup user: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, username, password_hash, role FROM users WHERE username = $1 LIMIT 1",
-            )
-            .bind(username)
-            .fetch_optional(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("lookup user: {err}")))?,
-        };
-        Ok(row)
+            .map_err(|err| ServerFnError::new(format!("lookup user: {err}")))?;
+        Ok(row.and_then(|u| {
+            u.username.clone().map(|name| {
+                (
+                    u.id.to_string(),
+                    name,
+                    u.password_hash,
+                    u.role,
+                )
+            })
+        }))
     }
 
-    async fn touch_last_login(db: &Db, id: &str) -> Result<(), ServerFnError> {
-        let now = chrono::Utc::now();
-        match db {
-            Db::Sqlite(pool) => {
-                sqlx::query("UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?")
-                    .bind(now.to_rfc3339())
-                    .bind(now.to_rfc3339())
-                    .bind(id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("touch last_login: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query("UPDATE users SET last_login_at = $1, updated_at = $2 WHERE id = $3")
-                    .bind(now)
-                    .bind(now)
-                    .bind(id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("touch last_login: {err}")))?;
-            }
-        }
+    async fn touch_last_login(
+        db: &DatabaseConnection,
+        id: &str,
+    ) -> Result<(), ServerFnError> {
+        let Some(wrapper) = parse_uuid_wrapper(id) else {
+            return Ok(());
+        };
+        let backend = db.get_database_backend();
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        users::Entity::update_many()
+            .col_expr(
+                users::Column::LastLoginAt,
+                now.into_simple_expr(backend),
+            )
+            .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("touch last_login: {err}")))?;
         Ok(())
     }
 
-    async fn count_users(db: &Db) -> Result<i64, ServerFnError> {
-        let (n,): (i64,) = match db {
-            Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM users")
-                .fetch_one(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("count users: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as("SELECT COUNT(*) FROM users")
-                .fetch_one(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("count users: {err}")))?,
-        };
-        Ok(n)
+    async fn count_users(db: &DatabaseConnection) -> Result<i64, ServerFnError> {
+        let n = users::Entity::find()
+            .count(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("count users: {err}")))?;
+        Ok(i64::try_from(n).unwrap_or(i64::MAX))
     }
 
-    async fn load_user_brief(db: &Db, id: &str) -> Result<Option<AuthAck>, ServerFnError> {
-        type BriefRow = (String, Option<String>, String);
-        let row: Option<BriefRow> = match db {
-            Db::Sqlite(pool) => {
-                sqlx::query_as("SELECT id, username, role FROM users WHERE id = ? LIMIT 1")
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("load user: {err}")))?
-            }
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT id, username, role FROM users WHERE id = $1 LIMIT 1")
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("load user: {err}")))?
-            }
+    async fn load_user_brief(
+        db: &DatabaseConnection,
+        id: &str,
+    ) -> Result<Option<AuthAck>, ServerFnError> {
+        let Some(wrapper) = parse_uuid_wrapper(id) else {
+            return Ok(None);
         };
-        Ok(row.map(|(id, username, role)| AuthAck {
-            user_id: id,
-            username,
-            role,
+        let backend = db.get_database_backend();
+        let row = users::Entity::find()
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("load user: {err}")))?;
+        Ok(row.map(|u| AuthAck {
+            user_id: u.id.to_string(),
+            username: u.username,
+            role: u.role,
         }))
     }
 }

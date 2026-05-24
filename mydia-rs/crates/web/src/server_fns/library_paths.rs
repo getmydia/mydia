@@ -122,8 +122,14 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::library_paths;
     use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
     use std::path::PathBuf;
 
     /// Library types valid for `library_paths.type` — mirror of the
@@ -149,53 +155,30 @@ mod server {
         })
     }
 
-    type LibraryPathTuple = (
-        String,
-        String,
-        String,
-        bool,
-        Option<String>,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     pub(super) async fn list() -> Result<Vec<LibraryPathRow>, ServerFnError> {
         let _user_id = require_session_user_id().await?;
         let state = state().await?;
-        let rows: Vec<LibraryPathTuple> = match &state.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, path, type, monitored, last_scan_status, last_scan_error, last_scan_at \
-                 FROM library_paths \
-                 ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
+        let rows = library_paths::Entity::find()
+            .order_by_asc(library_paths::Column::InsertedAt)
+            .all(&state.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query library_paths: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, path, type, monitored, last_scan_status, last_scan_error, last_scan_at \
-                 FROM library_paths \
-                 ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query library_paths: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("query library_paths: {err}")))?;
 
         Ok(rows
             .into_iter()
-            .map(
-                |(id, path, kind, monitored, last_scan_status, last_scan_error, last_scan_at)| {
-                    LibraryPathRow {
-                        id,
-                        path,
-                        kind,
-                        monitored,
-                        last_scan_status,
-                        last_scan_error,
-                        last_scan_at: last_scan_at.map(|dt| dt.to_rfc3339()),
-                    }
-                },
-            )
+            .map(|row| LibraryPathRow {
+                id: row.id.to_string(),
+                path: row.path,
+                kind: row.r#type,
+                monitored: row.monitored.unwrap_or(true),
+                last_scan_status: row.last_scan_status,
+                last_scan_error: row.last_scan_error,
+                last_scan_at: row.last_scan_at.map(|dt| dt.0.to_rfc3339()),
+            })
             .collect())
     }
 
@@ -213,44 +196,38 @@ mod server {
         validate_directory(&new_path.path)?;
 
         let state = state().await?;
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
 
-        match &state.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO library_paths (id, path, type, monitored, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(&new_path.path)
-                .bind(&new_path.kind)
-                .bind(new_path.monitored)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert library_path: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO library_paths (id, path, type, monitored, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6)",
-                )
-                .bind(&id)
-                .bind(&new_path.path)
-                .bind(&new_path.kind)
-                .bind(new_path.monitored)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert library_path: {err}")))?;
-            }
-        }
+        let am = library_paths::ActiveModel {
+            id: Set(id),
+            path: Set(new_path.path.clone()),
+            r#type: Set(new_path.kind.clone()),
+            monitored: Set(Some(new_path.monitored)),
+            scan_interval: Set(None),
+            last_scan_at: Set(None),
+            last_scan_status: Set(None),
+            last_scan_error: Set(None),
+            quality_profile_id: Set(None),
+            updated_by_id: Set(None),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+            from_env: Set(false),
+            disabled: Set(false),
+            category_paths: Set(None),
+            auto_organize: Set(Some(false)),
+            auto_import: Set(Some(false)),
+            auto_rename: Set(Some(true)),
+            write_nfo: Set(false),
+        };
+        insert_active_model(am, &state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("insert library_path: {err}")))?;
 
         Ok(LibraryPathRow {
-            id,
+            id: id_str,
             path: new_path.path,
             kind: new_path.kind,
             monitored: new_path.monitored,
@@ -263,21 +240,16 @@ mod server {
     pub(super) async fn delete(id: String) -> Result<(), ServerFnError> {
         let _user_id = require_session_user_id().await?;
         let state = state().await?;
-        let affected = match &state.db {
-            Db::Sqlite(pool) => sqlx::query("DELETE FROM library_paths WHERE id = ?")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete library_path: {err}")))?
-                .rows_affected(),
-            Db::Postgres(pool) => sqlx::query("DELETE FROM library_paths WHERE id = $1")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete library_path: {err}")))?
-                .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid library_path id {id}")));
         };
-        if affected == 0 {
+        let backend = state.db.get_database_backend();
+        let res = library_paths::Entity::delete_many()
+            .filter(Expr::col(library_paths::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("delete library_path: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!("no library_path with id {id}")));
         }
         Ok(())
@@ -286,18 +258,15 @@ mod server {
     pub(super) async fn trigger_scan(id: String) -> Result<TriggerScanAck, ServerFnError> {
         let _user_id = require_session_user_id().await?;
         let mut state = state().await?;
-        let exists: Option<(String,)> = match &state.db {
-            Db::Sqlite(pool) => sqlx::query_as("SELECT id FROM library_paths WHERE id = ?")
-                .bind(&id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("query library_path: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as("SELECT id FROM library_paths WHERE id = $1")
-                .bind(&id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("query library_path: {err}")))?,
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid library_path id {id}")));
         };
+        let backend = state.db.get_database_backend();
+        let exists = library_paths::Entity::find()
+            .filter(Expr::col(library_paths::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .one(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query library_path: {err}")))?;
         if exists.is_none() {
             return Err(ServerFnError::new(format!("no library_path with id {id}")));
         }

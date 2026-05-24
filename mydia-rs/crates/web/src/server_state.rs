@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use mydia_rs_auth::{MediaTokenCache, MediaTokenSigner};
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_downloads::DownloadService;
 use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
@@ -41,8 +41,10 @@ use crate::oidc::OidcContext;
 /// effectively a refcount bump.
 #[derive(Clone)]
 pub struct WebState {
-    /// Runtime-dispatched sqlx pool (`SQLite` or Postgres).
-    pub db: Db,
+    /// `SeaORM` `DatabaseConnection` (`SQLite` or Postgres). Engine
+    /// dispatch happens inside `SeaORM` — callers thread `&self.db`
+    /// directly into entity queries.
+    pub db: DatabaseConnection,
 
     /// In-process pubsub bus. Library-scan, jobs:status, downloads,
     /// transcodes, and (later) GraphQL subscriptions all fan out here.
@@ -131,7 +133,7 @@ impl WebState {
     ///      subscribe to.
     #[must_use]
     pub fn new(
-        db: Db,
+        db: DatabaseConnection,
         pubsub: Pubsub,
         library_scanner_storage: JobStorage<LibraryScannerArgs>,
         oidc: Option<Arc<OidcContext>>,

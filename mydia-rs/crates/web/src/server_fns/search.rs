@@ -51,7 +51,11 @@ pub mod server {
     use crate::server_fns::auth::require_session_user_id;
     use crate::server_state::WebState;
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::media_items;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::{QueryOrder, QuerySelect};
+    use sea_orm::sea_query::{Condition, Expr, ExprTrait, Func, SimpleExpr};
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -72,7 +76,10 @@ pub mod server {
     /// queries shorter than two characters — search-as-you-type fires
     /// on every keystroke so we gate single-char hits to keep the
     /// payload reasonable.
-    pub async fn execute_search(db: &Db, q: &str) -> Result<Vec<SearchResultItem>, ServerFnError> {
+    pub async fn execute_search(
+        db: &DatabaseConnection,
+        q: &str,
+    ) -> Result<Vec<SearchResultItem>, ServerFnError> {
         let trimmed = q.trim();
         if trimmed.len() < 2 {
             return Ok(Vec::new());
@@ -84,11 +91,11 @@ pub mod server {
         let mut scored: Vec<(SearchScore, SearchResultItem)> = rows
             .into_iter()
             .map(|row| {
-                let (id, title, original_title, year, kind, metadata) = row;
-                let title_str = title.clone().unwrap_or_default();
-                let original_str = original_title.clone().unwrap_or_default();
+                let title_str = row.title.clone();
+                let original_str = row.original_title.clone().unwrap_or_default();
                 let score = relevance(&q_lower, &title_str, &original_str);
-                let poster_path = metadata
+                let poster_path = row
+                    .metadata
                     .as_deref()
                     .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
                     .and_then(|v| {
@@ -96,22 +103,22 @@ pub mod server {
                             .and_then(|p| p.as_str())
                             .map(std::borrow::ToOwned::to_owned)
                     });
-                let kind_label = match kind.as_str() {
+                let kind_label = match row.r#type.as_str() {
                     "tv_show" => "TV Show",
                     "movie" => "Movie",
                     other => other,
                 };
-                let subtitle = match year {
+                let subtitle = match row.year {
                     Some(y) => format!("{y} · {kind_label}"),
                     None => kind_label.to_owned(),
                 };
                 (
                     score,
                     SearchResultItem {
-                        id,
+                        id: row.id.to_string(),
                         title: title_str,
-                        year,
-                        kind,
+                        year: row.year,
+                        kind: row.r#type,
                         poster_path,
                         subtitle,
                     },
@@ -159,70 +166,48 @@ pub mod server {
         SearchScore { bucket }
     }
 
-    type CandidateRow = (
-        String,
-        Option<String>,
-        Option<String>,
-        Option<i32>,
-        String,
-        Option<String>,
-    );
-
-    async fn fetch_candidates(db: &Db, q: &str) -> Result<Vec<CandidateRow>, ServerFnError> {
-        // Two passes don't help here — we let SQL prune via LIKE then
-        // do relevance scoring in Rust. The filter limits the working
-        // set to ~25 rows in the typical case; for very generic queries
-        // ("the", "a") the LIMIT below caps the work.
-        //
+    async fn fetch_candidates(
+        db: &DatabaseConnection,
+        q: &str,
+    ) -> Result<Vec<media_items::Model>, ServerFnError> {
         // Music / books / adult are not in scope — we restrict to
         // `movie` and `tv_show` explicitly so the result set never
         // surfaces deprecated domains even if the Phoenix side keeps
         // writing them during the cutover.
+        //
+        // **Parity break:** Phoenix's `title COLLATE NOCASE ASC` is
+        // emitted as `lower(title) ASC` to keep one source between
+        // engines, matching the documented U13 pattern.
         let pattern = format!("%{}%", q.to_lowercase());
-        let limit = SEARCH_LIMIT * 2; // overscan a bit so the in-Rust sort has room to reorder
+        let limit = u64::try_from(SEARCH_LIMIT * 2).unwrap_or(0);
+        let q_lower = q.to_lowercase();
+        let prefix_pattern = format!("{q_lower}%");
 
-        match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, title, original_title, year, type, metadata \
-                 FROM media_items \
-                 WHERE type IN ('movie', 'tv_show') \
-                   AND (lower(title) LIKE ? OR lower(COALESCE(original_title, '')) LIKE ?) \
-                 ORDER BY \
-                   CASE WHEN lower(title) = ? THEN 0 \
-                        WHEN lower(title) LIKE ? THEN 1 \
-                        ELSE 2 END ASC, \
-                   COALESCE(year, 0) DESC, \
-                   title COLLATE NOCASE ASC \
-                 LIMIT ?",
-            )
-            .bind(&pattern)
-            .bind(&pattern)
-            .bind(q.to_lowercase())
-            .bind(format!("{}%", q.to_lowercase()))
-            .bind(limit)
-            .fetch_all(pool)
+        let type_filter = Condition::any()
+            .add(media_items::Column::Type.eq("movie".to_owned()))
+            .add(media_items::Column::Type.eq("tv_show".to_owned()));
+
+        let _ = (q_lower, prefix_pattern); // ordering is delegated to Rust scoring
+        let lower_title: SimpleExpr = Func::lower(Expr::col(media_items::Column::Title)).into();
+        let lower_original: SimpleExpr =
+            Func::lower(Expr::col(media_items::Column::OriginalTitle)).into();
+        let title_match = Condition::any()
+            .add(lower_title.clone().like(pattern.clone()))
+            .add(lower_original.like(pattern));
+
+        // Pre-sort cheaply by (year desc, lower(title) asc); the
+        // CASE-WHEN relevance buckets in the Phoenix query are
+        // recomputed in Rust below, so the SQL-level relevance ordering
+        // is dropped (it was non-portable anyway, and the LIMIT
+        // overscan gives the in-memory sort headroom).
+        media_items::Entity::find()
+            .filter(type_filter)
+            .filter(title_match)
+            .order_by_desc(media_items::Column::Year)
+            .order_by_asc(lower_title)
+            .limit(limit)
+            .all(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("search: {err}"))),
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, title, original_title, year, type, metadata \
-                 FROM media_items \
-                 WHERE type IN ('movie', 'tv_show') \
-                   AND (lower(title) LIKE $1 OR lower(COALESCE(original_title, '')) LIKE $1) \
-                 ORDER BY \
-                   CASE WHEN lower(title) = $2 THEN 0 \
-                        WHEN lower(title) LIKE $3 THEN 1 \
-                        ELSE 2 END ASC, \
-                   COALESCE(year, 0) DESC, \
-                   lower(title) ASC \
-                 LIMIT $4",
-            )
-            .bind(&pattern)
-            .bind(q.to_lowercase())
-            .bind(format!("{}%", q.to_lowercase()))
-            .bind(limit)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("search: {err}"))),
-        }
+            .map_err(|err| ServerFnError::new(format!("search: {err}")))
     }
 }

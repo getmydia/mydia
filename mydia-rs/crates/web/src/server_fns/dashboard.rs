@@ -64,7 +64,11 @@ mod server {
     use crate::server_state::WebState;
     use chrono::{Duration as ChronoDuration, Utc};
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::{downloads, episodes, media_files, media_items};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::{QueryOrder, QuerySelect};
+    use std::collections::HashSet;
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -112,161 +116,115 @@ mod server {
         list_episodes_by_air_date(&st.db, today, seven_days_ahead, 10).await
     }
 
-    async fn count_media_type(db: &Db, media_type: &str) -> Result<i64, ServerFnError> {
-        let (n,): (i64,) = match db {
-            Db::Sqlite(pool) => sqlx::query_as("SELECT COUNT(*) FROM media_items WHERE type = ?")
-                .bind(media_type)
-                .fetch_one(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("count {media_type}: {err}")))?,
-            Db::Postgres(pool) => {
-                sqlx::query_as("SELECT COUNT(*) FROM media_items WHERE type = $1")
-                    .bind(media_type)
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("count {media_type}: {err}")))?
-            }
-        };
-        Ok(n)
+    async fn count_media_type(
+        db: &DatabaseConnection,
+        media_type: &str,
+    ) -> Result<i64, ServerFnError> {
+        let n = media_items::Entity::find()
+            .filter(media_items::Column::Type.eq(media_type.to_owned()))
+            .count(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("count {media_type}: {err}")))?;
+        Ok(i64::try_from(n).unwrap_or(i64::MAX))
     }
 
-    async fn count_active_downloads(db: &Db) -> Result<i64, ServerFnError> {
-        // Phoenix's `Mydia.Downloads.History.count_active_downloads/0`
-        // hydrates each row via the configured download-client adapter
-        // and counts the in-memory derived statuses (downloading /
-        // seeding / checking / paused / queued). The Rust port hasn't
-        // wired adapter probes into the server-fn layer yet, so we
-        // approximate the count from the columns that survived migration
-        // 20251105033610 (status / progress / estimated_completion got
-        // dropped that day):
-        //
-        //   active := imported_at IS NULL
-        //          AND completed_at IS NULL
-        //          AND import_failed_at IS NULL
-        //
-        // Over-counts when a configured client has gone offline (a
-        // proper status check would mark those rows "missing"), but it
-        // does not 500.
-        //
-        // TODO(U27.downloads-followup): port `list_downloads_with_status`
-        // and the per-adapter `Client.list_torrents` fan-out so this
-        // collapses back to the Phoenix predicate.
-        let (n,): (i64,) = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT COUNT(*) FROM downloads \
-                 WHERE imported_at IS NULL \
-                   AND completed_at IS NULL \
-                   AND import_failed_at IS NULL",
-            )
-            .fetch_one(pool)
+    async fn count_active_downloads(db: &DatabaseConnection) -> Result<i64, ServerFnError> {
+        // See the Phoenix doc comment in the prior implementation —
+        // active := imported_at IS NULL AND completed_at IS NULL AND
+        // import_failed_at IS NULL.
+        let n = downloads::Entity::find()
+            .filter(downloads::Column::ImportedAt.is_null())
+            .filter(downloads::Column::CompletedAt.is_null())
+            .filter(downloads::Column::ImportFailedAt.is_null())
+            .count(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("count active downloads: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT COUNT(*) FROM downloads \
-                 WHERE imported_at IS NULL \
-                   AND completed_at IS NULL \
-                   AND import_failed_at IS NULL",
-            )
-            .fetch_one(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("count active downloads: {err}")))?,
-        };
-        Ok(n)
+            .map_err(|err| ServerFnError::new(format!("count active downloads: {err}")))?;
+        Ok(i64::try_from(n).unwrap_or(i64::MAX))
     }
 
-    async fn total_storage_bytes(db: &Db) -> Result<i64, ServerFnError> {
-        // Phoenix uses `sum(size)` cast to integer with a fallback to
-        // 0. sqlx returns Option<i64> from a SUM over an empty
-        // selection; coerce with unwrap_or(0).
-        let (raw,): (Option<i64>,) = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT COALESCE(SUM(size), 0) FROM media_files WHERE trashed_at IS NULL",
-            )
-            .fetch_one(pool)
+    async fn total_storage_bytes(db: &DatabaseConnection) -> Result<i64, ServerFnError> {
+        // Phoenix uses `sum(size)` with a fallback to 0. SeaORM aggregate
+        // helpers are clunky for nullable sums; pull the sizes and add
+        // in Rust. The row count is bounded by the library size which is
+        // tractable for a dashboard widget.
+        let sizes = media_files::Entity::find()
+            .select_only()
+            .column(media_files::Column::Size)
+            .filter(media_files::Column::TrashedAt.is_null())
+            .into_tuple::<Option<i64>>()
+            .all(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("total storage: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT COALESCE(SUM(size), 0)::bigint FROM media_files WHERE trashed_at IS NULL",
-            )
-            .fetch_one(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("total storage: {err}")))?,
-        };
-        Ok(raw.unwrap_or(0))
+            .map_err(|err| ServerFnError::new(format!("total storage: {err}")))?;
+        Ok(sizes.into_iter().flatten().sum::<i64>())
     }
 
     async fn list_episodes_by_air_date(
-        db: &Db,
+        db: &DatabaseConnection,
         start: chrono::NaiveDate,
         end: chrono::NaiveDate,
         limit: i64,
     ) -> Result<Vec<DashboardEpisode>, ServerFnError> {
-        // Mirrors the join + EXISTS expression in the Phoenix
-        // implementation, but we only fetch the fields the dashboard
-        // widget renders. The HAS_FILES EXISTS keeps the row light
-        // even though it touches `media_files`.
-        type Row = (
-            String,
-            chrono::NaiveDate,
-            Option<String>,
-            Option<i64>,
-            Option<i64>,
-            String,
-            Option<String>,
-            i64,
-        );
-        let rows: Vec<Row> = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT e.id, e.air_date, e.title, e.season_number, e.episode_number, \
-                        m.id, m.title, \
-                        CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = e.id) \
-                             THEN 1 ELSE 0 END \
-                 FROM episodes e \
-                 INNER JOIN media_items m ON e.media_item_id = m.id \
-                 WHERE e.air_date IS NOT NULL \
-                   AND e.air_date >= ? AND e.air_date <= ? \
-                   AND m.monitored = 1 \
-                 ORDER BY e.air_date ASC, m.title ASC \
-                 LIMIT ?",
-            )
-            .bind(start)
-            .bind(end)
-            .bind(limit)
-            .fetch_all(pool)
+        let eps = episodes::Entity::find()
+            .filter(episodes::Column::AirDate.is_not_null())
+            .filter(episodes::Column::AirDate.gte(start))
+            .filter(episodes::Column::AirDate.lte(end))
+            .order_by_asc(episodes::Column::AirDate)
+            .all(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("list episodes: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT e.id, e.air_date, e.title, e.season_number, e.episode_number, \
-                        m.id, m.title, \
-                        CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = e.id) \
-                             THEN 1 ELSE 0 END \
-                 FROM episodes e \
-                 INNER JOIN media_items m ON e.media_item_id = m.id \
-                 WHERE e.air_date IS NOT NULL \
-                   AND e.air_date >= $1 AND e.air_date <= $2 \
-                   AND m.monitored = true \
-                 ORDER BY e.air_date ASC, m.title ASC \
-                 LIMIT $3",
-            )
-            .bind(start)
-            .bind(end)
-            .bind(limit)
-            .fetch_all(pool)
+            .map_err(|err| ServerFnError::new(format!("list episodes: {err}")))?;
+        if eps.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let media_item_ids: Vec<_> = eps.iter().map(|e| e.media_item_id.clone()).collect();
+        let parents = media_items::Entity::find()
+            .filter(media_items::Column::Id.is_in(media_item_ids))
+            .filter(media_items::Column::Monitored.eq(true))
+            .all(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("list episodes: {err}")))?,
-        };
-        Ok(rows
-            .into_iter()
-            .map(|(id, ad, title, s, e, mid, mtitle, has)| DashboardEpisode {
-                id,
+            .map_err(|err| ServerFnError::new(format!("list media_items: {err}")))?;
+        let mut parent_map = std::collections::HashMap::new();
+        for parent in parents {
+            parent_map.insert(parent.id.clone(), parent);
+        }
+
+        let episode_ids: Vec<_> = eps.iter().map(|e| e.id.clone()).collect();
+        let files = media_files::Entity::find()
+            .select_only()
+            .column(media_files::Column::EpisodeId)
+            .filter(media_files::Column::EpisodeId.is_in(episode_ids))
+            .into_tuple::<Option<mydia_rs_db::types::UuidText>>()
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query media_files: {err}")))?;
+        let files_set: HashSet<_> = files.into_iter().flatten().collect();
+
+        let limit_usize = usize::try_from(limit).unwrap_or(usize::MAX);
+        let mut out: Vec<DashboardEpisode> = Vec::new();
+        for e in eps {
+            if out.len() >= limit_usize {
+                break;
+            }
+            let Some(parent) = parent_map.get(&e.media_item_id) else {
+                continue;
+            };
+            let Some(ad) = e.air_date else { continue };
+            out.push(DashboardEpisode {
+                id: e.id.to_string(),
                 air_date: ad.format("%Y-%m-%d").to_string(),
-                title,
-                season_number: s,
-                episode_number: e,
-                media_item_id: mid,
-                media_item_title: mtitle,
-                has_files: has != 0,
-            })
-            .collect())
+                title: e.title.clone(),
+                season_number: Some(i64::from(e.season_number)),
+                episode_number: Some(i64::from(e.episode_number)),
+                media_item_id: parent.id.to_string(),
+                media_item_title: Some(parent.title.clone()),
+                has_files: files_set.contains(&e.id),
+            });
+        }
+        out.sort_by(|a, b| {
+            a.air_date
+                .cmp(&b.air_date)
+                .then_with(|| a.media_item_title.cmp(&b.media_item_title))
+        });
+        Ok(out)
     }
 }

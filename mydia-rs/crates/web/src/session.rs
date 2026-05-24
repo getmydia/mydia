@@ -23,7 +23,8 @@
 //! `lib.rs`, so no inner `#![cfg(...)]` attribute is needed here.
 
 use axum::Router;
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
+use sea_orm::DatabaseBackend;
 use sqlx::{PgPool, SqlitePool};
 use std::time::Duration;
 use tower_sessions::cookie::SameSite;
@@ -49,10 +50,24 @@ pub const SESSION_KEY_USER_ID: &str = "user_id";
 /// for HTTP-only LAN deployments. Defaults to `true` in production.
 /// The matching `migrate()` call must run once before the first
 /// request lands; do it at boot via [`migrate`].
-pub fn layer(db: &Db, secure: bool) -> SessionLayer {
-    match db.clone() {
-        Db::Sqlite(pool) => SessionLayer::Sqlite(layer_sqlite(pool, secure)),
-        Db::Postgres(pool) => SessionLayer::Postgres(layer_postgres(pool, secure)),
+///
+/// tower-sessions-sqlx-store wants the raw `sqlx::PgPool` /
+/// `sqlx::SqlitePool`; `SeaORM` exposes those through
+/// `get_postgres_connection_pool()` / `get_sqlite_connection_pool()`.
+/// This is the one remaining backend check in the web crate — it
+/// dispatches an entirely separate store type, not per-engine SQL.
+pub fn layer(db: &DatabaseConnection, secure: bool) -> SessionLayer {
+    match db.get_database_backend() {
+        DatabaseBackend::Sqlite => {
+            SessionLayer::Sqlite(layer_sqlite(db.get_sqlite_connection_pool().clone(), secure))
+        }
+        DatabaseBackend::Postgres => SessionLayer::Postgres(layer_postgres(
+            db.get_postgres_connection_pool().clone(),
+            secure,
+        )),
+        DatabaseBackend::MySql => {
+            panic!("MySQL backend is not supported by mydia-rs sessions")
+        }
     }
 }
 
@@ -107,15 +122,16 @@ impl SessionLayer {
 /// `mydia_runtime_lock`). Both are tables Phoenix's Ecto schemas
 /// don't model and don't touch; the rewrite plan's "no migrations
 /// from mydia-rs" rule notes these as the explicit exceptions.
-pub async fn migrate(db: &Db) -> Result<(), sqlx::Error> {
-    match db {
-        Db::Sqlite(pool) => {
-            let store = SqliteStore::new(pool.clone());
+pub async fn migrate(db: &DatabaseConnection) -> Result<(), sqlx::Error> {
+    match db.get_database_backend() {
+        DatabaseBackend::Sqlite => {
+            let store = SqliteStore::new(db.get_sqlite_connection_pool().clone());
             store.migrate().await
         }
-        Db::Postgres(pool) => {
-            let store = PostgresStore::new(pool.clone());
+        DatabaseBackend::Postgres => {
+            let store = PostgresStore::new(db.get_postgres_connection_pool().clone());
             store.migrate().await
         }
+        DatabaseBackend::MySql => Ok(()),
     }
 }

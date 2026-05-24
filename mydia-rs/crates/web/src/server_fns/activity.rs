@@ -84,7 +84,12 @@ mod server {
     use crate::server_state::WebState;
     use chrono::{DateTime, Duration as ChronoDuration, Utc};
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::DateTimeSecs;
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::events;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::{QueryOrder, QuerySelect};
+    use sea_orm::sea_query::{Condition, Expr, ExprTrait};
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -116,74 +121,56 @@ mod server {
         Ok(ActivityPage { events, has_more })
     }
 
-    /// `(id, category, type, severity, actor_type, actor_id, metadata_json, inserted_at)`.
-    type EventRow = (
-        String,
-        String,
-        String,
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        chrono::DateTime<chrono::Utc>,
-    );
-
     async fn fetch_events(
-        db: &Db,
+        db: &DatabaseConnection,
         category: &str,
         date_filter: &str,
         offset: i64,
         limit: i64,
-    ) -> Result<Vec<EventRow>, ServerFnError> {
-        // Whitelist the categories: either "all"/"errors", a specific
-        // allowed one, or otherwise return nothing. The OR-IN clause
-        // (rather than IN with a placeholder list) keeps the query
-        // shape constant across dialects.
+    ) -> Result<Vec<events::Model>, ServerFnError> {
         let cat_filter = sanitize_category(category);
         let since_until = sanitize_date_filter(date_filter);
+        let backend = db.get_database_backend();
 
-        match db {
-            Db::Sqlite(pool) => {
-                let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
-                    "SELECT id, category, type, severity, actor_type, actor_id, metadata, inserted_at \
-                     FROM events WHERE 1=1",
-                );
-                apply_category_filter_sqlite(&mut qb, &cat_filter);
-                if let Some((since, until)) = since_until {
-                    qb.push(" AND inserted_at >= ").push_bind(since);
-                    if let Some(until) = until {
-                        qb.push(" AND inserted_at < ").push_bind(until);
-                    }
+        let mut cond = Condition::all();
+        match cat_filter {
+            CategoryFilter::All => {
+                let mut any = Condition::any();
+                for cat in ALLOWED_CATEGORIES {
+                    any = any.add(events::Column::Category.eq((*cat).to_owned()));
                 }
-                qb.push(" ORDER BY inserted_at DESC, id DESC");
-                qb.push(" LIMIT ").push_bind(limit);
-                qb.push(" OFFSET ").push_bind(offset);
-                qb.build_query_as::<EventRow>()
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list events: {err}")))
+                cond = cond.add(any);
             }
-            Db::Postgres(pool) => {
-                let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-                    "SELECT id, category, type, severity, actor_type, actor_id, metadata::text, inserted_at \
-                     FROM events WHERE 1=1",
-                );
-                apply_category_filter_postgres(&mut qb, &cat_filter);
-                if let Some((since, until)) = since_until {
-                    qb.push(" AND inserted_at >= ").push_bind(since);
-                    if let Some(until) = until {
-                        qb.push(" AND inserted_at < ").push_bind(until);
-                    }
-                }
-                qb.push(" ORDER BY inserted_at DESC, id DESC");
-                qb.push(" LIMIT ").push_bind(limit);
-                qb.push(" OFFSET ").push_bind(offset);
-                qb.build_query_as::<EventRow>()
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("list events: {err}")))
+            CategoryFilter::Errors => {
+                cond = cond.add(events::Column::Severity.eq("error".to_owned()));
+            }
+            CategoryFilter::Category(cat) => {
+                cond = cond.add(events::Column::Category.eq(cat.to_owned()));
             }
         }
+        if let Some((since, until)) = since_until {
+            let since_wrapper = DateTimeSecs::from(since);
+            cond = cond.add(
+                Expr::col(events::Column::InsertedAt).gte(since_wrapper.into_simple_expr(backend)),
+            );
+            if let Some(until) = until {
+                let until_wrapper = DateTimeSecs::from(until);
+                cond = cond.add(
+                    Expr::col(events::Column::InsertedAt)
+                        .lt(until_wrapper.into_simple_expr(backend)),
+                );
+            }
+        }
+
+        events::Entity::find()
+            .filter(cond)
+            .order_by_desc(events::Column::InsertedAt)
+            .order_by_desc(events::Column::Id)
+            .limit(u64::try_from(limit).unwrap_or(0))
+            .offset(u64::try_from(offset).unwrap_or(0))
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("list events: {err}")))
     }
 
     enum CategoryFilter {
@@ -202,50 +189,6 @@ mod server {
                 } else {
                     CategoryFilter::All
                 }
-            }
-        }
-    }
-
-    fn apply_category_filter_sqlite(
-        qb: &mut sqlx::QueryBuilder<'_, sqlx::Sqlite>,
-        f: &CategoryFilter,
-    ) {
-        match f {
-            CategoryFilter::All => {
-                qb.push(" AND category IN (");
-                let mut sep = qb.separated(", ");
-                for cat in ALLOWED_CATEGORIES {
-                    sep.push_bind((*cat).to_owned());
-                }
-                qb.push(")");
-            }
-            CategoryFilter::Errors => {
-                qb.push(" AND severity = ").push_bind("error".to_owned());
-            }
-            CategoryFilter::Category(cat) => {
-                qb.push(" AND category = ").push_bind((*cat).to_owned());
-            }
-        }
-    }
-
-    fn apply_category_filter_postgres(
-        qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>,
-        f: &CategoryFilter,
-    ) {
-        match f {
-            CategoryFilter::All => {
-                qb.push(" AND category IN (");
-                let mut sep = qb.separated(", ");
-                for cat in ALLOWED_CATEGORIES {
-                    sep.push_bind((*cat).to_owned());
-                }
-                qb.push(")");
-            }
-            CategoryFilter::Errors => {
-                qb.push(" AND severity = ").push_bind("error".to_owned());
-            }
-            CategoryFilter::Category(cat) => {
-                qb.push(" AND category = ").push_bind((*cat).to_owned());
             }
         }
     }
@@ -272,22 +215,22 @@ mod server {
         })
     }
 
-    fn decode_row(row: EventRow) -> ActivityEvent {
+    fn decode_row(row: events::Model) -> ActivityEvent {
         let metadata: serde_json::Value = row
-            .6
+            .metadata
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
 
         ActivityEvent {
-            id: row.0,
-            category: row.1,
-            event_type: row.2,
-            severity: row.3,
-            actor_type: row.4,
-            actor_id: row.5,
+            id: row.id.to_string(),
+            category: row.category,
+            event_type: row.r#type,
+            severity: row.severity,
+            actor_type: row.actor_type,
+            actor_id: row.actor_id,
             metadata,
-            inserted_at: row.7.to_rfc3339(),
+            inserted_at: row.inserted_at.0.to_rfc3339(),
         }
     }
 }

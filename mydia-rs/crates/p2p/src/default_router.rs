@@ -402,9 +402,8 @@ impl P2pRouter for MinimalRouter {
                 (None, None) => (200_u16, 0_u64, file_size, None),
                 (start, end) => {
                     let start = start.unwrap_or(0);
-                    let end = end
-                        .unwrap_or(file_size.saturating_sub(1))
-                        .min(file_size.saturating_sub(1));
+                    let end_max = file_size.saturating_sub(1);
+                    let end = Ord::min(end.unwrap_or(end_max), end_max);
                     let length = end.saturating_sub(start).saturating_add(1);
                     let range_header = format!("bytes {start}-{end}/{file_size}");
                     (206_u16, start, length, Some(range_header))

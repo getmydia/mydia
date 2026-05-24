@@ -85,7 +85,13 @@ mod server {
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
     use mydia_rs_auth::password::hash_password;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::{insert_active_model, DatabaseConnection};
+    use mydia_rs_entities::users;
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
+    use sea_orm::Set;
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -94,48 +100,29 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type UserTuple = (
-        String,
-        Option<String>,
-        Option<String>,
-        String,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     pub(super) async fn list() -> Result<Vec<UserRow>, ServerFnError> {
         let _ = require_admin_user_id().await?;
         let state = state().await?;
-        let rows: Vec<UserTuple> = match &state.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT id, username, email, role, oidc_sub, last_login_at, inserted_at \
-                 FROM users ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
+        let rows = users::Entity::find()
+            .order_by_asc(users::Column::InsertedAt)
+            .all(&state.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query users: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT id, username, email, role, oidc_sub, last_login_at, inserted_at \
-                 FROM users ORDER BY inserted_at ASC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query users: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("query users: {err}")))?;
         Ok(rows
             .into_iter()
-            .map(
-                |(id, username, email, role, oidc_sub, last_login_at, inserted_at)| UserRow {
-                    id,
-                    username,
-                    email,
-                    role,
-                    is_oidc: oidc_sub.is_some(),
-                    last_login_at: last_login_at.map(|dt| dt.to_rfc3339()),
-                    inserted_at: inserted_at.map(|dt| dt.to_rfc3339()),
-                },
-            )
+            .map(|u| UserRow {
+                id: u.id.to_string(),
+                username: u.username,
+                email: u.email,
+                role: u.role,
+                is_oidc: u.oidc_sub.is_some(),
+                last_login_at: u.last_login_at.map(|dt| dt.0.to_rfc3339()),
+                inserted_at: Some(u.inserted_at.0.to_rfc3339()),
+            })
             .collect())
     }
 
@@ -155,57 +142,42 @@ mod server {
             )));
         }
 
-        let id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now();
+        let id_uuid = uuid::Uuid::new_v4();
+        let id_str = id_uuid.to_string();
+        let id = UuidText::from(id_uuid);
+        let now = DateTimeSecs::from(chrono::Utc::now());
         let hash = hash_password(&payload.password)
             .map_err(|err| ServerFnError::new(format!("hash password: {err}")))?;
 
         let username = payload.username.trim().to_owned();
         let email = payload.email.trim().to_owned();
 
-        match &state.db {
-            Db::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO users (id, username, email, password_hash, role, inserted_at, updated_at) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
-                )
-                .bind(&id)
-                .bind(&username)
-                .bind(&email)
-                .bind(&hash)
-                .bind(role)
-                .bind(now.to_rfc3339())
-                .bind(now.to_rfc3339())
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert user: {err}")))?;
-            }
-            Db::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO users (id, username, email, password_hash, role, inserted_at, updated_at) \
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                )
-                .bind(&id)
-                .bind(&username)
-                .bind(&email)
-                .bind(&hash)
-                .bind(role)
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("insert user: {err}")))?;
-            }
-        }
+        let am = users::ActiveModel {
+            id: Set(id),
+            username: Set(Some(username.clone())),
+            email: Set(Some(email.clone())),
+            password_hash: Set(Some(hash)),
+            oidc_sub: Set(None),
+            oidc_issuer: Set(None),
+            role: Set(role.to_owned()),
+            display_name: Set(None),
+            avatar_url: Set(None),
+            last_login_at: Set(None),
+            inserted_at: Set(now),
+            updated_at: Set(now),
+        };
+        insert_active_model(am, &state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("insert user: {err}")))?;
 
         Ok(UserRow {
-            id,
+            id: id_str,
             username: Some(username),
             email: Some(email),
             role: role.to_owned(),
             is_oidc: false,
             last_login_at: None,
-            inserted_at: Some(now.to_rfc3339()),
+            inserted_at: Some(now.0.to_rfc3339()),
         })
     }
 
@@ -218,37 +190,25 @@ mod server {
             )));
         }
         let state = state().await?;
-        let affected = match &state.db {
-            Db::Sqlite(pool) => {
-                sqlx::query("UPDATE users SET role = ?, updated_at = ? WHERE id = ?")
-                    .bind(&payload.role)
-                    .bind(chrono::Utc::now().to_rfc3339())
-                    .bind(&payload.id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("update role: {err}")))?
-                    .rows_affected()
-            }
-            Db::Postgres(pool) => {
-                sqlx::query("UPDATE users SET role = $1, updated_at = $2 WHERE id = $3")
-                    .bind(&payload.role)
-                    .bind(chrono::Utc::now())
-                    .bind(&payload.id)
-                    .execute(pool)
-                    .await
-                    .map_err(|err| ServerFnError::new(format!("update role: {err}")))?
-                    .rows_affected()
-            }
+        let Some(wrapper) = parse_uuid(&payload.id) else {
+            return Err(ServerFnError::new(format!("invalid user id {}", payload.id)));
         };
-        if affected == 0 {
+        let backend = state.db.get_database_backend();
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let res = users::Entity::update_many()
+            .col_expr(users::Column::Role, Expr::value(payload.role.clone()))
+            .col_expr(users::Column::UpdatedAt, now.into_simple_expr(backend))
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("update role: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!(
                 "no user with id {}",
                 payload.id
             )));
         }
 
-        // Re-read the row so the page can re-render with the fresh
-        // state without a second round-trip.
         let rows = list().await?;
         rows.into_iter()
             .find(|row| row.id == payload.id)
@@ -265,21 +225,16 @@ mod server {
             ));
         }
         let state = state().await?;
-        let affected = match &state.db {
-            Db::Sqlite(pool) => sqlx::query("DELETE FROM users WHERE id = ?")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete user: {err}")))?
-                .rows_affected(),
-            Db::Postgres(pool) => sqlx::query("DELETE FROM users WHERE id = $1")
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(|err| ServerFnError::new(format!("delete user: {err}")))?
-                .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid user id {id}")));
         };
-        if affected == 0 {
+        let backend = state.db.get_database_backend();
+        let res = users::Entity::delete_many()
+            .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("delete user: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!("no user with id {id}")));
         }
         Ok(())

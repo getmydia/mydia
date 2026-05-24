@@ -35,7 +35,10 @@ use axum::{
     Json,
 };
 use mydia_rs_auth::{verify_api_key_hash, MediaTokenClaims};
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
+use mydia_rs_entities::{api_keys, users};
+use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::{Expr, ExprTrait};
 use serde_json::json;
 
 use crate::session::SESSION_KEY_USER_ID;
@@ -363,67 +366,43 @@ fn hex_digit(b: u8) -> Option<u8> {
 /// O(n) over the key set, same as Phoenix; the dataset is small (one
 /// row per operator-issued key) so the cost is acceptable. A
 /// hashed-prefix lookup is a future optimization.
-async fn verify_api_key_db(db: &Db, plaintext: &str) -> Result<Option<String>, sqlx::Error> {
-    // We don't filter on `expires_at < now()` in SQL because the
-    // SQLite path stores UTC text and Postgres stores a tz-aware
-    // timestamp. Pull the candidate set and filter in Rust for
-    // database-portability.
-    let rows: Vec<(String, String, Option<i64>, Option<i64>)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as(
-                "SELECT user_id, key_hash, \
-             CAST(strftime('%s', revoked_at) AS INTEGER), \
-             CAST(strftime('%s', expires_at) AS INTEGER) \
-             FROM api_keys",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as(
-                "SELECT user_id::text, key_hash, \
-             CASE WHEN revoked_at IS NULL THEN NULL \
-                  ELSE EXTRACT(EPOCH FROM revoked_at)::bigint END, \
-             CASE WHEN expires_at IS NULL THEN NULL \
-                  ELSE EXTRACT(EPOCH FROM expires_at)::bigint END \
-             FROM api_keys",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-    };
-
-    let now_secs = chrono::Utc::now().timestamp();
-    for (user_id, key_hash, revoked_at, expires_at) in rows {
-        if revoked_at.is_some() {
+async fn verify_api_key_db(
+    db: &DatabaseConnection,
+    plaintext: &str,
+) -> Result<Option<String>, sea_orm::DbErr> {
+    // Pull the candidate set and filter in Rust — the
+    // `DateTimeSecs` wrapper round-trips uniformly across engines, so
+    // the in-Rust timestamp comparison is engine-agnostic.
+    let rows = api_keys::Entity::find().all(db).await?;
+    let now = chrono::Utc::now();
+    for row in rows {
+        if row.revoked_at.is_some() {
             continue;
         }
-        if expires_at.is_some_and(|exp| exp <= now_secs) {
+        if row.expires_at.is_some_and(|exp| exp.0 <= now) {
             continue;
         }
-        if verify_api_key_hash(plaintext, &key_hash).is_ok() {
-            return Ok(Some(user_id));
+        if verify_api_key_hash(plaintext, &row.key_hash).is_ok() {
+            return Ok(Some(row.user_id.to_string()));
         }
     }
     Ok(None)
 }
 
-async fn lookup_user_role(db: &Db, user_id: &str) -> Result<Option<String>, sqlx::Error> {
-    let row: Option<(String,)> = match db {
-        Db::Sqlite(pool) => {
-            sqlx::query_as("SELECT role FROM users WHERE id = ? LIMIT 1")
-                .bind(user_id)
-                .fetch_optional(pool)
-                .await?
-        }
-        Db::Postgres(pool) => {
-            sqlx::query_as("SELECT role FROM users WHERE id = $1 LIMIT 1")
-                .bind(user_id)
-                .fetch_optional(pool)
-                .await?
-        }
+async fn lookup_user_role(
+    db: &DatabaseConnection,
+    user_id: &str,
+) -> Result<Option<String>, sea_orm::DbErr> {
+    let Ok(uuid) = uuid::Uuid::parse_str(user_id) else {
+        return Ok(None);
     };
-    Ok(row.map(|(role,)| role))
+    let wrapper = mydia_rs_db::types::UuidText::from(uuid);
+    let backend = db.get_database_backend();
+    let row = users::Entity::find()
+        .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(db)
+        .await?;
+    Ok(row.map(|u| u.role))
 }
 
 /// Read the session cookie (if any) and return the user id stored

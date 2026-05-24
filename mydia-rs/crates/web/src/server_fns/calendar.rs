@@ -72,7 +72,12 @@ mod server {
     use crate::server_state::WebState;
     use chrono::{Datelike, Duration as ChronoDuration, NaiveDate, Utc};
     use dioxus::fullstack::{FullstackContext, ServerFnError};
-    use mydia_rs_db::Db;
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::{downloads, episodes, media_files, media_items};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait, Query};
+    use std::collections::HashSet;
 
     fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -127,146 +132,155 @@ mod server {
         (start, end)
     }
 
-    type EpisodeRow = (
-        String,
-        chrono::NaiveDate,
-        Option<String>,
-        Option<i64>,
-        Option<i64>,
-        String,
-        Option<String>,
-        i64,
-        i64,
-    );
-
     async fn list_episodes_for_range(
-        db: &Db,
+        db: &DatabaseConnection,
         start: NaiveDate,
         end: NaiveDate,
     ) -> Result<Vec<CalendarEntry>, ServerFnError> {
-        let rows: Vec<EpisodeRow> = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT e.id, e.air_date, e.title, e.season_number, e.episode_number, \
-                        m.id, m.title, \
-                        CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = e.id) \
-                             THEN 1 ELSE 0 END, \
-                        CASE WHEN EXISTS(SELECT 1 FROM downloads WHERE episode_id = e.id) \
-                             THEN 1 ELSE 0 END \
-                 FROM episodes e \
-                 INNER JOIN media_items m ON e.media_item_id = m.id \
-                 WHERE e.air_date IS NOT NULL \
-                   AND e.air_date >= ? AND e.air_date <= ? \
-                   AND m.type = 'tv_show' \
-                 ORDER BY e.air_date ASC, m.title ASC",
-            )
-            .bind(start)
-            .bind(end)
-            .fetch_all(pool)
+        // The original Phoenix query JOINs episodes -> media_items and
+        // computes `has_files` / `has_downloads` via correlated EXISTS
+        // subqueries on `media_files.episode_id` / `downloads.episode_id`.
+        // Translated to SeaORM: pull the candidate episodes, then bulk
+        // load the matching media_files/downloads sets and compute the
+        // boolean flags in Rust. Trades one query for three, but each is
+        // a tightly scoped index lookup so the cost is comparable.
+        let eps = episodes::Entity::find()
+            .filter(episodes::Column::AirDate.is_not_null())
+            .filter(episodes::Column::AirDate.gte(start))
+            .filter(episodes::Column::AirDate.lte(end))
+            .order_by_asc(episodes::Column::AirDate)
+            .all(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("list episodes: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT e.id, e.air_date, e.title, e.season_number, e.episode_number, \
-                        m.id, m.title, \
-                        CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE episode_id = e.id) \
-                             THEN 1 ELSE 0 END, \
-                        CASE WHEN EXISTS(SELECT 1 FROM downloads WHERE episode_id = e.id) \
-                             THEN 1 ELSE 0 END \
-                 FROM episodes e \
-                 INNER JOIN media_items m ON e.media_item_id = m.id \
-                 WHERE e.air_date IS NOT NULL \
-                   AND e.air_date >= $1 AND e.air_date <= $2 \
-                   AND m.type = 'tv_show' \
-                 ORDER BY e.air_date ASC, m.title ASC",
-            )
-            .bind(start)
-            .bind(end)
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("list episodes: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("list episodes: {err}")))?;
 
-        Ok(rows
-            .into_iter()
-            .map(
-                |(id, ad, title, s, e, mid, mtitle, has_files, has_downloads)| CalendarEntry {
-                    id,
-                    kind: "episode".to_owned(),
-                    air_date: ad.format("%Y-%m-%d").to_string(),
-                    title,
-                    season_number: s,
-                    episode_number: e,
-                    media_item_id: mid,
-                    media_item_title: mtitle,
-                    media_item_type: Some("tv_show".to_owned()),
-                    has_files: has_files != 0,
-                    has_downloads: has_downloads != 0,
-                },
-            )
-            .collect())
+        if eps.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Pull the parent media_items in one shot.
+        let media_item_ids: Vec<_> = eps.iter().map(|e| e.media_item_id.clone()).collect();
+        let parents = media_items::Entity::find()
+            .filter(media_items::Column::Id.is_in(media_item_ids.clone()))
+            .filter(media_items::Column::Type.eq("tv_show".to_owned()))
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("list media_items: {err}")))?;
+        let mut parent_map = std::collections::HashMap::new();
+        for parent in parents {
+            parent_map.insert(parent.id.clone(), parent);
+        }
+
+        let episode_ids: Vec<_> = eps.iter().map(|e| e.id.clone()).collect();
+        let files = media_files::Entity::find()
+            .select_only()
+            .column(media_files::Column::EpisodeId)
+            .filter(media_files::Column::EpisodeId.is_in(episode_ids.clone()))
+            .into_tuple::<Option<mydia_rs_db::types::UuidText>>()
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query media_files: {err}")))?;
+        let files_set: HashSet<_> = files.into_iter().flatten().collect();
+
+        let downloads_rows = downloads::Entity::find()
+            .select_only()
+            .column(downloads::Column::EpisodeId)
+            .filter(downloads::Column::EpisodeId.is_in(episode_ids))
+            .into_tuple::<Option<mydia_rs_db::types::UuidText>>()
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query downloads: {err}")))?;
+        let downloads_set: HashSet<_> = downloads_rows.into_iter().flatten().collect();
+
+        let mut out: Vec<CalendarEntry> = Vec::new();
+        for e in eps {
+            let Some(parent) = parent_map.get(&e.media_item_id) else {
+                continue;
+            };
+            let Some(ad) = e.air_date else { continue };
+            out.push(CalendarEntry {
+                id: e.id.to_string(),
+                kind: "episode".to_owned(),
+                air_date: ad.format("%Y-%m-%d").to_string(),
+                title: e.title.clone(),
+                season_number: Some(i64::from(e.season_number)),
+                episode_number: Some(i64::from(e.episode_number)),
+                media_item_id: parent.id.to_string(),
+                media_item_title: Some(parent.title.clone()),
+                media_item_type: Some("tv_show".to_owned()),
+                has_files: files_set.contains(&e.id),
+                has_downloads: downloads_set.contains(&e.id),
+            });
+        }
+        // Stable sort by (air_date, title) to mirror Phoenix.
+        out.sort_by(|a, b| {
+            a.air_date
+                .cmp(&b.air_date)
+                .then_with(|| a.media_item_title.cmp(&b.media_item_title))
+        });
+        Ok(out)
     }
 
-    type MovieRow = (String, Option<String>, Option<String>, i64, i64);
-
     async fn list_movies_for_range(
-        db: &Db,
+        db: &DatabaseConnection,
         start: NaiveDate,
         end: NaiveDate,
     ) -> Result<Vec<CalendarEntry>, ServerFnError> {
-        // Movies store `release_date` in the metadata JSON column. We
-        // pull every movie's `(id, title, metadata)` and filter the
-        // release_date in Rust — the row count is small enough not to
-        // matter (one library has O(thousands) of movies, and most
-        // libraries have far fewer). A future optimization could push
-        // this into a generated column or sqlx JSON1 filter, but the
-        // simple approach mirrors the Phoenix `Repo.all + Enum.filter`
-        // path 1:1.
-        let rows: Vec<MovieRow> = match db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT m.id, m.title, m.metadata, \
-                        CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE media_item_id = m.id) \
-                             THEN 1 ELSE 0 END, \
-                        CASE WHEN EXISTS(SELECT 1 FROM downloads WHERE media_item_id = m.id) \
-                             THEN 1 ELSE 0 END \
-                 FROM media_items m \
-                 WHERE m.type = 'movie'",
-            )
-            .fetch_all(pool)
+        // Pull every movie + metadata + flags. The Phoenix path does
+        // the same in-memory release_date filter; we mirror it.
+        let movies = media_items::Entity::find()
+            .filter(media_items::Column::Type.eq("movie".to_owned()))
+            .all(db)
             .await
-            .map_err(|err| ServerFnError::new(format!("list movies: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT m.id, m.title, m.metadata::text, \
-                        CASE WHEN EXISTS(SELECT 1 FROM media_files WHERE media_item_id = m.id) \
-                             THEN 1 ELSE 0 END, \
-                        CASE WHEN EXISTS(SELECT 1 FROM downloads WHERE media_item_id = m.id) \
-                             THEN 1 ELSE 0 END \
-                 FROM media_items m \
-                 WHERE m.type = 'movie'",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("list movies: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("list movies: {err}")))?;
 
+        if movies.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let movie_ids: Vec<_> = movies.iter().map(|m| m.id.clone()).collect();
+        let files = media_files::Entity::find()
+            .select_only()
+            .column(media_files::Column::MediaItemId)
+            .filter(media_files::Column::MediaItemId.is_in(movie_ids.clone()))
+            .filter(media_files::Column::EpisodeId.is_null())
+            .into_tuple::<Option<mydia_rs_db::types::UuidText>>()
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query media_files: {err}")))?;
+        let files_set: HashSet<_> = files.into_iter().flatten().collect();
+
+        let dl_rows = downloads::Entity::find()
+            .select_only()
+            .column(downloads::Column::MediaItemId)
+            .filter(downloads::Column::MediaItemId.is_in(movie_ids))
+            .into_tuple::<Option<mydia_rs_db::types::UuidText>>()
+            .all(db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query downloads: {err}")))?;
+        let downloads_set: HashSet<_> = dl_rows.into_iter().flatten().collect();
+
+        let _ = Query::select(); // keep the import live in case future filters need it
         let mut entries: Vec<CalendarEntry> = Vec::new();
-        for (id, title, metadata_json, has_files, has_downloads) in rows {
-            let Some(release_date) = extract_release_date(metadata_json.as_deref()) else {
+        for m in movies {
+            let Some(release_date) = extract_release_date(m.metadata.as_deref()) else {
                 continue;
             };
             if release_date < start || release_date > end {
                 continue;
             }
+            let id_str = m.id.to_string();
             entries.push(CalendarEntry {
-                id: id.clone(),
+                id: id_str.clone(),
                 kind: "movie".to_owned(),
                 air_date: release_date.format("%Y-%m-%d").to_string(),
-                title: title.clone(),
+                title: Some(m.title.clone()),
                 season_number: None,
                 episode_number: None,
-                media_item_id: id,
-                media_item_title: title,
+                media_item_id: id_str,
+                media_item_title: Some(m.title),
                 media_item_type: Some("movie".to_owned()),
-                has_files: has_files != 0,
-                has_downloads: has_downloads != 0,
+                has_files: files_set.contains(&m.id),
+                has_downloads: downloads_set.contains(&m.id),
             });
         }
         Ok(entries)

@@ -50,7 +50,12 @@ mod server {
     use crate::server_state::WebState;
     use dioxus::fullstack::FullstackContext;
     use dioxus::fullstack::ServerFnError;
-    use mydia_rs_db::Db;
+    use mydia_rs_db::types::{DateTimeSecs, UuidText};
+    use mydia_rs_db::DatabaseConnection;
+    use mydia_rs_entities::{media_files, transcode_jobs};
+    use sea_orm::entity::prelude::*;
+    use sea_orm::query::QueryOrder;
+    use sea_orm::sea_query::{Expr, ExprTrait};
 
     async fn state() -> Result<WebState, ServerFnError> {
         let ctx = FullstackContext::current()
@@ -59,70 +64,57 @@ mod server {
             .ok_or_else(|| ServerFnError::new("WebState axum extension missing".to_owned()))
     }
 
-    type TranscodeTuple = (
-        String,
-        String,
-        Option<String>,
-        String,
-        String,
-        Option<f64>,
-        Option<String>,
-        Option<chrono::DateTime<chrono::Utc>>,
-    );
+    fn parse_uuid(s: &str) -> Option<UuidText> {
+        uuid::Uuid::parse_str(s).ok().map(UuidText::from)
+    }
 
     pub(super) async fn list() -> Result<Vec<TranscodeRow>, ServerFnError> {
         let _user_id = require_admin_user_id().await?;
         let state = state().await?;
 
-        // LEFT JOIN so a transcode row whose media_file went away
-        // still renders. The Phoenix page does the same by preloading
-        // `:media_file` with a nilable association.
-        let rows: Vec<TranscodeTuple> = match &state.db {
-            Db::Sqlite(pool) => sqlx::query_as(
-                "SELECT t.id, t.media_file_id, mf.file_name, t.resolution, t.status, \
-                        t.progress, t.error, t.started_at \
-                 FROM transcode_jobs t \
-                 LEFT JOIN media_files mf ON mf.id = t.media_file_id \
-                 ORDER BY t.inserted_at DESC",
-            )
-            .fetch_all(pool)
+        let jobs = transcode_jobs::Entity::find()
+            .order_by_desc(transcode_jobs::Column::InsertedAt)
+            .all(&state.db)
             .await
-            .map_err(|err| ServerFnError::new(format!("query transcode_jobs: {err}")))?,
-            Db::Postgres(pool) => sqlx::query_as(
-                "SELECT t.id, t.media_file_id, mf.file_name, t.resolution, t.status, \
-                        t.progress, t.error, t.started_at \
-                 FROM transcode_jobs t \
-                 LEFT JOIN media_files mf ON mf.id = t.media_file_id \
-                 ORDER BY t.inserted_at DESC",
-            )
-            .fetch_all(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("query transcode_jobs: {err}")))?,
-        };
+            .map_err(|err| ServerFnError::new(format!("query transcode_jobs: {err}")))?;
 
-        Ok(rows
+        if jobs.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Bulk-load the referenced media files for a cheap "file name"
+        // column on the page (Phoenix preloads :media_file with a
+        // nilable association — we do the same with a hash lookup).
+        let file_ids: Vec<_> = jobs.iter().map(|j| j.media_file_id.clone()).collect();
+        let files = media_files::Entity::find()
+            .filter(media_files::Column::Id.is_in(file_ids))
+            .all(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("query media_files: {err}")))?;
+        let mut file_map = std::collections::HashMap::new();
+        for f in files {
+            file_map.insert(f.id.clone(), f.path);
+        }
+
+        Ok(jobs
             .into_iter()
-            .map(
-                |(
-                    id,
-                    media_file_id,
+            .map(|j| {
+                let media_file_name = file_map.get(&j.media_file_id).cloned().flatten().map(|p| {
+                    std::path::Path::new(&p)
+                        .file_name()
+                        .map_or_else(|| p.clone(), |s| s.to_string_lossy().into_owned())
+                });
+                TranscodeRow {
+                    id: j.id.to_string(),
+                    media_file_id: j.media_file_id.to_string(),
                     media_file_name,
-                    resolution,
-                    status,
-                    progress,
-                    error,
-                    started_at,
-                )| TranscodeRow {
-                    id,
-                    media_file_id,
-                    media_file_name,
-                    resolution,
-                    status,
-                    progress,
-                    error,
-                    started_at: started_at.map(|dt| dt.to_rfc3339()),
-                },
-            )
+                    resolution: j.resolution,
+                    status: j.status,
+                    progress: j.progress,
+                    error: j.error,
+                    started_at: j.started_at.map(|dt| dt.0.to_rfc3339()),
+                }
+            })
             .collect())
     }
 
@@ -130,31 +122,25 @@ mod server {
         let _user_id = require_admin_user_id().await?;
         let state = state().await?;
 
-        // Soft cancel: mark the row `cancelled`. The transcode worker
-        // checks this status on each progress tick and aborts when it
-        // observes the change. Mirrors Phoenix's
-        // `Mydia.Downloads.cancel_transcode_job/1`.
-        let affected = match &state.db {
-            Db::Sqlite(pool) => sqlx::query(
-                "UPDATE transcode_jobs SET status = 'cancelled', updated_at = ? WHERE id = ?",
-            )
-            .bind(chrono::Utc::now().to_rfc3339())
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("update transcode: {err}")))?
-            .rows_affected(),
-            Db::Postgres(pool) => sqlx::query(
-                "UPDATE transcode_jobs SET status = 'cancelled', updated_at = $1 WHERE id = $2",
-            )
-            .bind(chrono::Utc::now())
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(|err| ServerFnError::new(format!("update transcode: {err}")))?
-            .rows_affected(),
+        let Some(wrapper) = parse_uuid(&id) else {
+            return Err(ServerFnError::new(format!("invalid transcode_job id {id}")));
         };
-        if affected == 0 {
+        let now = DateTimeSecs::from(chrono::Utc::now());
+        let backend = state.db.get_database_backend();
+        let res = transcode_jobs::Entity::update_many()
+            .col_expr(
+                transcode_jobs::Column::Status,
+                Expr::value("cancelled".to_owned()),
+            )
+            .col_expr(
+                transcode_jobs::Column::UpdatedAt,
+                now.into_simple_expr(backend),
+            )
+            .filter(Expr::col(transcode_jobs::Column::Id).eq(wrapper.into_simple_expr(backend)))
+            .exec(&state.db)
+            .await
+            .map_err(|err| ServerFnError::new(format!("update transcode: {err}")))?;
+        if res.rows_affected == 0 {
             return Err(ServerFnError::new(format!("no transcode_job with id {id}")));
         }
         Ok(())
