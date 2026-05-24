@@ -166,7 +166,7 @@ async fn ensure_lock_table(db: &DatabaseConnection) -> Result<(), RuntimeLockErr
         )"
         .to_string(),
     );
-    db.execute(stmt).await?;
+    db.execute_raw(stmt).await?;
     Ok(())
 }
 

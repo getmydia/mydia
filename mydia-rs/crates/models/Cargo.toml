@@ -24,6 +24,13 @@ tokio.workspace = true
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 mydia-rs-config = { path = "../config" }
+# Test-only — round-trip tests in `tests/round_trip.rs` drive entity
+# `ActiveModel`s through `mydia_rs_db::insert_active_model` to exercise
+# the wrapper-type write path on SQLite. The lib stays wasm-compatible
+# because `mydia-rs-entities` (which pulls SeaORM/sqlx) only appears in
+# `[dev-dependencies]`.
+mydia-rs-entities = { path = "../entities" }
+sea-orm.workspace = true
 
 [lints]
 workspace = true

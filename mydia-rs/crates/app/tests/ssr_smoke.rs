@@ -13,13 +13,13 @@ use std::sync::Once;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use mydia_rs_app::server::build_router;
-use mydia_rs_db::Db;
+use mydia_rs_db::DatabaseConnection;
 use mydia_rs_jobs::storage::JobStorage;
 use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
 use mydia_rs_pubsub::Pubsub;
 use mydia_rs_web::session::{self as web_session, SessionLayer};
 use mydia_rs_web::WebState;
-use sqlx::sqlite::SqlitePoolOptions;
+use sea_orm::Database;
 use tower::ServiceExt;
 
 /// `dioxus::server::router(app)` reads the `public/` directory next to
@@ -37,12 +37,9 @@ fn ensure_empty_public_dir() {
 }
 
 async fn stub_state_and_session() -> (WebState, SessionLayer) {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite::memory:")
+    let db: DatabaseConnection = Database::connect("sqlite::memory:")
         .await
         .expect("in-memory sqlite");
-    let db = Db::Sqlite(pool);
     web_session::migrate(&db).await.expect("session migrate");
     let pubsub = Pubsub::new();
     let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);

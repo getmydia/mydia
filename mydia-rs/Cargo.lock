@@ -5032,6 +5032,8 @@ dependencies = [
  "chrono",
  "mydia-rs-config",
  "mydia-rs-db",
+ "mydia-rs-entities",
+ "sea-orm",
  "serde",
  "serde_json",
  "sqlx",
