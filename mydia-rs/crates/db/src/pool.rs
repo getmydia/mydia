@@ -57,19 +57,16 @@ impl Db {
     pub async fn smoke_query(&self) -> Result<i32, DbError> {
         let value = match self {
             Self::Sqlite(p) => {
-                // TODO(tier-a): portable shape, promotable in the db-promotion pass.
+                // SQLite arm of a tier-(a) pair; byte-equal to the macro arm below.
                 #[allow(clippy::disallowed_methods)]
                 sqlx::query_scalar::<_, i32>("SELECT 1")
                     .fetch_one(p)
                     .await?
             }
-            Self::Postgres(p) => {
-                // TODO(tier-a): portable shape, promotable in the db-promotion pass.
-                #[allow(clippy::disallowed_methods)]
-                sqlx::query_scalar::<_, i32>("SELECT 1")
-                    .fetch_one(p)
-                    .await?
-            }
+            Self::Postgres(p) => sqlx::query_scalar!("SELECT 1")
+                .fetch_one(p)
+                .await?
+                .unwrap_or(0),
         };
         Ok(value)
     }
