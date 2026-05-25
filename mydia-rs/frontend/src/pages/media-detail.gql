@@ -1,0 +1,52 @@
+query MediaDetail($id: ID!) {
+  node(id: $id) {
+    ... on Movie {
+      id
+      title
+      year
+      overview
+      monitored
+      artwork {
+        posterUrl
+        backdropUrl
+      }
+      files {
+        id
+        streamUrl
+        size
+      }
+      progress {
+        positionSeconds
+        percentage
+        watched
+      }
+    }
+    ... on TvShow {
+      id
+      title
+      year
+      overview
+      monitored
+      artwork {
+        posterUrl
+        backdropUrl
+      }
+      seasons {
+        seasonNumber
+        episodeCount
+      }
+    }
+  }
+}
+
+mutation ToggleMediaMonitored($id: ID!) {
+  toggleMediaMonitored(id: $id)
+}
+
+mutation ToggleEpisodeMonitored($id: ID!) {
+  toggleEpisodeMonitored(id: $id)
+}
+
+mutation DeleteMedia($id: ID!) {
+  deleteMedia(id: $id)
+}

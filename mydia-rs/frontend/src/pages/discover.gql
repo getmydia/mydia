@@ -1,0 +1,43 @@
+query DiscoverRecentlyAdded($first: Int = 20, $types: [MediaType!]) {
+  recentlyAdded(first: $first, types: $types) {
+    id
+    type
+    title
+    year
+    addedAt
+    artwork {
+      posterUrl
+      backdropUrl
+    }
+  }
+}
+
+query DiscoverUpNext {
+  upNext(first: 10) {
+    episode {
+      id
+      title
+      seasonNumber
+      episodeNumber
+    }
+    show {
+      id
+      title
+    }
+    progressState
+  }
+}
+
+query DiscoverContinueWatching {
+  continueWatching(first: 10) {
+    id
+    title
+    artwork {
+      posterUrl
+    }
+    progress {
+      percentage
+      watched
+    }
+  }
+}

@@ -3,6 +3,16 @@ import { RequireAuth, RequireAdmin } from "./lib/auth";
 import { AdminLayout } from "./layouts/admin-layout";
 import { UserLayout } from "./layouts/user-layout";
 import { LoginPage } from "./pages/login";
+import { DashboardPage } from "./pages/dashboard";
+import { CalendarPage } from "./pages/calendar";
+import { DiscoverPage } from "./pages/discover";
+import { SearchPage } from "./pages/search";
+import { AddMediaPage } from "./pages/add-media";
+import { ImportMediaPage } from "./pages/import-media";
+import { MediaDetailPage } from "./pages/media-detail";
+import { MyRequestsPage } from "./pages/my-requests";
+import { RequestMediaPage } from "./pages/request-media";
+import { ProfilePage } from "./pages/profile";
 import { LibraryPathsPage } from "./pages/admin/library-paths";
 import { IndexersPage } from "./pages/admin/indexers";
 import { DownloadClientsPage } from "./pages/admin/download-clients";
@@ -36,47 +46,47 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <DashboardPlaceholder />,
+        element: <DashboardPage />,
       },
       {
         path: "dashboard",
-        element: <DashboardPlaceholder />,
+        element: <DashboardPage />,
       },
       {
         path: "calendar",
-        element: <PagePlaceholder title="Calendar" />,
+        element: <CalendarPage />,
       },
       {
         path: "discover",
-        element: <PagePlaceholder title="Discover" />,
+        element: <DiscoverPage />,
       },
       {
         path: "search",
-        element: <PagePlaceholder title="Search" />,
+        element: <SearchPage />,
       },
       {
         path: "add-media",
-        element: <PagePlaceholder title="Add Media" />,
+        element: <AddMediaPage />,
       },
       {
         path: "import-media",
-        element: <PagePlaceholder title="Import Media" />,
+        element: <ImportMediaPage />,
       },
       {
         path: "media/:id",
-        element: <PagePlaceholder title="Media Detail" />,
+        element: <MediaDetailPage />,
       },
       {
         path: "my-requests",
-        element: <PagePlaceholder title="My Requests" />,
+        element: <MyRequestsPage />,
       },
       {
         path: "request-media",
-        element: <PagePlaceholder title="Request Media" />,
+        element: <RequestMediaPage />,
       },
       {
         path: "profile",
-        element: <PagePlaceholder title="Profile" />,
+        element: <ProfilePage />,
       },
     ],
   },
@@ -163,30 +173,6 @@ export const router = createBrowserRouter([
   },
 ]);
 
-function DashboardPlaceholder() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {["TV Shows", "Movies", "Episodes", "Downloads"].map((stat) => (
-          <div key={stat} className="card bg-base-100 shadow">
-            <div className="card-body p-5">
-              <h3 className="text-sm text-base-content/60">{stat}</h3>
-              <p className="text-2xl font-bold">--</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="card bg-base-100 shadow">
-        <div className="card-body">
-          <h2 className="card-title">Recent Activity</h2>
-          <p className="text-base-content/60">Activity feed coming soon.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function PagePlaceholder({ title }: { title: string }) {
   return (
     <div>
@@ -199,3 +185,5 @@ function PagePlaceholder({ title }: { title: string }) {
     </div>
   );
 }
+
+

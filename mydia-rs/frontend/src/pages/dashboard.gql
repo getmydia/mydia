@@ -1,0 +1,12 @@
+query DashboardStats {
+  dashboardStats {
+    totalMovies
+    totalTvShows
+    totalEpisodes
+    watchedEpisodes
+    totalLibraries
+    missingEpisodes
+    monitoredMovies
+    monitoredTvShows
+  }
+}

@@ -1,0 +1,8 @@
+mutation AddMediaToLibrary($input: AddMediaToLibraryInput!) {
+  addMediaToLibrary(input: $input) {
+    id
+    title
+    year
+    monitored
+  }
+}

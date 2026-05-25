@@ -1,0 +1,3 @@
+mutation FinalizeImport($input: FinalizeImportInput!) {
+  finalizeImport(input: $input)
+}

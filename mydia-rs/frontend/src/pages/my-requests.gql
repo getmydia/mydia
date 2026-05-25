@@ -1,0 +1,18 @@
+query MyRequests {
+  myRequests {
+    id
+    mediaType
+    title
+    originalTitle
+    year
+    tmdbId
+    imdbId
+    status
+    requesterNotes
+    adminNotes
+    rejectionReason
+    approvedAt
+    rejectedAt
+    insertedAt
+  }
+}

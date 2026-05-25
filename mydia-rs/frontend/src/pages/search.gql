@@ -1,0 +1,16 @@
+query SearchMedia($query: String!, $first: Int = 20, $types: [MediaType!]) {
+  search(query: $query, first: $first, types: $types) {
+    results {
+      id
+      type
+      title
+      year
+      artwork {
+        posterUrl
+        backdropUrl
+      }
+      score
+    }
+    totalCount
+  }
+}

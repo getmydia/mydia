@@ -1,0 +1,27 @@
+query CurrentProfile {
+  currentProfile {
+    id
+    username
+    email
+    displayName
+    role
+    avatarUrl
+    lastLoginAt
+    insertedAt
+  }
+}
+
+mutation UpdateProfile($input: UpdateProfileInput!) {
+  updateProfile(input: $input) {
+    id
+    username
+    email
+    displayName
+    role
+    avatarUrl
+  }
+}
+
+mutation ChangePassword($currentPassword: String!, $newPassword: String!) {
+  changePassword(currentPassword: $currentPassword, newPassword: $newPassword)
+}

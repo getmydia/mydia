@@ -25,10 +25,14 @@ use crate::mutations::api_key::ApiKeyMutations;
 use crate::mutations::auth::AuthMutations;
 use crate::mutations::device::DeviceMutations;
 use crate::mutations::download::DownloadMutations;
+use crate::mutations::media::MediaMutations;
 use crate::mutations::playback::PlaybackMutations;
+use crate::mutations::profile::ProfileMutations;
 use crate::mutations::remote_access::RemoteAccessMutations;
+use crate::mutations::requests::RequestMutations;
 use crate::mutations::streaming::StreamingMutations;
 use crate::node_id::NodeId;
+use crate::queries::activity::ActivityQueries;
 use crate::queries::admin::download_clients::DownloadClientQueries;
 use crate::queries::admin::import_lists::ImportListQueries;
 use crate::queries::admin::indexers::IndexerQueries;
@@ -38,10 +42,14 @@ use crate::queries::admin::quality_profiles::QualityProfileQueries;
 use crate::queries::admin::release_blacklist::ReleaseBlacklistQueries;
 use crate::queries::api_key::ApiKeyQueries;
 use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
+use crate::queries::calendar::CalendarQueries;
 use crate::queries::collection::CollectionQueries;
+use crate::queries::dashboard::DashboardQueries;
 use crate::queries::device::DeviceQueries;
 use crate::queries::discovery::DiscoveryQueries;
+use crate::queries::profile::ProfileQueries;
 use crate::queries::remote_access::RemoteAccessQueries;
+use crate::queries::requests::RequestQueries;
 use crate::queries::search::SearchQueries;
 use crate::queries::streaming::StreamingQueries;
 use crate::subscriptions::SubscriptionRoot;
@@ -118,6 +126,11 @@ pub struct QueryRoot(
     DeviceQueries,
     CollectionQueries,
     RemoteAccessQueries,
+    DashboardQueries,
+    CalendarQueries,
+    ActivityQueries,
+    ProfileQueries,
+    RequestQueries,
     LibraryPathQueries,
     IndexerQueries,
     DownloadClientQueries,
@@ -169,6 +182,9 @@ pub struct MutationRoot(
     DeviceMutations,
     DownloadMutations,
     RemoteAccessMutations,
+    ProfileMutations,
+    RequestMutations,
+    MediaMutations,
     LibraryPathMutations,
     IndexerMutations,
     DownloadClientMutations,

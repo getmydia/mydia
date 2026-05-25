@@ -1,0 +1,9 @@
+mutation CreateMediaRequest($input: CreateMediaRequestInput!) {
+  createRequest(input: $input) {
+    id
+    title
+    mediaType
+    status
+    insertedAt
+  }
+}

@@ -7,9 +7,12 @@
 //! access, files, progress) live alongside in `#[ComplexObject]`
 //! impls.
 
+pub mod activity_event;
 pub mod api_key;
 pub mod artwork;
+pub mod calendar_entry;
 pub mod collection;
+pub mod dashboard_stats;
 pub mod discovery;
 pub mod download;
 pub mod download_client;
@@ -27,6 +30,7 @@ pub mod quality_profile;
 pub mod release_blacklist;
 pub mod remote_access;
 pub mod remote_device;
+pub mod request;
 pub mod search_result;
 pub mod season;
 pub mod streaming;
@@ -34,10 +38,14 @@ pub mod subtitle;
 pub mod toggle_favorite_result;
 pub mod tv_show;
 pub mod user;
+pub mod user_profile;
 
+pub use activity_event::ActivityEvent;
 pub use api_key::{ApiKeyObject, CreateApiKeyResult};
 pub use artwork::Artwork;
+pub use calendar_entry::CalendarEntry;
 pub use collection::CollectionObject;
+pub use dashboard_stats::DashboardStats;
 pub use discovery::{ContinueWatchingItem, MediaType, RecentlyAddedItem, UpNextItem};
 pub use download::{
     CancelDownloadResult, DownloadJobStatus, DownloadOption, PrepareDownloadResult,
@@ -57,6 +65,7 @@ pub use quality_profile::QualityProfile;
 pub use release_blacklist::ReleaseBlacklistEntry;
 pub use remote_access::{ClaimCodeObject, MediaTokenObject, RemoteAccessStatus};
 pub use remote_device::{RemoteDevice, RevokeDeviceResult};
+pub use request::MediaRequest;
 pub use search_result::{SearchResult, SearchResults};
 pub use season::Season;
 pub use streaming::{
@@ -67,3 +76,4 @@ pub use subtitle::{SubtitleFormat, SubtitleTrack};
 pub use toggle_favorite_result::ToggleFavoriteResult;
 pub use tv_show::{TvShow, TvShowConnection, TvShowEdge};
 pub use user::UserObject;
+pub use user_profile::UserProfile;

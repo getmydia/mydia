@@ -463,6 +463,42 @@ type MovieEdge {
 The merged Mutation root. Same convention as `QueryRoot`: one
 struct per family.
 """
+input ActivityFilter {
+	category: String
+	severity: String
+	resourceType: String
+}
+
+input UpdateProfileInput {
+	displayName: String
+	email: String
+	username: String
+}
+
+input CreateMediaRequestInput {
+	mediaType: String!
+	title: String!
+	originalTitle: String
+	year: Int
+	tmdbId: Int
+	imdbId: String
+	requesterNotes: String
+}
+
+input AddMediaToLibraryInput {
+	mediaType: String!
+	title: String!
+	tmdbId: Int
+	tvdbId: Int
+	qualityProfileId: String
+	monitored: Boolean
+	monitoringPreset: String
+}
+
+input FinalizeImportInput {
+	sessionId: String!
+}
+
 type Mutation {
 	"""
 	Keeps the mutation root non-empty when the merged set has
@@ -549,6 +585,14 @@ type Mutation {
 	deleteQualityProfile(id: ID!): Boolean!
 	createReleaseBlacklistEntry(input: ReleaseBlacklistInput!): ReleaseBlacklistEntry!
 	deleteReleaseBlacklistEntry(id: ID!): Boolean!
+	updateProfile(input: UpdateProfileInput!): UserProfile!
+	changePassword(currentPassword: String!, newPassword: String!): Boolean!
+	createRequest(input: CreateMediaRequestInput!): MediaRequest!
+	toggleMediaMonitored(id: ID!): Boolean!
+	toggleEpisodeMonitored(id: ID!): Boolean!
+	deleteMedia(id: ID!): Boolean!
+	addMediaToLibrary(input: AddMediaToLibraryInput!): Movie!
+	finalizeImport(input: FinalizeImportInput!): Boolean!
 }
 
 """
@@ -560,6 +604,7 @@ Format: %Y-%m-%d
 * `1994-11-13`
 * `2000-02-24`
 """
+scalar JSON
 scalar NaiveDate
 
 """
@@ -625,6 +670,74 @@ input QualityProfileInput {
 The merged Query root type. New resolver families add themselves
 here as the corresponding U10/U11/U14 units land.
 """
+type DashboardStats {
+	totalMovies: Int!
+	totalTvShows: Int!
+	totalEpisodes: Int!
+	watchedEpisodes: Int!
+	totalLibraries: Int!
+	missingEpisodes: Int!
+	monitoredMovies: Int!
+	monitoredTvShows: Int!
+}
+
+type CalendarEntry {
+	id: ID!
+	showTitle: String!
+	showId: String!
+	seasonNumber: Int!
+	episodeNumber: Int!
+	episodeTitle: String
+	airDate: NaiveDate
+	monitored: Boolean!
+	hasFile: Boolean!
+}
+
+type ActivityEvent {
+	id: ID!
+	category: String!
+	type: String!
+	actorType: String
+	actorId: String
+	resourceType: String
+	resourceId: String
+	severity: String!
+	metadata: JSON
+	insertedAt: DateTime!
+}
+
+type UserProfile {
+	id: ID!
+	username: String
+	email: String
+	displayName: String
+	role: String!
+	avatarUrl: String
+	lastLoginAt: DateTime
+	insertedAt: DateTime!
+}
+
+type MediaRequest {
+	id: ID!
+	mediaType: String!
+	title: String!
+	originalTitle: String
+	year: Int
+	tmdbId: Int
+	imdbId: String
+	status: String!
+	requesterNotes: String
+	adminNotes: String
+	rejectionReason: String
+	approvedAt: DateTime
+	rejectedAt: DateTime
+	requesterId: String!
+	approvedById: String
+	mediaItemId: String
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+}
+
 type Query {
 	"""
 	Stable string identifying the GraphQL schema build. Useful for
@@ -738,6 +851,13 @@ type Query {
 	qualityProfile(id: ID!): QualityProfile
 	releaseBlacklist: [ReleaseBlacklistEntry!]!
 	releaseBlacklistEntry(id: ID!): ReleaseBlacklistEntry
+	dashboardStats: DashboardStats!
+	recentEpisodes(limit: Int! = 10): [Episode!]!
+	upcomingEpisodes(days: Int! = 14): [Episode!]!
+	calendar(start: DateTime!, end: DateTime!): [CalendarEntry!]!
+	activity(filter: ActivityFilter, limit: Int! = 50): [ActivityEvent!]!
+	currentProfile: UserProfile!
+	myRequests: [MediaRequest!]!
 }
 
 """

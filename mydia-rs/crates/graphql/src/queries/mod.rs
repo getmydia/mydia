@@ -20,13 +20,18 @@
 //! The resolvers are exposed as `#[Object]` structs; the top-level
 //! schema combines them via `MergedObject` (see [`crate::schema`]).
 
+pub mod activity;
 pub mod admin;
 pub mod api_key;
 pub mod browse;
+pub mod calendar;
 pub mod collection;
+pub mod dashboard;
 pub mod device;
 pub mod discovery;
 pub mod media;
+pub mod profile;
 pub mod remote_access;
+pub mod requests;
 pub mod search;
 pub mod streaming;

@@ -1,0 +1,13 @@
+query Calendar($start: DateTime!, $end: DateTime!) {
+  calendar(start: $start, end: $end) {
+    id
+    showTitle
+    showId
+    seasonNumber
+    episodeNumber
+    episodeTitle
+    airDate
+    monitored
+    hasFile
+  }
+}
