@@ -11,9 +11,9 @@
 //! `MutationRoot` follows the same pattern with one merged struct per
 //! mutation family.
 
-use async_graphql::{MergedObject, Object, Schema, SchemaBuilder, ID};
+use async_graphql::{MergedObject, Object, Schema, SchemaBuilder, SimpleObject, ID};
 
-use crate::context::GraphqlAppState;
+use crate::context::{GraphqlAppState, GraphqlRequestContext};
 use crate::mutations::api_key::ApiKeyMutations;
 use crate::mutations::auth::AuthMutations;
 use crate::mutations::device::DeviceMutations;
@@ -31,6 +31,17 @@ use crate::queries::remote_access::RemoteAccessQueries;
 use crate::queries::search::SearchQueries;
 use crate::queries::streaming::StreamingQueries;
 use crate::subscriptions::SubscriptionRoot;
+
+/// Identity of the currently-authenticated user, or null when the
+/// request is unauthenticated. Mirrors the `viewer` query in the
+/// Phoenix GraphQL schema.
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "Viewer")]
+pub struct Viewer {
+    pub id: ID,
+    pub username: String,
+    pub role: String,
+}
 
 /// Introspection + utility queries that aren't tied to a specific
 /// Phoenix resolver family.
@@ -63,6 +74,19 @@ impl IntrospectionQueries {
         id: ID,
     ) -> async_graphql::Result<Option<NodeBlob>> {
         resolve_node(ctx, id).await
+    }
+
+    /// The currently authenticated user, or null when the request is
+    /// unauthenticated. The SPA calls this on mount to determine whether
+    /// to show the login screen or the app shell.
+    async fn viewer(&self, ctx: &async_graphql::Context<'_>) -> Option<Viewer> {
+        let req_ctx = ctx.data_opt::<GraphqlRequestContext>()?;
+        let user = req_ctx.current_user.as_ref()?;
+        Some(Viewer {
+            id: ID(user.id.to_string()),
+            username: user.username.clone(),
+            role: user.role.as_str().to_string(),
+        })
     }
 }
 

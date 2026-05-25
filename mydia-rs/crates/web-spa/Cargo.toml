@@ -16,6 +16,9 @@ axum-embed = "0.1"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "compression-br", "compression-gzip"] }
 mime_guess = "2"
+async-graphql = { version = "7", features = ["chrono", "uuid"] }
+mydia-rs-graphql = { path = "../graphql" }
+clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,837 @@
+type ApiKey {
+	id: ID!
+	name: String!
+	keyPrefix: String!
+	permissions: [String!]!
+	lastUsedAt: DateTime
+	expiresAt: DateTime
+	revokedAt: DateTime
+	insertedAt: DateTime!
+}
+
+type Artwork {
+	posterUrl: String
+	backdropUrl: String
+	thumbnailUrl: String
+}
+
+type CancelDownloadResult {
+	success: Boolean!
+}
+
+type ClaimCode {
+	code: String!
+	expiresAt: DateTime!
+}
+
+type Collection {
+	id: ID!
+	name: String!
+	description: String
+	type: String!
+	visibility: String!
+	itemCount: Int!
+	posterPaths: [String!]!
+}
+
+"""
+Continue-watching rail item.
+"""
+type ContinueWatchingItem {
+	id: ID!
+	type: MediaType!
+	title: String!
+	artwork: Artwork
+	progress: Progress!
+	"""
+	Set on episode items only.
+	"""
+	showId: ID
+	showTitle: String
+	seasonNumber: Int
+	episodeNumber: Int
+}
+
+type CreateApiKeyResult {
+	apiKey: ApiKey!
+	key: String!
+}
+
+"""
+Implement the DateTime<Utc> scalar
+
+The input/output is a string in RFC3339 format.
+"""
+scalar DateTime
+
+type Device {
+	id: ID!
+	deviceName: String!
+	platform: String!
+	lastSeenAt: DateTime
+	revokedAt: DateTime
+	insertedAt: DateTime!
+}
+
+enum DeviceEventType {
+	CONNECTED
+	DISCONNECTED
+	REVOKED
+	DELETED
+}
+
+type DeviceStatusEvent {
+	device: Device!
+	event: DeviceEventType!
+}
+
+type DownloadJobStatus {
+	jobId: ID!
+	status: String!
+	progress: Float!
+	error: String
+	fileSize: Int
+}
+
+type DownloadOption {
+	resolution: String!
+	label: String!
+	estimatedSize: Int!
+	transcodeStatus: String
+	transcodeProgress: Float
+	actualSize: Int
+}
+
+type Episode {
+	"""
+	Encoded `episode:<uuid>` form.
+	"""
+	id: ID!
+	"""
+	Plain UUID of the parent media item (the show).
+	"""
+	mediaItemId: String!
+	seasonNumber: Int!
+	episodeNumber: Int!
+	title: String
+	airDate: NaiveDate
+	monitored: Boolean!
+	overview: String
+	runtime: Int
+	"""
+	Episode thumbnail — `metadata.still_path` prefixed with the
+	TMDB CDN.
+	"""
+	thumbnailUrl: String
+	"""
+	Files for this episode.
+	"""
+	files: [MediaFile!]!
+	hasFile: Boolean!
+	"""
+	User playback progress on this episode. Anonymous fallback.
+	"""
+	progress: Progress
+	"""
+	Parent show — full `TvShow` object. The Phoenix resolver loads
+	the show by `episode.media_item_id`.
+	"""
+	show: TvShow
+}
+
+type LibraryPath {
+	"""
+	Encoded `library:<uuid>` form.
+	"""
+	id: ID!
+	path: String!
+	type: LibraryType!
+	monitored: Boolean!
+	scanInterval: Int
+	lastScanAt: DateTime
+	autoOrganize: Boolean!
+	autoImport: Boolean!
+	writeNfo: Boolean!
+	autoRename: Boolean!
+}
+
+"""
+Mirrors the Absinthe `library_type` enum (`enum_types.ex:34-41`).
+"""
+enum LibraryType {
+	MOVIES
+	SERIES
+	MIXED
+	MUSIC
+	BOOKS
+	ADULT
+}
+
+input LoginInput {
+	username: String!
+	password: String!
+	deviceId: String!
+	deviceName: String!
+	platform: String!
+}
+
+type LoginResult {
+	token: String!
+	user: User!
+	expiresIn: Int!
+}
+
+"""
+Media category enum — port of `:media_category`. Values mirror
+`lib/mydia_web/schema/enum_types.ex:43-50`.
+"""
+enum MediaCategory {
+	ANIME
+	STANDARD
+	DOCUMENTARY
+	STAND_UP
+	REALITY
+	ADULT
+}
+
+type MediaFile {
+	"""
+	Underlying DB row ID — kept separately from the GraphQL
+	`id` field because Absinthe emits raw UUIDs for media files
+	(no node-id wrapping), so we expose the plain UUID string.
+	"""
+	id: String!
+	resolution: String
+	codec: String
+	audioCodec: String
+	hdrFormat: String
+	size: Int
+	bitrate: Int
+	"""
+	Whether the file can be direct-played. Phoenix hardcodes
+	`true` pending client-capabilities work.
+	"""
+	directPlaySupported: Boolean!
+	"""
+	Streaming URL — `/api/v1/stream/file/<id>`.
+	"""
+	streamUrl: String!
+	"""
+	Direct play URL.
+	"""
+	directPlayUrl: String!
+	"""
+	Available subtitle tracks (embedded + external). U21 lights up
+	the real extractor; U14 returns an empty list so the schema
+	contract holds for the parity replay harness.
+	"""
+	subtitles: [SubtitleTrack!]!
+}
+
+type MediaToken {
+	token: String!
+	expiresAt: DateTime!
+	permissions: [String!]!
+}
+
+"""
+Discriminator for items that can appear in mixed rails
+(continueWatching, recentlyAdded, favorites). Mirrors the
+Absinthe `:media_type` enum.
+"""
+enum MediaType {
+	MOVIE
+	TV_SHOW
+	EPISODE
+}
+
+type Movie {
+	"""
+	Encoded `movie:<uuid>` form.
+	"""
+	id: ID!
+	title: String!
+	originalTitle: String
+	year: Int
+	tmdbId: Int
+	tvdbId: Int
+	imdbId: String
+	monitored: Boolean!
+	addedAt: DateTime!
+	"""
+	`metadata.overview`
+	"""
+	overview: String
+	"""
+	`metadata.runtime`
+	"""
+	runtime: Int
+	"""
+	`metadata.genres`
+	"""
+	genres: [String!]!
+	"""
+	Content rating — Phoenix hardcodes `nil` (TODO note in
+	resolver). Mirrored.
+	"""
+	contentRating: String
+	"""
+	`metadata.vote_average`
+	"""
+	rating: Float
+	"""
+	Build poster / backdrop URLs from metadata paths. Returns
+	`None` when neither path is present.
+	"""
+	artwork: Artwork
+	"""
+	Category enum (anime, standard, etc.).
+	"""
+	category: MediaCategory
+	"""
+	Available video files for the movie.
+	"""
+	files: [MediaFile!]!
+	"""
+	User playback progress on this movie. Returns `None` for
+	anonymous requests; the authenticated path lights up
+	alongside the U6 auth middleware follow-up.
+	"""
+	progress: Progress
+	"""
+	Whether this movie is in the user's favorites collection.
+	Returns `false` for anonymous requests; the authenticated
+	path lights up with the Collections context port (U14).
+	"""
+	isFavorite: Boolean!
+}
+
+type MovieConnection {
+	edges: [MovieEdge!]!
+	pageInfo: PageInfo!
+	totalCount: Int!
+}
+
+type MovieEdge {
+	node: Movie!
+	cursor: String!
+}
+
+"""
+The merged Mutation root. Same convention as `QueryRoot`: one
+struct per family.
+"""
+type Mutation {
+	"""
+	Keeps the mutation root non-empty when the merged set has
+	nothing else to expose (e.g. in U13's parity harness when it
+	builds a schema without DB-backed resolvers). Once U14 lands
+	`auth/api_key/device` mutations, this can be dropped.
+	"""
+	ping: String!
+	"""
+	Upsert progress for a movie. Returns the new progress shape.
+	"""
+	updateMovieProgress(movieId: ID!, positionSeconds: Int!, durationSeconds: Int): Progress!
+	"""
+	Upsert progress for an episode.
+	"""
+	updateEpisodeProgress(episodeId: ID!, positionSeconds: Int!, durationSeconds: Int): Progress!
+	"""
+	Mark a movie as watched. Creates a progress row with
+	`(position=0, duration=1, watched=true)` if none exists yet,
+	matching Phoenix's fallback path.
+	"""
+	markMovieWatched(movieId: ID!): Movie!
+	"""
+	Mark a movie as unwatched. Deletes the progress row if it
+	exists; otherwise no-op (matches Phoenix's
+	`delete_progress -> {:error, :not_found}` no-op branch).
+	"""
+	markMovieUnwatched(movieId: ID!): Movie!
+	"""
+	Mark an episode as watched.
+	"""
+	markEpisodeWatched(episodeId: ID!): Episode!
+	"""
+	Mark an episode as unwatched.
+	"""
+	markEpisodeUnwatched(episodeId: ID!): Episode!
+	"""
+	Mark every episode in a season as watched.
+	"""
+	markSeasonWatched(showId: ID!, seasonNumber: Int!): TvShow!
+	"""
+	Toggle a media item's membership in the user's favorites.
+	"""
+	toggleFavorite(mediaItemId: ID!): ToggleFavoriteResult!
+	"""
+	Start an HLS streaming session for a media file.
+	"""
+	startStreamingSession(fileId: ID!, strategy: StreamingStrategy!, maxBitrate: Int): StreamingSessionResult!
+	"""
+	End an HLS streaming session. Returns `true` even for unknown
+	session IDs (matches Phoenix's terminate-session behavior).
+	"""
+	endStreamingSession(sessionId: String!): Boolean!
+	login(input: LoginInput!): LoginResult!
+	createApiKey(name: String!, permissions: [String!], expiresAt: DateTime): CreateApiKeyResult!
+	revokeApiKey(id: ID!): ApiKey!
+	deleteApiKey(id: ID!): Boolean!
+	revokeDevice(id: ID!): RevokeDeviceResult!
+	downloadOptions(contentType: String!, id: ID!): [DownloadOption!]!
+	prepareDownload(contentType: String!, id: ID!, resolution: String! = "720p"): PrepareDownloadResult!
+	downloadJobStatus(jobId: ID!): DownloadJobStatus!
+	cancelDownloadJob(jobId: ID!): CancelDownloadResult!
+	generateClaimCode: ClaimCode!
+	refreshMediaToken(token: String!): MediaToken!
+}
+
+"""
+ISO 8601 calendar date without timezone.
+Format: %Y-%m-%d
+
+# Examples
+
+* `1994-11-13`
+* `2000-02-24`
+"""
+scalar NaiveDate
+
+"""
+Polymorphic Node-interface stand-in until the full `Interface`
+enum lands in U10.c. Each variant wraps the concrete type; the
+`node(id)` resolver returns `Option<NodeBlob>` and async-graphql
+renders the inner `SimpleObject`.
+"""
+union NodeUnion = Movie | TvShow | Episode | Season | LibraryPath
+
+type PageInfo {
+	hasNextPage: Boolean!
+	hasPreviousPage: Boolean!
+	startCursor: String
+	endCursor: String
+}
+
+type PrepareDownloadResult {
+	jobId: ID!
+	status: String!
+	progress: Float!
+	fileSize: Int
+}
+
+type Progress {
+	positionSeconds: Int!
+	durationSeconds: Int
+	percentage: Float
+	watched: Boolean!
+	lastWatchedAt: DateTime
+}
+
+"""
+The merged Query root type. New resolver families add themselves
+here as the corresponding U10/U11/U14 units land.
+"""
+type Query {
+	"""
+	Stable string identifying the GraphQL schema build. Useful for
+	the parity replay harness in U13 and for smoke tests asserting
+	the schema is wired correctly.
+	"""
+	schemaVersion: String!
+	"""
+	Decode a global ID and report its type tag, without resolving
+	the underlying node. Convenience field for the parity harness
+	— useful when a corpus record's `id` argument fails to round-
+	trip and you want to know whether the encoding or the lookup
+	is the culprit.
+	"""
+	nodeType(id: ID!): String
+	"""
+	Polymorphic node lookup — port of `BrowseResolver.get_node/3`.
+	"""
+	node(id: ID!): NodeUnion
+	"""
+	The currently authenticated user, or null when the request is
+	unauthenticated. The SPA calls this on mount to determine whether
+	to show the login screen or the app shell.
+	"""
+	viewer: Viewer
+	"""
+	List all movies, sorted and paginated.
+	"""
+	movies(first: Int! = 20, after: String, sort: SortInput, category: MediaCategory): MovieConnection!
+	"""
+	List all TV shows.
+	"""
+	tvShows(first: Int! = 20, after: String, sort: SortInput, category: MediaCategory): TvShowConnection!
+	"""
+	Fetch one movie by global node ID or plain UUID.
+	"""
+	movie(id: ID!): Movie!
+	"""
+	Fetch one TV show.
+	"""
+	tvShow(id: ID!): TvShow!
+	"""
+	Fetch one episode.
+	"""
+	episode(id: ID!): Episode!
+	"""
+	List all library paths.
+	"""
+	libraries: [LibraryPath!]!
+	"""
+	Get a specific library path.
+	"""
+	libraryPath(id: ID!): LibraryPath!
+	"""
+	List episodes for a given show + season number.
+	"""
+	seasonEpisodes(showId: ID!, seasonNumber: Int!): [Episode!]!
+	"""
+	Materialise a virtual `Season` for a show + season number.
+	"""
+	season(showId: ID!, seasonNumber: Int!): Season!
+	"""
+	In-progress items for the current user. Returns `[]` when no
+	`CurrentUser` is attached (unauthenticated request) — mirrors
+	`DiscoveryResolver.continue_watching/3` line 18.
+	"""
+	continueWatching(first: Int! = 10, after: String): [ContinueWatchingItem!]!
+	"""
+	Recently-added items across all media types. No auth required.
+	"""
+	recentlyAdded(first: Int! = 20, after: String, types: [MediaType!]): [RecentlyAddedItem!]!
+	"""
+	Next-episode-to-watch rail. Anonymous fallback returns `[]`.
+	"""
+	upNext(first: Int! = 10, after: String): [UpNextItem!]!
+	"""
+	User's favorites collection. Anonymous fallback returns `[]`.
+	Favorites moved to the `collections` table in
+	`priv/repo/migrations/20251228233656_migrate_favorites_to_collections.exs`;
+	the Collections context port lands in U14 and this resolver
+	activates then.
+	"""
+	favorites(first: Int! = 50, after: String, types: [MediaType!]): [RecentlyAddedItem!]!
+	"""
+	Unwatched items with files. Anonymous fallback returns `[]`.
+	"""
+	unwatched(first: Int! = 50, after: String, types: [MediaType!]): [RecentlyAddedItem!]!
+	"""
+	Substring search across media item titles.
+	"""
+	search(query: String!, first: Int! = 20, types: [MediaType!]): SearchResults!
+	"""
+	Resolve a media file from a (`content_type`, id) pair and return
+	the streaming-strategy candidates plus source metadata. Calls
+	fail with `Authentication required` when no user is in context.
+	"""
+	streamingCandidates(contentType: String!, id: ID!): StreamingCandidatesResult!
+	apiKeys: [ApiKey!]!
+	devices: [RemoteDevice!]!
+	collections(first: Int! = 50): [Collection!]!
+	collection(id: ID!): Collection!
+	collectionItems(collectionId: ID!, first: Int! = 50): [RecentlyAddedItem!]!
+	remoteAccessStatus: RemoteAccessStatus!
+}
+
+"""
+Recently-added rail item. Also returned by the favorites and
+unwatched queries.
+"""
+type RecentlyAddedItem {
+	id: ID!
+	type: MediaType!
+	title: String!
+	year: Int
+	artwork: Artwork
+	addedAt: DateTime!
+}
+
+type RemoteAccessStatus {
+	enabled: Boolean!
+	endpointAddr: String
+	connectedPeers: Int!
+}
+
+type RemoteDevice {
+	id: ID!
+	deviceName: String!
+	platform: String!
+	lastSeenAt: DateTime
+	isRevoked: Boolean!
+	createdAt: DateTime!
+}
+
+type RevokeDeviceResult {
+	success: Boolean!
+	device: RemoteDevice
+}
+
+"""
+One row in a search response. `score` is `None` from this resolver
+(Phoenix leaves it `nil`) and is reserved for a future ranking-
+aware port that consumes the indexer-side scorer in U21.
+"""
+type SearchResult {
+	id: ID!
+	type: MediaType!
+	title: String!
+	year: Int
+	artwork: Artwork
+	score: Float
+}
+
+"""
+Container envelope for search responses.
+"""
+type SearchResults {
+	results: [SearchResult!]!
+	totalCount: Int!
+}
+
+type Season {
+	"""
+	Encoded `season:<show_id>:<season_number>` form.
+	"""
+	id: ID!
+	seasonNumber: Int!
+	episodeCount: Int!
+	airedEpisodeCount: Int
+	hasFiles: Boolean!
+}
+
+enum SortDirection {
+	ASC
+	DESC
+}
+
+"""
+Sort field — port of the Absinthe `:sort_field` enum
+(`lib/mydia_web/schema/enum_types.ex`).
+"""
+enum SortField {
+	TITLE
+	ADDED_AT
+	YEAR
+	RATING
+}
+
+"""
+Sort args — port of the Absinthe `:sort_input` input object.
+"""
+input SortInput {
+	field: SortField! = TITLE
+	direction: SortDirection! = ASC
+}
+
+"""
+One playback strategy the server can serve for a given file.
+"""
+type StreamingCandidate {
+	strategy: StreamingCandidateStrategy!
+	mime: String!
+	container: String!
+	videoCodec: String
+	audioCodec: String
+}
+
+"""
+Wider response enum for `StreamingCandidate.strategy`. Includes
+the direct-play and remux options the resolver may return.
+"""
+enum StreamingCandidateStrategy {
+	DIRECT_PLAY
+	REMUX
+	HLS_COPY
+	TRANSCODE
+}
+
+"""
+Response shape for the `streamingCandidates` query.
+"""
+type StreamingCandidatesResult {
+	fileId: ID!
+	candidates: [StreamingCandidate!]!
+	metadata: StreamingMetadata!
+}
+
+"""
+Source-file metadata returned alongside the candidate list.
+"""
+type StreamingMetadata {
+	duration: Float
+	width: Int
+	height: Int
+	bitrate: Int
+	resolution: String
+	hdrFormat: String
+	originalCodec: String
+	originalAudioCodec: String
+	container: String
+}
+
+"""
+Response shape for `startStreamingSession`. Per the MEMORY note:
+returns `session_id + duration` only — NOT a wrapped HLS URL.
+"""
+type StreamingSessionResult {
+	sessionId: String!
+	duration: Float
+}
+
+"""
+Input enum for `startStreamingSession.strategy`. The Phoenix
+`:streaming_strategy` GraphQL enum maps `:hls_copy` → "`HLS_COPY`"
+and `:transcode` → "TRANSCODE" by default. async-graphql's enum
+rendering matches when we annotate with `rename_items = "SCREAMING_SNAKE_CASE"`
+(the default for Rust enums in async-graphql).
+"""
+enum StreamingStrategy {
+	HLS_COPY
+	TRANSCODE
+}
+
+type SubscriptionRoot {
+	"""
+	Yield the latest `Progress` shape whenever the per-item
+	broadcast bus fires. The `nodeId` argument is the global ID of
+	the media item being watched — Phoenix uses `topic: args.node_id`
+	from `subscription_types.ex:13-15`.
+	
+	Authorization: any authenticated user may subscribe; further
+	per-row access gating waits on the Authorization context port
+	in U14. The current behavior matches Phoenix (no per-item gate
+	at the subscription layer today).
+	"""
+	progressUpdated(nodeId: ID!): Progress!
+	"""
+	Yield device connect / disconnect / revoke events for the
+	requested user. Authorization: the subscriber must be the user
+	being watched, or an Admin.
+	"""
+	deviceStatusChanged(userId: ID!): DeviceStatusEvent!
+}
+
+type SubtitleTrack {
+	trackId: String!
+	language: String!
+	title: String!
+	format: String!
+	embedded: Boolean!
+	"""
+	URL is computed by `SubtitleResolver.url/3` on the Phoenix side;
+	the Rust port computes it inline (`/api/player/v1/subtitles/...`).
+	Lands as a real field when U21 wires the extractor.
+	"""
+	url: String
+}
+
+type ToggleFavoriteResult {
+	isFavorite: Boolean!
+	mediaItemId: ID!
+}
+
+type TvShow {
+	id: ID!
+	title: String!
+	originalTitle: String
+	year: Int
+	tmdbId: Int
+	tvdbId: Int
+	imdbId: String
+	monitored: Boolean!
+	addedAt: DateTime!
+	overview: String
+	"""
+	`metadata.status` — e.g. "Continuing", "Ended".
+	"""
+	status: String
+	genres: [String!]!
+	contentRating: String
+	rating: Float
+	artwork: Artwork
+	category: MediaCategory
+	"""
+	List seasons aggregated from the episodes table.
+	"""
+	seasons: [Season!]!
+	"""
+	Total number of seasons.
+	"""
+	seasonCount: Int!
+	"""
+	Total number of episodes across all seasons.
+	"""
+	episodeCount: Int!
+	"""
+	Next episode to watch for the current user. Anonymous
+	fallback returns `None`.
+	"""
+	nextEpisode: Episode
+	isFavorite: Boolean!
+}
+
+type TvShowConnection {
+	edges: [TvShowEdge!]!
+	pageInfo: PageInfo!
+	totalCount: Int!
+}
+
+type TvShowEdge {
+	node: TvShow!
+	cursor: String!
+}
+
+"""
+Up-next rail item — next episode to watch per show. The
+`progress_state` discriminates between "continue" (mid-episode),
+"next" (next episode after a fully-watched prior one), and
+"start" (no progress yet, first unwatched episode).
+"""
+type UpNextItem {
+	episode: Episode!
+	show: TvShow!
+	"""
+	One of: `"continue"`, `"next"`, `"start"`.
+	"""
+	progressState: String!
+}
+
+type User {
+	id: ID!
+	username: String
+	email: String
+	displayName: String
+}
+
+"""
+Identity of the currently-authenticated user, or null when the
+request is unauthenticated. Mirrors the `viewer` query in the
+Phoenix GraphQL schema.
+"""
+type Viewer {
+	id: ID!
+	username: String!
+	role: String!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Provides a scalar specification URL for specifying the behavior of custom scalar types.
+"""
+directive @specifiedBy(url: String!) on SCALAR
+schema {
+	query: Query
+	mutation: Mutation
+	subscription: SubscriptionRoot
+}
