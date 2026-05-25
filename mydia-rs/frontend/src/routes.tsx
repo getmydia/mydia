@@ -27,6 +27,9 @@ import { DevicesPage } from "./pages/admin/devices";
 import { RemoteAccessPage } from "./pages/admin/remote-access";
 import { RequestsPage } from "./pages/admin/requests";
 import { ActivityPage } from "./pages/admin/activity";
+import { SettingsPage } from "./pages/admin/settings";
+import { SystemPage } from "./pages/admin/system";
+import { UsersPage } from "./pages/admin/users";
 
 function NotFound() {
   return (
@@ -162,15 +165,15 @@ export const router = createBrowserRouter([
       },
       {
         path: "admin/settings",
-        element: <PagePlaceholder title="Settings" />,
+        element: <SettingsPage />,
       },
       {
         path: "admin/system",
-        element: <PagePlaceholder title="System" />,
+        element: <SystemPage />,
       },
       {
         path: "admin/users",
-        element: <PagePlaceholder title="Users" />,
+        element: <UsersPage />,
       },
     ],
   },
@@ -179,18 +182,5 @@ export const router = createBrowserRouter([
     element: <NotFound />,
   },
 ]);
-
-function PagePlaceholder({ title }: { title: string }) {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">{title}</h1>
-      <div className="alert">
-        <span className="text-base-content/60">
-          This page will be migrated from the Dioxus stack soon.
-        </span>
-      </div>
-    </div>
-  );
-}
 
 

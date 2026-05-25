@@ -600,6 +600,12 @@ type Mutation {
 	revokePairedDevice(id: ID!): Boolean!
 	approveRequest(id: ID!, notes: String): Boolean!
 	rejectRequest(id: ID!, notes: String): Boolean!
+	updateSetting(key: String!, value: String!): SettingRow!
+	createUser(input: CreateUserInput!): UserRow!
+	updateUserRole(input: UpdateUserRoleInput!): UserRow!
+	deleteUser(id: ID!): Boolean!
+	setupAdmin(input: SetupAdminInput!): UserRow!
+	logout: Boolean!
 }
 
 """
@@ -872,6 +878,9 @@ type Query {
 	devicesByUser(userId: ID!): [RemoteDevice!]!
 	pairedDevices: [RemoteDevice!]!
 	adminRequests(status: String): [MediaRequest!]!
+	settings: [SettingRow!]!
+	systemStatus: SystemStatus!
+	users: [UserRow!]!
 }
 
 """
@@ -1267,6 +1276,73 @@ type TranscodeStatusEvent {
 	status: String!
 	progress: Float
 	error: String
+}
+
+enum ConfigSource {
+	default
+	env
+	database
+}
+
+type SettingRow {
+	key: String!
+	category: String!
+	label: String!
+	kind: String!
+	value: String!
+	source: ConfigSource!
+	description: String
+	placeholder: String
+}
+
+type SetupCounts {
+	userCount: Int!
+	mediaCount: Int!
+	libraryPathCount: Int!
+}
+
+type SystemStatus {
+	appVersion: String!
+	buildTarget: String!
+	databaseAdapter: String!
+	databaseHealth: String!
+	databaseSize: String!
+	databaseLocation: String!
+	uptime: String!
+	libraryPathsCount: Int!
+	downloadClientsCount: Int!
+	indexersCount: Int!
+	activeTranscodes: Int!
+	activeStreamingSessions: Int!
+	setupCounts: SetupCounts!
+}
+
+type UserRow {
+	id: ID!
+	username: String
+	email: String
+	role: String!
+	isOidc: Boolean!
+	lastLoginAt: String
+	insertedAt: String
+}
+
+input CreateUserInput {
+	username: String!
+	email: String!
+	password: String!
+	role: String
+}
+
+input UpdateUserRoleInput {
+	id: ID!
+	role: String!
+}
+
+input SetupAdminInput {
+	username: String!
+	email: String!
+	password: String!
 }
 
 """

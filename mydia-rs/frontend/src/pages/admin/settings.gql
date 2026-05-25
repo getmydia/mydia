@@ -1,0 +1,20 @@
+query Settings {
+  settings {
+    key
+    category
+    label
+    kind
+    value
+    source
+    description
+    placeholder
+  }
+}
+
+mutation UpdateSetting($key: String!, $value: String!) {
+  updateSetting(key: $key, value: $value) {
+    key
+    value
+    source
+  }
+}

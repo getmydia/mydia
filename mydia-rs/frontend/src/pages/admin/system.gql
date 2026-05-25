@@ -1,0 +1,21 @@
+query SystemStatus {
+  systemStatus {
+    appVersion
+    buildTarget
+    databaseAdapter
+    databaseHealth
+    databaseSize
+    databaseLocation
+    uptime
+    libraryPathsCount
+    downloadClientsCount
+    indexersCount
+    activeTranscodes
+    activeStreamingSessions
+    setupCounts {
+      userCount
+      mediaCount
+      libraryPathCount
+    }
+  }
+}

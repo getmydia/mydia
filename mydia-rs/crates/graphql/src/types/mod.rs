@@ -36,12 +36,15 @@ pub mod remote_device;
 pub mod request;
 pub mod search_result;
 pub mod season;
+pub mod setting;
 pub mod streaming;
 pub mod subtitle;
+pub mod system_status;
 pub mod toggle_favorite_result;
 pub mod tv_show;
 pub mod user;
 pub mod user_profile;
+pub mod user_row;
 
 pub use activity_event::ActivityEvent;
 pub use admin_download::DownloadRecord;
@@ -74,12 +77,15 @@ pub use remote_device::{RemoteDevice, RevokeDeviceResult};
 pub use request::MediaRequest;
 pub use search_result::{SearchResult, SearchResults};
 pub use season::Season;
+pub use setting::{ConfigSource, SettingRow};
 pub use streaming::{
     StreamingCandidate, StreamingCandidateStrategy, StreamingCandidatesResult, StreamingMetadata,
     StreamingSessionResult, StreamingStrategy,
 };
 pub use subtitle::{SubtitleFormat, SubtitleTrack};
+pub use system_status::{SetupCounts, SystemStatus};
 pub use toggle_favorite_result::ToggleFavoriteResult;
 pub use tv_show::{TvShow, TvShowConnection, TvShowEdge};
 pub use user::UserObject;
 pub use user_profile::UserProfile;
+pub use user_row::{CreateUserInput, SetupAdminInput, UpdateUserRoleInput, UserRow};

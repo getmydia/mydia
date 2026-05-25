@@ -26,7 +26,9 @@ use crate::mutations::admin::quality_profiles::QualityProfileMutations;
 use crate::mutations::admin::release_blacklist::ReleaseBlacklistMutations;
 use crate::mutations::admin::remote_access::AdminRemoteAccessMutations;
 use crate::mutations::admin::requests::AdminRequestMutations;
+use crate::mutations::admin::settings::SettingsMutations;
 use crate::mutations::admin::transcodes::TranscodeMutations;
+use crate::mutations::admin::users::UserMutations;
 use crate::mutations::api_key::ApiKeyMutations;
 use crate::mutations::auth::AuthMutations;
 use crate::mutations::download::DownloadMutations;
@@ -50,7 +52,10 @@ use crate::queries::admin::quality_profiles::QualityProfileQueries;
 use crate::queries::admin::release_blacklist::ReleaseBlacklistQueries;
 use crate::queries::admin::remote_access::AdminRemoteAccessQueries;
 use crate::queries::admin::requests::AdminRequestQueries;
+use crate::queries::admin::settings::SettingsQueries;
+use crate::queries::admin::system::SystemQueries;
 use crate::queries::admin::transcodes::TranscodeQueries;
+use crate::queries::admin::users::UserQueries;
 use crate::queries::api_key::ApiKeyQueries;
 use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
 use crate::queries::calendar::CalendarQueries;
@@ -153,6 +158,9 @@ pub struct QueryRoot(
     DownloadQueries,
     AdminDeviceQueries,
     AdminRequestQueries,
+    SettingsQueries,
+    SystemQueries,
+    UserQueries,
 );
 
 impl Default for IntrospectionQueries {
@@ -212,6 +220,8 @@ pub struct MutationRoot(
     AdminDownloadMutations,
     AdminRemoteAccessMutations,
     AdminRequestMutations,
+    SettingsMutations,
+    UserMutations,
 );
 
 /// The wired schema type alias resolvers and the axum handler

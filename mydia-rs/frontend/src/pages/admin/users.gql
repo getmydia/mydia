@@ -1,0 +1,39 @@
+query Users {
+  users {
+    id
+    username
+    email
+    role
+    isOidc
+    lastLoginAt
+    insertedAt
+  }
+}
+
+mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    id
+    username
+    email
+    role
+    isOidc
+    lastLoginAt
+    insertedAt
+  }
+}
+
+mutation UpdateUserRole($input: UpdateUserRoleInput!) {
+  updateUserRole(input: $input) {
+    id
+    username
+    email
+    role
+    isOidc
+    lastLoginAt
+    insertedAt
+  }
+}
+
+mutation DeleteUser($id: ID!) {
+  deleteUser(id: $id)
+}

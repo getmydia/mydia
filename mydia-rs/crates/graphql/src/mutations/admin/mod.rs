@@ -10,4 +10,6 @@ pub mod quality_profiles;
 pub mod release_blacklist;
 pub mod remote_access;
 pub mod requests;
+pub mod settings;
 pub mod transcodes;
+pub mod users;
