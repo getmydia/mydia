@@ -1,29 +1,8 @@
-//! axum + Dioxus router assembly.
-//!
-//! Builds the application router by composing:
-//!   1. `dioxus::server::router(mydia_rs_web::app)` — SSR + asset
-//!      pipeline + automatic registration of every `#[server]` /
-//!      `#[get]` / `#[post]` macro in `mydia-rs-web`.
-//!   2. Raw axum OIDC redirect handlers (`/auth/oidc/{login,callback}`)
-//!      merged in before the layers attach, so the trace +
-//!      catch-panic + request-id layers cover them too.
-//!   3. Session middleware, then security headers (CSP / Referrer-
-//!      Policy / X-Content-Type-Options / X-Frame-Options), request-id
-//!      propagation, panic catching, compression, and trace.
-//!
-//! Listener + bind + graceful shutdown live in `dioxus::serve`, which
-//! `main.rs` hands this Router to.
-//!
-//! Future units add: CORS allowlist construction from `ServerConfig`
-//! (currently no CORS layer — the SPA is same-origin), authentication
-//! middleware (U24), per-route rate limits (U28).
-
 use axum::{Extension, Router};
 use http::{HeaderName, HeaderValue};
-use mydia_rs_web::api as web_api;
-use mydia_rs_web::oidc as web_oidc;
-use mydia_rs_web::session::SessionLayer;
-use mydia_rs_web::{security, WebState};
+use mydia_rs_web_spa::api as web_api;
+use mydia_rs_web_spa::session_config::SessionLayer;
+use mydia_rs_web_spa::{security, WebState};
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -32,36 +11,16 @@ use tower_http::trace::TraceLayer;
 
 const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 
-/// Build the axum Router for the running app.
-///
-/// `state` is wrapped in an `axum::Extension` so server functions and
-/// WebSocket upgrade handlers in `mydia-rs-web` can pull it via
-/// `FullstackContext::extension::<WebState>()`. `session_layer`
-/// attaches the tower-sessions middleware so server fns can call
-/// `Session::get/insert` for the authenticated user's id.
-pub fn build_router(state: WebState, session_layer: SessionLayer) -> Router {
-    let router = dioxus::server::router(mydia_rs_web::app);
-    // The OIDC routes are raw axum GET handlers (302 redirects) —
-    // they can't be Dioxus server fns because the login leg writes
-    // PKCE state into the session before returning a redirect, and
-    // the callback leg reads `code`/`state` from the query string.
-    // Merge them in before the layers are attached so the trace +
-    // catch-panic + request-id layers cover them too.
-    let router = router.merge(web_oidc::router());
-    // U33 REST API surface — `/api/v1/*` and `/api/player/v1/*`.
-    // Mounted before the session layer attaches so the same trace +
-    // request-id + catch-panic layers wrap every REST request, and so
-    // the API key / media token extractor middleware (U33 follow-up)
-    // can be hung off the same router level as the session layer.
+pub fn build_router(
+    state: WebState,
+    graphql_schema: mydia_rs_graphql::MydiaSchema,
+    session_layer: SessionLayer,
+) -> Router {
+    let router = mydia_rs_web_spa::router(state.clone());
+    let router = router.merge(mydia_rs_graphql::axum_handler::router(graphql_schema));
     let router = router.merge(web_api::router(state.clone()));
     let router = session_layer.attach(router);
 
-    // CSP picks dev or prod variant at build time. The dev variant
-    // loosens script-src and style-src so dx serve's injected dev
-    // HTML (Inter from fonts.googleapis.com, inlined dev-tool JS,
-    // the hot-reload WebSocket client) doesn't trip a CSP violation
-    // that kills the wasm client at startup. Release builds keep
-    // the strict CSP.
     let csp = if cfg!(debug_assertions) {
         security::CONTENT_SECURITY_POLICY_DEV
     } else {
@@ -96,46 +55,47 @@ pub fn build_router(state: WebState, session_layer: SessionLayer) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Once;
+    use mydia_rs_jobs::storage::JobStorage;
+    use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
+    use mydia_rs_pubsub::Pubsub;
+    use mydia_rs_web_spa::session_config;
+    use sea_orm::Database;
 
-    fn ensure_empty_public_dir() {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            let dir = std::env::temp_dir().join("mydia-rs-ssr-test-public");
-            std::fs::create_dir_all(&dir).expect("create empty public dir");
-            // SAFETY: tests run in a fresh process; set_var here is
-            // before any thread that reads DIOXUS_PUBLIC_PATH starts.
-            unsafe {
-                std::env::set_var("DIOXUS_PUBLIC_PATH", &dir);
-            }
-        });
-    }
-
-    #[test]
-    fn build_router_compiles() {
-        ensure_empty_public_dir();
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("build runtime");
-        let (state, session_layer) = runtime.block_on(test_state_and_session());
-        let _router = build_router(state, session_layer);
-    }
-
-    async fn test_state_and_session() -> (WebState, SessionLayer) {
-        use mydia_rs_jobs::storage::JobStorage;
-        use mydia_rs_jobs::workers::library_scanner::LibraryScannerArgs;
-        use mydia_rs_pubsub::Pubsub;
-        use mydia_rs_web::session;
-        use sea_orm::Database;
+    async fn test_state_and_session() -> (WebState, mydia_rs_graphql::MydiaSchema, SessionLayer) {
+        use async_graphql::Schema;
+        use mydia_rs_graphql::{MutationRoot, QueryRoot, SubscriptionRoot};
 
         let db = Database::connect("sqlite::memory:")
             .await
             .expect("in-memory sqlite");
-        session::migrate(&db).await.expect("tower-sessions migrate");
+        session_config::migrate(&db)
+            .await
+            .expect("tower-sessions migrate");
         let pubsub = Pubsub::new();
         let storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
-        let session_layer = session::layer(&db, false);
-        (WebState::new(db, pubsub, storage, None), session_layer)
+        let session_layer = session_config::layer(&db, false);
+
+        let schema = Schema::build(
+            QueryRoot::default(),
+            MutationRoot::default(),
+            SubscriptionRoot,
+        )
+        .finish();
+
+        (
+            WebState::new(db, pubsub, storage, None),
+            schema,
+            session_layer,
+        )
+    }
+
+    #[test]
+    fn build_router_compiles() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build runtime");
+        let (state, schema, session_layer) = runtime.block_on(test_state_and_session());
+        let _router = build_router(state, schema, session_layer);
     }
 }

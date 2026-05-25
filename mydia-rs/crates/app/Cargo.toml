@@ -13,81 +13,27 @@ path = "src/lib.rs"
 name = "mydia-rs"
 path = "src/main.rs"
 
-# Dual-target binary per Dioxus 0.7's `dx serve` model.
-# - `--features server` (default): builds the native axum binary
-#   with the config / DB / lock / SSR bootstrap. All server-only
-#   deps live behind this feature so they're not pulled in for wasm.
-# - `--features web` (set by `dx` when targeting wasm32-unknown-unknown):
-#   builds a wasm binary that calls `dioxus::launch(mydia_rs_web::app)`.
-#   The wasm tree has NO sqlx / tokio-multi-thread / axum — those are
-#   all gated behind `server`.
-#
-# Operators don't need to know about features: `./dev rs build` and
-# `./dev rs run` (native) use the default `server` feature; `dx serve`
-# orchestrates both compiles.
-
-[features]
-default = ["server"]
-
-server = [
-    "dep:tokio",
-    "dep:clap",
-    "dep:sea-orm",
-    "dep:chrono",
-    "dep:thiserror",
-    "dep:anyhow",
-    "dep:mydia-rs-auth",
-    "dep:mydia-rs-config",
-    "dep:mydia-rs-db",
-    "dep:mydia-rs-entities",
-    "dep:mydia-rs-graphql",
-    "dep:mydia-rs-p2p",
-    "dep:mydia-rs-pubsub",
-    "dep:mydia-rs-jobs",
-    "dep:mydia-rs-streaming",
-    "dep:mydia-rs-downloads",
-    "dep:axum",
-    "dep:tower",
-    "dep:tower-http",
-    "dep:http",
-    "dioxus/server",
-    "mydia-rs-web/server",
-]
-
-web = ["dioxus/web"]
-
 [dependencies]
-# Always-on deps — both wasm and server need these.
-dioxus = { version = "0.7", features = ["fullstack", "router"] }
-mydia-rs-web = { path = "../web" }
-tracing.workspace = true
-
-# Server-only deps — gated behind the `server` feature so wasm
-# builds don't try to compile them.
-tokio = { workspace = true, optional = true }
-clap = { workspace = true, optional = true }
-sea-orm = { workspace = true, optional = true }
-chrono = { version = "0.4", optional = true, default-features = false, features = [
-    "clock",
-] }
-thiserror = { workspace = true, optional = true }
-# dioxus::serve's closure must return Result<Router, anyhow::Error>; we
-# adopt anyhow in the boot path so figment / SeaORM / runtime-lock errors
-# coerce cleanly via `?`. Server-only — wasm bin never sees it.
-anyhow = { workspace = true, optional = true }
-mydia-rs-auth = { path = "../auth", optional = true }
-mydia-rs-config = { path = "../config", optional = true }
-mydia-rs-db = { path = "../db", optional = true }
-mydia-rs-entities = { path = "../entities", optional = true }
-mydia-rs-graphql = { path = "../graphql", optional = true }
-mydia-rs-p2p = { path = "../p2p", optional = true }
-mydia-rs-pubsub = { path = "../pubsub", optional = true }
-mydia-rs-jobs = { path = "../jobs", optional = true }
-mydia-rs-streaming = { path = "../streaming", optional = true }
-mydia-rs-downloads = { path = "../downloads", optional = true }
-axum = { version = "0.8", optional = true }
-tower = { version = "0.5", optional = true }
-tower-http = { version = "0.6", optional = true, features = [
+mydia-rs-web-spa = { path = "../web-spa" }
+mydia-rs-auth = { path = "../auth" }
+mydia-rs-config = { path = "../config" }
+mydia-rs-db = { path = "../db" }
+mydia-rs-entities = { path = "../entities" }
+mydia-rs-graphql = { path = "../graphql" }
+mydia-rs-p2p = { path = "../p2p" }
+mydia-rs-pubsub = { path = "../pubsub" }
+mydia-rs-jobs = { path = "../jobs" }
+mydia-rs-streaming = { path = "../streaming" }
+mydia-rs-downloads = { path = "../downloads" }
+tokio = { workspace = true }
+clap = { workspace = true }
+sea-orm = { workspace = true }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = [
     "cors",
     "trace",
     "compression-gzip",
@@ -96,7 +42,8 @@ tower-http = { version = "0.6", optional = true, features = [
     "catch-panic",
     "set-header",
 ] }
-http = { version = "1", optional = true }
+http = "1"
+tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

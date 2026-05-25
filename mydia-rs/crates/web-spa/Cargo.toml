@@ -22,6 +22,15 @@ clap = { version = "4", features = ["derive"] }
 mydia-rs-db = { path = "../db" }
 mydia-rs-auth = { path = "../auth" }
 mydia-rs-entities = { path = "../entities" }
+mydia-rs-pubsub = { path = "../pubsub" }
+mydia-rs-jobs = { path = "../jobs" }
+mydia-rs-models = { path = "../models" }
+mydia-rs-metadata = { path = "../metadata" }
+mydia-rs-subtitles = { path = "../subtitles" }
+mydia-rs-streaming = { path = "../streaming" }
+mydia-rs-p2p = { path = "../p2p" }
+mydia-rs-downloads = { path = "../downloads" }
+mydia-rs-indexers = { path = "../indexers" }
 sea-orm = { workspace = true }
 tower-sessions = "0.14"
 tower-sessions-sqlx-store = { version = "0.15", features = ["sqlite", "postgres"] }
@@ -36,12 +45,21 @@ uuid = { version = "1", features = ["v4", "serde"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 http = "1"
+dashmap = "6"
+futures = "0.3"
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["io"] }
+bytes = "1"
+thiserror = { workspace = true }
+url = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 http = "1"
+async-trait = "0.1"
+tempfile = "3"
 
 [lints]
 workspace = true

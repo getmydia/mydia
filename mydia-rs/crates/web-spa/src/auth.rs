@@ -12,7 +12,7 @@ use openidconnect::{
 use serde::{Deserialize, Serialize};
 use tower_sessions::Session;
 
-use crate::server_state::SpaState;
+use crate::server_state::WebState;
 use crate::session_config::SESSION_KEY_USER_ID;
 
 const SESSION_KEY_OIDC_PKCE_VERIFIER: &str = "oidc.pkce_verifier";
@@ -26,7 +26,7 @@ pub fn router() -> Router {
         .route("/auth/logout", post(logout_handler))
 }
 
-async fn login_handler(Extension(state): Extension<SpaState>, session: Session) -> Response {
+async fn login_handler(Extension(state): Extension<WebState>, session: Session) -> Response {
     let Some(ctx) = state.oidc.clone() else {
         return Redirect::to("/login?error=oidc_disabled").into_response();
     };
@@ -80,7 +80,7 @@ struct CallbackParams {
 }
 
 async fn callback_handler(
-    Extension(state): Extension<SpaState>,
+    Extension(state): Extension<WebState>,
     session: Session,
     Query(params): Query<CallbackParams>,
 ) -> Response {

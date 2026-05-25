@@ -20,7 +20,6 @@ members = [
     "crates/pubsub",
     "crates/streaming",
     "crates/subtitles",
-    "crates/web",
     "crates/web-spa",
     "bin/mydia-rs-cli",
     "scripts/schema_diff",

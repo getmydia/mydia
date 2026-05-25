@@ -184,11 +184,6 @@ If you're working without the Postgres service (no edits to compile-checked quer
 
 A late-2026 audit identified ~322 runtime `sqlx::query*` calls and 0 compile-time-checked queries. Schema drift had landed twice already (e.g. `downloads.status` removed months before the Rust code stopped querying it). The conversion sweep is incremental: portable-SQL call sites become tier (a) on touch, dialect-divergent ones stay tier (b). The workspace clippy lint (`disallowed_methods` in `mydia-rs/clippy.toml`) is configured but kept at `allow` by default; converted modules opt in with `#![warn(clippy::disallowed_methods)]` so the lint surfaces backsliding without escalating to a workspace-wide block on the unconverted majority.
 
-### Dual-target binary layout
+### Binary layout
 
-`crates/app/Cargo.toml` declares two features:
-
-- `server` (the cargo default) builds the native axum binary with the config / DB / lock / SSR bootstrap. All server-only deps (`sqlx`, `tokio`, `axum`, `tower-http`, `mydia-rs-db`, ...) are gated behind this feature. Entry point: `dioxus::serve(closure)`, which owns the listener, the tokio runtime, and the devtools websocket. The closure runs the expensive boot sequence behind a `tokio::sync::OnceCell` so hot-patches reuse the cached state.
-- `web` builds a wasm binary that calls `dioxus::launch(mydia_rs_web::app)`. The wasm tree has none of the server deps, only `dioxus` (with the `web` feature) and the wasm-compatible `mydia-rs-web` library.
-
-Operators don't see this split: `./dev rs build` and `./dev rs run` go through `dx`, which orchestrates both compiles in parallel via its `@client` / `@server` channels. Plain `cargo` commands (`./dev rs check`, `./dev rs test`) hit the server target only.
+`crates/app/src/main.rs` builds a single native axum binary with `#[tokio::main]`. It boots the DB, OIDC, p2p, streaming, and download subsystems, then serves the React SPA (embedded via `mydia-rs-web-spa`), GraphQL at `/api/graphql`, and REST at `/api/v1/*` and `/api/player/v1/*` — all on one port.

@@ -41,7 +41,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Expr, ExprTrait};
 use serde_json::json;
 
-use crate::session::SESSION_KEY_USER_ID;
+use crate::session_config::SESSION_KEY_USER_ID;
 use crate::WebState;
 
 /// Marker placed on the request extensions when authentication succeeds
