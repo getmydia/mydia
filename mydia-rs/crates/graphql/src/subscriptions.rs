@@ -29,7 +29,8 @@ use mydia_rs_auth::role::Role;
 use serde::Deserialize;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::context::{CurrentUser, GraphqlAppState, GraphqlRequestContext};
+use crate::auth_guards::require_user;
+use crate::context::{CurrentUser, GraphqlAppState};
 use crate::node_id::{NodeId, NodeRef};
 use crate::types::Progress;
 
@@ -238,16 +239,6 @@ impl SubscriptionRoot {
     }
 }
 
-fn require_user<'a>(ctx: &'a Context<'_>) -> async_graphql::Result<&'a CurrentUser> {
-    ctx.data_opt::<GraphqlRequestContext>()
-        .and_then(|r| r.current_user.as_ref())
-        .ok_or_else(|| async_graphql::Error::new("Authentication required"))
-}
-
-/// Permit admins to watch any user; otherwise the `user_id` must match
-/// the subscriber's. Phoenix's resolver doesn't enforce this — we add
-/// the check so subscribing to someone else's device status by guessing
-/// the user ID is rejected with a clear error.
 fn user_can_watch_device(user: &CurrentUser, target_user_id: &str) -> bool {
     if matches!(user.role, Role::Admin) {
         return true;

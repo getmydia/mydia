@@ -7,6 +7,14 @@ const wsClient = createWSClient({
   retryAttempts: 5,
 });
 
+const customFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("X-Mydia-Client")) {
+    headers.set("X-Mydia-Client", "web");
+  }
+  return fetch(input, { ...init, headers });
+};
+
 export const clientConfig = {
   url: "/graphql",
   exchanges: [
@@ -29,5 +37,6 @@ export const clientConfig = {
   fetchOptions: {
     credentials: "include" as const,
   },
+  fetch: customFetch as typeof fetch,
   requestPolicy: "cache-and-network" as const,
 };

@@ -21,6 +21,7 @@
 //!   `Mydia.Media`, `Mydia.Settings`, `Mydia.Library`,
 //!   `Mydia.Playback` context modules.
 
+pub mod auth_guards;
 pub mod axum_handler;
 pub mod context;
 pub mod metadata;

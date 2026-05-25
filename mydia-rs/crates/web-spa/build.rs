@@ -1,10 +1,10 @@
 use std::process::Command;
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=MYDIA_RS_SKIP_FRONTEND_BUILD");
+    println!("cargo:rerun-if-env-changed=SKIP_FRONTEND_BUILD");
 
-    if std::env::var("MYDIA_RS_SKIP_FRONTEND_BUILD").is_ok() {
-        println!("cargo:warning=MYDIA_RS_SKIP_FRONTEND_BUILD set, skipping frontend build");
+    if std::env::var("SKIP_FRONTEND_BUILD").is_ok() {
+        println!("cargo:warning=SKIP_FRONTEND_BUILD set, skipping frontend build");
         return;
     }
 
@@ -14,24 +14,12 @@ fn main() {
     // Emit rerun-if-changed so Cargo knows when to re-run this script.
     // Touch any of these and the frontend gets rebuilt on the next
     // `cargo build`.
-    println!(
-        "cargo:rerun-if-changed=../../frontend/package.json"
-    );
-    println!(
-        "cargo:rerun-if-changed=../../frontend/pnpm-lock.yaml"
-    );
-    println!(
-        "cargo:rerun-if-changed=../../frontend/vite.config.ts"
-    );
-    println!(
-        "cargo:rerun-if-changed=../../frontend/tsconfig.json"
-    );
-    println!(
-        "cargo:rerun-if-changed=../../frontend/index.html"
-    );
-    println!(
-        "cargo:rerun-if-changed=../../frontend/src"
-    );
+    println!("cargo:rerun-if-changed=../../frontend/package.json");
+    println!("cargo:rerun-if-changed=../../frontend/pnpm-lock.yaml");
+    println!("cargo:rerun-if-changed=../../frontend/vite.config.ts");
+    println!("cargo:rerun-if-changed=../../frontend/tsconfig.json");
+    println!("cargo:rerun-if-changed=../../frontend/index.html");
+    println!("cargo:rerun-if-changed=../../frontend/src");
 
     // Install dependencies only when node_modules is missing or outdated.
     let node_modules = frontend_dir.join("node_modules");
@@ -79,11 +67,10 @@ fn run_pnpm(dir: &std::path::Path, args: &[&str]) {
             )
         });
 
-    if !status.success() {
-        panic!(
-            "pnpm {} exited with status {}",
-            args.join(" "),
-            status.code().unwrap_or(-1)
-        );
-    }
+    assert!(
+        status.success(),
+        "pnpm {} exited with status {}",
+        args.join(" "),
+        status.code().unwrap_or(-1)
+    );
 }

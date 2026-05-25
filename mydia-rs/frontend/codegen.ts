@@ -13,6 +13,10 @@ const config: CodegenConfig = {
           },
         },
       ],
+      presetConfig: {
+        gqlTagName: "gql",
+        fragmentMasking: { unmaskFunctionName: "getFragmentData" },
+      },
       config: {
         strictScalars: true,
         scalars: {

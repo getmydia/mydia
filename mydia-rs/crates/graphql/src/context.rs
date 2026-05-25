@@ -62,6 +62,12 @@ pub struct CurrentUser {
     pub role: Role,
 }
 
+impl CurrentUser {
+    pub fn is_admin(&self) -> bool {
+        matches!(self.role, Role::Admin)
+    }
+}
+
 /// Per-request additions the axum handler attaches before invoking
 /// `Schema::execute`. The handler builds this from extractors (session
 /// cookie, API-key header, media-token header) and merges it into the

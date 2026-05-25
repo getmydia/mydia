@@ -1,12 +1,16 @@
 use axum::body::Body;
 use http::Request;
 use http_body_util::BodyExt;
-use mydia_rs_web_spa::router;
+use mydia_rs_web_spa::embed::spa_router;
 use tower::ServiceExt;
+
+fn app() -> axum::Router {
+    spa_router()
+}
 
 #[tokio::test]
 async fn serves_index_html_at_root() {
-    let app = router();
+    let app = app();
 
     let response = app
         .oneshot(Request::get("/").body(Body::empty()).unwrap())
@@ -23,7 +27,7 @@ async fn serves_index_html_at_root() {
 
 #[tokio::test]
 async fn serves_css_with_content_type() {
-    let app = router();
+    let app = app();
 
     let response = app
         .oneshot(
@@ -48,7 +52,7 @@ async fn serves_css_with_content_type() {
 
 #[tokio::test]
 async fn spa_fallback_serves_index_html_for_unknown_routes() {
-    let app = router();
+    let app = app();
 
     // Client-side route that doesn't correspond to an on-disk file should
     // receive index.html (SPA fallback) so react-router can handle it.
@@ -71,7 +75,7 @@ async fn spa_fallback_serves_index_html_for_unknown_routes() {
 
 #[tokio::test]
 async fn returns_etag_header() {
-    let app = router();
+    let app = app();
 
     let response = app
         .oneshot(Request::get("/").body(Body::empty()).unwrap())

@@ -19,6 +19,23 @@ mime_guess = "2"
 async-graphql = { version = "7", features = ["chrono", "uuid"] }
 mydia-rs-graphql = { path = "../graphql" }
 clap = { version = "4", features = ["derive"] }
+mydia-rs-db = { path = "../db" }
+mydia-rs-auth = { path = "../auth" }
+mydia-rs-entities = { path = "../entities" }
+sea-orm = { workspace = true }
+tower-sessions = "0.14"
+tower-sessions-sqlx-store = { version = "0.15", features = ["sqlite", "postgres"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "postgres"] }
+time = "0.3"
+openidconnect = { version = "3", default-features = false, features = ["reqwest", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { workspace = true }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+http = "1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
