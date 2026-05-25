@@ -1,0 +1,33 @@
+query MediaServers {
+  mediaServers {
+    id
+    name
+    type
+    enabled
+    url
+    token
+    connectionSettings
+    insertedAt
+    updatedAt
+  }
+}
+
+mutation CreateMediaServer($input: MediaServerInput!) {
+  createMediaServer(input: $input) {
+    id
+    name
+    type
+    enabled
+  }
+}
+
+mutation DeleteMediaServer($id: ID!) {
+  deleteMediaServer(id: $id)
+}
+
+mutation ToggleMediaServer($id: ID!, $enabled: Boolean!) {
+  toggleMediaServer(id: $id, enabled: $enabled) {
+    id
+    enabled
+  }
+}

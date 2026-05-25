@@ -1,0 +1,47 @@
+query DownloadClients {
+  downloadClients {
+    id
+    name
+    type
+    enabled
+    priority
+    host
+    port
+    useSsl
+    urlBase
+    username
+    password
+    apiKey
+    category
+    downloadDirectory
+    connectionSettings
+    removeCompleted
+    incompleteGraceMinutes
+    insertedAt
+    updatedAt
+  }
+}
+
+mutation CreateDownloadClient($input: DownloadClientInput!) {
+  createDownloadClient(input: $input) {
+    id
+    name
+    type
+    enabled
+  }
+}
+
+mutation DeleteDownloadClient($id: ID!) {
+  deleteDownloadClient(id: $id)
+}
+
+mutation ToggleDownloadClient($id: ID!, $enabled: Boolean!) {
+  toggleDownloadClient(id: $id, enabled: $enabled) {
+    id
+    enabled
+  }
+}
+
+mutation TestDownloadClient($id: ID!) {
+  testDownloadClient(id: $id)
+}

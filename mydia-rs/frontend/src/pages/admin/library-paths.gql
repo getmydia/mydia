@@ -1,0 +1,30 @@
+query LibraryPaths {
+  libraryPaths {
+    id
+    path
+    type
+    monitored
+    scanInterval
+    lastScanAt
+    autoOrganize
+    autoImport
+    writeNfo
+    autoRename
+  }
+}
+
+mutation CreateLibraryPath($input: LibraryPathInput!) {
+  createLibraryPath(input: $input) {
+    id
+    path
+    type
+  }
+}
+
+mutation DeleteLibraryPath($id: ID!) {
+  deleteLibraryPath(id: $id)
+}
+
+mutation TriggerScan($pathId: ID!) {
+  triggerScan(pathId: $pathId)
+}

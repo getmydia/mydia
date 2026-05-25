@@ -13,6 +13,7 @@
 //! - [`remote_access`] — `generate_claim_code` / `refresh_media_token`
 //!   (U14 stubs; U29 real).
 
+pub mod admin;
 pub mod api_key;
 pub mod auth;
 pub mod device;

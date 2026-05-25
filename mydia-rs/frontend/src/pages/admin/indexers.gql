@@ -1,0 +1,43 @@
+query Indexers {
+  indexers {
+    id
+    name
+    type
+    enabled
+    priority
+    baseUrl
+    apiKey
+    rateLimit
+    connectionSettings
+    envName
+    indexerIds
+    categories
+    minPostAgeMinutes
+    insertedAt
+    updatedAt
+  }
+}
+
+mutation CreateIndexer($input: IndexerInput!) {
+  createIndexer(input: $input) {
+    id
+    name
+    type
+    enabled
+  }
+}
+
+mutation DeleteIndexer($id: ID!) {
+  deleteIndexer(id: $id)
+}
+
+mutation ToggleIndexer($id: ID!, $enabled: Boolean!) {
+  toggleIndexer(id: $id, enabled: $enabled) {
+    id
+    enabled
+  }
+}
+
+mutation TestIndexer($id: ID!) {
+  testIndexer(id: $id)
+}

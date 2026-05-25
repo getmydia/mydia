@@ -14,6 +14,13 @@
 use async_graphql::{MergedObject, Object, Schema, SchemaBuilder, SimpleObject, ID};
 
 use crate::context::{GraphqlAppState, GraphqlRequestContext};
+use crate::mutations::admin::download_clients::DownloadClientMutations;
+use crate::mutations::admin::import_lists::ImportListMutations;
+use crate::mutations::admin::indexers::IndexerMutations;
+use crate::mutations::admin::library_paths::LibraryPathMutations;
+use crate::mutations::admin::media_servers::MediaServerMutations;
+use crate::mutations::admin::quality_profiles::QualityProfileMutations;
+use crate::mutations::admin::release_blacklist::ReleaseBlacklistMutations;
 use crate::mutations::api_key::ApiKeyMutations;
 use crate::mutations::auth::AuthMutations;
 use crate::mutations::device::DeviceMutations;
@@ -22,6 +29,13 @@ use crate::mutations::playback::PlaybackMutations;
 use crate::mutations::remote_access::RemoteAccessMutations;
 use crate::mutations::streaming::StreamingMutations;
 use crate::node_id::NodeId;
+use crate::queries::admin::download_clients::DownloadClientQueries;
+use crate::queries::admin::import_lists::ImportListQueries;
+use crate::queries::admin::indexers::IndexerQueries;
+use crate::queries::admin::library_paths::LibraryPathQueries;
+use crate::queries::admin::media_servers::MediaServerQueries;
+use crate::queries::admin::quality_profiles::QualityProfileQueries;
+use crate::queries::admin::release_blacklist::ReleaseBlacklistQueries;
 use crate::queries::api_key::ApiKeyQueries;
 use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
 use crate::queries::collection::CollectionQueries;
@@ -104,6 +118,13 @@ pub struct QueryRoot(
     DeviceQueries,
     CollectionQueries,
     RemoteAccessQueries,
+    LibraryPathQueries,
+    IndexerQueries,
+    DownloadClientQueries,
+    ImportListQueries,
+    MediaServerQueries,
+    QualityProfileQueries,
+    ReleaseBlacklistQueries,
 );
 
 impl Default for IntrospectionQueries {
@@ -148,6 +169,13 @@ pub struct MutationRoot(
     DeviceMutations,
     DownloadMutations,
     RemoteAccessMutations,
+    LibraryPathMutations,
+    IndexerMutations,
+    DownloadClientMutations,
+    ImportListMutations,
+    MediaServerMutations,
+    QualityProfileMutations,
+    ReleaseBlacklistMutations,
 );
 
 /// The wired schema type alias resolvers and the axum handler

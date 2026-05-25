@@ -1,0 +1,37 @@
+query QualityProfiles {
+  qualityProfiles {
+    id
+    name
+    upgradesAllowed
+    upgradeUntilQuality
+    qualities
+    description
+    isSystem
+    version
+    sourceUrl
+    lastSyncedAt
+    qualityStandards
+    metadataPreferences
+    customizations
+    insertedAt
+    updatedAt
+  }
+}
+
+mutation CreateQualityProfile($input: QualityProfileInput!) {
+  createQualityProfile(input: $input) {
+    id
+    name
+  }
+}
+
+mutation UpdateQualityProfile($id: ID!, $input: QualityProfileInput!) {
+  updateQualityProfile(id: $id, input: $input) {
+    id
+    name
+  }
+}
+
+mutation DeleteQualityProfile($id: ID!) {
+  deleteQualityProfile(id: $id)
+}

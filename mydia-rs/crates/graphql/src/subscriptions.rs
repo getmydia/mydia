@@ -29,7 +29,7 @@ use mydia_rs_auth::role::Role;
 use serde::Deserialize;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::auth_guards::require_user;
+use crate::auth_guards::{require_admin, require_user};
 use crate::context::{CurrentUser, GraphqlAppState};
 use crate::node_id::{NodeId, NodeRef};
 use crate::types::Progress;
@@ -236,6 +236,84 @@ impl SubscriptionRoot {
             }
         });
         Ok(stream)
+    }
+
+    async fn library_scan_progress(
+        &self,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<impl Stream<Item = async_graphql::Result<LibraryScanEvent>>> {
+        require_admin(ctx)?;
+        let state = ctx.data::<GraphqlAppState>()?;
+        let rx = state.pubsub.subscribe("library_scanner");
+
+        let stream = BroadcastStream::new(rx).filter_map(|res| async move {
+            match res {
+                Ok(event) => {
+                    let parsed: Result<LibraryScanPayload, _> =
+                        serde_json::from_value(event.payload);
+                    match parsed {
+                        Ok(payload) => Some(Ok(LibraryScanEvent::from(payload))),
+                        Err(err) => {
+                            tracing::warn!(
+                                target: "mydia_rs_graphql::subscriptions",
+                                error = %err,
+                                "dropping malformed library-scan payload"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        target: "mydia_rs_graphql::subscriptions",
+                        error = %err,
+                        "library-scan broadcast receiver lagged"
+                    );
+                    None
+                }
+            }
+        });
+        Ok(stream)
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "LibraryScanEvent")]
+pub struct LibraryScanEvent {
+    pub stage: String,
+    pub current: Option<i32>,
+    pub total: Option<i32>,
+    pub files_found: Option<i32>,
+    pub path_id: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LibraryScanPayload {
+    #[serde(default)]
+    stage: String,
+    #[serde(default)]
+    current: Option<i32>,
+    #[serde(default)]
+    total: Option<i32>,
+    #[serde(default)]
+    files_found: Option<i32>,
+    #[serde(default)]
+    path_id: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+impl From<LibraryScanPayload> for LibraryScanEvent {
+    fn from(value: LibraryScanPayload) -> Self {
+        Self {
+            stage: value.stage,
+            current: value.current,
+            total: value.total,
+            files_found: value.files_found,
+            path_id: value.path_id,
+            error: value.error,
+        }
     }
 }
 

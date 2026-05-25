@@ -85,6 +85,47 @@ type DeviceStatusEvent {
 	event: DeviceEventType!
 }
 
+type DownloadClient {
+	id: ID!
+	name: String!
+	type: String!
+	enabled: Boolean!
+	priority: Int
+	host: String
+	port: Int
+	useSsl: Boolean
+	urlBase: String
+	username: String
+	password: String
+	apiKey: String
+	category: String
+	downloadDirectory: String
+	connectionSettings: String
+	removeCompleted: Boolean!
+	incompleteGraceMinutes: Int
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+}
+
+input DownloadClientInput {
+	name: String!
+	type: String!
+	enabled: Boolean
+	priority: Int
+	host: String
+	port: Int
+	useSsl: Boolean
+	urlBase: String
+	username: String
+	password: String
+	apiKey: String
+	category: String
+	downloadDirectory: String
+	connectionSettings: String
+	removeCompleted: Boolean
+	incompleteGraceMinutes: Int
+}
+
 type DownloadJobStatus {
 	jobId: ID!
 	status: String!
@@ -139,6 +180,69 @@ type Episode {
 	show: TvShow
 }
 
+type ImportList {
+	id: ID!
+	name: String!
+	type: String!
+	mediaType: String!
+	enabled: Boolean!
+	syncInterval: Int!
+	autoAdd: Boolean!
+	monitored: Boolean!
+	lastSyncedAt: DateTime
+	syncError: String
+	qualityProfileId: String
+	libraryPathId: String
+	targetCollectionId: String
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+}
+
+input ImportListInput {
+	name: String!
+	type: String!
+	mediaType: String!
+	enabled: Boolean
+	syncInterval: Int
+	autoAdd: Boolean
+	monitored: Boolean
+	qualityProfileId: String
+	libraryPathId: String
+}
+
+type Indexer {
+	id: ID!
+	name: String!
+	type: String!
+	enabled: Boolean!
+	priority: Int
+	baseUrl: String
+	apiKey: String
+	rateLimit: Int
+	connectionSettings: String
+	envName: String
+	indexerIds: [String!]
+	categories: [String!]
+	minPostAgeMinutes: Int
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+}
+
+input IndexerInput {
+	name: String!
+	type: String!
+	enabled: Boolean
+	priority: Int
+	baseUrl: String
+	apiKey: String
+	rateLimit: Int
+	connectionSettings: String
+	envName: String
+	indexerIds: [String!]
+	categories: [String!]
+	minPostAgeMinutes: Int
+}
+
 type LibraryPath {
 	"""
 	Encoded `library:<uuid>` form.
@@ -153,6 +257,23 @@ type LibraryPath {
 	autoImport: Boolean!
 	writeNfo: Boolean!
 	autoRename: Boolean!
+}
+
+input LibraryPathInput {
+	path: String!
+	type: String!
+	monitored: Boolean
+	scanInterval: Int
+	qualityProfileId: String
+}
+
+type LibraryScanEvent {
+	stage: String!
+	current: Int
+	total: Int
+	filesFound: Int
+	pathId: String
+	error: String
 }
 
 """
@@ -226,6 +347,27 @@ type MediaFile {
 	contract holds for the parity replay harness.
 	"""
 	subtitles: [SubtitleTrack!]!
+}
+
+type MediaServer {
+	id: ID!
+	name: String!
+	type: String!
+	enabled: Boolean!
+	url: String!
+	token: String
+	connectionSettings: String
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+}
+
+input MediaServerInput {
+	name: String!
+	type: String!
+	enabled: Boolean
+	url: String!
+	token: String
+	connectionSettings: String
 }
 
 type MediaToken {
@@ -385,6 +527,28 @@ type Mutation {
 	cancelDownloadJob(jobId: ID!): CancelDownloadResult!
 	generateClaimCode: ClaimCode!
 	refreshMediaToken(token: String!): MediaToken!
+	createLibraryPath(input: LibraryPathInput!): LibraryPath!
+	deleteLibraryPath(id: ID!): Boolean!
+	triggerScan(pathId: ID!): Boolean!
+	createIndexer(input: IndexerInput!): Indexer!
+	deleteIndexer(id: ID!): Boolean!
+	toggleIndexer(id: ID!, enabled: Boolean!): Indexer
+	testIndexer(id: ID!): String!
+	createDownloadClient(input: DownloadClientInput!): DownloadClient!
+	deleteDownloadClient(id: ID!): Boolean!
+	toggleDownloadClient(id: ID!, enabled: Boolean!): DownloadClient
+	testDownloadClient(id: ID!): String!
+	createImportList(input: ImportListInput!): ImportList!
+	deleteImportList(id: ID!): Boolean!
+	toggleImportList(id: ID!, enabled: Boolean!): ImportList
+	createMediaServer(input: MediaServerInput!): MediaServer!
+	deleteMediaServer(id: ID!): Boolean!
+	toggleMediaServer(id: ID!, enabled: Boolean!): MediaServer
+	createQualityProfile(input: QualityProfileInput!): QualityProfile!
+	updateQualityProfile(id: ID!, input: QualityProfileInput!): QualityProfile
+	deleteQualityProfile(id: ID!): Boolean!
+	createReleaseBlacklistEntry(input: ReleaseBlacklistInput!): ReleaseBlacklistEntry!
+	deleteReleaseBlacklistEntry(id: ID!): Boolean!
 }
 
 """
@@ -426,6 +590,35 @@ type Progress {
 	percentage: Float
 	watched: Boolean!
 	lastWatchedAt: DateTime
+}
+
+type QualityProfile {
+	id: ID!
+	name: String!
+	upgradesAllowed: Boolean!
+	upgradeUntilQuality: String
+	qualities: String!
+	description: String
+	isSystem: Boolean!
+	version: Int
+	sourceUrl: String
+	lastSyncedAt: DateTime
+	qualityStandards: String
+	metadataPreferences: String
+	customizations: String
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+}
+
+input QualityProfileInput {
+	name: String!
+	upgradesAllowed: Boolean
+	upgradeUntilQuality: String
+	qualities: String!
+	description: String
+	qualityStandards: String
+	metadataPreferences: String
+	customizations: String
 }
 
 """
@@ -481,10 +674,7 @@ type Query {
 	List all library paths.
 	"""
 	libraries: [LibraryPath!]!
-	"""
-	Get a specific library path.
-	"""
-	libraryPath(id: ID!): LibraryPath!
+	libraryPath(id: ID!): LibraryPath
 	"""
 	List episodes for a given show + season number.
 	"""
@@ -535,6 +725,19 @@ type Query {
 	collection(id: ID!): Collection!
 	collectionItems(collectionId: ID!, first: Int! = 50): [RecentlyAddedItem!]!
 	remoteAccessStatus: RemoteAccessStatus!
+	libraryPaths: [LibraryPath!]!
+	indexers: [Indexer!]!
+	indexer(id: ID!): Indexer
+	downloadClients: [DownloadClient!]!
+	downloadClient(id: ID!): DownloadClient
+	importLists: [ImportList!]!
+	importList(id: ID!): ImportList
+	mediaServers: [MediaServer!]!
+	mediaServer(id: ID!): MediaServer
+	qualityProfiles: [QualityProfile!]!
+	qualityProfile(id: ID!): QualityProfile
+	releaseBlacklist: [ReleaseBlacklistEntry!]!
+	releaseBlacklistEntry(id: ID!): ReleaseBlacklistEntry
 }
 
 """
@@ -548,6 +751,23 @@ type RecentlyAddedItem {
 	year: Int
 	artwork: Artwork
 	addedAt: DateTime!
+}
+
+type ReleaseBlacklistEntry {
+	id: ID!
+	indexer: String!
+	guid: String!
+	title: String!
+	failureReason: String!
+	expiresAt: DateTime
+	insertedAt: DateTime!
+}
+
+input ReleaseBlacklistInput {
+	indexer: String!
+	guid: String!
+	title: String!
+	failureReason: String!
 }
 
 type RemoteAccessStatus {
@@ -713,6 +933,7 @@ type SubscriptionRoot {
 	being watched, or an Admin.
 	"""
 	deviceStatusChanged(userId: ID!): DeviceStatusEvent!
+	libraryScanProgress: LibraryScanEvent!
 }
 
 type SubtitleTrack {

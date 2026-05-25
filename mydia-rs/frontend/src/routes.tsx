@@ -3,6 +3,13 @@ import { RequireAuth, RequireAdmin } from "./lib/auth";
 import { AdminLayout } from "./layouts/admin-layout";
 import { UserLayout } from "./layouts/user-layout";
 import { LoginPage } from "./pages/login";
+import { LibraryPathsPage } from "./pages/admin/library-paths";
+import { IndexersPage } from "./pages/admin/indexers";
+import { DownloadClientsPage } from "./pages/admin/download-clients";
+import { ImportListsPage } from "./pages/admin/import-lists";
+import { MediaServersPage } from "./pages/admin/media-servers";
+import { QualityProfilesPage } from "./pages/admin/quality-profiles";
+import { ReleaseBlacklistPage } from "./pages/admin/release-blacklist";
 
 function NotFound() {
   return (
@@ -82,31 +89,31 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "admin/library-paths",
-        element: <PagePlaceholder title="Library Paths" />,
+        element: <LibraryPathsPage />,
       },
       {
         path: "admin/indexers",
-        element: <PagePlaceholder title="Indexers" />,
+        element: <IndexersPage />,
       },
       {
         path: "admin/download-clients",
-        element: <PagePlaceholder title="Download Clients" />,
+        element: <DownloadClientsPage />,
       },
       {
         path: "admin/import-lists",
-        element: <PagePlaceholder title="Import Lists" />,
+        element: <ImportListsPage />,
       },
       {
         path: "admin/media-servers",
-        element: <PagePlaceholder title="Media Servers" />,
+        element: <MediaServersPage />,
       },
       {
         path: "admin/quality-profiles",
-        element: <PagePlaceholder title="Quality Profiles" />,
+        element: <QualityProfilesPage />,
       },
       {
         path: "admin/release-blacklist",
-        element: <PagePlaceholder title="Release Blacklist" />,
+        element: <ReleaseBlacklistPage />,
       },
       {
         path: "admin/jobs",

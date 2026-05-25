@@ -4907,6 +4907,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_json",
+ "serial_test",
  "sha1",
  "strsim",
  "tempfile",

@@ -1,0 +1,39 @@
+query ImportLists {
+  importLists {
+    id
+    name
+    type
+    mediaType
+    enabled
+    syncInterval
+    autoAdd
+    monitored
+    lastSyncedAt
+    syncError
+    qualityProfileId
+    libraryPathId
+    targetCollectionId
+    insertedAt
+    updatedAt
+  }
+}
+
+mutation CreateImportList($input: ImportListInput!) {
+  createImportList(input: $input) {
+    id
+    name
+    type
+    enabled
+  }
+}
+
+mutation DeleteImportList($id: ID!) {
+  deleteImportList(id: $id)
+}
+
+mutation ToggleImportList($id: ID!, $enabled: Boolean!) {
+  toggleImportList(id: $id, enabled: $enabled) {
+    id
+    enabled
+  }
+}

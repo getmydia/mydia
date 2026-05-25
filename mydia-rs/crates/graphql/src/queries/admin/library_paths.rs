@@ -1,0 +1,41 @@
+use async_graphql::{Context, Object, ID};
+use mydia_rs_db::types::UuidText;
+use sea_orm::entity::prelude::*;
+
+use crate::auth_guards::require_admin;
+use crate::context::GraphqlAppState;
+use crate::types::LibraryPath;
+
+fn parse_id(id: &str) -> async_graphql::Result<UuidText> {
+    uuid::Uuid::parse_str(id)
+        .map(UuidText)
+        .map_err(|_| async_graphql::Error::new("Invalid id format"))
+}
+
+#[derive(Default)]
+pub struct LibraryPathQueries;
+
+#[Object]
+impl LibraryPathQueries {
+    async fn library_paths(&self, ctx: &Context<'_>) -> async_graphql::Result<Vec<LibraryPath>> {
+        require_admin(ctx)?;
+        let state = ctx.data::<GraphqlAppState>()?;
+        let rows = mydia_rs_entities::library_paths::Entity::find()
+            .all(&state.db)
+            .await?;
+        Ok(rows.iter().filter_map(LibraryPath::from_row).collect())
+    }
+
+    async fn library_path(
+        &self,
+        ctx: &Context<'_>,
+        id: ID,
+    ) -> async_graphql::Result<Option<LibraryPath>> {
+        require_admin(ctx)?;
+        let state = ctx.data::<GraphqlAppState>()?;
+        let row = mydia_rs_entities::library_paths::Entity::find_by_id(parse_id(id.as_str())?)
+            .one(&state.db)
+            .await?;
+        Ok(row.as_ref().and_then(LibraryPath::from_row))
+    }
+}
