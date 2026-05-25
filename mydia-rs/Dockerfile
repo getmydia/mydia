@@ -34,11 +34,16 @@ RUN apk add --no-cache \
     pkgconfig \
     openssl-dev \
     openssl-libs-static \
-    curl
+    curl \
+    nodejs \
+    npm
+
+# Enable pnpm via corepack (shipped with Node 22+).
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Tailwind v4 standalone binary — same minor pin as the dev image and
 # the Phoenix `:tailwind` package. Compiles `crates/web/assets/tailwind.css`
-# (Tailwind + DaisyUI source) into `tailwind.built.css`, which the asset!()
+# into `tailwind.built.css`, which the asset!()
 # macro in crates/web/src/app.rs references. Without this step the
 # Rust compile fails (asset! verifies file existence at compile time).
 ARG TAILWIND_VERSION=4.1.18
@@ -62,6 +67,7 @@ WORKDIR /build
 COPY mydia-rs/Cargo.toml mydia-rs/Cargo.lock mydia-rs/rust-toolchain.toml ./
 COPY mydia-rs/crates ./crates
 COPY mydia-rs/bin ./bin
+COPY mydia-rs/frontend ./frontend
 # Reference path-dep for the p2p core lives outside mydia-rs/ so the
 # directory layout in the image mirrors the repo's directory layout.
 # Copy it in once we wire crates/p2p (U29).

@@ -1,0 +1,7 @@
+# Frontend build artifacts are rebuilt inside the container by build.rs.
+# Excluding them keeps the build context lean.
+mydia-rs/frontend/node_modules
+mydia-rs/frontend/dist
+
+# Rust build artifacts
+mydia-rs/target
