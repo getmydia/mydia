@@ -20,6 +20,13 @@ import { ImportListsPage } from "./pages/admin/import-lists";
 import { MediaServersPage } from "./pages/admin/media-servers";
 import { QualityProfilesPage } from "./pages/admin/quality-profiles";
 import { ReleaseBlacklistPage } from "./pages/admin/release-blacklist";
+import { JobsPage } from "./pages/admin/jobs";
+import { TranscodesPage } from "./pages/admin/transcodes";
+import { DownloadsPage } from "./pages/admin/downloads";
+import { DevicesPage } from "./pages/admin/devices";
+import { RemoteAccessPage } from "./pages/admin/remote-access";
+import { RequestsPage } from "./pages/admin/requests";
+import { ActivityPage } from "./pages/admin/activity";
 
 function NotFound() {
   return (
@@ -127,31 +134,31 @@ export const router = createBrowserRouter([
       },
       {
         path: "admin/jobs",
-        element: <PagePlaceholder title="Jobs" />,
+        element: <JobsPage />,
       },
       {
         path: "admin/transcodes",
-        element: <PagePlaceholder title="Transcodes" />,
+        element: <TranscodesPage />,
       },
       {
         path: "admin/downloads",
-        element: <PagePlaceholder title="Downloads" />,
+        element: <DownloadsPage />,
       },
       {
         path: "admin/devices",
-        element: <PagePlaceholder title="Devices" />,
+        element: <DevicesPage />,
       },
       {
         path: "admin/remote-access",
-        element: <PagePlaceholder title="Remote Access" />,
+        element: <RemoteAccessPage />,
       },
       {
         path: "admin/requests",
-        element: <PagePlaceholder title="Requests" />,
+        element: <RequestsPage />,
       },
       {
         path: "admin/activity",
-        element: <PagePlaceholder title="Activity" />,
+        element: <ActivityPage />,
       },
       {
         path: "admin/settings",

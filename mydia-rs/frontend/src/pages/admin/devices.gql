@@ -1,0 +1,24 @@
+query DevicesByUser($userId: ID!) {
+  devicesByUser(userId: $userId) {
+    id
+    deviceName
+    platform
+    lastSeenAt
+    isRevoked
+    createdAt
+  }
+}
+
+mutation RevokeDevice($id: ID!) {
+  revokeDevice(id: $id) {
+    success
+    device {
+      id
+      deviceName
+      platform
+      lastSeenAt
+      isRevoked
+      createdAt
+    }
+  }
+}

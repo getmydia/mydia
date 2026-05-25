@@ -1,0 +1,22 @@
+query AdminTranscodes {
+  transcodes {
+    id
+    mediaFileId
+    resolution
+    status
+    progress
+    outputPath
+    fileSize
+    error
+    startedAt
+    completedAt
+    insertedAt
+    updatedAt
+    type
+    userId
+  }
+}
+
+mutation CancelTranscode($id: ID!) {
+  cancelTranscode(id: $id)
+}

@@ -14,16 +14,21 @@
 use async_graphql::{MergedObject, Object, Schema, SchemaBuilder, SimpleObject, ID};
 
 use crate::context::{GraphqlAppState, GraphqlRequestContext};
+use crate::mutations::admin::devices::AdminDeviceMutations;
 use crate::mutations::admin::download_clients::DownloadClientMutations;
+use crate::mutations::admin::downloads::AdminDownloadMutations;
 use crate::mutations::admin::import_lists::ImportListMutations;
 use crate::mutations::admin::indexers::IndexerMutations;
+use crate::mutations::admin::jobs::JobMutations;
 use crate::mutations::admin::library_paths::LibraryPathMutations;
 use crate::mutations::admin::media_servers::MediaServerMutations;
 use crate::mutations::admin::quality_profiles::QualityProfileMutations;
 use crate::mutations::admin::release_blacklist::ReleaseBlacklistMutations;
+use crate::mutations::admin::remote_access::AdminRemoteAccessMutations;
+use crate::mutations::admin::requests::AdminRequestMutations;
+use crate::mutations::admin::transcodes::TranscodeMutations;
 use crate::mutations::api_key::ApiKeyMutations;
 use crate::mutations::auth::AuthMutations;
-use crate::mutations::device::DeviceMutations;
 use crate::mutations::download::DownloadMutations;
 use crate::mutations::media::MediaMutations;
 use crate::mutations::playback::PlaybackMutations;
@@ -33,13 +38,19 @@ use crate::mutations::requests::RequestMutations;
 use crate::mutations::streaming::StreamingMutations;
 use crate::node_id::NodeId;
 use crate::queries::activity::ActivityQueries;
+use crate::queries::admin::devices::AdminDeviceQueries;
 use crate::queries::admin::download_clients::DownloadClientQueries;
+use crate::queries::admin::downloads::DownloadQueries;
 use crate::queries::admin::import_lists::ImportListQueries;
 use crate::queries::admin::indexers::IndexerQueries;
+use crate::queries::admin::jobs::JobQueries;
 use crate::queries::admin::library_paths::LibraryPathQueries;
 use crate::queries::admin::media_servers::MediaServerQueries;
 use crate::queries::admin::quality_profiles::QualityProfileQueries;
 use crate::queries::admin::release_blacklist::ReleaseBlacklistQueries;
+use crate::queries::admin::remote_access::AdminRemoteAccessQueries;
+use crate::queries::admin::requests::AdminRequestQueries;
+use crate::queries::admin::transcodes::TranscodeQueries;
 use crate::queries::api_key::ApiKeyQueries;
 use crate::queries::browse::{resolve_node, BrowseQueries, NodeBlob};
 use crate::queries::calendar::CalendarQueries;
@@ -48,7 +59,6 @@ use crate::queries::dashboard::DashboardQueries;
 use crate::queries::device::DeviceQueries;
 use crate::queries::discovery::DiscoveryQueries;
 use crate::queries::profile::ProfileQueries;
-use crate::queries::remote_access::RemoteAccessQueries;
 use crate::queries::requests::RequestQueries;
 use crate::queries::search::SearchQueries;
 use crate::queries::streaming::StreamingQueries;
@@ -125,7 +135,7 @@ pub struct QueryRoot(
     ApiKeyQueries,
     DeviceQueries,
     CollectionQueries,
-    RemoteAccessQueries,
+    AdminRemoteAccessQueries,
     DashboardQueries,
     CalendarQueries,
     ActivityQueries,
@@ -138,6 +148,11 @@ pub struct QueryRoot(
     MediaServerQueries,
     QualityProfileQueries,
     ReleaseBlacklistQueries,
+    JobQueries,
+    TranscodeQueries,
+    DownloadQueries,
+    AdminDeviceQueries,
+    AdminRequestQueries,
 );
 
 impl Default for IntrospectionQueries {
@@ -179,7 +194,7 @@ pub struct MutationRoot(
     StreamingMutations,
     AuthMutations,
     ApiKeyMutations,
-    DeviceMutations,
+    AdminDeviceMutations,
     DownloadMutations,
     RemoteAccessMutations,
     ProfileMutations,
@@ -192,6 +207,11 @@ pub struct MutationRoot(
     MediaServerMutations,
     QualityProfileMutations,
     ReleaseBlacklistMutations,
+    JobMutations,
+    TranscodeMutations,
+    AdminDownloadMutations,
+    AdminRemoteAccessMutations,
+    AdminRequestMutations,
 );
 
 /// The wired schema type alias resolvers and the axum handler

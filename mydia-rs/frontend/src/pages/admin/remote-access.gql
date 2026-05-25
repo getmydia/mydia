@@ -1,0 +1,22 @@
+query PairedDevices {
+  pairedDevices {
+    id
+    deviceName
+    platform
+    lastSeenAt
+    isRevoked
+    createdAt
+  }
+}
+
+query RemoteAccessStatusQuery {
+  remoteAccessStatus {
+    enabled
+    endpointAddr
+    connectedPeers
+  }
+}
+
+mutation RevokePairedDevice($id: ID!) {
+  revokePairedDevice(id: $id)
+}

@@ -1,0 +1,30 @@
+query AdminRequests($status: String) {
+  adminRequests(status: $status) {
+    id
+    mediaType
+    title
+    originalTitle
+    year
+    tmdbId
+    imdbId
+    status
+    requesterNotes
+    adminNotes
+    rejectionReason
+    approvedAt
+    rejectedAt
+    requesterId
+    approvedById
+    mediaItemId
+    insertedAt
+    updatedAt
+  }
+}
+
+mutation ApproveRequest($id: ID!, $notes: String) {
+  approveRequest(id: $id, notes: $notes)
+}
+
+mutation RejectRequest($id: ID!, $notes: String) {
+  rejectRequest(id: $id, notes: $notes)
+}

@@ -593,6 +593,13 @@ type Mutation {
 	deleteMedia(id: ID!): Boolean!
 	addMediaToLibrary(input: AddMediaToLibraryInput!): Movie!
 	finalizeImport(input: FinalizeImportInput!): Boolean!
+	triggerJob(name: String!): Boolean!
+	cancelTranscode(id: ID!): Boolean!
+	cancelDownload(id: ID!): Boolean!
+	manuallyMatchDownload(id: ID!, mediaId: ID!): Boolean!
+	revokePairedDevice(id: ID!): Boolean!
+	approveRequest(id: ID!, notes: String): Boolean!
+	rejectRequest(id: ID!, notes: String): Boolean!
 }
 
 """
@@ -858,6 +865,13 @@ type Query {
 	activity(filter: ActivityFilter, limit: Int! = 50): [ActivityEvent!]!
 	currentProfile: UserProfile!
 	myRequests: [MediaRequest!]!
+	workerSummary: [WorkerSummary!]!
+	recentJobEvents(limit: Int! = 50): [JobEvent!]!
+	transcodes: [TranscodeJob!]!
+	downloads(filter: DownloadFilter!): [DownloadRecord!]!
+	devicesByUser(userId: ID!): [RemoteDevice!]!
+	pairedDevices: [RemoteDevice!]!
+	adminRequests(status: String): [MediaRequest!]!
 }
 
 """
@@ -1054,6 +1068,9 @@ type SubscriptionRoot {
 	"""
 	deviceStatusChanged(userId: ID!): DeviceStatusEvent!
 	libraryScanProgress: LibraryScanEvent!
+	downloadEvents: DownloadEvent!
+	jobEvents: JobStatusEvent!
+	transcodeEvents: TranscodeStatusEvent!
 }
 
 type SubtitleTrack {
@@ -1157,6 +1174,99 @@ type Viewer {
 	id: ID!
 	username: String!
 	role: String!
+}
+
+type WorkerSummary {
+	queue: String!
+	worker: String!
+	count: Int!
+	maxPriority: Int
+	oldestScheduledAt: DateTime
+}
+
+type JobEvent {
+	id: Int!
+	state: String!
+	queue: String!
+	worker: String!
+	attempt: Int!
+	maxAttempts: Int!
+	insertedAt: DateTime!
+	scheduledAt: DateTime!
+	attemptedAt: DateTime
+	completedAt: DateTime
+	errors: [String!]!
+	meta: String
+}
+
+type TranscodeJob {
+	id: ID!
+	mediaFileId: String!
+	resolution: String!
+	status: String!
+	progress: Float
+	outputPath: String
+	fileSize: Int
+	error: String
+	startedAt: DateTime
+	completedAt: DateTime
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+	type: String!
+	userId: String
+}
+
+enum DownloadFilter {
+	queue
+	completed
+	issues
+}
+
+type DownloadRecord {
+	id: ID!
+	title: String!
+	indexer: String
+	downloadUrl: String
+	downloadClient: String
+	matchStatus: String
+	errorMessage: String
+	completedAt: DateTime
+	insertedAt: DateTime!
+	updatedAt: DateTime!
+	bytesPulled: Int
+	lastKnownBytes: Int
+	importRetryCount: Int
+	importLastError: String
+	importNextRetryAt: DateTime
+	importFailedAt: DateTime
+	importedAt: DateTime
+	mediaItemId: String
+	episodeId: String
+	libraryPathId: String
+}
+
+type DownloadEvent {
+	id: String!
+	status: String!
+	title: String
+	progress: Float
+	error: String
+}
+
+type JobStatusEvent {
+	jobId: Int
+	state: String!
+	worker: String!
+	queue: String!
+	message: String
+	insertedAt: String
+}
+
+type TranscodeStatusEvent {
+	id: String!
+	status: String!
+	progress: Float
+	error: String
 }
 
 """

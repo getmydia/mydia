@@ -1,0 +1,30 @@
+query WorkerSummary {
+  workerSummary {
+    queue
+    worker
+    count
+    maxPriority
+    oldestScheduledAt
+  }
+}
+
+query RecentJobEvents($limit: Int) {
+  recentJobEvents(limit: $limit) {
+    id
+    state
+    queue
+    worker
+    attempt
+    maxAttempts
+    insertedAt
+    scheduledAt
+    attemptedAt
+    completedAt
+    errors
+    meta
+  }
+}
+
+mutation TriggerJob($name: String!) {
+  triggerJob(name: $name)
+}

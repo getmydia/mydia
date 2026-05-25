@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! async-graphql surface for mydia-rs.
 //!
 //! Module layout:

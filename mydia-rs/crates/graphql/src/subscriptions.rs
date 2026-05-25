@@ -275,6 +275,120 @@ impl SubscriptionRoot {
         });
         Ok(stream)
     }
+
+    async fn download_events(
+        &self,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<impl Stream<Item = async_graphql::Result<DownloadEvent>>> {
+        require_admin(ctx)?;
+        let state = ctx.data::<GraphqlAppState>()?;
+        let rx = state.pubsub.subscribe("downloads");
+
+        let stream = BroadcastStream::new(rx).filter_map(|res| async move {
+            match res {
+                Ok(event) => {
+                    let parsed: Result<DownloadEventPayload, _> =
+                        serde_json::from_value(event.payload);
+                    match parsed {
+                        Ok(payload) => Some(Ok(DownloadEvent::from(payload))),
+                        Err(err) => {
+                            tracing::warn!(
+                                target: "mydia_rs_graphql::subscriptions",
+                                error = %err,
+                                "dropping malformed download event payload"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        target: "mydia_rs_graphql::subscriptions",
+                        error = %err,
+                        "download event broadcast receiver lagged"
+                    );
+                    None
+                }
+            }
+        });
+        Ok(stream)
+    }
+
+    async fn job_events(
+        &self,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<impl Stream<Item = async_graphql::Result<JobStatusEvent>>> {
+        require_admin(ctx)?;
+        let state = ctx.data::<GraphqlAppState>()?;
+        let rx = state.pubsub.subscribe("jobs:status");
+
+        let stream = BroadcastStream::new(rx).filter_map(|res| async move {
+            match res {
+                Ok(event) => {
+                    let parsed: Result<JobStatusPayload, _> = serde_json::from_value(event.payload);
+                    match parsed {
+                        Ok(payload) => Some(Ok(JobStatusEvent::from(payload))),
+                        Err(err) => {
+                            tracing::warn!(
+                                target: "mydia_rs_graphql::subscriptions",
+                                error = %err,
+                                "dropping malformed job status payload"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        target: "mydia_rs_graphql::subscriptions",
+                        error = %err,
+                        "job status broadcast receiver lagged"
+                    );
+                    None
+                }
+            }
+        });
+        Ok(stream)
+    }
+
+    async fn transcode_events(
+        &self,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<impl Stream<Item = async_graphql::Result<TranscodeStatusEvent>>>
+    {
+        require_admin(ctx)?;
+        let state = ctx.data::<GraphqlAppState>()?;
+        let rx = state.pubsub.subscribe("transcodes");
+
+        let stream = BroadcastStream::new(rx).filter_map(|res| async move {
+            match res {
+                Ok(event) => {
+                    let parsed: Result<TranscodeStatusPayload, _> =
+                        serde_json::from_value(event.payload);
+                    match parsed {
+                        Ok(payload) => Some(Ok(TranscodeStatusEvent::from(payload))),
+                        Err(err) => {
+                            tracing::warn!(
+                                target: "mydia_rs_graphql::subscriptions",
+                                error = %err,
+                                "dropping malformed transcode status payload"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        target: "mydia_rs_graphql::subscriptions",
+                        error = %err,
+                        "transcode status broadcast receiver lagged"
+                    );
+                    None
+                }
+            }
+        });
+        Ok(stream)
+    }
 }
 
 #[derive(Debug, Clone, SimpleObject)]
@@ -312,6 +426,114 @@ impl From<LibraryScanPayload> for LibraryScanEvent {
             total: value.total,
             files_found: value.files_found,
             path_id: value.path_id,
+            error: value.error,
+        }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "DownloadEvent")]
+pub struct DownloadEvent {
+    pub id: String,
+    pub status: String,
+    pub title: Option<String>,
+    pub progress: Option<f64>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct DownloadEventPayload {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    progress: Option<f64>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+impl From<DownloadEventPayload> for DownloadEvent {
+    fn from(value: DownloadEventPayload) -> Self {
+        Self {
+            id: value.id,
+            status: value.status,
+            title: value.title,
+            progress: value.progress,
+            error: value.error,
+        }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "JobStatusEvent")]
+pub struct JobStatusEvent {
+    pub job_id: Option<i64>,
+    pub state: String,
+    pub worker: String,
+    pub queue: String,
+    pub message: Option<String>,
+    pub inserted_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct JobStatusPayload {
+    #[serde(default)]
+    job_id: Option<i64>,
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    worker: String,
+    #[serde(default)]
+    queue: String,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    inserted_at: Option<String>,
+}
+
+impl From<JobStatusPayload> for JobStatusEvent {
+    fn from(value: JobStatusPayload) -> Self {
+        Self {
+            job_id: value.job_id,
+            state: value.state,
+            worker: value.worker,
+            queue: value.queue,
+            message: value.message,
+            inserted_at: value.inserted_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "TranscodeStatusEvent")]
+pub struct TranscodeStatusEvent {
+    pub id: String,
+    pub status: String,
+    pub progress: Option<f64>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct TranscodeStatusPayload {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    progress: Option<f64>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+impl From<TranscodeStatusPayload> for TranscodeStatusEvent {
+    fn from(value: TranscodeStatusPayload) -> Self {
+        Self {
+            id: value.id,
+            status: value.status,
+            progress: value.progress,
             error: value.error,
         }
     }

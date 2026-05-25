@@ -1,7 +1,13 @@
+pub mod devices;
 pub mod download_clients;
+pub mod downloads;
 pub mod import_lists;
 pub mod indexers;
+pub mod jobs;
 pub mod library_paths;
 pub mod media_servers;
 pub mod quality_profiles;
 pub mod release_blacklist;
+pub mod remote_access;
+pub mod requests;
+pub mod transcodes;

@@ -1,0 +1,32 @@
+query AdminDownloads($filter: DownloadFilter!) {
+  downloads(filter: $filter) {
+    id
+    title
+    indexer
+    downloadUrl
+    downloadClient
+    matchStatus
+    errorMessage
+    completedAt
+    insertedAt
+    updatedAt
+    bytesPulled
+    lastKnownBytes
+    importRetryCount
+    importLastError
+    importNextRetryAt
+    importFailedAt
+    importedAt
+    mediaItemId
+    episodeId
+    libraryPathId
+  }
+}
+
+mutation CancelDownload($id: ID!) {
+  cancelDownload(id: $id)
+}
+
+mutation ManuallyMatchDownload($id: ID!, $mediaId: ID!) {
+  manuallyMatchDownload(id: $id, mediaId: $mediaId)
+}

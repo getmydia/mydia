@@ -1,0 +1,14 @@
+query AdminActivity($filter: ActivityFilter, $limit: Int) {
+  activity(filter: $filter, limit: $limit) {
+    id
+    category
+    type
+    actorType
+    actorId
+    resourceType
+    resourceId
+    severity
+    metadata
+    insertedAt
+  }
+}

@@ -8,6 +8,9 @@
 //! impls.
 
 pub mod activity_event;
+pub mod admin_download;
+pub mod admin_job;
+pub mod admin_transcode;
 pub mod api_key;
 pub mod artwork;
 pub mod calendar_entry;
@@ -41,6 +44,9 @@ pub mod user;
 pub mod user_profile;
 
 pub use activity_event::ActivityEvent;
+pub use admin_download::DownloadRecord;
+pub use admin_job::{JobEvent, WorkerSummary};
+pub use admin_transcode::TranscodeJob;
 pub use api_key::{ApiKeyObject, CreateApiKeyResult};
 pub use artwork::Artwork;
 pub use calendar_entry::CalendarEntry;
