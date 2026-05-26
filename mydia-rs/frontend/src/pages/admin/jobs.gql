@@ -28,3 +28,14 @@ query RecentJobEvents($limit: Int) {
 mutation TriggerJob($name: String!) {
   triggerJob(name: $name)
 }
+
+subscription JobEvents {
+  jobEvents {
+    jobId
+    state
+    worker
+    queue
+    message
+    insertedAt
+  }
+}

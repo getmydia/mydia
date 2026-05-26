@@ -1,0 +1,71 @@
+{
+  "name": "@graphql-tools/url-loader",
+  "version": "9.1.2",
+  "description": "A set of utils for faster development of GraphQL tools",
+  "sideEffects": false,
+  "peerDependencies": {
+    "graphql": "^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0"
+  },
+  "dependencies": {
+    "@graphql-tools/executor-graphql-ws": "^3.1.4",
+    "@graphql-tools/executor-http": "^3.2.1",
+    "@graphql-tools/executor-legacy-ws": "^1.1.28",
+    "@graphql-tools/utils": "^11.1.0",
+    "@graphql-tools/wrap": "^11.1.1",
+    "@types/ws": "^8.0.0",
+    "@whatwg-node/fetch": "^0.10.13",
+    "@whatwg-node/promise-helpers": "^1.0.0",
+    "isomorphic-ws": "^5.0.0",
+    "sync-fetch": "0.6.0",
+    "tslib": "^2.4.0",
+    "ws": "^8.20.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "ardatan/graphql-tools",
+    "directory": "packages/loaders/url"
+  },
+  "author": "Dotan Simha <dotansimha@gmail.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "cjs/index.js",
+  "module": "esm/index.js",
+  "typings": "typings/index.d.ts",
+  "typescript": {
+    "definition": "typings/index.d.ts"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./typings/index.d.cts",
+        "default": "./cjs/index.js"
+      },
+      "import": {
+        "types": "./typings/index.d.ts",
+        "default": "./esm/index.js"
+      },
+      "default": {
+        "types": "./typings/index.d.ts",
+        "default": "./esm/index.js"
+      }
+    },
+    "./*": {
+      "require": {
+        "types": "./typings/*.d.cts",
+        "default": "./cjs/*.js"
+      },
+      "import": {
+        "types": "./typings/*.d.ts",
+        "default": "./esm/*.js"
+      },
+      "default": {
+        "types": "./typings/*.d.ts",
+        "default": "./esm/*.js"
+      }
+    },
+    "./package.json": "./package.json"
+  }
+}

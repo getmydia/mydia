@@ -1,9 +1,11 @@
 import { useState, useCallback } from "react";
-import { useQuery, useMutation } from "urql";
+import { useQuery, useMutation, useSubscription } from "urql";
+import type { JobEventsSubscription } from "../../graphql/generated/graphql";
 import {
   WorkerSummaryDocument,
   RecentJobEventsDocument,
   TriggerJobDocument,
+  JobEventsDocument,
 } from "../../graphql/generated/graphql";
 import { PageHeader } from "../../components/page-header";
 import { Card } from "../../components/card";
@@ -33,6 +35,19 @@ export function JobsPage() {
   const workers = workerResult.data?.workerSummary ?? [];
   const events = eventsResult.data?.recentJobEvents ?? [];
   const error = workerResult.error ?? eventsResult.error;
+
+  // Subscribe to job events for live updates
+  useSubscription<
+    JobEventsSubscription,
+    { jobEvents: JobEventsSubscription["jobEvents"] }
+  >(
+    { query: JobEventsDocument },
+    (_prev, event) => {
+      refetchWorker();
+      refetchEvents();
+      return event;
+    },
+  );
 
   const handleTrigger = useCallback(async () => {
     if (!jobName.trim()) return;

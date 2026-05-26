@@ -1,0 +1,84 @@
+{
+  "name": "listr2",
+  "version": "10.2.1",
+  "description": "Terminal task list reborn! Create beautiful CLI interfaces via easy and logical to implement task lists that feel alive and interactive.",
+  "license": "MIT",
+  "repository": "https://github.com/listr2/listr2",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "author": {
+    "name": "Cenk Kilic",
+    "email": "cenk@kilic.dev",
+    "url": "https://cenk.kilic.dev"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev:start": "tsdown --watch",
+    "format": "prettier --log-level warn --write src/ tests/ && pnpm run lint --fix",
+    "lint": "eslint src/ tests/",
+    "test": "NODE_OPTIONS='--no-warnings --experimental-vm-modules' jest --config tests/jest.config.ts",
+    "test:cov": "pnpm run test --coverage",
+    "test:dev": "NODE_OPTIONS='--no-warnings --experimental-vm-modules --inspect=0.0.0.0:9229' pnpm run test --verbose --watchAll"
+  },
+  "lint-staged": {
+    "{src,tests}/**/*.{ts,js,tsx,jsx,spec.ts}": [
+      "prettier --log-level warn --write",
+      "eslint --fix"
+    ],
+    "*.{json,md}": [
+      "prettier --log-level warn --write"
+    ]
+  },
+  "keywords": [
+    "listr",
+    "listr2",
+    "cli",
+    "task",
+    "list",
+    "tasklist",
+    "terminal",
+    "term",
+    "console",
+    "ascii",
+    "unicode",
+    "loading",
+    "indicator",
+    "progress",
+    "busy",
+    "wait",
+    "idle"
+  ],
+  "dependencies": {
+    "cli-truncate": "^5.2.0",
+    "eventemitter3": "^5.0.4",
+    "log-update": "^6.1.0",
+    "rfdc": "^1.4.1",
+    "wrap-ansi": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/zen-observable": "^0.8.7",
+    "rxjs": "^7.8.2",
+    "zen-observable": "^0.10.0"
+  }
+}

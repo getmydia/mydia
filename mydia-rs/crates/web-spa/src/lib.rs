@@ -10,6 +10,7 @@ pub mod session_config;
 
 use axum::{middleware, Extension, Router};
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn router(state: WebState) -> Router {
     let session_router: Router = Router::new()
         .merge(auth::router())

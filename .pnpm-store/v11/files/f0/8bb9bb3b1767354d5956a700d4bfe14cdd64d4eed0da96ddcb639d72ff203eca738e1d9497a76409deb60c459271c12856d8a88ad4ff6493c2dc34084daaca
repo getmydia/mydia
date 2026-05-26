@@ -1,0 +1,45 @@
+{
+  "name": "@graphql-hive/signal",
+  "version": "2.0.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/graphql-hive/gateway.git",
+    "directory": "packages/signal"
+  },
+  "author": {
+    "email": "contact@the-guild.dev",
+    "name": "The Guild",
+    "url": "https://the-guild.dev"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pkgroll --clean-dist",
+    "prepack": "yarn build"
+  },
+  "devDependencies": {
+    "pkgroll": "2.15.0"
+  },
+  "sideEffects": false
+}

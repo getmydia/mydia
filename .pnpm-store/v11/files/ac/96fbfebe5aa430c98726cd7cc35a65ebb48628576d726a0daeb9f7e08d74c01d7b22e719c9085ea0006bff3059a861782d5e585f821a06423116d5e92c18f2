@@ -1,0 +1,106 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.BaseVisitor = void 0;
+const tslib_1 = require("tslib");
+const auto_bind_1 = tslib_1.__importDefault(require("auto-bind"));
+const plugin_helpers_1 = require("@graphql-codegen/plugin-helpers");
+const naming_js_1 = require("./naming.js");
+const utils_js_1 = require("./utils.js");
+class BaseVisitor {
+    _parsedConfig;
+    _declarationBlockConfig = {};
+    scalars;
+    constructor(rawConfig, additionalConfig) {
+        const importExtension = (0, plugin_helpers_1.normalizeImportExtension)({
+            emitLegacyCommonJSImports: rawConfig.emitLegacyCommonJSImports,
+            importExtension: rawConfig.importExtension,
+        });
+        this._parsedConfig = {
+            convert: (0, naming_js_1.convertFactory)(rawConfig),
+            typesPrefix: rawConfig.typesPrefix || '',
+            typesSuffix: rawConfig.typesSuffix || '',
+            enumPrefix: (0, utils_js_1.getConfigValue)(rawConfig.enumPrefix, true),
+            enumSuffix: (0, utils_js_1.getConfigValue)(rawConfig.enumSuffix, true),
+            externalFragments: rawConfig.externalFragments || [],
+            fragmentImports: rawConfig.fragmentImports || [],
+            useTypeImports: !!rawConfig.useTypeImports,
+            allowEnumStringTypes: !!rawConfig.allowEnumStringTypes,
+            inlineFragmentTypes: rawConfig.inlineFragmentTypes ?? 'inline',
+            emitLegacyCommonJSImports: rawConfig.emitLegacyCommonJSImports === undefined
+                ? true
+                : !!rawConfig.emitLegacyCommonJSImports,
+            importExtension,
+            printFieldsOnNewLines: rawConfig.printFieldsOnNewLines ?? false,
+            includeExternalFragments: rawConfig.includeExternalFragments ?? false,
+            ...(additionalConfig || {}),
+        };
+        this.scalars = {};
+        for (const key of Object.keys(this.config.scalars || {})) {
+            this.scalars[key] = {
+                input: this.config.scalars[key]?.input?.type,
+                output: this.config.scalars[key]?.output?.type,
+            };
+        }
+        (0, auto_bind_1.default)(this);
+    }
+    getVisitorKindContextFromAncestors(ancestors) {
+        if (!ancestors) {
+            return [];
+        }
+        return ancestors.map(t => t.kind).filter(Boolean);
+    }
+    get config() {
+        return this._parsedConfig;
+    }
+    convertName(node, options) {
+        const useTypesPrefix = typeof options?.useTypesPrefix === 'boolean' ? options.useTypesPrefix : true;
+        const useTypesSuffix = typeof options?.useTypesSuffix === 'boolean' ? options.useTypesSuffix : true;
+        let convertedName = '';
+        if (useTypesPrefix) {
+            convertedName += this.config.typesPrefix;
+        }
+        convertedName += this.config.convert(node, options);
+        if (useTypesSuffix) {
+            convertedName += this.config.typesSuffix;
+        }
+        return convertedName;
+    }
+    getOperationSuffix(node, operationType) {
+        const { omitOperationSuffix = false, dedupeOperationSuffix = false } = this.config;
+        const operationName = typeof node === 'string' ? node : node.name ? node.name.value : '';
+        return omitOperationSuffix
+            ? ''
+            : dedupeOperationSuffix && operationName.toLowerCase().endsWith(operationType.toLowerCase())
+                ? ''
+                : operationType;
+    }
+    getFragmentSuffix(node) {
+        return this.getOperationSuffix(node, 'Fragment');
+    }
+    getFragmentName(node) {
+        return this.convertName(node, {
+            suffix: this.getFragmentSuffix(node),
+            useTypesPrefix: false,
+        });
+    }
+    getFragmentVariableName(node) {
+        const { omitOperationSuffix = false, dedupeOperationSuffix = false, fragmentVariableSuffix = 'FragmentDoc', fragmentVariablePrefix = '', } = this.config;
+        const fragmentName = typeof node === 'string' ? node : node.name.value;
+        const suffix = omitOperationSuffix
+            ? ''
+            : dedupeOperationSuffix &&
+                fragmentName.toLowerCase().endsWith('fragment') &&
+                fragmentVariableSuffix.toLowerCase().startsWith('fragment')
+                ? fragmentVariableSuffix.substring('fragment'.length)
+                : fragmentVariableSuffix;
+        return this.convertName(node, {
+            prefix: fragmentVariablePrefix,
+            suffix,
+            useTypesPrefix: false,
+        });
+    }
+    getPunctuation(_declarationKind) {
+        return '';
+    }
+}
+exports.BaseVisitor = BaseVisitor;

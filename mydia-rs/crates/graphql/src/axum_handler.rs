@@ -17,12 +17,20 @@ use async_graphql::http::GraphiQLSource;
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::{
     response::{Html, IntoResponse},
-    routing::{get, post},
+    routing::get,
     Extension, Router,
 };
+use mydia_rs_db::types::UuidText;
+use mydia_rs_entities::users;
+use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::{Expr, ExprTrait};
+use tower_sessions::Session;
+use uuid::Uuid;
 
-use crate::context::GraphqlRequestContext;
+use crate::context::{CurrentUser, GraphqlRequestContext};
 use crate::schema::MydiaSchema;
+
+const SESSION_KEY_USER_ID: &str = "user_id";
 
 /// Mount the GraphQL surface under `/api/graphql`. Returns an axum
 /// `Router` the caller (the application supervisor in U22) merges
@@ -32,27 +40,70 @@ use crate::schema::MydiaSchema;
 /// fn, so it mounts through `route_service` rather than `get`.
 pub fn router(schema: MydiaSchema) -> Router {
     Router::new()
-        .route("/api/graphql", post(graphql_handler))
+        .route("/api/graphql", get(graphql_handler).post(graphql_handler))
+        .route("/graphql", get(graphql_handler).post(graphql_handler))
         .route_service(
             "/api/graphql/socket",
             GraphQLSubscription::new(schema.clone()),
         )
+        .route_service("/graphql/ws", GraphQLSubscription::new(schema.clone()))
         .route("/api/graphql/graphiql", get(graphiql))
         .layer(Extension(schema))
 }
 
 async fn graphql_handler(
     Extension(schema): Extension<MydiaSchema>,
+    session: Session,
     request: GraphQLRequest,
 ) -> GraphQLResponse {
-    // Anonymous context for now; the auth middleware (U6 follow-up,
-    // gated on U22's axum supervisor) replaces this with the real
-    // CurrentUser once the session cookie / API key / media token
-    // extractors run before this handler.
-    let request = request
-        .into_inner()
-        .data(GraphqlRequestContext::anonymous());
+    let context = if let Some(user_id) = session
+        .get::<String>(SESSION_KEY_USER_ID)
+        .await
+        .ok()
+        .flatten()
+    {
+        if let Ok(Some(user)) = lookup_user_by_id(&schema, &user_id).await {
+            GraphqlRequestContext::with_user(user)
+        } else {
+            GraphqlRequestContext::anonymous()
+        }
+    } else {
+        GraphqlRequestContext::anonymous()
+    };
+
+    let request = request.into_inner().data(context);
     schema.execute(request).await.into()
+}
+
+async fn lookup_user_by_id(
+    schema: &MydiaSchema,
+    user_id: &str,
+) -> Result<Option<CurrentUser>, String> {
+    let state = schema
+        .data::<crate::context::GraphqlAppState>()
+        .ok_or("GraphqlAppState not in schema data")?;
+
+    let Ok(uuid) = Uuid::parse_str(user_id) else {
+        return Ok(None);
+    };
+
+    let wrapper = UuidText::from(uuid);
+    let backend = state.db.get_database_backend();
+    let user = users::Entity::find()
+        .filter(Expr::col(users::Column::Id).eq(wrapper.into_simple_expr(backend)))
+        .one(&state.db)
+        .await
+        .map_err(|err| format!("lookup user: {err}"))?;
+
+    Ok(user.map(|u| {
+        let role =
+            mydia_rs_auth::role::Role::parse(&u.role).unwrap_or(mydia_rs_auth::role::Role::User);
+        CurrentUser {
+            id: uuid,
+            username: u.username.unwrap_or_default(),
+            role,
+        }
+    }))
 }
 
 async fn graphiql() -> impl IntoResponse {

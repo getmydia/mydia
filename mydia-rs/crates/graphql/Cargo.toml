@@ -26,6 +26,7 @@ mydia-rs-db = { path = "../db" }
 mydia-rs-entities = { path = "../entities" }
 mydia-rs-auth = { path = "../auth" }
 mydia-rs-pubsub = { path = "../pubsub" }
+tower-sessions = "0.14"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

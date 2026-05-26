@@ -63,7 +63,7 @@ mod tests {
 
     async fn test_state_and_session() -> (WebState, mydia_rs_graphql::MydiaSchema, SessionLayer) {
         use async_graphql::Schema;
-        use mydia_rs_graphql::{MutationRoot, QueryRoot, SubscriptionRoot};
+        use mydia_rs_graphql::{subscriptions::SubscriptionRoot, MutationRoot, QueryRoot};
 
         let db = Database::connect("sqlite::memory:")
             .await

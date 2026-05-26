@@ -1,0 +1,65 @@
+{
+  "name": "ts-log",
+  "version": "3.0.2",
+  "description": "Abstract logger TypeScript interface with a dummy logger that does nothing, useful for libraries.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "author": "Stagnation Lab",
+  "keywords": [
+    "typescript",
+    "abstract",
+    "logger",
+    "console",
+    "dummy"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kallaspriit/ts-log.git"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "lint:fix": "eslint --fix src/",
+    "format": "prettier --check src/",
+    "format:fix": "prettier --write src/",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "validate": "npm run format && npm run build && npm run typecheck && npm run lint && npm run test:coverage",
+    "prepublishOnly": "tsup"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.1",
+    "vitest": "^4.1.5"
+  }
+}

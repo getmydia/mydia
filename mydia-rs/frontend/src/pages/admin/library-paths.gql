@@ -28,3 +28,14 @@ mutation DeleteLibraryPath($id: ID!) {
 mutation TriggerScan($pathId: ID!) {
   triggerScan(pathId: $pathId)
 }
+
+subscription LibraryScanProgress {
+  libraryScanProgress {
+    stage
+    current
+    total
+    filesFound
+    pathId
+    error
+  }
+}

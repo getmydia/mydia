@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [{ data, fetching }] = useQuery({ query: ViewerDocument });
 
   const viewer = data?.viewer ?? null;
+
   const value: AuthContextValue = {
     viewer,
     loading: fetching,

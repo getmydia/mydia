@@ -6,7 +6,8 @@ use tower_sessions::cookie::SameSite;
 use tower_sessions::{Expiry, SessionManagerLayer};
 use tower_sessions_sqlx_store::{PostgresStore, SqliteStore};
 
-pub const SESSION_COOKIE_NAME: &str = "__Host-mydia_session";
+const SESSION_COOKIE_NAME_SECURE: &str = "__Host-mydia_session";
+const SESSION_COOKIE_NAME_DEV: &str = "mydia_session";
 
 pub const SESSION_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
@@ -40,8 +41,14 @@ fn base_layer<S>(store: S, secure: bool) -> SessionManagerLayer<S>
 where
     S: tower_sessions::SessionStore + Clone,
 {
+    let cookie_name = if secure {
+        SESSION_COOKIE_NAME_SECURE
+    } else {
+        SESSION_COOKIE_NAME_DEV
+    };
+
     SessionManagerLayer::new(store)
-        .with_name(SESSION_COOKIE_NAME)
+        .with_name(cookie_name)
         .with_http_only(true)
         .with_secure(secure)
         .with_same_site(SameSite::Lax)

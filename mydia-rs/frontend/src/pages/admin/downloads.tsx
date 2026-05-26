@@ -1,9 +1,11 @@
-import { useState, useCallback } from "react";
-import { useQuery, useMutation } from "urql";
+import { useState, useCallback, useRef } from "react";
+import { useQuery, useMutation, useSubscription } from "urql";
+import type { DownloadEventsSubscription } from "../../graphql/generated/graphql";
 import {
   AdminDownloadsDocument,
   CancelDownloadDocument,
   ManuallyMatchDownloadDocument,
+  DownloadEventsDocument,
 } from "../../graphql/generated/graphql";
 import type { DownloadFilter } from "../../graphql/generated/graphql";
 import { PageHeader } from "../../components/page-header";
@@ -14,7 +16,6 @@ import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Modal, type ModalHandle } from "../../components/modal";
 import { pushToast } from "../../components/feedback";
-import { useRef } from "react";
 
 type Tab = "queue" | "completed" | "issues";
 
@@ -45,6 +46,19 @@ export function DownloadsPage() {
 
   const downloads = result.data?.downloads ?? [];
   const error = result.error;
+
+  // Subscribe to download events for live updates
+  useSubscription<
+    DownloadEventsSubscription,
+    { downloadEvents: DownloadEventsSubscription["downloadEvents"] }
+  >(
+    { query: DownloadEventsDocument },
+    (_prev, event) => {
+      // Refetch on new events to keep the list current
+      refetch();
+      return event;
+    },
+  );
 
   const handleCancel = useCallback(
     async (id: string) => {

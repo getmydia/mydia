@@ -1,0 +1,916 @@
+import { createHash } from 'crypto';
+import autoBind from 'auto-bind';
+import { isInterfaceType, isListType, isNonNullType, isObjectType, isTypeSubTypeOf, isUnionType, Kind, SchemaMetaFieldDef, TypeMetaFieldDef, } from 'graphql';
+import { getBaseType } from '@graphql-codegen/plugin-helpers';
+import { getRootTypes } from '@graphql-tools/utils';
+import { DeclarationBlock, getFieldNames, getFieldNodeNameValue, getPossibleTypes, hasConditionalDirectives, hasIncrementalDeliveryDirectives, mergeSelectionSets, separateSelectionSet, } from './utils.js';
+const operationTypes = ['Query', 'Mutation', 'Subscription'];
+function isMetadataFieldName(name) {
+    return ['__schema', '__type'].includes(name);
+}
+const metadataFieldMap = {
+    __schema: SchemaMetaFieldDef,
+    __type: TypeMetaFieldDef,
+};
+export class SelectionSetToObject {
+    _processor;
+    _scalars;
+    _schema;
+    _convertName;
+    _getFragmentSuffix;
+    _loadedFragments;
+    _config;
+    _parentSchemaType;
+    _selectionSet;
+    _primitiveFields = [];
+    _primitiveAliasedFields = [];
+    _linksFields = [];
+    _queriedForTypename = false;
+    // Enables resolving conflicting type names in extractAllFieldsToTypesCompact mode:
+    //   key === GetFoo_user    <-- full field name
+    //   value === User         <-- last field type
+    _seenFieldNames = new Map();
+    constructor(_processor, _scalars, _schema, _convertName, _getFragmentSuffix, _loadedFragments, _config, _parentSchemaType, _selectionSet) {
+        this._processor = _processor;
+        this._scalars = _scalars;
+        this._schema = _schema;
+        this._convertName = _convertName;
+        this._getFragmentSuffix = _getFragmentSuffix;
+        this._loadedFragments = _loadedFragments;
+        this._config = _config;
+        this._parentSchemaType = _parentSchemaType;
+        this._selectionSet = _selectionSet;
+        autoBind(this);
+    }
+    createNext(parentSchemaType, selectionSet) {
+        const next = new SelectionSetToObject(this._processor, this._scalars, this._schema, this._convertName.bind(this), this._getFragmentSuffix.bind(this), this._loadedFragments, this._config, parentSchemaType, selectionSet);
+        next._seenFieldNames = this._seenFieldNames;
+        return next;
+    }
+    /**
+     * traverse the inline fragment nodes recursively for collecting the selectionSets on each type
+     */
+    _collectInlineFragments(parentType, nodes, types) {
+        if (isListType(parentType) || isNonNullType(parentType)) {
+            return this._collectInlineFragments(parentType.ofType, nodes, types);
+        }
+        if (isObjectType(parentType)) {
+            for (const node of nodes) {
+                const typeOnSchema = node.typeCondition
+                    ? this._schema.getType(node.typeCondition.name.value)
+                    : parentType;
+                const { fields, inlines, spreads } = separateSelectionSet(node.selectionSet.selections);
+                const spreadsUsage = this.buildFragmentSpreadsUsage(spreads);
+                const directives = node.directives || undefined;
+                // When we collect the selection sets of inline fragments we need to
+                // make sure directives on the inline fragments are stored in a way
+                // that can be associated back to the fields in the fragment, to
+                // support things like making those fields optional when deferring a
+                // fragment (using @defer).
+                const fieldsWithFragmentDirectives = fields.map(field => ({
+                    ...field,
+                    fragmentDirectives: directives,
+                }));
+                if (isObjectType(typeOnSchema)) {
+                    this._appendToTypeMap(types, typeOnSchema.name, fieldsWithFragmentDirectives);
+                    this._appendToTypeMap(types, typeOnSchema.name, spreadsUsage[typeOnSchema.name]);
+                    this._appendToTypeMap(types, typeOnSchema.name, directives);
+                    this._collectInlineFragments(typeOnSchema, inlines, types);
+                }
+                else if (isInterfaceType(typeOnSchema) &&
+                    parentType.getInterfaces().includes(typeOnSchema)) {
+                    this._appendToTypeMap(types, parentType.name, fields);
+                    this._appendToTypeMap(types, parentType.name, spreadsUsage[parentType.name]);
+                    this._collectInlineFragments(typeOnSchema, inlines, types);
+                }
+            }
+        }
+        else if (isInterfaceType(parentType)) {
+            const possibleTypes = getPossibleTypes(this._schema, parentType);
+            for (const node of nodes) {
+                const schemaType = node.typeCondition
+                    ? this._schema.getType(node.typeCondition.name.value)
+                    : parentType;
+                const { fields, inlines, spreads } = separateSelectionSet(node.selectionSet.selections);
+                const spreadsUsage = this.buildFragmentSpreadsUsage(spreads);
+                if (isObjectType(schemaType) &&
+                    possibleTypes.find(possibleType => possibleType.name === schemaType.name)) {
+                    this._appendToTypeMap(types, schemaType.name, fields);
+                    this._appendToTypeMap(types, schemaType.name, spreadsUsage[schemaType.name]);
+                    this._collectInlineFragments(schemaType, inlines, types);
+                }
+                else if (isInterfaceType(schemaType) && schemaType.name === parentType.name) {
+                    for (const possibleType of possibleTypes) {
+                        this._appendToTypeMap(types, possibleType.name, fields);
+                        this._appendToTypeMap(types, possibleType.name, spreadsUsage[possibleType.name]);
+                        this._collectInlineFragments(schemaType, inlines, types);
+                    }
+                }
+                else {
+                    // it must be an interface type that is spread on an interface field
+                    for (const possibleType of possibleTypes) {
+                        if (!node.typeCondition) {
+                            throw new Error('Invalid state. Expected type condition for interface spread on a interface field.');
+                        }
+                        const fragmentSpreadType = this._schema.getType(node.typeCondition.name.value);
+                        // the field should only be added to the valid selections
+                        // in case the possible type actually implements the given interface
+                        if (isTypeSubTypeOf(this._schema, possibleType, fragmentSpreadType)) {
+                            this._appendToTypeMap(types, possibleType.name, fields);
+                            this._appendToTypeMap(types, possibleType.name, spreadsUsage[possibleType.name]);
+                        }
+                    }
+                }
+            }
+        }
+        else if (isUnionType(parentType)) {
+            const possibleTypes = parentType.getTypes();
+            for (const node of nodes) {
+                const schemaType = node.typeCondition
+                    ? this._schema.getType(node.typeCondition.name.value)
+                    : parentType;
+                const { fields, inlines, spreads } = separateSelectionSet(node.selectionSet.selections);
+                const spreadsUsage = this.buildFragmentSpreadsUsage(spreads);
+                if (isObjectType(schemaType) &&
+                    possibleTypes.find(possibleType => possibleType.name === schemaType.name)) {
+                    this._appendToTypeMap(types, schemaType.name, fields);
+                    this._appendToTypeMap(types, schemaType.name, spreadsUsage[schemaType.name]);
+                    this._collectInlineFragments(schemaType, inlines, types);
+                }
+                else if (isInterfaceType(schemaType)) {
+                    const possibleInterfaceTypes = getPossibleTypes(this._schema, schemaType);
+                    for (const possibleType of possibleTypes) {
+                        if (possibleInterfaceTypes.find(possibleInterfaceType => possibleInterfaceType.name === possibleType.name)) {
+                            this._appendToTypeMap(types, possibleType.name, fields);
+                            this._appendToTypeMap(types, possibleType.name, spreadsUsage[possibleType.name]);
+                            this._collectInlineFragments(schemaType, inlines, types);
+                        }
+                    }
+                }
+                else {
+                    for (const possibleType of possibleTypes) {
+                        this._appendToTypeMap(types, possibleType.name, fields);
+                        this._appendToTypeMap(types, possibleType.name, spreadsUsage[possibleType.name]);
+                    }
+                }
+            }
+        }
+    }
+    /**
+     * The `buildFragmentSpreadsUsage` method is used to collect fields from fragment spreads in the selection set.
+     * It creates a record of fragment spread usages, which includes the fragment name, type name, and the selection nodes
+     * inside the fragment.
+     */
+    buildFragmentSpreadsUsage(spreads) {
+        const selectionNodesByTypeName = {};
+        for (const spread of spreads) {
+            const fragmentSpreadObject = this._loadedFragments.find(lf => lf.name === spread.name.value);
+            if (fragmentSpreadObject) {
+                const schemaType = this._schema.getType(fragmentSpreadObject.onType);
+                const possibleTypesForFragment = getPossibleTypes(this._schema, schemaType);
+                for (const possibleType of possibleTypesForFragment) {
+                    const fragmentSuffix = this._getFragmentSuffix(spread.name.value);
+                    const usage = this.buildFragmentTypeName(spread.name.value, fragmentSuffix, possibleTypesForFragment.length === 1 ? null : possibleType.name);
+                    selectionNodesByTypeName[possibleType.name] ||= [];
+                    const fragmentSelectionNodes = [
+                        ...fragmentSpreadObject.node.selectionSet.selections,
+                    ].map(originalNode => {
+                        if (originalNode.kind === Kind.FIELD) {
+                            return {
+                                ...originalNode,
+                                fragmentDirectives: [...spread.directives],
+                            };
+                        }
+                        return originalNode;
+                    });
+                    selectionNodesByTypeName[possibleType.name].push({
+                        fragmentName: spread.name.value,
+                        typeName: usage,
+                        onType: fragmentSpreadObject.onType,
+                        selectionNodes: fragmentSelectionNodes,
+                        fragmentDirectives: [...spread.directives],
+                    });
+                }
+            }
+        }
+        return selectionNodesByTypeName;
+    }
+    flattenSelectionSet(selections, parentSchemaType) {
+        const result = {
+            selectionNodesByTypeName: new Map(),
+            selectionNodesByTypeNameConditional: [],
+        };
+        const inlineFragmentSelections = [];
+        /**
+         * Inline fragments marked with `@skip`, `@include` or `@defer`
+         */
+        const inlineFragmentConditionalSelections = [];
+        const fieldNodes = [];
+        const fragmentSpreads = [];
+        /**
+         * Fragment spreads marked with `@skip` or `@include` or `@defer`
+         */
+        const fragmentSpreadsConditionalSelections = [];
+        for (const selection of selections) {
+            switch (selection.kind) {
+                case Kind.FIELD:
+                    fieldNodes.push(selection);
+                    break;
+                case Kind.INLINE_FRAGMENT:
+                    if (!this._config.extractAllFieldsToTypesCompact &&
+                        (hasConditionalDirectives(selection.directives) ||
+                            hasIncrementalDeliveryDirectives(selection.directives))) {
+                        inlineFragmentConditionalSelections.push(selection);
+                        break;
+                    }
+                    inlineFragmentSelections.push(selection);
+                    break;
+                case Kind.FRAGMENT_SPREAD:
+                    if (!this._config.extractAllFieldsToTypesCompact &&
+                        (hasConditionalDirectives(selection.directives) ||
+                            hasIncrementalDeliveryDirectives(selection.directives))) {
+                        fragmentSpreadsConditionalSelections.push(selection);
+                        break;
+                    }
+                    fragmentSpreads.push(selection);
+                    break;
+            }
+        }
+        // 1. Merge all selection sets that are mergable into one object. This includes:
+        // - field
+        // - field with conditional directives
+        // - inline fragment without conditional/incremental directives
+        // - fragment spreads without conditional/incremental directives
+        // Turn field nodes into one inline fragments to simplify collecting fields from selections using _collectInlineFragments
+        if (fieldNodes.length) {
+            inlineFragmentSelections.push({
+                kind: Kind.INLINE_FRAGMENT,
+                typeCondition: {
+                    kind: Kind.NAMED_TYPE,
+                    name: {
+                        kind: Kind.NAME,
+                        value: (parentSchemaType ?? this._parentSchemaType).name,
+                    },
+                },
+                directives: [],
+                selectionSet: {
+                    kind: Kind.SELECTION_SET,
+                    selections: fieldNodes,
+                },
+            });
+        }
+        this._collectInlineFragments(parentSchemaType ?? this._parentSchemaType, inlineFragmentSelections, result.selectionNodesByTypeName);
+        // Add fragment spreads into selection nodes so it becomes part of the base selection
+        const fragmentSpreadsUsage = this.buildFragmentSpreadsUsage(fragmentSpreads);
+        for (const [typeName, records] of Object.entries(fragmentSpreadsUsage)) {
+            this._appendToTypeMap(result.selectionNodesByTypeName, typeName, records);
+        }
+        // 2. Push conditional inline fragments into the result.selectionNodesByTypeNameConditional
+        // This is treated differently from result.selectionNodesByTypeName
+        // because fields in result.selectionNodesByTypeNameConditional are optional
+        for (const inlineFragmentConditionalSelection of inlineFragmentConditionalSelections) {
+            const selectionNodes = new Map();
+            this._collectInlineFragments(parentSchemaType ?? this._parentSchemaType, [inlineFragmentConditionalSelection], selectionNodes);
+            result.selectionNodesByTypeNameConditional.push(selectionNodes);
+        }
+        // 3. Push conditional FragmentSpreadUsage into the result.selectionNodesByTypeNameConditional
+        // This is important to track because fields in a conditional Fragment Spread are optional
+        for (const fragmentSpreadsConditionalSelection of fragmentSpreadsConditionalSelections) {
+            const conditionalFragmentSpreadsUsage = this.buildFragmentSpreadsUsage([
+                fragmentSpreadsConditionalSelection,
+            ]);
+            for (const [typeName, records] of Object.entries(conditionalFragmentSpreadsUsage)) {
+                const selectionNodes = new Map();
+                this._appendToTypeMap(selectionNodes, typeName, records);
+                result.selectionNodesByTypeNameConditional.push(selectionNodes);
+            }
+        }
+        return result;
+    }
+    _appendToTypeMap(types, typeName, nodes) {
+        if (!types.has(typeName)) {
+            types.set(typeName, []);
+        }
+        if (nodes && nodes.length > 0) {
+            types.get(typeName).push(...nodes);
+        }
+    }
+    _buildGroupedSelections(parentName) {
+        if (!this._selectionSet?.selections || this._selectionSet.selections.length === 0) {
+            return { grouped: {}, mustAddEmptyObject: true, dependentTypes: [] };
+        }
+        const { selectionNodesByTypeName, selectionNodesByTypeNameConditional } = this.flattenSelectionSet(this._selectionSet.selections);
+        const possibleTypes = getPossibleTypes(this._schema, this._parentSchemaType);
+        const dependentTypes = [];
+        if (!this._config.mergeFragmentTypes || this._config.inlineFragmentTypes === 'mask') {
+            // in case there is not a selection for each type, we need to add a empty type.
+            let mustAddEmptyObject = false;
+            // Each grouped type contains an array of stringified objects to be merged.
+            // Once merged, the type would be the TypeScript representative of the GraphQL selection set
+            // For example:
+            // const grouped = {
+            //   User: [
+            //     '{ createdAt: string, id: string }',
+            //     '{ name?: string, nickName?: string }',
+            //     '{ age?: number }'
+            //   ]
+            // }
+            // type merged = { createdAt: string, id: string } & { name?: string, nickName?: string } & { age?: number }
+            const grouped = possibleTypes.reduce((prev, type) => {
+                const typeName = type.name;
+                const schemaType = this._schema.getType(typeName);
+                if (!isObjectType(schemaType)) {
+                    throw new TypeError(`Invalid state! Schema type ${typeName} is not a valid GraphQL object!`);
+                }
+                prev[typeName] ||= [];
+                const collectGrouped = (selectionNodes) => {
+                    const { fields, dependentTypes: subDependentTypes } = this.buildSelectionSet(schemaType, selectionNodes, {
+                        parentFieldName: this.buildParentFieldName(typeName, parentName),
+                    });
+                    const transformedSet = this.selectionSetStringFromFields(fields);
+                    if (transformedSet) {
+                        prev[typeName].push(transformedSet);
+                    }
+                    dependentTypes.push(...subDependentTypes);
+                    return {
+                        hasTransformedSelectionSet: !!transformedSet,
+                    };
+                };
+                const { hasTransformedSelectionSet } = collectGrouped(selectionNodesByTypeName.get(typeName) || []);
+                if (!hasTransformedSelectionSet) {
+                    mustAddEmptyObject = true;
+                }
+                for (const conditionalNodes of selectionNodesByTypeNameConditional) {
+                    const selectionNodes = (conditionalNodes.get(typeName) || []).filter((node) => 'fragmentDirectives' in node);
+                    let conditionalDirectivesFound = false;
+                    let incrementalDirectivesFound = false;
+                    for (const selectionNode of selectionNodes) {
+                        if (hasConditionalDirectives(selectionNode.fragmentDirectives)) {
+                            conditionalDirectivesFound = true;
+                        }
+                        if (hasIncrementalDeliveryDirectives(selectionNode.fragmentDirectives)) {
+                            incrementalDirectivesFound = true;
+                        }
+                    }
+                    if (conditionalDirectivesFound) {
+                        // When a FragmentSpreadUsage is marked as conditional,
+                        // it should just be treated like an Inline Fragment
+                        // i.e. every field in the fragment's selection set should be optional
+                        const flattenedSelectionNodes = selectionNodes.reduce((prev, node) => {
+                            if ('kind' in node) {
+                                prev.push(node);
+                                return prev;
+                            }
+                            // When a node is a FragmentSpreadUsage,
+                            // We just "inline" all the field in its selection set. Note: each field has fragmentDirectives which should contain `@skip` or `@inlcude`
+                            // So, `buildSelectionSet` function below can correctly make said fields optional
+                            for (const fragmentSpreadUsageSelectionNode of node.selectionNodes) {
+                                prev.push(fragmentSpreadUsageSelectionNode);
+                            }
+                            return prev;
+                        }, []);
+                        collectGrouped(flattenedSelectionNodes);
+                    }
+                    if (incrementalDirectivesFound) {
+                        for (const incrementalNode of selectionNodes) {
+                            // 1. fragment masking
+                            if (this._config.inlineFragmentTypes === 'mask' &&
+                                'fragmentName' in incrementalNode) {
+                                const { fields: incrementalFields, dependentTypes: incrementalDependentTypes } = this.buildSelectionSet(schemaType, [incrementalNode], {
+                                    unsetTypes: true,
+                                    parentFieldName: parentName,
+                                });
+                                const incrementalSet = this.selectionSetStringFromFields(incrementalFields);
+                                prev[typeName].push(incrementalSet);
+                                dependentTypes.push(...incrementalDependentTypes);
+                                continue;
+                            }
+                            // 2. @defer
+                            const { fields: initialFields, dependentTypes: initialDependentTypes } = this.buildSelectionSet(schemaType, [incrementalNode], {
+                                parentFieldName: parentName,
+                            });
+                            const { fields: subsequentFields, dependentTypes: subsequentDependentTypes } = this.buildSelectionSet(schemaType, [incrementalNode], {
+                                unsetTypes: true,
+                                parentFieldName: parentName,
+                            });
+                            const initialSet = this.selectionSetStringFromFields(initialFields);
+                            const subsequentSet = this.selectionSetStringFromFields(subsequentFields);
+                            dependentTypes.push(...initialDependentTypes, ...subsequentDependentTypes);
+                            prev[typeName].push({ union: [initialSet, subsequentSet] });
+                        }
+                    }
+                }
+                return prev;
+            }, {});
+            return { grouped, mustAddEmptyObject, dependentTypes };
+        }
+        // Accumulate a map of selected fields to the typenames that
+        // share the exact same selected fields. When we find multiple
+        // typenames with the same set of fields, we can collapse the
+        // generated type to the selected fields and a string literal
+        // union of the typenames.
+        //
+        // E.g. {
+        //        __typename: "foo" | "bar";
+        //        shared: string;
+        //      }
+        const grouped = possibleTypes.reduce((prev, type) => {
+            const typeName = type.name;
+            const schemaType = this._schema.getType(typeName);
+            if (!isObjectType(schemaType)) {
+                throw new TypeError(`Invalid state! Schema type ${typeName} is not a valid GraphQL object!`);
+            }
+            const selectionNodes = selectionNodesByTypeName.get(typeName) || [];
+            const { typeInfo, fields, dependentTypes: subDependentTypes, } = this.buildSelectionSet(schemaType, selectionNodes, {
+                parentFieldName: this.buildParentFieldName(typeName, parentName),
+            });
+            dependentTypes.push(...subDependentTypes);
+            const key = this.selectionSetStringFromFields(fields);
+            prev[key] = {
+                fields,
+                types: [...(prev[key]?.types ?? []), typeInfo || { name: '', type: type.name }].filter(Boolean),
+            };
+            return prev;
+        }, {});
+        // For every distinct set of fields, create the corresponding
+        // string literal union of typenames.
+        const compacted = Object.keys(grouped).reduce((acc, key) => {
+            const typeNames = grouped[key].types.map(t => t.type);
+            // Don't create very large string literal unions. TypeScript
+            // will stop comparing some nested union types types when
+            // they contain props with more than some number of string
+            // literal union members (testing with TS 4.5 stops working
+            // at 25 for a naive test case:
+            // https://www.typescriptlang.org/play?ts=4.5.4&ssl=29&ssc=10&pln=29&pc=1#code/C4TwDgpgBAKg9nAMgQwE4HNoF4BQV9QA+UA3ngRQJYB21EqAXDsQEQCMLzULATJ6wGZ+3ACzCWAVnEA2cQHZxADnEBOcWwAM6jl3Z9dbIQbEGpB2QYUHlBtbp5b7O1j30ujLky7Os4wABb0nAC+ODigkFAAQlBYUOT4xGQUVLT0TKzO3G7cHqLiPtwWrFasNqx2mY6ZWXrqeexe3GyF7MXNpc3lzZXZ1dm1ruI8DTxNvGahFEkJKTR0jLMpRNx+gaicy6E4APQ7AALAAM4AtJTo1HCoEDgANhDAUMgMsAgoGNikwQDcdw9QACMXjE4shfmEItAAGI0bCzGbLfDzdIGYbiBrjVrtFidFjdFi9dj9di1Ng5dgNNjjFrqbFsXFsfFsQkOYaDckjYbjNZBHDbPaHU7nS7XP6PZBsF4wuixL6-e6PAGS6KyiXfIA
+            const max_types = 20;
+            for (let i = 0; i < typeNames.length; i += max_types) {
+                const selectedTypes = typeNames.slice(i, i + max_types);
+                const typenameUnion = grouped[key].types[0].name
+                    ? this._processor.transformTypenameField(selectedTypes.join(' | '), grouped[key].types[0].name)
+                    : [];
+                const transformedSet = this.selectionSetStringFromFields([
+                    ...typenameUnion,
+                    ...grouped[key].fields,
+                ]);
+                // The keys here will be used to generate intermediary
+                // fragment names. To avoid blowing up the type name on large
+                // unions, calculate a stable hash here instead.
+                acc[selectedTypes.length <= 3
+                    ? // Remove quote marks to produce a valid type name
+                        selectedTypes.map(t => t.replace(/'/g, '')).join('_')
+                    : createHash('sha256')
+                        .update(selectedTypes.join() || transformedSet || '')
+                        // Remove invalid characters to produce a valid type name
+                        .digest('base64')
+                        .replace(/[=+/]/g, '')] = [transformedSet];
+            }
+            return acc;
+        }, {});
+        return { grouped: compacted, mustAddEmptyObject: false, dependentTypes };
+    }
+    selectionSetStringFromFields(fields) {
+        const allStrings = fields.filter((f) => typeof f === 'string');
+        const allObjects = fields
+            .filter((f) => typeof f !== 'string')
+            .map(t => `${t.name}: ${t.type}`);
+        const mergedObjects = allObjects.length
+            ? this._processor.buildFieldsIntoObject(allObjects)
+            : null;
+        const transformedSet = this._processor.buildSelectionSetFromStrings([...allStrings, mergedObjects].filter(Boolean));
+        return transformedSet;
+    }
+    buildSelectionSet(parentSchemaType, selectionNodes, options) {
+        const primitiveFields = new Map();
+        const primitiveAliasFields = new Map();
+        const linkFieldSelectionSets = new Map();
+        let requireTypename = false;
+        // usages via fragment typescript type
+        const fragmentsSpreadUsages = [];
+        // ensure we mutate no function params
+        selectionNodes = [...selectionNodes];
+        let inlineFragmentConditional = false;
+        for (const selectionNode of selectionNodes) {
+            // 1. Handle Field or Directtives selection nodes
+            if ('kind' in selectionNode) {
+                if (selectionNode.kind === Kind.FIELD) {
+                    if (selectionNode.selectionSet) {
+                        let selectedField = null;
+                        const fields = parentSchemaType.getFields();
+                        selectedField = fields[selectionNode.name.value];
+                        if (isMetadataFieldName(selectionNode.name.value)) {
+                            selectedField = metadataFieldMap[selectionNode.name.value];
+                        }
+                        if (!selectedField) {
+                            continue;
+                        }
+                        const fieldName = getFieldNodeNameValue(selectionNode);
+                        let linkFieldNode = linkFieldSelectionSets.get(fieldName);
+                        if (linkFieldNode) {
+                            linkFieldNode = {
+                                ...linkFieldNode,
+                                field: {
+                                    ...linkFieldNode.field,
+                                    selectionSet: mergeSelectionSets(linkFieldNode.field.selectionSet, selectionNode.selectionSet),
+                                },
+                            };
+                        }
+                        else {
+                            linkFieldNode = {
+                                selectedFieldType: selectedField.type,
+                                field: selectionNode,
+                            };
+                        }
+                        linkFieldSelectionSets.set(fieldName, linkFieldNode);
+                    }
+                    else if (selectionNode.alias) {
+                        primitiveAliasFields.set(selectionNode.alias.value, selectionNode);
+                    }
+                    else if (selectionNode.name.value === '__typename') {
+                        requireTypename = true;
+                    }
+                    else {
+                        primitiveFields.set(selectionNode.name.value, selectionNode);
+                    }
+                }
+                else if (selectionNode.kind === Kind.DIRECTIVE) {
+                    if (hasConditionalDirectives([selectionNode])) {
+                        inlineFragmentConditional = true;
+                    }
+                }
+                else {
+                    throw new TypeError('Unexpected type.');
+                }
+                continue;
+            }
+            // 2. Handle Fragment Spread nodes
+            // A Fragment Spread can be:
+            // - masked: the fields declared in the Fragment do not appear in the operation types
+            // - inline: the fields declared in the Fragment appear in the operation types
+            // 2a. If `inlineFragmentTypes` is 'combine' or 'mask', the Fragment Spread is masked by default
+            // In some cases, a masked node could be unmasked (i.e. treated as inline):
+            // - Fragment spread node is marked with Apollo `@unmask`, e.g. `...User @unmask`
+            if (this._config.inlineFragmentTypes === 'combine' ||
+                this._config.inlineFragmentTypes === 'mask') {
+                let isMasked = true;
+                if (this._config.customDirectives.apolloUnmask &&
+                    selectionNode.fragmentDirectives.some(d => d.name.value === 'unmask')) {
+                    isMasked = false;
+                }
+                if (isMasked) {
+                    fragmentsSpreadUsages.push(selectionNode.typeName);
+                    continue;
+                }
+            }
+            // 2b. If the Fragment Spread is not masked, generate inline types.
+            const fragmentType = this._schema.getType(selectionNode.onType);
+            if (fragmentType == null) {
+                throw new TypeError(`Unexpected error: Type ${selectionNode.onType} does not exist within schema.`);
+            }
+            if (parentSchemaType.name === selectionNode.onType ||
+                parentSchemaType
+                    .getInterfaces()
+                    .find(iinterface => iinterface.name === selectionNode.onType) != null ||
+                (isUnionType(fragmentType) &&
+                    fragmentType.getTypes().find(objectType => objectType.name === parentSchemaType.name))) {
+                // also process fields from fragment that apply for this parentType
+                const { selectionNodesByTypeName } = this.flattenSelectionSet(selectionNode.selectionNodes, parentSchemaType);
+                const typeNodes = selectionNodesByTypeName.get(parentSchemaType.name) ?? [];
+                selectionNodes.push(...typeNodes);
+                for (const iinterface of parentSchemaType.getInterfaces()) {
+                    const typeNodes = selectionNodesByTypeName.get(iinterface.name) ?? [];
+                    selectionNodes.push(...typeNodes);
+                }
+            }
+        }
+        const linkFields = [];
+        const linkFieldsInterfaces = [];
+        for (const { field, selectedFieldType } of linkFieldSelectionSets.values()) {
+            const realSelectedFieldType = getBaseType(selectedFieldType);
+            const selectionSet = this.createNext(realSelectedFieldType, field.selectionSet);
+            const fieldName = field.alias?.value ?? field.name.value;
+            const selectionSetObjects = selectionSet.transformSelectionSet(options.parentFieldName ? `${options.parentFieldName}_${fieldName}` : fieldName);
+            linkFieldsInterfaces.push(...selectionSetObjects.dependentTypes);
+            const isConditional = hasConditionalDirectives(field.directives) ||
+                hasConditionalDirectives(field.fragmentDirectives) ||
+                inlineFragmentConditional;
+            linkFields.push({
+                alias: field.alias
+                    ? this._processor.config.formatNamedField({
+                        name: field.alias.value,
+                        isOptional: isConditional || options.unsetTypes,
+                    })
+                    : undefined,
+                name: this._processor.config.formatNamedField({
+                    name: field.name.value,
+                    isOptional: isConditional || options.unsetTypes,
+                }),
+                type: realSelectedFieldType.name,
+                selectionSet: this._processor.config.wrapTypeWithModifiers(selectionSetObjects.mergedTypeString.split(`\n`).join(`\n  `), selectedFieldType),
+            });
+        }
+        const typeInfoField = this.buildTypeNameField(parentSchemaType, this._config.nonOptionalTypename, requireTypename, this._config.skipTypeNameForRoot);
+        const transformed = [
+            // Only add the typename field if we're not merging fragment
+            // types. If we are merging, we need to wait until we know all
+            // the involved typenames.
+            ...(typeInfoField &&
+                (!this._config.mergeFragmentTypes || this._config.inlineFragmentTypes === 'mask')
+                ? this._processor.transformTypenameField(typeInfoField.type, typeInfoField.name)
+                : []),
+            ...this._processor.transformPrimitiveFields(parentSchemaType, Array.from(primitiveFields.values()).map(field => ({
+                isConditional: hasConditionalDirectives(field.directives) ||
+                    hasConditionalDirectives(field.fragmentDirectives),
+                fieldName: field.name.value,
+            })), options.unsetTypes),
+            ...this._processor.transformAliasesPrimitiveFields(parentSchemaType, Array.from(primitiveAliasFields.values()).map(field => ({
+                alias: field.alias.value,
+                fieldName: field.name.value,
+                isConditional: hasConditionalDirectives(field.directives) ||
+                    hasConditionalDirectives(field.fragmentDirectives),
+            })), options.unsetTypes),
+            ...this._processor.transformLinkFields(linkFields, options.unsetTypes),
+        ].filter(Boolean);
+        const allStrings = transformed.filter(t => typeof t === 'string');
+        const allObjectsMerged = transformed
+            .filter(t => typeof t !== 'string')
+            .map((t) => `${t.name}: ${t.type}`);
+        let mergedObjectsAsString = null;
+        if (allObjectsMerged.length > 0) {
+            mergedObjectsAsString = this._processor.buildFieldsIntoObject(allObjectsMerged);
+        }
+        const fields = [...allStrings, mergedObjectsAsString].filter(Boolean);
+        if (fragmentsSpreadUsages.length) {
+            if (this._config.inlineFragmentTypes === 'combine') {
+                fields.push(...fragmentsSpreadUsages);
+            }
+            else if (this._config.inlineFragmentTypes === 'mask') {
+                fields.push(`{ ' $fragmentRefs'?: { ${fragmentsSpreadUsages
+                    .map(name => `'${name}': ${options.unsetTypes ? `Incremental<${name}>` : name}`)
+                    .join(`;`)} } }`);
+            }
+        }
+        return {
+            typeInfo: typeInfoField,
+            fields,
+            dependentTypes: linkFieldsInterfaces,
+        };
+    }
+    buildTypeNameField(type, nonOptionalTypename, queriedForTypename, skipTypeNameForRoot) {
+        const typenameField = {
+            name: this._processor.config.formatNamedField({ name: '__typename' }),
+            type: `'${type.name}'`,
+        };
+        if (queriedForTypename) {
+            return typenameField;
+        }
+        const rootTypes = getRootTypes(this._schema);
+        if (rootTypes.has(type) && skipTypeNameForRoot) {
+            return null;
+        }
+        if (nonOptionalTypename) {
+            return typenameField;
+        }
+        return null;
+    }
+    getUnknownType() {
+        return 'never';
+    }
+    getEmptyObjectType() {
+        return 'Record<PropertyKey, never>';
+    }
+    getEmptyObjectTypeString(mustAddEmptyObject) {
+        return mustAddEmptyObject ? this.getEmptyObjectType() : ``;
+    }
+    transformSelectionSet(fieldName) {
+        const possibleTypesList = getPossibleTypes(this._schema, this._parentSchemaType);
+        const possibleTypes = possibleTypesList.map(v => v.name).sort();
+        const fieldSelections = [
+            ...getFieldNames({
+                selections: this._selectionSet.selections,
+                loadedFragments: this._loadedFragments,
+            }),
+        ].sort();
+        // Optimization: Do not create new dependentTypes if fragment typename exists in cache
+        // 2-layer cache: LOC => Field Selection Type Combination => cachedTypeString
+        const objMap = this._processor.typeCache.get(this._selectionSet.loc) ?? new Map();
+        this._processor.typeCache.set(this._selectionSet.loc, objMap);
+        const cacheHashKey = `${fieldSelections.join(',')} @ ${possibleTypes.join('|')}`;
+        const [cachedTypeString] = objMap.get(cacheHashKey) ?? [];
+        if (cachedTypeString) {
+            // reuse previously generated type, as it is identical
+            return {
+                mergedTypeString: cachedTypeString,
+                // there are no new dependent types, as this is a nth use of the same type
+                dependentTypes: [],
+            };
+        }
+        const result = this.transformSelectionSetUncached(fieldName);
+        objMap.set(cacheHashKey, [result.mergedTypeString, fieldName]);
+        if (this._selectionSet.loc) {
+            this._processor.typeCache.set(this._selectionSet.loc, objMap);
+        }
+        return result;
+    }
+    transformSelectionSetUncached(fieldName) {
+        const { grouped, mustAddEmptyObject, dependentTypes: subDependentTypes, } = this._buildGroupedSelections(fieldName);
+        // This might happen in case we have an interface, that is being queries, without any GraphQL
+        // "type" that implements it. It will lead to a runtime error, but we aim to try to reflect that in
+        // build time as well.
+        if (Object.keys(grouped).length === 0) {
+            return {
+                mergedTypeString: this.getUnknownType(),
+                dependentTypes: subDependentTypes,
+            };
+        }
+        const dependentTypes = Object.keys(grouped)
+            .map(typeName => {
+            const relevant = grouped[typeName].filter(Boolean);
+            return relevant.map(objDefinition => {
+                // In extractAllFieldsToTypesCompact mode, we still need to keep the final concrete type name for union/interface types
+                // to distinguish between different implementations, but we skip it for simple object types
+                const hasMultipleTypes = Object.keys(grouped).length > 1;
+                let name;
+                if (fieldName) {
+                    if (this._config.extractAllFieldsToTypesCompact && !hasMultipleTypes) {
+                        name = fieldName;
+                    }
+                    else {
+                        name = `${fieldName}_${typeName}`;
+                    }
+                }
+                else {
+                    name = typeName;
+                }
+                return {
+                    name,
+                    content: typeof objDefinition === 'string' ? objDefinition : objDefinition.union.join(' | '),
+                    isUnionType: !!(typeof objDefinition !== 'string' && objDefinition.union.length > 1),
+                };
+            });
+        })
+            .filter(pairs => pairs.length > 0);
+        const typeParts = [
+            ...dependentTypes.map(pair => pair
+                .map(({ name, content, isUnionType }) => 
+            // unions need to be wrapped, as intersections have higher precedence
+            this._config.extractAllFieldsToTypes ? name : isUnionType ? `(${content})` : content)
+                .join(' & ')),
+            this.getEmptyObjectTypeString(mustAddEmptyObject),
+        ].filter(Boolean);
+        const content = formatUnion(typeParts);
+        if (typeParts.length > 1 && this._config.extractAllFieldsToTypes) {
+            return {
+                mergedTypeString: fieldName,
+                dependentTypes: [
+                    ...subDependentTypes,
+                    ...dependentTypes.flat(1),
+                    { name: fieldName, content, isUnionType: true },
+                ],
+            };
+        }
+        return {
+            mergedTypeString: content,
+            dependentTypes: [...subDependentTypes, ...dependentTypes.flat(1)],
+            isUnionType: typeParts.length > 1,
+        };
+    }
+    transformFragmentSelectionSetToTypes(fragmentName, fragmentSuffix, declarationBlockConfig) {
+        const mergedTypeString = this.buildFragmentTypeName(fragmentName, fragmentSuffix);
+        const { grouped, dependentTypes } = this._buildGroupedSelections(mergedTypeString);
+        const hasMultipleTypes = Object.keys(grouped).length > 1;
+        const subTypes = Object.keys(grouped).flatMap(typeName => {
+            const possibleFields = grouped[typeName].filter(Boolean);
+            // In extractAllFieldsToTypesCompact mode, pass typeName only when there are multiple types
+            const declarationName = this._config.extractAllFieldsToTypesCompact && !hasMultipleTypes
+                ? this.buildFragmentTypeName(fragmentName, fragmentSuffix)
+                : this.buildFragmentTypeName(fragmentName, fragmentSuffix, typeName);
+            if (possibleFields.length === 0) {
+                return [];
+            }
+            const flatFields = possibleFields.map(selectionObject => {
+                if (typeof selectionObject === 'string')
+                    return { value: selectionObject };
+                return {
+                    value: selectionObject.union.join(' | '),
+                    isUnionType: true,
+                };
+            });
+            const content = flatFields.length > 1
+                ? flatFields
+                    .map(({ value, isUnionType }) => (isUnionType ? `(${value})` : value))
+                    .join(' & ')
+                : flatFields.map(({ value }) => value).join(' & ');
+            return {
+                name: declarationName,
+                content,
+                isUnionType: false,
+            };
+        });
+        const fragmentMaskPartial = this._config.inlineFragmentTypes === 'mask'
+            ? ` & { ' $fragmentName'?: '${mergedTypeString}' }`
+            : '';
+        // TODO: unify with line 308 from base-documents-visitor
+        const dependentTypesContent = this._config.extractAllFieldsToTypes
+            ? dependentTypes.map(i => new DeclarationBlock(declarationBlockConfig)
+                .export(true)
+                .asKind('type')
+                .withName(i.name)
+                .withContent(i.content).string)
+            : [];
+        if (subTypes.length === 1) {
+            return [
+                ...dependentTypesContent,
+                new DeclarationBlock(declarationBlockConfig)
+                    .export()
+                    .asKind('type')
+                    .withName(mergedTypeString)
+                    .withContent(subTypes[0].content + fragmentMaskPartial).string,
+            ].join('\n');
+        }
+        return [
+            ...dependentTypesContent,
+            ...subTypes.map(t => new DeclarationBlock(declarationBlockConfig)
+                .export(this._config.exportFragmentSpreadSubTypes)
+                .asKind('type')
+                .withName(t.name)
+                .withContent(`${t.content}${this._config.inlineFragmentTypes === 'mask'
+                ? ` & { ' $fragmentName'?: '${t.name}' }`
+                : ''}`).string),
+            new DeclarationBlock(declarationBlockConfig)
+                .export()
+                .asKind('type')
+                .withName(mergedTypeString)
+                .withContent(formatUnion(subTypes.map(t => t.name))).string,
+        ].join('\n');
+    }
+    buildFragmentTypeName(name, suffix, typeName = '') {
+        const fragmentSuffix = typeName && suffix ? `_${typeName}_${suffix}` : typeName ? `_${typeName}` : suffix;
+        return this._convertName(name, {
+            useTypesPrefix: true,
+            suffix: fragmentSuffix,
+        });
+    }
+    buildParentFieldName(typeName, parentName) {
+        // Sample args:
+        //   typeName = User             <-- last field type
+        //   parentName = GetFoo_user    <-- full field name
+        // queries/mutations/fragments are guaranteed to be unique type names,
+        // so we can skip affixing the field names with typeName
+        if (operationTypes.includes(typeName)) {
+            return parentName;
+        }
+        // When extractAllFieldsToTypesCompact mode is enabled, skip appending typeName initially
+        // but check for conflicts
+        if (this._config.extractAllFieldsToTypesCompact) {
+            const existingTypeName = this._seenFieldNames.get(parentName);
+            if (!existingTypeName) {
+                // First time seeing this field name, record it's type
+                this._seenFieldNames.set(parentName, typeName);
+                return parentName;
+            }
+            if (existingTypeName !== typeName) {
+                // Conflict detected: same field name but different type
+                // Return field name with type suffix
+                return `${parentName}_${typeName}`;
+            }
+            // Same field name and same type, just return the plain name
+            return parentName;
+        }
+        const schemaType = this._schema.getType(typeName);
+        // Check if current selection set has type-narrowing fragments.
+        // - Inline fragments are always type-narrowing
+        // - Fragment spreads are only type-narrowing if they are on a different type than the current parent schema type
+        //   (e.g. spreading `fragment Foo on Pet` while processing `Pet` is not type-narrowing).
+        const hasTypeNarrowingFragments = this._selectionSet?.selections?.some(selection => {
+            if (selection.kind === Kind.INLINE_FRAGMENT) {
+                return true;
+            }
+            if (selection.kind === Kind.FRAGMENT_SPREAD) {
+                const spreadFragment = this._loadedFragments.find(lf => lf.name === selection.name.value);
+                // If we can't resolve fragment metadata (or the current parent type), treat it as type-narrowing.
+                // This avoids incorrectly using interface-rooted names in cases that are actually concrete-targeting.
+                return (!spreadFragment ||
+                    !this._parentSchemaType ||
+                    spreadFragment.onType !== this._parentSchemaType.name);
+            }
+            return false;
+        }) ?? false;
+        // When the parent schema type is an interface:
+        // - If we're processing inline fragments, use the concrete type name
+        // - If we're processing the interface directly, use the interface name
+        // - If we're in a named fragment, always use the concrete type name
+        if (isObjectType(schemaType) &&
+            this._parentSchemaType &&
+            isInterfaceType(this._parentSchemaType) &&
+            !hasTypeNarrowingFragments) {
+            return `${parentName}_${this._parentSchemaType.name}`;
+        }
+        return `${parentName}_${typeName}`;
+    }
+}
+function formatUnion(members) {
+    if (members.length > 1) {
+        return `\n  | ${members.map(m => m.replace(/\n/g, '\n  ')).join('\n  | ')}\n`;
+    }
+    return members.join(' | ');
+}

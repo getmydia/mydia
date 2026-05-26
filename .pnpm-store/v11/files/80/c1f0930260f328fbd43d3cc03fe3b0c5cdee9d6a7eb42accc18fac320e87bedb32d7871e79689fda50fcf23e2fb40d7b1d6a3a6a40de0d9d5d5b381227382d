@@ -1,0 +1,83 @@
+import { concatAST } from 'graphql';
+import { oldVisit } from '@graphql-codegen/plugin-helpers';
+import { transformSchemaAST } from '@graphql-codegen/schema-ast';
+import { optimizeOperations } from '@graphql-codegen/visitor-plugin-common';
+import { TypeScriptDocumentsVisitor } from './visitor.js';
+export const plugin = async (inputSchema, rawDocuments, config, { outputFile }) => {
+    const schema = config.nullability?.errorHandlingClient
+        ? await semanticToStrict(inputSchema)
+        : inputSchema;
+    const documents = config.flattenGeneratedTypes
+        ? optimizeOperations(schema, rawDocuments, {
+            includeFragments: config.flattenGeneratedTypesIncludeFragments,
+        })
+        : rawDocuments;
+    const parsedDocuments = documents.reduce((prev, document) => {
+        prev.all.documentFiles.push(document);
+        prev.all.documentNodes.push(document.document);
+        // `!document.type` case could happen in a few scenarios:
+        // - the plugin is programmatically triggered
+        // - in existing tests
+        if (!document.type || document.type === 'standard') {
+            prev.standard.documentFiles.push(document);
+            prev.standard.documentNodes.push(document.document);
+        }
+        return prev;
+    }, {
+        all: { documentFiles: [], documentNodes: [] },
+        standard: { documentFiles: [], documentNodes: [] },
+    });
+    // For Fragment types to resolve correctly, we must get read all docs (`standard` and `external`)
+    // Fragment types are usually (but not always) in `external` files in certain setup, like a monorepo.
+    const allDocumentsAST = concatAST(parsedDocuments.all.documentNodes);
+    const visitor = new TypeScriptDocumentsVisitor(schema, config, allDocumentsAST, outputFile);
+    // We only visit `standard` documents to generate types.
+    // `external` documents are included as references for typechecking and completeness i.e. only used for reading purposes, no writing.
+    const documentsToVisitAST = concatAST(parsedDocuments.standard.documentNodes);
+    const operationsResult = oldVisit(documentsToVisitAST, {
+        leave: visitor,
+    });
+    const operationsDefinitions = operationsResult.definitions;
+    if (config.addOperationExport) {
+        for (const d of allDocumentsAST.definitions) {
+            if ('name' in d) {
+                operationsDefinitions.push(`export declare const ${d.name.value}: import("graphql").DocumentNode;`);
+            }
+        }
+    }
+    const schemaTypes = oldVisit(transformSchemaAST(schema, config).ast, { leave: visitor });
+    // IMPORTANT: when a visitor leaves a node with no transformation logic,
+    // It will leave the node as an object.
+    // Here, we filter in nodes that have been turned into strings, i.e. they have been transformed
+    // This way, we do not have to explicitly declare a method for every node type to convert them to null
+    const schemaTypesDefinitions = schemaTypes.definitions.filter(def => typeof def === 'string');
+    let content = [...schemaTypesDefinitions, ...operationsDefinitions].join('\n');
+    if (config.globalNamespace) {
+        content = `
+    declare global {
+      ${content}
+    }`;
+    }
+    return {
+        prepend: [
+            ...visitor.getImports(),
+            ...visitor.getExternalSchemaTypeImports(),
+            ...visitor.getEnumsImports(),
+            ...visitor.getScalarsImports(),
+            ...visitor.getGlobalDeclarations(visitor.config.noExport),
+            visitor.getExactUtilityType(),
+            visitor.getIncrementalUtilityType(),
+        ],
+        content,
+    };
+};
+export { TypeScriptDocumentsVisitor };
+const semanticToStrict = async (schema) => {
+    try {
+        const sock = await import('graphql-sock');
+        return sock.semanticToStrict(schema);
+    }
+    catch {
+        throw new Error("To use the `nullability.errorHandlingClient` option, you must install the 'graphql-sock' package.");
+    }
+};

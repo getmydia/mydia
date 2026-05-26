@@ -151,7 +151,7 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
         .context("tower-sessions table migration failed")?;
 
     let pubsub = Pubsub::new();
-    let _library_scanner_storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
+    let library_scanner_storage: JobStorage<LibraryScannerArgs> = JobStorage::from_db(&db);
 
     let oidc = build_oidc_context(config).await.map(Arc::new);
 
@@ -169,7 +169,7 @@ async fn bootstrap(config: &Config) -> anyhow::Result<BootState> {
         download_service_config(),
     );
 
-    let mut web_state = WebState::new(db.clone(), pubsub, _library_scanner_storage, oidc)
+    let mut web_state = WebState::new(db.clone(), pubsub, library_scanner_storage, oidc)
         .with_streaming_supervisor(streaming_supervisor.clone())
         .with_download_service(download_service);
 

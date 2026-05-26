@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1.4
+#
+# Development image for the mydia-rs React frontend.
+#
+# Runs Vite dev server with HMR on :5173, proxying API calls to the
+# Rust backend on localhost:4002. Shares host networking with the rs
+# container so the Vite proxy reaches the backend directly.
+
+FROM node:22-bookworm-slim
+
+# Enable corepack + pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app/mydia-rs/frontend
+
+EXPOSE 5173
+
+COPY docker-entrypoint-rs-frontend.sh /usr/local/bin/docker-entrypoint-rs-frontend.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-rs-frontend.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-rs-frontend.sh"]
+CMD ["pnpm", "run", "dev", "--host", "0.0.0.0"]

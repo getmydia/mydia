@@ -1,8 +1,10 @@
 import { useCallback } from "react";
-import { useQuery, useMutation } from "urql";
+import { useQuery, useMutation, useSubscription } from "urql";
+import type { TranscodeEventsSubscription } from "../../graphql/generated/graphql";
 import {
   AdminTranscodesDocument,
   CancelTranscodeDocument,
+  TranscodeEventsDocument,
 } from "../../graphql/generated/graphql";
 import { PageHeader } from "../../components/page-header";
 import { Card } from "../../components/card";
@@ -18,6 +20,18 @@ export function TranscodesPage() {
 
   const transcodes = result.data?.transcodes ?? [];
   const error = result.error;
+
+  // Subscribe to transcode events for live progress updates
+  useSubscription<
+    TranscodeEventsSubscription,
+    { transcodeEvents: TranscodeEventsSubscription["transcodeEvents"] }
+  >(
+    { query: TranscodeEventsDocument },
+    (_prev, _event) => {
+      refetch();
+      return _event;
+    },
+  );
 
   const handleCancel = useCallback(
     async (id: string) => {

@@ -190,10 +190,11 @@ impl P2pRouter for MinimalRouter {
         _request: ReadMediaRequest,
         _ctx: RouterContext,
     ) -> Result<MydiaResponse, RouterError> {
-        // Legacy direct read path. Not yet wired in mydia-rs; HLS is
-        // the supported surface.
+        // Permanently unwired. mydia-rs's playback surface is HLS via Flutter;
+        // direct-read is retained on the protocol for wire compatibility with
+        // old clients but will never be implemented server-side.
         Ok(MydiaResponse::Error(
-            "ReadMedia not implemented in mydia-rs; use HlsStream".into(),
+            "ReadMedia is permanently unwired in mydia-rs; HLS-only surface.".into(),
         ))
     }
 

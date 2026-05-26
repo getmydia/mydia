@@ -2,7 +2,7 @@ import { cacheExchange, fetchExchange, subscriptionExchange } from "urql";
 import { createClient as createWSClient } from "graphql-ws";
 
 const wsClient = createWSClient({
-  url: `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/graphql/ws`,
+  url: `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/graphql/socket`,
   lazy: true,
   retryAttempts: 5,
 });
@@ -16,7 +16,7 @@ const customFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Resp
 };
 
 export const clientConfig = {
-  url: "/graphql",
+  url: "/api/graphql",
   exchanges: [
     cacheExchange,
     fetchExchange,

@@ -25,6 +25,12 @@ use std::sync::Arc;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use tokio::sync::RwLock;
 
+use mydia_rs_db::types::{DateTimeMicros, UuidText};
+use mydia_rs_entities::release_blacklist;
+use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::{Expr, ExprTrait, SimpleExpr, Value};
+use sea_orm::{DbBackend, PaginatorTrait, QueryOrder};
+
 /// One blacklist row. Carries the same fields as Phoenix's
 /// `Mydia.Downloads.ReleaseBlacklist` schema.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,6 +135,169 @@ impl BlacklistStore for MemoryStore {
         let before = rows.len();
         rows.retain(|r| r.is_active(now));
         before - rows.len()
+    }
+}
+
+/// Database-backed blacklist store using `SeaORM` and the `release_blacklist`
+/// entity. Uniform across both database backends (`SQLite`, `Postgres`).
+pub struct SeaOrmStore {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmStore {
+    /// Create a new `SeaOrmStore` backed by the given DB connection.
+    #[must_use]
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait::async_trait]
+impl BlacklistStore for SeaOrmStore {
+    async fn upsert(&self, entry: BlacklistEntry) {
+        let normalized = normalize_indexer(&entry.indexer);
+        let backend = self.db.get_database_backend();
+
+        // 1. Check if the row already exists
+        let existing = release_blacklist::Entity::find()
+            .filter(release_blacklist::Column::Indexer.eq(&normalized))
+            .filter(release_blacklist::Column::Guid.eq(&entry.guid))
+            .one(&self.db)
+            .await;
+
+        let expires = entry.expires_at.map(DateTimeMicros::from);
+        let inserted = DateTimeMicros::from(entry.inserted_at);
+
+        if let Ok(Some(row)) = existing {
+            // Update the existing row
+            let mut update_query = release_blacklist::Entity::update_many()
+                .col_expr(release_blacklist::Column::Title, Expr::value(&entry.title))
+                .col_expr(
+                    release_blacklist::Column::FailureReason,
+                    Expr::value(&entry.failure_reason),
+                )
+                .col_expr(
+                    release_blacklist::Column::InsertedAt,
+                    inserted.into_simple_expr(backend),
+                );
+
+            let expires_expr = match expires {
+                Some(exp) => exp.into_simple_expr(backend),
+                None => match backend {
+                    DbBackend::Sqlite => SimpleExpr::Value(Value::String(None)),
+                    DbBackend::Postgres => {
+                        Expr::cust_with_values("$1::timestamptz", vec![Value::String(None)])
+                    }
+                    _ => unreachable!("mydia-rs is dual-engine SQLite/Postgres only"),
+                },
+            };
+
+            update_query =
+                update_query.col_expr(release_blacklist::Column::ExpiresAt, expires_expr);
+
+            let _ = update_query
+                .filter(
+                    Expr::col(release_blacklist::Column::Id).eq(row.id.into_simple_expr(backend)),
+                )
+                .exec(&self.db)
+                .await;
+        } else {
+            // Insert a new row
+            let id = UuidText::new_v4();
+            let am = release_blacklist::ActiveModel {
+                id: sea_orm::Set(id),
+                indexer: sea_orm::Set(normalized),
+                guid: sea_orm::Set(entry.guid.clone()),
+                title: sea_orm::Set(entry.title.clone()),
+                failure_reason: sea_orm::Set(entry.failure_reason.clone()),
+                expires_at: sea_orm::Set(expires),
+                inserted_at: sea_orm::Set(inserted),
+            };
+
+            let _ = mydia_rs_db::insert_active_model(am, &self.db).await;
+        }
+    }
+
+    async fn is_blacklisted(&self, indexer: &str, guid: &str, now: DateTime<Utc>) -> bool {
+        let normalized = normalize_indexer(indexer);
+        let now_db = DateTimeMicros::from(now);
+        let backend = self.db.get_database_backend();
+
+        let count = release_blacklist::Entity::find()
+            .filter(release_blacklist::Column::Indexer.eq(&normalized))
+            .filter(release_blacklist::Column::Guid.eq(guid))
+            .filter(
+                release_blacklist::Column::ExpiresAt
+                    .is_null()
+                    .or(Expr::col(release_blacklist::Column::ExpiresAt)
+                        .gt(now_db.into_simple_expr(backend))),
+            )
+            .count(&self.db)
+            .await
+            .unwrap_or(0);
+
+        count > 0
+    }
+
+    async fn list_active(&self, now: DateTime<Utc>) -> Vec<BlacklistEntry> {
+        let now_db = DateTimeMicros::from(now);
+        let backend = self.db.get_database_backend();
+
+        let rows = release_blacklist::Entity::find()
+            .filter(
+                release_blacklist::Column::ExpiresAt
+                    .is_null()
+                    .or(Expr::col(release_blacklist::Column::ExpiresAt)
+                        .gt(now_db.into_simple_expr(backend))),
+            )
+            .order_by_asc(release_blacklist::Column::ExpiresAt)
+            .all(&self.db)
+            .await
+            .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|r| BlacklistEntry {
+                indexer: r.indexer,
+                guid: r.guid,
+                title: r.title,
+                failure_reason: r.failure_reason,
+                expires_at: r.expires_at.map(|d| d.0),
+                inserted_at: r.inserted_at.0,
+            })
+            .collect()
+    }
+
+    async fn remove(&self, indexer: &str, guid: &str) -> bool {
+        let normalized = normalize_indexer(indexer);
+        let res = release_blacklist::Entity::delete_many()
+            .filter(release_blacklist::Column::Indexer.eq(&normalized))
+            .filter(release_blacklist::Column::Guid.eq(guid))
+            .exec(&self.db)
+            .await;
+
+        match res {
+            Ok(delete_result) => delete_result.rows_affected > 0,
+            Err(_) => false,
+        }
+    }
+
+    async fn cleanup_expired(&self, now: DateTime<Utc>) -> usize {
+        let now_db = DateTimeMicros::from(now);
+        let backend = self.db.get_database_backend();
+
+        let res = release_blacklist::Entity::delete_many()
+            .filter(release_blacklist::Column::ExpiresAt.is_not_null())
+            .filter(
+                Expr::col(release_blacklist::Column::ExpiresAt)
+                    .lt(now_db.into_simple_expr(backend)),
+            )
+            .exec(&self.db)
+            .await;
+
+        match res {
+            Ok(delete_result) => delete_result.rows_affected as usize,
+            Err(_) => 0,
+        }
     }
 }
 

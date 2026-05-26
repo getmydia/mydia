@@ -96,18 +96,21 @@ ${YELLOW}Player Android (Native, uses player/flake.nix):${NC}
   player android run   Build and run on connected Android device
   player android shell Open nix develop shell in player directory
 
-${YELLOW}Rust Backend (mydia-rs, native via Nix devenv):${NC}
-  rs up                Start 'dx serve' (host port 4002, RSX hot-reload + kill-restart)
-  rs down              Stop the devenv processes
-  rs shell             Open the devenv shell (toolchain + dx)
-  rs build             Build via dx (cargo build of server + wasm + tailwind)
-  rs run               Run the app binary once via dx (no watcher)
+${YELLOW}Rust Backend (mydia-rs, docker compose --profile rs):${NC}
+  rs up [-d]           Start axum + Vite HMR (forward :5173, proxies to :4002)
+  rs down              Stop the rs + rs-frontend containers
+  rs logs [-f] [name]  View / follow container logs (name: rs or rs-frontend)
+  rs shell             Open bash in the rs container
+  rs build             Build (cargo build + pnpm build)
+  rs run               Run the app binary once (no watcher)
   rs test              Run all tests (cargo test)
   rs check             Type-check without building (cargo check)
   rs fmt               Format code (cargo fmt)
   rs clippy            Run clippy lints (cargo clippy)
   rs sqlx-prepare      Refresh sqlx offline query cache
   rs schema-diff       Check entity schema drift vs Phoenix-migrated Postgres
+  rs frontend dev      Start frontend dev server only (Vite HMR on :5173)
+  rs frontend build    Build frontend (pnpm install && pnpm build)
   rs <args>            Forward args verbatim to cargo
 
 ${YELLOW}Player E2E Options:${NC}
@@ -761,42 +764,36 @@ case "$COMMAND" in
 
     # Rust backend (mydia-rs)
     #
-    # All commands run natively via Nix devenv. `up` drives `dx serve
-    # --hot-patch` under process-compose; everything else is a
-    # one-shot cargo / dx invocation in the dev shell.
+    # All commands run inside the `rs` docker compose service. `up`
+    # foregrounds `dx serve` so Ctrl-C cleanly tears the container
+    # down; everything else is `docker compose exec` (if rs is up) or
+    # `docker compose run --rm` (otherwise).
     rs)
         if [ $# -eq 0 ]; then
             cat <<EOF
-${YELLOW}mydia-rs Rust backend (native via nix devenv):${NC}
-  ./dev rs up            Start 'dx serve' (host port 4002)
-  ./dev rs down          Stop the running processes
-  ./dev rs shell         Open the devenv shell (toolchain + dx)
-  ./dev rs build         Build via dx (server + wasm + tailwind in one shot)
-  ./dev rs run           Run the app binary once via dx (no watcher)
-  ./dev rs test          Run all tests (cargo test)
-  ./dev rs check         Type-check without building (cargo check)
-  ./dev rs fmt           Format code (cargo fmt)
-  ./dev rs clippy        Run clippy lints (cargo clippy)
-  ./dev rs sqlx-prepare  Refresh sqlx offline query cache (--workspace)
-  ./dev rs <args>        Forward args verbatim to cargo
+${YELLOW}mydia-rs Rust backend (docker compose --profile rs):${NC}
+  ./dev rs up                 Start axum + Vite HMR in foreground (Ctrl-C stops both)
+  ./dev rs up -d              Start detached
+  ./dev rs down               Stop rs + rs-frontend containers
+  ./dev rs logs [-f] [name]   View / follow logs (default: both; name: rs or rs-frontend)
+  ./dev rs shell              Open bash in the rs container
+  ./dev rs build              Build (cargo build + pnpm build)
+  ./dev rs run                Run the app binary once
+  ./dev rs test               Run all tests (cargo test)
+  ./dev rs check              Type-check without building (cargo check)
+  ./dev rs fmt                Format code (cargo fmt)
+  ./dev rs clippy             Run clippy lints (cargo clippy)
+  ./dev rs sqlx-prepare       Refresh sqlx offline query cache (--workspace)
+  ./dev rs schema-diff        Drift check between entities and Postgres schema
+  ./dev rs frontend dev       Start frontend Vite dev server only (HMR on :5173)
+  ./dev rs frontend build     Install deps + build frontend (pnpm build)
+  ./dev rs <args>             Forward args verbatim to cargo
 
-The dev loop is owned by dx serve:
-  - RSX edits push patches over the dev WebSocket without a rebuild.
-  - Other edits (Rust code, signatures, deps) trigger a parallel
-    server + wasm rebuild and dx gracefully kill-restarts the binary.
-    Subsequent rebuilds are seconds with the warm incremental cache.
-  - Tailwind v4 runs under dx via the standalone tailwindcss binary
-    it auto-downloads on first run; the source/output paths are in
-    Dioxus.toml's [application] block.
+Two containers start with --profile rs:
+  - rs:           axum backend on :4002
+  - rs-frontend:  Vite dev server on :5173, proxies /graphql /api /auth to :4002
 
-Subsecond hot-patching (--hot-patch) is off for now: dx 0.7.9 fails
-the workspace fullstack build with "Missing linker args for fat link"
-when it's enabled. RSX hot-reload doesn't need it; full Rust patching
-will turn on once dx ships the fix.
-
-MYDIA_RS_DEV_SKIP_LOCK=true is set in dev so dx's kill-restart on a
-full rebuild doesn't trip the U34 lock's 30-second staleness window.
-Production must never set this.
+The operator SSH-forwards a single port: 5173.
 EOF
             exit 0
         fi
@@ -804,114 +801,92 @@ EOF
         rs_subcmd="$1"
         shift
 
-        if ! command -v nix &> /dev/null; then
-            echo -e "${RED}Error: nix is not installed${NC}"
-            echo "./dev rs commands run natively via Nix devenv."
-            echo "Install from: https://nixos.org/download.html"
-            exit 1
-        fi
+        RS_SERVICE="rs"
+
+        is_rs_running() {
+            docker compose --profile rs ps --status=running --format '{{.Service}}' 2>/dev/null \
+                | grep -q "^${RS_SERVICE}$"
+        }
+
+        rs_in_container() {
+            if is_rs_running; then
+                docker compose --profile rs exec \
+                    --user "$LOCAL_UID:$LOCAL_GID" \
+                    -w /app/mydia-rs "$RS_SERVICE" "$@"
+            else
+                docker compose --profile rs run --rm \
+                    -w /app/mydia-rs "$RS_SERVICE" "$@"
+            fi
+        }
 
         case "$rs_subcmd" in
             up)
-                # Build the devenv-up artifact, then exec it. devenv
-                # reads DEVENV_ROOT to know which working directory
-                # to bind processes to; --impure is required because
-                # devenv needs runtime info that flake purity rejects.
-                DEVENV_UP=$(DEVENV_ROOT="$(pwd)" nix build --impure \
-                    .#mydia-rs-dev-devenv-up --no-link --print-out-paths 2>&1 \
-                    | grep -v '^warning' | tail -1)
-                if [ -z "$DEVENV_UP" ] || [ ! -x "$DEVENV_UP" ]; then
-                    echo -e "${RED}Failed to build devenv-up artifact${NC}"
-                    exit 1
-                fi
-                # Stash the process-group leader's pid for `./dev rs
-                # down`. setsid puts us in a fresh session whose pgid
-                # equals the leader's pid — that lets `down` send a
-                # group-wide signal that reaches process-compose, dx
-                # serve, and every process dx spawned (cargo, the
-                # wasm-bindgen step, the running binary, tailwindcss).
-                mkdir -p .devenv
-                exec setsid sh -c '
-                    echo $$ > .devenv/dev-rs-up.pid
-                    echo -e "\033[0;32m[mydia-rs] devenv up — Ctrl-C / ./dev rs down to stop\033[0m"
-                    exec env DEVENV_ROOT="'"$(pwd)"'" "'"$DEVENV_UP"'" "$@"
-                ' setsid-sh "$@"
+                echo -e "${GREEN}[mydia-rs] starting axum + Vite HMR (forward :5173)${NC}"
+                exec docker compose --profile rs up "$@" rs rs-frontend
                 ;;
             down)
-                pid_file=".devenv/dev-rs-up.pid"
-                if [ -f "$pid_file" ]; then
-                    pid=$(cat "$pid_file")
-                    rm -f "$pid_file"
-                    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                        # kill -TERM -<pid> sends SIGTERM to the
-                        # entire process group whose pgid equals
-                        # <pid>. `./dev rs up` setsid'd to make pgid
-                        # = leader pid, so this reaches every
-                        # descendant: process-compose, dx serve,
-                        # cargo/rustc, tailwindcss, the running binary.
-                        kill -TERM -"$pid" 2>/dev/null
-                        for _ in 1 2 3 4 5; do
-                            sleep 1
-                            kill -0 -"$pid" 2>/dev/null || break
-                        done
-                        kill -KILL -"$pid" 2>/dev/null
-                    fi
+                echo -e "${GREEN}[mydia-rs] stopping rs + rs-frontend containers${NC}"
+                exec docker compose --profile rs stop rs rs-frontend
+                ;;
+            logs)
+                if [ $# -gt 0 ] && ( [ "$1" = "rs" ] || [ "$1" = "rs-frontend" ] ); then
+                    exec docker compose --profile rs logs "$@" "$1"
+                else
+                    exec docker compose --profile rs logs "$@" rs rs-frontend
                 fi
-                # Belt + suspenders: catch anything from a previous
-                # session that didn't go through ./dev rs up (e.g.
-                # `nix run` invocations directly, or a stray dx serve).
-                pkill -KILL -f 'process-compose .*devenv-' 2>/dev/null
-                pkill -KILL -f 'dx serve.*mydia-rs-app' 2>/dev/null
-                pkill -KILL -f '/target/debug/mydia-rs$' 2>/dev/null
-                pkill -KILL -f 'tailwindcss .*--watch' 2>/dev/null
-                echo -e "${GREEN}[mydia-rs] devenv processes stopped${NC}"
-                exit 0
                 ;;
-            shell)
-                echo -e "${GREEN}[mydia-rs] entering devenv shell${NC}"
-                exec env DEVENV_ROOT="$(pwd)" \
-                    nix develop --impure .#mydia-rs-dev "$@"
+            shell|bash)
+                if is_rs_running; then
+                    exec docker compose --profile rs exec \
+                        --user "$LOCAL_UID:$LOCAL_GID" \
+                        -w /app/mydia-rs "$RS_SERVICE" bash
+                else
+                    exec docker compose --profile rs run --rm \
+                        -w /app/mydia-rs "$RS_SERVICE" bash
+                fi
                 ;;
-        esac
-
-        # Remaining subcommands are one-shot invocations via the
-        # devenv shell. enterShell creates the tailwind placeholder
-        # so the asset!() macro resolves before dx has run.
-        case "$rs_subcmd" in
+            frontend)
+                frontend_subcmd="${1:-dev}"
+                shift 2>/dev/null || true
+                case "$frontend_subcmd" in
+                    dev)
+                        echo -e "${GREEN}[rs-frontend] starting Vite HMR on :5173${NC}"
+                        exec docker compose --profile rs up "$@" rs-frontend
+                        ;;
+                    build)
+                        echo -e "${GREEN}[rs-frontend] pnpm install && pnpm build${NC}"
+                        docker compose --profile rs run --rm \
+                            -w /app/mydia-rs/frontend \
+                            rs-frontend \
+                            sh -c "pnpm install --frozen-lockfile && pnpm run build"
+                        ;;
+                    *)
+                        echo -e "${RED}Error: Unknown frontend command: $frontend_subcmd${NC}"
+                        echo "Usage: ./dev rs frontend <dev|build>"
+                        exit 1
+                        ;;
+                esac
+                ;;
             run)
-                # dx run owns the full build (server + wasm +
-                # tailwind) just like dx serve, but exits when the
-                # binary does. No watcher attached.
-                rs_cmd="dx run --package mydia-rs-app $*"
+                rs_in_container cargo run --bin mydia-rs "$@"
                 ;;
             build)
-                # dx build runs cargo for server + wasm targets in
-                # parallel, plus tailwindcss in one shot. The output
-                # tree under target/dx/ is what dx serve / dx run
-                # also consume; using dx here keeps them aligned.
-                rs_cmd="dx build --package mydia-rs-app $*"
+                echo -e "${GREEN}[rs] cargo build + frontend build${NC}"
+                rs_in_container cargo build "$@"
                 ;;
             sqlx-prepare)
-                rs_cmd="cargo sqlx prepare --workspace $*"
+                rs_in_container cargo sqlx prepare --workspace "$@"
                 ;;
             schema-diff)
-                # Drift check between hand-written entities and the
-                # Phoenix-migrated Postgres schema. Run after
-                # `./dev up -d postgres` and `./dev mix ecto.migrate` so
-                # the comparison runs against the current schema.
-                rs_cmd="cargo run -p mydia-rs-schema-diff $*"
+                rs_in_container cargo run -p mydia-rs-schema-diff "$@"
                 ;;
             test|check|fmt|clippy)
-                rs_cmd="cargo $rs_subcmd $*"
+                rs_in_container cargo "$rs_subcmd" "$@"
                 ;;
             *)
-                rs_cmd="cargo $rs_subcmd $*"
+                rs_in_container cargo "$rs_subcmd" "$@"
                 ;;
         esac
-
-        echo -e "${GREEN}[mydia-rs] $rs_cmd${NC}"
-        exec env DEVENV_ROOT="$(pwd)" nix develop --impure .#mydia-rs-dev \
-            --command bash -c "cd mydia-rs && $rs_cmd"
         ;;
 
     # Forward everything else to docker compose

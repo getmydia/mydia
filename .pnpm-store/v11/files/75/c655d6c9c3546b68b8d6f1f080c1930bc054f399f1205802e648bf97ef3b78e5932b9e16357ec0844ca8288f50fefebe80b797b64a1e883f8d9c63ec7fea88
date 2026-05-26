@@ -1,0 +1,43 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getPluginByName = getPluginByName;
+const path_1 = require("path");
+async function getPluginByName(name, pluginLoader) {
+    const possibleNames = [
+        `@graphql-codegen/${name}`,
+        `@graphql-codegen/${name}-template`,
+        `@graphql-codegen/${name}-plugin`,
+        `graphql-codegen-${name}`,
+        `graphql-codegen-${name}-template`,
+        `graphql-codegen-${name}-plugin`,
+        `codegen-${name}`,
+        `codegen-${name}-template`,
+        name,
+    ];
+    const possibleModules = possibleNames.concat((0, path_1.resolve)(process.cwd(), name));
+    for (const moduleName of possibleModules) {
+        try {
+            return await pluginLoader(moduleName);
+        }
+        catch (err) {
+            if (err.code !== 'MODULE_NOT_FOUND' && err.code !== 'ERR_MODULE_NOT_FOUND') {
+                throw new Error(`
+              Unable to load template plugin matching '${name}'.
+              Reason:
+                ${err.message}
+            `);
+            }
+        }
+    }
+    const possibleNamesMsg = possibleNames
+        .map(name => `
+        - ${name}
+    `.trimEnd())
+        .join('');
+    throw new Error(`
+        Unable to find template plugin matching '${name}'
+        Install one of the following packages:
+
+        ${possibleNamesMsg}
+      `);
+}

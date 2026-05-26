@@ -1,7 +1,10 @@
 use axum::extract::{Extension, Query};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
-use axum::Router;
+use axum::{Form, Json, Router};
+use mydia_rs_auth::verify_password;
+use mydia_rs_entities::users;
 use openidconnect::core::CoreAuthenticationFlow;
 use openidconnect::core::CoreGenderClaim;
 use openidconnect::reqwest::async_http_client;
@@ -9,6 +12,7 @@ use openidconnect::{
     AuthorizationCode, CsrfToken, EmptyAdditionalClaims, IdTokenClaims, Nonce, PkceCodeChallenge,
     PkceCodeVerifier, TokenResponse,
 };
+use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use tower_sessions::Session;
 
@@ -24,6 +28,9 @@ pub fn router() -> Router {
         .route("/auth/oidc/login", get(login_handler))
         .route("/auth/oidc/callback", get(callback_handler))
         .route("/auth/logout", post(logout_handler))
+        .route("/auth/local/login", post(local_login_handler))
+        .route("/auth/local/setup", post(local_setup_handler))
+        .route("/auth/status", get(status_handler))
 }
 
 async fn login_handler(Extension(state): Extension<WebState>, session: Session) -> Response {
@@ -77,6 +84,201 @@ struct CallbackParams {
     state: Option<String>,
     error: Option<String>,
     error_description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalLoginForm {
+    username: String,
+    password: String,
+}
+
+#[derive(Serialize)]
+struct SetupStatus {
+    setup_completed: bool,
+}
+
+async fn status_handler(Extension(state): Extension<WebState>) -> Response {
+    let user_count = match users::Entity::find().count(&state.db).await {
+        Ok(c) => c,
+        Err(err) => {
+            tracing::error!(%err, "status_handler user count");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "db_error"})),
+            )
+                .into_response();
+        }
+    };
+    (
+        StatusCode::OK,
+        Json(SetupStatus {
+            setup_completed: user_count > 0,
+        }),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalSetupForm {
+    username: String,
+    email: String,
+    password: String,
+}
+
+async fn local_setup_handler(
+    Extension(state): Extension<WebState>,
+    session: Session,
+    Form(form): Form<LocalSetupForm>,
+) -> Response {
+    let existing_count = match users::Entity::find().count(&state.db).await {
+        Ok(c) => c,
+        Err(err) => {
+            tracing::error!(%err, "local_setup count");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "db_error"})),
+            )
+                .into_response();
+        }
+    };
+
+    if existing_count > 0 {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "setup_already_completed"})),
+        )
+            .into_response();
+    }
+
+    let username = form.username.trim().to_owned();
+    if username.len() < 3 || username.len() > 50 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Username must be 3-50 characters"})),
+        )
+            .into_response();
+    }
+
+    let email = form.email.trim().to_owned();
+    if !email.contains('@') || email.split_whitespace().count() != 1 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Email must be a valid address"})),
+        )
+            .into_response();
+    }
+
+    if form.password.len() < 8 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Password must be at least 8 characters"})),
+        )
+            .into_response();
+    }
+
+    let password_hash = match mydia_rs_auth::hash_password(&form.password) {
+        Ok(h) => h,
+        Err(err) => {
+            tracing::error!(%err, "local_setup hash_password");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "hash_failed"})),
+            )
+                .into_response();
+        }
+    };
+
+    let id = uuid::Uuid::new_v4();
+    let now = mydia_rs_db::types::DateTimeSecs::from(chrono::Utc::now());
+
+    let am = users::ActiveModel {
+        id: sea_orm::Set(mydia_rs_db::types::UuidText::from(id)),
+        username: sea_orm::Set(Some(username)),
+        email: sea_orm::Set(Some(email)),
+        password_hash: sea_orm::Set(Some(password_hash)),
+        oidc_sub: sea_orm::Set(None),
+        oidc_issuer: sea_orm::Set(None),
+        role: sea_orm::Set("admin".to_owned()),
+        display_name: sea_orm::Set(None),
+        avatar_url: sea_orm::Set(None),
+        last_login_at: sea_orm::Set(None),
+        inserted_at: sea_orm::Set(now),
+        updated_at: sea_orm::Set(now),
+    };
+
+    if let Err(err) = mydia_rs_db::insert_active_model(am, &state.db).await {
+        tracing::error!(%err, "local_setup insert user");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "insert_failed"})),
+        )
+            .into_response();
+    }
+
+    if let Err(err) = session.cycle_id().await {
+        tracing::error!(%err, "local_setup session cycle_id");
+        return Redirect::to("/login?error=session_write_failed").into_response();
+    }
+    if let Err(err) = session.insert(SESSION_KEY_USER_ID, &id.to_string()).await {
+        tracing::error!(%err, "local_setup session insert user_id");
+        return Redirect::to("/login?error=session_write_failed").into_response();
+    }
+
+    Redirect::to("/").into_response()
+}
+
+async fn local_login_handler(
+    Extension(state): Extension<WebState>,
+    session: Session,
+    Form(form): Form<LocalLoginForm>,
+) -> Response {
+    let db = &state.db;
+
+    let user = match users::Entity::find()
+        .filter(users::Column::Username.eq(form.username.clone()))
+        .one(db)
+        .await
+    {
+        Ok(Some(u)) => Some(u),
+        Ok(None) => match users::Entity::find()
+            .filter(users::Column::Email.eq(form.username.clone()))
+            .one(db)
+            .await
+        {
+            Ok(Some(u)) => Some(u),
+            _ => None,
+        },
+        Err(err) => {
+            tracing::error!(%err, "local_login db lookup");
+            return Redirect::to("/login?error=local_login_failed").into_response();
+        }
+    };
+
+    let Some(user) = user else {
+        return Redirect::to("/login?error=invalid_credentials").into_response();
+    };
+
+    let Some(password_hash) = &user.password_hash else {
+        return Redirect::to("/login?error=invalid_credentials").into_response();
+    };
+
+    if verify_password(&form.password, password_hash).is_err() {
+        return Redirect::to("/login?error=invalid_credentials").into_response();
+    }
+
+    if let Err(err) = session.cycle_id().await {
+        tracing::error!(%err, "local_login session cycle_id failed");
+        return Redirect::to("/login?error=session_write_failed").into_response();
+    }
+    if let Err(err) = session
+        .insert(SESSION_KEY_USER_ID, &user.id.to_string())
+        .await
+    {
+        tracing::error!(%err, "local_login session insert user_id failed");
+        return Redirect::to("/login?error=session_write_failed").into_response();
+    }
+
+    Redirect::to("/").into_response()
 }
 
 async fn callback_handler(

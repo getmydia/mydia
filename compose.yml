@@ -81,6 +81,79 @@ services:
       start_period: 40s
       retries: 3
 
+  # mydia-rs Rust backend dev server. `./dev rs up` starts both this
+  # container and the rs-frontend Vite dev server. Host networking lets
+  # the Vite proxy reach axum at localhost:4002 directly.
+  rs:
+    image: mydia-rs-dev:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.dev.rs
+    container_name: mydia_rs_dev
+    environment:
+      LOCAL_UID: ${LOCAL_UID:-0}
+      LOCAL_GID: ${LOCAL_GID:-0}
+
+      # Runtime config for the dev server. Matches the env block in
+      # nix/devenv/flake-module.nix so the existing config keys line
+      # up — Postgres values can be flipped on at runtime by editing
+      # compose.override.yml without rebuilding the image.
+      MYDIA_DATABASE__TYPE: sqlite
+      MYDIA_DATABASE__PATH: /app/mydia_dev.db
+      MYDIA_SERVER__HOST: 0.0.0.0
+      MYDIA_SERVER__PORT: 4002
+      MYDIA_LOGGING__LEVEL: info
+      MYDIA_LOGGING__FORMAT: text
+
+      # Skip the U34 lock so kill-restart on a full rebuild
+      # doesn't trip the 30-second staleness window. Dev only.
+      MYDIA_RS_DEV_SKIP_LOCK: "true"
+
+      # sqlx-cli + compile-time query macros.
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5433/mydia_rs_test?sslmode=disable
+
+      # Frontend is built by rs-frontend container; skip in rs.
+      SKIP_FRONTEND_BUILD: "true"
+
+      # Logging
+      RUST_LOG: info,tower_http=debug
+      RUST_BACKTRACE: "1"
+    network_mode: host
+    volumes:
+      - .:/app
+      - rs_cargo_registry:/usr/local/cargo/registry
+      - rs_cargo_git:/usr/local/cargo/git
+      - rs_target:/app/mydia-rs/target
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    profiles:
+      - rs
+
+  # Vite dev server for mydia-rs React frontend (HMR on :5173).
+  # Proxies /graphql, /api, /auth to the rs container at localhost:4002.
+  # The operator SSH-forwards :5173 and nothing else.
+  rs-frontend:
+    image: mydia-rs-frontend-dev:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.dev.rs-frontend
+    container_name: mydia_rs_frontend_dev
+    environment:
+      LOCAL_UID: ${LOCAL_UID:-0}
+      LOCAL_GID: ${LOCAL_GID:-0}
+    network_mode: host
+    volumes:
+      - .:/app
+      - rs_frontend_node_modules:/app/mydia-rs/frontend/node_modules
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    depends_on:
+      - rs
+    profiles:
+      - rs
+
 volumes:
   player_pub_cache:
     driver: local
@@ -104,4 +177,13 @@ volumes:
     driver: local
   # PostgreSQL data (only used with --profile postgres)
   postgres_data:
+    driver: local
+  # mydia-rs caches (only used with --profile rs)
+  rs_cargo_registry:
+    driver: local
+  rs_cargo_git:
+    driver: local
+  rs_target:
+    driver: local
+  rs_frontend_node_modules:
     driver: local

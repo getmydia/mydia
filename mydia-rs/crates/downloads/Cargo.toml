@@ -30,6 +30,7 @@ mydia-rs-pubsub = { path = "../pubsub" }
 tempfile = "3"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
 wiremock = "0.6"
+serial_test = "3"
 
 [lints]
 workspace = true

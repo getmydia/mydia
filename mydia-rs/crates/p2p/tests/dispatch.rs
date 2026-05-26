@@ -670,6 +670,30 @@ async fn hls_dispatch_burst_completes_under_load() {
     assert!(result.is_ok(), "hls dispatch burst hung");
 }
 
+#[tokio::test]
+async fn read_media_dispatch_returns_permanent_error() {
+    let db = fresh_sqlite().await;
+    let router = build_router(db);
+    let req = mydia_p2p_core::ReadMediaRequest {
+        file_path: "some/file.mp4".into(),
+        offset: 0,
+        length: 100,
+    };
+    let resp = router
+        .handle_read_media(req, RouterContext::default())
+        .await
+        .expect("read_media dispatch");
+    match resp {
+        mydia_p2p_core::MydiaResponse::Error(msg) => {
+            assert!(
+                msg.contains("permanently unwired"),
+                "got unexpected message: {msg}"
+            );
+        }
+        _ => panic!("expected MydiaResponse::Error, got {resp:?}"),
+    }
+}
+
 async fn futures_join_all<T>(handles: Vec<tokio::task::JoinHandle<T>>) -> Vec<T> {
     let mut results = Vec::with_capacity(handles.len());
     for h in handles {

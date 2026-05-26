@@ -3721,6 +3721,7 @@ name = "mydia-rs-app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-graphql",
  "axum",
  "chrono",
  "clap",
@@ -3881,6 +3882,7 @@ dependencies = [
  "tokio-stream",
  "tower",
  "tower-http",
+ "tower-sessions",
  "tracing",
  "uuid",
 ]

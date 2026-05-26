@@ -20,3 +20,12 @@ query AdminTranscodes {
 mutation CancelTranscode($id: ID!) {
   cancelTranscode(id: $id)
 }
+
+subscription TranscodeEvents {
+  transcodeEvents {
+    id
+    status
+    progress
+    error
+  }
+}

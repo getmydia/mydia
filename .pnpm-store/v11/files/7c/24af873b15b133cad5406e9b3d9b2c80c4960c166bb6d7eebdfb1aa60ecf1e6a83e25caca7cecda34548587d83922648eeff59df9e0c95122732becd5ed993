@@ -1,0 +1,40 @@
+{
+	"name": "debounce",
+	"version": "3.0.0",
+	"description": "Delay function calls until a set time elapses after the last invocation",
+	"license": "MIT",
+	"repository": "sindresorhus/debounce",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"type": "module",
+	"exports": {
+		"types": "./index.d.ts",
+		"default": "./index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"test": "xo && node --test"
+	},
+	"files": [
+		"index.js",
+		"index.d.ts"
+	],
+	"keywords": [
+		"debounce",
+		"debouncing",
+		"function",
+		"throttle",
+		"invoke",
+		"limit",
+		"limited",
+		"interval",
+		"rate",
+		"batch",
+		"rate-limit"
+	],
+	"devDependencies": {
+		"xo": "^0.56.0"
+	}
+}

@@ -1,0 +1,40 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.executePlugin = executePlugin;
+const graphql_1 = require("graphql");
+const plugin_helpers_1 = require("@graphql-codegen/plugin-helpers");
+async function executePlugin(options, plugin) {
+    if (!plugin?.plugin || typeof plugin.plugin !== 'function') {
+        throw new Error(`Invalid Custom Plugin "${options.name}" \n
+        Plugin ${options.name} does not export a valid JS object with "plugin" function.
+
+        Make sure your custom plugin is written in the following form:
+
+        module.exports = {
+          plugin: (schema, documents, config) => {
+            return 'my-custom-plugin-content';
+          },
+        };
+        `);
+    }
+    const outputSchema = options.schemaAst || (0, graphql_1.buildASTSchema)(options.schema, options.config);
+    const documents = options.documents || [];
+    const pluginContext = options.pluginContext || {};
+    const profiler = options.profiler ?? (0, plugin_helpers_1.createNoopProfiler)();
+    if (plugin.validate && typeof plugin.validate === 'function') {
+        try {
+            // FIXME: Sync validate signature with plugin signature
+            await profiler.run(async () => plugin.validate(outputSchema, documents, options.config, options.outputFilename, options.allPlugins, pluginContext), `Plugin ${options.name} validate`);
+        }
+        catch (e) {
+            throw new Error(`Plugin "${options.name}" validation failed: \n
+            ${e.message}
+          `);
+        }
+    }
+    return profiler.run(() => Promise.resolve(plugin.plugin(outputSchema, documents, typeof options.config === 'object' ? { ...options.config } : options.config, {
+        outputFile: options.outputFilename,
+        allPlugins: options.allPlugins,
+        pluginContext,
+    })), `Plugin ${options.name} execution`);
+}

@@ -30,3 +30,13 @@ mutation CancelDownload($id: ID!) {
 mutation ManuallyMatchDownload($id: ID!, $mediaId: ID!) {
   manuallyMatchDownload(id: $id, mediaId: $mediaId)
 }
+
+subscription DownloadEvents {
+  downloadEvents {
+    id
+    status
+    title
+    progress
+    error
+  }
+}
