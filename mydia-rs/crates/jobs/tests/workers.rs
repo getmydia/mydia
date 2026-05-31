@@ -48,9 +48,10 @@ use mydia_rs_jobs::workers::{
     MetadataRefreshArgs, MovieSearchArgs, ThumbnailGenerationArgs, TraktSyncArgs,
     TraktTokenRefreshArgs, TrashCleanupArgs, TvShowSearchArgs, TvdbIdBackfillArgs,
 };
-use mydia_rs_jobs::AppContext;
+use mydia_rs_jobs::{AppContext, JobStorage};
 use mydia_rs_metadata::ProviderRegistry;
 use mydia_rs_pubsub::{topics, Pubsub};
+use serde::{de::DeserializeOwned, Serialize};
 
 /// Build a fresh in-memory `SQLite` `SeaORM` connection with the tables
 /// the workers under test touch. Entity-driven DDL via
@@ -90,6 +91,16 @@ fn fixture_ctx(db: DatabaseConnection) -> AppContext {
         Arc::new(IndexerRegistry::new()),
         Arc::new(ClientRegistry::new()),
     )
+}
+
+/// Build the follow-up queue handle that scheduler/sync/monitor workers
+/// take to enqueue downstream jobs. Tests exercise early-return paths
+/// that never push, so the storage only needs to construct.
+fn fixture_storage<T>(db: &DatabaseConnection) -> Data<Arc<tokio::sync::Mutex<JobStorage<T>>>>
+where
+    T: Serialize + DeserializeOwned + Send + Sync + Unpin + 'static,
+{
+    Data::new(Arc::new(tokio::sync::Mutex::new(JobStorage::from_db(db))))
 }
 
 // -- Maintenance workers --------------------------------------------------
@@ -460,7 +471,8 @@ async fn metadata_refresh_for_missing_item_errors() {
 async fn download_monitor_skips_when_no_clients() {
     let db = fixture_db().await;
     let ctx = fixture_ctx(db);
-    download_monitor(DownloadMonitorArgs::default(), Data::new(ctx))
+    let storage = fixture_storage(&ctx.db);
+    download_monitor(DownloadMonitorArgs::default(), Data::new(ctx), storage)
         .await
         .expect("no-client setup skips cleanly");
 }
@@ -471,7 +483,8 @@ async fn download_monitor_skips_when_no_clients() {
 async fn import_list_scheduler_runs_on_empty_table() {
     let db = fixture_db().await;
     let ctx = fixture_ctx(db);
-    import_list_scheduler(ImportListSchedulerArgs::default(), Data::new(ctx))
+    let storage = fixture_storage(&ctx.db);
+    import_list_scheduler(ImportListSchedulerArgs::default(), Data::new(ctx), storage)
         .await
         .expect("scheduler on empty table is a no-op");
 }
@@ -480,12 +493,14 @@ async fn import_list_scheduler_runs_on_empty_table() {
 async fn import_list_sync_handles_missing_list() {
     let db = fixture_db().await;
     let ctx = fixture_ctx(db);
+    let storage = fixture_storage(&ctx.db);
     import_list_sync(
         ImportListSyncArgs {
             import_list_id: Uuid::new_v4().to_string(),
             auto_add: false,
         },
         Data::new(ctx),
+        storage,
     )
     .await
     .expect("missing list logs and returns Ok");
@@ -522,12 +537,14 @@ async fn import_list_sync_picks_up_existing_row() {
 
     let ctx = fixture_ctx(db.clone());
     let mut rx = ctx.pubsub.subscribe(topics::IMPORT_LISTS);
+    let storage = fixture_storage(&ctx.db);
     import_list_sync(
         ImportListSyncArgs {
             import_list_id: list_id.to_string(),
             auto_add: false,
         },
         Data::new(ctx),
+        storage,
     )
     .await
     .unwrap();

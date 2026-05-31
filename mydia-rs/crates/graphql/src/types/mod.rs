@@ -21,6 +21,8 @@ pub mod download;
 pub mod download_client;
 pub mod episode;
 pub mod import_list;
+pub mod import_list_item;
+pub mod import_session;
 pub mod indexer;
 pub mod library_path;
 pub mod login;
@@ -55,13 +57,17 @@ pub use artwork::Artwork;
 pub use calendar_entry::CalendarEntry;
 pub use collection::CollectionObject;
 pub use dashboard_stats::DashboardStats;
-pub use discovery::{ContinueWatchingItem, MediaType, RecentlyAddedItem, UpNextItem};
+pub use discovery::{
+    ContinueWatchingItem, DiscoverItem, DiscoverPage, MediaType, RecentlyAddedItem, UpNextItem,
+};
 pub use download::{
     CancelDownloadResult, DownloadJobStatus, DownloadOption, PrepareDownloadResult,
 };
 pub use download_client::DownloadClient;
 pub use episode::Episode;
 pub use import_list::ImportList;
+pub use import_list_item::ImportListItem;
+pub use import_session::ImportSession;
 pub use indexer::Indexer;
 pub use library_path::{LibraryPath, LibraryType};
 pub use login::{LoginInput, LoginResult};

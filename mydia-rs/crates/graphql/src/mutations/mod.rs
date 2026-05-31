@@ -18,6 +18,7 @@ pub mod api_key;
 pub mod auth;
 pub mod device;
 pub mod download;
+pub mod import_session;
 pub mod media;
 pub mod playback;
 pub mod profile;

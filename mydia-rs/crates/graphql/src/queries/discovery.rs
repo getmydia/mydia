@@ -15,14 +15,17 @@
 //! are written so they light up automatically once the middleware
 //! attaches a `CurrentUser` to the per-request data slot.
 
+use std::collections::HashSet;
+
 use async_graphql::{Context, Object, ID};
 use chrono::{Duration, Utc};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
 use crate::context::{CurrentUser, GraphqlAppState};
 use crate::node_id::{NodeId, NodeRef};
 use crate::relay::decode_offset_cursor;
 use crate::repos::media;
-use crate::types::{Artwork, MediaType, RecentlyAddedItem};
+use crate::types::{Artwork, DiscoverItem, DiscoverPage, MediaType, RecentlyAddedItem};
 
 const RECENTLY_ADDED_WINDOW_DAYS: i64 = 30;
 
@@ -44,10 +47,6 @@ impl DiscoveryQueries {
         if maybe_current_user(ctx).is_none() {
             return Ok(Vec::new());
         }
-        // Playback context port lands alongside the auth middleware
-        // (U6 follow-up). Once `playback_progress` is queryable from
-        // Rust, this resolver consumes it and applies the same
-        // 90%-completion filter Phoenix uses.
         let _ = (first, after);
         Ok(Vec::new())
     }
@@ -77,7 +76,6 @@ impl DiscoveryQueries {
 
         let mut items: Vec<RecentlyAddedItem> =
             rows.iter().map(build_recently_added_item).collect();
-        // Phoenix sorts by inserted_at DESC after fetching.
         items.sort_by(|a, b| b.added_at.cmp(&a.added_at));
         Ok(paginate_simple(&items, first, after.as_deref()))
     }
@@ -98,10 +96,6 @@ impl DiscoveryQueries {
     }
 
     /// User's favorites collection. Anonymous fallback returns `[]`.
-    /// Favorites moved to the `collections` table in
-    /// `priv/repo/migrations/20251228233656_migrate_favorites_to_collections.exs`;
-    /// the Collections context port lands in U14 and this resolver
-    /// activates then.
     async fn favorites(
         &self,
         ctx: &Context<'_>,
@@ -132,6 +126,58 @@ impl DiscoveryQueries {
         let _ = (first, after, types);
         Ok(Vec::new())
     }
+
+    /// Discover new content from TMDB via the metadata-relay. Returns
+    /// curated lists (trending, popular, upcoming, etc.) with an
+    /// `in_library` flag indicating whether each item is already in
+    /// the user's media library.
+    ///
+    /// `category` must be one of: `trending`, `popular`, `upcoming`,
+    /// `now_playing`, `on_the_air`, `airing_today`. Unknown values
+    /// fall back to `trending`.
+    async fn discover(
+        &self,
+        ctx: &Context<'_>,
+        category: String,
+        media_type: MediaType,
+        page: Option<i32>,
+    ) -> async_graphql::Result<DiscoverPage> {
+        let state = ctx.data::<GraphqlAppState>()?;
+
+        let md_media_type = match media_type {
+            MediaType::TvShow => mydia_rs_metadata::structs::MediaType::TvShow,
+            MediaType::Movie | MediaType::Episode => mydia_rs_metadata::structs::MediaType::Movie,
+        };
+
+        let page_num = page.unwrap_or(1).clamp(1, 500) as u32;
+
+        let config = mydia_rs_metadata::ProviderConfig::metadata_relay_default();
+        let relay = mydia_rs_metadata::Relay::new();
+        let opts = mydia_rs_metadata::TrendingOpts {
+            media_type: Some(md_media_type),
+            language: None,
+            page: Some(page_num),
+        };
+
+        let curated = relay
+            .fetch_curated(&config, &category, &opts)
+            .await
+            .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+
+        let in_library_ids = get_library_tmdb_ids(&state.db).await?;
+
+        let results: Vec<DiscoverItem> = curated
+            .results
+            .iter()
+            .map(|r| build_discover_item(r, &in_library_ids))
+            .collect();
+
+        Ok(DiscoverPage {
+            results,
+            page: curated.page as i32,
+            total_pages: curated.total_pages as i32,
+        })
+    }
 }
 
 fn maybe_current_user<'a>(ctx: &'a Context<'_>) -> Option<&'a CurrentUser> {
@@ -139,9 +185,6 @@ fn maybe_current_user<'a>(ctx: &'a Context<'_>) -> Option<&'a CurrentUser> {
         .and_then(|r| r.current_user.as_ref())
 }
 
-/// Map a `Vec<MediaType>` from the GraphQL surface to the single
-/// `type` filter Phoenix accepts. Phoenix's logic: if both Movie and
-/// `TvShow` are included, no filter; otherwise return the lone kind.
 fn type_filter_to_db(types: Option<&Vec<MediaType>>) -> Option<&'static str> {
     let types = types?;
     if types.is_empty() {
@@ -153,6 +196,51 @@ fn type_filter_to_db(types: Option<&Vec<MediaType>>) -> Option<&'static str> {
         (true, false) => Some("movie"),
         (false, true) => Some("tv_show"),
         (true, true) | (false, false) => None,
+    }
+}
+
+/// Query the DB for all non-null `tmdb_id` values currently stored in
+/// `media_items`. Returns a set for O(1) membership checks when
+/// computing `in_library`.
+async fn get_library_tmdb_ids(
+    db: &sea_orm::DatabaseConnection,
+) -> Result<HashSet<i32>, async_graphql::Error> {
+    use mydia_rs_entities::media_items::{Column, Entity};
+    let rows = Entity::find()
+        .filter(Column::TmdbId.is_not_null())
+        .all(db)
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    Ok(rows.into_iter().filter_map(|r| r.tmdb_id).collect())
+}
+
+fn build_discover_item(
+    result: &mydia_rs_metadata::SearchResult,
+    in_library_ids: &HashSet<i32>,
+) -> DiscoverItem {
+    let tmdb_id = result.id.and_then(|id| i32::try_from(id).ok()).unwrap_or(0);
+    let title = result
+        .title
+        .clone()
+        .or_else(|| result.name.clone())
+        .unwrap_or_else(|| "Unknown".to_string());
+    let poster_url = result
+        .poster_path
+        .as_deref()
+        .and_then(|p| crate::metadata::poster_url(Some(p)));
+
+    DiscoverItem {
+        id: ID(format!("tmdb:{tmdb_id}")),
+        tmdb_id,
+        type_: match result.media_type {
+            mydia_rs_metadata::MediaType::TvShow => MediaType::TvShow,
+            _ => MediaType::Movie,
+        },
+        title,
+        year: result.year,
+        poster_url,
+        vote_average: result.vote_average.map(|v| (v * 10.0).round() / 10.0),
+        in_library: in_library_ids.contains(&tmdb_id),
     }
 }
 
@@ -181,9 +269,6 @@ fn build_artwork(row: &mydia_rs_entities::media_items::Model) -> Option<Artwork>
         return None;
     }
     Some(Artwork {
-        // U10.c will route these through the metadata-relay-aware
-        // ImageUrl helpers. For U10.b we surface the raw paths so
-        // the field is non-empty without misrepresenting the URL.
         poster_url: poster_path.map(std::borrow::ToOwned::to_owned),
         backdrop_url: backdrop_path.map(std::borrow::ToOwned::to_owned),
         thumbnail_url: None,

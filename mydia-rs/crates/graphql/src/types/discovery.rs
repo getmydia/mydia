@@ -75,3 +75,29 @@ pub struct UpNextItem {
     /// One of: `"continue"`, `"next"`, `"start"`.
     pub progress_state: String,
 }
+
+/// Discover item — a TMDB result surfaced on the Discover page.
+/// These are media items NOT yet in the user's library (or may be,
+/// indicated by `in_library`).
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "DiscoverItem")]
+pub struct DiscoverItem {
+    pub id: ID,
+    pub tmdb_id: i32,
+    #[graphql(name = "type")]
+    pub type_: MediaType,
+    pub title: String,
+    pub year: Option<i32>,
+    pub poster_url: Option<String>,
+    pub vote_average: Option<f64>,
+    pub in_library: bool,
+}
+
+/// Single page of discover/curated results.
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "DiscoverPage")]
+pub struct DiscoverPage {
+    pub results: Vec<DiscoverItem>,
+    pub page: i32,
+    pub total_pages: i32,
+}

@@ -1,8 +1,10 @@
 use async_graphql::{Context, InputObject, Object, ID};
 use mydia_rs_db::types::{DateTimeSecs, UuidText};
+use mydia_rs_metadata::Provider;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Expr, ExprTrait};
 use sea_orm::Set;
+use tracing::warn;
 
 use crate::auth_guards::require_admin;
 use crate::context::GraphqlAppState;
@@ -122,9 +124,56 @@ impl MediaMutations {
     ) -> async_graphql::Result<Movie> {
         require_admin(ctx)?;
         let state = ctx.data::<GraphqlAppState>()?;
+        let now = DateTimeSecs::from(chrono::Utc::now());
+
+        // Check if an item with this tmdb_id already exists
+        if let Some(tmdb_id) = input.tmdb_id {
+            use mydia_rs_entities::media_items::{Column, Entity};
+            let existing = Entity::find()
+                .filter(Expr::col(Column::TmdbId).eq(tmdb_id))
+                .one(&state.db)
+                .await?;
+
+            if let Some(existing_row) = existing {
+                // Item exists. If it lacks metadata, refresh it now.
+                if existing_row.metadata.is_none() {
+                    if let Ok(meta) = fetch_tmdb_metadata(tmdb_id, &input.media_type).await {
+                        let title = meta.title.clone().unwrap_or(existing_row.title.clone());
+                        let metadata_json = serde_json::to_string(&meta).ok();
+
+                        let updated = mydia_rs_entities::media_items::ActiveModel {
+                            id: Set(existing_row.id),
+                            title: Set(title),
+                            original_title: Set(meta.original_title.clone()),
+                            year: Set(meta.year),
+                            metadata: Set(metadata_json),
+                            updated_at: Set(now),
+                            ..Default::default()
+                        };
+                        let row = mydia_rs_db::update_active_model(updated, &state.db).await?;
+
+                        if input.media_type == "tv_show" {
+                            let _ = create_episodes_from_tmdb(
+                                &state.db,
+                                uuid::Uuid::parse_str(&existing_row.id.0.to_string())
+                                    .unwrap_or_default(),
+                                tmdb_id,
+                            )
+                            .await;
+                        }
+
+                        return Movie::from_row(&row)
+                            .ok_or_else(|| async_graphql::Error::new("Failed to build movie"));
+                    }
+                }
+
+                // Return existing item as-is (already has metadata, or refresh failed)
+                return Movie::from_row(&existing_row)
+                    .ok_or_else(|| async_graphql::Error::new("Failed to build movie"));
+            }
+        }
 
         let id = uuid::Uuid::new_v4();
-        let now = DateTimeSecs::from(chrono::Utc::now());
 
         let quality_profile_id = input
             .quality_profile_id
@@ -132,15 +181,36 @@ impl MediaMutations {
             .and_then(|s| uuid::Uuid::parse_str(s).ok())
             .map(UuidText);
 
+        let (title, original_title, year, metadata_json) = if let Some(tmdb_id) = input.tmdb_id {
+            match fetch_tmdb_metadata(tmdb_id, &input.media_type).await {
+                Ok(meta) => {
+                    let title = meta.title.clone().unwrap_or(input.title.clone());
+                    let original_title = meta.original_title.clone();
+                    let year = meta.year;
+                    let metadata_json = serde_json::to_string(&meta).ok();
+                    (title, original_title, year, metadata_json)
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to fetch TMDB metadata for {} id={}: {}",
+                        input.media_type, tmdb_id, e
+                    );
+                    (input.title.clone(), None, None, None)
+                }
+            }
+        } else {
+            (input.title.clone(), None, None, None)
+        };
+
         let model = mydia_rs_entities::media_items::ActiveModel {
             id: Set(UuidText(id)),
-            r#type: Set(input.media_type),
-            title: Set(input.title),
-            original_title: Set(None),
-            year: Set(None),
+            r#type: Set(input.media_type.clone()),
+            title: Set(title),
+            original_title: Set(original_title),
+            year: Set(year),
             tmdb_id: Set(input.tmdb_id),
             imdb_id: Set(None),
-            metadata: Set(None),
+            metadata: Set(metadata_json),
             monitored: Set(input.monitored),
             inserted_at: Set(now),
             updated_at: Set(now),
@@ -153,6 +223,13 @@ impl MediaMutations {
         };
 
         let row = mydia_rs_db::insert_active_model(model, &state.db).await?;
+
+        if input.media_type == "tv_show" {
+            if let Some(tmdb_id) = input.tmdb_id {
+                let _ = create_episodes_from_tmdb(&state.db, id, tmdb_id).await;
+            }
+        }
+
         Movie::from_row(&row)
             .ok_or_else(|| async_graphql::Error::new("Failed to create media item"))
     }
@@ -179,4 +256,84 @@ impl MediaMutations {
         mydia_rs_db::update_active_model(active, &state.db).await?;
         Ok(true)
     }
+}
+
+async fn fetch_tmdb_metadata(
+    tmdb_id: i32,
+    media_type: &str,
+) -> Result<mydia_rs_metadata::MediaMetadata, String> {
+    let config = mydia_rs_metadata::ProviderConfig::metadata_relay_default();
+    let relay = mydia_rs_metadata::Relay::new();
+    let md_media_type = match media_type {
+        "tv_show" => mydia_rs_metadata::MediaType::TvShow,
+        _ => mydia_rs_metadata::MediaType::Movie,
+    };
+    let opts = mydia_rs_metadata::FetchOpts {
+        media_type: Some(md_media_type),
+        language: None,
+        provider: Some("tmdb"),
+        append_to_response: Vec::new(),
+    };
+    relay
+        .fetch_by_id(&config, &tmdb_id.to_string(), &opts)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn create_episodes_from_tmdb(
+    db: &sea_orm::DatabaseConnection,
+    media_item_id: uuid::Uuid,
+    tmdb_id: i32,
+) -> Result<(), String> {
+    let config = mydia_rs_metadata::ProviderConfig::metadata_relay_default();
+    let relay = mydia_rs_metadata::Relay::new();
+    let now = DateTimeSecs::from(chrono::Utc::now());
+
+    // First, fetch the show metadata to get the list of seasons
+    let opts = mydia_rs_metadata::FetchOpts {
+        media_type: Some(mydia_rs_metadata::MediaType::TvShow),
+        language: None,
+        provider: Some("tmdb"),
+        append_to_response: Vec::new(),
+    };
+    let metadata = relay
+        .fetch_by_id(&config, &tmdb_id.to_string(), &opts)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for season_info in &metadata.seasons {
+        let season_number = season_info.season_number;
+        if season_number <= 0 {
+            continue;
+        }
+        let season_opts = mydia_rs_metadata::SeasonOpts {
+            language: None,
+            tvdb_season_id: None,
+        };
+        let Ok(season) = relay
+            .fetch_season(&config, &tmdb_id.to_string(), season_number, &season_opts)
+            .await
+        else {
+            continue;
+        };
+
+        for ep in &season.episodes {
+            let ep_metadata = serde_json::to_string(ep).ok();
+            let ep_model = mydia_rs_entities::episodes::ActiveModel {
+                id: Set(UuidText(uuid::Uuid::new_v4())),
+                media_item_id: Set(UuidText(media_item_id)),
+                season_number: Set(ep.season_number),
+                episode_number: Set(ep.episode_number),
+                title: Set(ep.name.clone()),
+                air_date: Set(ep.air_date),
+                metadata: Set(ep_metadata),
+                monitored: Set(Some(true)),
+                inserted_at: Set(now),
+                updated_at: Set(now),
+            };
+            let _ = mydia_rs_db::insert_active_model(ep_model, db).await;
+        }
+    }
+
+    Ok(())
 }

@@ -105,7 +105,7 @@ impl BrowseQueries {
         let opts = media::ListMediaItemsOpts {
             kind: Some("movie"),
             category: category.map(MediaCategory::as_db_str),
-            has_files: true,
+            has_files: false,
             added_since: None,
             search: None,
         };
@@ -142,7 +142,7 @@ impl BrowseQueries {
         let opts = media::ListMediaItemsOpts {
             kind: Some("tv_show"),
             category: category.map(MediaCategory::as_db_str),
-            has_files: true,
+            has_files: false,
             added_since: None,
             search: None,
         };

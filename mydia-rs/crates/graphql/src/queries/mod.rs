@@ -29,6 +29,7 @@ pub mod collection;
 pub mod dashboard;
 pub mod device;
 pub mod discovery;
+pub mod import_session;
 pub mod media;
 pub mod profile;
 pub mod remote_access;

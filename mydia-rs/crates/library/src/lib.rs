@@ -36,8 +36,10 @@
 pub mod error;
 pub mod file_analyzer;
 pub mod file_grouper;
+pub mod file_organizer;
 pub mod file_parser;
 pub mod metadata_enricher;
+pub mod metadata_matcher;
 pub mod release_parser;
 pub mod scanner;
 
@@ -46,7 +48,12 @@ pub use file_analyzer::{AnalysisOutcome, FileAnalysis, FileAnalyzer};
 pub use file_grouper::{
     FileGrouper, GroupedEpisode, GroupedFile, GroupedSeason, GroupedSeries, GroupedSummary,
 };
+pub use file_organizer::{FileOrganizer, OrganizeInput, OrganizeMetadata};
 pub use file_parser::FileParser;
 pub use metadata_enricher::{EnrichInput, MetadataEnricher};
+pub use metadata_matcher::{
+    normalize_search_query, title_similarity, MatchCandidate, MatchContext, MatchType,
+    MetadataMatcher, DIRECT_ID_CONFIDENCE, HIGH_CONFIDENCE_THRESHOLD, SERIES_LEVEL_CONFIDENCE,
+};
 pub use release_parser::{MediaKind, ParsedFileInfo, Quality, ReleaseParser};
 pub use scanner::{ScanFile, ScanOptions, ScanProgressEvent, ScanResult, Scanner};

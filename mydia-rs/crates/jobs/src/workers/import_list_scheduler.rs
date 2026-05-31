@@ -12,6 +12,8 @@
 //! Rust. Volume is low (handful of import lists per instance) so the
 //! engine-side filter buys nothing here.
 
+use std::sync::Arc;
+
 use apalis::prelude::Data;
 use chrono::{Duration, Utc};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
@@ -23,7 +25,8 @@ use mydia_rs_entities::import_lists;
 
 use crate::context::AppContext;
 use crate::queues::Queue;
-use crate::storage::JobsError;
+use crate::storage::{JobStorage, JobsError};
+use crate::workers::import_list_sync::ImportListSyncArgs;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ImportListSchedulerArgs {}
@@ -34,23 +37,22 @@ pub const MAX_ATTEMPTS: u32 = 1;
 pub async fn import_list_scheduler(
     _args: ImportListSchedulerArgs,
     ctx: Data<AppContext>,
+    sync_storage: Data<Arc<tokio::sync::Mutex<JobStorage<ImportListSyncArgs>>>>,
 ) -> Result<(), JobsError> {
     tracing::info!("checking for import lists due for sync");
     let due = list_sync_due_lists(&ctx.db).await?;
     tracing::info!(count = due.len(), "import lists due for sync");
 
-    // The actual enqueue uses `JobStorage<ImportListSyncArgs>` via the
-    // supervisor-injected handle. For the cutover window we log the
-    // work plan; the supervision tree in `crate::supervisor` will
-    // register a per-type storage that this worker can push into once
-    // the storage handles are surfaced as `Data` extractors.
     for id in &due {
-        tracing::debug!(import_list_id = %id, "would enqueue ImportListSync");
+        sync_storage
+            .lock()
+            .await
+            .push(ImportListSyncArgs {
+                import_list_id: id.0.to_string(),
+                auto_add: false,
+            })
+            .await?;
     }
-    tracing::warn!(
-        count = due.len(),
-        "import_list_scheduler enqueue delegated to Phoenix during cutover window"
-    );
     Ok(())
 }
 

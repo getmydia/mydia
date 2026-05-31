@@ -1,10 +1,12 @@
 use async_graphql::{Context, Object, ID};
 use mydia_rs_db::types::UuidText;
 use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::{Condition, Expr};
+use sea_orm::ExprTrait;
 
 use crate::auth_guards::require_admin;
 use crate::context::GraphqlAppState;
-use crate::types::ImportList;
+use crate::types::{ImportList, ImportListItem};
 
 fn parse_id(id: &str) -> async_graphql::Result<UuidText> {
     uuid::Uuid::parse_str(id)
@@ -37,5 +39,26 @@ impl ImportListQueries {
             .one(&state.db)
             .await?;
         Ok(row.as_ref().and_then(ImportList::from_row))
+    }
+
+    async fn import_list_items(
+        &self,
+        ctx: &Context<'_>,
+        import_list_id: ID,
+    ) -> async_graphql::Result<Vec<ImportListItem>> {
+        require_admin(ctx)?;
+        let state = ctx.data::<GraphqlAppState>()?;
+        let backend = state.db.get_database_backend();
+        let id = parse_id(import_list_id.as_str())?;
+        let rows = mydia_rs_entities::import_list_items::Entity::find()
+            .filter(
+                Condition::all().add(
+                    Expr::col(mydia_rs_entities::import_list_items::Column::ImportListId)
+                        .eq(id.into_simple_expr(backend)),
+                ),
+            )
+            .all(&state.db)
+            .await?;
+        Ok(rows.iter().filter_map(ImportListItem::from_row).collect())
     }
 }

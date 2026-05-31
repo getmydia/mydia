@@ -5,6 +5,7 @@
 //! records errors, and flags downloads removed manually from the client
 //! as `missing` so they show up in the Issues tab.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use apalis::prelude::Data;
@@ -12,7 +13,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::context::AppContext;
 use crate::queues::Queue;
-use crate::storage::JobsError;
+use crate::storage::{JobStorage, JobsError};
+use crate::workers::media_import::MediaImportArgs;
 
 /// Default grace window for a download whose client config can't be
 /// resolved. Mirrors Phoenix's `@default_grace_minutes 60`.
@@ -33,6 +35,7 @@ pub const MAX_ATTEMPTS: u32 = 5;
 pub async fn download_monitor(
     args: DownloadMonitorArgs,
     ctx: Data<AppContext>,
+    _import_storage: Data<Arc<tokio::sync::Mutex<JobStorage<MediaImportArgs>>>>,
 ) -> Result<(), JobsError> {
     let start = std::time::Instant::now();
     tracing::info!(

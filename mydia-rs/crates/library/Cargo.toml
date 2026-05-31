@@ -14,10 +14,12 @@ tokio = { workspace = true }
 regex = "1.10"
 walkdir = "2"
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+sea-orm = { workspace = true }
 mydia-rs-pubsub = { path = "../pubsub" }
 mydia-rs-metadata = { path = "../metadata" }
 mydia-rs-models = { path = "../models" }
 mydia-rs-db = { path = "../db" }
+mydia-rs-entities = { path = "../entities" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -25,6 +25,7 @@ sea-orm.workspace = true
 mydia-rs-db = { path = "../db" }
 mydia-rs-entities = { path = "../entities" }
 mydia-rs-auth = { path = "../auth" }
+mydia-rs-metadata = { path = "../metadata" }
 mydia-rs-pubsub = { path = "../pubsub" }
 tower-sessions = "0.14"
 

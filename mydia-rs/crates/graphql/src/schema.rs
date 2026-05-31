@@ -32,6 +32,7 @@ use crate::mutations::admin::users::UserMutations;
 use crate::mutations::api_key::ApiKeyMutations;
 use crate::mutations::auth::AuthMutations;
 use crate::mutations::download::DownloadMutations;
+use crate::mutations::import_session::ImportSessionMutations;
 use crate::mutations::media::MediaMutations;
 use crate::mutations::playback::PlaybackMutations;
 use crate::mutations::profile::ProfileMutations;
@@ -63,6 +64,7 @@ use crate::queries::collection::CollectionQueries;
 use crate::queries::dashboard::DashboardQueries;
 use crate::queries::device::DeviceQueries;
 use crate::queries::discovery::DiscoveryQueries;
+use crate::queries::import_session::ImportSessionQueries;
 use crate::queries::profile::ProfileQueries;
 use crate::queries::requests::RequestQueries;
 use crate::queries::search::SearchQueries;
@@ -135,6 +137,7 @@ pub struct QueryRoot(
     IntrospectionQueries,
     BrowseQueries,
     DiscoveryQueries,
+    ImportSessionQueries,
     SearchQueries,
     StreamingQueries,
     ApiKeyQueries,
@@ -212,6 +215,7 @@ pub struct MutationRoot(
     IndexerMutations,
     DownloadClientMutations,
     ImportListMutations,
+    ImportSessionMutations,
     MediaServerMutations,
     QualityProfileMutations,
     ReleaseBlacklistMutations,
