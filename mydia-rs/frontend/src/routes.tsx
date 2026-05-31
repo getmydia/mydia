@@ -10,6 +10,10 @@ import { SearchPage } from "./pages/search";
 import { AddMediaPage } from "./pages/add-media";
 import { ImportMediaPage } from "./pages/import-media";
 import { MediaDetailPage } from "./pages/media-detail";
+import { MoviesPage } from "./pages/movies";
+import { TvShowsPage } from "./pages/tv-shows";
+import { CollectionsPage } from "./pages/collections";
+import { PlaybackPage } from "./pages/playback";
 import { MyRequestsPage } from "./pages/my-requests";
 import { RequestMediaPage } from "./pages/request-media";
 import { ProfilePage } from "./pages/profile";
@@ -42,17 +46,6 @@ function NotFound() {
   );
 }
 
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <div className="text-center space-y-4">
-        <h1 className="text-3xl font-bold">{title}</h1>
-        <p className="text-base-content/60">This page is coming soon.</p>
-      </div>
-    </div>
-  );
-}
-
 export const router = createBrowserRouter([
   {
     path: "/login",
@@ -68,15 +61,17 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: "dashboard", element: <DashboardPage /> },
       { path: "discover", element: <DiscoverPage /> },
-      { path: "movies", element: <PlaceholderPage title="Movies" /> },
-      { path: "tv-shows", element: <PlaceholderPage title="TV Shows" /> },
+      { path: "movies", element: <MoviesPage /> },
+      { path: "tv-shows", element: <TvShowsPage /> },
       { path: "calendar", element: <CalendarPage /> },
       { path: "downloads", element: <DownloadsPage /> },
       { path: "add-media", element: <AddMediaPage /> },
       { path: "import-media", element: <ImportMediaPage /> },
       { path: "search", element: <SearchPage /> },
-      { path: "collections", element: <PlaceholderPage title="Collections" /> },
+      { path: "collections", element: <CollectionsPage /> },
+      { path: "collections/:id", element: <CollectionsPage /> },
       { path: "media/:id", element: <MediaDetailPage /> },
+      { path: "play/:type/:id", element: <PlaybackPage /> },
       { path: "profile", element: <ProfilePage /> },
       { path: "my-requests", element: <MyRequestsPage /> },
       { path: "request-media", element: <RequestMediaPage /> },

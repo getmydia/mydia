@@ -41,3 +41,27 @@ query DiscoverContinueWatching {
     }
   }
 }
+
+query Discover($category: String!, $mediaType: MediaType!, $page: Int) {
+  discover(category: $category, mediaType: $mediaType, page: $page) {
+    results {
+      id
+      tmdbId
+      type
+      title
+      year
+      posterUrl
+      voteAverage
+      inLibrary
+    }
+    page
+    totalPages
+  }
+}
+
+mutation AddToLibrary($input: AddMediaToLibraryInput!) {
+  addMediaToLibrary(input: $input) {
+    id
+    title
+  }
+}

@@ -836,6 +836,17 @@ type Query {
 	"""
 	unwatched(first: Int! = 50, after: String, types: [MediaType!]): [RecentlyAddedItem!]!
 	"""
+	Discover new content from TMDB via the metadata-relay. Returns
+	curated lists (trending, popular, upcoming, etc.) with an
+	inLibrary flag indicating whether each item is already in the
+	user's media library.
+
+	category must be one of: trending, popular, upcoming,
+	now_playing, on_the_air, airing_today. Unknown values fall
+	back to trending.
+	"""
+	discover(category: String!, mediaType: MediaType!, page: Int): DiscoverPage!
+	"""
 	Substring search across media item titles.
 	"""
 	search(query: String!, first: Int! = 20, types: [MediaType!]): SearchResults!
@@ -894,6 +905,31 @@ type RecentlyAddedItem {
 	year: Int
 	artwork: Artwork
 	addedAt: DateTime!
+}
+
+"""
+Discover item — a TMDB result surfaced on the Discover page.
+These are media items that may or may not yet be in the user's
+library (indicated by inLibrary).
+"""
+type DiscoverItem {
+	id: ID!
+	tmdbId: Int!
+	type: MediaType!
+	title: String!
+	year: Int
+	posterUrl: String
+	voteAverage: Float
+	inLibrary: Boolean!
+}
+
+"""
+Single page of discover/curated results.
+"""
+type DiscoverPage {
+	results: [DiscoverItem!]!
+	page: Int!
+	totalPages: Int!
 }
 
 type ReleaseBlacklistEntry {

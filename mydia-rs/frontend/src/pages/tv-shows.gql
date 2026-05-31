@@ -1,0 +1,47 @@
+query TvShows($first: Int = 50, $after: String, $sort: SortInput, $category: MediaCategory) {
+  tvShows(first: $first, after: $after, sort: $sort, category: $category) {
+    edges {
+      node {
+        id
+        title
+        originalTitle
+        year
+        tvdbId
+        monitored
+        addedAt
+        overview
+        status
+        genres
+        rating
+        category
+        artwork {
+          posterUrl
+          backdropUrl
+        }
+        seasons {
+          seasonNumber
+          episodeCount
+          hasFiles
+        }
+        seasonCount
+        episodeCount
+        nextEpisode {
+          id
+          seasonNumber
+          episodeNumber
+          title
+          airDate
+        }
+        isFavorite
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

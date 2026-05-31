@@ -1,0 +1,11 @@
+query Collections($first: Int = 50) {
+  collections(first: $first) {
+    id
+    name
+    description
+    type
+    visibility
+    itemCount
+    posterPaths
+  }
+}

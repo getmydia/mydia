@@ -1,0 +1,42 @@
+query Movies($first: Int = 50, $after: String, $sort: SortInput, $category: MediaCategory) {
+  movies(first: $first, after: $after, sort: $sort, category: $category) {
+    edges {
+      node {
+        id
+        title
+        originalTitle
+        year
+        tmdbId
+        monitored
+        addedAt
+        overview
+        runtime
+        genres
+        rating
+        category
+        artwork {
+          posterUrl
+          backdropUrl
+        }
+        files {
+          id
+          resolution
+          size
+        }
+        progress {
+          percentage
+          watched
+        }
+        isFavorite
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

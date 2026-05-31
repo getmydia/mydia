@@ -1,0 +1,110 @@
+query PlaybackMovie($id: ID!) {
+  movie(id: $id) {
+    id
+    title
+    year
+    overview
+    artwork {
+      posterUrl
+      backdropUrl
+    }
+    files {
+      id
+      streamUrl
+      directPlayUrl
+      resolution
+      size
+      codec
+      audioCodec
+      hdrFormat
+      subtitles {
+        trackId
+        language
+        title
+        format
+        embedded
+        url
+      }
+    }
+    runtime
+    progress {
+      positionSeconds
+      durationSeconds
+      percentage
+      watched
+    }
+  }
+}
+
+query PlaybackEpisode($id: ID!) {
+  episode(id: $id) {
+    id
+    title
+    seasonNumber
+    episodeNumber
+    airDate
+    overview
+    hasFile
+    files {
+      id
+      streamUrl
+      directPlayUrl
+      resolution
+      size
+      codec
+      audioCodec
+      subtitles {
+        trackId
+        language
+        title
+        format
+        embedded
+        url
+      }
+    }
+    progress {
+      positionSeconds
+      durationSeconds
+      percentage
+      watched
+    }
+    show {
+      id
+      title
+      artwork {
+        posterUrl
+      }
+    }
+  }
+}
+
+query StreamingCandidates($contentType: String!, $id: ID!) {
+  streamingCandidates(contentType: $contentType, id: $id) {
+    fileId
+    candidates {
+      strategy
+      mime
+      container
+      videoCodec
+      audioCodec
+    }
+    metadata {
+      duration
+      width
+      height
+      bitrate
+      resolution
+      hdrFormat
+      originalCodec
+      originalAudioCodec
+      container
+    }
+  }
+}
+
+mutation StartStreamingSession($fileId: ID!, $strategy: StreamingStrategy!, $maxBitrate: Int) {
+  startStreamingSession(fileId: $fileId, strategy: $strategy, maxBitrate: $maxBitrate) {
+    sessionId
+    duration
+  }
+}
