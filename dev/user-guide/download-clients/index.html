@@ -732,6 +732,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rqbit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rqbit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-priority" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1521,6 +1532,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rqbit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rqbit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-priority" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1598,6 +1620,7 @@
 <h1 id="download-clients">Download Clients</h1>
 <p>Download clients handle the actual downloading of media files. Mydia supports both torrent and usenet clients.</p>
 <h2 id="supported-clients">Supported Clients</h2>
+<p>This table highlights the most common client types. The Admin UI also supports rTorrent, Blackhole, and Debrid clients.</p>
 <h3 id="torrent-clients">Torrent Clients</h3>
 <table>
 <thead>
@@ -1617,6 +1640,11 @@
 <td>Transmission</td>
 <td>RPC</td>
 <td>Categories, seeding</td>
+</tr>
+<tr>
+<td>rqbit</td>
+<td>HTTP API</td>
+<td>Lightweight torrent client, seeding</td>
 </tr>
 </tbody>
 </table>
@@ -1670,20 +1698,29 @@
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nv">DOWNLOAD_CLIENT_2_USERNAME</span><span class="o">=</span>admin
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="nv">DOWNLOAD_CLIENT_2_PASSWORD</span><span class="o">=</span>adminpass
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="c1"># SABnzbd</span>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="nv">DOWNLOAD_CLIENT_3_NAME</span><span class="o">=</span>SABnzbd
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="nv">DOWNLOAD_CLIENT_3_TYPE</span><span class="o">=</span>sabnzbd
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="nv">DOWNLOAD_CLIENT_3_HOST</span><span class="o">=</span>sabnzbd
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="nv">DOWNLOAD_CLIENT_3_PORT</span><span class="o">=</span><span class="m">8080</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="nv">DOWNLOAD_CLIENT_3_API_KEY</span><span class="o">=</span>your-sabnzbd-api-key
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>
-<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="c1"># NZBGet</span>
-<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="nv">DOWNLOAD_CLIENT_4_NAME</span><span class="o">=</span>NZBGet
-<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="nv">DOWNLOAD_CLIENT_4_TYPE</span><span class="o">=</span>nzbget
-<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="nv">DOWNLOAD_CLIENT_4_HOST</span><span class="o">=</span>nzbget
-<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="nv">DOWNLOAD_CLIENT_4_PORT</span><span class="o">=</span><span class="m">6789</span>
-<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="nv">DOWNLOAD_CLIENT_4_USERNAME</span><span class="o">=</span>nzbget
-<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="nv">DOWNLOAD_CLIENT_4_PASSWORD</span><span class="o">=</span>tegbzn6789
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="c1"># rqbit</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="nv">DOWNLOAD_CLIENT_3_NAME</span><span class="o">=</span>rqbit
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="nv">DOWNLOAD_CLIENT_3_TYPE</span><span class="o">=</span>rqbit
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="nv">DOWNLOAD_CLIENT_3_HOST</span><span class="o">=</span>rqbit
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="nv">DOWNLOAD_CLIENT_3_PORT</span><span class="o">=</span><span class="m">3030</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="c1"># Optional, when rqbit HTTP basic auth is enabled</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="nv">DOWNLOAD_CLIENT_3_USERNAME</span><span class="o">=</span>admin
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="nv">DOWNLOAD_CLIENT_3_PASSWORD</span><span class="o">=</span>adminpass
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="c1"># SABnzbd</span>
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="nv">DOWNLOAD_CLIENT_4_NAME</span><span class="o">=</span>SABnzbd
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="nv">DOWNLOAD_CLIENT_4_TYPE</span><span class="o">=</span>sabnzbd
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="nv">DOWNLOAD_CLIENT_4_HOST</span><span class="o">=</span>sabnzbd
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="nv">DOWNLOAD_CLIENT_4_PORT</span><span class="o">=</span><span class="m">8080</span>
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a><span class="nv">DOWNLOAD_CLIENT_4_API_KEY</span><span class="o">=</span>your-sabnzbd-api-key
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="c1"># NZBGet</span>
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="nv">DOWNLOAD_CLIENT_5_NAME</span><span class="o">=</span>NZBGet
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a><span class="nv">DOWNLOAD_CLIENT_5_TYPE</span><span class="o">=</span>nzbget
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a><span class="nv">DOWNLOAD_CLIENT_5_HOST</span><span class="o">=</span>nzbget
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a><span class="nv">DOWNLOAD_CLIENT_5_PORT</span><span class="o">=</span><span class="m">6789</span>
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a><span class="nv">DOWNLOAD_CLIENT_5_USERNAME</span><span class="o">=</span>nzbget
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a><span class="nv">DOWNLOAD_CLIENT_5_PASSWORD</span><span class="o">=</span>tegbzn6789
 </code></pre></div>
 <h2 id="configuration-options">Configuration Options</h2>
 <table>
@@ -1752,6 +1789,15 @@
 </tr>
 </tbody>
 </table>
+<h2 id="rqbit">rqbit</h2>
+<p>Mydia connects to a separately running <code>rqbit server</code> over rqbit's HTTP API. Mydia does not install, start, or supervise the rqbit process.</p>
+<p>Use these connection values when adding rqbit:</p>
+<ul>
+<li>Type: <code>rqbit</code></li>
+<li>Port: <code>3030</code> by default</li>
+<li>Username/password: optional, only when rqbit HTTP basic auth is enabled</li>
+</ul>
+<p>rqbit supports torrents only. It does not support categories, labels, tags, or Usenet downloads, so Mydia ignores category settings for rqbit clients. Final organization still happens during import when Mydia moves or links completed files into the configured library.</p>
 <h2 id="client-priority">Client Priority</h2>
 <p>When multiple clients are configured, priority determines which client is used:</p>
 <ul>
@@ -1765,6 +1811,7 @@
 <li>Set the same category in Mydia</li>
 <li>Downloads are tagged with this category</li>
 </ul>
+<p>rqbit does not have categories or labels. For rqbit clients, leave category fields empty and use the download directory plus Mydia's import step for final organization.</p>
 <h2 id="download-directory">Download Directory</h2>
 <p>Configure where downloads are saved:</p>
 <ul>
