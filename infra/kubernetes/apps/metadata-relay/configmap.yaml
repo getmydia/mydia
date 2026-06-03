@@ -17,3 +17,12 @@ data:
 
   # Redis cache for distributed/persistent caching
   REDIS_URL: "redis://redis:6379"
+
+  # Feedback email notifications (delivered via Resend SMTP).
+  # The matching SMTP_PASSWORD (Resend API key) lives in the secret.
+  FEEDBACK_EMAIL_TO: "feedback@mydia.dev"
+  FEEDBACK_EMAIL_FROM: "feedback@mydia.dev"
+  FEEDBACK_DASHBOARD_URL: "https://relay.mydia.dev"
+  SMTP_HOST: "smtp.resend.com"
+  SMTP_PORT: "587"
+  SMTP_USERNAME: "resend"

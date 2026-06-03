@@ -74,6 +74,15 @@ if config_env() != :test do
         password: smtp_password,
         auth: if(smtp_username && smtp_password, do: :always, else: :never),
         tls: :always,
+        tls_options: [
+          verify: :verify_peer,
+          cacerts: :public_key.cacerts_get(),
+          server_name_indication: String.to_charlist(smtp_host),
+          depth: 99,
+          customize_hostname_check: [
+            match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+          ]
+        ],
         retries: 2,
         no_mx_lookups: true
     else
