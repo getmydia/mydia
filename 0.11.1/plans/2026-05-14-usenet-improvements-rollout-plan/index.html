@@ -1,0 +1,2526 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A modern, self-hosted media management platform for tracking, organizing, and monitoring your media library">
+      
+      
+      
+        <link rel="canonical" href="https://docs.mydia.dev/0.11.1/plans/2026-05-14-usenet-improvements-rollout-plan/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>feat: Usenet improvements rollout (issues #119–#129) - Mydia Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.mydia.dev/js/pa-H3lvJys17D0-xiK_1xsxu.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#feat-usenet-improvements-rollout" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Mydia Documentation" class="md-header__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mydia Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              feat: Usenet improvements rollout (issues #119–#129)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/getmydia/mydia" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    getmydia/mydia
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Mydia Documentation" class="md-nav__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Mydia Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/getmydia/mydia" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    getmydia/mydia
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-steps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First Steps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/libraries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Managing Libraries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/adding-media/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding Media
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/quality-profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Profiles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/download-clients/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Download Clients
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/indexers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Indexers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/users/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/environment-variables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Environment Variables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/remote-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Remote Access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Advanced
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/postgresql/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PostgreSQL
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/oidc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SSO/OIDC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/cardigann/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cardigann Indexers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/e2e-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    E2E Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope-and-issues-closed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope and Issues Closed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scope and Issues Closed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scope-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope Boundaries
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scope Boundaries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#non-goals-deferred-to-follow-up-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-goals (deferred to follow-up work)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pre-existing-state-and-correction-flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-existing State and Correction Flags
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#high-level-technical-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        High-Level Technical Design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="High-Level Technical Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dependency-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dependency graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parallel-dispatch-waves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parallel dispatch waves
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-units" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Units
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Units">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#u1-indexer-parsing-nzb-aware-ranking-log-noise-120-121-125" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U1. Indexer parsing + NZB-aware ranking + log noise (#120, #121, #125)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u2-wave-2-schema-foundation-122-124-126-129-additive-columns-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U2. Wave-2 schema foundation (#122, #124, #126, #129 — additive columns only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u3-queue-submission-per-content-type-categories-priority-profile-124-129" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U3. Queue submission: per-content-type categories + priority profile (#124, #129)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u4-stall-detection-in-downloadmonitor-126" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U4. Stall detection in DownloadMonitor (#126)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u5-webhook-receiver-mediaimport-idempotency-122" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U5. Webhook receiver + MediaImport idempotency (#122)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u6-admin-form-unified-rewrite-122-124-126-129-ui-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U6. Admin form unified rewrite (#122, #124, #126, #129 UI surface)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u7-release-blacklist-123" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U7. Release blacklist (#123)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u8-unify-downloadstatus-struct-extract-shared-helpers-127" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U8. Unify DownloadStatus struct + extract shared helpers (#127)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#u9-adapter-parsingstate-mapping-unit-tests-with-frozen-fixtures-128" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        U9. Adapter parsing/state-mapping unit tests with frozen fixtures (#128)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-concerns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-Cutting Concerns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Cutting Concerns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migrations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backwards-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backwards compatibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logging-hygiene" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logging hygiene
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-wide-impact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System-Wide Impact
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-time-unknowns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation-Time Unknowns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Acceptance Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#risks-and-mitigations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Risks and Mitigations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sources-and-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources and References
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sources and References">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#origin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Origin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prior-plans" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prior plans
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#institutional-learnings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Institutional learnings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal references
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="feat-usenet-improvements-rollout">feat: Usenet Improvements Rollout</h1>
+<h2 id="overview">Overview</h2>
+<p>This plan ships all 10 open Usenet improvement issues tracked under getmydia/mydia#119 in a single coordinated rollout. The work is sized for parallel subagent dispatch with worktree isolation: 9 implementation units organised into 4 dependency-ordered waves, with U-IDs anchoring each unit so <code>ce-work</code> can dispatch them and track progress unambiguously.</p>
+<p>The Usenet pipeline itself is <strong>already production-ready</strong> after <code>docs/plans/2026-04-08-fix-usenet-download-import-pipeline-plan.md</code> shipped. None of the work below fixes broken behavior — it closes feature-parity gaps versus Sonarr/Radarr and pays down some adapter duplication.</p>
+<hr />
+<h2 id="problem-statement">Problem Statement</h2>
+<p>Mydia's Usenet support works end-to-end, but a coordinated set of gaps and polish items remain:</p>
+<ul>
+<li><strong>Indexer parsing</strong>: <code>usenetdate</code> is extracted from Newznab XML and immediately dropped; <code>grabs</code> is misrepresented as <code>seeders</code>; Prowlarr emits 1000+ info-level log lines per search.</li>
+<li><strong>Release lifecycle</strong>: failed downloads aren't blacklisted, so the next search picks them again; stalled downloads at 99% are polled forever with no circuit breaker.</li>
+<li><strong>Real-time signalling</strong>: completion is polling-only (30s–5min latency); both clients can push via post-processing scripts but there's no endpoint to receive them.</li>
+<li><strong>Configuration depth</strong>: one category per client, one hardcoded 3-tier priority mapping — users can't separate movies/TV on the same client or take advantage of finer priority tiers.</li>
+<li><strong>Code health</strong>: SABnzbd (665 LOC) and NZBGet (517 LOC) duplicate state classification, size normalization, and queue+history merging. Adapter parsing tests skew heavily toward error paths.</li>
+</ul>
+<p>(see origin: getmydia/mydia#119 — tracking issue with full theme breakdown)</p>
+<hr />
+<h2 id="scope-and-issues-closed">Scope and Issues Closed</h2>
+<table>
+<thead>
+<tr>
+<th>Wave</th>
+<th>Unit</th>
+<th>Issues closed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>U1</td>
+<td>#120, #121, #125</td>
+</tr>
+<tr>
+<td>2</td>
+<td>U2</td>
+<td>(foundation for #122, #124, #126, #129)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>U3</td>
+<td>#124, #129</td>
+</tr>
+<tr>
+<td>2</td>
+<td>U4</td>
+<td>#126</td>
+</tr>
+<tr>
+<td>2</td>
+<td>U5</td>
+<td>#122</td>
+</tr>
+<tr>
+<td>2</td>
+<td>U6</td>
+<td>(UI surface for U3, U4, U5)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>U7</td>
+<td>#123</td>
+</tr>
+<tr>
+<td>3</td>
+<td>U8</td>
+<td>#127</td>
+</tr>
+<tr>
+<td>3</td>
+<td>U9</td>
+<td>#128</td>
+</tr>
+</tbody>
+</table>
+<h3 id="scope-boundaries">Scope Boundaries</h3>
+<h4 id="non-goals-deferred-to-follow-up-work">Non-goals (deferred to follow-up work)</h4>
+<ul>
+<li><strong>Replacing polling entirely</strong>: webhooks (#122 / U5) are additive. The poll loop stays as the source of truth and webhook fast-path is opportunistic.</li>
+<li><strong>Per-quality-profile priority</strong> (#129 stretch): this plan delivers per-client priority profiles. Resolving priority by <code>Download.quality_profile_id</code> is explicitly out of scope.</li>
+<li><strong>New download client types</strong> (e.g. additional NZB clients): not in scope.</li>
+<li><strong>Rewriting <code>MediaImport</code></strong>: its <code>save_path</code> fallback (shipped 2026-04-08) is well-tested. We only add idempotency guards.</li>
+<li><strong>Mock-sabnzbd / mock-nzbget Docker containers under a <code>usenet</code> profile</strong>: the prior plan said it shipped this — it didn't (verified by directory listing). For <em>this</em> plan, all new tests use <code>Phoenix.ConnTest</code>, <code>Bypass</code>, and <code>Mox</code>. Building the container infra is deferred; if E2E coverage is desired later, it's a clean follow-up.</li>
+<li><strong>A real <code>:status</code> column on <code>downloads</code></strong>: <code>download_monitor.ex:184/226</code> already calls <code>update_download(..., %{status: "missing", ...})</code> and the <code>:status</code> key is silently dropped because it isn't cast. Adding a real column is tempting cleanup but outside the scope of the 10 issues. Note the bug; do not let scope creep absorb it.</li>
+</ul>
+<hr />
+<h2 id="pre-existing-state-and-correction-flags">Pre-existing State and Correction Flags</h2>
+<p>Several issue bodies assumed columns or infrastructure that don't actually exist. The plan reflects what's <em>actually</em> in the codebase as of 2026-05-14:</p>
+<ol>
+<li><strong>Download schema does not have <code>save_path</code>, <code>status</code>, <code>progress_pct</code>, <code>downloaded_bytes</code>, <code>content_type</code>, <code>indexer_id</code>, or <code>guid</code> columns.</strong> <code>save_path</code> lives in <code>download.metadata["save_path"]</code> (JSON map). Any new persistent state in this plan must either (a) be added as a real column via migration, or (b) live in <code>metadata</code>. Plan calls out which approach each unit takes.</li>
+<li><strong>Mock SABnzbd/NZBGet containers do not exist.</strong> Only <code>test/mock_services/prowlarr/</code> and <code>test/mock_services/qbittorrent/</code> are present. <code>compose.test.yml</code> has no <code>usenet</code> profile. New tests in this plan use <code>Bypass</code> (already used by <code>usenet_import_integration_test.exs</code>) and <code>Phoenix.ConnTest</code> — no new containers required.</li>
+<li><strong><code>MediaImport</code> has no <code>unique:</code> Oban option today</strong> and no early-return on <code>imported_at</code>. U5 adds both.</li>
+<li><strong>The canonical state struct is <code>Mydia.Downloads.Structs.TorrentStatus</code></strong> with states <code>:downloading | :seeding | :paused | :checking | :queued | :error | :completed | :unknown</code>. U8 renames to <code>DownloadStatus</code> (already represents both modalities).</li>
+<li><strong>The canonical state-classifier name is <code>parse_state/1</code></strong> in each adapter (not <code>state_from_status</code> as #127 implied).</li>
+<li><strong><code>usenetdate</code> is already extracted into the item map</strong> at <code>lib/mydia/indexers/adapter/nzbhydra2.ex:267-269</code> but <code>parse_result_item/2</code> never reads <code>item.usenetdate</code>. The fix is to consume it.</li>
+<li><strong>Filter-vs-rank convention</strong>: per <code>docs/plans/2026-04-01-fix-duplicate-tv-show-downloads-plan.md</code>, pre-ranking filters live in callers (<code>process_episode_results</code>, <code>process_movie_results</code>) using <code>reject_*</code> naming. <code>ReleaseRanker</code> stays scoring-focused. U1 and U7 honor this.</li>
+</ol>
+<hr />
+<h2 id="high-level-technical-design">High-Level Technical Design</h2>
+<h3 id="dependency-graph">Dependency graph</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>            ┌─────────────────────────────────────────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Wave 1:     │ U1: Indexer parsing + NZB-aware ranking + log noise │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>            └─────────────────────────────────────────────────────┘
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                              │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>            ┌─────────────────┴─────────────────┐
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>Wave 2:     │ U2: Schema foundation (1 migration)│
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>            └─────────────────┬─────────────────┘
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                              │
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>              ┌───────────────┼───────────────┐
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>              │               │               │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>            ┌─▼──┐         ┌──▼─┐          ┌──▼─┐
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>            │ U3 │         │ U4 │          │ U5 │
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>            │Queue│        │Stall│         │Webhook│
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>            │+adapters│    │detect│        │+idempotency│
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>            └─┬──┘         └──┬─┘          └──┬─┘
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>              └───────────────┼───────────────┘
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>                              │
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>                       ┌──────▼──────┐
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>                       │ U6: Admin UI │
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>                       │ unified pass │
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>                       └──────┬──────┘
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>                              │
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>              ┌───────────────┼───────────────┐
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>Wave 3:       │               │               │
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>            ┌─▼──┐         ┌──▼─┐
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>            │ U7 │         │ U8 │
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>            │Blacklist│    │Struct unify│
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>            │(needs U4)│   │(needs U3)│
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>            └─────┘         └──┬─┘
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>                               │
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>                            ┌──▼─┐
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>                            │ U9 │
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>                            │Adapter tests│
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>                            └────┘
+</code></pre></div>
+<p><em>Directional guidance for the dependency graph above — this is intent, not literal CI gates. Implementer should treat each arrow as "the prior unit must merge to master before the next is dispatched."</em></p>
+<h3 id="parallel-dispatch-waves">Parallel dispatch waves</h3>
+<table>
+<thead>
+<tr>
+<th>Wave</th>
+<th>Dispatch</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A</strong></td>
+<td>U1 + U2 in parallel</td>
+<td>No file overlap. U1 is indexer axis, U2 is download-client schema.</td>
+</tr>
+<tr>
+<td><strong>B</strong></td>
+<td>U3 + U4 + U5 in parallel after U2 merges</td>
+<td>All depend on U2's schema columns. No file overlap among themselves (verified).</td>
+</tr>
+<tr>
+<td><strong>C</strong></td>
+<td>U6 alone after Wave B merges</td>
+<td>Touches the admin form file that U3/U4/U5 all need to render. Sequencing it solo is cleaner than letting three parallel units conflict-resolve on one form.</td>
+</tr>
+<tr>
+<td><strong>D</strong></td>
+<td>U7 + U8 in parallel after U6 (U7 needs U4 in master; U8 needs U3 in master)</td>
+<td>U7 touches <code>DownloadMonitor</code> (U4's territory) + search orchestrators (untouched elsewhere). U8 touches all adapters (U3's territory). No overlap between U7 and U8.</td>
+</tr>
+<tr>
+<td><strong>E</strong></td>
+<td>U9 alone after U8 merges</td>
+<td>Tests fixtures must reflect U8's unified <code>DownloadStatus</code>.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="implementation-units">Implementation Units</h2>
+<h3 id="u1-indexer-parsing-nzb-aware-ranking-log-noise-120-121-125">U1. Indexer parsing + NZB-aware ranking + log noise (#120, #121, #125)</h3>
+<p><strong>Goal</strong>: Stop dropping <code>usenetdate</code>, stop misrepresenting <code>grabs</code> as <code>seeders</code>, branch ranker scoring by protocol, add a configurable minimum post-age filter, and demote the four noisy Prowlarr <code>Logger.info</code> calls.</p>
+<p><strong>Issues</strong>: #120, #121, #125</p>
+<p><strong>Dependencies</strong>: none.</p>
+<p><strong>Files</strong>:
+- Modify: <code>lib/mydia/indexers/search_result.ex</code>
+- Modify: <code>lib/mydia/indexers/adapter/nzbhydra2.ex</code>
+- Modify: <code>lib/mydia/indexers/adapter/prowlarr.ex</code>
+- Modify: <code>lib/mydia/indexers/release_ranker.ex</code>
+- Modify: <code>lib/mydia/settings/indexer_config.ex</code>
+- Modify: <code>lib/mydia_web/live/admin_indexers_live/components.ex</code>
+- Create: <code>priv/repo/migrations/{TIMESTAMP}_add_min_post_age_to_indexer_configs.exs</code>
+- Test (modify): <code>test/mydia/indexers/release_ranker_test.exs</code>
+- Test (modify): <code>test/mydia/indexers/adapter/nzbhydra2_test.exs</code>
+- Test (modify): <code>test/mydia/indexers/adapter/prowlarr_test.exs</code></p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong><code>SearchResult</code> additions</strong> — add four fields (all optional, default <code>nil</code>):</li>
+<li><code>usenet_date :: DateTime.t() | nil</code></li>
+<li><code>nzb_completion :: float | nil</code> (0.0..1.0)</li>
+<li><code>nzb_grabs :: integer | nil</code></li>
+<li>(do <strong>not</strong> add <code>download_protocol</code> — it already exists at <code>search_result.ex</code> and is populated by all NZB adapters)</li>
+<li><strong>NZBHydra2 parser</strong> — <code>parse_result_item/2</code> already has <code>usenetdate</code> in the item map at <code>nzbhydra2.ex:267-269</code>; consume it into <code>usenet_date</code>. Where <code>grabs</code> is mapped to <code>seeders</code> (lines 297-302, 371), instead populate <code>nzb_grabs</code> and leave <code>seeders</code>/<code>leechers</code> as <code>nil</code> for NZB results. Parse <code>newznab:attr name="completion"</code> when present (some indexers expose it).</li>
+<li><strong>Prowlarr parser</strong> — demote <code>Logger.info</code> at lines 305, 316, 328 to <code>Logger.debug</code>. Parse <code>publishDate</code> into <code>usenet_date</code> when <code>download_protocol == :nzb</code>. Parse <code>completion</code> when the underlying indexer reports it (Prowlarr passes Newznab attrs through transparently).</li>
+<li><strong>Ranker filter</strong> — add <code>min_post_age_minutes</code> filter to <code>ReleaseRanker.filter_acceptable/2</code> (consistent with the existing <code>meets_seeder_minimum?/2</code> property-check pattern, not the orchestrator-level <code>reject_*</code> pattern). For NZB results with <code>usenet_date</code> more recent than <code>now - min_post_age_minutes</code>, exclude. Torrent results pass through unchanged.</li>
+<li><strong>Ranker scoring</strong> — in <code>SearchScorer.score_result_with_breakdown/2</code>, branch on <code>download_protocol</code>:</li>
+<li><code>:torrent</code> → existing <code>seeders</code>-based scoring (unchanged)</li>
+<li><code>:nzb</code> → use <code>nzb_completion</code> (default to 1.0 when unknown to avoid penalizing old indexers) + <code>nzb_grabs</code> as a tiebreaker</li>
+<li><strong><code>IndexerConfig</code> schema</strong> — add <code>field :min_post_age_minutes, :integer</code> (nullable). Changeset: cast + <code>validate_number(:min_post_age_minutes, greater_than_or_equal_to: 0)</code> when not nil.</li>
+<li><strong>Migration</strong>: nullable integer column on <code>indexer_configs</code>. SQLite-safe (additive, no default needed).</li>
+<li><strong>Admin indexers form</strong> — add a <code>Min post age (minutes)</code> input, visible only when the indexer type supports NZB (<code>prowlarr</code>, <code>nzbhydra2</code>, <code>jackett</code> if NZB-capable). Follow the conditional-rendering pattern at <code>admin_indexers_live/components.ex:367-369</code> (<code>is_prowlarr</code> assign derived at top, then <code>&lt;%= if @is_prowlarr do %&gt;</code>).</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- <code>SearchResult.new/1</code> struct construction — <code>lib/mydia/indexers/search_result.ex</code>
+- <code>ReleaseRanker.filter_acceptable/2</code> for the post-age filter — pure property check
+- <code>meets_seeder_minimum?/2</code> for <code>nil</code> setting → no filtering
+- Admin form conditional rendering — <code>admin_indexers_live/components.ex</code> lines 367-500
+- Newznab attr parsing — existing <code>xpath</code> extractor in <code>nzbhydra2.ex:237</code></p>
+<p><strong>Execution note</strong>: Test-first for the ranker filter and scoring branch — these are pure functions with clear input/output and the failing-test-first pattern keeps the branch logic honest.</p>
+<p><strong>Test scenarios</strong>:
+- <em>Happy path</em>: NZBHydra2 fixture with <code>usenetdate</code> → <code>SearchResult.usenet_date</code> carries a <code>DateTime</code>.
+- <em>Happy path</em>: NZBHydra2 fixture with <code>grabs="42"</code> → <code>nzb_grabs == 42</code>, <code>seeders == nil</code>, <code>leechers == nil</code>.
+- <em>Happy path</em>: Prowlarr fixture with <code>downloadProtocol: "usenet"</code> and <code>publishDate</code> → <code>usenet_date</code> populated, <code>nzb_grabs</code> populated.
+- <em>Edge</em>: NZB result with no <code>usenetdate</code> field → <code>usenet_date == nil</code>; ranker passes it through (no filter applied).
+- <em>Edge</em>: NZB result with <code>usenet_date</code> exactly equal to <code>now - min_post_age_minutes</code> → not filtered (use strict <code>&lt;</code> for "too recent").
+- <em>Edge</em>: <code>min_post_age_minutes</code> is <code>nil</code> → no filtering at all, even for very fresh NZBs.
+- <em>Filter</em>: NZB posted 5 minutes ago, <code>min_post_age_minutes = 30</code> → filtered out.
+- <em>Filter</em>: NZB posted 60 minutes ago, <code>min_post_age_minutes = 30</code> → kept.
+- <em>Filter</em>: Torrent with the same age → kept (filter is NZB-only).
+- <em>Scoring</em>: NZB with <code>nzb_completion: 1.0, nzb_grabs: 5</code> outranks NZB with <code>nzb_completion: 0.6, nzb_grabs: 500</code>.
+- <em>Scoring</em>: Torrent scoring is unchanged (regression — pin an existing scoring test).
+- <em>Log demotion</em>: search against a Bypass-mocked Prowlarr server emits zero <code>:info</code>-level log lines for routine result parsing (capture log + assert).</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix test test/mydia/indexers/</code> is green.
+- A manual search through the admin UI shows the new <code>Min post age (minutes)</code> field on a Prowlarr indexer and zero info-level log lines in <code>./dev logs -f</code>.
+- <code>./dev mix ecto.migrate</code> runs and rolls back cleanly.</p>
+<hr />
+<h3 id="u2-wave-2-schema-foundation-122-124-126-129-additive-columns-only">U2. Wave-2 schema foundation (#122, #124, #126, #129 — additive columns only)</h3>
+<p><strong>Goal</strong>: Land one migration with all wave-2 schema changes plus the <code>DownloadClientConfig</code> and <code>Download</code> schema updates. No behavior changes, no UI — pure data-model bedrock so U3/U4/U5 can build on top without colliding migrations.</p>
+<p><strong>Issues</strong>: foundation for #122, #124, #126, #129. None closed yet.</p>
+<p><strong>Dependencies</strong>: none.</p>
+<p><strong>Files</strong>:
+- Create: <code>priv/repo/migrations/{TIMESTAMP}_add_usenet_improvement_columns.exs</code>
+- Modify: <code>lib/mydia/settings/download_client_config.ex</code>
+- Modify: <code>lib/mydia/downloads/download.ex</code>
+- Test (modify): <code>test/mydia/settings/download_client_config_test.exs</code> (may need to create — verify existence)
+- Test (modify): <code>test/mydia/downloads/download_test.exs</code> (may need to create — verify existence)</p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong>Migration</strong> adds the following to <code>download_clients</code>:</li>
+<li><code>add :webhook_secret, :string</code> — nullable; populated on next save via changeset auto-generate (see below)</li>
+<li><code>add :categories, :map, default: %{}</code> — JSON map keyed by <code>Download.content_type</code> atom-as-string</li>
+<li><code>add :priority_profile, :map, default: %{}</code> — JSON map of 5-tier priority taxonomy → client-native string/int</li>
+<li><code>add :incomplete_grace_minutes, :integer, default: 60</code></li>
+<li><strong>Migration</strong> also adds to <code>downloads</code>:</li>
+<li><code>add :last_progress_at, :utc_datetime_usec</code> — nullable</li>
+<li><code>add :last_known_bytes, :integer, default: 0</code></li>
+<li><strong><code>DownloadClientConfig</code> schema</strong> — add the four new fields. Changeset:</li>
+<li><code>cast</code> adds <code>:categories, :priority_profile, :incomplete_grace_minutes</code> (do <strong>not</strong> cast <code>:webhook_secret</code> — security-sensitive, generated server-side)</li>
+<li>On insert, when <code>:webhook_secret</code> is nil, set it via <code>put_change(:webhook_secret, generate_secret())</code>. Use <code>:crypto.strong_rand_bytes(32) |&gt; Base.url_encode64(padding: false)</code>.</li>
+<li><code>validate_number(:incomplete_grace_minutes, greater_than: 0)</code> when present</li>
+<li><strong>Do not</strong> remove the existing <code>:category</code> string column. Keep it for backwards compatibility; mark as deprecated in <code>@moduledoc</code>. U3 will use <code>categories</code> map preferentially, falling back to <code>category</code> when the map is empty.</li>
+<li><strong><code>Download</code> schema</strong> — add <code>:last_progress_at</code> and <code>:last_known_bytes</code> fields. Cast both. No validation needed.</li>
+<li><strong>No <code>@type t</code></strong> changes mandated, but if the implementer wants to add <code>@type t :: %__MODULE__{...}</code> to these schemas (which are missing it per institutional research), that's a free win.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- Existing migration shape — see <code>priv/repo/migrations/20260326000000_add_match_status_to_downloads.exs</code> for an additive column on <code>downloads</code>.
+- <code>connection_settings :: map</code> on the same <code>download_clients</code> table for prior-art on JSON map columns — <code>download_client_config.ex</code> field declaration.
+- Changeset <code>put_change</code> for server-side generated secrets — look for any existing token/secret generation pattern in <code>lib/mydia/</code>.</p>
+<p><strong>Execution note</strong>: not test-first — this is a pure schema additive change with no behavior. Tests assert column existence and the secret-generation invariant.</p>
+<p><strong>Test scenarios</strong>:
+- <em>Happy path</em>: <code>Settings.create_download_client_config(%{name: "sab", type: :sabnzbd, ...})</code> returns a config with a non-nil <code>webhook_secret</code> ≥ 32 chars.
+- <em>Happy path</em>: Inserting with <code>categories: %{"movie" =&gt; "movies", "tv" =&gt; "tv"}</code> round-trips through Ecto correctly.
+- <em>Edge</em>: Updating an existing config with no <code>webhook_secret</code> causes one to be generated on next save (changeset <code>put_change</code> covers nil → generate path).
+- <em>Edge</em>: <code>incomplete_grace_minutes</code> defaults to 60 when not provided.
+- <em>Edge</em>: A pre-existing download row with <code>last_progress_at = nil</code> and <code>last_known_bytes = 0</code> is queryable (migration default works).
+- <em>Error path</em>: <code>incomplete_grace_minutes: -1</code> fails validation.</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix ecto.migrate</code> runs cleanly; rollback runs cleanly.
+- <code>./dev mix test test/mydia/settings/</code> and <code>./dev mix test test/mydia/downloads/download_test.exs</code> green.
+- A SQLite shell check: <code>.schema download_clients</code> shows all four new columns; <code>.schema downloads</code> shows the two new columns.</p>
+<hr />
+<h3 id="u3-queue-submission-per-content-type-categories-priority-profile-124-129">U3. Queue submission: per-content-type categories + priority profile (#124, #129)</h3>
+<p><strong>Goal</strong>: Route categories by content type at submission time, and pass a 5-tier priority atom through to adapters which resolve it via each client's <code>priority_profile</code> map. All six adapters updated.</p>
+<p><strong>Issues closed</strong>: #124, #129</p>
+<p><strong>Dependencies</strong>: U2.</p>
+<p><strong>Files</strong>:
+- Create: <code>lib/mydia/downloads/priority.ex</code>
+- Modify: <code>lib/mydia/downloads/queue.ex</code>
+- Modify: <code>lib/mydia/downloads/client/sabnzbd.ex</code>
+- Modify: <code>lib/mydia/downloads/client/nzbget.ex</code>
+- Modify: <code>lib/mydia/downloads/client/qbittorrent.ex</code>
+- Modify: <code>lib/mydia/downloads/client/transmission.ex</code>
+- Modify: <code>lib/mydia/downloads/client/rtorrent.ex</code>
+- Modify: <code>lib/mydia/downloads/client/blackhole.ex</code> (priority is no-op for blackhole; document)
+- Test (modify): <code>test/mydia/downloads/queue_test.exs</code> (may need to create if absent — verify)
+- Test (modify): per-adapter test files for priority/category mapping</p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong><code>Mydia.Downloads.Priority</code></strong> — new module defining the 5-tier taxonomy:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>:verylow | :low | :normal | :high | :veryhigh
+</code></pre></div>
+   Constants: <code>Priority.all/0</code>, <code>Priority.default/0</code> (<code>:normal</code>).</li>
+<li><strong><code>Mydia.Downloads.Queue.select_and_add_to_client/2</code></strong> — derive <code>content_type</code> from the <code>Download</code> record:</li>
+<li>if <code>download.episode_id != nil</code> → <code>"tv"</code></li>
+<li>else if <code>download.media_item_id != nil</code> and <code>MediaItem.type == :movie</code> → <code>"movie"</code></li>
+<li>else → fall back to <code>:download_protocol</code> from <code>search_result</code> → <code>"tv"</code>/<code>"movie"</code> per existing detection
+   (Use a private helper <code>resolve_content_type/1</code> so future content types can be added in one place.)</li>
+<li><strong><code>Queue.add_torrent_to_client_with_input/4</code></strong> — extend the opts construction at <code>queue.ex:607</code>:</li>
+<li><code>:category</code> resolved as <code>client_config.categories[content_type] || client_config.category || nil</code> (backwards compat: empty map falls back to the legacy single-field).</li>
+<li><code>:priority</code> resolved as <code>Priority.default/0</code> for now. Future hook (deferred): per-quality-profile resolution.</li>
+<li><strong>Adapter behaviour</strong> — <code>add_torrent/3</code> already accepts <code>opts</code>. Extend each adapter's option handling:</li>
+<li><strong>SABnzbd</strong> (<code>sabnzbd.ex</code> ~lines 130–216 and <code>parse_state/1</code> neighborhood for <code>do_add_nzb</code>): look up <code>opts[:priority]</code> (a <code>Priority</code> atom) in <code>client_config.priority_profile</code>. Fall back to today's hardcoded mapping (<code>:low → "-1" | :normal → "0" | :high → "1"</code>) when the profile is empty. Add <code>:verylow → "-100"</code> and <code>:veryhigh → "2"</code> (SABnzbd's actual range is <code>-100..2</code>).</li>
+<li><strong>NZBGet</strong> (<code>nzbget.ex</code> ~lines 128-142, <code>parse_state/1</code> at 470): same shape. Today's <code>:low → -50 | :normal → 0 | :high → 50</code>. Extend to <code>:verylow → -100, :veryhigh → 100</code>. Validator: integer only.</li>
+<li><strong>qBittorrent, Transmission, rTorrent</strong>: today these may not pass priority through. Add the look-up but allow <code>priority_profile</code> to be empty (no-op default). Document the per-client value range in <code>@moduledoc</code>.</li>
+<li><strong>Blackhole</strong>: priority is a no-op (filesystem drop has no queue). Document this; do not pass priority.</li>
+<li><strong>Backwards compatibility</strong>: a client created before this migration has <code>priority_profile: %{}</code> and <code>categories: %{}</code>. The lookups must fall back to the hardcoded today-mappings (priority) and the legacy <code>:category</code> string (categories). Existing behavior preserved by default.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- Existing per-adapter <code>do_add_torrent/2</code> shapes (already accept <code>opts</code>).
+- The <code>client_config.category || nil</code> pattern at <code>queue.ex:607</code> for "use this or fall back."
+- <code>Mydia.Downloads.Client</code> behaviour at <code>lib/mydia/downloads/client.ex</code> — keep signatures stable; this unit extends opts, not behaviour callbacks.</p>
+<p><strong>Execution note</strong>: test-first for the per-adapter priority lookup — small pure function on each adapter, makes a clean red-green pair.</p>
+<p><strong>Test scenarios</strong>:
+- <em>Happy path</em>: a movie download submitted to a SABnzbd client with <code>categories: %{"movie" =&gt; "movies"}</code> → SABnzbd <code>add_torrent</code> receives <code>category: "movies"</code>.
+- <em>Happy path</em>: a TV episode submitted to the same client with <code>categories: %{"tv" =&gt; "tv"}</code> → receives <code>category: "tv"</code>.
+- <em>Backwards compat</em>: a client with <code>categories: %{}</code> and legacy <code>category: "all"</code> → both movie and TV submissions receive <code>category: "all"</code>.
+- <em>Backwards compat</em>: a client with <code>priority_profile: %{}</code> → SABnzbd <code>:high</code> resolves to <code>"1"</code>, NZBGet <code>:high</code> resolves to <code>50</code> (today's behavior preserved).
+- <em>Edge</em>: a client with <code>priority_profile: %{"high" =&gt; "2"}</code> → SABnzbd <code>:high</code> resolves to <code>"2"</code>, falls back to today's mapping for other atoms.
+- <em>Edge</em>: blackhole client with priority set → priority is silently ignored (no error).
+- <em>Edge</em>: <code>Priority.all/0 |&gt; Enum.each(&amp;assert &amp;1 in [:verylow, :low, :normal, :high, :veryhigh])</code> (regression guard against accidental atom additions).
+- <em>Error path</em>: invalid priority profile value rejected by changeset (SABnzbd: must parse as integer in <code>-100..2</code>; NZBGet: any integer).</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix test test/mydia/downloads/</code> is green.
+- Manual: create a SABnzbd client with <code>categories: %{"movie" =&gt; "movies", "tv" =&gt; "tv"}</code>, submit a movie + a TV episode, verify in SABnzbd UI that they landed in different categories.</p>
+<hr />
+<h3 id="u4-stall-detection-in-downloadmonitor-126">U4. Stall detection in DownloadMonitor (#126)</h3>
+<p><strong>Goal</strong>: Detect downloads that have made no progress for longer than the client's <code>incomplete_grace_minutes</code> and transition them to <code>:error</code>. Surface "stalled" state in the downloads UI.</p>
+<p><strong>Issues closed</strong>: #126</p>
+<p><strong>Dependencies</strong>: U2.</p>
+<p><strong>Files</strong>:
+- Modify: <code>lib/mydia/jobs/download_monitor.ex</code>
+- Modify: <code>lib/mydia_web/live/downloads_live/index.ex</code> (or its sibling <code>index.html.heex</code>)
+- Test (modify): <code>test/mydia/jobs/download_monitor_test.exs</code> (verify existence)
+- Test (create or modify): <code>test/mydia/jobs/usenet_import_integration_test.exs</code> — add stalled-flow describe block</p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong><code>DownloadMonitor.perform/1</code></strong> — on each poll, when a download's <code>:downloading</code> or <code>:checking</code> state is observed:</li>
+<li>Read <code>client_status.downloaded_bytes</code> (already on <code>TorrentStatus</code>).</li>
+<li>If <code>client_status.downloaded_bytes &gt; download.last_known_bytes</code>, update <code>last_progress_at: now()</code> and <code>last_known_bytes: client_status.downloaded_bytes</code>.</li>
+<li>Else if <code>client_status.downloaded_bytes == download.last_known_bytes</code> and <code>(now - download.last_progress_at) &gt; grace_minutes_for(download.download_client_id)</code>:<ul>
+<li>Log structured event: <code>download_id, client, last_progress_at, downloaded_bytes</code>.</li>
+<li>Optionally call adapter's <code>remove_torrent/3</code> (configurable per-client setting? — out of scope; just log a TODO).</li>
+<li>Mark <code>import_failed_at: now()</code>, <code>import_last_error: "stalled after #{grace_minutes}m without progress"</code>.</li>
+<li><strong>Do not</strong> call <code>update_download(..., %{status: "stalled"})</code> — <code>:status</code> is not cast on <code>Download</code> (known bug, out of scope). Use <code>import_failed_at</code> as the signal.</li>
+</ul>
+</li>
+<li>On terminal states (<code>:completed</code>, <code>:error</code>), no progress tracking needed.</li>
+<li><strong>Grace resolution</strong> — helper: <code>grace_minutes_for(download_client_id)</code> reads <code>client_config.incomplete_grace_minutes</code> (defaults to 60 from migration). Cache per poll (the monitor already loads all clients).</li>
+<li><strong>Downloads LiveView</strong> — in <code>downloads_live/index.html.heex</code>, derive a stalled indicator:</li>
+<li>If <code>download.import_failed_at != nil</code> and <code>download.import_last_error =~ "stalled"</code> → render with a yellow <code>badge</code> ("Stalled") instead of a green one.</li>
+<li>Wrap the existing badge-rendering helper.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- <code>DownloadMonitor.handle_completion/1</code> and <code>handle_failure/1</code> for state-transition patterns.
+- The async health-check pattern noted in research (use structured logging, <code>MydiaLogger.extract_error_message/1</code> for any error messages surfaced to the user).
+- DaisyUI <code>badge</code> classes already used in the downloads LiveView.</p>
+<p><strong>Execution note</strong>: test-first for the time-based transition — easy to write a failing test with a stubbed <code>now()</code> (or use a <code>time_provider</code> injection).</p>
+<p><strong>Test scenarios</strong>:
+- <em>Happy path</em>: a download with <code>downloaded_bytes: 100MB</code> is observed at 200MB → <code>last_progress_at</code> updates, <code>last_known_bytes: 200_000_000</code>.
+- <em>Happy path</em>: a download with <code>downloaded_bytes: 200MB</code> observed again at 200MB after 5 minutes → no change (state unchanged).
+- <em>Stall trigger</em>: a download stuck at 200MB for <code>grace + 1 minute</code> → <code>import_failed_at</code> set, <code>import_last_error</code> matches <code>"stalled"</code>.
+- <em>Edge</em>: a fresh download with <code>last_progress_at = nil</code> and <code>last_known_bytes = 0</code> observed at 0 → initialize <code>last_progress_at: now()</code>, do not flag as stalled.
+- <em>Edge</em>: <code>incomplete_grace_minutes</code> exactly elapsed → not yet stalled (use strict <code>&gt;</code>, not <code>&gt;=</code>).
+- <em>Edge</em>: download already in <code>:completed</code> state → no progress tracking, no false stall.
+- <em>Integration</em>: stub <code>Mydia.Downloads.ClientMock</code> to return constant <code>downloaded_bytes</code> for <code>grace + 2 minutes</code> of simulated time → <code>Downloads.get_download!/1</code> shows <code>import_failed_at</code> populated.
+- <em>Negative</em>: simulated frozen progress for <code>grace - 1 minute</code> → not stalled (regression guard).</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix test test/mydia/jobs/download_monitor_test.exs</code> is green.
+- Manual: in dev, pause a real NZB download mid-flight, wait <code>grace_minutes</code>, observe the LiveView badge flip to "Stalled" and the log lines.</p>
+<hr />
+<h3 id="u5-webhook-receiver-mediaimport-idempotency-122">U5. Webhook receiver + MediaImport idempotency (#122)</h3>
+<p><strong>Goal</strong>: Accept SABnzbd notification-script and NZBGet pp-script POSTs to trigger <code>MediaImport</code> immediately; make <code>MediaImport</code> idempotent so polling and webhook racing is a no-op.</p>
+<p><strong>Issues closed</strong>: #122</p>
+<p><strong>Dependencies</strong>: U2.</p>
+<p><strong>Files</strong>:
+- Create: <code>lib/mydia_web/controllers/api/webhook/usenet_controller.ex</code>
+- Create: <code>lib/mydia_web/plugs/webhook_secret_auth.ex</code>
+- Modify: <code>lib/mydia_web/router.ex</code>
+- Modify: <code>lib/mydia/jobs/media_import.ex</code>
+- Modify: <code>lib/mydia/downloads.ex</code> (add lookup helper if absent: <code>get_download_by_client_and_remote_id/2</code>)
+- Test (create): <code>test/mydia_web/controllers/api/webhook/usenet_controller_test.exs</code>
+- Test (modify): <code>test/mydia/jobs/media_import_test.exs</code> — add idempotency describe block</p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong>Router</strong> — new scope outside <code>:browser</code> and <code>:api_auth</code>:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>scope &quot;/api/webhooks&quot;, MydiaWeb.Api.Webhook do
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  pipe_through [:api]
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  post &quot;/usenet/:client_id&quot;, UsenetController, :completed
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>end
+</code></pre></div>
+   Pipeline <code>:api</code> already exists in the router; do not chain <code>:api_auth</code> (webhooks authenticate by per-client signed secret).</li>
+<li><strong><code>WebhookSecretAuth</code> plug</strong> — reads <code>?secret=...</code> query param OR <code>X-Mydia-Webhook-Secret</code> header, looks up <code>DownloadClientConfig</code> by <code>:client_id</code> path param, constant-time compares secrets. On failure: 401 with empty body.</li>
+<li><strong><code>UsenetController.completed/2</code></strong> — parse request body. Detect payload shape by header / param:</li>
+<li>SABnzbd notification script POSTs JSON or form-encoded with keys like <code>name</code>, <code>nzo_id</code>, <code>status</code>, <code>storage</code>.</li>
+<li>NZBGet pp-script POSTs (technically env vars in script, but typical bridge scripts POST a JSON envelope) with keys like <code>NZBID</code>, <code>NZBName</code>, <code>DestDir</code>, <code>Status</code>.</li>
+<li>Branch on <code>?client=sabnzbd</code> query param OR <code>User-Agent</code>. Document the expected payload shape in <code>@moduledoc</code>.</li>
+<li><strong>Download lookup</strong> — <code>Mydia.Downloads.get_download_by_client_and_remote_id(client_id, remote_id)</code> returns the <code>Download</code> row whose <code>download_client_id == remote_id</code> and <code>download_client.id == client_id</code>. The unique index <code>[:download_client, :download_client_id]</code> makes this fast.</li>
+<li><strong>Enqueue <code>MediaImport</code></strong> — call <code>MediaImport.new(%{"download_id" =&gt; download.id}) |&gt; Oban.insert/1</code>. With idempotency via <code>unique:</code> (below), duplicate triggers are deduplicated by Oban.</li>
+<li><strong><code>MediaImport</code> idempotency</strong> — at <code>media_import.ex:20-22</code>:</li>
+<li>Add <code>unique: [period: 600, keys: [:download_id], states: [:available, :scheduled, :executing, :retryable]]</code> to the <code>use Oban.Worker</code> opts. Pattern from <code>lib/mydia/jobs/import_list_sync.ex:20</code>.</li>
+<li>In <code>perform/1</code>, immediately after <code>Downloads.get_download!/1</code>: <code>if download.imported_at, do: :ok</code> — short-circuit re-imports. Below this guard, the existing snooze-loop machinery stays in place.</li>
+<li><strong>Response</strong> — always <code>200 OK</code> with empty body on valid auth + valid payload. <code>400</code> for malformed payload. <code>404</code> for unknown client. <code>401</code> for bad secret. Errors logged at <code>:warning</code>.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- Router scope shape — <code>MydiaWeb.Router</code> (read for existing scope/pipeline conventions).
+- <code>use Oban.Worker, unique: [...]</code> — <code>lib/mydia/jobs/import_list_sync.ex:20</code>.
+- Plug pattern — search <code>lib/mydia_web/plugs/</code> (or <code>lib/mydia_web/auth/</code> if plugs live there).
+- Conn → JSON response — existing controllers under <code>lib/mydia_web/controllers/api/</code>.</p>
+<p><strong>Execution note</strong>: test-first for the controller — <code>Phoenix.ConnTest</code> makes the auth + payload-parsing path easy to nail down before implementation.</p>
+<p><strong>Test scenarios</strong>:
+- <em>Happy path SABnzbd</em>: <code>POST /api/webhooks/usenet/:id?secret=valid</code> with SABnzbd-shaped JSON body → 200, <code>MediaImport</code> job enqueued with <code>download_id</code>.
+- <em>Happy path NZBGet</em>: same with <code>?client=nzbget</code> query and NZBGet-shaped JSON → 200, job enqueued.
+- <em>Auth fail</em>: invalid secret → 401, no job enqueued (assert via <code>Oban.Testing.assert_enqueued/1</code>).
+- <em>Auth fail</em>: missing secret → 401.
+- <em>Unknown client</em>: <code>client_id</code> doesn't exist in DB → 404.
+- <em>Idempotency racing webhook</em>: same payload posted twice in quick succession → only one <code>MediaImport</code> job enqueued (Oban <code>unique:</code> dedupes).
+- <em>Idempotency racing poll + webhook</em>: monitor enqueues a <code>MediaImport</code> job; webhook fires 100ms later; only one job runs.
+- <em>Already imported</em>: download with <code>imported_at != nil</code> → controller still enqueues; <code>perform/1</code> short-circuits with <code>:ok</code> immediately (no work done).
+- <em>Malformed payload</em>: empty body → 400.
+- <em>Constant-time comparison</em>: using <code>Plug.Crypto.secure_compare/2</code> for secrets, not <code>==</code>.</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix test test/mydia_web/controllers/api/webhook/</code> is green.
+- Manual: configure a real SABnzbd notification script pointing at <code>http://mydia:4000/api/webhooks/usenet/:client_id?secret=...</code>, complete a small NZB, observe <code>MediaImport</code> enqueued within 1 second.</p>
+<hr />
+<h3 id="u6-admin-form-unified-rewrite-122-124-126-129-ui-surface">U6. Admin form unified rewrite (#122, #124, #126, #129 UI surface)</h3>
+<p><strong>Goal</strong>: One coherent pass on the download-clients admin form surfacing all four wave-2 features. Sequencing this after U3/U4/U5 lets the implementer design the form holistically rather than collide three parallel branches on the same file.</p>
+<p><strong>Issues closed</strong>: UI portion of #122, #124, #126, #129.</p>
+<p><strong>Dependencies</strong>: U3, U4, U5.</p>
+<p><strong>Files</strong>:
+- Modify: <code>lib/mydia_web/live/admin_download_clients_live/index.ex</code>
+- Modify: <code>lib/mydia_web/live/admin_download_clients_live/index.html.heex</code> (if separate)
+- Modify: <code>lib/mydia_web/live/admin_download_clients_live/components.ex</code>
+- Test (modify): <code>test/mydia_web/live/admin_download_clients_live_test.exs</code> (verify existence)</p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong>Per-content-type category inputs</strong> (#124) — replace the single <code>&lt;.input field={@form[:category]}&gt;</code> with three labeled inputs:</li>
+<li><code>categories[movie]</code>, <code>categories[tv]</code>, <code>categories[music]</code></li>
+<li>Use the nested-form-name pattern at <code>admin_download_clients_live/components.ex:263-289</code> (already used for blackhole <code>connection_settings</code>).</li>
+<li>Show only for NZB and torrent clients (hide for blackhole).</li>
+<li><strong>Priority profile</strong> (#129) — collapsed advanced section using <code>&lt;details class="collapse collapse-arrow"&gt;</code>:</li>
+<li>Five inputs for <code>:verylow, :low, :normal, :high, :veryhigh</code> → client-native string/int.</li>
+<li>Placeholder values show the today-default per client type (<code>SABnzbd: "-100"/"-1"/"0"/"1"/"2"</code>, <code>NZBGet: "-100"/"-50"/"0"/"50"/"100"</code>).</li>
+<li>Only shown for SABnzbd, NZBGet, qBittorrent, Transmission, rTorrent. Blackhole hides this entirely.</li>
+<li><strong><code>incomplete_grace_minutes</code> input</strong> (#126) — single <code>&lt;.input type="number" field={@form[:incomplete_grace_minutes]} label="Stalled timeout (minutes)" placeholder="60"&gt;</code>. Visible for all client types.</li>
+<li><strong>Webhook URL + script snippet</strong> (#122) — for SABnzbd and NZBGet only:</li>
+<li>Render the full URL: <code>https://${host}/api/webhooks/usenet/${client.id}?secret=${client.webhook_secret}</code>.</li>
+<li>Render a copy-pasteable post-processing script snippet per client type (small <code>&lt;pre&gt;</code> block, <code>phx-no-curly-interpolation</code> annotation if using bash heredoc).</li>
+<li>"Copy" button using a <code>Hook</code> (<code>assets/js/hooks/copy_to_clipboard.js</code> if a similar hook exists; otherwise inline a small <code>phx-click</code> handler).</li>
+<li>Show only after the client is saved (webhook_secret exists). For new clients, show a hint: "Save the client to reveal the webhook URL."</li>
+<li><strong>Form change validation</strong> — every new field plumbed through the <code>changeset/2</code> call from <code>handle_event("validate_download_client", ...)</code>. Nested <code>categories</code> map fields parsed from form params: <code>params["download_client_config"]["categories"] = %{"movie" =&gt; ..., "tv" =&gt; ...}</code>.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- <code>admin_download_clients_live/components.ex</code> <code>download_client_modal/1</code> (line 156) for the form shape.
+- The nested-form pattern at lines 263-289 (<code>name="download_client_config[connection_settings][watch_folder]"</code>) for <code>categories</code> and <code>priority_profile</code>.
+- DaisyUI <code>&lt;details class="collapse collapse-arrow"&gt;</code> for the advanced section.
+- <code>Phoenix.HTML.Form.input_value/2</code> for deriving conditional render flags at the top of the function.</p>
+<p><strong>Execution note</strong>: not strict TDD — form testing in LiveView benefits more from happy-path-first then regression coverage. Test via <code>Phoenix.LiveViewTest.render_change/2</code> and <code>render_submit/2</code>.</p>
+<p><strong>Test scenarios</strong>:
+- <em>Happy path</em>: submitting the form with <code>categories[movie]=movies, categories[tv]=tv</code> saves the map.
+- <em>Happy path</em>: priority profile values save round-trip.
+- <em>Conditional render</em>: a SABnzbd client form shows the webhook URL section; a qBittorrent client form does not.
+- <em>Conditional render</em>: a blackhole client form shows neither categories nor priority profile.
+- <em>Empty state</em>: a new SABnzbd client (not yet saved) shows the "Save the client to reveal the webhook URL" hint, not a broken URL.
+- <em>Form validation</em>: submitting <code>incomplete_grace_minutes=-5</code> shows an inline validation error.
+- <em>Backwards compat</em>: an existing client with legacy <code>category: "all"</code> and empty <code>categories: %{}</code> shows "all" in the per-content-type inputs (read-only? or all three pre-filled with "all"?) — decide during implementation; document the choice.</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix test test/mydia_web/live/admin_download_clients_live_test.exs</code> green.
+- Manual: open the admin UI, click "Edit" on a SABnzbd client, verify all four new sections render correctly and save round-trips.</p>
+<hr />
+<h3 id="u7-release-blacklist-123">U7. Release blacklist (#123)</h3>
+<p><strong>Goal</strong>: When a download enters <code>:error</code>, write a row to <code>release_blacklist</code>. Filter blacklisted releases out of future search results in the orchestrators (not in <code>ReleaseRanker</code>). Admin LiveView for inspection and manual removal.</p>
+<p><strong>Issues closed</strong>: #123</p>
+<p><strong>Dependencies</strong>: U4 (DownloadMonitor changes in master).</p>
+<p><strong>Files</strong>:
+- Create: <code>priv/repo/migrations/{TIMESTAMP}_create_release_blacklist.exs</code>
+- Create: <code>lib/mydia/downloads/release_blacklist.ex</code> (schema)
+- Create: <code>lib/mydia/downloads/blacklists.ex</code> (context functions: <code>add/4</code>, <code>blacklisted?/2</code>, <code>list/1</code>, <code>remove/1</code>, <code>cleanup_expired/0</code>)
+- Modify: <code>lib/mydia/jobs/download_monitor.ex</code> — <code>handle_failure/1</code> writes a blacklist row
+- Modify: <code>lib/mydia/jobs/tv_show_search.ex</code> (or wherever <code>process_episode_results/4</code> lives — verify path) — add <code>reject_blacklisted/2</code> step
+- Modify: <code>lib/mydia/jobs/movie_search.ex</code> — same <code>reject_blacklisted/2</code> step
+- Modify: <code>lib/mydia/config/schema.ex</code> — add <code>release_blacklist_default_ttl_days :: integer</code> (default 30)
+- Create: <code>lib/mydia_web/live/admin_release_blacklist_live/index.ex</code>
+- Create: <code>lib/mydia_web/live/admin_release_blacklist_live/index.html.heex</code>
+- Modify: <code>lib/mydia_web/router.ex</code> — register the new admin route in <code>live_session :admin</code>
+- Test (create): <code>test/mydia/downloads/blacklists_test.exs</code>
+- Test (modify): <code>test/mydia/jobs/download_monitor_test.exs</code> — assert blacklist row on failure
+- Test (create): <code>test/mydia_web/live/admin_release_blacklist_live_test.exs</code></p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong>Schema</strong> — <code>release_blacklist</code> table:</li>
+<li><code>indexer :: string</code> (matches <code>SearchResult.indexer</code>)</li>
+<li><code>guid :: string</code> (matches <code>SearchResult.metadata["guid"]</code> or a hash if guid isn't stable — see decision below)</li>
+<li><code>title :: string</code> (for admin UI)</li>
+<li><code>failure_reason :: string</code> (e.g., <code>"par2_failed"</code>, <code>"client_reported_failure"</code>, <code>"stalled"</code>)</li>
+<li><code>expires_at :: utc_datetime_usec</code> nullable (null = forever)</li>
+<li><code>inserted_at</code></li>
+<li>Unique index on <code>(indexer, guid)</code> to prevent duplicates.</li>
+<li><strong>Guid decision</strong> — <code>Download</code> has no <code>guid</code> or <code>indexer_id</code> columns (verified). The release's stable identifier must be plumbed from <code>search_result.metadata["guid"]</code> through <code>Download.metadata</code>. At download creation (<code>Queue.add_torrent_to_client_with_input</code> or upstream), copy <code>search_result.indexer</code> and <code>search_result.metadata["guid"]</code> into <code>Download.metadata["indexer"]</code> and <code>Download.metadata["guid"]</code>. Read from there on failure. If guid is missing, use a hash of <code>(indexer, title, size)</code> as a fallback — document this.</li>
+<li><strong>Producer</strong> — in <code>DownloadMonitor.handle_failure/1</code>, after the existing delete logic (or after marking the download), call <code>Blacklists.add(indexer, guid, title, reason)</code>. Default <code>expires_at: now + release_blacklist_default_ttl_days</code>.</li>
+<li><strong>Consumer</strong> — per the institutional learning ("filter, don't rank"), add <code>reject_blacklisted/2</code> in <code>TvShowSearch.process_episode_results/4</code> and <code>MovieSearch.process_movie_results/N</code>. Use the existing <code>reject_*</code> pipeline pattern. Each rejection logs at <code>:info</code> with the <code>(indexer, guid)</code> pair for debuggability.</li>
+<li><strong>TTL cleanup</strong> — new Oban worker (or piggyback on an existing periodic worker) <code>Mydia.Jobs.BlacklistCleanup</code> that deletes rows where <code>expires_at &lt; now</code>. Schedule daily via cron.</li>
+<li><strong>Admin LiveView</strong> — <code>/admin/release-blacklist</code>:</li>
+<li>Paginated list of rows, ordered by <code>inserted_at desc</code>.</li>
+<li>"Block forever" action sets <code>expires_at: nil</code>.</li>
+<li>"Remove" action deletes the row (instant un-blacklist).</li>
+<li>Filter by <code>failure_reason</code>.</li>
+<li>DaisyUI <code>table</code> component for layout.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- Migration shape — match recent migrations under <code>priv/repo/migrations/</code>.
+- <code>reject_*</code> filter pattern — <code>lib/mydia/indexers/release_ranker.ex</code> (<code>reject_tv_releases_for_movies/1</code>, <code>reject_title_mismatches/1</code>).
+- Admin LiveView shape — <code>lib/mydia_web/live/admin_download_clients_live/index.ex</code> for layout, <code>&lt;Layouts.app&gt;</code> wrapper, <code>on_mount: [{MydiaWeb.UserAuth, :ensure_admin}]</code>.
+- DaisyUI <code>table table-zebra</code> for tabular display.
+- Periodic Oban worker — <code>lib/mydia/jobs/import_list_sync.ex</code> for cron-scheduled patterns.</p>
+<p><strong>Execution note</strong>: test-first for the blacklist context (<code>Blacklists.add/4</code>, <code>blacklisted?/2</code>) — pure functions on the DB layer, small surface, fits TDD cleanly.</p>
+<p><strong>Test scenarios</strong>:
+- <em>Happy path</em>: <code>Blacklists.add("nzbhydra2", "abc123", "Show.S01E01", "par2_failed")</code> inserts a row.
+- <em>Happy path</em>: <code>Blacklists.blacklisted?("nzbhydra2", "abc123")</code> returns <code>true</code> when an active row exists.
+- <em>Happy path</em>: <code>Blacklists.blacklisted?("nzbhydra2", "abc123")</code> returns <code>false</code> when <code>expires_at &lt; now</code>.
+- <em>Happy path</em>: <code>Blacklists.blacklisted?("nzbhydra2", "abc123")</code> returns <code>true</code> when <code>expires_at = nil</code>.
+- <em>Edge</em>: inserting a duplicate <code>(indexer, guid)</code> updates <code>failure_reason</code> and <code>expires_at</code> instead of erroring (upsert).
+- <em>Integration</em>: a simulated download failure → blacklist row exists → next search excludes the release.
+- <em>Integration (negative)</em>: a non-blacklisted release passes through <code>reject_blacklisted/2</code> unchanged.
+- <em>TTL</em>: rows with <code>expires_at &lt; now</code> deleted by <code>BlacklistCleanup</code> job.
+- <em>Admin UI</em>: list view paginates correctly; "Block forever" sets <code>expires_at: nil</code>; "Remove" deletes the row.
+- <em>Edge</em>: blacklist guard works for both <code>indexer</code> matches — case-sensitive or normalized? — pick normalized (lowercase) to avoid <code>Prowlarr</code> vs <code>prowlarr</code> mismatches.</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix test test/mydia/downloads/blacklists_test.exs</code> green.
+- Manual: trigger a download failure in dev, observe a blacklist row appear, re-run search, observe the release is filtered out.</p>
+<hr />
+<h3 id="u8-unify-downloadstatus-struct-extract-shared-helpers-127">U8. Unify DownloadStatus struct + extract shared helpers (#127)</h3>
+<p><strong>Goal</strong>: Rename <code>TorrentStatus</code> → <code>DownloadStatus</code>. Extract <code>parse_size_mb_to_bytes/1</code>, <code>parse_size_bytes/1</code>, <code>parse_timestamp_unix/1</code> into <code>Mydia.Downloads.Client.Helpers</code>. All six adapters route through the shared struct and helpers. State classifiers stay per-adapter (state strings are client-specific) but their output uses the shared taxonomy.</p>
+<p><strong>Issues closed</strong>: #127</p>
+<p><strong>Dependencies</strong>: U3 (priority changes in adapters already merged).</p>
+<p><strong>Files</strong>:
+- Rename + modify: <code>lib/mydia/downloads/structs/torrent_status.ex</code> → <code>lib/mydia/downloads/structs/download_status.ex</code> (rename module <code>TorrentStatus</code> → <code>DownloadStatus</code>)
+- Create: <code>lib/mydia/downloads/client/helpers.ex</code>
+- Modify: <code>lib/mydia/downloads/client.ex</code> (behaviour module — update callback specs to reference <code>DownloadStatus</code>)
+- Modify all 6 adapters: <code>sabnzbd.ex, nzbget.ex, qbittorrent.ex, transmission.ex, rtorrent.ex, blackhole.ex</code>
+- Modify: <code>lib/mydia/downloads/history.ex</code> (uses <code>TorrentStatus</code> per research)
+- Modify: <code>lib/mydia/downloads/queue.ex</code> (references <code>save_path</code> from status)
+- Grep for <code>TorrentStatus</code> and update all call sites (compile-time error otherwise)
+- Modify all adapter tests for the renamed struct</p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong>Rename file + module</strong> — <code>lib/mydia/downloads/structs/torrent_status.ex</code> → <code>download_status.ex</code>. Module <code>Mydia.Downloads.Structs.TorrentStatus</code> → <code>Mydia.Downloads.Structs.DownloadStatus</code>. Fields unchanged.</li>
+<li><strong>Backwards-compat alias</strong> — add <code>defmodule Mydia.Downloads.Structs.TorrentStatus, do: defdelegate ...</code> ? No — internal-only module, no external deps. Hard rename + update all call sites in one commit.</li>
+<li><strong>Helpers module</strong> — <code>Mydia.Downloads.Client.Helpers</code> with:</li>
+<li><code>parse_size_mb_to_bytes(value)</code> — handles string/int/nil, multiplies by 1_048_576.</li>
+<li><code>parse_size_bytes(value)</code> — handles string/int/nil.</li>
+<li><code>parse_timestamp_unix(value)</code> — handles string/int Unix epoch → <code>DateTime</code>.</li>
+<li><strong>Adapter consolidation</strong> — for each adapter, replace inline implementations of size and timestamp parsing with calls to <code>Helpers.*</code>. State classifier (<code>parse_state/1</code>) stays in each adapter because state strings differ per client, but each returns the shared taxonomy from <code>DownloadStatus.@state_values</code>.</li>
+<li><strong>State taxonomy</strong> — confirm taxonomy from <code>download_status.ex:29</code>: <code>:downloading | :seeding | :paused | :checking | :queued | :error | :completed | :unknown</code>. Add a module attribute <code>@state_values</code> and document each:</li>
+<li><code>:downloading</code> — receiving data</li>
+<li><code>:seeding</code> — torrent only; post-completion upload</li>
+<li><code>:paused</code> — manually paused</li>
+<li><code>:checking</code> — verifying/repairing/unpacking (NZB Extracting/Moving lands here per the 2026-04-08 fix)</li>
+<li><code>:queued</code> — waiting to start</li>
+<li><code>:error</code> — terminal failure</li>
+<li><code>:completed</code> — terminal success</li>
+<li><code>:unknown</code> — fallback</li>
+<li><strong>Behaviour contract</strong> — <code>Mydia.Downloads.Client</code> callback <code>@spec</code>s reference <code>DownloadStatus.t/0</code> and <code>ClientInfo.t/0</code>. Add <code>@type t :: %__MODULE__{...}</code> to <code>DownloadStatus</code> and <code>ClientInfo</code> while touching them (institutional research flagged this gap).</li>
+<li><strong>No behavior change</strong> — all existing tests must stay green. This is mechanical.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- Existing <code>Mydia.Downloads.Structs</code> module shape.
+- Existing per-adapter <code>parse_state/1</code> shape — keep, just ensure return value is in <code>@state_values</code>.
+- Look for any helper module already in <code>lib/mydia/downloads/</code> for the conventional name/location.</p>
+<p><strong>Execution note</strong>: characterization-first — before refactoring, the adapter tests serve as the regression net. Run them, confirm green, then refactor in place. Do not add new tests in this unit — that's U9.</p>
+<p><strong>Test scenarios</strong>: (no new scenarios — preservation only)
+- <em>Regression</em>: all of <code>./dev mix test test/mydia/downloads/client/</code> stays green throughout the refactor.
+- <em>Integration</em>: <code>test/mydia/jobs/usenet_import_integration_test.exs</code> stays green (uses <code>TorrentStatus</code> indirectly via real adapter calls).
+- <em>Behaviour conformance</em>: each adapter's <code>get_status/2</code> returns a <code>%DownloadStatus{}</code> and never a raw map.</p>
+<p><strong>Verification</strong>:
+- All adapter tests + integration tests green.
+- <code>grep -rn TorrentStatus lib/ test/ | wc -l</code> returns 0 after the rename (or only references in a comment explaining the rename).
+- Each adapter is ~50–100 LOC shorter than before (size + timestamp duplication removed).</p>
+<hr />
+<h3 id="u9-adapter-parsingstate-mapping-unit-tests-with-frozen-fixtures-128">U9. Adapter parsing/state-mapping unit tests with frozen fixtures (#128)</h3>
+<p><strong>Goal</strong>: Round out adapter unit test coverage with frozen JSON/XML fixtures and table-driven state-mapping tests. Catches the class of subtle mis-mapping the integration test can't see.</p>
+<p><strong>Issues closed</strong>: #128</p>
+<p><strong>Dependencies</strong>: U8 (fixtures and tests reference <code>DownloadStatus</code>).</p>
+<p><strong>Files</strong>:
+- Modify: <code>test/mydia/downloads/client/sabnzbd_test.exs</code>
+- Modify: <code>test/mydia/downloads/client/nzbget_test.exs</code>
+- Modify: <code>test/mydia/indexers/adapter/prowlarr_test.exs</code>
+- Create: <code>test/support/fixtures/sabnzbd/queue.json</code>
+- Create: <code>test/support/fixtures/sabnzbd/history.json</code>
+- Create: <code>test/support/fixtures/nzbget/listgroups.json</code>
+- Create: <code>test/support/fixtures/nzbget/history.json</code>
+- Create: <code>test/support/fixtures/prowlarr/nzb_results.xml</code>
+- Create: <code>test/support/fixtures/prowlarr/mixed_protocol_results.xml</code></p>
+<p><strong>Approach</strong>:</p>
+<ol>
+<li><strong>SABnzbd fixtures</strong> — capture realistic queue and history JSON from a live SABnzbd or vendor docs. Include:</li>
+<li>Multi-item queue with varied states (<code>Downloading</code>, <code>Paused</code>, <code>Queued</code>, <code>Verifying</code>, <code>Extracting</code>, <code>Moving</code>).</li>
+<li>History with multiple terminal states (<code>Completed</code>, <code>Failed</code>).</li>
+<li>Test asserts the full list parses into <code>[%DownloadStatus{}]</code> matching expected fields (id, name, size, downloaded, state, progress).</li>
+<li><strong>NZBGet fixtures</strong> — same shape for <code>listgroups</code> JSON-RPC response and <code>history</code> response. Include <code>DOWNLOADING, PP_QUEUED, VERIFYING, REPAIRING, UNPACKING, MOVING, SUCCESS, FAILURE</code>.</li>
+<li><strong>Prowlarr fixtures</strong> — two new XML fixtures:</li>
+<li>NZB-only response (Newznab XML with <code>downloadProtocol: "usenet"</code>).</li>
+<li>Mixed-protocol response (both <code>usenet</code> and <code>torrent</code> items in one XML).</li>
+<li><strong>Table-driven state mapping</strong> — one parameterized test per adapter:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>for {client_state, expected_internal} &lt;- @state_table do
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  assert ClientAdapter.parse_state(client_state) == expected_internal
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>end
+</code></pre></div>
+   Covering every documented state including the Extracting/Moving → <code>:checking</code> correction from the 2026-04-08 fix.</li>
+<li><strong>ETA parsing edge cases (SABnzbd)</strong> — <code>parse_state/1</code>'s neighbor <code>parse_eta/1</code>-equivalent: zero (<code>"0:00:00"</code>), large (<code>"99:59:59"</code>), malformed (<code>""</code> or <code>"-"</code> or <code>"unknown"</code>).</li>
+<li><strong>Computed ETA (NZBGet)</strong> — given <code>RemainingSizeMB</code> and <code>DownloadRate</code>, assert ETA computes correctly. Cover divide-by-zero (no rate → ETA nil or <code>:infinity</code>).</li>
+<li><strong>Protocol detection priority (Prowlarr)</strong> — explicit <code>downloadProtocol</code> field wins over <code>.nzb</code> URL heuristic. Add a fixture row where these conflict.</li>
+</ol>
+<p><strong>Patterns to follow</strong>:
+- Existing <code>Bypass</code>-based tests in <code>test/mydia/downloads/client/sabnzbd_test.exs</code> for HTTP shape.
+- Read fixtures via <code>File.read!(Path.expand("../../support/fixtures/...", __DIR__))</code>.
+- Existing NZBHydra2 XML parsing test for the fixture-read pattern.</p>
+<p><strong>Execution note</strong>: not strict TDD here — this is coverage extension on stable code post-U8. Write tests, verify they catch realistic mis-mappings, ship.</p>
+<p><strong>Test scenarios</strong>: (the unit itself is test scenarios — no separate list)</p>
+<p><strong>Verification</strong>:
+- <code>./dev mix test test/mydia/downloads/client/sabnzbd_test.exs test/mydia/downloads/client/nzbget_test.exs test/mydia/indexers/adapter/prowlarr_test.exs</code> green.
+- New tests fail if <code>parse_state/1</code> regressed (e.g., introduce a bug, see the table test catch it, revert).
+- No network calls in any new test (<code>Bypass</code> only, with fixtures pre-loaded).</p>
+<hr />
+<h2 id="cross-cutting-concerns">Cross-Cutting Concerns</h2>
+<h3 id="migrations">Migrations</h3>
+<p>All four migrations in this plan are additive on existing tables (<code>indexer_configs</code>, <code>download_clients</code>, <code>downloads</code>) or create new tables (<code>release_blacklist</code>). SQLite-safe: no column drops, no <code>NOT NULL</code> adds to existing rows, no data backfill required. Nullable columns get sensible defaults at the migration layer.</p>
+<h3 id="backwards-compatibility">Backwards compatibility</h3>
+<ul>
+<li><strong><code>DownloadClientConfig.category</code> (string)</strong> stays alongside the new <code>categories</code> (map). U3 prefers map; falls back to string when map is empty. Removal is a follow-up after a few release cycles confirm no installs still rely on the string field exclusively.</li>
+<li><strong>Hardcoded priority mapping</strong> stays as the default when <code>priority_profile: %{}</code>. U3's 5-tier taxonomy adds two new tiers (<code>:verylow</code>, <code>:veryhigh</code>) without breaking 3-tier callers.</li>
+<li><strong>Existing downloads without <code>metadata["guid"]</code></strong> are blacklist-immune (no key to compare against). New downloads get the field; old ones quietly skip blacklist matching. Acceptable.</li>
+</ul>
+<h3 id="logging-hygiene">Logging hygiene</h3>
+<p>U1 demotes Prowlarr <code>Logger.info</code> → <code>:debug</code>. The pattern (info-spam during routine parsing) likely repeats in NZBHydra2 and the search jobs — the implementer should grep <code>Logger.info</code> in those areas opportunistically. Out-of-scope additions if found &gt; 5 sites; in-scope if 1–5 sites.</p>
+<h3 id="performance">Performance</h3>
+<ul>
+<li>Stall detection (U4) adds a per-download timestamp comparison on each poll. O(n) over active downloads; n is small (rarely &gt; 50). Negligible.</li>
+<li>Blacklist consumer (U7) adds one extra query per search: <code>SELECT 1 FROM release_blacklist WHERE (indexer, guid) IN (...)</code>. Bulk lookup, indexed on <code>(indexer, guid)</code>. Negligible.</li>
+<li>Webhook idempotency (U5) <code>unique:</code> Oban query is indexed by Oban itself. Negligible.</li>
+</ul>
+<h3 id="security">Security</h3>
+<ul>
+<li>Webhook auth (U5): constant-time secret comparison via <code>Plug.Crypto.secure_compare/2</code>. Secrets generated server-side via <code>:crypto.strong_rand_bytes(32)</code>. Never logged.</li>
+<li>No PII in any new log line (download titles are OK; user data is not).</li>
+</ul>
+<h3 id="system-wide-impact">System-Wide Impact</h3>
+<ul>
+<li><strong><code>MediaImport</code> snooze loop</strong> (U5): the <code>unique:</code> Oban option must include <code>[:available, :scheduled, :executing, :retryable]</code> so that a snoozed (<code>:scheduled</code> for retry) job dedupes against a webhook-triggered fresh insert. Without <code>:scheduled</code>, a webhook fires a duplicate job while a snooze is pending → two jobs run when the snooze fires. Catch this in the idempotency test.</li>
+<li><strong>DownloadMonitor failure path</strong> (U7): inserting a blacklist row should NOT block the failure handling — if blacklist insert fails (DB locked, constraint violation, etc.), log and continue. Don't propagate the error up; failure handling itself must succeed.</li>
+<li><strong>Admin form changes</strong> (U6): the LiveView's <code>handle_event("save_download_client", ...)</code> already calls <code>Settings.create_download_client_config/1</code> or <code>update_download_client_config/2</code>. New fields plumb through the changeset automatically once cast. Verify with a <code>Phoenix.LiveViewTest.render_submit/2</code> round-trip.</li>
+</ul>
+<hr />
+<h2 id="implementation-time-unknowns">Implementation-Time Unknowns</h2>
+<p>Items deliberately deferred to <code>ce-work</code>:</p>
+<ol>
+<li><strong>Exact <code>update_download/2</code> interaction in U4</strong>: do we add <code>import_failed_at</code> directly, or introduce a new field like <code>stalled_at</code>? The plan says reuse <code>import_failed_at</code> + an <code>import_last_error</code> string match — but if the implementer finds string-matching brittle, a dedicated <code>stalled: boolean</code> field is fine. Decide during U4.</li>
+<li><strong><code>Download.metadata["guid"]</code> plumbing in U7</strong>: where exactly is the right place to copy <code>search_result.metadata["guid"]</code> into the download's metadata? Likely <code>Queue.add_torrent_to_client_with_input</code> at <code>queue.ex:607</code> or in the upstream create call. The implementer should grep for "guid" usage during U7.</li>
+<li><strong>Webhook payload shape ambiguity (U5)</strong>: SABnzbd's actual notification-script payload varies by SABnzbd version. The plan assumes JSON; if the real version sends form-encoded, branch the controller. Verify against a live SABnzbd 4.x notification script when writing the controller tests.</li>
+<li><strong>Priority profile UI placement (U6)</strong>: collapsed <code>&lt;details&gt;</code> advanced section vs. a dedicated tab. The plan suggests collapsed; the implementer should match whichever pattern other "advanced config" sections in the admin already use.</li>
+<li><strong>BlacklistCleanup scheduling (U7)</strong>: daily cron via <code>oban_pro</code> (if installed) or a <code>Oban.Cron</code> config entry. Verify which is wired up in <code>config/config.exs</code>.</li>
+<li><strong><code>:status</code> column resolution</strong>: out of scope but flagged. If the implementer can't avoid touching the <code>update_download(..., %{status: ...})</code> lines in U4 or U7, decide whether to cast <code>:status</code> or remove the dead key. Document the decision in the unit's commit message.</li>
+</ol>
+<hr />
+<h2 id="acceptance-criteria">Acceptance Criteria</h2>
+<p>When all units merge, the rollout closes:</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #120 — Prowlarr <code>Logger.info</code> demoted to <code>:debug</code> in 3 sites; manual search emits zero info-level lines.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #121 — <code>SearchResult.usenet_date</code> populated by NZBHydra2 + Prowlarr; <code>min_post_age_minutes</code> on <code>IndexerConfig</code>; ReleaseRanker filters NZB by age; admin form exposes the field.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #122 — <code>POST /api/webhooks/usenet/:id</code> accepts SABnzbd + NZBGet payloads with per-client secret; <code>MediaImport</code> is idempotent; admin form shows webhook URL.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #123 — <code>release_blacklist</code> table populated by failure handler; consumed by <code>process_episode_results</code> and <code>process_movie_results</code>; admin LiveView lists and removes.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #124 — <code>download_clients.categories</code> map populated and resolved at submit time by <code>Download.content_type</code>.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #125 — <code>SearchResult.nzb_completion</code> and <code>nzb_grabs</code> populated; <code>seeders</code>/<code>leechers</code> <code>nil</code> for NZB; ReleaseRanker branches scoring by protocol.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #126 — <code>last_progress_at</code> + <code>last_known_bytes</code> on downloads; <code>DownloadMonitor</code> transitions stalled downloads to <code>:error</code> after grace; UI surfaces "Stalled" badge.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #127 — <code>DownloadStatus</code> struct unified; <code>Mydia.Downloads.Client.Helpers</code> extracted; each adapter ~50–100 LOC shorter; behaviour callbacks reference shared struct.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #128 — Each of <code>{sabnzbd, nzbget, prowlarr}_test.exs</code> has frozen fixtures, table-driven state-mapping tests, no network.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> #129 — <code>priority_profile</code> map column; 5-tier taxonomy via <code>Mydia.Downloads.Priority</code>; adapters look up via profile with backwards-compat default; admin form exposes advanced override.</li>
+</ul>
+<hr />
+<h2 id="risks-and-mitigations">Risks and Mitigations</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Likelihood</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wave-2 schema migration touches 2 tables with 5+ new columns; reverting partial wave-2 work needs careful rollback.</td>
+<td>Low</td>
+<td>Medium</td>
+<td>Single migration in U2 keeps all wave-2 schema changes atomic. <code>ce-work</code> runs the migration before dispatching U3/U4/U5. Rollback reverses cleanly.</td>
+</tr>
+<tr>
+<td><code>MediaImport</code> idempotency change interacts with the existing snooze loop.</td>
+<td>Medium</td>
+<td>Medium</td>
+<td><code>unique:</code> includes <code>:scheduled</code> state. Test scenario explicitly covers snoozed-job + webhook race.</td>
+</tr>
+<tr>
+<td>Backwards-compat <code>:category</code> string + <code>categories</code> map creates two sources of truth.</td>
+<td>Medium</td>
+<td>Low</td>
+<td>U3 falls back to <code>:category</code> only when <code>categories</code> map is empty. Document deprecation in <code>@moduledoc</code>. Schedule removal for a future release after telemetry confirms zero installs rely on <code>:category</code> alone.</td>
+</tr>
+<tr>
+<td>U8's rename of <code>TorrentStatus</code> → <code>DownloadStatus</code> ripples through the codebase.</td>
+<td>High</td>
+<td>Low</td>
+<td>All references are internal (verified by grep). Compile-time error catches any miss. Run full test suite after the rename.</td>
+</tr>
+<tr>
+<td>Admin form UI (U6) collides with U3/U4/U5 if any of them sneak in UI changes.</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Plan explicitly puts ALL UI in U6. If an implementer is tempted to add UI in U3-5, the unit's <code>Files:</code> list flags the violation. Code review catches it.</td>
+</tr>
+<tr>
+<td><code>Download.metadata["guid"]</code> may not always be present for old downloads.</td>
+<td>Medium</td>
+<td>Low</td>
+<td>Blacklist consumer treats missing guid as "not blacklisted" — safe default. Old downloads are blacklist-immune; new downloads aren't. Acceptable behavior gap.</td>
+</tr>
+<tr>
+<td>Webhook payload shape varies by SABnzbd/NZBGet version.</td>
+<td>Medium</td>
+<td>Low</td>
+<td>U5 tests against documented schemas; manual verification step in U5's <code>Verification</code> section catches drift. If drift is found, branch on payload shape.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="sources-and-references">Sources and References</h2>
+<h3 id="origin">Origin</h3>
+<ul>
+<li><strong>Tracking issue</strong>: getmydia/mydia#119 — "Improve Usenet support: tracking issue"</li>
+<li><strong>Sub-issues</strong>: getmydia/mydia#120, #121, #122, #123, #124, #125, #126, #127, #128, #129</li>
+</ul>
+<h3 id="prior-plans">Prior plans</h3>
+<ul>
+<li><code>docs/plans/2026-04-08-fix-usenet-download-import-pipeline-plan.md</code> — the import-pipeline fix this plan sits on top of. Note the verified discrepancies: claimed <code>save_path</code> column was implemented as <code>metadata["save_path"]</code> JSON key; claimed mock-sabnzbd/mock-nzbget containers were not actually added.</li>
+<li><code>docs/brainstorms/2026-04-08-usenet-import-fix-brainstorm.md</code> — origin context.</li>
+</ul>
+<h3 id="institutional-learnings">Institutional learnings</h3>
+<ul>
+<li><code>docs/plans/2026-04-01-fix-duplicate-tv-show-downloads-plan.md</code> — established "filter, don't rank" convention; <code>reject_*</code> naming; blacklist filtering belongs in <code>process_episode_results</code>, not <code>ReleaseRanker</code>.</li>
+<li><code>docs/plans/2026-03-23-refactor-comprehensive-type-safety-plan.md</code> — <code>Mydia.Downloads.Client</code> behaviour already exists with <code>@spec</code> callbacks; 45/46 schemas missing <code>@type t :: %__MODULE__{...}</code> (opportunistic add).</li>
+<li><code>docs/plans/2026-04-03-refactor-phoenix-architecture-cleanup-plan.md</code> — admin LiveView is one-per-tab; health checks use <code>Task.start</code> not <code>Task.async</code>; never call client HTTP in LiveView mount paths.</li>
+</ul>
+<h3 id="internal-references">Internal references</h3>
+<ul>
+<li><code>lib/mydia/indexers/search_result.ex</code> — struct shape</li>
+<li><code>lib/mydia/indexers/adapter/nzbhydra2.ex:267-269</code> — <code>usenetdate</code> already extracted and dropped</li>
+<li><code>lib/mydia/indexers/adapter/prowlarr.ex:305,316,328</code> — noisy <code>Logger.info</code> sites</li>
+<li><code>lib/mydia/indexers/release_ranker.ex</code> — filter pipeline + scoring</li>
+<li><code>lib/mydia/settings/download_client_config.ex</code> — current schema</li>
+<li><code>lib/mydia/downloads/download.ex</code> — current schema (no save_path/status/guid columns)</li>
+<li><code>lib/mydia/downloads/queue.ex:607</code> — <code>add_torrent_to_client_with_input/4</code> opts construction</li>
+<li><code>lib/mydia/downloads/structs/torrent_status.ex</code> — canonical state struct</li>
+<li><code>lib/mydia/downloads/client.ex</code> — behaviour module</li>
+<li><code>lib/mydia/jobs/download_monitor.ex</code> — poll loop + state transitions</li>
+<li><code>lib/mydia/jobs/media_import.ex</code> — entry point (no <code>unique:</code> today, no <code>imported_at</code> early-return)</li>
+<li><code>lib/mydia/jobs/import_list_sync.ex:20</code> — pattern for <code>unique:</code> Oban opts</li>
+<li><code>lib/mydia_web/live/admin_download_clients_live/components.ex:156</code> — admin form modal pattern</li>
+<li><code>test/mydia/jobs/usenet_import_integration_test.exs</code> — integration test pattern (Bypass-based, no containers)</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/getmydia/mydia" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>
