@@ -272,7 +272,11 @@ defmodule Mydia.Jobs.MediaImport do
           process_import(download, files, args)
 
         {:ok, []} ->
-          Logger.error("No files found for download", download_id: download.id)
+          Logger.warning("No files found for download",
+            download_id: download.id,
+            operational: true
+          )
+
           {:error, :no_files}
 
         {:error, error} ->
@@ -293,18 +297,20 @@ defmodule Mydia.Jobs.MediaImport do
                 process_import(download, files, args)
 
               {:ok, []} ->
-                Logger.error("No files found at save_path",
+                Logger.warning("No files found at save_path",
                   download_id: download.id,
-                  save_path: args.save_path
+                  save_path: args.save_path,
+                  operational: true
                 )
 
                 {:error, :no_files}
 
               {:error, path_error} ->
-                Logger.error("save_path fallback also failed",
+                Logger.warning("save_path fallback also failed",
                   download_id: download.id,
                   save_path: args.save_path,
-                  error: inspect(path_error)
+                  error: inspect(path_error),
+                  operational: true
                 )
 
                 {:error, path_error}
@@ -564,13 +570,28 @@ defmodule Mydia.Jobs.MediaImport do
         end
 
       File.exists?(Path.dirname(path)) ->
+        Logger.warning("Path not found (parent exists, leaf missing)",
+          path: path,
+          operational: true
+        )
+
         {:error, {:path_not_found, path}}
 
       true ->
+        Logger.warning("Path not found (parent directory not visible)",
+          path: path,
+          operational: true
+        )
+
         {:error, {:path_not_found, path}}
     end
   rescue
     _e in File.Error ->
+      Logger.warning("Path not accessible",
+        path: path,
+        operational: true
+      )
+
       {:error, {:path_not_accessible, path}}
   end
 
