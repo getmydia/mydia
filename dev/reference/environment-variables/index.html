@@ -907,6 +907,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Download Clients">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#debrid-clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debrid Clients
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#blackhole-clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Blackhole Clients
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1779,6 +1807,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Download Clients">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#debrid-clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debrid Clients
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#blackhole-clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Blackhole Clients
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2193,7 +2249,7 @@
 </tr>
 <tr>
 <td><code>DOWNLOAD_CLIENT_&lt;N&gt;_API_KEY</code></td>
-<td>API key (SABnzbd)</td>
+<td>API key (SABnzbd, debrid)</td>
 <td>-</td>
 </tr>
 <tr>
@@ -2206,9 +2262,27 @@
 <td>Download directory</td>
 <td>-</td>
 </tr>
+<tr>
+<td><code>DOWNLOAD_CLIENT_&lt;N&gt;_PROVIDER</code></td>
+<td>Debrid provider (debrid only)</td>
+<td><code>real_debrid</code></td>
+</tr>
+<tr>
+<td><code>DOWNLOAD_CLIENT_&lt;N&gt;_WATCH_FOLDER</code></td>
+<td>Watch folder (blackhole only)</td>
+<td><code>/downloads/watch</code></td>
+</tr>
+<tr>
+<td><code>DOWNLOAD_CLIENT_&lt;N&gt;_COMPLETED_FOLDER</code></td>
+<td>Completed folder (blackhole only)</td>
+<td><code>/downloads/complete</code></td>
+</tr>
 </tbody>
 </table>
-<p><strong>Client Types:</strong> <code>qbittorrent</code>, <code>transmission</code>, <code>rqbit</code>, <code>rtorrent</code>, <code>sabnzbd</code>, <code>nzbget</code></p>
+<blockquote>
+<p><code>DOWNLOAD_CLIENT_&lt;N&gt;_NAME</code> is required — clients are discovered by their <code>_NAME</code> variable, so a block without it is ignored.</p>
+</blockquote>
+<p><strong>Client Types:</strong> <code>qbittorrent</code>, <code>transmission</code>, <code>rqbit</code>, <code>rtorrent</code>, <code>blackhole</code>, <code>sabnzbd</code>, <code>nzbget</code>, <code>debrid</code></p>
 <p>Example rqbit client:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">DOWNLOAD_CLIENT_1_NAME</span><span class="o">=</span>rqbit
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">DOWNLOAD_CLIENT_1_TYPE</span><span class="o">=</span>rqbit
@@ -2218,6 +2292,33 @@
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nv">DOWNLOAD_CLIENT_1_USERNAME</span><span class="o">=</span>admin
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nv">DOWNLOAD_CLIENT_1_PASSWORD</span><span class="o">=</span>adminpass
 </code></pre></div>
+<h3 id="debrid-clients">Debrid Clients</h3>
+<p>Debrid clients connect to a hosted debrid service rather than a self-hosted
+torrent/usenet daemon. They require <code>TYPE=debrid</code>, an <code>API_KEY</code>, and a
+<code>PROVIDER</code> selecting which service to use. <code>HOST</code>/<code>PORT</code> are ignored — each
+provider's API endpoint is built in.</p>
+<p><strong>Providers:</strong> <code>real_debrid</code>, <code>all_debrid</code>, <code>premiumize</code>, <code>tor_box</code></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">DOWNLOAD_CLIENT_2_NAME</span><span class="o">=</span>Real-Debrid
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">DOWNLOAD_CLIENT_2_TYPE</span><span class="o">=</span>debrid
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">DOWNLOAD_CLIENT_2_API_KEY</span><span class="o">=</span>your-debrid-api-key
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nv">DOWNLOAD_CLIENT_2_PROVIDER</span><span class="o">=</span>real_debrid
+</code></pre></div>
+<p>Swap <code>PROVIDER</code> for any of the values above (e.g. <code>all_debrid</code>, <code>premiumize</code>,
+<code>tor_box</code>) to use a different service. Debrid clients default to a 24-hour
+stall-detection grace period (vs. 60 minutes for other clients), since remote
+caching can take longer to resolve a download.</p>
+<h3 id="blackhole-clients">Blackhole Clients</h3>
+<p>Blackhole clients drop <code>.torrent</code> files into a watched folder for an external
+client to pick up, and detect finished downloads in a completed folder. They
+require <code>TYPE=blackhole</code>, a <code>WATCH_FOLDER</code>, and a <code>COMPLETED_FOLDER</code> instead of
+host/port.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">DOWNLOAD_CLIENT_3_NAME</span><span class="o">=</span>Blackhole
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">DOWNLOAD_CLIENT_3_TYPE</span><span class="o">=</span>blackhole
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">DOWNLOAD_CLIENT_3_WATCH_FOLDER</span><span class="o">=</span>/downloads/watch
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nv">DOWNLOAD_CLIENT_3_COMPLETED_FOLDER</span><span class="o">=</span>/downloads/complete
+</code></pre></div>
+<p>See the <a href="../../user-guide/download-clients/#via-environment-variables">Download Clients user guide</a>
+for per-type examples of the remaining client types.</p>
 <h2 id="indexers">Indexers</h2>
 <p>Configure multiple indexers using numbered variables (<code>&lt;N&gt;</code> = 1, 2, 3, etc.):</p>
 <table>
