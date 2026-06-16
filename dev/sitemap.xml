@@ -2,126 +2,130 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://docs.mydia.dev/dev/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/advanced/cardigann/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/advanced/deployment/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/advanced/oidc/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/advanced/postgresql/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/brainstorms/2026-03-25-auto-file-renaming-brainstorm/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/development/architecture/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/development/e2e-testing/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/development/setup/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/development/testing/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/getting-started/first-steps/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/getting-started/installation/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/getting-started/quick-start/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plans/2026-03-25-feat-auto-file-renaming-on-import-plan/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plans/2026-05-14-usenet-improvements-rollout-plan/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/authoring/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/cookbook/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/plugins/manifest/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/reference/api/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/reference/configuration/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/reference/database/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/reference/environment-variables/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/reference/remote-access/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.mydia.dev/dev/solutions/logic-errors/playback-progress-partial-hls-duration/</loc>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/user-guide/adding-media/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/user-guide/download-clients/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/user-guide/indexers/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/user-guide/libraries/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/user-guide/quality-profiles/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/user-guide/users/</loc>
-         <lastmod>2026-06-10</lastmod>
+         <lastmod>2026-06-16</lastmod>
     </url>
 </urlset>
