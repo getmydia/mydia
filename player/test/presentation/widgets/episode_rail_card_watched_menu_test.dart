@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/models/progress.dart';
-import 'package:player/presentation/widgets/episode_card.dart';
+import 'package:player/presentation/widgets/episode_rail_card.dart';
 
 Episode _episode({required bool? watched}) {
   return Episode(
@@ -14,6 +14,7 @@ Episode _episode({required bool? watched}) {
     title: 'Pilot',
     monitored: true,
     hasFile: true,
+    // No thumbnail URL → placeholder, so the card needs no network mocking.
     progress: watched == null
         ? null
         : Progress(positionSeconds: 0, percentage: 0, watched: watched),
@@ -29,7 +30,7 @@ Future<void> _pumpCard(WidgetTester tester, Episode episode) async {
       ],
       child: MaterialApp(
         home: Scaffold(
-          body: EpisodeCard(
+          body: EpisodeRailCard(
             episode: episode,
             showTitle: 'Test Show',
             showId: 'show-1',
@@ -42,13 +43,13 @@ Future<void> _pumpCard(WidgetTester tester, Episode episode) async {
 }
 
 void main() {
-  testWidgets('overflow menu renders on the episode row', (tester) async {
+  testWidgets('overflow menu renders on the rail card', (tester) async {
     await _pumpCard(tester, _episode(watched: null));
 
     expect(find.byIcon(Icons.more_vert_rounded), findsOneWidget);
   });
 
-  // Covers AE3: the toggle item is the opposite of the row's current state.
+  // The toggle item is the opposite of the card's current watched state.
   testWidgets('an unwatched episode offers "Mark watched"', (tester) async {
     await _pumpCard(tester, _episode(watched: null));
 
