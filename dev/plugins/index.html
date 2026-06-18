@@ -1663,9 +1663,9 @@ records as a plugin error.</p>
 <div class="admonition tip">
 <p class="admonition-title">Toolchain</p>
 <p>You need the <code>wasm32-wasip2</code> target: <code>rustup target add wasm32-wasip2</code>. If
-you build inside the Mydia repo, <code>nix develop .#rust</code> provides it. The SDK's
-<code>wit-bindgen</code> dependency generates the component bindings, so no system
-binding generator is required.</p>
+you build inside the Mydia repo, the devenv shell (<code>./dev shell</code>) provides
+it. The SDK's <code>wit-bindgen</code> dependency generates the component bindings, so
+no system binding generator is required.</p>
 </div>
 <div class="admonition warning">
 <p class="admonition-title">Always set <code>panic = \"abort\"</code></p>

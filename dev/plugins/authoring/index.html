@@ -1914,8 +1914,9 @@ trapping cleanly. Abort traps immediately, with no stderr write.</p>
 <div class="admonition note">
 <p class="admonition-title">Toolchain</p>
 <p>You need the <code>wasm32-wasip2</code> target (<code>rustup target add wasm32-wasip2</code>), or
-run inside <code>nix develop</code>. The SDK's <code>wit-bindgen</code> dependency generates the
-component bindings — no system binding-generator is required.</p>
+run inside the Mydia devenv shell (<code>./dev shell</code>), which provides it. The
+SDK's <code>wit-bindgen</code> dependency generates the component bindings — no system
+binding-generator is required.</p>
 </div>
 <h2 id="the-event">The event</h2>
 <p>The host delivers a typed <code>Event</code> record:</p>
