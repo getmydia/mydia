@@ -59,7 +59,7 @@ Open http://localhost:4000 and create your admin account.
 
 - **Unified Media Management** - Movies + TV shows with TMDB/TVDB metadata
 - **Automated Downloads** - Quality profiles, smart release ranking
-- **Download Clients** - qBittorrent, Transmission, rqbit, SABnzbd, NZBGet
+- **Download Clients** - qBittorrent, Transmission, rqbit, SABnzbd, NZBGet, debrid providers
 - **Indexers** - Prowlarr, Jackett, built-in Cardigann (experimental)
 - **Multi-User** - Admin/guest roles with request workflow
 - **SSO** - Local auth + OIDC/OpenID Connect
@@ -84,6 +84,13 @@ Full documentation available at **[docs.mydia.dev](https://docs.mydia.dev)**
 - [SSO/OIDC Setup](https://docs.mydia.dev/latest/advanced/oidc/)
 - [PostgreSQL Support](https://docs.mydia.dev/latest/advanced/postgresql/)
 - [Development Guide](https://docs.mydia.dev/latest/development/setup/)
+
+### Debrid Provider Note
+
+Debrid clients support Real-Debrid, AllDebrid, Premiumize, and TorBox via the
+`debrid` client type. TorBox support is marked bypass-only in code: unit tests
+cover the documented API shape, but live-account behavior can vary by provider
+state, cache availability, and seed health.
 
 ## Screenshots
 

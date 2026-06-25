@@ -57,6 +57,30 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBoxTest do
 
       assert {:ok, "42"} = TorBox.submit_torrent(config, {:magnet, "magnet:?xt=abc"})
     end
+
+    test "torrent file upload uses Req-compatible multipart body", %{
+      bypass: bypass,
+      config: config
+    } do
+      torrent_binary = "d8:announce13:https://tracker4:infod6:lengthi1e4:name7:mayabeeee"
+
+      Bypass.expect(bypass, "POST", "/torrents/createtorrent", fn conn ->
+        [content_type | _] = Plug.Conn.get_req_header(conn, "content-type")
+        assert content_type =~ "multipart/form-data"
+
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        assert body =~ ~s(name="file")
+        assert body =~ ~s(filename="release.torrent")
+        assert body =~ "application/x-bittorrent"
+        assert body =~ torrent_binary
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success(%{"torrent_id" => 43}))
+      end)
+
+      assert {:ok, "43"} = TorBox.submit_torrent(config, {:file, torrent_binary})
+    end
   end
 
   describe "get_job/2 ready predicate" do
@@ -101,6 +125,51 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBoxTest do
       end)
 
       assert {:ok, %ProviderJob{state: :finalizing}} = TorBox.get_job(config, "1")
+    end
+
+    test "no-seed stall stays active instead of terminal", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect(bypass, "GET", "/torrents/mylist", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          success(%{
+            "id" => 1,
+            "download_state" => "stalled (no seeds)",
+            "download_finished" => false,
+            "download_present" => false,
+            "size" => 100,
+            "progress" => 0.0,
+            "files" => []
+          })
+        )
+      end)
+
+      assert {:ok, %ProviderJob{state: :downloading}} = TorBox.get_job(config, "1")
+    end
+
+    test "missingFiles remains terminal", %{bypass: bypass, config: config} do
+      Bypass.expect(bypass, "GET", "/torrents/mylist", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          success(%{
+            "id" => 1,
+            "download_state" => "missingFiles",
+            "download_finished" => false,
+            "download_present" => false,
+            "size" => 100,
+            "progress" => 0.0,
+            "files" => []
+          })
+        )
+      end)
+
+      assert {:ok, %ProviderJob{state: :error}} = TorBox.get_job(config, "1")
     end
   end
 
