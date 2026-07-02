@@ -46,6 +46,23 @@ jobs:
             echo "::notice::No player/relay/lib/native/config changes; skipping E2E build."
           fi
 
+      - name: Free up disk space
+        if: steps.should.outputs.run == 'true'
+        run: |
+          echo "Disk before cleanup:"
+          df -h /
+          # The E2E build runs entirely in Docker (the Android emulator is built
+          # inside the container from Dockerfile.e2e), so the host's preinstalled
+          # toolchains are unused. Remove them to avoid "No space left on device"
+          # while compiling the Rust p2p NIF + Android image.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/powershell /usr/local/share/chromium \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force || true
+          echo "Disk after cleanup:"
+          df -h /
+
       - name: Setup Docker Buildx
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v3
