@@ -241,6 +241,19 @@ defmodule Mydia.Downloads do
   defdelegate initiate_download(search_result, opts \\ []), to: Mydia.Downloads.Queue
 
   @doc """
+  Optimistically starts a download for a manual search result.
+
+  Inserts the Download record synchronously (derived status `"grabbing"`) and
+  returns immediately; the duplicate check, torrent fetch, and client handoff
+  run in a supervised background task. Outcomes are broadcast on the
+  `"downloads"` PubSub topic as `:grab_completed` / `:grab_failed` /
+  `:grab_duplicate` messages.
+  """
+  @spec grab_async(SearchResult.t(), keyword()) ::
+          {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
+  defdelegate grab_async(search_result, opts \\ []), to: Mydia.Downloads.Grabber
+
+  @doc """
   Cancels a download by removing it from the download client.
 
   This removes the torrent from the client and deletes the database record.
