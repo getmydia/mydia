@@ -282,6 +282,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("delete_download_record", params, socket),
     do: DownloadEvents.delete_download_record(params, socket)
 
+  def handle_event("dismiss_failed_grab", params, socket),
+    do: DownloadEvents.dismiss_failed_grab(params, socket)
+
   def handle_event("show_download_details", params, socket),
     do: DownloadEvents.show_download_details(params, socket)
 
