@@ -2,10 +2,13 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
   use Mydia.DataCase, async: true
   use Oban.Testing, repo: Mydia.Repo
 
+  import Ecto.Query
+
   alias Mydia.Jobs.DownloadMonitor
   alias Mydia.Downloads
   alias Mydia.Downloads.Download
   alias Mydia.Events
+  alias Mydia.Repo
   import Mydia.MediaFixtures
   import Mydia.DownloadsFixtures
 
@@ -508,6 +511,32 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert :ok = perform_job(DownloadMonitor, %{})
 
       assert Mydia.Repo.get(Mydia.Downloads.Download, orphan.id)
+    end
+  end
+
+  describe "stale grab self-healing" do
+    test "persists 'Grab timed out' on a backdated client-less record" do
+      setup_runtime_config([])
+
+      download =
+        download_fixture(%{download_client: nil, download_client_id: nil})
+        |> backdate(Downloads.grab_timeout_minutes() + 1)
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      updated = Downloads.get_download!(download.id)
+      assert updated.error_message == "Grab timed out"
+    end
+
+    test "leaves a fresh client-less record untouched" do
+      setup_runtime_config([])
+
+      download = download_fixture(%{download_client: nil, download_client_id: nil})
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      updated = Downloads.get_download!(download.id)
+      assert is_nil(updated.error_message)
     end
   end
 
@@ -1370,6 +1399,18 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
   defp occupying_ids do
     Download.occupying() |> Repo.all() |> Enum.map(& &1.id)
+  end
+
+  # Backdates `inserted_at` directly — the changeset doesn't cast timestamps,
+  # so this is the only way to simulate an old grab. Mirrors `backdate/2` in
+  # history_grab_status_test.exs.
+  defp backdate(download, minutes_ago) do
+    cutoff = DateTime.add(DateTime.utc_now(), -minutes_ago * 60, :second)
+
+    from(d in Download, where: d.id == ^download.id)
+    |> Repo.update_all(set: [inserted_at: cutoff])
+
+    download
   end
 
   defp start_sabnzbd_bypass(opts \\ []) do

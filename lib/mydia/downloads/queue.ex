@@ -26,7 +26,7 @@ defmodule Mydia.Downloads.Queue do
     # Normalize metadata: callers (e.g. TVShowSearch) may pass a plain map.
     # Coerce to %SearchResultMetadata{} so downstream pattern matches and
     # persistence in create_download_record/4 work uniformly.
-    search_result = %{search_result | metadata: normalize_metadata(search_result.metadata)}
+    search_result = normalize_search_result_metadata(search_result)
 
     # Use protocol from search result
     download_type = search_result.download_protocol
@@ -195,6 +195,16 @@ defmodule Mydia.Downloads.Queue do
 
     success_count = Enum.count(results, &(&1 == :ok))
     {:ok, success_count}
+  end
+
+  @doc false
+  # Normalizes a SearchResult's metadata into a %SearchResultMetadata{}
+  # struct. Public so the optimistic grab pipeline (Mydia.Downloads.Grabber)
+  # can normalize before its own duplicate check, matching what
+  # initiate_download/2 does before check_for_duplicate_download/2 — keeping
+  # season-pack-aware duplicate-check guards working from both entry points.
+  def normalize_search_result_metadata(%SearchResult{} = search_result) do
+    %{search_result | metadata: normalize_metadata(search_result.metadata)}
   end
 
   # Normalizes search-result metadata into a SearchResultMetadata struct.

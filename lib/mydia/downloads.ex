@@ -206,6 +206,20 @@ defmodule Mydia.Downloads do
   defdelegate list_stuck_downloads(opts \\ []), to: Mydia.Downloads.History
 
   @doc """
+  Lists client-less grab records abandoned mid-flight (grab task died before
+  writing an outcome) whose `inserted_at` is older than
+  `Mydia.Downloads.History.grab_timeout_minutes/0`. See `History.list_stale_grabs/1`.
+  """
+  @spec list_stale_grabs(DateTime.t()) :: [Download.t()]
+  defdelegate list_stale_grabs(now \\ DateTime.utc_now()), to: Mydia.Downloads.History
+
+  @doc """
+  The grab-timeout threshold (minutes). See `Mydia.Downloads.History.grab_timeout_minutes/0`.
+  """
+  @spec grab_timeout_minutes() :: pos_integer()
+  defdelegate grab_timeout_minutes(), to: Mydia.Downloads.History
+
+  @doc """
   Broadcasts a download update to all subscribed LiveViews.
   """
   @spec broadcast_download_update(binary()) :: :ok | {:error, term()}

@@ -139,7 +139,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     test "downloading renders the grabbing spinner state" do
       html = modal_html(%{downloading: true})
 
-      assert html =~ "Grabbing..."
+      assert html =~ "Grabbing…"
     end
   end
 end

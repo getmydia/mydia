@@ -61,6 +61,11 @@ defmodule Mydia.Downloads.Grabber do
   # synchronously without the supervisor.
   @spec run_grab(Download.t(), SearchResult.t(), keyword()) :: :ok | :error | :duplicate
   def run_grab(%Download{} = download, %SearchResult{} = search_result, opts) do
+    # Mirror initiate_download/2: normalize metadata before the duplicate
+    # check so season-pack-aware guards (check_for_active_download/4) see a
+    # %SearchResultMetadata{} rather than a raw map from the caller.
+    search_result = Queue.normalize_search_result_metadata(search_result)
+
     opts =
       opts
       |> Keyword.put(:exclude_download_id, download.id)

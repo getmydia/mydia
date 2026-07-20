@@ -892,11 +892,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     <% Map.get(result, :downloading) -> %>
                       <button class="btn btn-primary btn-sm btn-disabled" disabled>
                         <span class="loading loading-spinner loading-xs"></span>
-                        <span class="hidden sm:inline">Grabbing...</span>
+                        <span class="hidden sm:inline">Grabbing…</span>
                       </button>
                     <% Map.get(result, :grab_failed) -> %>
                       <button
-                        class="btn btn-error btn-sm"
+                        class="btn btn-error btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
                         phx-click="download_from_search"
                         phx-value-download-url={result.download_url}
                         phx-value-title={result.title}

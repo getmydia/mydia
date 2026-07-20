@@ -26,6 +26,37 @@ defmodule Mydia.Downloads.History do
 
   ## Public Functions
 
+  @doc """
+  The grab-timeout threshold (minutes) used both to derive a stale grab's
+  displayed status (see `grab_status/1`) and by `Mydia.Jobs.DownloadMonitor`
+  to detect abandoned grabs to persist as failed. Single-sourced so the
+  displayed and persisted thresholds never drift apart.
+  """
+  def grab_timeout_minutes, do: @grab_timeout_minutes
+
+  @doc """
+  Lists client-less grab records whose supervised task died before writing
+  an outcome (BEAM restart, deploy) — no `download_client`/`download_client_id`,
+  no `error_message`, not completed, not imported — and whose `inserted_at`
+  is older than `grab_timeout_minutes/0`.
+
+  The derived `"failed"` status from `grab_status/1` only changes what's
+  *displayed*; `Download.occupying/1` keys off the persisted `error_message`,
+  so without this these orphaned grabs would block re-grabs of their target
+  forever. Used by `Mydia.Jobs.DownloadMonitor` to persist the failure.
+  """
+  def list_stale_grabs(now \\ DateTime.utc_now()) do
+    cutoff = DateTime.add(now, -@grab_timeout_minutes, :minute)
+
+    Download
+    |> where([d], is_nil(d.download_client) and is_nil(d.download_client_id))
+    |> where([d], is_nil(d.error_message))
+    |> where([d], is_nil(d.completed_at))
+    |> where([d], is_nil(d.imported_at))
+    |> where([d], d.inserted_at < ^cutoff)
+    |> Repo.all()
+  end
+
   def list_downloads(opts \\ []) do
     Download
     |> apply_download_filters(opts)
