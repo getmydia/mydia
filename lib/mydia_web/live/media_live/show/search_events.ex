@@ -228,6 +228,22 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> apply_search_filters()}
   end
 
+  def toggle_close_after_grab(_params, socket) do
+    new_value = not socket.assigns.close_after_grab
+
+    preference = Mydia.Accounts.get_user_preference!(socket.assigns.current_user)
+
+    case Mydia.Accounts.update_preference(preference, %{
+           "close_manual_search_after_grab" => new_value
+         }) do
+      {:ok, _} ->
+        {:noreply, assign(socket, :close_after_grab, new_value)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not save preference")}
+    end
+  end
+
   def sort_search(%{"sort_by" => sort_by}, socket) do
     sort_by = String.to_existing_atom(sort_by)
 

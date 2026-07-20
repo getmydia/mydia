@@ -52,4 +52,42 @@ defmodule MydiaWeb.MediaLive.Show.GrabFlowTest do
     render_async(view)
     assert has_element?(view, "#manual-search-modal")
   end
+
+  test "toggle persists the close-after-grab preference", %{
+    conn: conn,
+    movie: movie,
+    admin: admin
+  } do
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+
+    render_click(view, "manual_search", %{})
+    render_async(view)
+
+    assert has_element?(view, "#close-after-grab-toggle")
+    render_click(view, "toggle_close_after_grab", %{})
+
+    pref = Mydia.Accounts.get_user_preference!(admin)
+    assert Mydia.Accounts.UserPreference.close_manual_search_after_grab?(pref)
+  end
+
+  test "grab closes the modal when the preference is enabled", %{
+    conn: conn,
+    movie: movie,
+    admin: admin
+  } do
+    pref = Mydia.Accounts.get_user_preference!(admin)
+
+    {:ok, _} =
+      Mydia.Accounts.update_preference(pref, %{"close_manual_search_after_grab" => true})
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+
+    render_click(view, "manual_search", %{})
+    render_async(view)
+    assert has_element?(view, "#manual-search-modal")
+
+    render_click(view, "download_from_search", @grab_params)
+
+    refute has_element?(view, "#manual-search-modal")
+  end
 end

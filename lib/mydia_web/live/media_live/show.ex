@@ -305,6 +305,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("sort_search", params, socket),
     do: SearchEvents.sort_search(params, socket)
 
+  def handle_event("toggle_close_after_grab", params, socket),
+    do: SearchEvents.toggle_close_after_grab(params, socket)
+
   def handle_event("download_from_search", params, socket),
     do: SearchEvents.download_from_search(params, socket)
 

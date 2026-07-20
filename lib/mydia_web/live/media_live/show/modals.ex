@@ -661,6 +661,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 </div>
               </form>
               <div class="flex-1"></div>
+              <label
+                class="label cursor-pointer gap-2"
+                id="close-after-grab-toggle"
+                title="Close this dialog as soon as a release is grabbed"
+              >
+                <span class="label-text text-xs">Close after grabbing</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-primary"
+                  checked={@close_after_grab}
+                  phx-click="toggle_close_after_grab"
+                />
+              </label>
               <form phx-change="sort_search">
                 <select name="sort_by" class="select select-bordered select-sm">
                   <option value="quality" selected={@sort_by == :quality}>Best Score</option>
