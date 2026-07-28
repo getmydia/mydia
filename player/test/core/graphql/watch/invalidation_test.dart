@@ -23,6 +23,60 @@ Map<String, dynamic> _pingData(String value) => {
       'ping': {'__typename': 'Ping', 'id': 'ping-1', 'value': value},
     };
 
+/// A [FetchLog] that reports when `clearAll()` runs, delegating everything
+/// else to [_inner]. Used to pin the true ordering contract of
+/// `invalidateAll` without depending on the timing of `QueryWatcher`'s
+/// unawaited fetch-log write (see the ordering test below).
+class _CallOrderFetchLog implements FetchLog {
+  _CallOrderFetchLog(this._inner, {required void Function() onClearAll})
+      : _onClearAll = onClearAll;
+
+  final FetchLog _inner;
+  final void Function() _onClearAll;
+
+  @override
+  DateTime? lastFetchedAt(QueryKey key) => _inner.lastFetchedAt(key);
+
+  @override
+  Future<void> record(QueryKey key, DateTime when) => _inner.record(key, when);
+
+  @override
+  Future<void> clear(QueryKey key) => _inner.clear(key);
+
+  @override
+  Future<void> clearAll() async {
+    _onClearAll();
+    await _inner.clearAll();
+  }
+}
+
+/// A [FetchLog] whose `clear` throws for one designated key and records
+/// every key it was actually asked to clear (successes only) — used to prove
+/// that one failing key in a batch does not block its siblings.
+class _PartiallyFailingFetchLog implements FetchLog {
+  _PartiallyFailingFetchLog(this._failingKey);
+
+  final QueryKey _failingKey;
+  final List<QueryKey> clearedKeys = [];
+
+  @override
+  DateTime? lastFetchedAt(QueryKey key) => null;
+
+  @override
+  Future<void> record(QueryKey key, DateTime when) async {}
+
+  @override
+  Future<void> clear(QueryKey key) async {
+    if (key == _failingKey) {
+      throw StateError('simulated storage failure clearing $key');
+    }
+    clearedKeys.add(key);
+  }
+
+  @override
+  Future<void> clearAll() async {}
+}
+
 void main() {
   group('InvalidationRules', () {
     test('toggling a show favorite refreshes favorites, home and the show list',
@@ -147,6 +201,71 @@ void main() {
 
       expect(log.lastFetchedAt(QueryKeys.unwatched), isNull);
       expect(link.requests.length, greaterThanOrEqualTo(2));
+      // The live watcher's fresh network result restamps its own entry
+      // after clearAll() wipes it, so it survives to the end of the call.
+      expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
+    });
+
+    test(
+        'invalidateAll clears the log before refetching any live watcher '
+        '(ordering)', () async {
+      // The assertion above (home's entry isNotNull after invalidateAll)
+      // does not actually pin the clear-then-refetch order: QueryWatcher
+      // dispatches its fetch-log write via `unawaited(...)` inside
+      // `_onResult`, so that write is not guaranteed to have landed by the
+      // time `watcher.refetch()`'s own awaited call returns. Verified by
+      // temporarily swapping invalidateAll to refetch-then-clear: the
+      // isNotNull assertion above still passed, because the unawaited write
+      // from the refetch reliably lands after either statement order,
+      // racing back in ahead of the *next* awaited call in the caller
+      // regardless of source order. See the fix report for the full trace.
+      //
+      // What is not racy is exactly when the network request itself is
+      // dispatched: `link.requests` grows synchronously, strictly before
+      // `watcher.refetch()`'s awaited call can return. Snapshotting the
+      // request count at the moment clearAll() runs pins the true ordering
+      // contract without depending on the unawaited write's timing.
+      final log = InMemoryFetchLog({
+        QueryKeys.unwatched: DateTime(2026, 7, 28),
+      });
+      final link = StubLink((_, __) => _pingData('v'));
+      int? requestCountAtClear;
+      final orderTrackingLog = _CallOrderFetchLog(
+        log,
+        onClearAll: () => requestCountAtClear = link.requests.length,
+      );
+      final watcher = makeWatcher(link, orderTrackingLog);
+      addTearDown(watcher.close);
+
+      final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
+      final invalidator =
+          Invalidator(registry: registry, fetchLog: orderTrackingLog);
+
+      await watcher.stream.first;
+      final requestsBeforeInvalidateAll = link.requests.length;
+
+      await invalidator.invalidateAll();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(requestCountAtClear, requestsBeforeInvalidateAll,
+          reason: 'clearAll() must run before any live watcher is '
+              'refetched, not after');
+    });
+
+    test(
+        'a key whose fetch-log clear throws does not block the rest of the '
+        'batch', () async {
+      final log = _PartiallyFailingFetchLog(QueryKeys.favorites);
+      final invalidator =
+          Invalidator(registry: WatcherRegistry(), fetchLog: log);
+
+      await invalidator.invalidate([
+        QueryKeys.favorites,
+        QueryKeys.home,
+        QueryKeys.tvShowsList,
+      ]);
+
+      expect(log.clearedKeys, [QueryKeys.home, QueryKeys.tvShowsList]);
     });
 
     test('unregister only removes the watcher it was given', () async {

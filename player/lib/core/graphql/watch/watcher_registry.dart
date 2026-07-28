@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'fetch_log.dart';
@@ -46,23 +47,48 @@ class Invalidator {
   final WatcherRegistry _registry;
   final FetchLog _fetchLog;
 
+  /// Invalidates each key in turn.
+  ///
+  /// Each key is isolated in its own try/catch: `HiveFetchLog.clear` can
+  /// throw on an I/O error, and one throw must not abort the rest of the
+  /// batch — a favorite toggle invalidating `{favorites, home, tvShowsList}`
+  /// has to keep going even if the first key's write fails, or the other two
+  /// silently stay stale. The loop stays sequential on purpose: concurrent
+  /// refetches over what may be a p2p relay are not wanted here.
   Future<void> invalidate(Iterable<QueryKey> keys) async {
     for (final key in keys) {
-      final watcher = _registry.find(key);
-      if (watcher != null) {
-        await watcher.refetch();
-      } else {
-        await _fetchLog.clear(key);
+      try {
+        final watcher = _registry.find(key);
+        if (watcher != null) {
+          await watcher.refetch();
+        } else {
+          await _fetchLog.clear(key);
+        }
+      } catch (error, stackTrace) {
+        debugPrint(
+          'Invalidator.invalidate: failed to invalidate $key: $error\n'
+          '$stackTrace',
+        );
       }
     }
   }
 
   /// Used on app resume: every dormant screen becomes cold, every live one
   /// refetches now.
+  ///
+  /// Same per-watcher isolation as [invalidate], and for the same reason:
+  /// one watcher's refetch failing must not stop the rest from refreshing.
   Future<void> invalidateAll() async {
     await _fetchLog.clearAll();
     for (final watcher in _registry.watchers) {
-      await watcher.refetch();
+      try {
+        await watcher.refetch();
+      } catch (error, stackTrace) {
+        debugPrint(
+          'Invalidator.invalidateAll: failed to refetch ${watcher.key}: '
+          '$error\n$stackTrace',
+        );
+      }
     }
   }
 }
