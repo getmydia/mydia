@@ -116,6 +116,36 @@ defmodule Mydia.LibrarySearchEpisodesTest do
     assert section.total_count == 25
   end
 
+  test "total_count is the same true count regardless of how the limit caps results", %{
+    user: user
+  } do
+    show = media_item_fixture(%{type: "tv_show", title: "Anthology"})
+
+    for n <- 1..7 do
+      episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: n,
+        title: "Alien Part #{n}"
+      })
+    end
+
+    {:ok, capped} = LibrarySearch.search(user, "alien", types: [:episode], limit: 3)
+    {:ok, uncapped} = LibrarySearch.search(user, "alien", types: [:episode], limit: 100)
+
+    capped_section = episode_section(capped)
+    uncapped_section = episode_section(uncapped)
+
+    # The count query and the row query must derive from the same underlying
+    # set of matching rows: capping the page must never change how many rows
+    # are reported as matching, and raising the limit past the true total
+    # must return every row `total_count` promised, no more and no fewer.
+    assert length(capped_section.results) == 3
+    assert capped_section.total_count == 7
+    assert length(uncapped_section.results) == 7
+    assert uncapped_section.total_count == 7
+  end
+
   test "omits the episode section when nothing matches", %{user: user} do
     media_item_fixture(%{type: "movie", title: "Alien"})
 

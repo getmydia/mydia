@@ -176,19 +176,22 @@ defmodule Mydia.LibrarySearch do
   ## episodes
 
   defp episode_base(normalized) do
-    Enum.reduce(normalized.tokens, from(e in Episode), fn token, query ->
-      pattern = Tokenizer.contains_pattern(token)
+    Enum.reduce(
+      normalized.tokens,
+      from(e in Episode, join: m in assoc(e, :media_item), as: :show),
+      fn token, query ->
+        pattern = Tokenizer.contains_pattern(token)
 
-      where(query, [e], fragment("lower(?) LIKE ? ESCAPE '\\'", e.title, ^pattern))
-    end)
+        where(query, [e], fragment("lower(?) LIKE ? ESCAPE '\\'", e.title, ^pattern))
+      end
+    )
   end
 
   defp episode_rows(base, normalized, limit) do
     prefix = Tokenizer.prefix_pattern(normalized.query)
     word = Tokenizer.word_pattern(normalized.query)
 
-    from(e in base,
-      join: m in assoc(e, :media_item),
+    from([e, show: m] in base,
       select: %{
         episode: e,
         show: m,
