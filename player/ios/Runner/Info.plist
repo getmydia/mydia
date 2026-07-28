@@ -53,5 +53,11 @@
 	<string>Camera access is needed to scan QR codes for pairing with your Mydia server.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Mydia needs local network access to find Chromecast and DLNA devices to cast to.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_googlecast._tcp</string>
+	</array>
 </dict>
 </plist>

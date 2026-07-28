@@ -26,7 +26,8 @@ dependencies:
   media_kit_libs_video: ^1.0.7
   dio: ^5.4.0
   path_provider: ^2.1.0
-  flutter_chrome_cast: ^1.2.8
+  dart_cast: 0.7.3
+  bonsoir: ^7.0.0
   web: ^1.0.0
   crypto: ^3.0.3
   cryptography: ^2.9.0

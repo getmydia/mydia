@@ -34,5 +34,7 @@
 	<string>+n3C1GhBlCOwA2CLLwdh/kJjqPLNGNlVkZNLUVtkwMo=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Mydia needs local network access to find Chromecast and DLNA devices to cast to.</string>
 </dict>
 </plist>
