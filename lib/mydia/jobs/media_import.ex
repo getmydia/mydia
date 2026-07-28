@@ -540,18 +540,70 @@ defmodule Mydia.Jobs.MediaImport do
   defp get_download_files(client_info, download) do
     case Client.get_status(client_info.adapter, client_info.config, client_info.client_id) do
       {:ok, status} ->
-        if status.save_path && status.save_path != "" do
-          status.save_path
-          |> mapped_path(download.id)
-          |> list_files_in_path()
-        else
-          Logger.warning("No save_path in status", download_id: download.id)
-          {:error, :no_save_path}
-        end
+        resolve_status_files(status, download.id)
 
       {:error, error} ->
         {:error, error}
     end
+  end
+
+  # Prefer the client's explicit per-torrent file list when available. Falling
+  # back to a recursive listing of `save_path` is unsafe for clients (rqbit)
+  # that share one output folder across many torrents — that path is what
+  # cross-contaminated series libraries on galactica.
+  defp resolve_status_files(%{files: files}, download_id)
+       when is_list(files) and files != [] do
+    resolved =
+      files
+      |> Enum.map(&mapped_path(&1, download_id))
+      |> Enum.flat_map(&file_entry_if_exists/1)
+
+    case resolved do
+      [] ->
+        Logger.warning("Torrent file list resolved to no existing paths",
+          download_id: download_id,
+          listed_count: length(files)
+        )
+
+        {:error, :no_files}
+
+      entries ->
+        {:ok, entries}
+    end
+  end
+
+  defp resolve_status_files(%{save_path: save_path}, download_id)
+       when is_binary(save_path) and save_path != "" do
+    save_path
+    |> mapped_path(download_id)
+    |> list_files_in_path()
+  end
+
+  defp resolve_status_files(_status, download_id) do
+    Logger.warning("No save_path in status", download_id: download_id)
+    {:error, :no_save_path}
+  end
+
+  defp file_entry_if_exists(path) do
+    cond do
+      not File.exists?(path) ->
+        []
+
+      File.dir?(path) ->
+        list_files_recursive(path)
+
+      true ->
+        [
+          %{
+            path: path,
+            name: Path.basename(path),
+            size: File.stat!(path).size
+          }
+        ]
+    end
+  rescue
+    _e in File.Error ->
+      []
   end
 
   # Apply configured remote→local path mappings before touching the filesystem,
@@ -727,19 +779,33 @@ defmodule Mydia.Jobs.MediaImport do
           end
         end)
 
-      # Separate results into imported, unresolved, and errors
-      {imported, unresolved, errors} =
-        Enum.reduce(results, {[], [], []}, fn
-          {:ok, media_file}, {imp, unr, err} -> {[media_file | imp], unr, err}
-          {:unresolved, file_info}, {imp, unr, err} -> {imp, [file_info | unr], err}
-          {:error, _} = error, {imp, unr, err} -> {imp, unr, [error | err]}
+      # Separate results into imported, unresolved, skipped, and errors
+      {imported, unresolved, skipped, errors} =
+        Enum.reduce(results, {[], [], [], []}, fn
+          {:ok, media_file}, {imp, unr, skp, err} -> {[media_file | imp], unr, skp, err}
+          {:unresolved, file_info}, {imp, unr, skp, err} -> {imp, [file_info | unr], skp, err}
+          {:skipped, _reason}, {imp, unr, skp, err} -> {imp, unr, [:skipped | skp], err}
+          {:error, _} = error, {imp, unr, skp, err} -> {imp, unr, skp, [error | err]}
         end)
 
       imported = Enum.reverse(imported)
       unresolved = Enum.reverse(unresolved)
 
       cond do
-        # All files imported successfully
+        # All files imported successfully (title-mismatch skips are fine)
+        unresolved == [] and errors == [] and imported != [] ->
+          {:ok, imported}
+
+        # Everything was a foreign-title skip — nothing belonging to this show
+        unresolved == [] and errors == [] and imported == [] and skipped != [] ->
+          Logger.warning("All candidate files skipped due to title mismatch",
+            download_id: download.id,
+            skipped_count: length(skipped)
+          )
+
+          {:error, :no_importable_files}
+
+        # Vacuous success with neither imports nor skips (shouldn't happen)
         unresolved == [] and errors == [] ->
           {:ok, imported}
 
@@ -1081,6 +1147,37 @@ defmodule Mydia.Jobs.MediaImport do
     # focuses on season + episode + quality.
     parsed = ReleaseParser.parse(file.name, parser_opts)
 
+    # Defense in depth against shared-download-dir contamination: if the
+    # unbound filename title clearly belongs to a *different* show than the
+    # download's media item, refuse to import it into that show's library
+    # folder. Only fire when a conflicting title was actually parsed —
+    # season/episode-only names like `S03E03.mkv` stay allowed.
+    if foreign_title_mismatch?(parsed) do
+      Logger.warning("Skipping file whose title does not match download media item",
+        download_id: download.id,
+        file: file.name,
+        media_item: download.media_item && download.media_item.title,
+        parsed_title: get_in(parsed.engine_flags || %{}, [:parsed_title_unbound])
+      )
+
+      {:skipped, :title_mismatch}
+    else
+      import_file_after_parse(file, download, library_path, args, parsed)
+    end
+  end
+
+  # True when the parser flagged a binding suspect AND recovered a concrete
+  # conflicting title from the filename. Nil/empty unbound titles mean the
+  # filename had no show name (e.g. `S03E03.mkv`) — those are not mismatches.
+  defp foreign_title_mismatch?(%{engine_flags: flags}) when is_map(flags) do
+    Map.get(flags, :binding_suspect) == true and
+      is_binary(Map.get(flags, :parsed_title_unbound)) and
+      Map.get(flags, :parsed_title_unbound) != ""
+  end
+
+  defp foreign_title_mismatch?(_), do: false
+
+  defp import_file_after_parse(file, download, library_path, args, parsed) do
     # Check if this is a season pack download
     is_season_pack = get_in(download.metadata, ["season_pack"]) == true
     season_pack_season = get_in(download.metadata, ["season_number"])

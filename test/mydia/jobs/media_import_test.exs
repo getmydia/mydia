@@ -1413,4 +1413,81 @@ defmodule Mydia.Jobs.MediaImportTest do
              "refresh_episodes_for_tv_show should be invoked at most once per import job; got #{refresh_attempts} attempts across 5 unresolved files"
     end
   end
+
+  describe "foreign title mismatch guard (shared download dir)" do
+    @tag :tmp_dir
+    test "skips files whose unbound title belongs to a different show", %{tmp_dir: tmp_dir} do
+      # Shared download directory contains Silo + Star Trek files. Importing
+      # against Silo must only take the Silo file — the Star Trek file is a
+      # binding_suspect and must not land under Series/Silo/.
+      _library_path = create_test_library_path(tmp_dir, :series)
+
+      download_dir = Path.join(tmp_dir, "shared-downloads")
+      File.mkdir_p!(download_dir)
+
+      silo_file = Path.join(download_dir, "Silo.S01E01.Pilot.1080p.mkv")
+      trek_file = Path.join(download_dir, "Star.Trek.TOS.S01E01.The.Man.Trap.avi")
+      File.write!(silo_file, "silo video")
+      File.write!(trek_file, "trek video")
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Silo", year: 2023})
+
+      ep =
+        episode_fixture(%{
+          media_item_id: media_item.id,
+          season_number: 1,
+          episode_number: 1,
+          title: "Pilot"
+        })
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "SharedDirClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          episode_id: ep.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "SharedDirClient",
+          download_client_id: "shared-1",
+          title: "Silo.S01E01.Pilot.1080p.mkv"
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      files = Library.list_media_files() |> Enum.filter(&(&1.episode_id == ep.id))
+      assert length(files) == 1
+      assert Enum.any?(files, &String.contains?(&1.relative_path || "", "Silo"))
+
+      # Foreign title must not appear anywhere under the Silo library tree.
+      silo_root = Path.join([tmp_dir, "library", "Silo"])
+
+      trek_leaks =
+        if File.dir?(silo_root) do
+          silo_root
+          |> Path.join("**/*")
+          |> Path.wildcard()
+          |> Enum.filter(&String.contains?(Path.basename(&1), "Star.Trek"))
+        else
+          []
+        end
+
+      assert trek_leaks == [],
+             "Star Trek file must not be imported into Silo's library tree, got: #{inspect(trek_leaks)}"
+    end
+  end
 end
