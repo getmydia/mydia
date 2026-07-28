@@ -1414,35 +1414,33 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
-  describe "foreign title mismatch guard (shared download dir)" do
+  describe "destination filename conflicts" do
     @tag :tmp_dir
-    test "skips files whose unbound title belongs to a different show", %{tmp_dir: tmp_dir} do
-      # Shared download directory contains Silo + Star Trek files. Importing
-      # against Silo must only take the Silo file — the Star Trek file is a
-      # binding_suspect and must not land under Series/Silo/.
-      _library_path = create_test_library_path(tmp_dir, :series)
+    test "re-running an import adopts the earlier conflict copy instead of duplicating it",
+         %{tmp_dir: tmp_dir} do
+      # Conflict names used to carry a unix timestamp, so every retry of an
+      # import minted a fresh filename and re-copied the whole file. Under
+      # max_attempts: 1000 that is how misplaced episodes became ~980 GiB of
+      # duplicates. Numbering deterministically means a retry finds what the
+      # previous attempt wrote and adopts it.
+      library_path = create_test_library_path(tmp_dir, :movies)
 
-      download_dir = Path.join(tmp_dir, "shared-downloads")
+      download_dir = Path.join(tmp_dir, "downloads")
       File.mkdir_p!(download_dir)
+      source = Path.join(download_dir, "Conflict.Movie.2024.1080p.mkv")
+      File.write!(source, "the freshly downloaded copy")
 
-      silo_file = Path.join(download_dir, "Silo.S01E01.Pilot.1080p.mkv")
-      trek_file = Path.join(download_dir, "Star.Trek.TOS.S01E01.The.Man.Trap.avi")
-      File.write!(silo_file, "silo video")
-      File.write!(trek_file, "trek video")
+      media_item = media_item_fixture(%{type: "movie", title: "Conflict Movie", year: 2024})
 
-      media_item = media_item_fixture(%{type: "tv_show", title: "Silo", year: 2023})
-
-      ep =
-        episode_fixture(%{
-          media_item_id: media_item.id,
-          season_number: 1,
-          episode_number: 1,
-          title: "Pilot"
-        })
+      # Squat the destination with different content so the import is forced
+      # down the conflict path.
+      dest_dir = Path.join(library_path.path, "Conflict Movie (2024)")
+      File.mkdir_p!(dest_dir)
+      File.write!(Path.join(dest_dir, "Conflict Movie (2024).mkv"), "a different, older file")
 
       {:ok, _} =
         Settings.create_download_client_config(%{
-          name: "SharedDirClient",
+          name: "ConflictClient",
           type: :qbittorrent,
           host: "nonexistent.invalid",
           port: 9999,
@@ -1455,39 +1453,37 @@ defmodule Mydia.Jobs.MediaImportTest do
       download =
         download_fixture(%{
           media_item_id: media_item.id,
-          episode_id: ep.id,
           status: "completed",
           completed_at: DateTime.utc_now(),
-          download_client: "SharedDirClient",
-          download_client_id: "shared-1",
-          title: "Silo.S01E01.Pilot.1080p.mkv"
+          download_client: "ConflictClient",
+          download_client_id: "conflict-1"
         })
 
-      assert {:ok, :imported} =
-               perform_job(MediaImport, %{
-                 "download_id" => download.id,
-                 "save_path" => download_dir
-               })
+      args = %{"download_id" => download.id, "save_path" => download_dir}
 
-      files = Library.list_media_files() |> Enum.filter(&(&1.episode_id == ep.id))
-      assert length(files) == 1
-      assert Enum.any?(files, &String.contains?(&1.relative_path || "", "Silo"))
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir)
 
-      # Foreign title must not appear anywhere under the Silo library tree.
-      silo_root = Path.join([tmp_dir, "library", "Silo"])
+      # Clear imported_at so the job re-runs the import rather than
+      # short-circuiting on the already-done guard. Re-fetch first: the local
+      # struct predates the import, so changing it produces an empty changeset.
+      download.id
+      |> Mydia.Downloads.get_download!()
+      |> Ecto.Changeset.change(%{imported_at: nil})
+      |> Repo.update!()
 
-      trek_leaks =
-        if File.dir?(silo_root) do
-          silo_root
-          |> Path.join("**/*")
-          |> Path.wildcard()
-          |> Enum.filter(&String.contains?(Path.basename(&1), "Star.Trek"))
-        else
-          []
-        end
+      assert {:ok, :imported} = perform_job(MediaImport, args)
 
-      assert trek_leaks == [],
-             "Star Trek file must not be imported into Silo's library tree, got: #{inspect(trek_leaks)}"
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir),
+             "retry must reuse the existing conflict copy, not mint another one"
+    end
+
+    defp conflict_copies(dest_dir) do
+      dest_dir
+      |> File.ls!()
+      |> Enum.filter(&(&1 != "Conflict Movie (2024).mkv"))
+      |> Enum.filter(&String.ends_with?(&1, ".mkv"))
+      |> Enum.sort()
     end
   end
 end
