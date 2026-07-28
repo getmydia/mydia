@@ -77,16 +77,22 @@ defmodule Mydia.Library.MisplacedSeriesHealer do
     case Keyword.get(opts, :library_path_id) do
       nil ->
         Settings.list_library_paths()
-        |> Enum.filter(&(&1.type in [:series, :mixed]))
+        |> Enum.filter(&series_library_path?/1)
 
       id ->
         case Settings.get_library_path!(id) do
-          %LibraryPath{type: type} = lp when type in [:series, :mixed] -> [lp]
+          %LibraryPath{} = lp ->
+            if series_library_path?(lp), do: [lp], else: []
+
           _ -> []
         end
     end
   rescue
     Ecto.NoResultsError -> []
+  end
+
+  defp series_library_path?(%LibraryPath{type: type, monitored: monitored}) do
+    type in [:series, :mixed] and monitored
   end
 
   defp empty_result do
@@ -351,6 +357,8 @@ defmodule Mydia.Library.MisplacedSeriesHealer do
   end
 
   defp record(acc, action, counter) do
-    %{acc | counter => Map.fetch!(acc, counter) + 1, actions: [action | acc.actions]}
+    acc
+    |> Map.update!(counter, &(&1 + 1))
+    |> Map.update!(:actions, &[action | &1])
   end
 end
