@@ -12,6 +12,14 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:episode, description: "A TV episode")
   end
 
+  @desc "Library search result types"
+  enum :search_result_type do
+    value(:movie, description: "A movie")
+    value(:tv_show, description: "A TV show")
+    value(:episode, description: "A TV episode")
+    value(:collection, description: "A user collection")
+  end
+
   @desc "Library path type"
   enum :library_type do
     value(:movies, description: "Movie library")
