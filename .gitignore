@@ -146,3 +146,6 @@ devenv.local.yaml
 
 # Superpowers planning artifacts (specs/plans) — local only, never tracked
 docs/superpowers/
+
+# Subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/
