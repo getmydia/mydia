@@ -134,6 +134,49 @@ defmodule MydiaWeb.Schema.SearchTest do
     assert movies["totalCount"] == 5
   end
 
+  test "clamps a negative first to the floor instead of passing it through to LIMIT", %{
+    user: user
+  } do
+    for n <- 1..3 do
+      MediaFixtures.media_item_fixture(%{type: "movie", title: "Alien Part #{n}"})
+    end
+
+    assert {:ok, %{data: %{"search" => search}}} =
+             run_query(@search_query, %{"query" => "alien", "first" => -1}, user)
+
+    movies = section(search["sections"], "MOVIE")
+    assert length(movies["results"]) == 1
+    assert movies["totalCount"] == 3
+  end
+
+  test "clamps a zero first to the floor instead of rendering an empty page", %{user: user} do
+    for n <- 1..3 do
+      MediaFixtures.media_item_fixture(%{type: "movie", title: "Alien Part #{n}"})
+    end
+
+    assert {:ok, %{data: %{"search" => search}}} =
+             run_query(@search_query, %{"query" => "alien", "first" => 0}, user)
+
+    movies = section(search["sections"], "MOVIE")
+    assert length(movies["results"]) == 1
+    assert movies["totalCount"] == 3
+  end
+
+  test "clamps a first above the maximum instead of passing it through unbounded", %{
+    user: user
+  } do
+    for n <- 1..105 do
+      MediaFixtures.media_item_fixture(%{type: "movie", title: "Alien Part #{n}"})
+    end
+
+    assert {:ok, %{data: %{"search" => search}}} =
+             run_query(@search_query, %{"query" => "alien", "first" => 1000}, user)
+
+    movies = section(search["sections"], "MOVIE")
+    assert length(movies["results"]) == 100
+    assert movies["totalCount"] == 105
+  end
+
   test "returns empty sections for a blank query", %{user: user} do
     MediaFixtures.media_item_fixture(%{type: "movie", title: "Alien"})
 

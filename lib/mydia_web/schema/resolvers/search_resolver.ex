@@ -15,9 +15,13 @@ defmodule MydiaWeb.Schema.Resolvers.SearchResolver do
   alias Mydia.LibrarySearch.{Result, Results, Section}
   alias Mydia.Metadata.ImageUrl
 
+  @default_limit 20
+  @min_limit 1
+  @max_limit 100
+
   @spec search(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
   def search(_parent, %{query: query} = args, %{context: %{current_user: %User{} = user}}) do
-    opts = [limit: Map.get(args, :first, 20)]
+    opts = [limit: args |> Map.get(:first, @default_limit) |> clamp_limit()]
     opts = if types = Map.get(args, :types), do: Keyword.put(opts, :types, types), else: opts
 
     with {:ok, %Results{} = results} <- LibrarySearch.search(user, query, opts) do
@@ -30,6 +34,20 @@ defmodule MydiaWeb.Schema.Resolvers.SearchResolver do
   end
 
   def search(_parent, _args, _info), do: {:error, :unauthenticated}
+
+  # `first` is client-controlled and reaches a raw SQL `LIMIT`. Clamping here,
+  # before it enters `Mydia.LibrarySearch`, keeps the two supported adapters
+  # in agreement: SQLite treats a negative `LIMIT` as "no limit" (unbounded
+  # rows plus one `item_count`/poster query per returned collection), while
+  # PostgreSQL raises `ERROR 2201W: LIMIT must not be negative`. A `nil` (an
+  # explicit `first: null`) falls back to the default rather than clamping to
+  # the floor.
+  @spec clamp_limit(integer() | nil) :: pos_integer()
+  defp clamp_limit(nil), do: @default_limit
+
+  defp clamp_limit(first) when is_integer(first) do
+    first |> max(@min_limit) |> min(@max_limit)
+  end
 
   defp build_section(%Section{} = section) do
     %{

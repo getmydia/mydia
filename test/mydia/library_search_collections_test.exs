@@ -45,6 +45,27 @@ defmodule Mydia.LibrarySearchCollectionsTest do
              ] = collection_section(results).results
     end
 
+    test "falls back to a member's poster when poster_path is unset", %{user: user} do
+      collection = collection_fixture(%{user: user, name: "Alien Anthology"})
+
+      collection_item_fixture(%{
+        collection: collection,
+        media_item: media_item_fixture(%{metadata: %{poster_path: "/member.jpg"}})
+      })
+
+      {:ok, results} = LibrarySearch.search(user, "alien")
+
+      assert [%Result{poster_path: "/member.jpg"}] = collection_section(results).results
+    end
+
+    test "has no poster when poster_path is unset and the collection is empty", %{user: user} do
+      collection_fixture(%{user: user, name: "Alien Anthology"})
+
+      {:ok, results} = LibrarySearch.search(user, "alien")
+
+      assert [%Result{poster_path: nil}] = collection_section(results).results
+    end
+
     test "reports the item count as the subtitle", %{user: user} do
       collection = collection_fixture(%{user: user, name: "Alien Anthology"})
       collection_item_fixture(%{collection: collection, media_item: media_item_fixture()})

@@ -20,11 +20,13 @@ defmodule Mydia.LibrarySearch do
   ## Query shape
 
   Each requested section runs one row query and one `COUNT` query, so a full
-  search is eight queries plus one `item_count` per returned collection.
-  Movies and TV shows share the `media_items` table but still get their own
-  query pair: splitting a single result set in Elixir would break the
-  per-section limit, since one `LIMIT 20` over both types cannot guarantee
-  twenty of each.
+  search is eight queries plus, per returned collection, one `item_count`
+  query and — since nothing in this codebase currently writes
+  `collections.poster_path` — one more `Collections.poster_paths/2` query to
+  fall back to a member's poster. Movies and TV shows share the `media_items`
+  table but still get their own query pair: splitting a single result set in
+  Elixir would break the per-section limit, since one `LIMIT 20` over both
+  types cannot guarantee twenty of each.
 
   The counts are deliberate. Section headers show a total and each section offers
   "Show all", both of which need a real count rather than the length of an
@@ -260,8 +262,26 @@ defmodule Mydia.LibrarySearch do
       title: collection.name,
       score: rank / 1,
       subtitle: item_count_label(Collections.item_count(collection)),
-      poster_path: collection.poster_path
+      poster_path: collection_poster_path(collection)
     }
+  end
+
+  # `collections.poster_path` is cast on the schema but no write path in this
+  # codebase ever populates it, so every other collection surface (see
+  # `CollectionResolver.build_collection/1` and `CollectionLive.Index`) builds
+  # a poster from the collection's own items instead. Do the same here rather
+  # than showing the bookmark placeholder forever. Only reached when the
+  # column is empty, so this is at most one extra query per collection.
+  defp collection_poster_path(%Collection{poster_path: poster_path})
+       when is_binary(poster_path) and poster_path != "" do
+    poster_path
+  end
+
+  defp collection_poster_path(collection) do
+    case Collections.poster_paths(collection, 1) do
+      [path | _] -> path
+      [] -> nil
+    end
   end
 
   defp item_count_label(1), do: "1 item"
