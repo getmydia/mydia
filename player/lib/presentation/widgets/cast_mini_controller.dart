@@ -12,16 +12,19 @@ class CastMiniController extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isCasting = ref.watch(isCastingProvider);
+    final capabilities = ref.watch(castCapabilitiesProvider);
+    if (!capabilities.any) return const SizedBox.shrink();
 
-    if (!isCasting) {
-      return const SizedBox.shrink();
-    }
+    final isCasting = ref.watch(isCastingProvider);
+    if (!isCasting) return const SizedBox.shrink();
+
+    final managerAsync = ref.watch(castSessionManagerProvider);
+    final manager = managerAsync.value;
+    if (manager == null) return const SizedBox.shrink();
 
     final mediaInfo = ref.watch(castMediaInfoProvider);
     final playbackState = ref.watch(castPlaybackStateProvider);
     final device = ref.watch(currentCastDeviceProvider);
-    final castService = ref.read(castServiceProvider);
 
     if (mediaInfo == null) {
       return const SizedBox.shrink();
@@ -76,18 +79,20 @@ class CastMiniController extends ConsumerWidget {
                       children: [
                         Text(
                           mediaInfo.title,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (device != null)
                           Text(
                             'Casting to ${device.name}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey[600],
+                                    ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -103,9 +108,9 @@ class CastMiniController extends ConsumerWidget {
                     ),
                     onPressed: () async {
                       if (isPlaying) {
-                        await castService.pause();
+                        await manager.pause();
                       } else {
-                        await castService.play();
+                        await manager.play();
                       }
                     },
                   ),
@@ -138,7 +143,7 @@ class CastMiniController extends ConsumerWidget {
                       );
 
                       if (shouldStop == true) {
-                        await castService.disconnect();
+                        await manager.stopCast();
                       }
                     },
                   ),

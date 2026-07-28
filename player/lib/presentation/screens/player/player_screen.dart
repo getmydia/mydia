@@ -18,8 +18,9 @@ import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/duration_override.dart';
-import '../../../core/player/streaming_strategy.dart';
+import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
+import '../../../core/cast/cast_session_manager.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../widgets/resume_dialog.dart';
 import '../../widgets/subtitle_track_selector.dart';
@@ -1688,6 +1689,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Build the cast button that opens device picker.
   // ignore: unused_element
   Widget _buildCastButton() {
+    if (!ref.watch(castCapabilitiesProvider).any)
+      return const SizedBox.shrink();
+
     final isCasting = ref.watch(isCastingProvider);
     final castDevice = ref.watch(currentCastDeviceProvider);
 
@@ -1706,110 +1710,109 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  /// Show the cast device picker dialog.
+  /// Show the cast device picker dialog, then hand the selected device to
+  /// [CastSessionManager] to resolve a route and start playback.
   Future<void> _showCastDevicePicker() async {
     final device = await showCastDevicePicker(context);
+    if (device == null || !mounted) return;
 
-    if (device != null && mounted) {
-      // Device was connected, now load the media
-      await _startCasting(device);
+    final manager = await ref.read(castSessionManagerProvider.future);
+
+    try {
+      await manager.startCast(
+        device: device,
+        request: CastLaunchRequest(
+          fileId: widget.fileId,
+          mediaId: widget.mediaId,
+          mediaType: widget.mediaType,
+          title: widget.title ?? 'Untitled',
+          subtitleLabel: widget.mediaType == 'episode' ? 'Episode' : 'Movie',
+          startPosition: _player?.state.position,
+          subtitles: _subtitleTracks
+              .where((track) => track.url != null)
+              .map((track) => CastSubtitleTrack(
+                    url: track.url!,
+                    label: track.displayName,
+                    language: track.language,
+                  ))
+              .toList(),
+        ),
+      );
+
+      await _player?.pause();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Casting to ${device.name}'),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    } on CastBackendException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_castErrorMessage(e)),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 
-  /// Start casting the current media to the selected device.
-  Future<void> _startCasting(CastDevice device) async {
-    final castService = ref.read(castServiceProvider);
-    final serverUrlAsync = ref.read(serverUrlProvider);
-    final authTokenAsync = ref.read(authTokenProvider);
+  /// Turn a cast failure into something the user can act on. A bare
+  /// "cast failed" leaves a firewall or codec problem undiagnosable, so the
+  /// unreachable case names the actual port that needs to be open.
+  String _castErrorMessage(CastBackendException e) {
+    final proxy = ref.read(localProxyServiceProvider);
 
-    final serverUrl = serverUrlAsync.when(
-      data: (url) => url,
-      loading: () => null,
-      error: (_, __) => null,
-    );
-
-    final token = authTokenAsync.when(
-      data: (t) => t,
-      loading: () => null,
-      error: (_, __) => null,
-    );
-
-    if (serverUrl == null || token == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot start casting: server URL or token missing'),
-          ),
-        );
-      }
-      return;
-    }
-
-    try {
-      // Get media token service for media access
-      final mediaTokenService =
-          await ref.read(asyncMediaTokenServiceProvider.future);
-      await mediaTokenService.ensureValidToken();
-      final mediaToken = await mediaTokenService.getToken();
-
-      // Determine optimal streaming strategy
-      final strategy = StreamingStrategyService.getOptimalStrategy();
-
-      final streamUrl = StreamingStrategyService.buildStreamUrl(
-        serverUrl: serverUrl,
-        fileId: widget.fileId,
-        strategy: strategy,
-        mediaToken: mediaToken,
-      );
-
-      // Get current playback position if available
-      Duration? startPosition;
-      if (_player != null) {
-        startPosition = _player!.state.position;
-      }
-
-      // Load media into cast session
-      await castService.loadMedia(
-        mediaUrl: streamUrl,
-        title: widget.title ?? 'Untitled',
-        subtitle: widget.mediaType == 'episode' ? 'Episode' : 'Movie',
-        startPosition: startPosition,
-      );
-
-      // Pause local player
-      if (_player != null && _player!.state.playing) {
-        await _player!.pause();
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Casting to ${device.name}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error starting cast: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to start casting: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    switch (e.kind) {
+      case CastFailureKind.unreachable:
+        final port = proxy.isLanAccessible ? proxy.port : null;
+        final portHint =
+            port == null ? '' : ' Allow incoming connections on port $port.';
+        return 'The device could not reach your media. Check that both are on '
+            'the same network and that your firewall is not blocking '
+            'Mydia.$portHint';
+      case CastFailureKind.mediaLoadFailed:
+        return 'The device could not play this file. It may not support the '
+            'video or audio format.';
+      case CastFailureKind.connectionLost:
+        return 'Lost the connection to the device.';
+      case CastFailureKind.discoveryDenied:
+        return 'Mydia needs local network permission to find cast devices.';
+      case CastFailureKind.unknown:
+        return 'Casting failed: ${e.message}';
     }
   }
 
   /// Build the remote control UI when casting.
   Widget _buildCastRemoteControlUI() {
+    final session = ref.watch(castSessionProvider).value;
+    if (session != null && session.isStale) {
+      return Center(
+        key: const Key('cast-session-stale'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cast_outlined, size: 48, color: Colors.white70),
+            const SizedBox(height: 16),
+            Text(
+              'Lost connection to ${session.device.name}',
+              style: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _showCastDevicePicker,
+              child: const Text('Reconnect'),
+            ),
+          ],
+        ),
+      );
+    }
+
     final mediaInfo = ref.watch(castMediaInfoProvider);
     final playbackState = ref.watch(castPlaybackStateProvider);
     final castDevice = ref.watch(currentCastDeviceProvider);
-    final castService = ref.read(castServiceProvider);
+    final manager = ref.watch(castSessionManagerProvider).value;
 
-    if (mediaInfo == null || castDevice == null) {
+    if (mediaInfo == null || castDevice == null || manager == null) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.red),
       );
@@ -1882,7 +1885,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           seconds:
                               (value * mediaInfo.duration.inSeconds).round(),
                         );
-                        await castService.seek(newPosition);
+                        await manager.seek(newPosition);
                       },
                       activeColor: Colors.red,
                       inactiveColor: Colors.grey[800],
@@ -1923,7 +1926,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       onPressed: () async {
                         final newPosition =
                             mediaInfo.position - const Duration(seconds: 10);
-                        await castService.seek(
+                        await manager.seek(
                           newPosition.isNegative ? Duration.zero : newPosition,
                         );
                       },
@@ -1950,9 +1953,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         iconSize: 64,
                         onPressed: () async {
                           if (isPlaying) {
-                            await castService.pause();
+                            await manager.pause();
                           } else {
-                            await castService.play();
+                            await manager.play();
                           }
                         },
                       ),
@@ -1965,7 +1968,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         final newPosition =
                             mediaInfo.position + const Duration(seconds: 10);
                         final maxPosition = mediaInfo.duration;
-                        await castService.seek(
+                        await manager.seek(
                           newPosition > maxPosition ? maxPosition : newPosition,
                         );
                       },
@@ -1978,7 +1981,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   icon: const Icon(Icons.stop),
                   label: const Text('Stop Casting'),
                   onPressed: () async {
-                    await castService.disconnect();
+                    await manager.stopCast();
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,

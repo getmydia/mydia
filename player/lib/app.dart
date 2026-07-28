@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/providers.dart';
 import 'core/graphql/graphql_provider.dart';
+import 'core/cast/cast_providers.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 
@@ -26,6 +27,20 @@ class _MyAppState extends ConsumerState<MyApp> {
         // as it requires a targetPeer parameter
       } catch (e) {
         debugPrint('[MyApp] Failed to initialize P2P: $e');
+      }
+    });
+
+    // Reattach to a cast session left running by a previous app launch, on
+    // builds that can actually cast.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final capabilities = ref.read(castCapabilitiesProvider);
+      if (!capabilities.any) return;
+
+      try {
+        final manager = await ref.read(castSessionManagerProvider.future);
+        await manager.restoreSession();
+      } catch (e) {
+        debugPrint('[MyApp] Failed to restore cast session: $e');
       }
     });
   }
