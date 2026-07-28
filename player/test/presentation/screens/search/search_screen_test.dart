@@ -221,6 +221,62 @@ void main() {
     expect(captured.last.variables['types'], ['EPISODE']);
   });
 
+  testWidgets(
+      'navigating to /search with no q resets an already-filtered search',
+      (tester) async {
+    // Regression test: the sidebar's "Search" nav item always routes to bare
+    // `/search`, even while a filtered search is showing. That re-mounts the
+    // same route (didUpdateWidget, not initState) with initialQuery/Type both
+    // null, and the fix must land on a consistent state rather than only
+    // deselecting the filter chips while stale text/results linger.
+    final sameClient = MockGraphQLClient();
+    when(sameClient.query(any)).thenAnswer(
+      (_) async => QueryResult(
+        options: QueryOptions(document: gql('query { x }')),
+        source: QueryResultSource.network,
+        data: const {'search': _twoSections},
+      ),
+    );
+
+    Widget rebuild({String? initialQuery, SearchResultType? initialType}) {
+      return ProviderScope(
+        overrides: [
+          asyncGraphqlClientProvider.overrideWith((ref) async => sameClient),
+        ],
+        child: MaterialApp(
+          home: SearchScreen(
+            initialQuery: initialQuery,
+            initialType: initialType,
+          ),
+        ),
+      );
+    }
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(
+        rebuild(initialQuery: 'alien', initialType: SearchResultType.movie),
+      );
+      await tester.pumpAndSettle();
+    });
+
+    expect(find.widgetWithText(TextField, 'alien'), findsOneWidget);
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(rebuild());
+      await tester.pumpAndSettle();
+    });
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SearchScreen)),
+    );
+    final state = container.read(searchControllerProvider);
+
+    expect(find.widgetWithText(TextField, 'alien'), findsNothing);
+    expect(state.query, isEmpty);
+    expect(state.selectedTypes, isEmpty);
+    expect(state.results, isNull);
+  });
+
   testWidgets('renders four filter chips', (tester) async {
     await mockNetworkImages(() async {
       await tester.pumpWidget(host());

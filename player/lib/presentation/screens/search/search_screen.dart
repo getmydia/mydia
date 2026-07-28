@@ -64,15 +64,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   /// Seeds controller state from `q` and `type` and runs the search.
+  ///
+  /// A route with no `q` — e.g. the sidebar's "Search" link, which always
+  /// points at bare `/search` even while a filtered search is showing —
+  /// resets the screen entirely instead of only clearing filters. Clearing
+  /// filters alone left the text field and results grid still showing the
+  /// previous filtered search underneath newly-deselected chips.
   void _applyRouteParameters() {
     final notifier = ref.read(searchControllerProvider.notifier);
+    final query = widget.initialQuery ?? '';
+
+    if (query.isEmpty) {
+      _searchController.clear();
+      notifier.clear();
+      return;
+    }
 
     notifier.setTypes(
       widget.initialType == null ? const {} : {widget.initialType!},
     );
-
-    final query = widget.initialQuery ?? '';
-    if (query.isEmpty) return;
 
     _searchController.text = query;
     notifier.updateQuery(query);
@@ -196,7 +206,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           for (final type in SearchResultType.values) ...[
             SearchFilterChip(
               label: type.sectionTitle,
-              icon: _chipIcons[type]!,
+              icon: _chipIcons[type] ?? Icons.search_rounded,
               isSelected: searchState.selectedTypes.contains(type),
               onTap: () => _onToggleType(searchState, type),
             ),

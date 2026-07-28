@@ -5,6 +5,43 @@ import '../../../domain/models/search_result.dart';
 
 part 'search_controller.g.dart';
 
+/// Shown instead of the raw GraphQL error when a response looks like a
+/// client/server schema mismatch rather than an ordinary failure.
+///
+/// The web player ships inside the server image and always matches it, but
+/// the same Flutter codebase also ships as an Android APK and an iOS
+/// TestFlight build on an independent release cadence, and nothing
+/// negotiates the GraphQL schema version between them. An older app talking
+/// to an upgraded server — e.g. one still requesting the retired
+/// `SearchResults.results` field — gets a validation error here instead of
+/// data.
+const String _schemaMismatchErrorMessage =
+    "This app version doesn't match your Mydia server. Update the app to "
+    'search your library.';
+
+/// Absinthe's GraphQL validation phase uses these phrasings for a query
+/// asking about a field, argument, or type the server's schema no longer
+/// has — the shape a stale client produces against an upgraded server,
+/// distinct from a network failure or an ordinary server-side error.
+bool _looksLikeSchemaMismatch(OperationException exception) {
+  return exception.graphqlErrors.any((error) {
+    final message = error.message.toLowerCase();
+    return message.contains('cannot query field') ||
+        message.contains('unknown argument') ||
+        message.contains('unknown type') ||
+        message.contains('unknown field');
+  });
+}
+
+/// Renders a GraphQL failure for display, substituting a legible message for
+/// the raw exception when it looks like a schema mismatch.
+String describeSearchError(Object? exception) {
+  if (exception is OperationException && _looksLikeSchemaMismatch(exception)) {
+    return _schemaMismatchErrorMessage;
+  }
+  return exception.toString();
+}
+
 const String searchQuery = r'''
 query Search($query: String!, $types: [SearchResultType], $first: Int) {
   search(query: $query, types: $types, first: $first) {
@@ -138,7 +175,7 @@ class SearchController extends _$SearchController {
       if (result.hasException) {
         state = state.copyWith(
           isLoading: false,
-          error: result.exception.toString(),
+          error: describeSearchError(result.exception),
         );
         return;
       }
@@ -162,7 +199,7 @@ class SearchController extends _$SearchController {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: describeSearchError(e),
       );
     }
   }

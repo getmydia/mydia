@@ -141,5 +141,64 @@ void main() {
     final state = container.read(searchControllerProvider);
     expect(state.isLoading, isFalse);
     expect(state.error, isNotNull);
+    expect(state.error, contains('boom'));
+  });
+
+  test(
+      'a schema-mismatch GraphQL error renders a legible upgrade message, '
+      'not the raw exception', () async {
+    final container = makeContainer();
+    when(client.query(any)).thenAnswer(
+      (_) async => QueryResult(
+        options: QueryOptions(document: gql('query { x }')),
+        source: QueryResultSource.network,
+        exception: OperationException(
+          graphqlErrors: [
+            const GraphQLError(
+              message: 'Cannot query field "results" on type '
+                  '"SearchResults". Did you mean "sections"?',
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final notifier = container.read(searchControllerProvider.notifier);
+    notifier.updateQuery('alien');
+    await notifier.search();
+
+    final state = container.read(searchControllerProvider);
+    expect(state.isLoading, isFalse);
+    expect(state.error, isNotNull);
+    expect(state.error, isNot(contains('OperationException')));
+    expect(state.error, isNot(contains('Cannot query field')));
+    expect(state.error!.toLowerCase(), contains('update the app'));
+  });
+
+  test('describeSearchError falls back to toString for a non-schema error', () {
+    expect(
+      describeSearchError(
+        OperationException(
+          graphqlErrors: [const GraphQLError(message: 'unauthenticated')],
+        ),
+      ),
+      contains('unauthenticated'),
+    );
+  });
+
+  test(
+      'describeSearchError substitutes an upgrade message for an unknown '
+      'argument error', () {
+    final message = describeSearchError(
+      OperationException(
+        graphqlErrors: [
+          const GraphQLError(
+            message: 'Unknown argument "types" on field "search".',
+          ),
+        ],
+      ),
+    );
+
+    expect(message.toLowerCase(), contains('update the app'));
   });
 }
