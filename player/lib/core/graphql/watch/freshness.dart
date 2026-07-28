@@ -108,6 +108,14 @@ class FreshnessRegistry extends Notifier<Map<QueryKey, Freshness>> {
   }
 
   void clear(QueryKey key) {
+    // A watcher's teardown clears its freshness entry from `ref.onDispose`,
+    // deferred to a microtask (see `createWatcher`) to dodge Riverpod's
+    // debug-mode dispose-callback assertion. By the time that microtask
+    // runs, this registry may itself already be torn down (e.g. the whole
+    // container was disposed at once); `state` below would throw in that
+    // case, both on the read and the write, so the mounted check must come
+    // first.
+    if (!ref.mounted) return;
     if (!state.containsKey(key)) return;
     state = {...state}..remove(key);
   }

@@ -44,6 +44,10 @@ void main() {
     ).asRequest;
     cache.writeQuery(seedRequest,
         data: _homeData('Stale Movie'), broadcast: false);
+    // Assert the test's own premise: the cache is genuinely warm. Without
+    // this, a future shape change that silently makes the seed a no-op
+    // would degrade this into an indistinguishable cold-start test.
+    expect(cache.readQuery(seedRequest), isNotNull);
 
     final client = stubClient(
       StubLink.responses([_homeData('Fresh Movie')]),

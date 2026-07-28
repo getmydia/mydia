@@ -18,8 +18,13 @@ class WatcherRegistry {
   }
 
   /// Removes [watcher] only if it is still the one registered under [key].
-  /// A rebuilt controller registers its replacement before the old one is
-  /// disposed, and the replacement must survive that disposal.
+  /// Riverpod 3.1.0 actually disposes a predecessor before building its
+  /// replacement, so this identity check is a no-op in practice: nothing
+  /// else has registered under [key] yet when the predecessor's dispose
+  /// callback runs. It stays as a defensive guard against the reverse
+  /// order — a replacement registering before its predecessor is torn
+  /// down — so a live successor can never be dropped by a stale
+  /// predecessor's teardown.
   void unregister(QueryKey key, QueryWatcher<dynamic> watcher) {
     if (identical(_watchers[key], watcher)) {
       _watchers.remove(key);

@@ -47,20 +47,24 @@ QueryWatcher<T> createWatcher<T>(
     registry.unregister(key, watcher);
     watcher.close();
 
-    // Riverpod forbids touching another provider's state synchronously from
-    // inside a dispose callback ("Cannot use Ref or modify other providers
-    // inside life-cycles/selectors"), so the freshness clear is deferred to
-    // a microtask, after the callback stack that trips that check unwinds.
-    // If the whole container is being torn down at once (e.g. app shutdown,
-    // test teardown), freshnessRegistryProvider may itself already be gone
-    // by the time this runs; that failure is expected and safe to ignore,
-    // since nothing is left to observe the cleared entry anyway.
+    // Riverpod's debug build asserts against touching another provider's
+    // state synchronously from inside a dispose callback ("Cannot use Ref
+    // or modify other providers inside life-cycles/selectors"; release
+    // builds don't hit this — the assert only fires under kDebugMode), so
+    // the freshness clear is deferred to a microtask, after the callback
+    // stack that trips that check unwinds. `FreshnessRegistry.clear` itself
+    // guards against an unmounted ref, for the case where the whole
+    // container was torn down at once and freshnessRegistryProvider is
+    // already gone by the time this runs.
     Future.microtask(() {
-      try {
-        freshness.clear(key);
-      } catch (_) {
-        // Provider tree already torn down.
-      }
+      // A successor watcher may have already taken over this key by the
+      // time this runs — this closure only knows about the watcher it was
+      // built for, not whether it's still the live one. Consulting the
+      // registry (key-only, unlike `unregister`'s identity check) before
+      // clearing avoids wiping out a live successor's freshly published
+      // freshness entry.
+      if (registry.find(key) != null) return;
+      freshness.clear(key);
     });
   });
 
