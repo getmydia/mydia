@@ -35,7 +35,14 @@ detect_environment() {
 
 # Check if Chrome is installed and get version
 get_chrome_version() {
-    if command -v google-chrome &>/dev/null; then
+    # CHROME_PATH first, mirroring how the chromedriver helpers below prefer
+    # CHROMEDRIVER_PATH. devenv points both at its own pinned chromium. Without
+    # this, a GitHub runner's system google-chrome — which tracks stable and
+    # moves independently of nixpkgs — gets compared against devenv's pinned
+    # chromedriver, and the version check aborts before any test runs.
+    if [[ -n "${CHROME_PATH:-}" ]] && [[ -x "${CHROME_PATH}" ]]; then
+        "$CHROME_PATH" --version | grep -oP '\d+\.\d+\.\d+' || true
+    elif command -v google-chrome &>/dev/null; then
         google-chrome --version | grep -oP '\d+\.\d+\.\d+' || true
     elif command -v chromium &>/dev/null; then
         chromium --version | grep -oP '\d+\.\d+\.\d+' || true
