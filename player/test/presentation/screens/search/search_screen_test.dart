@@ -151,6 +151,76 @@ void main() {
     );
   });
 
+  testWidgets(
+      'a parameter change on an already-mounted screen re-seeds via '
+      'didUpdateWidget', (tester) async {
+    // Same client across both pumps, unlike host(), so every recorded
+    // query() call — from either pump — lands on one mock we can inspect
+    // together at the end.
+    final sameClient = MockGraphQLClient();
+    when(sameClient.query(any)).thenAnswer(
+      (_) async => QueryResult(
+        options: QueryOptions(document: gql('query { x }')),
+        source: QueryResultSource.network,
+        data: const {'search': _twoSections},
+      ),
+    );
+
+    Widget rebuild({String? initialQuery, SearchResultType? initialType}) {
+      return ProviderScope(
+        overrides: [
+          asyncGraphqlClientProvider.overrideWith((ref) async => sameClient),
+        ],
+        child: MaterialApp(
+          home: SearchScreen(
+            initialQuery: initialQuery,
+            initialType: initialType,
+          ),
+        ),
+      );
+    }
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(rebuild(initialQuery: 'alien'));
+      await tester.pumpAndSettle();
+    });
+
+    expect(find.widgetWithText(TextField, 'alien'), findsOneWidget);
+
+    // Re-pump the same widget type at the same position (ProviderScope ->
+    // MaterialApp -> SearchScreen, no keys anywhere) with different route
+    // parameters. Flutter's element diffing updates the existing element in
+    // place rather than remounting it, which is exactly what a "Show all"
+    // navigation to the same route does, and is what triggers
+    // didUpdateWidget instead of a fresh initState.
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(
+        rebuild(
+          initialQuery: 'predator',
+          initialType: SearchResultType.episode,
+        ),
+      );
+      await tester.pumpAndSettle();
+    });
+
+    expect(find.byType(SearchScreen), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'predator'), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SearchScreen)),
+    );
+    expect(
+      container.read(searchControllerProvider).selectedTypes,
+      {SearchResultType.episode},
+    );
+
+    final captured =
+        verify(sameClient.query(captureAny)).captured.cast<QueryOptions>();
+    expect(captured, hasLength(2));
+    expect(captured.last.variables['query'], 'predator');
+    expect(captured.last.variables['types'], ['EPISODE']);
+  });
+
   testWidgets('renders four filter chips', (tester) async {
     await mockNetworkImages(() async {
       await tester.pumpWidget(host());

@@ -34,6 +34,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Post-frame callbacks aren't cancelled on dispose. A synchronous route
+      // redirect within the same frame can dispose this State before the
+      // callback fires, and `ref`/`_focusNode` must not be touched after that.
+      if (!mounted) return;
       _applyRouteParameters();
       if (widget.initialQuery == null || widget.initialQuery!.isEmpty) {
         _focusNode.requestFocus();
@@ -48,7 +52,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // what a section's "Show all" does, so re-seed on parameter changes.
     if (oldWidget.initialQuery != widget.initialQuery ||
         oldWidget.initialType != widget.initialType) {
-      _applyRouteParameters();
+      // Defer to a post-frame callback: didUpdateWidget runs during the
+      // widget tree's build phase, and Riverpod forbids modifying providers
+      // (setTypes/updateQuery/search all do) until the frame is done — the
+      // same reason initState defers its call instead of running it inline.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _applyRouteParameters();
+      });
     }
   }
 
