@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/p2p/p2p_service.dart';
@@ -39,10 +40,39 @@ class LocalProxyService {
   /// Auth token for HLS requests
   String? _authToken;
 
+  /// Unguessable path prefix required on every request while LAN-exposed.
+  /// A path prefix rather than a query parameter because HLS segment URLs are
+  /// relative and would not carry a query string through manifest resolution.
+  String? _lanToken;
+
+  /// Cached non-loopback address used to build receiver-facing URLs.
+  String? _lanAddress;
+
   int get port => _server?.port ?? 0;
   bool get isRunning => _server != null;
 
+  /// Whether the proxy is currently reachable from other devices on the LAN.
+  bool get isLanAccessible => _lanToken != null && _lanAddress != null;
+
+  /// Base URL other devices on the LAN can reach, or null when loopback-only.
+  String? get lanBaseUrl {
+    if (!isLanAccessible || _server == null) return null;
+    return 'http://$_lanAddress:${_server!.port}/g/$_lanToken';
+  }
+
+  /// Prefix applied to every locally built URL.
+  String get _urlBase {
+    if (_server == null) {
+      throw StateError('LocalProxyService is not started');
+    }
+    return lanBaseUrl ?? 'http://127.0.0.1:${_server!.port}';
+  }
+
   LocalProxyService(this._p2p);
+
+  /// Test-only constructor: builds a service with no live P2P dependency.
+  /// Requests that reach P2P will fail, which is fine for URL and gating tests.
+  factory LocalProxyService.forTesting() => LocalProxyService(P2pService());
 
   /// Start the local proxy server.
   ///
@@ -76,65 +106,127 @@ class LocalProxyService {
     _server = null;
     _targetPeer = null;
     _authToken = null;
+    _lanToken = null;
+    _lanAddress = null;
     debugPrint('[LocalProxy] Stopped');
+  }
+
+  /// Find a usable non-loopback IPv4 address for receiver-facing URLs.
+  ///
+  /// Returns null when the device has no LAN interface, in which case casting
+  /// must fall back to the direct-server route.
+  static Future<String?> resolveLanAddress() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+        includeLinkLocal: false,
+      );
+
+      for (final interface in interfaces) {
+        for (final address in interface.addresses) {
+          if (!address.isLoopback) return address.address;
+        }
+      }
+    } catch (e) {
+      debugPrint('[LocalProxy] Failed to resolve LAN address: $e');
+    }
+    return null;
+  }
+
+  /// Rebind the proxy so LAN devices can reach it, or return it to loopback.
+  ///
+  /// Rebinding drops in-flight local playback connections. Callers enable this
+  /// only when starting a cast, at which point local playback is being paused
+  /// anyway.
+  Future<void> setLanAccess(bool enabled) async {
+    if (enabled == isLanAccessible) return;
+
+    final peer = _targetPeer;
+    final token = _authToken;
+
+    if (enabled) {
+      final address = await resolveLanAddress();
+      if (address == null) {
+        debugPrint('[LocalProxy] No LAN interface available; staying loopback');
+        return;
+      }
+      _lanAddress = address;
+      _lanToken = _generateToken();
+    } else {
+      _lanAddress = null;
+      _lanToken = null;
+    }
+
+    await _server?.close();
+    _server = null;
+
+    if (peer == null) return;
+
+    _server = await HttpServer.bind(
+      enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
+      0,
+    );
+    _targetPeer = peer;
+    _authToken = token;
+    _server!.listen(_handleRequest);
+
+    debugPrint(
+      '[LocalProxy] Rebound (lan=$enabled) on port ${_server!.port}',
+    );
+  }
+
+  static String _generateToken() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
   /// Build the HLS URL for a session.
   ///
   /// Returns the local proxy URL for the HLS playlist.
   /// The video player should use this URL to start playback.
-  String buildHlsUrl(String sessionId) {
-    if (_server == null) {
-      throw StateError('LocalProxyService is not started');
-    }
-    return 'http://127.0.0.1:${_server!.port}/hls/$sessionId/index.m3u8';
-  }
+  String buildHlsUrl(String sessionId) => '$_urlBase/hls/$sessionId/index.m3u8';
 
-  /// Build the base URL for HLS content.
-  ///
-  /// HLS manifests will use relative URLs for segments,
-  /// so they will resolve against this base URL.
-  String buildBaseUrl(String sessionId) {
-    if (_server == null) {
-      throw StateError('LocalProxyService is not started');
-    }
-    return 'http://127.0.0.1:${_server!.port}/hls/$sessionId/';
-  }
+  /// Build the base URL for HLS content. Manifests use relative segment URLs,
+  /// which resolve against this base — including the LAN token prefix.
+  String buildBaseUrl(String sessionId) => '$_urlBase/hls/$sessionId/';
 
   /// Build a direct stream URL for a media file.
   ///
   /// This uses the P2P HLS protocol with a "direct:" session ID prefix
   /// to stream the raw file without HLS transcoding.
-  String buildDirectStreamUrl(String fileId) {
-    if (_server == null) {
-      throw StateError('LocalProxyService is not started');
-    }
-    return 'http://127.0.0.1:${_server!.port}/direct/$fileId/stream';
-  }
+  String buildDirectStreamUrl(String fileId) => '$_urlBase/direct/$fileId/stream';
 
   /// Build a download URL for a completed transcode job.
   ///
   /// Uses the P2P HLS protocol with a "download:" session ID prefix
   /// to proxy the transcoded file download.
-  String buildDownloadUrl(String jobId) {
-    if (_server == null) {
-      throw StateError('LocalProxyService is not started');
-    }
-    return 'http://127.0.0.1:${_server!.port}/download/$jobId/file';
-  }
+  String buildDownloadUrl(String jobId) => '$_urlBase/download/$jobId/file';
 
   // Handle incoming HTTP requests
   Future<void> _handleRequest(HttpRequest request) async {
-    final path = request.uri.path;
+    final status = _authorizeAndStripPrefix(request.uri.path);
 
+    if (status.statusCode != HttpStatus.ok) {
+      request.response.statusCode = status.statusCode;
+      _setCorsHeaders(request.response);
+      request.response.write(status.statusCode == HttpStatus.forbidden
+          ? 'Forbidden'
+          : 'Not Found');
+      await request.response.close();
+      return;
+    }
+
+    final path = status.path;
     debugPrint('[LocalProxy] ${request.method} $path');
 
     if (path.startsWith('/hls/')) {
-      await _handleHlsRequest(request);
+      await _handleHlsRequest(request, path);
     } else if (path.startsWith('/direct/')) {
-      await _handleDirectRequest(request);
+      await _handleDirectRequest(request, path);
     } else if (path.startsWith('/download/')) {
-      await _handleDownloadRequest(request);
+      await _handleDownloadRequest(request, path);
     } else {
       request.response.statusCode = HttpStatus.notFound;
       _setCorsHeaders(request.response);
@@ -143,11 +235,38 @@ class LocalProxyService {
     }
   }
 
-  Future<void> _handleHlsRequest(HttpRequest request) async {
+  /// Validates the LAN token prefix and returns the path with it removed.
+  ///
+  /// While LAN-exposed, every request must carry `/g/<token>`; without it the
+  /// media would be readable by anything on the network.
+  ({int statusCode, String path}) _authorizeAndStripPrefix(String rawPath) {
+    final token = _lanToken;
+
+    if (token == null) {
+      // Loopback-only: no prefix expected, and any prefix is bogus.
+      return rawPath.startsWith('/g/')
+          ? (statusCode: HttpStatus.forbidden, path: rawPath)
+          : (statusCode: HttpStatus.ok, path: rawPath);
+    }
+
+    final expected = '/g/$token';
+    if (!rawPath.startsWith('$expected/')) {
+      return (statusCode: HttpStatus.forbidden, path: rawPath);
+    }
+
+    return (statusCode: HttpStatus.ok, path: rawPath.substring(expected.length));
+  }
+
+  /// Test hook: returns the status code `_handleRequest` would produce for a
+  /// path, without needing a live socket.
+  Future<int> debugHandlePath(String path) async =>
+      _authorizeAndStripPrefix(path).statusCode;
+
+  Future<void> _handleHlsRequest(HttpRequest request, String path) async {
     final sw = Stopwatch()..start();
     try {
       // Parse path: /hls/{session_id}/{path...}
-      final pathParts = request.uri.path.substring('/hls/'.length).split('/');
+      final pathParts = path.substring('/hls/'.length).split('/');
       if (pathParts.length < 2) {
         request.response.statusCode = HttpStatus.badRequest;
         _setCorsHeaders(request.response);
@@ -248,11 +367,10 @@ class LocalProxyService {
     }
   }
 
-  Future<void> _handleDirectRequest(HttpRequest request) async {
+  Future<void> _handleDirectRequest(HttpRequest request, String path) async {
     try {
       // Parse path: /direct/{file_id}/stream
-      final pathParts =
-          request.uri.path.substring('/direct/'.length).split('/');
+      final pathParts = path.substring('/direct/'.length).split('/');
       if (pathParts.length < 2) {
         request.response.statusCode = HttpStatus.badRequest;
         _setCorsHeaders(request.response);
@@ -294,11 +412,10 @@ class LocalProxyService {
     }
   }
 
-  Future<void> _handleDownloadRequest(HttpRequest request) async {
+  Future<void> _handleDownloadRequest(HttpRequest request, String path) async {
     try {
       // Parse path: /download/{job_id}/file
-      final pathParts =
-          request.uri.path.substring('/download/'.length).split('/');
+      final pathParts = path.substring('/download/'.length).split('/');
       if (pathParts.length < 2) {
         request.response.statusCode = HttpStatus.badRequest;
         _setCorsHeaders(request.response);
