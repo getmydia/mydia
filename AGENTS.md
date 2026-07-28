@@ -75,6 +75,20 @@ Android builds use the player's Nix flake (`player/flake.nix`) which provides Fl
 - Rust toolchain with Android targets (aarch64, armv7, x86_64, i686)
 - All necessary environment variables for Rust cross-compilation
 
+### Player macOS Builds
+
+macOS builds use the **host** toolchain — neither devenv nor `player/flake.nix`. Xcode and CocoaPods are Apple-licensed SDKs Nix cannot provide, and cargokit shells out to `rustup` to compile the Rust p2p core into the app bundle.
+
+**Commands:**
+
+- `./dev player macos run` - Debug build and run on this Mac (hot reload)
+- `./dev player macos build` - Release build
+- Both accept `--skip-codegen` to reuse existing build_runner output; extra args after `run` pass through to `flutter run`
+
+**Output:** `player/build/macos/Build/Products/Release/Mydia Player.app`
+
+**Requirements:** **Full Xcode** (Command Line Tools alone cannot build app bundles), CocoaPods (`pod`), Flutter, and rustup installed on the host. `./dev` preflights all four and prints the fix for whichever is missing.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
