@@ -27,6 +27,7 @@ import '../../widgets/subtitle_track_selector.dart';
 import '../../widgets/audio_track_selector.dart';
 import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/gesture_controls.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/up_next_overlay.dart';
@@ -1555,6 +1556,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           )
         else
           const Spacer(),
+        CastButton(onPressed: _showCastDevicePicker),
       ],
     );
   }
@@ -1685,40 +1687,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  // TODO: Re-enable cast button in top bar once casting is working
-  /// Build the cast button that opens device picker.
-  // ignore: unused_element
-  Widget _buildCastButton() {
-    if (!ref.watch(castCapabilitiesProvider).any)
-      return const SizedBox.shrink();
-
-    final isCasting = ref.watch(isCastingProvider);
-    final castDevice = ref.watch(currentCastDeviceProvider);
-
-    return IconButton(
-      icon: Icon(
-        isCasting ? Icons.cast_connected : Icons.cast,
-        color: isCasting ? Colors.blue : Colors.white,
-      ),
-      onPressed: _showCastDevicePicker,
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.5),
-      ),
-      tooltip: isCasting && castDevice != null
-          ? 'Casting to ${castDevice.name}'
-          : 'Cast to device',
-    );
-  }
-
   /// Show the cast device picker dialog, then hand the selected device to
   /// [CastSessionManager] to resolve a route and start playback.
   Future<void> _showCastDevicePicker() async {
     final device = await showCastDevicePicker(context);
     if (device == null || !mounted) return;
 
-    final manager = await ref.read(castSessionManagerProvider.future);
-
     try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
@@ -1751,6 +1728,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_castErrorMessage(e)),
+        backgroundColor: Colors.red,
+      ));
+    } catch (e) {
+      // Anything that isn't a CastBackendException: the session manager
+      // itself resolving (Hive, GraphQL client), or a non-typed failure from
+      // _setLanAccess/_store.save inside startCast. Without this, those
+      // failures would close the picker with no snackbar and no log.
+      debugPrint('[PlayerScreen] Unexpected error starting cast: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to start casting: $e'),
         backgroundColor: Colors.red,
       ));
     }
