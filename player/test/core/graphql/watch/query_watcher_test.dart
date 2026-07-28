@@ -16,7 +16,14 @@ query Ping {
 }
 ''';
 
+// `gql()` runs `AddTypenameVisitor`, which injects a `__typename` selection
+// into every selection set in the outgoing document, including the
+// operation's own root (see `visitOperationDefinitionNode` in
+// package:normalize). A response that omits the matching root-level
+// `__typename` fails cache normalization with a `PartialDataException`,
+// which surfaces as `result.hasException` on an otherwise successful fetch.
 Map<String, dynamic> _pingData(String value) => {
+      '__typename': 'Query',
       'ping': {
         '__typename': 'Ping',
         'id': 'ping-1',
@@ -186,6 +193,50 @@ void main() {
       expect(published.last.fetchedAt, isNotNull);
     });
 
+    test(
+        'a failed refresh keeps the earlier fetch timestamp and does not '
+        'overwrite the log', () async {
+      final log = InMemoryFetchLog();
+      final published = <Freshness>[];
+      var call = 0;
+      var clockValue = DateTime(2026, 7, 28, 12, 0);
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: Future<GraphQLClient>.value(
+          stubClient(StubLink((_, __) {
+            call++;
+            return call == 1
+                ? _pingData('first')
+                : graphqlErrorResponse('boom');
+          })),
+        ),
+        fetchLog: log,
+        document: gql(_pingQuery),
+        parse: (data) =>
+            (data['ping'] as Map<String, dynamic>)['value'] as String,
+        onFreshness: published.add,
+        clock: () => clockValue,
+      );
+      addTearDown(watcher.close);
+
+      final subscription = watcher.stream.listen((_) {}, onError: (_) {});
+      addTearDown(subscription.cancel);
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final firstFetchedAt = log.lastFetchedAt(_key);
+      expect(firstFetchedAt, isNotNull);
+
+      // Advance the clock so a bug that re-stamps on failure would be
+      // observable as a changed timestamp rather than a coincidental match.
+      clockValue = clockValue.add(const Duration(minutes: 1));
+      await watcher.refetch();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(log.lastFetchedAt(_key), firstFetchedAt);
+      expect(published.last.fetchedAt, firstFetchedAt);
+      expect(published.last.refreshFailed, isTrue);
+    });
+
     test('refetch goes back to the network and emits the new data', () async {
       var call = 0;
       final watcher = watcherFor(
@@ -205,6 +256,39 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(seen.last, 'second');
+    });
+
+    test(
+        'a fresh log entry with a cached value uses cacheAndNetwork end to '
+        'end: the cached value first, then the network value', () async {
+      final cache = GraphQLCache(store: InMemoryStore());
+      final request =
+          WatchQueryOptions<Map<String, dynamic>>(document: gql(_pingQuery))
+              .asRequest;
+      cache.writeQuery(request, data: _pingData('cached'), broadcast: false);
+
+      final log =
+          InMemoryFetchLog({_key: now.subtract(const Duration(minutes: 1))});
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: Future<GraphQLClient>.value(
+          stubClient(
+            StubLink.responses([_pingData('network')]),
+            cache: cache,
+          ),
+        ),
+        fetchLog: log,
+        document: gql(_pingQuery),
+        parse: (data) =>
+            (data['ping'] as Map<String, dynamic>)['value'] as String,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      await expectLater(
+        watcher.stream,
+        emitsInOrder(['cached', 'network']),
+      );
     });
 
     test('close stops the stream', () async {

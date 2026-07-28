@@ -16,7 +16,11 @@ class StubLink extends Link {
   /// Answers each call from [responses] in order, repeating the last entry
   /// once the script runs out.
   StubLink.responses(List<Object> responses)
-      : handler = ((_, index) =>
+      : assert(
+          responses.isNotEmpty,
+          'StubLink.responses requires at least one response',
+        ),
+        handler = ((_, index) =>
             responses[index < responses.length ? index : responses.length - 1]);
 
   final StubHandler handler;

@@ -125,20 +125,29 @@ class QueryWatcher<T> {
   void _onResult(QueryResult<Map<String, dynamic>> result) {
     final now = _clock();
 
+    // A failed network round-trip still arrives with `source: network`
+    // (`QueryManager._resolveQueryOnNetwork`'s catch path builds the result
+    // that way, and `carryForwardDataOnException` then attaches the
+    // *previous* data). Only a result with no exception is a completed
+    // fetch worth stamping; otherwise keep whatever the log already says.
     DateTime? fetchedAt;
-    if (result.source == QueryResultSource.network) {
+    if (result.source == QueryResultSource.network && !result.hasException) {
       fetchedAt = now;
       unawaited(fetchLog.record(key, now));
     } else {
       fetchedAt = fetchLog.lastFetchedAt(key);
     }
 
-    onFreshness?.call(Freshness.from(
-      result: result,
-      fetchedAt: fetchedAt,
-      maxAge: maxAge,
-      now: now,
-    ));
+    try {
+      onFreshness?.call(Freshness.from(
+        result: result,
+        fetchedAt: fetchedAt,
+        maxAge: maxAge,
+        now: now,
+      ));
+    } catch (error, stackTrace) {
+      _addError(error, stackTrace);
+    }
 
     final data = result.data;
     if (data != null) {
@@ -168,16 +177,15 @@ class QueryWatcher<T> {
   /// Refetches on the network. A no-op while a fetch is already in flight:
   /// `ObservableQuery.refetch()` throws when it is not refetch-safe, and a
   /// double pull-to-refresh must not surface an exception.
+  ///
+  /// If the client future itself rejected, `_query` stays null forever: the
+  /// captured future re-throws the same cached error on every await, so
+  /// retrying `_start()` here would only push a second identical error. A
+  /// watcher in that state stays dead until the provider that owns it is
+  /// rebuilt against a fresh client future.
   Future<void> refetch() async {
     if (_closed) return;
     await _started;
-
-    if (_query == null) {
-      // The cold start failed before the query existed (no client yet).
-      // Retry it so the error screen's "Try Again" can actually recover.
-      _started = _start();
-      await _started;
-    }
 
     final query = _query;
     if (query == null || !query.isRefetchSafe) return;
