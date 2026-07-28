@@ -346,6 +346,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildResultsGrid(SearchResults results) {
+    // Interim: flat grid over all sections so the project analyzes clean.
+    // Task 9 replaces this with the grouped-section body.
+    final flattened = results.sections.expand((s) => s.results).toList();
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -370,14 +373,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
-                final result = results.results[index];
+                final result = flattened[index];
                 return _SearchResultCard(
                   key: ValueKey(result.id),
                   result: result,
                   onTap: () => context.push(result.routePath),
                 );
               },
-              childCount: results.results.length,
+              childCount: flattened.length,
             ),
           ),
         ),

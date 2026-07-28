@@ -57,12 +57,10 @@ class SearchState {
     );
   }
 
-  bool get hasResults => results != null && results!.results.isNotEmpty;
+  bool get hasResults => results != null && results!.sections.isNotEmpty;
+
   bool get isEmpty =>
-      query.isNotEmpty &&
-      !isLoading &&
-      results != null &&
-      results!.results.isEmpty;
+      query.isNotEmpty && !isLoading && results != null && results!.isEmpty;
 }
 
 @riverpod
