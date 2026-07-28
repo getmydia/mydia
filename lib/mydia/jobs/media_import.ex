@@ -762,11 +762,12 @@ defmodule Mydia.Jobs.MediaImport do
         imported == [] ->
           {:error, representative_error(errors)}
 
-        # Some files imported, some failed — keep the generic partial-import
-        # signal so the successfully-imported files are not undone by a terminal
-        # cancel.
+        # Some files imported, some failed — keep the partial-import signal so
+        # the successfully-imported files are not undone by a terminal cancel,
+        # but attach the representative underlying reason so the user-facing
+        # message reflects the real cause instead of a generic hint.
         true ->
-          {:error, :partial_import}
+          {:error, {:partial_import, representative_error(errors)}}
       end
     end
   end
@@ -1752,9 +1753,13 @@ defmodule Mydia.Jobs.MediaImport do
       "Check library path permissions and available disk space."
   end
 
+  defp format_import_error({:partial_import, inner_reason}, _download) do
+    "Some files could not be imported. " <>
+      "First error: #{format_error_detail(inner_reason)}"
+  end
+
   defp format_import_error({:import_exception, message}, _download) do
-    "Unexpected error during import: #{message}. " <>
-      "This is often a filesystem permission or disk-space issue. " <>
+    "Unexpected error during import: #{format_error_detail({:import_exception, message})}. " <>
       "Import will retry automatically."
   end
 
@@ -1789,6 +1794,21 @@ defmodule Mydia.Jobs.MediaImport do
   defp format_import_error(reason, _download) do
     inspect(reason)
   end
+
+  # Renders the underlying per-file failure reason compactly for inclusion in
+  # user-facing messages. Exception messages can be huge (e.g. an Ecto error
+  # embeds the full query), so only the first line is kept.
+  defp format_error_detail({:import_exception, message}) do
+    message |> String.split("\n", trim: true) |> List.first() |> String.trim()
+  end
+
+  defp format_error_detail(reason) when is_atom(reason) do
+    reason |> Atom.to_string() |> String.replace("_", " ")
+  end
+
+  defp format_error_detail(reason) when is_binary(reason), do: reason
+
+  defp format_error_detail(reason), do: inspect(reason)
 
   # Helper to get a human-readable media type name
   defp get_media_type_name(download) do
