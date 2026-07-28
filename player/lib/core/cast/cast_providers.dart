@@ -1,73 +1,104 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'cast_service.dart';
-import '../player/platform_features.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
+
 import '../../domain/models/cast_device.dart';
+import '../connection/connection_provider.dart';
+import '../graphql/graphql_provider.dart';
+import '../p2p/local_proxy_service.dart';
+import '../player/progress_service.dart';
+import 'cast_backend.dart';
+import 'cast_capabilities.dart';
+import 'cast_route_resolver.dart';
+import 'cast_session_manager.dart';
+import 'cast_session_store.dart';
+import 'dart_cast_backend.dart';
 
-/// Provider for the CastService singleton.
-final castServiceProvider = Provider<CastService>((ref) {
-  final service = CastService();
-  final canUseCast = PlatformFeatures.isMobile;
-
-  // Chromecast plugin support is limited to mobile platforms.
-  if (canUseCast) {
-    service.startDiscovery();
-  }
-
-  // Clean up when provider is disposed
-  ref.onDispose(() {
-    if (canUseCast) {
-      service.stopDiscovery();
-    }
-    service.dispose();
-  });
-
-  return service;
+/// What this build can discover. Overridden in tests.
+final castCapabilitiesProvider = Provider<CastCapabilities>((ref) {
+  return CastCapabilities.forCurrentPlatform();
 });
 
-/// Provider for the stream of available Chromecast devices.
-final availableDevicesProvider = StreamProvider<List<CastDevice>>((ref) {
-  final service = ref.watch(castServiceProvider);
-  return service.devicesStream;
+/// The cast transport. Overridden in tests with a fake.
+final castBackendProvider = Provider<CastBackend>((ref) {
+  final backend = DartCastBackend();
+  ref.onDispose(() => backend.dispose());
+  return backend;
 });
 
-/// Provider for the current casting session.
-final castSessionProvider = StreamProvider<CastSession?>((ref) {
-  final service = ref.watch(castServiceProvider);
-  return service.sessionStream;
+final castSessionStoreProvider = FutureProvider<CastSessionStore>((ref) async {
+  final box = await Hive.openBox<Map>(HiveCastSessionStore.boxName);
+  return HiveCastSessionStore(box);
 });
 
-/// Provider that returns true if actively casting.
+final castSessionManagerProvider =
+    FutureProvider<CastSessionManager>((ref) async {
+  final store = await ref.watch(castSessionStoreProvider.future);
+  final client = await ref.watch(asyncGraphqlClientProvider.future);
+  final proxy = ref.watch(localProxyServiceProvider);
+
+  final manager = CastSessionManager(
+    backend: ref.watch(castBackendProvider),
+    store: store,
+    progressService: ProgressService(client),
+    resolverFactory: () => CastRouteResolver(
+      isP2pMode: ref.read(connectionProvider).isP2PMode,
+      serverUrl: ref.read(serverUrlProvider).whenOrNull(data: (url) => url),
+      mediaToken: ref.read(mediaTokenProvider).whenOrNull(data: (t) => t),
+      lanBaseUrl: proxy.lanBaseUrl,
+    ),
+    setLanAccess: proxy.setLanAccess,
+  );
+
+  ref.onDispose(manager.dispose);
+  return manager;
+});
+
+/// Devices discovered while something is listening.
+///
+/// Autodispose is load-bearing: discovery is multicast chatter and a battery
+/// drain, so it runs only while the picker is open.
+final castDiscoveryProvider =
+    StreamProvider.autoDispose<List<CastDevice>>((ref) {
+  final backend = ref.watch(castBackendProvider);
+  final capabilities = ref.watch(castCapabilitiesProvider);
+
+  if (!capabilities.any) return Stream.value(const []);
+
+  ref.onDispose(backend.stopDiscovery);
+
+  return backend.startDiscovery(capabilities: capabilities);
+});
+
+final castSessionProvider = StreamProvider<CastSession?>((ref) async* {
+  final manager = await ref.watch(castSessionManagerProvider.future);
+  yield manager.currentSession;
+  yield* manager.sessionStream;
+});
+
 final isCastingProvider = Provider<bool>((ref) {
-  final sessionAsync = ref.watch(castSessionProvider);
-  return sessionAsync.maybeWhen(
-    data: (session) => session != null,
-    orElse: () => false,
-  );
+  return ref.watch(castSessionProvider).maybeWhen(
+        data: (session) => session != null,
+        orElse: () => false,
+      );
 });
 
-/// Provider that returns the current cast device, if any.
 final currentCastDeviceProvider = Provider<CastDevice?>((ref) {
-  final sessionAsync = ref.watch(castSessionProvider);
-  return sessionAsync.maybeWhen(
-    data: (session) => session?.device,
-    orElse: () => null,
-  );
+  return ref.watch(castSessionProvider).maybeWhen(
+        data: (session) => session?.device,
+        orElse: () => null,
+      );
 });
 
-/// Provider for cast media info.
 final castMediaInfoProvider = Provider<CastMediaInfo?>((ref) {
-  final sessionAsync = ref.watch(castSessionProvider);
-  return sessionAsync.maybeWhen(
-    data: (session) => session?.mediaInfo,
-    orElse: () => null,
-  );
+  return ref.watch(castSessionProvider).maybeWhen(
+        data: (session) => session?.mediaInfo,
+        orElse: () => null,
+      );
 });
 
-/// Provider for cast playback state.
 final castPlaybackStateProvider = Provider<CastPlaybackState>((ref) {
-  final sessionAsync = ref.watch(castSessionProvider);
-  return sessionAsync.maybeWhen(
-    data: (session) => session?.playbackState ?? CastPlaybackState.idle,
-    orElse: () => CastPlaybackState.idle,
-  );
+  return ref.watch(castSessionProvider).maybeWhen(
+        data: (session) => session?.playbackState ?? CastPlaybackState.idle,
+        orElse: () => CastPlaybackState.idle,
+      );
 });
