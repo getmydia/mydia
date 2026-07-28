@@ -116,30 +116,9 @@ class ProgressService {
       return;
     }
 
-    try {
-      _lastSyncTime = DateTime.now();
+    _lastSyncTime = DateTime.now();
 
-      debugPrint('[ProgressService] Syncing movie progress: movieId=$movieId, position=${progress.positionSeconds}, duration=${progress.durationSeconds}');
-
-      final options = MutationOptions(
-        document: documentNodeMutationUpdateMovieProgress,
-        variables: Variables$Mutation$UpdateMovieProgress(
-          movieId: movieId,
-          positionSeconds: progress.positionSeconds,
-          durationSeconds: progress.durationSeconds,
-        ).toJson(),
-      );
-
-      final result = await _client.mutate(options);
-
-      if (result.hasException) {
-        debugPrint('[ProgressService] Error syncing movie progress: ${result.exception}');
-      } else {
-        debugPrint('[ProgressService] Movie progress synced successfully');
-      }
-    } catch (e) {
-      debugPrint('[ProgressService] Exception syncing movie progress: $e');
-    }
+    await _mutateMovieProgress(movieId, progress);
   }
 
   Future<void> _syncEpisodeProgress(
@@ -163,26 +142,96 @@ class ProgressService {
       return;
     }
 
+    _lastSyncTime = DateTime.now();
+
+    await _mutateEpisodeProgress(episodeId, progress);
+  }
+
+  /// Sync movie progress from a raw position, for playback we do not own —
+  /// notably a cast receiver, where there is no local `Player` to read.
+  Future<void> syncMoviePosition(
+    String movieId,
+    Duration position,
+    Duration duration,
+  ) async {
+    final progress = resolveSync(position, duration);
+    if (progress == null) {
+      debugPrint(
+        '[ProgressService] Skipping movie sync: invalid position/duration '
+        '(position=${position.inSeconds}s, duration=${duration.inSeconds}s)',
+      );
+      return;
+    }
+
+    await _mutateMovieProgress(movieId, progress);
+  }
+
+  /// Sync episode progress from a raw position. See [syncMoviePosition].
+  Future<void> syncEpisodePosition(
+    String episodeId,
+    Duration position,
+    Duration duration,
+  ) async {
+    final progress = resolveSync(position, duration);
+    if (progress == null) {
+      debugPrint(
+        '[ProgressService] Skipping episode sync: invalid position/duration '
+        '(position=${position.inSeconds}s, duration=${duration.inSeconds}s)',
+      );
+      return;
+    }
+
+    await _mutateEpisodeProgress(episodeId, progress);
+  }
+
+  Future<void> _mutateMovieProgress(
+    String movieId,
+    ({int positionSeconds, int durationSeconds}) progress,
+  ) async {
     try {
-      _lastSyncTime = DateTime.now();
+      debugPrint(
+        '[ProgressService] Syncing movie progress: movieId=$movieId, '
+        'position=${progress.positionSeconds}, duration=${progress.durationSeconds}',
+      );
 
-      debugPrint('[ProgressService] Syncing episode progress: episodeId=$episodeId, position=${progress.positionSeconds}, duration=${progress.durationSeconds}');
+      final result = await _client.mutate(MutationOptions(
+        document: documentNodeMutationUpdateMovieProgress,
+        variables: Variables$Mutation$UpdateMovieProgress(
+          movieId: movieId,
+          positionSeconds: progress.positionSeconds,
+          durationSeconds: progress.durationSeconds,
+        ).toJson(),
+      ));
 
-      final options = MutationOptions(
+      if (result.hasException) {
+        debugPrint('[ProgressService] Error syncing movie progress: ${result.exception}');
+      }
+    } catch (e) {
+      debugPrint('[ProgressService] Exception syncing movie progress: $e');
+    }
+  }
+
+  Future<void> _mutateEpisodeProgress(
+    String episodeId,
+    ({int positionSeconds, int durationSeconds}) progress,
+  ) async {
+    try {
+      debugPrint(
+        '[ProgressService] Syncing episode progress: episodeId=$episodeId, '
+        'position=${progress.positionSeconds}, duration=${progress.durationSeconds}',
+      );
+
+      final result = await _client.mutate(MutationOptions(
         document: documentNodeMutationUpdateEpisodeProgress,
         variables: Variables$Mutation$UpdateEpisodeProgress(
           episodeId: episodeId,
           positionSeconds: progress.positionSeconds,
           durationSeconds: progress.durationSeconds,
         ).toJson(),
-      );
-
-      final result = await _client.mutate(options);
+      ));
 
       if (result.hasException) {
         debugPrint('[ProgressService] Error syncing episode progress: ${result.exception}');
-      } else {
-        debugPrint('[ProgressService] Episode progress synced successfully');
       }
     } catch (e) {
       debugPrint('[ProgressService] Exception syncing episode progress: $e');
@@ -200,6 +249,14 @@ class ProgressService {
     if (duration <= 0) return false;
 
     return (position / duration) >= _watchedThreshold;
+  }
+
+  /// Whether a position counts as watched, without needing a `Player`.
+  static bool isWatchedAt(Duration position, Duration duration) {
+    final seconds = DurationOverride.getDuration(duration).inSeconds;
+    if (seconds <= 0) return false;
+
+    return (position.inSeconds / seconds) >= _watchedThreshold;
   }
 
   /// Disposes the service and cancels any active timers.
