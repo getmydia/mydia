@@ -60,7 +60,7 @@ defmodule Mydia.LibrarySearch do
 
   alias Mydia.Accounts.User
   alias Mydia.LibrarySearch.{Rank, Result, Results, Section, Tokenizer}
-  alias Mydia.Media.MediaItem
+  alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Repo
 
@@ -112,10 +112,21 @@ defmodule Mydia.LibrarySearch do
     %Section{type: type, results: results, total_count: Repo.aggregate(base, :count)}
   end
 
-  # Placeholder for section types without a builder yet: :episode arrives in
-  # Task 3, :collection in Task 4. Kept last so each task's specific clause,
-  # inserted immediately after the :movie/:tv_show clause above, takes
-  # precedence over this one.
+  defp build_section(:episode, _user, normalized, limit) do
+    base = episode_base(normalized)
+
+    results =
+      base
+      |> episode_rows(normalized, limit)
+      |> Repo.all()
+      |> Enum.map(&build_episode_result/1)
+
+    %Section{type: :episode, results: results, total_count: Repo.aggregate(base, :count)}
+  end
+
+  # Placeholder for section types without a builder yet: :collection arrives in
+  # Task 4. Kept last so each task's specific clause, inserted immediately
+  # after the :movie/:tv_show clause above, takes precedence over this one.
   defp build_section(type, _user, _normalized, _limit) do
     %Section{type: type, results: [], total_count: 0}
   end
@@ -159,6 +170,48 @@ defmodule Mydia.LibrarySearch do
       score: rank / 1,
       poster_path: MetadataAccess.get_field(item, :poster_path),
       backdrop_path: MetadataAccess.get_field(item, :backdrop_path)
+    }
+  end
+
+  ## episodes
+
+  defp episode_base(normalized) do
+    Enum.reduce(normalized.tokens, from(e in Episode), fn token, query ->
+      pattern = Tokenizer.contains_pattern(token)
+
+      where(query, [e], fragment("lower(?) LIKE ? ESCAPE '\\'", e.title, ^pattern))
+    end)
+  end
+
+  defp episode_rows(base, normalized, limit) do
+    prefix = Tokenizer.prefix_pattern(normalized.query)
+    word = Tokenizer.word_pattern(normalized.query)
+
+    from(e in base,
+      join: m in assoc(e, :media_item),
+      select: %{
+        episode: e,
+        show: m,
+        rank: selected_as(Rank.rank(e.title, ^normalized.query, ^prefix, ^word), :rank)
+      },
+      order_by: [desc: selected_as(:rank), asc: e.title],
+      limit: ^limit
+    )
+  end
+
+  defp build_episode_result(%{episode: episode, show: show, rank: rank}) do
+    %Result{
+      id: episode.id,
+      type: :episode,
+      title: episode.title,
+      score: rank / 1,
+      subtitle: show.title,
+      season_number: episode.season_number,
+      episode_number: episode.episode_number,
+      parent_id: show.id,
+      still_path: MetadataAccess.get_field(episode, :still_path),
+      poster_path: MetadataAccess.get_field(show, :poster_path),
+      backdrop_path: MetadataAccess.get_field(show, :backdrop_path)
     }
   end
 end
