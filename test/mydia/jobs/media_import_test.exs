@@ -1413,4 +1413,76 @@ defmodule Mydia.Jobs.MediaImportTest do
              "refresh_episodes_for_tv_show should be invoked at most once per import job; got #{refresh_attempts} attempts across 5 unresolved files"
     end
   end
+
+  describe "destination filename conflicts" do
+    @tag :tmp_dir
+    test "re-running an import adopts the earlier conflict copy instead of duplicating it",
+         %{tmp_dir: tmp_dir} do
+      # Conflict names used to carry a unix timestamp, so every retry of an
+      # import minted a fresh filename and re-copied the whole file. Under
+      # max_attempts: 1000 that is how misplaced episodes became ~980 GiB of
+      # duplicates. Numbering deterministically means a retry finds what the
+      # previous attempt wrote and adopts it.
+      library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      source = Path.join(download_dir, "Conflict.Movie.2024.1080p.mkv")
+      File.write!(source, "the freshly downloaded copy")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Conflict Movie", year: 2024})
+
+      # Squat the destination with different content so the import is forced
+      # down the conflict path.
+      dest_dir = Path.join(library_path.path, "Conflict Movie (2024)")
+      File.mkdir_p!(dest_dir)
+      File.write!(Path.join(dest_dir, "Conflict Movie (2024).mkv"), "a different, older file")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "ConflictClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "ConflictClient",
+          download_client_id: "conflict-1"
+        })
+
+      args = %{"download_id" => download.id, "save_path" => download_dir}
+
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir)
+
+      # Clear imported_at so the job re-runs the import rather than
+      # short-circuiting on the already-done guard. Re-fetch first: the local
+      # struct predates the import, so changing it produces an empty changeset.
+      download.id
+      |> Mydia.Downloads.get_download!()
+      |> Ecto.Changeset.change(%{imported_at: nil})
+      |> Repo.update!()
+
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir),
+             "retry must reuse the existing conflict copy, not mint another one"
+    end
+
+    defp conflict_copies(dest_dir) do
+      dest_dir
+      |> File.ls!()
+      |> Enum.filter(&(&1 != "Conflict Movie (2024).mkv" and String.ends_with?(&1, ".mkv")))
+      |> Enum.sort()
+    end
+  end
 end

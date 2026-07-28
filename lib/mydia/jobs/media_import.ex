@@ -91,6 +91,12 @@ defmodule Mydia.Jobs.MediaImport do
   @snooze_interval_seconds 300
   @max_snooze_count 12
 
+  # How many `name.N.ext` variants to try when a destination filename is taken
+  # by different content. Deliberately small: more than a handful of distinct
+  # files claiming one episode's filename means the parse is wrong, and
+  # numbering on forever is what let one bad import fill a disk.
+  @max_conflict_suffixes 10
+
   @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"download_id" => _} = raw_args, attempt: attempt}) do
@@ -193,6 +199,25 @@ defmodule Mydia.Jobs.MediaImport do
   defp terminal_failure?({:path_mapping_mismatch, _path}, _attempt), do: true
   defp terminal_failure?({:path_not_found, _path}, attempt) when attempt >= 3, do: true
   defp terminal_failure?({:path_not_accessible, _path}, attempt) when attempt >= 3, do: true
+  # The client reported a per-download file list and none of those paths exist
+  # locally. A mount blip or a client still moving files can explain it, so
+  # allow a few retries; past that it is a path-mapping or client problem that
+  # only an operator resolves.
+  defp terminal_failure?({:scoped_files_missing, _count}, attempt) when attempt >= 3, do: true
+  # The client reports its own download root as this download's save_path, so we
+  # cannot tell which files belong to it. Retrying re-reads the same config and
+  # gets the same answer; only an operator changing the client's layout (or
+  # adding a path mapping) fixes it.
+  defp terminal_failure?({:save_path_is_download_root, _path}, _attempt), do: true
+  # A partial import means some files landed and some failed. A couple of
+  # retries can pick up a transient per-file failure, but with max_attempts:
+  # 1000 an unfixable one re-walks (and historically re-copied) the whole
+  # download forever. Cap it so it surfaces as an issue instead.
+  defp terminal_failure?(:partial_import, attempt) when attempt >= 3, do: true
+  # Too many distinct files claiming one destination filename. Retrying tries
+  # the same exhausted suffixes; the parse or the download contents need
+  # looking at.
+  defp terminal_failure?({:too_many_conflicts, _path}, _attempt), do: true
   # {:destination_not_accessible, _} is intentionally NOT terminal: it's almost
   # always a fixable library-volume permission/disk issue. Retrying indefinitely
   # lets the import self-heal once the path becomes writable (the exact recovery
@@ -279,54 +304,104 @@ defmodule Mydia.Jobs.MediaImport do
           Logger.error("No files found for download", download_id: download.id)
           {:error, :no_files}
 
+        # The client told us exactly which files belong to this download and
+        # none of them are on disk. Dropping to the save_path fallback here
+        # would recursively sweep a directory the client has already told us
+        # is *not* scoped to this download — the exact contamination the file
+        # list exists to prevent. Fail instead.
+        {:error, {:scoped_files_missing, _count} = error} ->
+          {:error, error}
+
         {:error, error} ->
           Logger.warning("Client query failed, trying save_path fallback",
             download_id: download.id,
             error: inspect(error)
           )
 
-          if args.save_path && args.save_path != "" do
-            case list_files_in_path(mapped_path(args.save_path, download.id)) do
-              {:ok, files} when files != [] ->
-                Logger.info("Found files via save_path fallback",
-                  download_id: download.id,
-                  save_path: args.save_path,
-                  file_count: length(files)
-                )
-
-                process_import(download, files, args)
-
-              {:ok, []} ->
-                Logger.error("No files found at save_path",
-                  download_id: download.id,
-                  save_path: args.save_path
-                )
-
-                {:error, :no_files}
-
-              {:error, path_error} ->
-                Logger.error("save_path fallback also failed",
-                  download_id: download.id,
-                  save_path: args.save_path,
-                  error: inspect(path_error)
-                )
-
-                {:error, path_error}
-            end
-          else
-            Logger.error("Failed to get download files and no save_path available",
-              download_id: download.id,
-              error: inspect(error)
-            )
-
-            {:error, :client_error}
-          end
+          save_path_fallback(download, args, client_info, error)
       end
     else
       Logger.error("Could not get client info for download", download_id: download.id)
       {:error, :no_client}
     end
   end
+
+  # Last-resort listing when the client cannot tell us which files belong to
+  # this download. This walks `save_path` recursively, so it is only safe when
+  # `save_path` is specific to this download. Clients that share one output
+  # directory across every torrent (rqbit, and qBittorrent for single-file
+  # torrents) report the shared root here, and sweeping it copies every
+  # neighbouring release into this download's library folder.
+  defp save_path_fallback(download, args, client_info, original_error) do
+    cond do
+      is_nil(args.save_path) or args.save_path == "" ->
+        Logger.error("Failed to get download files and no save_path available",
+          download_id: download.id,
+          error: inspect(original_error)
+        )
+
+        {:error, :client_error}
+
+      shared_download_root?(args.save_path, client_info) ->
+        Logger.error(
+          "Refusing save_path fallback: save_path is the client's download root",
+          download_id: download.id,
+          save_path: args.save_path,
+          download_directory: client_info.download_directory
+        )
+
+        {:error, {:save_path_is_download_root, args.save_path}}
+
+      true ->
+        do_save_path_fallback(download, args)
+    end
+  end
+
+  defp do_save_path_fallback(download, args) do
+    case list_files_in_path(mapped_path(args.save_path, download.id)) do
+      {:ok, files} when files != [] ->
+        Logger.info("Found files via save_path fallback",
+          download_id: download.id,
+          save_path: args.save_path,
+          file_count: length(files)
+        )
+
+        process_import(download, files, args)
+
+      {:ok, []} ->
+        Logger.error("No files found at save_path",
+          download_id: download.id,
+          save_path: args.save_path
+        )
+
+        {:error, :no_files}
+
+      {:error, path_error} ->
+        Logger.error("save_path fallback also failed",
+          download_id: download.id,
+          save_path: args.save_path,
+          error: inspect(path_error)
+        )
+
+        {:error, path_error}
+    end
+  end
+
+  # True when the reported save_path is the client's configured download
+  # directory rather than a per-download subfolder. Compared after path
+  # mapping so a remote root and its local mount both match.
+  defp shared_download_root?(save_path, %{download_directory: root})
+       when is_binary(save_path) and save_path != "" and is_binary(root) and root != "" do
+    same_dir?(save_path, root) or
+      same_dir?(mapped_path_quiet(save_path), mapped_path_quiet(root))
+  end
+
+  defp shared_download_root?(_save_path, _client_info), do: false
+
+  defp same_dir?(a, b) when is_binary(a) and a != "" and is_binary(b) and b != "",
+    do: Path.expand(a) == Path.expand(b)
+
+  defp same_dir?(_a, _b), do: false
 
   defp process_import(download, files, args) do
     # Get library path for this media type
@@ -531,7 +606,8 @@ defmodule Mydia.Jobs.MediaImport do
           adapter: adapter,
           config: build_client_config(client_config),
           client_id: download.download_client_id,
-          remove_completed: Map.get(client_config, :remove_completed, false)
+          remove_completed: Map.get(client_config, :remove_completed, false),
+          download_directory: Map.get(client_config, :download_directory)
         }
       end
     end
@@ -540,18 +616,70 @@ defmodule Mydia.Jobs.MediaImport do
   defp get_download_files(client_info, download) do
     case Client.get_status(client_info.adapter, client_info.config, client_info.client_id) do
       {:ok, status} ->
-        if status.save_path && status.save_path != "" do
-          status.save_path
-          |> mapped_path(download.id)
-          |> list_files_in_path()
-        else
-          Logger.warning("No save_path in status", download_id: download.id)
-          {:error, :no_save_path}
-        end
+        resolve_status_files(status, download.id)
 
       {:error, error} ->
         {:error, error}
     end
+  end
+
+  # Prefer the client's explicit per-torrent file list when available. Falling
+  # back to a recursive listing of `save_path` is unsafe for clients (rqbit)
+  # that share one output folder across many torrents — that path is what
+  # cross-contaminated series libraries on galactica.
+  defp resolve_status_files(%{files: files}, download_id)
+       when is_list(files) and files != [] do
+    resolved =
+      files
+      |> Enum.map(&mapped_path(&1, download_id))
+      |> Enum.flat_map(&file_entry_if_exists/1)
+
+    case resolved do
+      [] ->
+        Logger.warning("Torrent file list resolved to no existing paths",
+          download_id: download_id,
+          listed_count: length(files)
+        )
+
+        {:error, {:scoped_files_missing, length(files)}}
+
+      entries ->
+        {:ok, entries}
+    end
+  end
+
+  defp resolve_status_files(%{save_path: save_path}, download_id)
+       when is_binary(save_path) and save_path != "" do
+    save_path
+    |> mapped_path(download_id)
+    |> list_files_in_path()
+  end
+
+  defp resolve_status_files(_status, download_id) do
+    Logger.warning("No save_path in status", download_id: download_id)
+    {:error, :no_save_path}
+  end
+
+  defp file_entry_if_exists(path) do
+    cond do
+      not File.exists?(path) ->
+        []
+
+      File.dir?(path) ->
+        list_files_recursive(path)
+
+      true ->
+        [
+          %{
+            path: path,
+            name: Path.basename(path),
+            size: File.stat!(path).size
+          }
+        ]
+    end
+  rescue
+    _e in File.Error ->
+      []
   end
 
   # Apply configured remote→local path mappings before touching the filesystem,
@@ -572,6 +700,13 @@ defmodule Mydia.Jobs.MediaImport do
         mapped
     end
   end
+
+  # Same rewrite without the log line, for comparisons that are not about to
+  # touch the filesystem.
+  defp mapped_path_quiet(path) when is_binary(path),
+    do: Mydia.Library.PathMapping.rewrite(path)
+
+  defp mapped_path_quiet(path), do: path
 
   defp list_files_in_path(path) do
     path_stat = File.stat(path)
@@ -1303,8 +1438,11 @@ defmodule Mydia.Jobs.MediaImport do
           {:ok, existing_file}
       end
     else
-      # Copy or move file
-      case copy_or_move_file(file.path, dest_path, args) do
+      # Copy or move file. `:expected_size` closes the window between the
+      # File.exists?/1 check above and the placement itself: a concurrent
+      # import that already wrote the right bytes is adopted rather than
+      # hardlinked-onto-EEXIST and re-copied.
+      case copy_or_move_file(file.path, dest_path, args, expected_size: file.size) do
         :ok ->
           create_media_file_record(dest_path, file.size, episode, download, library_path)
 
@@ -1321,45 +1459,102 @@ defmodule Mydia.Jobs.MediaImport do
   end
 
   defp handle_file_conflict(file, dest_path, episode, download, library_path, args) do
-    # Check if sizes match
-    dest_size = File.stat!(dest_path).size
-
-    if dest_size == file.size do
+    if file_size(dest_path) == file.size do
       # Files are likely identical - create DB record
       Logger.info("File sizes match, creating DB record", path: dest_path)
       create_media_file_record(dest_path, file.size, episode, download, library_path)
     else
-      # Files differ - rename new file
-      new_dest = generate_unique_path(dest_path)
-      Logger.info("File conflict, using unique name", new_path: new_dest)
-
-      case copy_or_move_file(file.path, new_dest, args) do
-        :ok ->
-          create_media_file_record(new_dest, file.size, episode, download, library_path)
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      place_conflicting_file(file, dest_path, episode, download, library_path, args)
     end
   end
 
-  defp generate_unique_path(path) do
-    ext = Path.extname(path)
-    base = Path.basename(path, ext)
-    dir = Path.dirname(path)
+  defp place_conflicting_file(file, dest_path, episode, download, library_path, args) do
+    case resolve_conflict_path(dest_path, file.size) do
+      {:existing, path} ->
+        # A previous attempt already placed this exact file under a conflict
+        # suffix. Adopt it instead of copying the bytes again.
+        Logger.info("Reusing conflict copy placed by an earlier attempt", path: path)
+        create_media_file_record(path, file.size, episode, download, library_path)
 
-    timestamp = DateTime.utc_now() |> DateTime.to_unix()
-    Path.join(dir, "#{base}.#{timestamp}#{ext}")
+      {:new, path} ->
+        Logger.info("File conflict, using unique name", new_path: path)
+
+        case copy_or_move_file(file.path, path, args, expected_size: file.size) do
+          :ok -> create_media_file_record(path, file.size, episode, download, library_path)
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Could not find a free conflict filename",
+          dest: dest_path,
+          reason: inspect(reason)
+        )
+
+        {:error, reason}
+    end
   end
 
-  defp copy_or_move_file(source, dest, %Args{} = args) do
+  # Picks the destination for a file whose ideal name is already taken by
+  # different content.
+  #
+  # This used to append `DateTime.to_unix()`, which made every retry of a
+  # failed import mint a brand-new filename and re-copy the whole file. With
+  # `max_attempts: 1000` that is how a handful of misplaced episodes became
+  # ~980 GiB of duplicates in production. Numbering deterministically means a
+  # retry lands on the same candidate, sees the file it wrote last time, and
+  # adopts it instead of copying again.
+  #
+  # Returns `{:existing, path}` when a suffixed sibling already holds content
+  # of the expected size, `{:new, path}` for the lowest free suffix, or
+  # `{:error, {:too_many_conflicts, dest}}` once the suffix budget is spent.
+  defp resolve_conflict_path(dest_path, size) do
+    ext = Path.extname(dest_path)
+    base = Path.basename(dest_path, ext)
+    dir = Path.dirname(dest_path)
+
+    Enum.reduce_while(1..@max_conflict_suffixes, nil, fn n, _acc ->
+      candidate = Path.join(dir, "#{base}.#{n}#{ext}")
+
+      cond do
+        not File.exists?(candidate) -> {:halt, {:new, candidate}}
+        file_size(candidate) == size -> {:halt, {:existing, candidate}}
+        true -> {:cont, nil}
+      end
+    end)
+    |> case do
+      nil -> {:error, {:too_many_conflicts, dest_path}}
+      result -> result
+    end
+  end
+
+  # File.stat/1 rather than File.stat!/1: the caller has already checked the
+  # path exists, but a file that vanishes in between should not crash the job.
+  defp file_size(path) do
+    case File.stat(path) do
+      {:ok, %File.Stat{size: size}} -> size
+      {:error, _} -> nil
+    end
+  end
+
+  defp copy_or_move_file(source, dest, %Args{} = args, opts) do
     # Import keeps the source file (seeding) after a hardlink, so
     # remove_source_after_hardlink stays false. Non-hardlink fallback is move
     # only when move_files is set, otherwise copy.
-    case FileOrganizer.place_file(source, dest,
-           use_hardlinks: args.use_hardlinks,
-           fallback: if(args.move_files, do: :move, else: :copy)
-         ) do
+    #
+    # `:expected_size` lets FileOrganizer treat an already-correct destination
+    # as placed instead of hardlinking onto EEXIST and falling through to a
+    # full copy — the difference between a retry being free and a retry
+    # duplicating the file.
+    place_opts =
+      Keyword.merge(
+        [
+          use_hardlinks: args.use_hardlinks,
+          fallback: if(args.move_files, do: :move, else: :copy)
+        ],
+        opts
+      )
+
+    case FileOrganizer.place_file(source, dest, place_opts) do
       {:ok, action} ->
         Logger.debug("Placed file", from: source, to: dest, action: action)
         :ok
@@ -1709,6 +1904,30 @@ defmodule Mydia.Jobs.MediaImport do
     "No files found in download location. " <>
       "The download may have been moved, deleted, or is still extracting. " <>
       "Import will retry automatically."
+  end
+
+  defp format_import_error({:too_many_conflicts, path}, _download) do
+    "Too many different files want the same library filename: #{path}. " <>
+      "The download probably contains several releases parsed as the same " <>
+      "episode. Check its contents before retrying."
+  end
+
+  defp format_import_error({:scoped_files_missing, count}, download) do
+    client_name = download.download_client || "the download client"
+
+    "#{client_name} listed #{count} file(s) for this download, but none of them " <>
+      "exist where Mydia looked. The client's paths likely differ from Mydia's " <>
+      "view of the same volume — add a path mapping or fix the mount."
+  end
+
+  defp format_import_error({:save_path_is_download_root, path}, download) do
+    client_name = download.download_client || "The download client"
+
+    "#{client_name} reports this download's location as its own download root " <>
+      "(#{path}) instead of a folder for this release. Importing from there " <>
+      "would pull in every other download in that directory, so it was refused. " <>
+      "Enable per-torrent subfolders in the client, or clear the client's " <>
+      "download directory setting in Settings → Download Clients if it is wrong."
   end
 
   defp format_import_error({:path_mapping_mismatch, path}, _download) do

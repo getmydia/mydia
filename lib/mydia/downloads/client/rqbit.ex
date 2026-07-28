@@ -265,9 +265,16 @@ defmodule Mydia.Downloads.Client.Rqbit do
   # Builds a DownloadStatus from a torrent details map and a stats map. Both the
   # list endpoint (stats embedded per item) and the single-status path (details +
   # stats/v1) converge here.
+  #
+  # `files` is always populated from the torrent's own file list when present.
+  # rqbit frequently sets `output_folder` to a shared download directory for
+  # single-file torrents; without an explicit file list MediaImport would
+  # recurse that shared folder and import every neighboring torrent's files
+  # into the wrong series library.
   defp build_status(details, stats) do
     finished = stats["finished"] == true
     total_bytes = stats["total_bytes"] || 0
+    output_folder = details["output_folder"] || ""
 
     DownloadStatus.new(%{
       id: details["info_hash"],
@@ -281,11 +288,60 @@ defmodule Mydia.Downloads.Client.Rqbit do
       size: total_bytes,
       eta: parse_eta(stats),
       ratio: ratio(stats["uploaded_bytes"], total_bytes),
-      save_path: details["output_folder"] || "",
+      save_path: output_folder,
+      files: resolve_torrent_files(output_folder, details["files"]),
       added_at: nil,
       completed_at: nil
     })
   end
+
+  # Resolve absolute paths for files belonging to this torrent.
+  # Prefer `name` (path relative to output_folder); fall back to joining
+  # `components`. Skip files marked `included: false`.
+  defp resolve_torrent_files(_output_folder, files) when not is_list(files), do: nil
+
+  defp resolve_torrent_files(output_folder, files) do
+    paths =
+      files
+      |> Enum.filter(&file_included?/1)
+      |> Enum.map(&absolute_torrent_path(output_folder, &1))
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+
+    case paths do
+      [] -> nil
+      list -> list
+    end
+  end
+
+  defp file_included?(%{"included" => false}), do: false
+  defp file_included?(_), do: true
+
+  defp absolute_torrent_path(output_folder, file) when is_map(file) do
+    rel =
+      cond do
+        is_binary(file["name"]) and file["name"] != "" ->
+          file["name"]
+
+        is_list(file["components"]) and file["components"] != [] ->
+          Path.join(file["components"])
+
+        true ->
+          nil
+      end
+
+    cond do
+      is_nil(rel) ->
+        nil
+
+      output_folder == "" ->
+        rel
+
+      true ->
+        Path.join(output_folder, rel)
+    end
+  end
+
+  defp absolute_torrent_path(_output_folder, _), do: nil
 
   defp parse_state(%{"state" => "error"}), do: :error
   defp parse_state(%{"state" => "initializing"}), do: :checking

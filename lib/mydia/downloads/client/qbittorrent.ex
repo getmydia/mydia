@@ -443,6 +443,8 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   end
 
   defp parse_torrent_status(torrent) do
+    save_path = torrent["save_path"] || ""
+
     DownloadStatus.new(%{
       id: torrent["hash"],
       name: torrent["name"],
@@ -455,11 +457,34 @@ defmodule Mydia.Downloads.Client.QBittorrent do
       size: torrent["size"] || 0,
       eta: parse_eta(torrent["eta"]),
       ratio: torrent["ratio"] || 0.0,
-      save_path: torrent["save_path"] || "",
+      save_path: save_path,
+      files: content_files(save_path, torrent["content_path"]),
       added_at: Helpers.parse_timestamp_unix(torrent["added_on"]),
       completed_at: Helpers.parse_timestamp_unix(torrent["completion_on"])
     })
   end
+
+  # `save_path` is the *containing* directory, so a single-file torrent reports
+  # the shared download root verbatim — and MediaImport's fallback recursively
+  # lists whatever it is handed. On a busy client that imports every
+  # neighbouring release into this download's library folder.
+  #
+  # `content_path` (Web API >= 2.6.1, already returned by /torrents/info, so
+  # this costs no extra request) points at the torrent's own data: the file
+  # itself for a single-file torrent, the torrent's root folder for a
+  # multi-file one. Either scopes the import correctly. Servers old enough to
+  # omit it — and multi-file torrents added with subfolder creation disabled,
+  # where content_path *is* save_path — fall back to the previous behaviour.
+  defp content_files(save_path, content_path)
+       when is_binary(content_path) and content_path != "" do
+    if Path.expand(content_path) == Path.expand(save_path) do
+      nil
+    else
+      [content_path]
+    end
+  end
+
+  defp content_files(_save_path, _content_path), do: nil
 
   # State mappings. Unknown / unrecognised states deliberately fall through to
   # :checking (transient) rather than :error, because DownloadMonitor deletes
