@@ -1,7 +1,8 @@
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/collection.dart';
 
 part 'collections_controller.g.dart';
@@ -20,53 +21,28 @@ query Collections($first: Int) {
 }
 ''';
 
+List<Collection> _parseCollections(Map<String, dynamic> data) {
+  return (data['collections'] as List<dynamic>?)
+          ?.map((e) => Collection.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [];
+}
+
 @riverpod
 class CollectionsController extends _$CollectionsController {
+  late QueryWatcher<List<Collection>> _watcher;
+
   @override
-  Future<List<Collection>> build() async {
-    return _fetchCollections();
-  }
-
-  Future<List<Collection>> _fetchCollections() async {
-    final client = await ref.read(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(collectionsQuery),
-        variables: const {
-          'first': 50,
-        },
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  Stream<List<Collection>> build() {
+    _watcher = createWatcher<List<Collection>>(
+      ref,
+      key: QueryKeys.collections,
+      document: gql(collectionsQuery),
+      variables: const {'first': 50},
+      parse: _parseCollections,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null) {
-      throw Exception('No data received from server');
-    }
-
-    final items = (result.data!['collections'] as List<dynamic>?)
-            ?.map((e) => Collection.fromJson(e as Map<String, dynamic>))
-            .toList() ??
-        [];
-
-    return items;
+    return _watcher.stream;
   }
 
-  Future<void> refresh() async {
-    final previousData = state.value;
-    state = const AsyncValue.loading();
-
-    final result = await AsyncValue.guard(() => _fetchCollections());
-    if (result.hasError && previousData != null) {
-      debugPrint(
-          '[CollectionsController] Refresh failed, keeping previous data: ${result.error}');
-      state = AsyncValue.data(previousData);
-      return;
-    }
-    state = result;
-  }
+  Future<void> refresh() => _watcher.refetch();
 }
