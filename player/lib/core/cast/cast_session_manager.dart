@@ -102,14 +102,7 @@ class CastSessionManager {
     final lanEnabledBeforeCall = _lanEnabled;
 
     try {
-      try {
-        await _loadOnRoute(resolver, route, device, request);
-      } on CastBackendException catch (e) {
-        final retryRoute = _retryRouteFor(e, route, resolver, device, request);
-        if (retryRoute == null) rethrow;
-
-        await _loadOnRoute(resolver, retryRoute, device, request);
-      }
+      await _loadWithRetries(resolver, route, device, request);
     } catch (e) {
       // Nothing succeeded: leaving the backend connected, the listeners
       // live, and the LAN proxy exposed would strand the app in a state
@@ -117,6 +110,63 @@ class CastSessionManager {
       // requirement) a listener with no cast in progress.
       await _rollbackFailedStart(lanEnabledBeforeCall);
       rethrow;
+    }
+  }
+
+  /// Loads media on [route], escalating through at most two further
+  /// remedies before giving up.
+  ///
+  /// Deliberately three sequential, explicitly nested attempts and nothing
+  /// more — no loop, so the bound is obvious by inspection:
+  ///
+  ///   1. [route] as resolved.
+  ///   2. Whichever remedy [_retryRouteFor] picks for the failure. For most
+  ///      failure kinds this is the only retry, and a bridge route never
+  ///      gets one for `mediaLoadFailed` — dart_cast would just resend the
+  ///      identical URL that just failed.
+  ///   3. Only reached when attempt 1 was a *direct* route that failed with
+  ///      `mediaLoadFailed` and attempt 2 was therefore a bridge retry: one
+  ///      final attempt back on the *original* route with `forceTranscode`.
+  ///      `mediaLoadFailed` is dart_cast's one kind for both "the receiver
+  ///      couldn't reach the media" and "the receiver rejected the codec"
+  ///      (see `DartCastBackend.failureKindFor`) — having ruled out the
+  ///      former by trying the bridge, the codec explanation is the only
+  ///      one left, regardless of why attempt 2 itself failed.
+  Future<void> _loadWithRetries(
+    CastRouteResolver resolver,
+    CastRoute route,
+    CastDevice device,
+    CastLaunchRequest request,
+  ) async {
+    try {
+      await _loadOnRoute(resolver, route, device, request);
+    } on CastBackendException catch (firstFailure) {
+      final secondRoute =
+          _retryRouteFor(firstFailure, route, resolver, device, request);
+      if (secondRoute == null) rethrow;
+
+      try {
+        await _loadOnRoute(resolver, secondRoute, device, request);
+      } on CastBackendException {
+        final isBridgeEscalationFromDirectMediaLoadFailed =
+            firstFailure.kind == CastFailureKind.mediaLoadFailed &&
+                route.kind == CastRouteKind.directServer &&
+                secondRoute.kind == CastRouteKind.localBridge;
+
+        if (!isBridgeEscalationFromDirectMediaLoadFailed) rethrow;
+
+        final transcodeRoute = resolver.resolve(
+          fileId: request.fileId,
+          protocol: device.protocol,
+          forceTranscode: true,
+        );
+        if (transcodeRoute == null) rethrow;
+
+        debugPrint(
+          '[CastSessionManager] Bridge retry also failed, retrying with TRANSCODE',
+        );
+        await _loadOnRoute(resolver, transcodeRoute, device, request);
+      }
     }
   }
 
@@ -177,8 +227,10 @@ class CastSessionManager {
         // simply being unable to reach the media URL at all (see
         // DartCastBackend.failureKindFor). We can't tell those apart from
         // the exception alone, so try the bridge first: it fixes the
-        // unreachable case, and costs nothing if the real problem is the
-        // codec, since a transcode escalation still follows below.
+        // unreachable case. If the bridge attempt also fails, the caller
+        // (_loadWithRetries) escalates once more to a transcode on the
+        // original route — this function only decides the *second*
+        // attempt, not the third.
         final bridgeRetry = resolver.resolve(
           fileId: request.fileId,
           protocol: device.protocol,

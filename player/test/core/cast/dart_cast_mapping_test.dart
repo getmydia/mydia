@@ -279,6 +279,34 @@ void main() {
     });
   });
 
+  group('DartCastBackend.connect reconstruction failures', () {
+    test(
+        'a malformed persisted host surfaces as CastBackendException, not a '
+        'raw ArgumentError', () async {
+      // Regression test: reconstructDartCastDevice used to run outside the
+      // try/catch that translates dart_cast errors. InternetAddress(host)
+      // throws a synchronous ArgumentError for anything that isn't a valid
+      // IP literal — before any actual networking happens, so this needs no
+      // hardware to exercise.
+      final backend = DartCastBackend();
+      addTearDown(backend.dispose);
+
+      const neverDiscovered = CastDevice(
+        id: 'ghost',
+        name: 'Ghost TV',
+        protocol: CastProtocolKind.chromecast,
+        host: 'not-a-valid-ip-address',
+        port: 8009,
+      );
+
+      await expectLater(
+        backend.connect(neverDiscovered),
+        throwsA(isA<CastBackendException>()
+            .having((e) => e.kind, 'kind', CastFailureKind.unknown)),
+      );
+    });
+  });
+
   group('playbackStateFrom', () {
     test('maps every dart_cast session state', () {
       expect(playbackStateFrom(dc.SessionState.playing), CastPlaybackState.playing);

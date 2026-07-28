@@ -133,7 +133,13 @@ class BonsoirChromecastDiscovery implements dc.DeviceDiscoveryProvider {
       debugPrint('[BonsoirChromecastDiscovery] Discovery failed: $e');
       final error = dc.DiscoveryException('Chromecast discovery was refused', e);
       if (!controller.isClosed) controller.addError(error);
-      _failuresController.add(error);
+      // dispose() (e.g. via DartCastBackend.dispose -> CastService.dispose
+      // -> DiscoveryManager.dispose -> provider.dispose()) can close
+      // _failuresController while this catch block is still running —
+      // adding to a closed StreamController throws, and this runs inside an
+      // unawaited future, so that would become an unhandled StateError. The
+      // same class of bug F5 was filed for.
+      if (!_failuresController.isClosed) _failuresController.add(error);
     }
   }
 

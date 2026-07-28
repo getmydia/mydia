@@ -181,8 +181,8 @@ void main() {
     });
 
     test(
-        'disables LAN access when the direct-route bridge retry also fails',
-        () async {
+        'disables LAN access when the direct-route escalation exhausts '
+        'both the bridge and TRANSCODE attempts', () async {
       final manager = build();
       addTearDown(manager.dispose);
       backend.failAllLoads(CastFailureKind.mediaLoadFailed);
@@ -194,8 +194,10 @@ void main() {
 
       // A direct-route mediaLoadFailed retries via the bridge first (a
       // receiver that can't reach the media URL reports the same
-      // mediaLoadFailed a codec rejection would), so LAN gets turned on for
-      // that attempt, then rolled back when it fails too.
+      // mediaLoadFailed a codec rejection would), turning LAN on for that
+      // attempt; when that also fails, a final TRANSCODE attempt back on
+      // the direct route doesn't touch LAN again. Both fail here, so
+      // rollback turns LAN back off.
       expect(lanCalls, [true, false]);
       expect(backend.connectedDevice, isNull);
     });
@@ -262,7 +264,8 @@ void main() {
           startsWith('http://192.168.1.20:5000/g/abcd/'));
     });
 
-    test('falls back to TRANSCODE when no bridge is available', () async {
+    test('falls back to TRANSCODE directly when no bridge is available',
+        () async {
       final manager = build(lanBaseUrl: null);
       addTearDown(manager.dispose);
       backend.failNextLoad(CastFailureKind.mediaLoadFailed);
@@ -273,9 +276,28 @@ void main() {
       expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
     });
 
-    test('rethrows when the bridge retry also fails', () async {
+    test(
+        'escalates direct -> bridge -> TRANSCODE when both the direct and '
+        'bridge attempts fail', () async {
       final manager = build();
       addTearDown(manager.dispose);
+      // Attempt 1 (direct) and attempt 2 (bridge) both fail; attempt 3
+      // (TRANSCODE, back on the direct route) succeeds.
+      backend.failNextLoad(CastFailureKind.mediaLoadFailed, times: 2);
+
+      await manager.startCast(device: device, request: launch);
+
+      expect(backend.loadedRequests.single.url,
+          startsWith('https://mydia.test/api/v1/stream/file/file-1'));
+      expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
+    });
+
+    test('stops escalating after the TRANSCODE attempt and rethrows', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      // Every attempt fails, so this also proves the escalation is bounded:
+      // if _loadWithRetries ever looped instead of stopping after exactly
+      // three attempts, this call would hang rather than complete.
       backend.failAllLoads(CastFailureKind.mediaLoadFailed);
 
       await expectLater(
@@ -284,8 +306,8 @@ void main() {
             .having((e) => e.kind, 'kind', CastFailureKind.mediaLoadFailed)),
       );
 
-      // Bridge was tried (and given a chance to turn LAN on) before giving
-      // up — never a second, transcode-flavoured attempt on top of it.
+      // Bridge was tried (turning LAN on), then TRANSCODE back on the
+      // direct route (no further LAN change) — both failed, then rollback.
       expect(lanCalls, [true, false]);
       expect(backend.loadedRequests, isEmpty);
     });

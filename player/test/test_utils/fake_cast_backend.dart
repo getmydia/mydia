@@ -17,7 +17,7 @@ class FakeCastBackend implements CastBackend {
   final List<Duration> seeks = [];
 
   CastDevice? _connected;
-  CastFailureKind? _pendingLoadFailure;
+  final List<CastFailureKind> _queuedLoadFailures = [];
   CastFailureKind? _persistentLoadFailure;
   CastFailureKind? _pendingConnectFailure;
   bool discoveryStarted = false;
@@ -30,8 +30,16 @@ class FakeCastBackend implements CastBackend {
   void emitDuration(Duration duration) => _durations.add(duration);
   void emitFailure(CastFailureKind kind) => _failures.add(kind);
 
-  /// Fail only the next `loadMedia` call, so a retry can succeed.
-  void failNextLoad(CastFailureKind kind) => _pendingLoadFailure = kind;
+  /// Fail only the next [times] `loadMedia` call(s), consumed in order, so a
+  /// later attempt can succeed. Calling this more than once (or with
+  /// `times > 1`) queues multiple failures — needed to script a
+  /// `CastSessionManager` escalation that fails more than once before
+  /// succeeding (e.g. direct -> bridge -> transcode).
+  void failNextLoad(CastFailureKind kind, {int times = 1}) {
+    for (var i = 0; i < times; i++) {
+      _queuedLoadFailures.add(kind);
+    }
+  }
 
   /// Fail every `loadMedia` call, so retry exhaustion can be tested.
   void failAllLoads(CastFailureKind kind) => _persistentLoadFailure = kind;
@@ -70,9 +78,8 @@ class FakeCastBackend implements CastBackend {
       throw CastBackendException('fake persistent load failure', persistent);
     }
 
-    final failure = _pendingLoadFailure;
-    if (failure != null) {
-      _pendingLoadFailure = null;
+    if (_queuedLoadFailures.isNotEmpty) {
+      final failure = _queuedLoadFailures.removeAt(0);
       throw CastBackendException('fake load failure', failure);
     }
     loadedRequests.add(request);

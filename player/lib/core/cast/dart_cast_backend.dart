@@ -225,27 +225,39 @@ class DartCastBackend implements CastBackend {
     // when this process never discovered it — the path
     // `CastSessionManager.restoreSession` takes right after a fresh app
     // launch, before any discovery sweep has run.
-    final target = _discovered[device.id] ?? reconstructDartCastDevice(device);
-    if (target == null) {
-      throw const CastBackendException(
-        'That device is no longer on the network.',
-        CastFailureKind.unreachable,
-      );
-    }
-
+    //
+    // reconstructDartCastDevice is called *inside* the try below, not out
+    // here: `InternetAddress(host)` throws a synchronous ArgumentError on a
+    // malformed persisted host, and that needs the same translation to
+    // CastBackendException everything else in this method gets — otherwise
+    // a corrupt stored session surfaces as a raw ArgumentError from
+    // startCast (restoreSession happens to swallow arbitrary exceptions,
+    // but startCast does not).
     try {
+      final target =
+          _discovered[device.id] ?? reconstructDartCastDevice(device);
+      if (target == null) {
+        throw const CastBackendException(
+          'That device is no longer on the network.',
+          CastFailureKind.unreachable,
+        );
+      }
+
       final session = await _service.connect(target);
       _session = session;
       _connectedDevice = device;
       _listen(session);
+    } on CastBackendException {
+      rethrow;
     } on dc.CastException catch (e) {
       throw CastBackendException(e.toString(), failureKindFor(e));
     } catch (e) {
       // dart_cast also throws raw TimeoutException (ChromecastSession.connect
       // after 15s with no RECEIVER_STATUS) and ArgumentError
       // (DlnaSession.fromDevice when the persisted metadata is missing a
-      // control URL) on this path — neither is a CastException, so nothing
-      // here would otherwise be translated before reaching the UI.
+      // control URL, or InternetAddress() on a malformed persisted host) on
+      // this path — none of those are a CastException, so nothing here
+      // would otherwise be translated before reaching the UI.
       throw CastBackendException(e.toString(), CastFailureKind.unknown);
     }
   }
