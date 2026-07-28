@@ -1,6 +1,9 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/movie_detail.dart';
 
 part 'movie_detail_controller.g.dart';
@@ -60,34 +63,26 @@ mutation ToggleMovieFavorite($id: ID!) {
 }
 ''';
 
+MovieDetail _parseMovie(Map<String, dynamic> data) {
+  final movie = data['movie'];
+  if (movie == null) throw Exception('Movie not found');
+  return MovieDetail.fromJson(movie as Map<String, dynamic>);
+}
+
 @riverpod
 class MovieDetailController extends _$MovieDetailController {
+  late QueryWatcher<MovieDetail> _watcher;
+
   @override
-  Future<MovieDetail> build(String id) async {
-    return _fetchMovie(id);
-  }
-
-  Future<MovieDetail> _fetchMovie(String id) async {
-    // Use async provider to wait for client to be ready
-    final client = await ref.watch(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(movieDetailQuery),
-        variables: {'id': id},
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  Stream<MovieDetail> build(String id) {
+    _watcher = createWatcher<MovieDetail>(
+      ref,
+      key: QueryKeys.movieDetail(id),
+      document: gql(movieDetailQuery),
+      variables: {'id': id},
+      parse: _parseMovie,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null || result.data!['movie'] == null) {
-      throw Exception('Movie not found');
-    }
-
-    return MovieDetail.fromJson(result.data!['movie'] as Map<String, dynamic>);
+    return _watcher.stream;
   }
 
   Future<void> toggleFavorite() async {
@@ -141,8 +136,5 @@ class MovieDetailController extends _$MovieDetailController {
     }
   }
 
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchMovie(id));
-  }
+  Future<void> refresh() => _watcher.refetch();
 }

@@ -1,17 +1,35 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+// `gql` is a transitive dependency reached through graphql_flutter (via
+// graphql -> gql_exec/gql_link). It is not exported by graphql_flutter, so
+// OperationDefinitionNode needs a direct import; the same pattern is already
+// used throughout core/graphql/watch/*.dart.
+// ignore: depend_on_referenced_packages
+import 'package:gql/ast.dart' show OperationDefinitionNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/models/progress.dart';
-import 'package:player/graphql/mutations/mark_watched.graphql.dart';
 import 'package:player/presentation/screens/show/season_episodes_controller.dart';
 
-import 'season_episodes_controller_test.mocks.dart';
+import '../../../test_utils/riverpod_helpers.dart';
+import '../../../test_utils/stub_graphql_client.dart';
 
-@GenerateNiceMocks([MockSpec<GraphQLClient>()])
+/// The operation's name, read off the request's own document.
+///
+/// `Operation.operationName` is a caller-supplied field (`QueryOptions`/
+/// `MutationOptions.operationName`) that nothing in this codebase ever sets,
+/// so it is always null in practice — reading it here would make every
+/// request indistinguishable. Every generated `.graphql.dart` document
+/// carries exactly one `OperationDefinitionNode` with the operation's real
+/// name (e.g. `MarkEpisodeWatched`), which is what the stub link below
+/// dispatches on.
+String? _operationName(Request request) {
+  final operations = request.operation.document.definitions
+      .whereType<OperationDefinitionNode>();
+  return operations.isEmpty ? null : operations.first.name?.value;
+}
+
 Episode _episode(int number, {bool? watched}) {
   return Episode(
     id: 'ep-$number',
@@ -28,15 +46,21 @@ Episode _episode(int number, {bool? watched}) {
 
 Map<String, dynamic> _episodeJson(int number, {bool? watched}) {
   return {
+    '__typename': 'Episode',
     'id': 'ep-$number',
     'seasonNumber': 1,
     'episodeNumber': number,
     'title': 'Episode $number',
+    'overview': null,
+    'airDate': null,
+    'runtime': null,
     'monitored': true,
+    'thumbnailUrl': null,
     'hasFile': true,
     'progress': watched == null
         ? null
         : {
+            '__typename': 'Progress',
             'positionSeconds': 0,
             'durationSeconds': null,
             'percentage': 0,
@@ -46,20 +70,6 @@ Map<String, dynamic> _episodeJson(int number, {bool? watched}) {
     'files': <dynamic>[],
   };
 }
-
-QueryResult _mutationSuccess() => QueryResult(
-      options: MutationOptions(document: gql('mutation { x }')),
-      source: QueryResultSource.network,
-      data: const {},
-    );
-
-QueryResult _mutationFailure() => QueryResult(
-      options: MutationOptions(document: gql('mutation { x }')),
-      source: QueryResultSource.network,
-      exception: OperationException(
-        graphqlErrors: [const GraphQLError(message: 'boom')],
-      ),
-    );
 
 void main() {
   group('applyOptimisticWatched (pure subset logic)', () {
@@ -134,21 +144,33 @@ void main() {
   });
 
   group('SeasonEpisodesController watched actions (optimistic + revert)', () {
-    late MockGraphQLClient client;
+    late StubLink link;
 
-    ProviderContainer makeContainer(List<Map<String, dynamic>> seed) {
-      client = MockGraphQLClient();
-      when(client.query(any)).thenAnswer(
-        (_) async => QueryResult(
-          options: QueryOptions(document: gql('query { x }')),
-          source: QueryResultSource.network,
-          data: {'seasonEpisodes': seed},
-        ),
-      );
+    ProviderContainer makeContainer(
+      List<Map<String, dynamic>> seed, {
+      bool mutationFails = false,
+    }) {
+      link = StubLink((request, _) {
+        final operation = _operationName(request);
+        if (operation == 'SeasonEpisodes') {
+          return {'__typename': 'Query', 'seasonEpisodes': seed};
+        }
+        if (mutationFails) return graphqlErrorResponse('boom');
+        return {
+          '__typename': 'Mutation',
+          operation!.substring(0, 1).toLowerCase() + operation.substring(1): {
+            '__typename': 'Episode',
+            'id': 'ep-1',
+            'title': 'Episode 1',
+          },
+        };
+      });
 
       final container = ProviderContainer(
         overrides: [
-          asyncGraphqlClientProvider.overrideWith((ref) async => client),
+          asyncGraphqlClientProvider.overrideWith(
+            (ref) async => stubClient(link),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -157,48 +179,51 @@ void main() {
 
     test('markEpisodeWatched flips the target and calls the watched mutation',
         () async {
-      final container = makeContainer([
-        _episodeJson(1),
-        _episodeJson(2),
-      ]);
+      final container = makeContainer([_episodeJson(1), _episodeJson(2)]);
       final provider =
           seasonEpisodesControllerProvider(showId: 'show-1', seasonNumber: 1);
 
-      final episodes = await container.read(provider.future);
-      when(client.mutate(any)).thenAnswer((_) async => _mutationSuccess());
+      final episodes = await waitForValue(
+        container,
+        provider,
+        (value) => value.isNotEmpty,
+      );
 
-      await container
-          .read(provider.notifier)
-          .markEpisodeWatched(episodes.first);
+      await container.read(provider.notifier).markEpisodeWatched(
+            episodes.firstWhere((e) => e.id == 'ep-1'),
+          );
 
       final updated = container.read(provider).value!;
-      expect(updated.firstWhere((e) => e.id == 'ep-1').progress?.watched,
-          isTrue);
-      // ep-2 untouched.
+      expect(
+        updated.firstWhere((e) => e.id == 'ep-1').progress?.watched,
+        isTrue,
+      );
       expect(updated.firstWhere((e) => e.id == 'ep-2').progress, isNull);
-
-      final captured =
-          verify(client.mutate(captureAny)).captured.single as MutationOptions;
-      expect(captured.document, documentNodeMutationMarkEpisodeWatched);
+      expect(
+        link.requests.map(_operationName),
+        contains('MarkEpisodeWatched'),
+      );
     });
 
     test('a failed mutation reverts the optimistic state', () async {
-      final container = makeContainer([
-        _episodeJson(1),
-        _episodeJson(2),
-      ]);
+      final container = makeContainer(
+        [_episodeJson(1), _episodeJson(2)],
+        mutationFails: true,
+      );
       final provider =
           seasonEpisodesControllerProvider(showId: 'show-1', seasonNumber: 1);
 
-      final episodes = await container.read(provider.future);
-      when(client.mutate(any)).thenAnswer((_) async => _mutationFailure());
+      final episodes = await waitForValue(
+        container,
+        provider,
+        (value) => value.isNotEmpty,
+      );
 
       await expectLater(
         container.read(provider.notifier).markEpisodeWatched(episodes.first),
         throwsA(isA<OperationException>()),
       );
 
-      // Reverted: ep-1 has no progress again.
       final reverted = container.read(provider).value!;
       expect(reverted.firstWhere((e) => e.id == 'ep-1').progress, isNull);
     });
@@ -212,17 +237,15 @@ void main() {
       final provider =
           seasonEpisodesControllerProvider(showId: 'show-1', seasonNumber: 1);
 
-      await container.read(provider.future);
-      when(client.mutate(any)).thenAnswer((_) async => _mutationSuccess());
-
+      await waitForValue(container, provider, (value) => value.isNotEmpty);
       await container.read(provider.notifier).markSeasonUnwatched();
 
       final updated = container.read(provider).value!;
       expect(updated.every((e) => e.progress == null), isTrue);
-
-      final captured =
-          verify(client.mutate(captureAny)).captured.single as MutationOptions;
-      expect(captured.document, documentNodeMutationMarkSeasonUnwatched);
+      expect(
+        link.requests.map(_operationName),
+        contains('MarkSeasonUnwatched'),
+      );
     });
   });
 }

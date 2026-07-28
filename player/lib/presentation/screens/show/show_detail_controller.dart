@@ -1,6 +1,9 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/show_detail.dart';
 
 part 'show_detail_controller.g.dart';
@@ -56,34 +59,26 @@ mutation ToggleShowFavorite($id: ID!) {
 }
 ''';
 
+ShowDetail _parseShow(Map<String, dynamic> data) {
+  final show = data['tvShow'];
+  if (show == null) throw Exception('TV show not found');
+  return ShowDetail.fromJson(show as Map<String, dynamic>);
+}
+
 @riverpod
 class ShowDetailController extends _$ShowDetailController {
+  late QueryWatcher<ShowDetail> _watcher;
+
   @override
-  Future<ShowDetail> build(String id) async {
-    return _fetchShow(id);
-  }
-
-  Future<ShowDetail> _fetchShow(String id) async {
-    // Use async provider to wait for client to be ready
-    final client = await ref.read(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(tvShowDetailQuery),
-        variables: {'id': id},
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  Stream<ShowDetail> build(String id) {
+    _watcher = createWatcher<ShowDetail>(
+      ref,
+      key: QueryKeys.showDetail(id),
+      document: gql(tvShowDetailQuery),
+      variables: {'id': id},
+      parse: _parseShow,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null || result.data!['tvShow'] == null) {
-      throw Exception('TV show not found');
-    }
-
-    return ShowDetail.fromJson(result.data!['tvShow'] as Map<String, dynamic>);
+    return _watcher.stream;
   }
 
   Future<void> toggleFavorite() async {
@@ -139,10 +134,7 @@ class ShowDetailController extends _$ShowDetailController {
     }
   }
 
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchShow(id));
-  }
+  Future<void> refresh() => _watcher.refetch();
 }
 
 // Provider for selected season state
