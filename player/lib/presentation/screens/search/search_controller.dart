@@ -6,19 +6,29 @@ import '../../../domain/models/search_result.dart';
 part 'search_controller.g.dart';
 
 const String searchQuery = r'''
-query Search($query: String!, $types: [MediaType], $first: Int) {
+query Search($query: String!, $types: [SearchResultType], $first: Int) {
   search(query: $query, types: $types, first: $first) {
-    results {
-      id
-      type
-      title
-      year
-      overview
-      posterUrl
-      backdropUrl
-      score
-    }
     totalCount
+    sections {
+      type
+      totalCount
+      results {
+        id
+        type
+        title
+        year
+        subtitle
+        seasonNumber
+        episodeNumber
+        parentId
+        score
+        artwork {
+          posterUrl
+          backdropUrl
+          thumbnailUrl
+        }
+      }
+    }
   }
 }
 ''';
@@ -86,6 +96,12 @@ class SearchController extends _$SearchController {
 
   void clearFilters() {
     state = state.copyWith(selectedTypes: {});
+  }
+
+  /// Replaces the whole filter set. Used when a `type` query parameter seeds the
+  /// screen and when a section's "Show all" narrows to that one section.
+  void setTypes(Set<SearchResultType> types) {
+    state = state.copyWith(selectedTypes: types);
   }
 
   Future<void> search() async {
