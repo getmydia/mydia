@@ -1481,8 +1481,7 @@ defmodule Mydia.Jobs.MediaImportTest do
     defp conflict_copies(dest_dir) do
       dest_dir
       |> File.ls!()
-      |> Enum.filter(&(&1 != "Conflict Movie (2024).mkv"))
-      |> Enum.filter(&String.ends_with?(&1, ".mkv"))
+      |> Enum.filter(&(&1 != "Conflict Movie (2024).mkv" and String.ends_with?(&1, ".mkv")))
       |> Enum.sort()
     end
   end
