@@ -13,6 +13,16 @@ class CastDevice {
   final String? host;
   final int? port;
 
+  /// Raw protocol metadata carried over from the `dart_cast` device this was
+  /// mapped from (see `toDomainDevice` in `dart_cast_backend.dart`).
+  ///
+  /// Persisted alongside [host]/[port] so `DartCastBackend.connect` can
+  /// reconstruct a session target after a fresh app launch, before this
+  /// process has run its own discovery sweep. DLNA in particular needs this:
+  /// `DlnaSession.fromDevice` reads the AVTransport/RenderingControl/
+  /// ConnectionManager control URLs back out of this map.
+  final Map<String, String> metadata;
+
   const CastDevice({
     required this.id,
     required this.name,
@@ -20,6 +30,7 @@ class CastDevice {
     this.model,
     this.host,
     this.port,
+    this.metadata = const {},
   });
 
   factory CastDevice.fromJson(Map<String, dynamic> json) {
@@ -32,6 +43,10 @@ class CastDevice {
       model: json['model'] as String?,
       host: json['host'] as String?,
       port: json['port'] as int?,
+      metadata: (json['metadata'] as Map?)?.map(
+            (k, v) => MapEntry(k as String, v.toString()),
+          ) ??
+          const {},
     );
   }
 
@@ -42,6 +57,7 @@ class CastDevice {
         'model': model,
         'host': host,
         'port': port,
+        'metadata': metadata,
       };
 
   @override

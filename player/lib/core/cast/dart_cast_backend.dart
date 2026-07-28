@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dart_cast/dart_cast.dart' as dc;
 import 'package:flutter/foundation.dart';
@@ -19,6 +20,41 @@ CastDevice toDomainDevice(dc.CastDevice device) {
     model: device.metadata['md'],
     host: device.address.address,
     port: device.port,
+    metadata: device.metadata,
+  );
+}
+
+/// Rebuild a `dart_cast` device from persisted app state.
+///
+/// `DartCastBackend.connect` normally resolves its target from the devices
+/// this process's own discovery sweep saw. `CastSessionManager.restoreSession`
+/// runs before any such sweep — right after a fresh app launch — so it can
+/// only offer the domain `CastDevice` it persisted. This rebuilds a usable
+/// `dart_cast` device from that alone.
+///
+/// Chromecast only needs [CastDevice.host]/[CastDevice.port]. DLNA
+/// additionally needs the AVTransport/RenderingControl/ConnectionManager
+/// control URLs `DlnaSession.fromDevice` reads back out of `metadata` — which
+/// is why [CastDevice.metadata] is round-tripped through `toJson`/`fromJson`
+/// rather than being discovery-sweep-only state.
+///
+/// Returns `null` when there isn't enough persisted information to proceed
+/// (no host or port), in which case the caller must fall through to
+/// "device no longer reachable" rather than guess.
+dc.CastDevice? reconstructDartCastDevice(CastDevice device) {
+  final host = device.host;
+  final port = device.port;
+  if (host == null || port == null) return null;
+
+  return dc.CastDevice(
+    id: device.id,
+    name: device.name,
+    protocol: device.protocol == CastProtocolKind.dlna
+        ? dc.CastProtocol.dlna
+        : dc.CastProtocol.chromecast,
+    address: InternetAddress(host),
+    port: port,
+    metadata: device.metadata,
   );
 }
 
@@ -38,6 +74,51 @@ CastPlaybackState playbackStateFrom(dc.SessionState state) {
     case dc.SessionState.disconnected:
       return CastPlaybackState.idle;
   }
+}
+
+/// Translate a `dart_cast` exception into the app's failure vocabulary,
+/// which is what drives the bridge-retry decision in `CastSessionManager`.
+///
+/// Kept top-level, pure, and public (not the private static method it used to
+/// be) so the mapping — the single highest-leverage untested function in
+/// this file — can be pinned with unit tests independent of any live
+/// session.
+///
+/// Only [dc.MediaLoadFailedException] (Chromecast) and [dc.ProtocolException]
+/// (DLNA) are ever actually thrown by the paths this backend calls —
+/// confirmed by reading `chromecast_session.dart` and `dlna_controller.dart`.
+/// [dc.DeviceUnreachableException], [dc.ConnectionLostException] and
+/// [dc.ProxyUpstreamException] are declared in `cast_exceptions.dart` but
+/// constructed nowhere in the package; the `is` checks for them are kept
+/// anyway in case a future dart_cast version starts throwing them — they are
+/// harmless if unreachable today.
+///
+/// [dc.ProtocolException] is DLNA's SOAP-level failure (HTTP >= 400 or a
+/// request timeout while sending SetAVTransportURI/Play/etc — see
+/// `dlna_controller.dart`'s `sendAction`). That is DLNA's equivalent of a
+/// receiver-side LOAD failure, so it maps to `mediaLoadFailed` for the same
+/// reason Chromecast's `MediaLoadFailedException` does — including the fact
+/// that on both protocols this single kind now covers two different root
+/// causes: an unsupported codec, or the receiver being unable to reach the
+/// media URL at all. `CastSessionManager._retryRouteFor` accounts for the
+/// latter by trying the bridge route before escalating to a transcode.
+CastFailureKind failureKindFor(dc.CastException e) {
+  if (e is dc.DeviceUnreachableException) return CastFailureKind.unreachable;
+  if (e is dc.ProxyUpstreamException) return CastFailureKind.unreachable;
+  if (e is dc.MediaLoadFailedException) return CastFailureKind.mediaLoadFailed;
+  if (e is dc.ProtocolException) return CastFailureKind.mediaLoadFailed;
+  if (e is dc.ConnectionLostException) return CastFailureKind.connectionLost;
+  if (e is dc.DiscoveryException) return CastFailureKind.discoveryDenied;
+  return CastFailureKind.unknown;
+}
+
+/// Maps a stream of raw discovery exceptions to the app's failure
+/// vocabulary. Extracted from [DartCastBackend]'s constructor so the exact
+/// composition wiring [BonsoirChromecastDiscovery.failures] into
+/// [CastBackend.failureStream] is unit-testable without a real `CastService`.
+@visibleForTesting
+Stream<CastFailureKind> mapDiscoveryFailures(Stream<dc.CastException> failures) {
+  return failures.map(failureKindFor);
 }
 
 /// Builds the protocol-specific `dart_cast` session for a discovered device.
@@ -60,10 +141,12 @@ dc.CastSession _createSession(dc.CastDevice device) {
 
 /// [CastBackend] implemented over the `dart_cast` package.
 ///
-/// This is the only file that imports `dart_cast`. Replacing the package means
-/// rewriting this file and nothing else.
+/// This file and `bonsoir_chromecast_discovery.dart` are the only two files
+/// in the project that import `dart_cast` directly. Replacing the package
+/// means rewriting both of those and nothing else.
 class DartCastBackend implements CastBackend {
   final dc.CastService _service;
+  final BonsoirChromecastDiscovery _chromecastDiscovery;
 
   final _states = StreamController<CastPlaybackState>.broadcast();
   final _positions = StreamController<Duration>.broadcast();
@@ -73,24 +156,37 @@ class DartCastBackend implements CastBackend {
   StreamSubscription<dc.SessionState>? _stateSub;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<CastFailureKind>? _discoveryFailureSub;
 
   dc.CastSession? _session;
   CastDevice? _connectedDevice;
   final Map<String, dc.CastDevice> _discovered = {};
 
-  DartCastBackend._(this._service);
+  DartCastBackend._(this._service, this._chromecastDiscovery) {
+    // dart_cast's DiscoveryManager only logs a provider's stream errors —
+    // it never forwards them (see discovery_manager.dart) — so a discovery
+    // denial would otherwise surface as a silently empty device list rather
+    // than reaching the UI. This is the only path that gets it there.
+    _discoveryFailureSub =
+        mapDiscoveryFailures(_chromecastDiscovery.failures).listen(_failures.add);
+  }
 
   factory DartCastBackend() {
-    return DartCastBackend._(dc.CastService(
-      discoveryProviders: [
-        // Chromecast goes through Bonsoir's native Bonjour backend so iOS works
-        // without the multicast entitlement. DLNA has no such option: SSDP is
-        // raw multicast, which is why it is unavailable on iOS.
-        BonsoirChromecastDiscovery(),
-        dc.DlnaDiscoveryProvider(),
-      ],
-      sessionFactory: _createSession,
-    ));
+    final chromecastDiscovery = BonsoirChromecastDiscovery();
+    return DartCastBackend._(
+      dc.CastService(
+        discoveryProviders: [
+          // Chromecast goes through Bonsoir's native Bonjour backend so iOS
+          // works without the multicast entitlement. DLNA has no such
+          // option: SSDP is raw multicast, which is why it is unavailable
+          // on iOS.
+          chromecastDiscovery,
+          dc.DlnaDiscoveryProvider(),
+        ],
+        sessionFactory: _createSession,
+      ),
+      chromecastDiscovery,
+    );
   }
 
   @override
@@ -98,6 +194,11 @@ class DartCastBackend implements CastBackend {
     required CastCapabilities capabilities,
     Duration timeout = const Duration(seconds: 10),
   }) {
+    // Cleared per sweep so a device that has genuinely disappeared cannot be
+    // connected to forever off a stale cache entry; the freshest sweep's
+    // results are the source of truth for what `connect()` can resolve.
+    _discovered.clear();
+
     final protocols = <dc.CastProtocol>{
       if (capabilities.chromecast) dc.CastProtocol.chromecast,
       if (capabilities.dlna) dc.CastProtocol.dlna,
@@ -120,7 +221,11 @@ class DartCastBackend implements CastBackend {
 
   @override
   Future<void> connect(CastDevice device) async {
-    final target = _discovered[device.id];
+    // Falls back to rebuilding the dart_cast device from persisted state
+    // when this process never discovered it — the path
+    // `CastSessionManager.restoreSession` takes right after a fresh app
+    // launch, before any discovery sweep has run.
+    final target = _discovered[device.id] ?? reconstructDartCastDevice(device);
     if (target == null) {
       throw const CastBackendException(
         'That device is no longer on the network.',
@@ -134,7 +239,14 @@ class DartCastBackend implements CastBackend {
       _connectedDevice = device;
       _listen(session);
     } on dc.CastException catch (e) {
-      throw CastBackendException(e.toString(), _failureKindFor(e));
+      throw CastBackendException(e.toString(), failureKindFor(e));
+    } catch (e) {
+      // dart_cast also throws raw TimeoutException (ChromecastSession.connect
+      // after 15s with no RECEIVER_STATUS) and ArgumentError
+      // (DlnaSession.fromDevice when the persisted metadata is missing a
+      // control URL) on this path — neither is a CastException, so nothing
+      // here would otherwise be translated before reaching the UI.
+      throw CastBackendException(e.toString(), CastFailureKind.unknown);
     }
   }
 
@@ -180,6 +292,10 @@ class DartCastBackend implements CastBackend {
             ? dc.CastMediaType.hls
             : dc.CastMediaType.mp4,
         title: request.title,
+        // request.subtitle is a short display line (e.g. "S1E3"), not a
+        // subtitle *track* — dc.CastMedia has no equivalent field, so it is
+        // intentionally dropped here. Only request.subtitles (caption
+        // tracks) maps onto dc.CastMedia.subtitles below.
         imageUrl: request.imageUrl,
         startPosition: request.startPosition,
         subtitles: request.subtitles
@@ -192,7 +308,12 @@ class DartCastBackend implements CastBackend {
             .toList(),
       ));
     } on dc.CastException catch (e) {
-      throw CastBackendException(e.toString(), _failureKindFor(e));
+      throw CastBackendException(e.toString(), failureKindFor(e));
+    } catch (e) {
+      // See the matching catch in connect(): dart_cast can also throw a raw
+      // StateError (e.g. ChromecastSession.loadMedia before connect()) that
+      // isn't a CastException and would otherwise reach the UI unwrapped.
+      throw CastBackendException(e.toString(), CastFailureKind.unknown);
     }
   }
 
@@ -238,6 +359,8 @@ class DartCastBackend implements CastBackend {
   @override
   Future<void> dispose() async {
     _cancelSubscriptions();
+    await _discoveryFailureSub?.cancel();
+    _session?.dispose();
     await _service.dispose();
     await _states.close();
     await _positions.close();
@@ -263,16 +386,5 @@ class DartCastBackend implements CastBackend {
     _stateSub = null;
     _positionSub = null;
     _durationSub = null;
-  }
-
-  /// Translate `dart_cast` exceptions into the app's failure vocabulary, which
-  /// is what drives the bridge-retry decision in `CastSessionManager`.
-  static CastFailureKind _failureKindFor(dc.CastException e) {
-    if (e is dc.DeviceUnreachableException) return CastFailureKind.unreachable;
-    if (e is dc.ProxyUpstreamException) return CastFailureKind.unreachable;
-    if (e is dc.MediaLoadFailedException) return CastFailureKind.mediaLoadFailed;
-    if (e is dc.ConnectionLostException) return CastFailureKind.connectionLost;
-    if (e is dc.DiscoveryException) return CastFailureKind.discoveryDenied;
-    return CastFailureKind.unknown;
   }
 }

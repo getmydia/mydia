@@ -14,6 +14,7 @@ void main() {
           protocol: CastProtocolKind.chromecast,
           host: '192.168.1.50',
           port: 8009,
+          metadata: {'md': 'Chromecast Ultra'},
         ),
         mediaId: 'movie-9',
         mediaType: 'movie',
@@ -38,6 +39,7 @@ void main() {
       expect(restored.position, const Duration(minutes: 12));
       expect(restored.routeKind, CastRouteKind.directServer);
       expect(restored.savedAt, DateTime.utc(2026, 7, 28, 10));
+      expect(restored.device.metadata['md'], 'Chromecast Ultra');
     });
 
     test('is not expired within 12 hours', () {
@@ -111,6 +113,11 @@ void main() {
 
       expect(loaded?.device.name, 'Living Room');
       expect(loaded?.position, const Duration(minutes: 12));
+      // Hive round-trips nested maps as Map<dynamic, dynamic>, not
+      // Map<String, dynamic> — this is the path that matters for
+      // reconstructDartCastDevice, which reads this back after a fresh
+      // app launch to reconnect without a discovery sweep.
+      expect(loaded?.device.metadata['md'], 'Chromecast Ultra');
     });
 
     test('load returns null after clear', () async {

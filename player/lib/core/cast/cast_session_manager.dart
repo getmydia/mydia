@@ -171,15 +171,34 @@ class CastSessionManager {
         // failed — a guaranteed-futile extra receiver round-trip.
         if (attempted.kind == CastRouteKind.localBridge) return null;
 
-        // The receiver rejected the file itself — nearly always a codec it
-        // cannot decode. Escalate to a full transcode.
+        // `mediaLoadFailed` is overloaded: dart_cast's Chromecast and DLNA
+        // backends both surface a receiver-side LOAD failure this way
+        // whether the true cause is an unsupported codec *or* the receiver
+        // simply being unable to reach the media URL at all (see
+        // DartCastBackend.failureKindFor). We can't tell those apart from
+        // the exception alone, so try the bridge first: it fixes the
+        // unreachable case, and costs nothing if the real problem is the
+        // codec, since a transcode escalation still follows below.
+        final bridgeRetry = resolver.resolve(
+          fileId: request.fileId,
+          protocol: device.protocol,
+          forceBridge: true,
+        );
+        if (bridgeRetry != null) {
+          debugPrint(
+            '[CastSessionManager] Media rejected on direct route, retrying via bridge',
+          );
+          return bridgeRetry;
+        }
+
+        // No bridge available — this must be a genuine codec rejection.
+        // Escalate to a full transcode.
         if (attempted.mediaUrl.contains('strategy=TRANSCODE')) return null;
 
         debugPrint('[CastSessionManager] Media rejected, retrying with TRANSCODE');
         return resolver.resolve(
           fileId: request.fileId,
           protocol: device.protocol,
-          forceBridge: attempted.kind == CastRouteKind.localBridge,
           forceTranscode: true,
         );
 

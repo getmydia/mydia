@@ -181,8 +181,8 @@ void main() {
     });
 
     test(
-        'disconnects without touching LAN access when the direct-route '
-        'transcode retry fails', () async {
+        'disables LAN access when the direct-route bridge retry also fails',
+        () async {
       final manager = build();
       addTearDown(manager.dispose);
       backend.failAllLoads(CastFailureKind.mediaLoadFailed);
@@ -192,7 +192,11 @@ void main() {
         throwsA(isA<CastBackendException>()),
       );
 
-      expect(lanCalls, isEmpty);
+      // A direct-route mediaLoadFailed retries via the bridge first (a
+      // receiver that can't reach the media URL reports the same
+      // mediaLoadFailed a codec rejection would), so LAN gets turned on for
+      // that attempt, then rolled back when it fails too.
+      expect(lanCalls, [true, false]);
       expect(backend.connectedDevice, isNull);
     });
 
@@ -245,8 +249,21 @@ void main() {
   });
 
   group('codec failure escalation', () {
-    test('retries with TRANSCODE rather than through the bridge', () async {
+    test('retries via the bridge rather than TRANSCODE when a bridge is available',
+        () async {
       final manager = build();
+      addTearDown(manager.dispose);
+      backend.failNextLoad(CastFailureKind.mediaLoadFailed);
+
+      await manager.startCast(device: device, request: launch);
+
+      expect(lanCalls, [true]);
+      expect(backend.loadedRequests.single.url,
+          startsWith('http://192.168.1.20:5000/g/abcd/'));
+    });
+
+    test('falls back to TRANSCODE when no bridge is available', () async {
+      final manager = build(lanBaseUrl: null);
       addTearDown(manager.dispose);
       backend.failNextLoad(CastFailureKind.mediaLoadFailed);
 
@@ -256,7 +273,7 @@ void main() {
       expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
     });
 
-    test('rethrows when the transcode retry also fails', () async {
+    test('rethrows when the bridge retry also fails', () async {
       final manager = build();
       addTearDown(manager.dispose);
       backend.failAllLoads(CastFailureKind.mediaLoadFailed);
@@ -266,6 +283,11 @@ void main() {
         throwsA(isA<CastBackendException>()
             .having((e) => e.kind, 'kind', CastFailureKind.mediaLoadFailed)),
       );
+
+      // Bridge was tried (and given a chance to turn LAN on) before giving
+      // up — never a second, transcode-flavoured attempt on top of it.
+      expect(lanCalls, [true, false]);
+      expect(backend.loadedRequests, isEmpty);
     });
   });
 
