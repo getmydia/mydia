@@ -6,10 +6,12 @@ typedef StubHandler = Object Function(Request request, int callIndex);
 
 /// A [Link] that answers from a script instead of a server.
 ///
-/// Every response `data` map must carry `__typename` on each object: the
-/// client adds `__typename` to outgoing documents, and the normalized cache
-/// refuses to write data that lacks it (which surfaces as a spurious
-/// `result.hasException`).
+/// Every response `data` map must carry `__typename` on each object,
+/// including the response root itself (e.g. `'__typename': 'Query'`
+/// alongside the top-level fields): `gql()` injects a `__typename` selection
+/// into every selection set in the outgoing document, root included, and the
+/// normalized cache refuses to write data that lacks a matching one (which
+/// surfaces as a spurious `result.hasException`, not as an obvious error).
 class StubLink extends Link {
   StubLink(this.handler);
 
