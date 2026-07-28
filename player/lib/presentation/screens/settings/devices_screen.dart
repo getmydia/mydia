@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/format/relative_time.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
@@ -271,20 +272,7 @@ class _DeviceCard extends StatelessWidget {
     }
   }
 
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-
-    if (diff.inDays == 0) {
-      return 'Today';
-    } else if (diff.inDays == 1) {
-      return 'Yesterday';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays} days ago';
-    } else {
-      return '${date.month}/${date.day}/${date.year}';
-    }
-  }
+  String _formatDate(DateTime date) => formatRelativeTime(date);
 }
 
 class _StatusBadge extends StatelessWidget {
