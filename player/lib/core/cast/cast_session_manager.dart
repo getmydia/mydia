@@ -96,13 +96,48 @@ class CastSessionManager {
     await _backend.connect(device);
     _listenToBackend(request);
 
-    try {
-      await _loadOnRoute(resolver, route, device, request);
-    } on CastBackendException catch (e) {
-      final retryRoute = _retryRouteFor(e, route, resolver, device, request);
-      if (retryRoute == null) rethrow;
+    // Captured before the load attempts so rollback can tell whether *this*
+    // call turned LAN access on, versus it already being on from a session
+    // that was mid-switch when this one started.
+    final lanEnabledBeforeCall = _lanEnabled;
 
-      await _loadOnRoute(resolver, retryRoute, device, request);
+    try {
+      try {
+        await _loadOnRoute(resolver, route, device, request);
+      } on CastBackendException catch (e) {
+        final retryRoute = _retryRouteFor(e, route, resolver, device, request);
+        if (retryRoute == null) rethrow;
+
+        await _loadOnRoute(resolver, retryRoute, device, request);
+      }
+    } catch (e) {
+      // Nothing succeeded: leaving the backend connected, the listeners
+      // live, and the LAN proxy exposed would strand the app in a state
+      // with no session but an active connection and (per the Security
+      // requirement) a listener with no cast in progress.
+      await _rollbackFailedStart(lanEnabledBeforeCall);
+      rethrow;
+    }
+  }
+
+  /// Undo the side effects of a [startCast] call that never produced a
+  /// working session.
+  Future<void> _rollbackFailedStart(bool lanEnabledBeforeCall) async {
+    _cancelSubscriptions();
+
+    try {
+      await _backend.disconnect();
+    } catch (e) {
+      debugPrint('[CastSessionManager] Ignoring disconnect error during rollback: $e');
+    }
+
+    if (_lanEnabled && !lanEnabledBeforeCall) {
+      try {
+        await _setLanAccess(false);
+      } catch (e) {
+        debugPrint('[CastSessionManager] Ignoring setLanAccess error during rollback: $e');
+      }
+      _lanEnabled = false;
     }
   }
 
@@ -131,6 +166,11 @@ class CastSessionManager {
         );
 
       case CastFailureKind.mediaLoadFailed:
+        // CastRouteResolver ignores forceTranscode on the bridge branch, so
+        // retrying here would just resend the identical URL that just
+        // failed — a guaranteed-futile extra receiver round-trip.
+        if (attempted.kind == CastRouteKind.localBridge) return null;
+
         // The receiver rejected the file itself — nearly always a codec it
         // cannot decode. Escalate to a full transcode.
         if (attempted.mediaUrl.contains('strategy=TRANSCODE')) return null;
@@ -208,6 +248,14 @@ class CastSessionManager {
 
   void _listenToBackend(CastLaunchRequest request) {
     _cancelSubscriptions();
+
+    // Casting a new item — whether via startCast or restoreSession — must
+    // not inherit the previous item's duration or throttle timestamp.
+    // Otherwise the first position event for the new item can sync against
+    // a stale duration, writing a wrong durationSeconds (and potentially a
+    // false "watched" verdict) to the user's history.
+    _lastDuration = Duration.zero;
+    _lastProgressSync = null;
 
     _durationSub = _backend.durationStream.listen((duration) {
       _lastDuration = duration;
@@ -330,6 +378,24 @@ class CastSessionManager {
     }
 
     _persisted = stored;
+
+    // The progress pump reads a CastLaunchRequest, not a PersistedCastSession
+    // — reconstruct an equivalent one from the fields the persisted record
+    // carries, so a restored session keeps syncing progress and marks
+    // itself stale like a freshly started one does.
+    _listenToBackend(CastLaunchRequest(
+      fileId: stored.fileId,
+      mediaId: stored.mediaId,
+      mediaType: stored.mediaType,
+      title: stored.title,
+      startPosition: stored.position,
+    ));
+
+    if (stored.routeKind == CastRouteKind.localBridge && !_lanEnabled) {
+      await _setLanAccess(true);
+      _lanEnabled = true;
+    }
+
     _publish(CastSession(
       device: stored.device,
       playbackState: CastPlaybackState.buffering,
