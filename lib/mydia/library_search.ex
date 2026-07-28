@@ -59,6 +59,8 @@ defmodule Mydia.LibrarySearch do
   require Mydia.LibrarySearch.Rank
 
   alias Mydia.Accounts.User
+  alias Mydia.Collections
+  alias Mydia.Collections.Collection
   alias Mydia.LibrarySearch.{Rank, Result, Results, Section, Tokenizer}
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Metadata.Access, as: MetadataAccess
@@ -124,11 +126,16 @@ defmodule Mydia.LibrarySearch do
     %Section{type: :episode, results: results, total_count: Repo.aggregate(base, :count)}
   end
 
-  # Placeholder for section types without a builder yet: :collection arrives in
-  # Task 4. Kept last so each task's specific clause, inserted immediately
-  # after the :movie/:tv_show clause above, takes precedence over this one.
-  defp build_section(type, _user, _normalized, _limit) do
-    %Section{type: type, results: [], total_count: 0}
+  defp build_section(:collection, %User{} = user, normalized, limit) do
+    base = collection_base(user, normalized)
+
+    results =
+      base
+      |> collection_rows(normalized, limit)
+      |> Repo.all()
+      |> Enum.map(&build_collection_result/1)
+
+    %Section{type: :collection, results: results, total_count: Repo.aggregate(base, :count)}
   end
 
   ## media_items
@@ -217,4 +224,46 @@ defmodule Mydia.LibrarySearch do
       backdrop_path: MetadataAccess.get_field(show, :backdrop_path)
     }
   end
+
+  ## collections
+
+  # Same visibility predicate used everywhere else in Mydia.Collections: the
+  # user's own collections plus anyone's shared ones.
+  defp collection_base(%User{} = user, normalized) do
+    base = from(c in Collection, where: c.user_id == ^user.id or c.visibility == "shared")
+
+    Enum.reduce(normalized.tokens, base, fn token, query ->
+      pattern = Tokenizer.contains_pattern(token)
+
+      where(query, [c], fragment("lower(?) LIKE ? ESCAPE '\\'", c.name, ^pattern))
+    end)
+  end
+
+  defp collection_rows(base, normalized, limit) do
+    prefix = Tokenizer.prefix_pattern(normalized.query)
+    word = Tokenizer.word_pattern(normalized.query)
+
+    from(c in base,
+      select: %{
+        collection: c,
+        rank: selected_as(Rank.rank(c.name, ^normalized.query, ^prefix, ^word), :rank)
+      },
+      order_by: [desc: selected_as(:rank), asc: c.name],
+      limit: ^limit
+    )
+  end
+
+  defp build_collection_result(%{collection: collection, rank: rank}) do
+    %Result{
+      id: collection.id,
+      type: :collection,
+      title: collection.name,
+      score: rank / 1,
+      subtitle: item_count_label(Collections.item_count(collection)),
+      poster_path: collection.poster_path
+    }
+  end
+
+  defp item_count_label(1), do: "1 item"
+  defp item_count_label(count), do: "#{count} items"
 end
