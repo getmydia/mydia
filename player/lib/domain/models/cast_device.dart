@@ -1,14 +1,48 @@
-/// Represents a discovered Chromecast device on the network.
+/// The wire protocol a cast receiver speaks.
+enum CastProtocolKind { chromecast, dlna }
+
+/// Represents a discovered cast receiver on the network.
 class CastDevice {
   final String id;
   final String name;
+  final CastProtocolKind protocol;
   final String? model;
+
+  /// Resolved network address, when known. Persisted so a stored session can
+  /// be reconnected without waiting for a full discovery sweep.
+  final String? host;
+  final int? port;
 
   const CastDevice({
     required this.id,
     required this.name,
+    required this.protocol,
     this.model,
+    this.host,
+    this.port,
   });
+
+  factory CastDevice.fromJson(Map<String, dynamic> json) {
+    return CastDevice(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      protocol: json['protocol'] == 'dlna'
+          ? CastProtocolKind.dlna
+          : CastProtocolKind.chromecast,
+      model: json['model'] as String?,
+      host: json['host'] as String?,
+      port: json['port'] as int?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'protocol': protocol == CastProtocolKind.dlna ? 'dlna' : 'chromecast',
+        'model': model,
+        'host': host,
+        'port': port,
+      };
 
   @override
   bool operator ==(Object other) {
@@ -20,7 +54,8 @@ class CastDevice {
   int get hashCode => id.hashCode;
 
   @override
-  String toString() => 'CastDevice(id: $id, name: $name, model: $model)';
+  String toString() =>
+      'CastDevice(id: $id, name: $name, protocol: $protocol, model: $model)';
 }
 
 /// Represents the current state of casting playback.
@@ -70,21 +105,28 @@ class CastSession {
   final CastMediaInfo? mediaInfo;
   final CastPlaybackState playbackState;
 
+  /// True once the receiver has dropped off the network. The UI offers a
+  /// reconnect rather than showing controls that silently do nothing.
+  final bool isStale;
+
   const CastSession({
     required this.device,
     this.mediaInfo,
     required this.playbackState,
+    this.isStale = false,
   });
 
   CastSession copyWith({
     CastDevice? device,
     CastMediaInfo? mediaInfo,
     CastPlaybackState? playbackState,
+    bool? isStale,
   }) {
     return CastSession(
       device: device ?? this.device,
       mediaInfo: mediaInfo ?? this.mediaInfo,
       playbackState: playbackState ?? this.playbackState,
+      isStale: isStale ?? this.isStale,
     );
   }
 }
