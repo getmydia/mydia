@@ -7,6 +7,15 @@ const PORT = process.env.PORT || 8080;
 const USERNAME = process.env.USERNAME || "admin";
 const PASSWORD = process.env.PASSWORD || "adminpass";
 
+// Which qBittorrent WebAPI dialect to emulate.
+//   5.1 -> login returns 200 "Ok."  and sets SID
+//   5.2 -> login returns 204 empty  and sets QBT_SID_<port>
+// 5.2 is the default because that is what current installs speak. The port in
+// the cookie name is the server's own listening port, matching real behaviour.
+const DIALECT = process.env.QB_DIALECT || "5.2";
+const SESSION_COOKIE = DIALECT === "5.1" ? "SID" : `QBT_SID_${PORT}`;
+const APP_VERSION = DIALECT === "5.1" ? "v5.1.2-mock" : "v5.2.0-mock";
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(cookieParser());
@@ -22,7 +31,7 @@ function generateSessionId() {
 
 // Middleware to check authentication
 const requireAuth = (req, res, next) => {
-  const sid = req.cookies.SID;
+  const sid = req.cookies[SESSION_COOKIE];
   if (!sid || !sessions.has(sid)) {
     return res.status(403).send("Forbidden");
   }
@@ -41,8 +50,8 @@ app.post("/api/v2/auth/login", (req, res) => {
   if (username === USERNAME && password === PASSWORD) {
     const sid = generateSessionId();
     sessions.set(sid, { username, loginTime: Date.now() });
-    res.cookie("SID", sid, { httpOnly: true });
-    return res.send("Ok.");
+    res.cookie(SESSION_COOKIE, sid, { httpOnly: true, sameSite: "Strict" });
+    return DIALECT === "5.1" ? res.send("Ok.") : res.status(204).end();
   }
 
   res.status(401).send("Fails.");
@@ -50,17 +59,17 @@ app.post("/api/v2/auth/login", (req, res) => {
 
 // Logout endpoint
 app.post("/api/v2/auth/logout", (req, res) => {
-  const sid = req.cookies.SID;
+  const sid = req.cookies[SESSION_COOKIE];
   if (sid) {
     sessions.delete(sid);
-    res.clearCookie("SID");
+    res.clearCookie(SESSION_COOKIE);
   }
   res.send("Ok.");
 });
 
 // Get application version
 app.get("/api/v2/app/version", (req, res) => {
-  res.send("v4.5.0-mock");
+  res.send(APP_VERSION);
 });
 
 // Get application preferences
