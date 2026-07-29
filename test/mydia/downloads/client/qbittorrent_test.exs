@@ -521,6 +521,55 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
     end
   end
 
+  describe "2xx success handling (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      stub_login(bypass)
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "remove_torrent accepts a 204", %{bypass: bypass, config: config} do
+      Bypass.expect(bypass, "POST", "/api/v2/torrents/delete", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      assert :ok = QBittorrent.remove_torrent(config, "abc123")
+    end
+
+    test "pause falls back to stop and accepts a 204", %{bypass: bypass, config: config} do
+      Bypass.expect(bypass, "POST", "/api/v2/torrents/pause", fn conn ->
+        Plug.Conn.resp(conn, 404, "Not Found")
+      end)
+
+      Bypass.expect(bypass, "POST", "/api/v2/torrents/stop", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      assert :ok = QBittorrent.pause_torrent(config, "abc123")
+    end
+
+    test "resume falls back to start and accepts a 204", %{bypass: bypass, config: config} do
+      Bypass.expect(bypass, "POST", "/api/v2/torrents/resume", fn conn ->
+        Plug.Conn.resp(conn, 404, "Not Found")
+      end)
+
+      Bypass.expect(bypass, "POST", "/api/v2/torrents/start", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      assert :ok = QBittorrent.resume_torrent(config, "abc123")
+    end
+
+    test "remove_torrent still reports a 404 as not_found", %{bypass: bypass, config: config} do
+      Bypass.expect(bypass, "POST", "/api/v2/torrents/delete", fn conn ->
+        Plug.Conn.resp(conn, 404, "Not Found")
+      end)
+
+      assert {:error, error} = QBittorrent.remove_torrent(config, "abc123")
+      assert error.type == :not_found
+    end
+  end
+
   describe "priority profile resolution (Bypass)" do
     setup do
       bypass = Bypass.open()

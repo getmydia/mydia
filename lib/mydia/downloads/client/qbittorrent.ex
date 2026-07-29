@@ -160,9 +160,9 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     with_authenticated_session(config, fn req ->
       with {:ok, response} <- HTTP.post(req, "/api/v2/torrents/delete", form: body) do
         case response.status do
-          200 -> :ok
+          status when status in 200..299 -> :ok
           404 -> {:error, Error.not_found("Torrent not found")}
-          _ -> {:error, Error.api_error("Failed to remove torrent", %{status: response.status})}
+          status -> {:error, Error.api_error("Failed to remove torrent", %{status: status})}
         end
       end
     end)
@@ -337,7 +337,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     authed_request(req, :post, "/api/v2/torrents/add", form_multipart: fields)
   end
 
-  defp check_add_response(%{status: 200}), do: :ok
+  defp check_add_response(%{status: status}) when status in 200..299, do: :ok
 
   defp check_add_response(%{status: status, body: body}) do
     {:error, Error.api_error("Failed to add torrent", %{status: status, body: body})}
@@ -389,12 +389,12 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
     with_authenticated_session(config, fn req ->
       case authed_request(req, :post, primary_path, form: body) do
-        {:ok, %{status: 200}} ->
+        {:ok, %{status: status}} when status in 200..299 ->
           :ok
 
         {:ok, %{status: 404}} ->
           case authed_request(req, :post, fallback_path, form: body) do
-            {:ok, %{status: 200}} -> :ok
+            {:ok, %{status: status}} when status in 200..299 -> :ok
             {:ok, resp} -> toggle_error(resp)
             {:error, _} = err -> err
           end
