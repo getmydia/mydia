@@ -19,7 +19,6 @@ import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
-import '../../../core/cast/cast_seek.dart';
 import '../../../core/player/duration_override.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
@@ -1422,7 +1421,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
 
     final isCasting = ref.watch(isCastingProvider);
-    Widget body = isCasting ? _buildCastRemoteControlUI() : _buildBody();
+    final castDevice = ref.watch(currentCastDeviceProvider);
+    Widget body = isCasting && castDevice != null
+        ? _buildCastPlaceholder(castDevice)
+        : _buildBody();
 
     // Wrap with keyboard listener for desktop
     if (PlatformFeatures.supportsKeyboardShortcuts && !isCasting) {
@@ -1811,7 +1813,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           mediaId: widget.mediaId,
           mediaType: widget.mediaType,
           title: widget.title ?? 'Untitled',
-          subtitleLabel: widget.mediaType == 'episode' ? 'Episode' : 'Movie',
           startPosition: _player?.state.position,
           // The receiver cannot work this out for itself: Mydia's HLS
           // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
@@ -1859,280 +1860,51 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  /// Re-cast the media the stored (now stale) session was playing.
-  Future<void> _reconnectStaleSession() async {
-    try {
-      final manager = await ref.read(castSessionManagerProvider.future);
-      await manager.reconnectStoredSession();
-    } on CastBackendException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(castErrorMessage(e, ref: ref)),
-        backgroundColor: Colors.red,
-      ));
-    } catch (e) {
-      debugPrint('[PlayerScreen] Unexpected error reconnecting cast: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to reconnect: $e'),
-        backgroundColor: Colors.red,
-      ));
-    }
-  }
-
-  /// Drop the cast session and fall back to local playback.
-  Future<void> _stopCasting() async {
-    try {
-      final manager = await ref.read(castSessionManagerProvider.future);
-      await manager.stopCast();
-    } catch (e) {
-      debugPrint('[PlayerScreen] Unexpected error stopping cast: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to stop casting: $e'),
-        backgroundColor: Colors.red,
-      ));
-    }
-  }
-
-  /// Build the remote control UI when casting.
-  Widget _buildCastRemoteControlUI() {
-    final session = ref.watch(castSessionProvider).value;
-    if (session != null && session.isStale) {
-      return Center(
-        key: const Key('cast-session-stale'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cast_outlined, size: 48, color: Colors.white70),
-            const SizedBox(height: 16),
-            Text(
-              'Lost connection to ${session.device.name}',
-              style: const TextStyle(color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              key: const Key('cast-stale-reconnect'),
-              // Re-cast what the *stale session* was playing. Opening the
-              // picker here would silently start whatever file this screen
-              // happens to be showing instead.
-              onPressed: _reconnectStaleSession,
-              child: const Text('Reconnect'),
-            ),
-            const SizedBox(height: 8),
-            // Without this the screen is a dead end: `isCastingProvider`
-            // stays true while the session is stale, so the normal player
-            // body never renders and there is no way back.
-            TextButton(
-              key: const Key('cast-stale-stop'),
-              onPressed: _stopCasting,
-              child: const Text('Stop casting'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final mediaInfo = ref.watch(castMediaInfoProvider);
-    final playbackState = ref.watch(castPlaybackStateProvider);
-    final castDevice = ref.watch(currentCastDeviceProvider);
-    final manager = ref.watch(castSessionManagerProvider).value;
-
-    if (mediaInfo == null || castDevice == null || manager == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.red),
-      );
-    }
-
-    final isPlaying = playbackState == CastPlaybackState.playing;
-    final isBuffering = playbackState == CastPlaybackState.buffering;
-    // A receiver that cannot report a length (every HLS cast — see
-    // `cast_seek.dart`) leaves this false, and the scrub bar goes read-only
-    // rather than seeking to a position computed from a bogus duration.
-    final durationKnown = hasKnownDuration(mediaInfo.duration);
-    final progress =
-        castProgressFraction(mediaInfo.position, mediaInfo.duration);
-
+  /// What the player screen shows while the media is on a receiver.
+  ///
+  /// Deliberately inert: every control lives in `CastMiniController`, which is
+  /// mounted over this screen by `app.dart`. Duplicating them here is the
+  /// confusion this replaced — two surfaces showing the same title, device,
+  /// play/pause and stop, with the bar clipping the remote's stop button.
+  Widget _buildCastPlaceholder(CastDevice device) {
     return Stack(
       children: [
         Center(
           child: Padding(
-            padding: const EdgeInsets.all(32),
+            // Bottom inset keeps the text clear of the mini bar.
+            padding: const EdgeInsets.only(
+              left: 32,
+              right: 32,
+              top: 32,
+              bottom: 120,
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Cast icon
-                const Icon(
-                  Icons.cast_connected,
-                  size: 120,
-                  color: Colors.blue,
-                ),
-                const SizedBox(height: 32),
-                // Device name
+                const Icon(Icons.cast_connected, size: 96, color: Colors.blue),
+                const SizedBox(height: 24),
                 Text(
-                  'Casting to',
+                  'Playing on ${device.name}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.grey[400],
+                        color: Colors.white,
                       ),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  castDevice.name,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 48),
-                // Media title
-                Text(
-                  mediaInfo.title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
+                  widget.title ?? 'Untitled',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[400],
                       ),
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (mediaInfo.subtitle != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    mediaInfo.subtitle!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[400],
-                        ),
-                  ),
-                ],
-                const SizedBox(height: 48),
-                // Progress bar
-                Column(
-                  children: [
-                    Slider(
-                      value: progress,
-                      // Null disables the slider outright. Leaving it live
-                      // with an unknown duration is the bug this replaces:
-                      // every drag resolved to `fraction * -1s` and threw the
-                      // receiver back to the start of the video.
-                      onChanged: !durationKnown
-                          ? null
-                          : (value) async {
-                              final newPosition = seekTargetForFraction(
-                                value,
-                                mediaInfo.duration,
-                              );
-                              if (newPosition == null) return;
-                              await manager.seek(newPosition);
-                            },
-                      activeColor: Colors.red,
-                      inactiveColor: Colors.grey[800],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _formatDuration(mediaInfo.position),
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[400],
-                                    ),
-                          ),
-                          Text(
-                            // `_formatDuration` renders a -1s duration as
-                            // "00:-1"; an unknown length gets a placeholder.
-                            durationKnown
-                                ? _formatDuration(mediaInfo.duration)
-                                : '--:--',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[400],
-                                    ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                // Playback controls
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Rewind 10s
-                    IconButton(
-                      icon: const Icon(Icons.replay_10, color: Colors.white),
-                      iconSize: 40,
-                      onPressed: () async {
-                        await manager.seek(clampSeekTarget(
-                          mediaInfo.position - const Duration(seconds: 10),
-                          mediaInfo.duration,
-                        ));
-                      },
-                    ),
-                    const SizedBox(width: 24),
-                    // Play/Pause
-                    if (isBuffering)
-                      const SizedBox(
-                        width: 64,
-                        height: 64,
-                        child: CircularProgressIndicator(
-                          color: Colors.red,
-                          strokeWidth: 4,
-                        ),
-                      )
-                    else
-                      IconButton(
-                        icon: Icon(
-                          isPlaying
-                              ? Icons.pause_circle_filled
-                              : Icons.play_circle_filled,
-                          color: Colors.white,
-                        ),
-                        iconSize: 64,
-                        onPressed: () async {
-                          if (isPlaying) {
-                            await manager.pause();
-                          } else {
-                            await manager.play();
-                          }
-                        },
-                      ),
-                    const SizedBox(width: 24),
-                    // Forward 10s
-                    IconButton(
-                      icon: const Icon(Icons.forward_10, color: Colors.white),
-                      iconSize: 40,
-                      onPressed: () async {
-                        // Clamping only applies when the duration is real;
-                        // clamping against the receiver's -1 placeholder is
-                        // what turned "skip ahead" into "back to the start".
-                        await manager.seek(clampSeekTarget(
-                          mediaInfo.position + const Duration(seconds: 10),
-                          mediaInfo.duration,
-                        ));
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                // Stop casting button
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.stop),
-                  label: const Text('Stop Casting'),
-                  onPressed: () async {
-                    await manager.stopCast();
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white),
-                  ),
-                ),
               ],
             ),
           ),
         ),
-        // Back button
         Positioned(
           top: 8,
           left: 8,
@@ -2169,18 +1941,5 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (fromPlayer != null && fromPlayer > Duration.zero) return fromPlayer;
 
     return null;
-  }
-
-  /// Format duration as HH:MM:SS or MM:SS.
-  String _formatDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    } else {
-      return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
   }
 }
