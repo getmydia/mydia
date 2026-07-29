@@ -30,6 +30,7 @@ import '../../widgets/subtitle_track_selector.dart';
 import '../../widgets/audio_track_selector.dart';
 import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/gesture_controls.dart';
+import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
@@ -1841,7 +1842,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } on CastBackendException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_castErrorMessage(e)),
+        content: Text(castErrorMessage(e, ref: ref)),
         backgroundColor: Colors.red,
       ));
     } catch (e) {
@@ -1866,7 +1867,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } on CastBackendException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_castErrorMessage(e)),
+        content: Text(castErrorMessage(e, ref: ref)),
         backgroundColor: Colors.red,
       ));
     } catch (e) {
@@ -1891,32 +1892,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         content: Text('Failed to stop casting: $e'),
         backgroundColor: Colors.red,
       ));
-    }
-  }
-
-  /// Turn a cast failure into something the user can act on. A bare
-  /// "cast failed" leaves a firewall or codec problem undiagnosable, so the
-  /// unreachable case names the actual port that needs to be open.
-  String _castErrorMessage(CastBackendException e) {
-    final proxy = ref.read(localProxyServiceProvider);
-
-    switch (e.kind) {
-      case CastFailureKind.unreachable:
-        final port = proxy.isLanAccessible ? proxy.port : null;
-        final portHint =
-            port == null ? '' : ' Allow incoming connections on port $port.';
-        return 'The device could not reach your media. Check that both are on '
-            'the same network and that your firewall is not blocking '
-            'Mydia.$portHint';
-      case CastFailureKind.mediaLoadFailed:
-        return 'The device could not play this file. It may not support the '
-            'video or audio format.';
-      case CastFailureKind.connectionLost:
-        return 'Lost the connection to the device.';
-      case CastFailureKind.discoveryDenied:
-        return 'Mydia needs local network permission to find cast devices.';
-      case CastFailureKind.unknown:
-        return 'Casting failed: ${e.message}';
     }
   }
 
