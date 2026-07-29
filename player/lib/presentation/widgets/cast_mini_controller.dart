@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/auth/auth_status.dart';
 import '../../core/cast/cast_providers.dart';
+import '../../core/graphql/graphql_provider.dart';
 import '../../domain/models/cast_device.dart';
 
 /// Mini controller that shows at the bottom of the screen during casting.
@@ -12,16 +14,31 @@ class CastMiniController extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isCasting = ref.watch(isCastingProvider);
+    final capabilities = ref.watch(castCapabilitiesProvider);
+    if (!capabilities.any) return const SizedBox.shrink();
 
-    if (!isCasting) {
-      return const SizedBox.shrink();
-    }
+    // Gate on authentication before touching anything else in the cast stack.
+    // `isCastingProvider` reaches `castSessionManagerProvider`, whose body
+    // awaits `asyncGraphqlClientProvider` — and that provider does not resolve
+    // until the user is authenticated. Building the chain beforehand leaves it
+    // loading indefinitely on every screen, and when the container is disposed
+    // while it is still pending (app teardown, or an integration test finishing
+    // on the pairing screen) Riverpod completes it with a StateError that
+    // escapes as an unhandled async error. There is also nothing to show: you
+    // cannot be casting before you have a server.
+    final auth = ref.watch(authStateProvider);
+    if (auth.value != AuthStatus.authenticated) return const SizedBox.shrink();
+
+    final isCasting = ref.watch(isCastingProvider);
+    if (!isCasting) return const SizedBox.shrink();
+
+    final managerAsync = ref.watch(castSessionManagerProvider);
+    final manager = managerAsync.value;
+    if (manager == null) return const SizedBox.shrink();
 
     final mediaInfo = ref.watch(castMediaInfoProvider);
     final playbackState = ref.watch(castPlaybackStateProvider);
     final device = ref.watch(currentCastDeviceProvider);
-    final castService = ref.read(castServiceProvider);
 
     if (mediaInfo == null) {
       return const SizedBox.shrink();
@@ -32,23 +49,16 @@ class CastMiniController extends ConsumerWidget {
         ? mediaInfo.position.inSeconds / mediaInfo.duration.inSeconds
         : 0.0;
 
+    // Deliberately not tappable: the full remote lives on the player screen,
+    // and this bar has no media ids to route there with. An affordance that
+    // only apologises for itself is worse than no affordance — the play/pause
+    // and stop buttons below are the real controls.
     return Material(
       elevation: 8,
       color: Theme.of(context).colorScheme.surface,
-      child: InkWell(
-        onTap: () {
-          // Navigate to player screen (which will show remote control UI)
-          // For now, just show a message since we'd need media IDs
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Full remote control coming soon'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
             // Progress bar
             LinearProgressIndicator(
               value: progress,
@@ -76,18 +86,20 @@ class CastMiniController extends ConsumerWidget {
                       children: [
                         Text(
                           mediaInfo.title,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (device != null)
                           Text(
                             'Casting to ${device.name}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey[600],
+                                    ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -103,9 +115,9 @@ class CastMiniController extends ConsumerWidget {
                     ),
                     onPressed: () async {
                       if (isPlaying) {
-                        await castService.pause();
+                        await manager.pause();
                       } else {
-                        await castService.play();
+                        await manager.play();
                       }
                     },
                   ),
@@ -138,15 +150,14 @@ class CastMiniController extends ConsumerWidget {
                       );
 
                       if (shouldStop == true) {
-                        await castService.disconnect();
+                        await manager.stopCast();
                       }
                     },
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

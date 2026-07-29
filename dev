@@ -10,6 +10,7 @@
 # Unchanged, intentionally NOT devenv-backed:
 #   - relay <build|push|restart|deploy>   (Docker + kubectl)
 #   - player android <build|run|shell>    (player/flake.nix, native Nix)
+#   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
 #   - player e2e / e2e-build              (Docker E2E stack, compose.player-e2e.yml)
 
 set -e
@@ -124,6 +125,12 @@ ${YELLOW}Player Android (native, uses player/flake.nix):${NC}
   player android build Build Android APK (release)
   player android run   Build and run on connected Android device
   player android shell Open nix develop shell in player directory
+
+${YELLOW}Player macOS (native, uses the host Xcode/CocoaPods/rustup toolchain):${NC}
+  player macos build   Build the macOS app (release)
+  player macos run     Build and run the macOS app (debug, hot reload)
+                       Both accept --skip-codegen to reuse existing build_runner
+                       output; extra args after 'run' pass through to flutter run.
 
 ${YELLOW}Metadata Relay (Docker + kubectl):${NC}
   relay deploy         Build, push :dev image, and redeploy to k8s
@@ -442,9 +449,98 @@ case "$COMMAND" in
                         ;;
                 esac
                 ;;
+            macos)
+                # macOS app builds use the HOST toolchain — not devenv, and not
+                # player/flake.nix either. Xcode and CocoaPods are Apple-licensed
+                # SDKs Nix cannot provide, and cargokit shells out to `rustup` to
+                # compile the Rust p2p core into the app bundle. Same escape hatch
+                # as `player android`, different reason.
+                if [ "$(uname -s)" != "Darwin" ]; then
+                    echo -e "${RED}Error: macOS builds require a macOS host${NC}"
+                    echo "Current host: $(uname -s). Use 'player android' or 'player build' (web) instead."
+                    exit 1
+                fi
+                macos_cmd="${2:-}"
+                case "$macos_cmd" in
+                    build|run) ;;
+                    *)
+                        echo -e "${RED}Error: Unknown macos command: ${macos_cmd:-<none>}${NC}"
+                        echo "Usage: ./dev player macos <build|run> [--skip-codegen] [flutter args...]"
+                        exit 1
+                        ;;
+                esac
+                shift 2
+
+                # Preflight the host toolchain so a missing prerequisite fails
+                # here with a fix, not 200 lines into an Xcode build log.
+                missing_tools=""
+                for tool in flutter pod rustup; do
+                    command -v "$tool" &> /dev/null || missing_tools="${missing_tools:+$missing_tools }$tool"
+                done
+                if [ -n "$missing_tools" ]; then
+                    echo -e "${RED}Error: missing host tools: $missing_tools${NC}"
+                    echo "macOS builds need the host toolchain (devenv does not provide these):"
+                    echo "  flutter   https://docs.flutter.dev/get-started/install/macos"
+                    echo "  pod       sudo gem install cocoapods  (or: brew install cocoapods)"
+                    echo "  rustup    https://rustup.rs  (cargokit builds the Rust p2p core via rustup)"
+                    exit 1
+                fi
+
+                # Full Xcode, NOT just the Command Line Tools: /usr/bin/xcodebuild
+                # is a shim that exists either way, so `command -v` passes with CLT
+                # only and the build then dies deep inside SPM resolution with
+                # "unable to find utility xcodebuild". Ask xcrun to resolve it.
+                if ! xcrun --find xcodebuild &> /dev/null; then
+                    echo -e "${RED}Error: full Xcode is required to build the macOS app${NC}"
+                    echo "Active developer directory: $(xcode-select -p 2>/dev/null || echo '<unset>')"
+                    echo "The Command Line Tools alone cannot build macOS app bundles. Fix with:"
+                    echo "  1. Install Xcode from the App Store (or https://developer.apple.com/xcode)"
+                    echo "  2. sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer"
+                    echo "  3. sudo xcodebuild -runFirstLaunch"
+                    exit 1
+                fi
+
+                # Codegen mirrors CI (ci-player.yml) — desktop builds need the
+                # build_runner output. --skip-codegen reuses it for fast iteration;
+                # everything else passes through to flutter.
+                run_codegen=true
+                flutter_args=()
+                for arg in "$@"; do
+                    if [ "$arg" = "--skip-codegen" ]; then
+                        run_codegen=false
+                    else
+                        flutter_args+=("$arg")
+                    fi
+                done
+
+                (
+                    cd player
+                    echo -e "${GREEN}Installing player dependencies...${NC}"
+                    flutter pub get
+                    if [ "$run_codegen" = true ]; then
+                        echo -e "${GREEN}Running code generation...${NC}"
+                        flutter pub run build_runner build --delete-conflicting-outputs
+                    fi
+                    case "$macos_cmd" in
+                        build)
+                            echo -e "${GREEN}Building macOS app (release)...${NC}"
+                            flutter build macos --release
+                            ;;
+                        run)
+                            echo -e "${GREEN}Running macOS app...${NC}"
+                            flutter run -d macos "${flutter_args[@]}"
+                            ;;
+                    esac
+                )
+                if [ "$macos_cmd" = "build" ]; then
+                    echo -e "${GREEN}macOS app built successfully!${NC}"
+                    echo "Output: player/build/macos/Build/Products/Release/Mydia Player.app"
+                    echo "Open it with: open 'player/build/macos/Build/Products/Release/Mydia Player.app'"
+                fi
+                ;;
             *)
                 echo -e "${RED}Error: Unknown player command: $1${NC}"
-                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android>"
+                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos>"
                 exit 1
                 ;;
         esac

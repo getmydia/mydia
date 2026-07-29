@@ -161,6 +161,21 @@ Android builds use the player's own Nix flake (not devenv):
 ./dev player android shell   # nix develop shell in player/
 ```
 
+macOS app builds use the host toolchain (not devenv, not the flake) — Xcode and
+CocoaPods are Apple-licensed SDKs Nix cannot provide, and cargokit builds the
+Rust p2p core via `rustup`:
+
+```bash
+./dev player macos run                  # Debug build + run, hot reload
+./dev player macos build                # Release build
+./dev player macos run --skip-codegen   # Reuse existing build_runner output
+```
+
+Requires **full Xcode** (the Command Line Tools alone cannot build app bundles),
+CocoaPods (`pod`), Flutter, and rustup on the host; `./dev` preflights all four
+and tells you how to fix whichever is missing. Release output lands in
+`player/build/macos/Build/Products/Release/Mydia Player.app`.
+
 ## Project Structure
 
 ```
