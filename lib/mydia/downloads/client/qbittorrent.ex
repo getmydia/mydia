@@ -9,17 +9,32 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
   qBittorrent Web API: https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)
 
-  ## Authentication
-
-  qBittorrent requires logging in via the `/api/v2/auth/login` endpoint to obtain
-  a session cookie (`SID`). This cookie must be included in all subsequent requests.
-
   ## qBittorrent 5.x compatibility
 
   qBittorrent 5.0 renamed the `pause`/`resume` endpoints to `stop`/`start` and
   introduced new state names (`stoppedDL`, `stoppedUP`, `moving`). This adapter
   tries the legacy endpoint first and falls back to the 5.x name on 404, and
   maps the new state names to their equivalent internal states.
+
+  qBittorrent 5.2 changed authentication in two ways. `/api/v2/auth/login` now
+  answers 204 with an empty body instead of 200 `Ok.`, so any 2xx is treated as
+  success. The session cookie was renamed from `SID` to `QBT_SID_<port>`, where
+  the port is the server's own WebUI port rather than the port we dial, so the
+  cookie name is read from `Set-Cookie` and echoed back verbatim instead of
+  being reconstructed. The old `SID` name is rejected outright by 5.2.
+
+  ## Authentication modes
+
+  Either an API key or a username and password is required.
+
+  An `api_key` (qBittorrent 5.2+) is sent as `Authorization: Bearer <key>` on
+  every request, with no login round trip and no session to expire. Keys are
+  generated inside qBittorrent under Preferences, WebUI, API Key. qBittorrent
+  holds exactly one key at a time and generating a new one immediately
+  invalidates the previous one, so mydia never generates keys itself.
+
+  Otherwise the adapter logs in with the username and password and maintains
+  the session cookie, re-authenticating once when a request comes back 403.
 
   ## State Mapping
 
@@ -70,7 +85,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   @impl true
   def test_connection(config) do
     with_authenticated_session(config, fn req ->
-      with {:ok, response} <- HTTP.get(req, "/api/v2/app/version") do
+      with {:ok, response} <- authed_request(req, :get, "/api/v2/app/version", []) do
         case response.status do
           200 ->
             {:ok, ClientInfo.new(version: to_string(response.body), api_version: "2.x")}
@@ -158,11 +173,11 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     body = %{hashes: client_id, deleteFiles: to_string(delete_files)}
 
     with_authenticated_session(config, fn req ->
-      with {:ok, response} <- HTTP.post(req, "/api/v2/torrents/delete", form: body) do
+      with {:ok, response} <- authed_request(req, :post, "/api/v2/torrents/delete", form: body) do
         case response.status do
-          200 -> :ok
+          status when status in 200..299 -> :ok
           404 -> {:error, Error.not_found("Torrent not found")}
-          _ -> {:error, Error.api_error("Failed to remove torrent", %{status: response.status})}
+          status -> {:error, Error.api_error("Failed to remove torrent", %{status: status})}
         end
       end
     end)
@@ -180,17 +195,17 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
   ## Private Functions
 
-  # Authenticates, runs `fun` with the authenticated Req struct, and re-authenticates
-  # once if the inner call returns a 403 (stale/expired session). This matches the
-  # pattern used by the Transmission adapter for 409 session-id retries.
+  # Authenticates, runs `fun` with the authenticated Req struct, and handles a
+  # 403 from the inner call. In cookie mode this is a stale/expired session, so
+  # we re-authenticate once and retry (matching the pattern used by the
+  # Transmission adapter for 409 session-id retries). Under API-key auth a 403
+  # means the key itself was rejected, so it is terminal: see
+  # `retry_after_stale_session/2`.
   defp with_authenticated_session(config, fun) when is_function(fun, 1) do
     with {:ok, req} <- authenticate(config) do
       case fun.(req) do
         {:error, %Error{type: :stale_session}} ->
-          # Session expired between authenticate() and the call — re-auth and retry once.
-          with {:ok, fresh_req} <- authenticate(config) do
-            fun.(fresh_req)
-          end
+          retry_after_stale_session(config, fun)
 
         other ->
           other
@@ -198,14 +213,53 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     end
   end
 
+  # API-key auth has no session to refresh: a 403 means the key was rejected.
+  # Re-running `fun` would also resend mutating requests such as
+  # POST /torrents/add, so fail fast rather than retrying.
+  defp retry_after_stale_session(config, fun) do
+    if api_key?(config) do
+      {:error,
+       Error.authentication_failed("qBittorrent rejected the API key", %{
+         hint: "Regenerate the key in qBittorrent under Preferences, WebUI, API Key"
+       })}
+    else
+      with {:ok, fresh_req} <- authenticate(config) do
+        case fun.(fresh_req) do
+          # Never leak the internal marker: it is meaningless to an operator.
+          {:error, %Error{type: :stale_session}} ->
+            {:error, Error.authentication_failed("qBittorrent session could not be established")}
+
+          other ->
+            other
+        end
+      end
+    end
+  end
+
+  defp api_key?(config), do: is_binary(config[:api_key]) and config[:api_key] != ""
+
   # Marker error indicating the caller should re-authenticate and retry.
   defp stale_session, do: Error.new(:stale_session, "Session expired")
+
+  # An API key (qBittorrent 5.2+, WebAPI 2.14.1+) authenticates every request
+  # directly, so there is no login round trip and no session to maintain.
+  # put_header replaces, so this Bearer header wins over the Basic header that
+  # HTTP.new_request/1 sets when credentials are also present.
+  defp authenticate(%{api_key: key} = config) when is_binary(key) and key != "" do
+    {:ok,
+     config
+     |> HTTP.new_request()
+     |> Req.Request.put_header("authorization", "Bearer " <> key)}
+  end
 
   defp authenticate(config) do
     if config[:username] && config[:password] do
       do_authenticate(config)
     else
-      {:error, Error.invalid_config("Username and password are required for qBittorrent")}
+      {:error,
+       Error.invalid_config(
+         "qBittorrent requires either an API key (5.2+) or a username and password"
+       )}
     end
   end
 
@@ -214,14 +268,27 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     login_body = %{username: config.username, password: config.password}
 
     case HTTP.post(req, "/api/v2/auth/login", form: login_body) do
-      {:ok, %{status: 200} = response} ->
-        case extract_sid_cookie(response) do
-          {:ok, sid} ->
-            {:ok, Req.Request.put_header(req, "cookie", "SID=#{sid}")}
+      {:ok, %{status: status} = response} when status in 200..299 ->
+        if login_rejected_body?(response.body) do
+          {:error, Error.authentication_failed("Invalid username or password")}
+        else
+          case extract_session_cookie(response) do
+            {:ok, cookie} ->
+              {:ok, Req.Request.put_header(req, "cookie", cookie)}
 
-          :error ->
-            {:error, Error.authentication_failed("Failed to extract session cookie")}
+            :error ->
+              {:error,
+               Error.authentication_failed("Failed to extract session cookie", %{
+                 hint:
+                   "qBittorrent returned no recognisable session cookie " <>
+                     "(expected SID or QBT_SID_<port>)",
+                 cookies_seen: observed_cookie_names(response)
+               })}
+          end
         end
+
+      {:ok, %{status: 401}} ->
+        {:error, Error.authentication_failed("Invalid username or password")}
 
       {:ok, %{status: 403}} ->
         {:error,
@@ -241,17 +308,45 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     end
   end
 
-  # Find the Set-Cookie header value that actually contains "SID=".
-  # qBittorrent occasionally emits multiple cookies (e.g. CSRF) and we must not
-  # pick the wrong one.
-  defp extract_sid_cookie(response) do
+  # qBittorrent <= 5.1 answers a wrong-password login with HTTP 200 and body
+  # "Fails." instead of an error status, so a 2xx alone doesn't mean success.
+  # Checked before cookie extraction so this doesn't get misreported as a
+  # missing/unrecognised session cookie.
+  defp login_rejected_body?(body) when is_binary(body), do: String.trim(body) == "Fails."
+  defp login_rejected_body?(_body), do: false
+
+  # Session cookie under any qBittorrent naming scheme:
+  #   <= 5.1  ->  SID=<value>
+  #   >= 5.2  ->  QBT_SID_<webui_port>=<value>
+  #
+  # The port suffix is qBittorrent's OWN listening port, not the port we dial:
+  # a 5.2 server listening on 8282 still issues QBT_SID_8282 when reached
+  # through a proxy on another port. So the name cannot be derived from config
+  # and must be read off Set-Cookie, then echoed back verbatim.
+  #
+  # Anchoring on (?:^|[\s;]) keeps unrelated cookies out: qBittorrent sometimes
+  # emits a _csrf cookie alongside the session one, and a name like MYSID= must
+  # not match either.
+  @session_cookie ~r/(?:^|[\s;])((?:QBT_)?SID(?:_\d+)?=[^;]+)/
+
+  defp extract_session_cookie(response) do
     response
     |> Req.Response.get_header("set-cookie")
     |> Enum.find_value(:error, fn cookie ->
-      case Regex.run(~r/SID=([^;]+)/, cookie) do
-        [_, sid] -> {:ok, sid}
+      case Regex.run(@session_cookie, cookie) do
+        [_, pair] -> {:ok, pair}
         _ -> nil
       end
+    end)
+  end
+
+  # Names only, never values: this lands in logs, and the value is a live
+  # session token.
+  defp observed_cookie_names(response) do
+    response
+    |> Req.Response.get_header("set-cookie")
+    |> Enum.map(fn cookie ->
+      cookie |> String.split("=", parts: 2) |> hd() |> String.trim()
     end)
   end
 
@@ -310,7 +405,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     authed_request(req, :post, "/api/v2/torrents/add", form_multipart: fields)
   end
 
-  defp check_add_response(%{status: 200}), do: :ok
+  defp check_add_response(%{status: status}) when status in 200..299, do: :ok
 
   defp check_add_response(%{status: status, body: body}) do
     {:error, Error.api_error("Failed to add torrent", %{status: status, body: body})}
@@ -362,12 +457,12 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
     with_authenticated_session(config, fn req ->
       case authed_request(req, :post, primary_path, form: body) do
-        {:ok, %{status: 200}} ->
+        {:ok, %{status: status}} when status in 200..299 ->
           :ok
 
         {:ok, %{status: 404}} ->
           case authed_request(req, :post, fallback_path, form: body) do
-            {:ok, %{status: 200}} -> :ok
+            {:ok, %{status: status}} when status in 200..299 -> :ok
             {:ok, resp} -> toggle_error(resp)
             {:error, _} = err -> err
           end
