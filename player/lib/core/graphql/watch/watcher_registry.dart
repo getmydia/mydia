@@ -42,8 +42,13 @@ final Provider<WatcherRegistry> watcherRegistryProvider =
 /// Two-branch invalidation.
 ///
 /// - Live watcher: refetch. The user watches it update, tier-1 line running.
-/// - No live watcher: clear that key's fetch-log entry, so the next mount is
-///   treated as cold and does `networkOnly` plus shimmer.
+///   A watcher may decline via its `canRefetch` guard (e.g. a library
+///   scrolled past page 1, where an automatic page-1 refetch would silently
+///   collapse the accumulated pages) — that counts as "no live watcher" for
+///   the branch below.
+/// - No live watcher, or a live one that declined: clear that key's
+///   fetch-log entry, so the next mount is treated as cold and does
+///   `networkOnly` plus shimmer.
 class Invalidator {
   Invalidator({required WatcherRegistry registry, required FetchLog fetchLog})
       : _registry = registry,
@@ -65,7 +70,15 @@ class Invalidator {
       try {
         final watcher = _registry.find(key);
         if (watcher != null) {
-          await watcher.refetch();
+          final refetched = await watcher.refetchAutomatically();
+          if (!refetched) {
+            // The watcher's `canRefetch` guard declined (e.g. paginated past
+            // page 1): falling back to a bare `refetch()` here would be
+            // exactly the silent page-1 collapse that guard exists to
+            // prevent, so clear the log entry instead and let the next
+            // fresh mount treat this key as cold.
+            await _fetchLog.clear(key);
+          }
         } else {
           await _fetchLog.clear(key);
         }
@@ -98,7 +111,14 @@ class Invalidator {
     }
     for (final watcher in _registry.watchers) {
       try {
-        await watcher.refetch();
+        final refetched = await watcher.refetchAutomatically();
+        if (!refetched) {
+          // Same fallback as `invalidate`: the `clearAll()` above already
+          // wiped every key, this one included, in the common case. Clearing
+          // it again here is cheap and keeps it correctly cold even if that
+          // first `clearAll()` itself failed (logged above, not rethrown).
+          await _fetchLog.clear(watcher.key);
+        }
       } catch (error, stackTrace) {
         debugPrint(
           'Invalidator.invalidateAll: failed to refetch ${watcher.key}: '

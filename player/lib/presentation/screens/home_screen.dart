@@ -42,7 +42,7 @@ class HomeScreen extends ConsumerWidget {
       body: Column(
         children: [
           FreshnessHeader(
-            queryKeys: const [QueryKeys.home],
+            queryKeys: [QueryKeys.home],
             topInset: freshnessTopInset(
               context,
               appBarHeight: isDesktop ? null : kToolbarHeight,

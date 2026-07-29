@@ -31,7 +31,7 @@ Map<String, dynamic> _pingData(String value) => {
       },
     };
 
-const QueryKey _key = QueryKey('Ping');
+final QueryKey _key = QueryKey('Ping');
 
 void main() {
   final now = DateTime(2026, 7, 28, 12, 0);
@@ -289,6 +289,111 @@ void main() {
         watcher.stream,
         emitsInOrder(['cached', 'network']),
       );
+    });
+
+    test(
+        'a warm-cache start publishes isRefreshing true on the cache '
+        'emission and false once the network result lands', () async {
+      // `QueryResult.isLoading` never fires for this scenario: a warm-cache
+      // `cacheAndNetwork` start emits exactly two results, `source: cache`
+      // then `source: network`, neither of which is
+      // `QueryResultSource.loading`. Tier 1 (the in-flight line) exists
+      // precisely to cover this quiet background refresh, so the watcher
+      // must synthesize the signal `result.isLoading` cannot provide.
+      final cache = GraphQLCache(store: InMemoryStore());
+      final request =
+          WatchQueryOptions<Map<String, dynamic>>(document: gql(_pingQuery))
+              .asRequest;
+      cache.writeQuery(request, data: _pingData('cached'), broadcast: false);
+
+      final log =
+          InMemoryFetchLog({_key: now.subtract(const Duration(minutes: 1))});
+      final published = <Freshness>[];
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: Future<GraphQLClient>.value(
+          stubClient(
+            StubLink.responses([_pingData('network')]),
+            cache: cache,
+          ),
+        ),
+        fetchLog: log,
+        document: gql(_pingQuery),
+        parse: (data) =>
+            (data['ping'] as Map<String, dynamic>)['value'] as String,
+        onFreshness: published.add,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      await expectLater(
+        watcher.stream,
+        emitsInOrder(['cached', 'network']),
+      );
+
+      expect(published.length, greaterThanOrEqualTo(2));
+      expect(
+        published.first.isRefreshing,
+        isTrue,
+        reason: 'the cache-sourced emission is the quiet half of the '
+            'warm-cache fetch and must read as refreshing',
+      );
+      expect(
+        published.last.isRefreshing,
+        isFalse,
+        reason: 'the network result landing clears it',
+      );
+    });
+
+    test(
+        'a cache rebroadcast after the initial network result has already '
+        'landed does not re-arm isRefreshing', () async {
+      // Guards the tight scoping the flag needs: once the network leg of the
+      // *initial* start has landed, a later cache-sourced rebroadcast of
+      // this same watcher (e.g. a `fetchMore()` cache rewrite, or an
+      // unrelated write touching the same normalized entities) must not
+      // pin the tier-1 line on again.
+      final cache = GraphQLCache(store: InMemoryStore());
+      final request =
+          WatchQueryOptions<Map<String, dynamic>>(document: gql(_pingQuery))
+              .asRequest;
+      cache.writeQuery(request, data: _pingData('cached'), broadcast: false);
+
+      // `GraphQLClient.writeQuery` (used below), not `cache.writeQuery`: only
+      // the client-level call also triggers
+      // `queryManager.maybeRebroadcastQueriesAsync()`. Writing straight to
+      // the cache sets `broadcastRequested` but nothing ever consults it, so
+      // it would silently never reach this watcher's stream.
+      final client = stubClient(
+        StubLink.responses([_pingData('network')]),
+        cache: cache,
+      );
+
+      final log =
+          InMemoryFetchLog({_key: now.subtract(const Duration(minutes: 1))});
+      final published = <Freshness>[];
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: Future<GraphQLClient>.value(client),
+        fetchLog: log,
+        document: gql(_pingQuery),
+        parse: (data) =>
+            (data['ping'] as Map<String, dynamic>)['value'] as String,
+        onFreshness: published.add,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      await watcher.stream.firstWhere((value) => value == 'network');
+
+      // A later cache-sourced rebroadcast, independent of this watcher's own
+      // fetch (e.g. another watcher writing an overlapping normalized
+      // entity). Default `broadcast: true` rebroadcasts to every watcher
+      // subscribed to this request, this one included.
+      client.writeQuery(request, data: _pingData('rebroadcast'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(published.last.isRefreshing, isFalse);
     });
 
     test('close stops the stream', () async {

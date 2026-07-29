@@ -8,15 +8,30 @@ import 'package:flutter/foundation.dart' show immutable;
 /// `Request` (gql_exec) has value equality, but its `hashCode` is not stable
 /// across app restarts, so it cannot key a persisted store such as the fetch
 /// log. [QueryKey] is also what the invalidation rules refer to.
+///
+/// Deliberately *not* `const`-constructible: `canonical` below is a `late
+/// final` field, memoized once per instance, and Dart forbids `late final`
+/// fields (and non-final ones) in any class that declares a const generative
+/// constructor, full stop, regardless of whether a given call site actually
+/// uses `const`. The catalog below relies on that memoization: `QueryKeys.home`
+/// and friends are `static final` singletons, each looked up by every
+/// `FreshnessHeader` build for as long as the app runs, so computing
+/// `canonical` once per singleton (instead of once per lookup) is the whole
+/// point.
 @immutable
 class QueryKey {
-  const QueryKey(this.operationName, [this.variables = const {}]);
+  QueryKey(this.operationName, [this.variables = const {}]);
 
   final String operationName;
   final Map<String, dynamic> variables;
 
   /// Stable string form: the persisted fetch-log key.
-  String get canonical => '$operationName(${jsonEncode(_sortKeys(variables))})';
+  ///
+  /// `late final` rather than a getter: this backs `==`/`hashCode` below, so
+  /// it runs on every registry lookup and every header build. Computed once
+  /// per instance and cached from then on.
+  late final String canonical =
+      '$operationName(${jsonEncode(_sortKeys(variables))})';
 
   static Object? _sortKeys(Object? value) {
     if (value is Map) {
@@ -47,13 +62,18 @@ class QueryKey {
 /// The invalidation rules and the freshness header both refer to these, so a
 /// renamed operation is a single-line change here.
 abstract final class QueryKeys {
-  static const QueryKey home = QueryKey('HomeScreen');
-  static const QueryKey favorites = QueryKey('Favorites');
-  static const QueryKey recentlyAdded = QueryKey('RecentlyAddedFull');
-  static const QueryKey unwatched = QueryKey('Unwatched');
-  static const QueryKey collections = QueryKey('Collections');
-  static const QueryKey moviesList = QueryKey('MoviesList');
-  static const QueryKey tvShowsList = QueryKey('TvShowsList');
+  // `static final`, not `static const`: `QueryKey` cannot be const-constructed
+  // (see the class doc comment above). Dart initializes a `static final`
+  // field lazily on first access and keeps the same instance forever after,
+  // so these remain effectively-singleton, exactly like the `const` fields
+  // they replaced, just without compile-time canonicalization.
+  static final QueryKey home = QueryKey('HomeScreen');
+  static final QueryKey favorites = QueryKey('Favorites');
+  static final QueryKey recentlyAdded = QueryKey('RecentlyAddedFull');
+  static final QueryKey unwatched = QueryKey('Unwatched');
+  static final QueryKey collections = QueryKey('Collections');
+  static final QueryKey moviesList = QueryKey('MoviesList');
+  static final QueryKey tvShowsList = QueryKey('TvShowsList');
 
   static QueryKey collectionItems(String collectionId) =>
       QueryKey('CollectionItems', {'collectionId': collectionId});

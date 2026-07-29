@@ -110,6 +110,50 @@ void main() {
     expect(data.hasMore, isFalse);
   });
 
+  test(
+      'refresh() still refetches (and resets to page 1) even after '
+      'paginating past page 1', () async {
+    // `LibraryController` wires a `canRefetch` guard into its watcher so an
+    // *automatic* invalidation (a favorite toggle, an app-resume sweep)
+    // declines to collapse a scrolled library back to page 1. `refresh()` is
+    // the user-initiated path (pull-to-refresh) and must be exempt from that
+    // guard entirely: it calls `_watcher.refetch()` directly, which always
+    // runs, and resets the pagination flag itself since going back to page 1
+    // is exactly what a pull-to-refresh means.
+    var call = 0;
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(StubLink((_, __) {
+            call++;
+            return switch (call) {
+              1 => _moviesPage(['1', '2'], hasNextPage: true),
+              2 => _moviesPage(['3', '4'], hasNextPage: false),
+              _ => _moviesPage(['1', '2'], hasNextPage: true),
+            };
+          })),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final provider = libraryControllerProvider(LibraryType.movies);
+    await waitForValue(container, provider, (value) => value.items.isNotEmpty);
+
+    await container.read(provider.notifier).loadMore();
+    await waitForValue(container, provider, (value) => value.items.length == 4);
+
+    await container.read(provider.notifier).refresh();
+
+    final data = await waitForValue(
+      container,
+      provider,
+      (value) => value.items.length == 2,
+    );
+
+    expect(data.items.map((i) => i.id).toList(), ['1', '2']);
+  });
+
   test('loadMore is a no-op on the last page', () async {
     final link = StubLink.responses([
       _moviesPage(['1'], hasNextPage: false)

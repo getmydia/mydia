@@ -54,7 +54,13 @@ class FreshnessHeader extends ConsumerWidget {
     );
 
     final fetchedAt = freshness.fetchedAt;
+    // `hasData` rules out a cold-stale mount: an age gate that picked
+    // `networkOnly` publishes a real (old) `fetchedAt` from the fetch log
+    // together with `data == null`, well before anything is on screen. Without
+    // this the banner would claim to be "showing" data over a shimmer, or
+    // (on a failed cold fetch) over the error screen.
     final showBanner = fetchedAt != null &&
+        freshness.hasData &&
         (freshness.refreshFailed ||
             (freshness.isStale && !freshness.isRefreshing));
 

@@ -38,7 +38,7 @@ class UnwatchedScreen extends ConsumerWidget {
       body: Column(
         children: [
           FreshnessHeader(
-            queryKeys: const [QueryKeys.unwatched],
+            queryKeys: [QueryKeys.unwatched],
             topInset: freshnessTopInset(
               context,
               appBarHeight: isDesktop ? null : kToolbarHeight,

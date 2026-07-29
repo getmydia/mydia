@@ -25,6 +25,7 @@ QueryWatcher<T> createWatcher<T>(
   Map<String, dynamic> variables = const {},
   required T Function(Map<String, dynamic> data) parse,
   Duration maxAge = kFreshnessThreshold,
+  bool Function()? canRefetch,
 }) {
   final registry = ref.read(watcherRegistryProvider);
   final freshness = ref.read(freshnessRegistryProvider.notifier);
@@ -40,6 +41,7 @@ QueryWatcher<T> createWatcher<T>(
     parse: parse,
     maxAge: maxAge,
     onFreshness: (value) => freshness.publish(key, value),
+    canRefetch: canRefetch,
   );
 
   registry.register(key, watcher);

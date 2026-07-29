@@ -38,7 +38,7 @@ class FavoritesScreen extends ConsumerWidget {
       body: Column(
         children: [
           FreshnessHeader(
-            queryKeys: const [QueryKeys.favorites],
+            queryKeys: [QueryKeys.favorites],
             topInset: freshnessTopInset(
               context,
               appBarHeight: isDesktop ? null : kToolbarHeight,

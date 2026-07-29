@@ -181,7 +181,11 @@ void main() {
   });
 
   group('Invalidator', () {
-    QueryWatcher<String> makeWatcher(StubLink link, FetchLog log) {
+    QueryWatcher<String> makeWatcher(
+      StubLink link,
+      FetchLog log, {
+      bool Function()? canRefetch,
+    }) {
       return QueryWatcher<String>(
         key: QueryKeys.home,
         client: Future<GraphQLClient>.value(stubClient(link)),
@@ -189,6 +193,7 @@ void main() {
         document: gql(_pingQuery),
         parse: (data) =>
             (data['ping'] as Map<String, dynamic>)['value'] as String,
+        canRefetch: canRefetch,
       );
     }
 
@@ -211,6 +216,65 @@ void main() {
 
       expect(link.requests.length, greaterThanOrEqualTo(2));
       expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
+    });
+
+    test(
+        'a live watcher that allows automatic refetch (canRefetch true or '
+        'unset) still refetches', () async {
+      final log = InMemoryFetchLog();
+      var call = 0;
+      final link = StubLink((_, __) {
+        call++;
+        return _pingData('v$call');
+      });
+      final watcher = makeWatcher(link, log, canRefetch: () => true);
+      addTearDown(watcher.close);
+
+      final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
+      final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+      await watcher.stream.first;
+      await invalidator.invalidate([QueryKeys.home]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(link.requests.length, greaterThanOrEqualTo(2));
+      expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
+    });
+
+    test(
+        'a live watcher that declines automatic refetch (e.g. a paginated '
+        'library) has its fetch-log entry cleared instead of being '
+        'refetched', () async {
+      // Simulates a library scrolled past page 1 catching an automatic
+      // invalidation (a favorite toggle, an app-resume sweep): refetching
+      // would re-issue the original page-1 variables and silently collapse
+      // the accumulated pages, so the watcher must decline and the
+      // invalidator must fall back to clearing the log entry instead, so the
+      // screen is treated as cold on its next fresh mount rather than
+      // staying silently stale forever.
+      final log = InMemoryFetchLog({QueryKeys.home: DateTime(2026, 7, 28)});
+      var call = 0;
+      final link = StubLink((_, __) {
+        call++;
+        return _pingData('v$call');
+      });
+      final watcher = makeWatcher(link, log, canRefetch: () => false);
+      addTearDown(watcher.close);
+
+      final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
+      final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+      await watcher.stream.first;
+      final requestsBeforeInvalidate = link.requests.length;
+
+      await invalidator.invalidate([QueryKeys.home]);
+
+      expect(
+        link.requests.length,
+        requestsBeforeInvalidate,
+        reason: 'a declining watcher must not be refetched automatically',
+      );
+      expect(log.lastFetchedAt(QueryKeys.home), isNull);
     });
 
     test('a dormant key has its fetch-log entry cleared instead', () async {

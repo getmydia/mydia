@@ -169,6 +169,19 @@ class LibraryController extends _$LibraryController {
   late QueryWatcher<LibraryData> _watcher;
   bool _loadingMore = false;
 
+  /// True once [loadMore] has accumulated a page beyond the first.
+  ///
+  /// Backs the watcher's `canRefetch` guard: an *automatic* invalidation
+  /// (a favorite toggle, an app-resume sweep) must not refetch a scrolled
+  /// library, because `ObservableQuery.refetch()` re-issues the original
+  /// page-1 variables and the library overwrites the accumulated edges with
+  /// that single page, silently snapping the scroll position back to the
+  /// top. A user-initiated [refresh] or [setSort] is exempt on purpose: both
+  /// call `_watcher.refetch()` directly rather than going through the guard,
+  /// and both reset this flag, since going back to page 1 is exactly what
+  /// the user asked for.
+  bool _hasPaginated = false;
+
   bool get _isMovies => libraryType == LibraryType.movies;
   String get _connectionField => _isMovies ? 'movies' : 'tvShows';
 
@@ -180,16 +193,23 @@ class LibraryController extends _$LibraryController {
       document: gql(_isMovies ? moviesListQuery : tvShowsListQuery),
       variables: const {'first': _pageSize},
       parse: _isMovies ? _parseMovies : _parseTvShows,
+      canRefetch: () => !_hasPaginated,
     );
     return _watcher.stream;
   }
 
-  Future<void> refresh() => _watcher.refetch();
+  Future<void> refresh() {
+    _hasPaginated = false;
+    return _watcher.refetch();
+  }
 
   /// Sort is not part of either query document, so this refetches rather than
   /// re-querying with a sort argument. Preserved from the pre-migration
   /// behavior; wiring sort into the query is a separate change.
-  Future<void> setSort(SortOption sort) => _watcher.refetch();
+  Future<void> setSort(SortOption sort) {
+    _hasPaginated = false;
+    return _watcher.refetch();
+  }
 
   Future<void> loadMore() async {
     if (_loadingMore) return;
@@ -207,6 +227,7 @@ class LibraryController extends _$LibraryController {
               mergeConnection(_connectionField, previous, fetched),
         ),
       );
+      _hasPaginated = true;
     } catch (error) {
       // A merge/cache-write failure (e.g. `mergeConnection` throwing on a
       // schema-shape violation) must not blank the already-rendered library

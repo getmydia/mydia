@@ -17,6 +17,7 @@ class Freshness {
     this.isRefreshing = false,
     this.refreshFailed = false,
     this.isStale = false,
+    this.hasData = false,
   });
 
   /// When this key last reached the network, from the fetch log.
@@ -31,20 +32,37 @@ class Freshness {
   /// [fetchedAt] is older than the threshold, or missing entirely.
   final bool isStale;
 
+  /// Whether there is actually data on screen right now.
+  ///
+  /// A cold-stale mount (age gate picks `networkOnly`, first result is
+  /// `QueryResult.loading` with `data == null`) is stale by definition but
+  /// has nothing to show yet; the header must not claim to be "showing"
+  /// anything for it. This is what tells it apart from a screen that really
+  /// is showing old data.
+  final bool hasData;
+
   static Freshness from({
     required QueryResult<dynamic> result,
     required DateTime? fetchedAt,
     required Duration maxAge,
     required DateTime now,
+    // The watcher alone knows whether this particular emission is the
+    // cache-sourced half of a still-pending `cacheAndNetwork` start (see
+    // `QueryWatcher._awaitingInitialNetworkResult`). That case has no
+    // `QueryResultSource.loading` result to key off, so `result.isLoading`
+    // never fires for it; the watcher passes what it knows instead of this
+    // method trying to infer fetch-policy history from a bare `QueryResult`.
+    bool awaitingNetworkResult = false,
   }) {
     final hasData = result.data != null;
     return Freshness(
       fetchedAt: fetchedAt,
-      isRefreshing: result.isLoading && hasData,
+      isRefreshing: (result.isLoading || awaitingNetworkResult) && hasData,
       // carryForwardDataOnException defaults to true, so a failed refresh
       // arrives as "exception plus the previous data".
       refreshFailed: result.hasException && hasData,
       isStale: fetchedAt == null || now.difference(fetchedAt) > maxAge,
+      hasData: hasData,
     );
   }
 
@@ -59,6 +77,7 @@ class Freshness {
     var isRefreshing = false;
     var refreshFailed = false;
     var isStale = false;
+    var hasData = false;
 
     for (final part in parts) {
       final at = part.fetchedAt;
@@ -68,6 +87,7 @@ class Freshness {
       isRefreshing = isRefreshing || part.isRefreshing;
       refreshFailed = refreshFailed || part.refreshFailed;
       isStale = isStale || part.isStale;
+      hasData = hasData || part.hasData;
     }
 
     return Freshness(
@@ -75,6 +95,7 @@ class Freshness {
       isRefreshing: isRefreshing,
       refreshFailed: refreshFailed,
       isStale: isStale,
+      hasData: hasData,
     );
   }
 
@@ -85,16 +106,17 @@ class Freshness {
           other.fetchedAt == fetchedAt &&
           other.isRefreshing == isRefreshing &&
           other.refreshFailed == refreshFailed &&
-          other.isStale == isStale);
+          other.isStale == isStale &&
+          other.hasData == hasData);
 
   @override
   int get hashCode =>
-      Object.hash(fetchedAt, isRefreshing, refreshFailed, isStale);
+      Object.hash(fetchedAt, isRefreshing, refreshFailed, isStale, hasData);
 
   @override
   String toString() => 'Freshness(fetchedAt: $fetchedAt, '
       'isRefreshing: $isRefreshing, refreshFailed: $refreshFailed, '
-      'isStale: $isStale)';
+      'isStale: $isStale, hasData: $hasData)';
 }
 
 /// Freshness for every live query, keyed so screens can select just theirs.
@@ -103,6 +125,13 @@ class FreshnessRegistry extends Notifier<Map<QueryKey, Freshness>> {
   Map<QueryKey, Freshness> build() => const {};
 
   void publish(QueryKey key, Freshness freshness) {
+    // Mirrors the guard in `clear` below: a result can in principle still be
+    // in flight (e.g. a pending `unawaited` write) after the container that
+    // owns this registry is torn down, and `state` would throw on both the
+    // read and the write in that case. Unreachable today — nothing publishes
+    // after a watcher's own teardown — but the asymmetry with `clear`
+    // invited exactly that assumption, so guard it the same way.
+    if (!ref.mounted) return;
     if (state[key] == freshness) return;
     state = {...state, key: freshness};
   }

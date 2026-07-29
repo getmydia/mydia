@@ -38,7 +38,7 @@ class RecentlyAddedScreen extends ConsumerWidget {
       body: Column(
         children: [
           FreshnessHeader(
-            queryKeys: const [QueryKeys.recentlyAdded],
+            queryKeys: [QueryKeys.recentlyAdded],
             topInset: freshnessTopInset(
               context,
               appBarHeight: isDesktop ? null : kToolbarHeight,

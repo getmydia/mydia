@@ -4,53 +4,53 @@ import 'package:player/core/graphql/watch/query_key.dart';
 void main() {
   test('keys with the same operation and variables are equal', () {
     expect(
-      const QueryKey('TvShowDetail', {'id': '7'}),
-      const QueryKey('TvShowDetail', {'id': '7'}),
+      QueryKey('TvShowDetail', const {'id': '7'}),
+      QueryKey('TvShowDetail', const {'id': '7'}),
     );
     expect(
-      const QueryKey('TvShowDetail', {'id': '7'}).hashCode,
-      const QueryKey('TvShowDetail', {'id': '7'}).hashCode,
+      QueryKey('TvShowDetail', const {'id': '7'}).hashCode,
+      QueryKey('TvShowDetail', const {'id': '7'}).hashCode,
     );
   });
 
   test('variable order does not change identity', () {
     expect(
-      const QueryKey('SeasonEpisodes', {'showId': '1', 'seasonNumber': 2})
+      QueryKey('SeasonEpisodes', const {'showId': '1', 'seasonNumber': 2})
           .canonical,
-      const QueryKey('SeasonEpisodes', {'seasonNumber': 2, 'showId': '1'})
+      QueryKey('SeasonEpisodes', const {'seasonNumber': 2, 'showId': '1'})
           .canonical,
     );
   });
 
   test('different variables produce different keys', () {
     expect(
-      const QueryKey('TvShowDetail', {'id': '7'}) ==
-          const QueryKey('TvShowDetail', {'id': '8'}),
+      QueryKey('TvShowDetail', const {'id': '7'}) ==
+          QueryKey('TvShowDetail', const {'id': '8'}),
       isFalse,
     );
   });
 
   test('different operations produce different keys', () {
     expect(
-      const QueryKey('Favorites') == const QueryKey('Unwatched'),
+      QueryKey('Favorites') == QueryKey('Unwatched'),
       isFalse,
     );
   });
 
   test('canonical form is a stable string usable as a persisted store key', () {
     expect(
-      const QueryKey('TvShowDetail', {'id': '7'}).canonical,
+      QueryKey('TvShowDetail', const {'id': '7'}).canonical,
       'TvShowDetail({"id":"7"})',
     );
-    expect(const QueryKey('HomeScreen').canonical, 'HomeScreen({})');
+    expect(QueryKey('HomeScreen').canonical, 'HomeScreen({})');
   });
 
   test('nested variables are canonicalized too', () {
     expect(
-      const QueryKey('X', {
+      QueryKey('X', const {
         'filter': {'b': 1, 'a': 2}
       }).canonical,
-      const QueryKey('X', {
+      QueryKey('X', const {
         'filter': {'a': 2, 'b': 1}
       }).canonical,
     );

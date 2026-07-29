@@ -48,7 +48,11 @@ Future<void> pumpHeader(
   WidgetTester tester, {
   required Map<QueryKey, Freshness> freshness,
   AuthStatus authStatus = AuthStatus.authenticated,
-  List<QueryKey> keys = const [QueryKeys.home],
+  // Nullable rather than `= const [QueryKeys.home]`: `QueryKey` is no longer
+  // const-constructible (see `query_key.dart`), so a `QueryKeys.home`
+  // reference cannot appear in a default parameter value, which Dart
+  // requires to be a compile-time constant.
+  List<QueryKey>? keys,
   List<Override> extraOverrides = const [],
 }) {
   return tester.pumpWidget(
@@ -60,7 +64,9 @@ Future<void> pumpHeader(
         ...extraOverrides,
       ],
       child: MaterialApp(
-        home: Scaffold(body: FreshnessHeader(queryKeys: keys)),
+        home: Scaffold(
+          body: FreshnessHeader(queryKeys: keys ?? [QueryKeys.home]),
+        ),
       ),
     ),
   );
@@ -109,6 +115,7 @@ void main() {
         fetchedAt: now.subtract(const Duration(hours: 2)),
         refreshFailed: true,
         isStale: true,
+        hasData: true,
       ),
     });
 
@@ -126,6 +133,7 @@ void main() {
       QueryKeys.home: Freshness(
         fetchedAt: now.subtract(const Duration(hours: 3)),
         isStale: true,
+        hasData: true,
       ),
     });
 
@@ -144,6 +152,39 @@ void main() {
     });
 
     expect(find.byKey(const Key('freshness-banner')), findsNothing);
+  });
+
+  testWidgets(
+      'shows no banner for a stale key with a real fetchedAt but nothing on '
+      'screen (a cold fetch still in flight)', (tester) async {
+    // This is the case a bare `fetchedAt != null` gate got wrong: the age
+    // gate picked `networkOnly` for a 20-minute-old log entry, so the first
+    // result is `QueryResult.loading` with `data == null`. `fetchedAt` is
+    // real (from the log) and `isStale` is true, but there is nothing on
+    // screen yet, so the banner must not claim there is.
+    await pumpHeader(tester, freshness: {
+      QueryKeys.home: Freshness(
+        fetchedAt: now.subtract(const Duration(minutes: 20)),
+        isStale: true,
+        hasData: false,
+      ),
+    });
+
+    expect(find.byKey(const Key('freshness-banner')), findsNothing);
+  });
+
+  testWidgets(
+      'shows the stale banner for the same fetchedAt once data is on screen',
+      (tester) async {
+    await pumpHeader(tester, freshness: {
+      QueryKeys.home: Freshness(
+        fetchedAt: now.subtract(const Duration(minutes: 20)),
+        isStale: true,
+        hasData: true,
+      ),
+    });
+
+    expect(find.byKey(const Key('freshness-banner')), findsOneWidget);
   });
 
   testWidgets('renders nothing in offline mode', (tester) async {
@@ -191,11 +232,13 @@ void main() {
           fetchedAt: now.subtract(const Duration(hours: 2)),
           refreshFailed: true,
           isStale: true,
+          hasData: true,
         ),
         QueryKeys.unwatched: Freshness(
           fetchedAt: now.subtract(const Duration(hours: 2)),
           refreshFailed: true,
           isStale: true,
+          hasData: true,
         ),
       },
       extraOverrides: [

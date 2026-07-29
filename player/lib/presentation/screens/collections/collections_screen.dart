@@ -30,7 +30,7 @@ class CollectionsScreen extends ConsumerWidget {
       body: Column(
         children: [
           FreshnessHeader(
-            queryKeys: const [QueryKeys.collections],
+            queryKeys: [QueryKeys.collections],
             topInset: freshnessTopInset(
               context,
               appBarHeight: isDesktop ? null : kToolbarHeight,
