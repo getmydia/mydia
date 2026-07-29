@@ -20,6 +20,15 @@ class CastLaunchRequest {
   final Duration? startPosition;
   final List<CastSubtitleTrack> subtitles;
 
+  /// The item's runtime, as the app already knows it.
+  ///
+  /// Required for a usable scrub bar: a Chromecast fed one of Mydia's
+  /// live-style HLS playlists answers `duration: -1` forever, so the receiver
+  /// is not a source of truth for length. Null means the caller genuinely
+  /// does not know it yet, and the UI degrades to controls that only move
+  /// relative to the current position.
+  final Duration? duration;
+
   const CastLaunchRequest({
     required this.fileId,
     required this.mediaId,
@@ -29,6 +38,7 @@ class CastLaunchRequest {
     this.imageUrl,
     this.startPosition,
     this.subtitles = const [],
+    this.duration,
   });
 }
 
@@ -103,7 +113,8 @@ class CastSessionManager {
 
     CastRoute? route;
     try {
-      route = await _resolveRoute(resolver, request, device, startedHlsSessions);
+      route =
+          await _resolveRoute(resolver, request, device, startedHlsSessions);
     } catch (e) {
       await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
       rethrow;
@@ -321,7 +332,8 @@ class CastSessionManager {
         // Usually AP isolation, a VLAN, or guest wifi. Serve it ourselves.
         if (attempted.kind == CastRouteKind.localBridge) return null;
 
-        debugPrint('[CastSessionManager] Direct route failed, retrying via bridge');
+        debugPrint(
+            '[CastSessionManager] Direct route failed, retrying via bridge');
         return _resolveRoute(
           resolver,
           request,
@@ -364,7 +376,8 @@ class CastSessionManager {
         // Escalate to a full transcode.
         if (attempted.mediaUrl.contains('strategy=TRANSCODE')) return null;
 
-        debugPrint('[CastSessionManager] Media rejected, retrying with TRANSCODE');
+        debugPrint(
+            '[CastSessionManager] Media rejected, retrying with TRANSCODE');
         return _resolveRoute(
           resolver,
           request,
@@ -389,7 +402,8 @@ class CastSessionManager {
     final subtitles = route.subtitlesSupported
         ? request.subtitles
             .map((track) => CastSubtitleTrack(
-                  url: resolver.resolveSubtitleUrl(route, track.url) ?? track.url,
+                  url: resolver.resolveSubtitleUrl(route, track.url) ??
+                      track.url,
                   label: track.label,
                   language: track.language,
                 ))
@@ -416,6 +430,7 @@ class CastSessionManager {
       routeKind: route.kind,
       savedAt: _clock(),
       mediaUrl: route.mediaUrl,
+      duration: request.duration ?? Duration.zero,
     );
     await _store.save(_persisted!);
 
@@ -426,7 +441,9 @@ class CastSessionManager {
         title: request.title,
         subtitle: request.subtitleLabel,
         imageUrl: request.imageUrl,
-        duration: Duration.zero,
+        // Seeded from what the app knows, not left at zero to wait on the
+        // receiver: on HLS the receiver never reports a length at all.
+        duration: request.duration ?? Duration.zero,
         position: request.startPosition ?? Duration.zero,
       ),
     ));
@@ -461,10 +478,17 @@ class CastSessionManager {
     // Otherwise the first position event for the new item can sync against
     // a stale duration, writing a wrong durationSeconds (and potentially a
     // false "watched" verdict) to the user's history.
-    _lastDuration = Duration.zero;
+    _lastDuration = request.duration ?? Duration.zero;
     _lastProgressSync = null;
 
     _durationSub = _backend.durationStream.listen((duration) {
+      // Non-positive is the receiver saying "I don't know" (Chromecast sends
+      // -1 for the live-style HLS playlists Mydia serves), not a length.
+      // `DartCastBackend` already filters these; the guard is repeated here
+      // because the manager is backend-agnostic and a bad duration corrupts
+      // both the scrub bar and the watch-history sync below.
+      if (duration <= Duration.zero) return;
+
       _lastDuration = duration;
       _updateMediaInfo(duration: duration);
     });
@@ -497,8 +521,13 @@ class CastSessionManager {
     });
   }
 
-  Future<void> _syncProgress(CastLaunchRequest request, Duration position) async {
-    if (_lastDuration == Duration.zero) return;
+  Future<void> _syncProgress(
+      CastLaunchRequest request, Duration position) async {
+    // `<=` rather than `== Duration.zero`: a receiver that reports -1 would
+    // otherwise clear this guard and write `durationSeconds: -1` into the
+    // user's watch history, along with whatever watched verdict follows from
+    // dividing by it.
+    if (_lastDuration <= Duration.zero) return;
 
     final now = _clock();
     final last = _lastProgressSync;
@@ -561,6 +590,7 @@ class CastSessionManager {
         mediaType: stored.mediaType,
         title: stored.title,
         startPosition: stored.position,
+        duration: stored.duration,
       ),
     );
   }
@@ -636,6 +666,7 @@ class CastSessionManager {
       mediaType: stored.mediaType,
       title: stored.title,
       startPosition: stored.position,
+      duration: stored.duration,
     );
     _listenToBackend(request);
 
@@ -656,7 +687,7 @@ class CastSessionManager {
       playbackState: CastPlaybackState.buffering,
       mediaInfo: CastMediaInfo(
         title: stored.title,
-        duration: Duration.zero,
+        duration: stored.duration,
         position: stored.position,
       ),
     ));
@@ -767,7 +798,8 @@ class CastSessionManager {
       try {
         await _backend.disconnect();
       } catch (e) {
-        debugPrint('[CastSessionManager] Ignoring disconnect error on dispose: $e');
+        debugPrint(
+            '[CastSessionManager] Ignoring disconnect error on dispose: $e');
       }
     }
 

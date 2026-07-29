@@ -471,6 +471,29 @@ case "$COMMAND" in
                 esac
                 shift 2
 
+                # Escape the devenv/Nix environment. direnv loads devenv on cd
+                # into the worktree, so by the time this branch runs the shell
+                # already exports a Nix clang/cctools PATH, DEVELOPER_DIR and
+                # SDKROOT pointing at nixpkgs' apple-sdk, NIX_CFLAGS_COMPILE,
+                # and a Nix-wrapped Flutter. That last one is fatal, not merely
+                # wrong: its engine artifacts live read-only in /nix/store, so
+                # Flutter copies FlutterMacOS.framework out as dr-xr-xr-x and
+                # `lipo` dies with "can't create temporary output file
+                # ... (Permission denied)" during debug_unpack_macos. Xcode must
+                # see the host toolchain, so strip the Nix layer back off.
+                if [ -n "${IN_NIX_SHELL:-}${DEVENV_ROOT:-}" ]; then
+                    PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/nix/store/' | paste -sd: -)"
+                    export PATH
+                    # NIX_SSL_CERT_FILE stays: rustup and CocoaPods fetch over
+                    # TLS and Nix-installed curl has no other CA bundle.
+                    for nix_var in $(compgen -v | grep '^NIX_'); do
+                        [ "$nix_var" = "NIX_SSL_CERT_FILE" ] || unset "$nix_var"
+                    done
+                    unset DEVELOPER_DIR SDKROOT MACOSX_DEPLOYMENT_TARGET IN_NIX_SHELL \
+                          LD_DYLD_PATH LD_FOR_BUILD PKG_CONFIG_PATH CC CXX AR LD \
+                          CFLAGS LDFLAGS CPATH LIBRARY_PATH
+                fi
+
                 # Preflight the host toolchain so a missing prerequisite fails
                 # here with a fix, not 200 lines into an Xcode build log.
                 missing_tools=""
