@@ -9,11 +9,6 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
   qBittorrent Web API: https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)
 
-  ## Authentication
-
-  qBittorrent requires logging in via the `/api/v2/auth/login` endpoint to obtain
-  a session cookie (`SID`). This cookie must be included in all subsequent requests.
-
   ## qBittorrent 5.x compatibility
 
   qBittorrent 5.0 renamed the `pause`/`resume` endpoints to `stop`/`start` and
@@ -90,7 +85,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   @impl true
   def test_connection(config) do
     with_authenticated_session(config, fn req ->
-      with {:ok, response} <- HTTP.get(req, "/api/v2/app/version") do
+      with {:ok, response} <- authed_request(req, :get, "/api/v2/app/version", []) do
         case response.status do
           200 ->
             {:ok, ClientInfo.new(version: to_string(response.body), api_version: "2.x")}
@@ -178,7 +173,7 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     body = %{hashes: client_id, deleteFiles: to_string(delete_files)}
 
     with_authenticated_session(config, fn req ->
-      with {:ok, response} <- HTTP.post(req, "/api/v2/torrents/delete", form: body) do
+      with {:ok, response} <- authed_request(req, :post, "/api/v2/torrents/delete", form: body) do
         case response.status do
           status when status in 200..299 -> :ok
           404 -> {:error, Error.not_found("Torrent not found")}
@@ -274,19 +269,26 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
     case HTTP.post(req, "/api/v2/auth/login", form: login_body) do
       {:ok, %{status: status} = response} when status in 200..299 ->
-        case extract_session_cookie(response) do
-          {:ok, cookie} ->
-            {:ok, Req.Request.put_header(req, "cookie", cookie)}
+        if login_rejected_body?(response.body) do
+          {:error, Error.authentication_failed("Invalid username or password")}
+        else
+          case extract_session_cookie(response) do
+            {:ok, cookie} ->
+              {:ok, Req.Request.put_header(req, "cookie", cookie)}
 
-          :error ->
-            {:error,
-             Error.authentication_failed("Failed to extract session cookie", %{
-               hint:
-                 "qBittorrent returned no recognisable session cookie " <>
-                   "(expected SID or QBT_SID_<port>)",
-               cookies_seen: observed_cookie_names(response)
-             })}
+            :error ->
+              {:error,
+               Error.authentication_failed("Failed to extract session cookie", %{
+                 hint:
+                   "qBittorrent returned no recognisable session cookie " <>
+                     "(expected SID or QBT_SID_<port>)",
+                 cookies_seen: observed_cookie_names(response)
+               })}
+          end
         end
+
+      {:ok, %{status: 401}} ->
+        {:error, Error.authentication_failed("Invalid username or password")}
 
       {:ok, %{status: 403}} ->
         {:error,
@@ -305,6 +307,13 @@ defmodule Mydia.Downloads.Client.QBittorrent do
         {:error, error}
     end
   end
+
+  # qBittorrent <= 5.1 answers a wrong-password login with HTTP 200 and body
+  # "Fails." instead of an error status, so a 2xx alone doesn't mean success.
+  # Checked before cookie extraction so this doesn't get misreported as a
+  # missing/unrecognised session cookie.
+  defp login_rejected_body?(body) when is_binary(body), do: String.trim(body) == "Fails."
+  defp login_rejected_body?(_body), do: false
 
   # Session cookie under any qBittorrent naming scheme:
   #   <= 5.1  ->  SID=<value>

@@ -301,6 +301,60 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
       assert error.message =~ "session cookie"
       assert Enum.sort(error.details.cookies_seen) == ["NEWNAME_9", "_csrf"]
     end
+
+    test "reports invalid credentials (not a cookie error) on the qBittorrent 5.1 'Fails.' rejection",
+         %{bypass: bypass, config: config} do
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        Plug.Conn.resp(conn, 200, "Fails.")
+      end)
+
+      assert {:error, error} = QBittorrent.test_connection(config)
+      assert error.type == :authentication_failed
+      assert error.message =~ "Invalid username or password"
+      refute error.message =~ "session cookie"
+    end
+
+    test "reports invalid credentials on the qBittorrent 5.2 401 rejection", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        Plug.Conn.resp(conn, 401, "Unauthorized")
+      end)
+
+      assert {:error, error} = QBittorrent.test_connection(config)
+      assert error.type == :authentication_failed
+      assert error.message =~ "Invalid username or password"
+      refute error.message =~ "session cookie"
+    end
+
+    test "does not match a cookie that merely contains SID as a substring (e.g. MYSID)", %{
+      bypass: bypass,
+      config: config
+    } do
+      hash = "1234567890abcdef1234567890abcdef12345678"
+
+      # Note: Plug/Cowboy relay these to the wire in the opposite order to how
+      # they're passed to prepend_resp_headers/2, so SID is listed first here
+      # to make MYSID arrive first over the wire, the position that actually
+      # exercises the anchor against a false match.
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.prepend_resp_headers([
+          {"set-cookie", "SID=session-abc-123; HttpOnly; Path=/"},
+          {"set-cookie", "MYSID=nope; Path=/"}
+        ])
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        assert ["SID=session-abc-123"] == Plug.Conn.get_req_header(conn, "cookie")
+        json_resp(conn, 200, [torrent_payload(hash)])
+      end)
+
+      assert {:ok, status} = QBittorrent.get_status(config, hash)
+      assert status.id == hash
+    end
   end
 
   describe "add_torrent/3 (Bypass)" do
@@ -389,6 +443,26 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
         else
           json_resp(conn, 200, [])
         end
+      end)
+
+      assert {:ok, ^hash} = QBittorrent.add_torrent(config, {:magnet, magnet})
+    end
+
+    test "accepts a 204 from the add endpoint, not just 200", %{
+      bypass: bypass,
+      config: config
+    } do
+      magnet = "magnet:?xt=urn:btih:abc123def456abc123def456abc123def456abcd&dn=test"
+      hash = "abc123def456abc123def456abc123def456abcd"
+
+      stub_login(bypass)
+
+      Bypass.expect(bypass, "POST", "/api/v2/torrents/add", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [torrent_payload(hash)])
       end)
 
       assert {:ok, ^hash} = QBittorrent.add_torrent(config, {:magnet, magnet})
@@ -654,6 +728,49 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
       assert error.message =~ "API key"
       assert :counters.get(logins, 1) == 0
       assert :counters.get(infos, 1) == 1
+    end
+
+    test "test_connection maps a 403 to the API-key error too, and never hits /auth/login", %{
+      bypass: bypass,
+      config: config
+    } do
+      logins = :counters.new(1, [])
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        :counters.add(logins, 1, 1)
+        Plug.Conn.resp(conn, 200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/app/version", fn conn ->
+        Plug.Conn.resp(conn, 403, "Forbidden")
+      end)
+
+      assert {:error, error} = QBittorrent.test_connection(config)
+      assert error.type == :authentication_failed
+      assert error.message =~ "API key"
+      assert :counters.get(logins, 1) == 0
+    end
+
+    test "Bearer wins over Basic when an api_key and a username/password are all set", %{
+      bypass: bypass,
+      config: config
+    } do
+      logins = :counters.new(1, [])
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        :counters.add(logins, 1, 1)
+        Plug.Conn.resp(conn, 200, "Ok.")
+      end)
+
+      full_config = Map.merge(config, %{username: "admin", password: "adminpass"})
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        assert ["Bearer " <> @api_key] == Plug.Conn.get_req_header(conn, "authorization")
+        json_resp(conn, 200, [])
+      end)
+
+      assert {:ok, []} = QBittorrent.list_torrents(full_config)
+      assert :counters.get(logins, 1) == 0
     end
   end
 

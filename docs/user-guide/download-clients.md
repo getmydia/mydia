@@ -54,7 +54,9 @@ DOWNLOAD_CLIENT_1_USERNAME=admin
 DOWNLOAD_CLIENT_1_PASSWORD=adminpass
 # Alternative to username/password on qBittorrent 5.2 and newer. Generate the
 # key in qBittorrent under Preferences, WebUI, API Key. When set, it takes
-# precedence over the username and password.
+# precedence over the username and password. qBittorrent holds exactly one
+# API key at a time, so generating a new one immediately invalidates the
+# previous one and breaks any other integration still using it.
 # DOWNLOAD_CLIENT_1_API_KEY=qbt_yourkeyhere
 
 # Transmission
