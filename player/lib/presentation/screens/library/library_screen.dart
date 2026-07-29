@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'library_controller.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/app_shell.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/media_poster.dart';
+import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 
@@ -114,38 +116,57 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(title, icon, isDesktop, effectiveShowSearch),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await ref
-              .read(libraryControllerProvider(widget.libraryType).notifier)
-              .refresh();
-        },
-        child: libraryData.when(
-          loading: () => _buildLoadingView(),
-          error: (error, stackTrace) => _buildErrorView(error),
-          data: (data) {
-            if (data.isEmpty) {
-              return _buildEmptyState();
-            }
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [
+              widget.libraryType == LibraryType.movies
+                  ? QueryKeys.moviesList
+                  : QueryKeys.tvShowsList,
+            ],
+            topInset: freshnessTopInset(
+              context,
+              appBarHeight: effectiveShowSearch ? 120 : kToolbarHeight,
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await ref
+                    .read(
+                        libraryControllerProvider(widget.libraryType).notifier)
+                    .refresh();
+              },
+              child: libraryData.when(
+                loading: () => _buildLoadingView(),
+                error: (error, stackTrace) => _buildErrorView(error),
+                data: (data) {
+                  if (data.isEmpty) {
+                    return _buildEmptyState();
+                  }
 
-            // Filter items based on search query
-            final searchQuery = _searchController.text.toLowerCase().trim();
-            final filteredItems = searchQuery.isEmpty
-                ? data.items
-                : data.items
-                    .where((item) =>
-                        item.title.toLowerCase().contains(searchQuery))
-                    .toList();
+                  // Filter items based on search query
+                  final searchQuery =
+                      _searchController.text.toLowerCase().trim();
+                  final filteredItems = searchQuery.isEmpty
+                      ? data.items
+                      : data.items
+                          .where((item) =>
+                              item.title.toLowerCase().contains(searchQuery))
+                          .toList();
 
-            if (filteredItems.isEmpty && searchQuery.isNotEmpty) {
-              return _buildNoSearchResultsState(searchQuery);
-            }
+                  if (filteredItems.isEmpty && searchQuery.isNotEmpty) {
+                    return _buildNoSearchResultsState(searchQuery);
+                  }
 
-            return _viewMode == ViewMode.grid
-                ? _buildGridView(context, filteredItems)
-                : _buildListView(context, filteredItems);
-          },
-        ),
+                  return _viewMode == ViewMode.grid
+                      ? _buildGridView(context, filteredItems)
+                      : _buildListView(context, filteredItems);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -157,131 +178,129 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     return PreferredSize(
       preferredSize: Size.fromHeight(showSearch ? 120 : kToolbarHeight),
       child: GlassSurface.appBar(
-          opacity: 0.85,
-          child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Main app bar
-                  SizedBox(
-                    height: kToolbarHeight,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: isDesktop ? horizontalPadding - 8 : 8),
-                      child: Row(
-                        children: [
-                          // Hamburger menu on mobile
-                          if (!isDesktop)
-                            IconButton(
-                              icon: const Icon(Icons.menu_rounded),
-                              onPressed: () {
-                                AppShell.scaffoldKey.currentState?.openDrawer();
-                              },
-                              tooltip: 'Menu',
-                            ),
-                          // Title with icon
-                          Padding(
-                            padding: EdgeInsets.only(left: isDesktop ? 8 : 0),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  icon,
-                                  color: AppColors.primary,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  title,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: -0.3,
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          // Action buttons - hide search toggle on desktop
-                          if (!isDesktop)
-                            _ActionButton(
-                              icon: Icons.search_rounded,
-                              isActive: _showSearch,
-                              onPressed: _toggleSearch,
-                              tooltip: 'Search',
-                            ),
-                          if (!isDesktop) const SizedBox(width: 4),
-                          _ActionButton(
-                            icon: Icons.sort_rounded,
-                            onPressed: _showSortMenu,
-                            tooltip: 'Sort: ${_currentSort.displayName}',
-                          ),
-                          const SizedBox(width: 4),
-                          _ActionButton(
-                            icon: _viewMode == ViewMode.grid
-                                ? Icons.view_list_rounded
-                                : Icons.grid_view_rounded,
-                            onPressed: _toggleViewMode,
-                            tooltip: 'Toggle view',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Search bar (animated, always visible on desktop)
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeInOut,
-                    height: showSearch ? 56 : 0,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: showSearch ? 1.0 : 0.0,
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                            horizontalPadding, 0, horizontalPadding, 12),
-                        child: TextField(
-                          controller: _searchController,
-                          autofocus: !isDesktop && _showSearch,
-                          decoration: InputDecoration(
-                            hintText: 'Search ${title.toLowerCase()}...',
-                            prefixIcon:
-                                const Icon(Icons.search_rounded, size: 20),
-                            suffixIcon: _searchController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear_rounded,
-                                        size: 18),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() {});
-                                    },
-                                  )
-                                : null,
-                            filled: true,
-                            fillColor:
-                                AppColors.surfaceVariant.withValues(alpha: 0.5),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          onChanged: (value) {
-                            setState(() {});
+        opacity: 0.85,
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Main app bar
+              SizedBox(
+                height: kToolbarHeight,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isDesktop ? horizontalPadding - 8 : 8),
+                  child: Row(
+                    children: [
+                      // Hamburger menu on mobile
+                      if (!isDesktop)
+                        IconButton(
+                          icon: const Icon(Icons.menu_rounded),
+                          onPressed: () {
+                            AppShell.scaffoldKey.currentState?.openDrawer();
                           },
+                          tooltip: 'Menu',
+                        ),
+                      // Title with icon
+                      Padding(
+                        padding: EdgeInsets.only(left: isDesktop ? 8 : 0),
+                        child: Row(
+                          children: [
+                            Icon(
+                              icon,
+                              color: AppColors.primary,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              title,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: -0.3,
+                                  ),
+                            ),
+                          ],
                         ),
                       ),
+                      const Spacer(),
+                      // Action buttons - hide search toggle on desktop
+                      if (!isDesktop)
+                        _ActionButton(
+                          icon: Icons.search_rounded,
+                          isActive: _showSearch,
+                          onPressed: _toggleSearch,
+                          tooltip: 'Search',
+                        ),
+                      if (!isDesktop) const SizedBox(width: 4),
+                      _ActionButton(
+                        icon: Icons.sort_rounded,
+                        onPressed: _showSortMenu,
+                        tooltip: 'Sort: ${_currentSort.displayName}',
+                      ),
+                      const SizedBox(width: 4),
+                      _ActionButton(
+                        icon: _viewMode == ViewMode.grid
+                            ? Icons.view_list_rounded
+                            : Icons.grid_view_rounded,
+                        onPressed: _toggleViewMode,
+                        tooltip: 'Toggle view',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Search bar (animated, always visible on desktop)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                height: showSearch ? 56 : 0,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: showSearch ? 1.0 : 0.0,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        horizontalPadding, 0, horizontalPadding, 12),
+                    child: TextField(
+                      controller: _searchController,
+                      autofocus: !isDesktop && _showSearch,
+                      decoration: InputDecoration(
+                        hintText: 'Search ${title.toLowerCase()}...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor:
+                            AppColors.surfaceVariant.withValues(alpha: 0.5),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {});
+                      },
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
+          ),
         ),
+      ),
     );
   }
 
