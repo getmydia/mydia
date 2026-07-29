@@ -99,7 +99,7 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.Premiumize do
   def submit_torrent(config, {:file, bin}) do
     case Req.post(base_url() <> "/transfer/create",
            form_multipart: [
-             {:src, bin, filename: "release.torrent", content_type: "application/x-bittorrent"}
+             src: {bin, filename: "release.torrent", content_type: "application/x-bittorrent"}
            ],
            headers: auth_headers(config)
          ) do

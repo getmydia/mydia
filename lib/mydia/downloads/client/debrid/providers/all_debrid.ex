@@ -101,8 +101,8 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebrid do
   def submit_torrent(config, {:file, bin}) do
     case Req.post(base_url() <> "/v4/magnet/upload/file",
            form_multipart: [
-             {:"files[]", bin,
-              filename: "release.torrent", content_type: "application/x-bittorrent"}
+             {:"files[]",
+              {bin, filename: "release.torrent", content_type: "application/x-bittorrent"}}
            ],
            headers: auth_headers(config)
          ) do

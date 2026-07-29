@@ -85,13 +85,6 @@ Full documentation available at **[docs.mydia.dev](https://docs.mydia.dev)**
 - [PostgreSQL Support](https://docs.mydia.dev/latest/advanced/postgresql/)
 - [Development Guide](https://docs.mydia.dev/latest/development/setup/)
 
-### Debrid Provider Note
-
-Debrid clients support Real-Debrid, AllDebrid, Premiumize, and TorBox via the
-`debrid` client type. TorBox support is marked bypass-only in code: unit tests
-cover the documented API shape, but live-account behavior can vary by provider
-state, cache availability, and seed health.
-
 ## Screenshots
 
 | Movies | TV Shows | Calendar |
