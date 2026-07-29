@@ -3,6 +3,24 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'platform_features_stub.dart'
     if (dart.library.io) 'platform_features_native.dart' as platform;
 
+/// Rendering tier for the playback chrome's glass material.
+///
+/// `BackdropFilter` — and especially `ImageFilter.compose` with a colour matrix
+/// — is the expensive path on Flutter web. Widgets read [PlatformFeatures
+/// .playerGlassTier] rather than branching on `kIsWeb` themselves, so the
+/// policy lives in one place and tests can force a tier.
+enum PlayerGlassTier {
+  /// Blur + saturation boost. Native desktop and mobile.
+  full,
+
+  /// Blur only, no colour matrix. Web.
+  reduced,
+
+  /// No live blur at all; compensating denser fill. Contingency only — adopt
+  /// solely if web verification measures an actual frame-rate problem.
+  faux,
+}
+
 /// Service to detect platform-specific capabilities and features
 class PlatformFeatures {
   /// Check if running on mobile (iOS or Android)
@@ -61,6 +79,14 @@ class PlatformFeatures {
 
   /// Check if background audio is supported (mobile only)
   static bool get supportsBackgroundAudio => isMobile;
+
+  /// Which glass material the playback chrome should render.
+  ///
+  /// [PlayerGlassTier.faux] is never selected automatically; it is a
+  /// contingency to be wired deliberately if web verification shows a real
+  /// performance problem.
+  static PlayerGlassTier get playerGlassTier =>
+      isWeb ? PlayerGlassTier.reduced : PlayerGlassTier.full;
 
   /// Get a human-readable platform name
   static String get platformName {
