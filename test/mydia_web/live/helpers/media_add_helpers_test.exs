@@ -53,6 +53,45 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     end
   end
 
+  describe "build_media_item_attrs/3 inherited settings" do
+    defp movie_metadata do
+      %MediaMetadata{
+        provider_id: "672",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Chamber of Secrets",
+        release_date: ~D[2002-11-13]
+      }
+    end
+
+    test "defaults to monitored with no quality profile" do
+      attrs = MediaAddHelpers.build_media_item_attrs(movie_metadata(), :movie)
+
+      assert attrs.monitored == true
+      refute Map.has_key?(attrs, :quality_profile_id)
+    end
+
+    test "honours an explicit monitored flag" do
+      attrs = MediaAddHelpers.build_media_item_attrs(movie_metadata(), :movie, monitored: false)
+
+      assert attrs.monitored == false
+    end
+
+    test "sets the quality profile when one is given" do
+      attrs =
+        MediaAddHelpers.build_media_item_attrs(movie_metadata(), :movie, quality_profile_id: 42)
+
+      assert attrs.quality_profile_id == 42
+    end
+
+    test "omits the quality profile when it is nil" do
+      attrs =
+        MediaAddHelpers.build_media_item_attrs(movie_metadata(), :movie, quality_profile_id: nil)
+
+      refute Map.has_key?(attrs, :quality_profile_id)
+    end
+  end
+
   describe "handle_add_media_to_library/4 derives provider and stamps provenance" do
     setup do
       bypass = Bypass.open()
