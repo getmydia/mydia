@@ -243,6 +243,13 @@ class DartCastBackend implements CastBackend {
         );
       }
 
+      // Switching receivers must hand the previous one back: overwriting
+      // `_session` leaked the old session and left that receiver playing our
+      // media with nothing able to stop it.
+      if (_session != null && _connectedDevice?.id != device.id) {
+        await disconnect();
+      }
+
       final session = await _service.connect(target);
       _session = session;
       _connectedDevice = device;
@@ -277,6 +284,27 @@ class DartCastBackend implements CastBackend {
     _positionSub = session.positionStream.listen(_positions.add);
     _durationSub = session.durationStream.listen(_durations.add);
   }
+
+  /// Always null: `dart_cast` 0.7.x offers no way to ask a receiver what it is
+  /// playing without first taking it over.
+  ///
+  /// `CastService.connect` is the only entry point to a session, and both
+  /// concrete sessions act on connect — `ChromecastSession.connect` sends
+  /// `LAUNCH CC1AD845`, which evicts whatever app the receiver is running.
+  /// A read-only probe would need the CASTV2 `GET_STATUS` message on
+  /// `receiver-0`, and the channel that speaks it
+  /// (`src/protocols/chromecast/castv2_channel.dart`) is not part of the
+  /// package's public API. DLNA is no better off: `DlnaSession` exposes
+  /// `GetPositionInfo`/`GetTransportInfo` only through its private polling
+  /// loop, and neither returns the current track URI.
+  ///
+  /// Returning null makes `CastSessionManager.restoreSession` discard the
+  /// stored session, which is the behaviour the design asks for when the
+  /// receiver's state is unknown. The seam stays because it is the one place
+  /// a future backend — hand-written CASTV2, or a dart_cast release that
+  /// exposes receiver status — plugs the reattach path back in.
+  @override
+  Future<String?> probeReceiverContentUrl(CastDevice device) async => null;
 
   @override
   Future<void> disconnect() async {

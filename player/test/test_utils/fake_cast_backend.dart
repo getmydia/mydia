@@ -24,6 +24,14 @@ class FakeCastBackend implements CastBackend {
   bool discoveryStopped = false;
   CastSubtitleTrack? selectedSubtitle;
 
+  /// What `probeReceiverContentUrl` reports. Null — the default, and what the
+  /// real `DartCastBackend` always answers — means "cannot tell".
+  String? receiverContentUrl;
+
+  /// Devices the receiver was probed for, so tests can prove the probe ran
+  /// before anything connected.
+  final List<CastDevice> probedDevices = [];
+
   void emitDevices(List<CastDevice> devices) => _devices.add(devices);
   void emitState(CastPlaybackState state) => _states.add(state);
   void emitPosition(Duration position) => _positions.add(position);
@@ -66,6 +74,12 @@ class FakeCastBackend implements CastBackend {
       throw CastBackendException('fake connect failure', failure);
     }
     _connected = device;
+  }
+
+  @override
+  Future<String?> probeReceiverContentUrl(CastDevice device) async {
+    probedDevices.add(device);
+    return receiverContentUrl;
   }
 
   @override

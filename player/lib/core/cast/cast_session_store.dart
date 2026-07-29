@@ -15,6 +15,13 @@ class PersistedCastSession {
   final CastRouteKind routeKind;
   final DateTime savedAt;
 
+  /// The exact URL handed to the receiver.
+  ///
+  /// Persisted so a restore can ask the receiver what it is playing and
+  /// compare, instead of connecting blind and evicting whatever app the user
+  /// started in the meantime.
+  final String mediaUrl;
+
   const PersistedCastSession({
     required this.device,
     required this.mediaId,
@@ -24,6 +31,7 @@ class PersistedCastSession {
     required this.position,
     required this.routeKind,
     required this.savedAt,
+    this.mediaUrl = '',
   });
 
   /// Sessions older than this are discarded without a reconnect attempt.
@@ -41,6 +49,7 @@ class PersistedCastSession {
         'routeKind':
             routeKind == CastRouteKind.localBridge ? 'bridge' : 'direct',
         'savedAt': savedAt.toIso8601String(),
+        'mediaUrl': mediaUrl,
       };
 
   factory PersistedCastSession.fromMap(Map<dynamic, dynamic> map) {
@@ -57,6 +66,10 @@ class PersistedCastSession {
           ? CastRouteKind.localBridge
           : CastRouteKind.directServer,
       savedAt: DateTime.parse(map['savedAt'] as String),
+      // Records written before cast restore learned to probe the receiver
+      // carry no URL; an empty one can never match, so they are discarded
+      // rather than restored blind.
+      mediaUrl: map['mediaUrl'] as String? ?? '',
     );
   }
 
@@ -70,6 +83,7 @@ class PersistedCastSession {
       position: position ?? this.position,
       routeKind: routeKind,
       savedAt: savedAt ?? this.savedAt,
+      mediaUrl: mediaUrl,
     );
   }
 }

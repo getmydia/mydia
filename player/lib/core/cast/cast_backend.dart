@@ -80,6 +80,14 @@ abstract class CastBackend {
   Future<void> connect(CastDevice device);
   Future<void> disconnect();
 
+  /// What the receiver is currently playing, *without* taking it over.
+  ///
+  /// Returns the content URL the receiver reports, or null when the answer
+  /// cannot be obtained without launching an app on it. Callers must treat
+  /// null as "do not touch this receiver": on Chromecast, connecting sends
+  /// `LAUNCH CC1AD845`, which evicts whatever the user is currently watching.
+  Future<String?> probeReceiverContentUrl(CastDevice device);
+
   Future<void> loadMedia(CastMediaRequest request);
   Future<void> play();
   Future<void> pause();

@@ -7,6 +7,7 @@ import '../player/progress_service.dart';
 import 'cast_backend.dart';
 import 'cast_route_resolver.dart';
 import 'cast_session_store.dart';
+import 'cast_streaming_session_service.dart';
 
 /// Everything the UI knows about the item it wants to cast.
 class CastLaunchRequest {
@@ -37,6 +38,7 @@ class CastSessionManager {
   final CastSessionStore _store;
   final ProgressService _progressService;
   final CastRouteResolver Function() _resolverFactory;
+  final CastStreamingSessionService _streamingSessions;
   final Future<void> Function(bool enabled) _setLanAccess;
   final DateTime Function() _clock;
 
@@ -53,6 +55,9 @@ class CastSessionManager {
   DateTime? _lastProgressSync;
   bool _lanEnabled = false;
 
+  /// Server-side HLS session backing the media currently on the receiver.
+  String? _activeHlsSessionId;
+
   /// How often receiver position is pushed to the server, matching the
   /// cadence local playback uses.
   static const _progressInterval = Duration(seconds: 10);
@@ -62,17 +67,24 @@ class CastSessionManager {
     required CastSessionStore store,
     required ProgressService progressService,
     required CastRouteResolver Function() resolverFactory,
+    required CastStreamingSessionService streamingSessions,
     required Future<void> Function(bool enabled) setLanAccess,
     DateTime Function()? clock,
   })  : _backend = backend,
         _store = store,
         _progressService = progressService,
         _resolverFactory = resolverFactory,
+        _streamingSessions = streamingSessions,
         _setLanAccess = setLanAccess,
         _clock = clock ?? DateTime.now;
 
   Stream<CastSession?> get sessionStream => _sessions.stream;
   CastSession? get currentSession => _current;
+
+  /// The item the active (or last) session is playing, for a UI that needs to
+  /// re-cast it — a stale session's "Reconnect" must target the media that
+  /// session was playing, not whatever screen happens to be open.
+  PersistedCastSession? get persistedSession => _persisted;
 
   Future<void> startCast({
     required CastDevice device,
@@ -80,12 +92,25 @@ class CastSessionManager {
   }) async {
     final resolver = _resolverFactory();
 
-    final route = resolver.resolve(
-      fileId: request.fileId,
-      protocol: device.protocol,
-    );
+    // Captured before any attempt so rollback can tell whether *this* call
+    // turned LAN access on, versus it already being on from a session that
+    // was mid-switch when this one started.
+    final lanEnabledBeforeCall = _lanEnabled;
+
+    // Every server-side HLS session opened while resolving routes for this
+    // call. All but the one actually playing get torn down at the end.
+    final startedHlsSessions = <String>[];
+
+    CastRoute? route;
+    try {
+      route = await _resolveRoute(resolver, request, device, startedHlsSessions);
+    } catch (e) {
+      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+      rethrow;
+    }
 
     if (route == null) {
+      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
       throw const CastBackendException(
         'No usable route to the receiver: the server is unreachable and this '
         'device has no LAN address to serve from.',
@@ -93,28 +118,91 @@ class CastSessionManager {
       );
     }
 
-    await _backend.connect(device);
+    try {
+      await _backend.connect(device);
+    } catch (e) {
+      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+      rethrow;
+    }
+
     _listenToBackend(request);
 
-    // Captured before the load attempts so rollback can tell whether *this*
-    // call turned LAN access on, versus it already being on from a session
-    // that was mid-switch when this one started.
-    final lanEnabledBeforeCall = _lanEnabled;
-
+    final CastRoute loaded;
     try {
-      await _loadWithRetries(resolver, route, device, request);
+      loaded = await _loadWithRetries(
+        resolver,
+        route,
+        device,
+        request,
+        startedHlsSessions,
+      );
     } catch (e) {
       // Nothing succeeded: leaving the backend connected, the listeners
       // live, and the LAN proxy exposed would strand the app in a state
       // with no session but an active connection and (per the Security
       // requirement) a listener with no cast in progress.
-      await _rollbackFailedStart(lanEnabledBeforeCall);
+      _cancelSubscriptions();
+      try {
+        await _backend.disconnect();
+      } catch (e) {
+        debugPrint(
+            '[CastSessionManager] Ignoring disconnect error during rollback: $e');
+      }
+      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
       rethrow;
+    }
+
+    await _adoptHlsSession(loaded.hlsSessionId, startedHlsSessions);
+
+    // The Security requirement is that the LAN listener exists only while a
+    // bridged cast needs it. An escalation that started on the bridge and
+    // ended on a direct route must not leave the proxy exposed.
+    if (loaded.kind != CastRouteKind.localBridge && !lanEnabledBeforeCall) {
+      await _disableLanQuietly();
     }
   }
 
+  /// Resolve a route, enabling LAN access first when the route will be a
+  /// bridge one.
+  ///
+  /// Ordering is the whole point: `lanBaseUrl` does not exist until the proxy
+  /// is LAN-bound, so asking the resolver for a bridge URL before enabling
+  /// access can only ever produce null. If the bridge turns out to be
+  /// impossible anyway (no LAN interface, no running proxy), access is turned
+  /// straight back off rather than left on for nothing.
+  Future<CastRoute?> _resolveRoute(
+    CastRouteResolver resolver,
+    CastLaunchRequest request,
+    CastDevice device,
+    List<String> startedHlsSessions, {
+    bool forceBridge = false,
+    bool forceTranscode = false,
+  }) async {
+    final wantsBridge = resolver.usesBridge(forceBridge: forceBridge);
+    final enabledHere = wantsBridge && !_lanEnabled;
+
+    if (wantsBridge) await _enableLan();
+
+    final route = await resolver.resolve(
+      fileId: request.fileId,
+      protocol: device.protocol,
+      forceBridge: forceBridge,
+      forceTranscode: forceTranscode,
+    );
+
+    if (route == null) {
+      if (enabledHere) await _disableLanQuietly();
+      return null;
+    }
+
+    final sessionId = route.hlsSessionId;
+    if (sessionId != null) startedHlsSessions.add(sessionId);
+
+    return route;
+  }
+
   /// Loads media on [route], escalating through at most two further
-  /// remedies before giving up.
+  /// remedies before giving up. Returns the route that actually loaded.
   ///
   /// Deliberately three sequential, explicitly nested attempts and nothing
   /// more — no loop, so the bound is obvious by inspection:
@@ -132,21 +220,30 @@ class CastSessionManager {
   ///      (see `DartCastBackend.failureKindFor`) — having ruled out the
   ///      former by trying the bridge, the codec explanation is the only
   ///      one left, regardless of why attempt 2 itself failed.
-  Future<void> _loadWithRetries(
+  Future<CastRoute> _loadWithRetries(
     CastRouteResolver resolver,
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
+    List<String> startedHlsSessions,
   ) async {
     try {
       await _loadOnRoute(resolver, route, device, request);
+      return route;
     } on CastBackendException catch (firstFailure) {
-      final secondRoute =
-          _retryRouteFor(firstFailure, route, resolver, device, request);
+      final secondRoute = await _retryRouteFor(
+        firstFailure,
+        route,
+        resolver,
+        device,
+        request,
+        startedHlsSessions,
+      );
       if (secondRoute == null) rethrow;
 
       try {
         await _loadOnRoute(resolver, secondRoute, device, request);
+        return secondRoute;
       } on CastBackendException {
         final isBridgeEscalationFromDirectMediaLoadFailed =
             firstFailure.kind == CastFailureKind.mediaLoadFailed &&
@@ -155,9 +252,11 @@ class CastSessionManager {
 
         if (!isBridgeEscalationFromDirectMediaLoadFailed) rethrow;
 
-        final transcodeRoute = resolver.resolve(
-          fileId: request.fileId,
-          protocol: device.protocol,
+        final transcodeRoute = await _resolveRoute(
+          resolver,
+          request,
+          device,
+          startedHlsSessions,
           forceTranscode: true,
         );
         if (transcodeRoute == null) rethrow;
@@ -166,29 +265,42 @@ class CastSessionManager {
           '[CastSessionManager] Bridge retry also failed, retrying with TRANSCODE',
         );
         await _loadOnRoute(resolver, transcodeRoute, device, request);
+        return transcodeRoute;
       }
     }
   }
 
-  /// Undo the side effects of a [startCast] call that never produced a
-  /// working session.
-  Future<void> _rollbackFailedStart(bool lanEnabledBeforeCall) async {
-    _cancelSubscriptions();
+  /// Undo the LAN exposure and server-side sessions a failed (or abandoned)
+  /// [startCast] created.
+  Future<void> _abandonStart(
+    bool lanEnabledBeforeCall,
+    List<String> startedHlsSessions,
+  ) async {
+    for (final id in startedHlsSessions) {
+      await _streamingSessions.end(id);
+    }
+    startedHlsSessions.clear();
 
-    try {
-      await _backend.disconnect();
-    } catch (e) {
-      debugPrint('[CastSessionManager] Ignoring disconnect error during rollback: $e');
+    if (!lanEnabledBeforeCall) await _disableLanQuietly();
+  }
+
+  /// Keep the session that loaded, tear down the ones that didn't — including
+  /// whatever the previously cast item was using.
+  Future<void> _adoptHlsSession(
+    String? loadedSessionId,
+    List<String> startedHlsSessions,
+  ) async {
+    final previous = _activeHlsSessionId;
+    if (previous != null && previous != loadedSessionId) {
+      await _streamingSessions.end(previous);
     }
 
-    if (_lanEnabled && !lanEnabledBeforeCall) {
-      try {
-        await _setLanAccess(false);
-      } catch (e) {
-        debugPrint('[CastSessionManager] Ignoring setLanAccess error during rollback: $e');
-      }
-      _lanEnabled = false;
+    for (final id in startedHlsSessions) {
+      if (id != loadedSessionId) await _streamingSessions.end(id);
     }
+    startedHlsSessions.clear();
+
+    _activeHlsSessionId = loadedSessionId;
   }
 
   /// Pick a second attempt for a failed load, or null to give up.
@@ -196,29 +308,32 @@ class CastSessionManager {
   /// Two distinct failures need two distinct remedies: an unreachable URL
   /// needs a *different route*, while a rejected file needs a *different
   /// encoding*. Retrying the wrong one wastes the user's time.
-  CastRoute? _retryRouteFor(
+  Future<CastRoute?> _retryRouteFor(
     CastBackendException e,
     CastRoute attempted,
     CastRouteResolver resolver,
     CastDevice device,
     CastLaunchRequest request,
-  ) {
+    List<String> startedHlsSessions,
+  ) async {
     switch (e.kind) {
       case CastFailureKind.unreachable:
         // Usually AP isolation, a VLAN, or guest wifi. Serve it ourselves.
         if (attempted.kind == CastRouteKind.localBridge) return null;
 
         debugPrint('[CastSessionManager] Direct route failed, retrying via bridge');
-        return resolver.resolve(
-          fileId: request.fileId,
-          protocol: device.protocol,
+        return _resolveRoute(
+          resolver,
+          request,
+          device,
+          startedHlsSessions,
           forceBridge: true,
         );
 
       case CastFailureKind.mediaLoadFailed:
-        // CastRouteResolver ignores forceTranscode on the bridge branch, so
-        // retrying here would just resend the identical URL that just
-        // failed — a guaranteed-futile extra receiver round-trip.
+        // CastRouteResolver ignores forceTranscode on the bridge branch for
+        // DLNA, so retrying there would just resend the identical URL that
+        // just failed — a guaranteed-futile extra receiver round-trip.
         if (attempted.kind == CastRouteKind.localBridge) return null;
 
         // `mediaLoadFailed` is overloaded: dart_cast's Chromecast and DLNA
@@ -231,9 +346,11 @@ class CastSessionManager {
         // (_loadWithRetries) escalates once more to a transcode on the
         // original route — this function only decides the *second*
         // attempt, not the third.
-        final bridgeRetry = resolver.resolve(
-          fileId: request.fileId,
-          protocol: device.protocol,
+        final bridgeRetry = await _resolveRoute(
+          resolver,
+          request,
+          device,
+          startedHlsSessions,
           forceBridge: true,
         );
         if (bridgeRetry != null) {
@@ -248,9 +365,11 @@ class CastSessionManager {
         if (attempted.mediaUrl.contains('strategy=TRANSCODE')) return null;
 
         debugPrint('[CastSessionManager] Media rejected, retrying with TRANSCODE');
-        return resolver.resolve(
-          fileId: request.fileId,
-          protocol: device.protocol,
+        return _resolveRoute(
+          resolver,
+          request,
+          device,
+          startedHlsSessions,
           forceTranscode: true,
         );
 
@@ -267,11 +386,6 @@ class CastSessionManager {
     CastDevice device,
     CastLaunchRequest request,
   ) async {
-    if (route.kind == CastRouteKind.localBridge && !_lanEnabled) {
-      await _setLanAccess(true);
-      _lanEnabled = true;
-    }
-
     final subtitles = route.subtitlesSupported
         ? request.subtitles
             .map((track) => CastSubtitleTrack(
@@ -301,6 +415,7 @@ class CastSessionManager {
       position: request.startPosition ?? Duration.zero,
       routeKind: route.kind,
       savedAt: _clock(),
+      mediaUrl: route.mediaUrl,
     );
     await _store.save(_persisted!);
 
@@ -315,6 +430,27 @@ class CastSessionManager {
         position: request.startPosition ?? Duration.zero,
       ),
     ));
+  }
+
+  Future<void> _enableLan() async {
+    if (_lanEnabled) return;
+    await _setLanAccess(true);
+    _lanEnabled = true;
+  }
+
+  /// Turn LAN exposure off, keeping `_lanEnabled` true if that fails.
+  ///
+  /// Clearing the flag on failure would mean a still-exposed proxy is never
+  /// retried — the app would believe it had closed a listener that is in fact
+  /// still serving media to the network.
+  Future<void> _disableLanQuietly() async {
+    if (!_lanEnabled) return;
+    try {
+      await _setLanAccess(false);
+      _lanEnabled = false;
+    } catch (e) {
+      debugPrint('[CastSessionManager] Failed to disable LAN access: $e');
+    }
   }
 
   void _listenToBackend(CastLaunchRequest request) {
@@ -404,6 +540,31 @@ class CastSessionManager {
   Future<void> pause() => _backend.pause();
   Future<void> seek(Duration position) => _backend.seek(position);
 
+  /// Re-cast whatever the stored session was playing.
+  ///
+  /// The stale-session UI needs this: a "Reconnect" that re-casts the screen
+  /// the user happens to be on would silently start a different item.
+  Future<void> reconnectStoredSession() async {
+    final stored = _persisted ?? await _store.load();
+    if (stored == null) {
+      throw const CastBackendException(
+        'There is no cast session to reconnect to.',
+        CastFailureKind.unknown,
+      );
+    }
+
+    await startCast(
+      device: stored.device,
+      request: CastLaunchRequest(
+        fileId: stored.fileId,
+        mediaId: stored.mediaId,
+        mediaType: stored.mediaType,
+        title: stored.title,
+        startPosition: stored.position,
+      ),
+    );
+  }
+
   Future<void> stopCast() async {
     _cancelSubscriptions();
 
@@ -416,10 +577,11 @@ class CastSessionManager {
     await _backend.disconnect();
     await _store.clear();
 
-    if (_lanEnabled) {
-      await _setLanAccess(false);
-      _lanEnabled = false;
-    }
+    final hlsSessionId = _activeHlsSessionId;
+    _activeHlsSessionId = null;
+    if (hlsSessionId != null) await _streamingSessions.end(hlsSessionId);
+
+    await _disableLanQuietly();
 
     _persisted = null;
     _lastDuration = Duration.zero;
@@ -431,11 +593,25 @@ class CastSessionManager {
   ///
   /// Returns true when a session was restored. Anything that goes wrong
   /// clears the stored session rather than leaving a phantom in the UI.
+  ///
+  /// The receiver is asked what it is playing *before* anything connects to
+  /// it. `ChromecastSession.connect` sends `LAUNCH CC1AD845`, which evicts
+  /// whatever app the receiver is running — so a restore that connected first
+  /// and checked afterwards would stop the user's TV every time they opened
+  /// Mydia within the 12 hour window. When the receiver's state cannot be
+  /// determined without launching (see
+  /// `DartCastBackend.probeReceiverContentUrl`), the stored session is
+  /// discarded: not restoring is a much smaller failure than hijacking.
   Future<bool> restoreSession() async {
     final stored = await _store.load();
     if (stored == null) return false;
 
     if (stored.isExpired(_clock())) {
+      await _store.clear();
+      return false;
+    }
+
+    if (!await _receiverStillPlaying(stored)) {
       await _store.clear();
       return false;
     }
@@ -454,17 +630,25 @@ class CastSessionManager {
     // — reconstruct an equivalent one from the fields the persisted record
     // carries, so a restored session keeps syncing progress and marks
     // itself stale like a freshly started one does.
-    _listenToBackend(CastLaunchRequest(
+    final request = CastLaunchRequest(
       fileId: stored.fileId,
       mediaId: stored.mediaId,
       mediaType: stored.mediaType,
       title: stored.title,
       startPosition: stored.position,
-    ));
+    );
+    _listenToBackend(request);
 
-    if (stored.routeKind == CastRouteKind.localBridge && !_lanEnabled) {
-      await _setLanAccess(true);
-      _lanEnabled = true;
+    if (stored.routeKind == CastRouteKind.localBridge) {
+      // The byte source died with the app: the proxy is gone, its port and
+      // path token are new, and any HLS session id in the old URL is stale.
+      // Re-resolve and reload at the stored position — a visible blip, which
+      // the design accepts as the cost of the bridge path.
+      if (!await _reloadBridgeSession(stored, request)) {
+        await _store.clear();
+        return false;
+      }
+      return true;
     }
 
     _publish(CastSession(
@@ -480,9 +664,73 @@ class CastSessionManager {
     return true;
   }
 
+  Future<bool> _receiverStillPlaying(PersistedCastSession stored) async {
+    String? playing;
+    try {
+      playing = await _backend.probeReceiverContentUrl(stored.device);
+    } catch (e) {
+      debugPrint('[CastSessionManager] Receiver probe failed: $e');
+      return false;
+    }
+
+    if (playing == null) {
+      debugPrint(
+        '[CastSessionManager] Cannot tell what the receiver is playing; '
+        'discarding the stored session rather than taking it over',
+      );
+      return false;
+    }
+
+    if (stored.mediaUrl.isEmpty || playing != stored.mediaUrl) {
+      debugPrint(
+        '[CastSessionManager] Receiver is playing something else; '
+        'discarding the stored session',
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<bool> _reloadBridgeSession(
+    PersistedCastSession stored,
+    CastLaunchRequest request,
+  ) async {
+    final resolver = _resolverFactory();
+    final startedHlsSessions = <String>[];
+
+    try {
+      final route = await _resolveRoute(
+        resolver,
+        request,
+        stored.device,
+        startedHlsSessions,
+        forceBridge: true,
+      );
+      if (route == null) {
+        await _abandonStart(false, startedHlsSessions);
+        return false;
+      }
+
+      await _loadOnRoute(resolver, route, stored.device, request);
+      await _adoptHlsSession(route.hlsSessionId, startedHlsSessions);
+      return true;
+    } catch (e) {
+      debugPrint('[CastSessionManager] Bridge restore failed: $e');
+      _cancelSubscriptions();
+      await _abandonStart(false, startedHlsSessions);
+      try {
+        await _backend.disconnect();
+      } catch (_) {
+        // Best effort: the restore has already failed.
+      }
+      return false;
+    }
+  }
+
   void _publish(CastSession? session) {
     _current = session;
-    _sessions.add(session);
+    if (!_sessions.isClosed) _sessions.add(session);
   }
 
   void _cancelSubscriptions() {
@@ -496,8 +744,35 @@ class CastSessionManager {
     _failureSub = null;
   }
 
+  /// Release everything this manager owns.
+  ///
+  /// Disposal has to be a real teardown, not just a stream close: a manager
+  /// dropped with a live session used to leave the backend connected and the
+  /// LAN proxy exposed with nothing left to turn either off.
   void dispose() {
     _cancelSubscriptions();
+
+    final hadSession = _current != null;
+    final hlsSessionId = _activeHlsSessionId;
+    _activeHlsSessionId = null;
+    _current = null;
+
+    unawaited(_releaseResources(hadSession, hlsSessionId));
+
     _sessions.close();
+  }
+
+  Future<void> _releaseResources(bool hadSession, String? hlsSessionId) async {
+    if (hadSession) {
+      try {
+        await _backend.disconnect();
+      } catch (e) {
+        debugPrint('[CastSessionManager] Ignoring disconnect error on dispose: $e');
+      }
+    }
+
+    if (hlsSessionId != null) await _streamingSessions.end(hlsSessionId);
+
+    await _disableLanQuietly();
   }
 }
