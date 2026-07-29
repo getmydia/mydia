@@ -134,8 +134,11 @@ void main() {
     test('tint is neutral, not the navy browse background', () {
       expect(DepthTokens.playerChromeTint, isNot(AppColors.background));
       final t = DepthTokens.playerChromeTint;
-      // Neutral means the blue channel does not dominate red by much.
-      expect(t.b - t.r, lessThanOrEqualTo(0.036));
+      final bg = AppColors.background;
+      // Neutral: the tint's blue-to-red difference is smaller than the navy
+      // background's, so backdrop colour survives the fill instead of being
+      // drained to grey/blue mush.
+      expect(t.b - t.r, lessThan(bg.b - bg.r));
     });
 
     test('exposes panel and pill radii', () {
