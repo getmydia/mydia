@@ -83,8 +83,19 @@ class Invalidator {
   ///
   /// Same per-watcher isolation as [invalidate], and for the same reason:
   /// one watcher's refetch failing must not stop the rest from refreshing.
+  /// The clear itself gets the same treatment: a transient storage error
+  /// (`Box.clear()` can throw on I/O failure) must degrade to "live screens
+  /// still refresh, dormant ones stay warm", not "nothing happens" — this is
+  /// exactly the kind of blip a resume from background can hit.
   Future<void> invalidateAll() async {
-    await _fetchLog.clearAll();
+    try {
+      await _fetchLog.clearAll();
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Invalidator.invalidateAll: failed to clear the fetch log: $error\n'
+        '$stackTrace',
+      );
+    }
     for (final watcher in _registry.watchers) {
       try {
         await watcher.refetch();

@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,19 +45,19 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.paused:
-      case AppLifecycleState.hidden:
-        _resumeGate.onPaused(DateTime.now());
-      case AppLifecycleState.resumed:
-        if (_resumeGate.onResumed(DateTime.now())) {
-          // Live screens refetch now; dormant ones become cold for their
-          // next mount.
-          ref.read(invalidatorProvider).invalidateAll();
-        }
-      case AppLifecycleState.inactive:
-      case AppLifecycleState.detached:
-        break;
+    if (applyAppLifecycleState(_resumeGate, state, DateTime.now())) {
+      // Live screens refetch now; dormant ones become cold for their next
+      // mount. Fire-and-forget: a lifecycle callback cannot await, so any
+      // failure is caught here rather than becoming an unhandled rejection.
+      unawaited(_invalidateOnResume());
+    }
+  }
+
+  Future<void> _invalidateOnResume() async {
+    try {
+      await ref.read(invalidatorProvider).invalidateAll();
+    } catch (e) {
+      debugPrint('[MyApp] Resume invalidation failed: $e');
     }
   }
 

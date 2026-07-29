@@ -77,6 +77,25 @@ class _PartiallyFailingFetchLog implements FetchLog {
   Future<void> clearAll() async {}
 }
 
+/// A [FetchLog] whose `clearAll` always throws — used to prove that a
+/// transient storage failure on the resume path degrades to "live watchers
+/// still refetch" rather than aborting the whole batch before it starts.
+class _ClearAllFailingFetchLog implements FetchLog {
+  @override
+  DateTime? lastFetchedAt(QueryKey key) => null;
+
+  @override
+  Future<void> record(QueryKey key, DateTime when) async {}
+
+  @override
+  Future<void> clear(QueryKey key) async {}
+
+  @override
+  Future<void> clearAll() async {
+    throw StateError('simulated storage failure clearing the fetch log');
+  }
+}
+
 void main() {
   group('InvalidationRules', () {
     test('toggling a show favorite refreshes favorites, home and the show list',
@@ -266,6 +285,28 @@ void main() {
       ]);
 
       expect(log.clearedKeys, [QueryKeys.home, QueryKeys.tvShowsList]);
+    });
+
+    test(
+        'invalidateAll still refetches live watchers when clearing the '
+        'fetch log throws', () async {
+      final log = _ClearAllFailingFetchLog();
+      final link = StubLink((_, __) => _pingData('v'));
+      final watcher = makeWatcher(link, log);
+      addTearDown(watcher.close);
+
+      final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
+      final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+      await watcher.stream.first;
+      final requestsBeforeInvalidateAll = link.requests.length;
+
+      // Must not throw: a failed clearAll() must not abort before a single
+      // watcher gets a chance to refetch.
+      await invalidator.invalidateAll();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(link.requests.length, greaterThan(requestsBeforeInvalidateAll));
     });
 
     test('unregister only removes the watcher it was given', () async {
