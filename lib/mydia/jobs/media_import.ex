@@ -212,8 +212,12 @@ defmodule Mydia.Jobs.MediaImport do
   # A partial import means some files landed and some failed. A couple of
   # retries can pick up a transient per-file failure, but with max_attempts:
   # 1000 an unfixable one re-walks (and historically re-copied) the whole
-  # download forever. Cap it so it surfaces as an issue instead.
+  # download forever. Cap it so it surfaces as an issue instead. Both the bare
+  # atom and the {:partial_import, representative_reason} form must be capped —
+  # the tuple carries the underlying cause for the user-facing message and is
+  # no less unfixable for it.
   defp terminal_failure?(:partial_import, attempt) when attempt >= 3, do: true
+  defp terminal_failure?({:partial_import, _reason}, attempt) when attempt >= 3, do: true
   # Too many distinct files claiming one destination filename. Retrying tries
   # the same exhausted suffixes; the parse or the download contents need
   # looking at.
@@ -587,7 +591,9 @@ defmodule Mydia.Jobs.MediaImport do
           error_count: length(errors)
         )
 
-        {:error, :partial_import}
+        # Same treatment as the bulk path: carry the representative reason so a
+        # user who just hand-resolved these files is told why it failed.
+        {:error, {:partial_import, representative_error(errors)}}
       end
     end
   end
@@ -897,11 +903,12 @@ defmodule Mydia.Jobs.MediaImport do
         imported == [] ->
           {:error, representative_error(errors)}
 
-        # Some files imported, some failed — keep the generic partial-import
-        # signal so the successfully-imported files are not undone by a terminal
-        # cancel.
+        # Some files imported, some failed — keep the partial-import signal so
+        # the successfully-imported files are not undone by a terminal cancel,
+        # but attach the representative underlying reason so the user-facing
+        # message reflects the real cause instead of a generic hint.
         true ->
-          {:error, :partial_import}
+          {:error, {:partial_import, representative_error(errors)}}
       end
     end
   end
@@ -1882,6 +1889,11 @@ defmodule Mydia.Jobs.MediaImport do
 
   # The client-reported path Mydia could not see, persisted for path-bearing
   # failures so the Issues tab can compute a mapping suggestion later.
+  #
+  # {:partial_import, reason} is explicitly not path-bearing: its second element
+  # is an underlying failure reason, which can itself be a string. Letting it
+  # fall through would feed prose to the Issues tab's path-mapping suggester.
+  defp failure_reported_path({:partial_import, _reason}), do: nil
   defp failure_reported_path({_tag, path}) when is_binary(path), do: path
   defp failure_reported_path(_), do: nil
 
@@ -1971,9 +1983,13 @@ defmodule Mydia.Jobs.MediaImport do
       "Check library path permissions and available disk space."
   end
 
+  defp format_import_error({:partial_import, inner_reason}, _download) do
+    "Some files could not be imported. " <>
+      "First error: #{format_error_detail(inner_reason)}"
+  end
+
   defp format_import_error({:import_exception, message}, _download) do
-    "Unexpected error during import: #{message}. " <>
-      "This is often a filesystem permission or disk-space issue. " <>
+    "Unexpected error during import: #{first_line(message)}. " <>
       "Import will retry automatically."
   end
 
@@ -2008,6 +2024,34 @@ defmodule Mydia.Jobs.MediaImport do
   defp format_import_error(reason, _download) do
     inspect(reason)
   end
+
+  # Renders the underlying per-file failure reason compactly for inclusion in
+  # user-facing messages.
+  defp format_error_detail({:import_exception, message}), do: first_line(message)
+
+  defp format_error_detail(reason) when is_atom(reason) do
+    reason |> Atom.to_string() |> String.replace("_", " ")
+  end
+
+  defp format_error_detail(reason) when is_binary(reason), do: first_line(reason)
+
+  defp format_error_detail(reason), do: inspect(reason)
+
+  # Exception messages can be huge — an Ecto error embeds the whole query — and
+  # these end up in `import_last_error`, which the UI renders inline. Keep the
+  # first non-empty line. Falls back to a placeholder rather than crashing: this
+  # runs inside failure reporting, where raising would lose the original error
+  # and leave the download with no message at all.
+  defp first_line(message) when is_binary(message) do
+    message
+    |> String.split("\n", trim: true)
+    |> Enum.find_value("(no details)", fn line ->
+      trimmed = String.trim(line)
+      trimmed != "" and trimmed
+    end)
+  end
+
+  defp first_line(message), do: inspect(message)
 
   # Helper to get a human-readable media type name
   defp get_media_type_name(download) do

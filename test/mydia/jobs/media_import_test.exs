@@ -1414,6 +1414,116 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
+  describe "partial import error surfacing" do
+    @tag :tmp_dir
+    test "exposes the underlying per-file error instead of only a generic hint",
+         %{tmp_dir: tmp_dir} do
+      # Regression for the production incident where season-pack imports
+      # failed with only the generic "Some files could not be imported. Check
+      # library path permissions and available disk space." while the real
+      # cause was duplicate media_files rows making Repo.one/1 raise
+      # "expected at most one result" on the reuse-existing-file path.
+      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+
+      assert {:error, _reason} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      updated = Mydia.Downloads.get_download!(download.id)
+
+      # The classification tag stays stable for Issues-tab filtering...
+      assert updated.import_failure_reason == "partial_import"
+
+      # ...but the human message must name the real underlying error, not
+      # just the generic permissions/disk-space hint.
+      assert updated.import_last_error =~ "Some files could not be imported"
+      assert updated.import_last_error =~ "First error: expected at most one result"
+      refute updated.import_last_error =~ "Check library path permissions"
+    end
+
+    @tag :tmp_dir
+    test "still goes terminal after three attempts once the reason is attached",
+         %{tmp_dir: tmp_dir} do
+      # Attaching the underlying reason turns the error from the bare atom
+      # :partial_import into {:partial_import, reason}. terminal_failure?/2
+      # must match the tuple too — otherwise an unfixable partial import falls
+      # through to the catch-all, never cancels, and re-walks the whole
+      # download for all 1000 of Oban's attempts.
+      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+
+      assert {:cancel, {:partial_import, _reason}} =
+               perform_job(
+                 MediaImport,
+                 %{"download_id" => download.id, "save_path" => download_dir},
+                 attempt: 3
+               )
+    end
+
+    # Builds the production shape: a two-episode season pack where S01E01's
+    # destination already exists and carries TWO media_files rows for the same
+    # (library_path_id, relative_path), so the reuse-existing-file path raises
+    # while S01E02 imports cleanly — i.e. a genuine partial import.
+    defp duplicate_media_file_scenario(tmp_dir) do
+      library_path = create_test_library_path(tmp_dir, :series, auto_rename: false)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+
+      File.write!(Path.join(download_dir, "Mystery.Show.S01E01.mkv"), "fake video 1")
+      File.write!(Path.join(download_dir, "Mystery.Show.S01E02.mkv"), "fake video 2")
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Mystery Show"})
+
+      ep_s1e1 =
+        episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 1})
+
+      _ep_s1e2 =
+        episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 2})
+
+      dest_dir =
+        Path.join(MediaImport.build_series_base_path(media_item, library_path), "Season 01")
+
+      File.mkdir_p!(dest_dir)
+      dest_file = Path.join(dest_dir, "Mystery.Show.S01E01.mkv")
+      File.write!(dest_file, "existing video")
+      relative_path = Path.relative_to(dest_file, library_path.path)
+
+      for _ <- 1..2 do
+        media_file_fixture(%{
+          library_path_id: library_path.id,
+          episode_id: ep_s1e1.id,
+          relative_path: relative_path
+        })
+      end
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "PartialErrorClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "PartialErrorClient",
+          download_client_id: "partial-error-1",
+          metadata: %{"season_pack" => true, "season_number" => 1}
+        })
+
+      {download, download_dir}
+    end
+  end
+
   describe "destination filename conflicts" do
     @tag :tmp_dir
     test "re-running an import adopts the earlier conflict copy instead of duplicating it",
