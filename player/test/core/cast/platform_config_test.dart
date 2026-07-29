@@ -14,8 +14,16 @@ void main() {
       expect(plist, contains('NSLocalNetworkUsageDescription'));
     });
 
-    test('iOS entitlements file exists', () {
-      expect(File('ios/Runner/Runner.entitlements').existsSync(), isTrue);
+    test('no empty iOS entitlements file is left behind', () {
+      // Casting on iOS needs Info.plist declarations, not entitlements: the
+      // multicast entitlement is explicitly out of scope. An empty
+      // entitlements plist referenced from the build settings signs nothing
+      // and only invites confusion, so neither should exist.
+      final pbxproj =
+          File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+
+      expect(File('ios/Runner/Runner.entitlements').existsSync(), isFalse);
+      expect(pbxproj, isNot(contains('Runner.entitlements')));
     });
 
     test('macOS Info.plist declares local network usage', () {

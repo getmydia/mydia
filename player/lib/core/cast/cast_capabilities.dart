@@ -21,9 +21,20 @@ class CastCapabilities {
   /// Whether any casting is possible at all.
   bool get any => chromecast || dlna;
 
-  factory CastCapabilities.forCurrentPlatform() {
-    if (PlatformFeatures.isWeb) return const CastCapabilities.web();
-    if (PlatformFeatures.isIOS) return const CastCapabilities.iOS();
+  factory CastCapabilities.forCurrentPlatform() => CastCapabilities.forPlatform(
+        isWeb: PlatformFeatures.isWeb,
+        isIOS: PlatformFeatures.isIOS,
+      );
+
+  /// The capability decision itself, separated from the static platform
+  /// lookups so it can be exercised for every platform on one machine. This
+  /// is the switch that decides whether iOS shows DLNA devices at all.
+  factory CastCapabilities.forPlatform({
+    required bool isWeb,
+    required bool isIOS,
+  }) {
+    if (isWeb) return const CastCapabilities.web();
+    if (isIOS) return const CastCapabilities.iOS();
     return const CastCapabilities.full();
   }
 }

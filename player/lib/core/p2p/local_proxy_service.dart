@@ -52,12 +52,18 @@ class LocalProxyService {
   bool get isRunning => _server != null;
 
   /// Whether the proxy is currently reachable from other devices on the LAN.
-  bool get isLanAccessible => _lanToken != null && _lanAddress != null;
+  ///
+  /// Requires a bound server, not just an address and token: without one there
+  /// is nothing listening, and callers that trusted the looser check reported
+  /// a nonexistent "port 0" to the user as the port to open in their firewall.
+  bool get isLanAccessible =>
+      _lanToken != null && _lanAddress != null && _server != null;
 
   /// Base URL other devices on the LAN can reach, or null when loopback-only.
   String? get lanBaseUrl {
-    if (!isLanAccessible || _server == null) return null;
-    return 'http://$_lanAddress:${_server!.port}/g/$_lanToken';
+    final server = _server;
+    if (!isLanAccessible || server == null) return null;
+    return 'http://$_lanAddress:${server.port}/g/$_lanToken';
   }
 
   /// Prefix applied to every locally built URL.
@@ -111,10 +117,34 @@ class LocalProxyService {
     debugPrint('[LocalProxy] Stopped');
   }
 
+  /// Interface name prefixes that are never the address a TV on the sofa can
+  /// reach: VPN tunnels, Apple's peer-to-peer radio, container and VM bridges.
+  /// Advertising one of these to a receiver produces a URL that times out.
+  static const _nonLanInterfacePrefixes = [
+    'utun', // macOS/iOS VPN tunnels
+    'ipsec',
+    'ppp',
+    'tun',
+    'tap',
+    'wg', // WireGuard
+    'awdl', // Apple Wireless Direct Link
+    'llw',
+    'docker',
+    'br-', // Docker user-defined bridges
+    'veth',
+    'vboxnet',
+    'vmnet',
+  ];
+
   /// Find a usable non-loopback IPv4 address for receiver-facing URLs.
   ///
   /// Returns null when the device has no LAN interface, in which case casting
   /// must fall back to the direct-server route.
+  ///
+  /// Interface order from the OS is arbitrary, so "the first non-loopback
+  /// IPv4" happily hands a receiver a VPN or Docker-bridge address. Real LAN
+  /// interfaces are preferred by name and by RFC 1918 range, with anything
+  /// else used only as a last resort.
   static Future<String?> resolveLanAddress() async {
     try {
       final interfaces = await NetworkInterface.list(
@@ -123,15 +153,49 @@ class LocalProxyService {
         includeLinkLocal: false,
       );
 
+      String? fallback;
+
       for (final interface in interfaces) {
+        final excluded = isNonLanInterface(interface.name);
+
         for (final address in interface.addresses) {
-          if (!address.isLoopback) return address.address;
+          if (address.isLoopback) continue;
+
+          if (!excluded && isPrivateIPv4(address.address)) {
+            return address.address;
+          }
+
+          fallback ??= excluded ? null : address.address;
         }
       }
+
+      return fallback;
     } catch (e) {
       debugPrint('[LocalProxy] Failed to resolve LAN address: $e');
     }
     return null;
+  }
+
+  /// Whether [name] is an interface that cannot carry LAN traffic to a
+  /// receiver. Exposed for tests: the real interface list is machine specific.
+  static bool isNonLanInterface(String name) {
+    final lower = name.toLowerCase();
+    return _nonLanInterfacePrefixes.any(lower.startsWith);
+  }
+
+  /// Whether [address] is in an RFC 1918 private range — where home LANs live.
+  static bool isPrivateIPv4(String address) {
+    final parts = address.split('.');
+    if (parts.length != 4) return false;
+
+    final first = int.tryParse(parts[0]);
+    final second = int.tryParse(parts[1]);
+    if (first == null || second == null) return false;
+
+    if (first == 10) return true;
+    if (first == 192 && second == 168) return true;
+    if (first == 172 && second >= 16 && second <= 31) return true;
+    return false;
   }
 
   /// Rebind the proxy so LAN devices can reach it, or return it to loopback.
@@ -161,7 +225,15 @@ class LocalProxyService {
     await _server?.close();
     _server = null;
 
-    if (peer == null) return;
+    if (peer == null) {
+      // Nothing to rebind: there is no proxy running to expose. Drop the
+      // address and token again so `isLanAccessible` does not claim a
+      // listener that was never created.
+      _lanAddress = null;
+      _lanToken = null;
+      debugPrint('[LocalProxy] setLanAccess($enabled) with no proxy running');
+      return;
+    }
 
     _server = await HttpServer.bind(
       enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,

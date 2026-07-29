@@ -64,6 +64,52 @@ void main() {
       expect(response, 403);
     });
 
+    test('enabling LAN access on a proxy that was never started stays closed',
+        () async {
+      // `isLanAccessible` used to guard a different set of fields than
+      // `lanBaseUrl`, so this left the service claiming LAN reachability with
+      // no listener at all — and the cast error message then told the user to
+      // open "port 0" in their firewall.
+      final service = LocalProxyService.forTesting();
+
+      await service.setLanAccess(true);
+
+      expect(service.isLanAccessible, isFalse);
+      expect(service.lanBaseUrl, isNull);
+      expect(service.port, 0);
+    });
+
+    test('a VPN or container interface is never advertised to a receiver', () {
+      for (final name in const [
+        'utun0',
+        'ipsec1',
+        'awdl0',
+        'docker0',
+        'br-1a2b3c',
+        'veth0',
+        'wg0',
+        'vmnet8',
+      ]) {
+        expect(LocalProxyService.isNonLanInterface(name), isTrue,
+            reason: '$name is not reachable from a TV');
+      }
+
+      for (final name in const ['en0', 'eth0', 'wlan0', 'wlp3s0']) {
+        expect(LocalProxyService.isNonLanInterface(name), isFalse);
+      }
+    });
+
+    test('private IPv4 ranges are recognised', () {
+      expect(LocalProxyService.isPrivateIPv4('192.168.1.20'), isTrue);
+      expect(LocalProxyService.isPrivateIPv4('10.0.0.4'), isTrue);
+      expect(LocalProxyService.isPrivateIPv4('172.16.5.1'), isTrue);
+      expect(LocalProxyService.isPrivateIPv4('172.31.255.254'), isTrue);
+
+      expect(LocalProxyService.isPrivateIPv4('172.32.0.1'), isFalse);
+      expect(LocalProxyService.isPrivateIPv4('8.8.8.8'), isFalse);
+      expect(LocalProxyService.isPrivateIPv4('not-an-ip'), isFalse);
+    });
+
     test('disabling LAN access returns the proxy to loopback', () async {
       final service = LocalProxyService.forTesting();
       await service.start(targetPeer: 'peer-1');
