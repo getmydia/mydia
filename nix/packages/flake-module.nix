@@ -19,12 +19,16 @@
         targets = [ "wasm32-wasip2" ];
       };
 
-      # Fine package (needed for lazy_html)
-      fineVersion = "0.1.4";
+      # Fine package (needed for lazy_html). Keep in lockstep with mix.lock's
+      # `fine` entry — lazy_html's C++ NIF build copies this source tree to
+      # /build/fine-${fineVersion} so its Makefile can find fine.hpp there; a
+      # stale version here silently breaks the sandbox build (the compiler
+      # looks for /build/fine-<mix.lock version>/c_include/fine.hpp).
+      fineVersion = "0.1.6";
       fineSrc = beamPackages.fetchHex {
         pkg = "fine";
         version = fineVersion;
-        sha256 = "be3324cc454a42d80951cf6023b9954e9ff27c6daa255483b3e8d608670303f5";
+        sha256 = "5638eb4495488e885ebec167fa57973e5c35e1a50c344eb7666c90ec1c4e3b12";
       };
 
       # Pre-fetch Rust/Cargo dependencies for the p2p NIF (required for sandbox build).
