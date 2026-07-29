@@ -2,6 +2,7 @@ defmodule Mydia.Media.FranchisesTest do
   use Mydia.DataCase, async: false
 
   import Mydia.MediaFixtures
+  import ExUnit.CaptureLog
 
   alias Mydia.Media
   alias Mydia.Media.{Franchise, FranchiseEntry, Franchises}
@@ -268,9 +269,19 @@ defmodule Mydia.Media.FranchisesTest do
         Plug.Conn.resp(conn, 404, "Not Found")
       end)
 
-      assert Franchises.for_media_item(movie, config) == :none
+      # A 404 is the normal state of the world until the relay ships this
+      # endpoint. It must not log a warning: an operator on a pre-upgrade
+      # relay would otherwise get a fresh warning line on every movie page
+      # view, indistinguishable from a genuinely broken relay.
+      log =
+        capture_log(fn ->
+          assert Franchises.for_media_item(movie, config) == :none
+        end)
+
+      refute log =~ "Franchise lookup failed"
     end
 
+    @tag :capture_log
     test "when the relay is unreachable", %{bypass: bypass, config: config} do
       cid = System.unique_integer([:positive])
       movie = movie_with_pointer(881, cid)

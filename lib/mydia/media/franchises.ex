@@ -8,16 +8,18 @@ defmodule Mydia.Media.Franchises do
   movies were added before the pointer existed, without a migration or a backfill
   job.
 
-  Every failure — an old relay, an unreachable relay, a movie with no franchise —
-  returns `:none`, so the caller has exactly one thing to check.
+  Every failure, whether the relay predates the endpoint, is unreachable, or the
+  movie simply has no franchise, returns `:none`, so the caller has exactly one
+  thing to check. A relay that predates the endpoint is the normal, expected
+  state of the world right now and stays quiet in the logs; anything else that
+  goes wrong is logged as a warning.
   """
 
   require Logger
 
-  import Ecto.Query, warn: false
-
   alias Mydia.{Media, Metadata, Repo}
   alias Mydia.Media.{Franchise, FranchiseEntry, MediaItem}
+  alias Mydia.Metadata.Provider.Error
 
   @doc """
   Returns the franchise for a movie, or `:none`.
@@ -58,6 +60,11 @@ defmodule Mydia.Media.Franchises do
       {:ok, _no_franchise} ->
         :none
 
+      # A relay that predates this endpoint is the normal state today; nothing
+      # to warn about.
+      {:error, %Error{type: :not_found}} ->
+        :none
+
       {:error, reason} ->
         Logger.warning("Franchise pointer lookup failed for tmdb #{tmdb_id}: #{inspect(reason)}")
 
@@ -96,6 +103,11 @@ defmodule Mydia.Media.Franchises do
     case Metadata.fetch_collection_cached(config, collection_id) do
       {:ok, collection} ->
         {:ok, collection}
+
+      # A relay that predates this endpoint is the normal state today; nothing
+      # to warn about.
+      {:error, %Error{type: :not_found}} ->
+        :none
 
       {:error, reason} ->
         Logger.warning(
