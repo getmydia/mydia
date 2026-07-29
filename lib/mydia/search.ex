@@ -35,6 +35,7 @@ defmodule Mydia.Search do
   import Ecto.Query, warn: false
   require Logger
 
+  alias Mydia.Media.MediaItem
   alias Mydia.Repo
   alias Mydia.Search.SearchBackoff
 
@@ -287,6 +288,54 @@ defmodule Mydia.Search do
       seconds < 86_400 -> "#{div(seconds, 3600)} hours"
       true -> "#{div(seconds, 86_400)} days"
     end
+  end
+
+  @doc """
+  Queues automatic release searches for the given media items.
+
+  Movies queue `Mydia.Jobs.MovieSearch` in `"specific"` mode and TV shows queue
+  `Mydia.Jobs.TVShowSearch` in `"show"` mode, the same jobs and modes the media
+  detail page queues.
+
+  Both workers declare `unique: [period: 60, fields: [:args]]`, which
+  `Oban.insert_all/1` honors, so repeated clicks cannot double-queue.
+
+  Callers are expected to have filtered the list already, typically with
+  `Mydia.Media.partition_for_auto_search/1`.
+
+  Returns `{:ok, count}` with the number of jobs inserted.
+  """
+  @spec queue_auto_searches([MediaItem.t()]) :: {:ok, non_neg_integer()} | {:error, term()}
+  def queue_auto_searches([]), do: {:ok, 0}
+
+  def queue_auto_searches(items) when is_list(items) do
+    jobs =
+      items
+      |> Enum.map(&auto_search_job/1)
+      |> insert_all_jobs()
+
+    {:ok, length(jobs)}
+  rescue
+    error ->
+      Logger.error("Failed to queue automatic searches: #{inspect(error)}")
+      {:error, error}
+  end
+
+  defp auto_search_job(%MediaItem{type: "movie", id: id}) do
+    Mydia.Jobs.MovieSearch.new(%{mode: "specific", media_item_id: id})
+  end
+
+  defp auto_search_job(%MediaItem{type: "tv_show", id: id}) do
+    Mydia.Jobs.TVShowSearch.new(%{mode: "show", media_item_id: id})
+  end
+
+  # Insert Oban jobs in one round trip, falling back to direct Repo inserts
+  # when Oban's engine is disabled (test mode). Mirrors the pattern in
+  # DownloadMonitor and Downloads.Queue.
+  defp insert_all_jobs(changesets) do
+    Oban.insert_all(changesets)
+  rescue
+    RuntimeError -> Enum.map(changesets, &Repo.insert!/1)
   end
 
   ## Private Functions
