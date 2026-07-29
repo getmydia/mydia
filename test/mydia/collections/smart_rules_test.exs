@@ -306,7 +306,7 @@ defmodule Mydia.Collections.SmartRulesTest do
 
       items = SmartRules.execute_query!(json)
 
-      assert length(items) >= 1
+      assert items != []
     end
   end
 

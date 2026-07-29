@@ -91,7 +91,7 @@ defmodule Mydia.Metadata.Provider.OpenLibraryTest do
       case OpenLibrary.search(@config, "The Hitchhiker's Guide to the Galaxy") do
         {:ok, results} ->
           assert is_list(results)
-          assert length(results) > 0
+          assert results != []
 
           first_result = List.first(results)
           assert %SearchResult{} = first_result

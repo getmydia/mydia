@@ -70,7 +70,7 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
 
       assert {:ok, results} = Jackett.search(config, "ubuntu", limit: 5)
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       # Check first result has required fields
       result = hd(results)

@@ -104,7 +104,7 @@ defmodule Mydia.IndexersTest do
       assert {:ok, %{results: results}} = Indexers.search_all("ubuntu")
       assert is_list(results)
       # Should have results from both mock indexers
-      assert length(results) > 0
+      assert results != []
     end
 
     test "filters results by minimum seeders", %{bypass1: bypass1} do

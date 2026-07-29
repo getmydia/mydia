@@ -1911,7 +1911,7 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       # Basic assertions for unified scoring
 
       # 1. Results should be sorted - first by preferred_qualities (1080p first), then by score
-      assert length(ranked) > 0, "Expected some results after filtering"
+      assert ranked != [], "Expected some results after filtering"
 
       # 2. Unrelated "Private Gladiator" should rank lower due to title mismatch
       gladiator = Enum.find(ranked, &String.contains?(&1.result.title, "Private Gladiator"))

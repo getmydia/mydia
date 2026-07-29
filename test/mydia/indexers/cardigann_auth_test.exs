@@ -71,7 +71,7 @@ defmodule Mydia.Indexers.CardigannAuthTest do
 
       assert {:ok, session} = CardigannAuth.authenticate(definition, user_config)
       assert session.method == :form
-      assert length(session.cookies) >= 1
+      assert session.cookies != []
       assert Enum.any?(session.cookies, fn cookie -> String.starts_with?(cookie, "session=") end)
       assert %DateTime{} = session.expires_at
     end

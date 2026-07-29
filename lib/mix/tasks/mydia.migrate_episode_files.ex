@@ -191,13 +191,13 @@ defmodule Mix.Tasks.Mydia.MigrateEpisodeFiles do
 
     missing = Map.get(results, :missing, [])
 
-    if length(missing) > 0 do
+    if missing != [] do
       Mix.shell().info("⚠️  Missing files: #{length(missing)}")
     end
 
     errors = Map.get(results, :error, [])
 
-    if length(errors) > 0 do
+    if errors != [] do
       Mix.shell().error("❌ Errors: #{length(errors)}")
     end
 

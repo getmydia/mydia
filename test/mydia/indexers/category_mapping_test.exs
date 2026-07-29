@@ -193,7 +193,7 @@ defmodule Mydia.Indexers.CategoryMappingTest do
       all = CategoryMapping.all_categories()
 
       assert is_list(all)
-      assert length(all) > 0
+      assert all != []
 
       # Each entry should have id, name, and type
       for category <- all do

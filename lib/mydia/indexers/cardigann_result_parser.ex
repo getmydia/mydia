@@ -1320,7 +1320,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
   defp map_category("", _category_mappings), do: nil
 
   defp map_category(raw_category, category_mappings)
-       when is_list(category_mappings) and length(category_mappings) > 0 do
+       when is_list(category_mappings) and category_mappings != [] do
     # Try to map using the category mappings from the definition
     case CategoryMapping.map_site_category_to_torznab(raw_category, category_mappings) do
       nil ->

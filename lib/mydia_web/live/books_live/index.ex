@@ -229,7 +229,7 @@ defmodule MydiaWeb.BooksLive.Index do
           "epub" in formats -> "EPUB"
           "pdf" in formats -> "PDF"
           "mobi" in formats -> "MOBI"
-          length(formats) > 0 -> String.upcase(hd(formats))
+          formats != [] -> String.upcase(hd(formats))
           true -> nil
         end
 

@@ -452,7 +452,7 @@ defmodule Mydia.Jobs.LibraryScanner do
     files_needing_thumbnails = new_media_file_ids ++ existing_files_missing_thumbnails
 
     # Enqueue thumbnail generation for all files needing thumbnails (includes sprites)
-    if length(files_needing_thumbnails) > 0 do
+    if files_needing_thumbnails != [] do
       Logger.info("Enqueueing thumbnail generation for adult files",
         new_files: length(new_media_file_ids),
         existing_missing: length(existing_files_missing_thumbnails),

@@ -397,7 +397,7 @@ defmodule Mydia.ImportListsTest do
   describe "preset management" do
     test "available_preset_lists/0 returns all presets" do
       presets = ImportLists.available_preset_lists()
-      assert length(presets) > 0
+      refute Enum.empty?(presets)
       assert Enum.any?(presets, &(&1.id == :tmdb_trending_movies))
     end
 

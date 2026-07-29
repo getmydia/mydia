@@ -138,7 +138,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     test "parses JSON API response" do
       {result, _def} = load_and_parse("yts", keywords: "avengers")
       assert {:ok, results} = result
-      assert length(results) > 0, "YTS should return results for 'avengers'"
+      assert results != [], "YTS should return results for 'avengers'"
     end
 
     @tag :snapshot
@@ -161,7 +161,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
           r.title =~ ~r/720p|1080p|2160p|3D/
         end)
 
-      assert length(quality_results) > 0, "Some titles should contain quality markers"
+      assert quality_results != [], "Some titles should contain quality markers"
     end
 
     @tag :snapshot
@@ -170,7 +170,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       {:ok, results} = result
 
       sized = Enum.filter(results, &(&1.size > 0))
-      assert length(sized) > 0, "Some results should have parsed sizes"
+      assert sized != [], "Some results should have parsed sizes"
     end
   end
 
@@ -183,7 +183,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     test "parses JSON API response" do
       {result, _def} = load_and_parse("thepiratebay")
       assert {:ok, results} = result
-      assert length(results) > 0, "TPB should return results"
+      assert results != [], "TPB should return results"
     end
 
     @tag :snapshot
@@ -202,7 +202,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       {:ok, results} = result
 
       seeded = Enum.filter(results, &(&1.seeders > 0))
-      assert length(seeded) > 0, "Some TPB results should have seeders"
+      assert seeded != [], "Some TPB results should have seeders"
     end
 
     @tag :snapshot
@@ -211,7 +211,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       {:ok, results} = result
 
       sized = Enum.filter(results, &(&1.size > 0))
-      assert length(sized) > 0, "Some TPB results should have sizes"
+      assert sized != [], "Some TPB results should have sizes"
     end
   end
 
@@ -224,7 +224,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     test "parses results from captured HTML" do
       {result, _def} = load_and_parse("torrentgalaxyclone")
       assert {:ok, results} = result
-      assert length(results) > 0, "TorrentGalaxy should return results"
+      assert results != [], "TorrentGalaxy should return results"
     end
 
     @tag :snapshot
@@ -243,7 +243,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       {:ok, results} = result
 
       sized = Enum.filter(results, &(&1.size > 0))
-      assert length(sized) > 0, "Some TorrentGalaxy results should have sizes"
+      assert sized != [], "Some TorrentGalaxy results should have sizes"
     end
   end
 
@@ -256,7 +256,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     test "parses results from captured HTML" do
       {result, _def} = load_and_parse("limetorrents")
       assert {:ok, results} = result
-      assert length(results) > 0, "LimeTorrents should return results"
+      assert results != [], "LimeTorrents should return results"
     end
 
     @tag :snapshot
@@ -265,7 +265,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       {:ok, results} = result
 
       seeded = Enum.filter(results, &(&1.seeders >= 0))
-      assert length(seeded) > 0, "LimeTorrents results should have seeders"
+      assert seeded != [], "LimeTorrents results should have seeders"
     end
   end
 

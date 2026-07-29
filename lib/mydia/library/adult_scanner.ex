@@ -221,7 +221,7 @@ defmodule Mydia.Library.AdultScanner do
       [studio, performers_str, title] when byte_size(studio) > 0 and byte_size(title) > 0 ->
         performers = parse_performers(performers_str)
 
-        if length(performers) > 0 do
+        if performers != [] do
           %{studio: studio, title: title, performers: performers, year: nil}
         else
           nil

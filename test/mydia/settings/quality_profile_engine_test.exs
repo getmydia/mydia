@@ -88,7 +88,7 @@ defmodule Mydia.Settings.QualityProfileEngineTest do
 
       # Should have low score due to violations
       assert evaluation.score == 0.0
-      assert length(evaluation.violations) > 0
+      assert evaluation.violations != []
       assert Enum.any?(evaluation.violations, &String.contains?(&1, "480p"))
     end
 
@@ -116,7 +116,7 @@ defmodule Mydia.Settings.QualityProfileEngineTest do
       assert evaluation.score > 0.0
       assert is_list(evaluation.recommendations)
       # Should have recommendations for improvements
-      assert length(evaluation.recommendations) > 0
+      assert evaluation.recommendations != []
     end
 
     test "handles missing metadata gracefully", %{profile: profile, library_path: library_path} do

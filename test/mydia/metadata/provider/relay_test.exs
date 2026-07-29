@@ -35,7 +35,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, results} = Relay.search(@config, "The Matrix", media_type: :movie)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       first_result = List.first(results)
       assert first_result.provider == :metadata_relay
@@ -48,7 +48,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, results} = Relay.search(@config, "Breaking Bad", media_type: :tv_show)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       first_result = List.first(results)
       assert first_result.provider == :metadata_relay
@@ -60,7 +60,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, results} = Relay.search(@config, "The Matrix", media_type: :movie, year: 1999)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       # The first result should be The Matrix from 1999
       first_result = List.first(results)
@@ -115,7 +115,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert is_integer(metadata.runtime)
       assert metadata.runtime > 0
       assert is_list(metadata.genres)
-      assert length(metadata.genres) > 0
+      assert metadata.genres != []
       assert is_binary(metadata.imdb_id)
     end
 
@@ -143,8 +143,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
       assert is_list(metadata.cast)
       assert is_list(metadata.crew)
-      assert length(metadata.cast) > 0
-      assert length(metadata.crew) > 0
+      assert metadata.cast != []
+      assert metadata.crew != []
 
       # Check cast member structure
       cast_member = List.first(metadata.cast)
@@ -200,7 +200,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert is_list(images.logos)
 
       # Should have at least some posters
-      assert length(images.posters) > 0
+      assert images.posters != []
 
       # Check poster structure
       poster = List.first(images.posters)
@@ -216,7 +216,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert is_map(images)
       assert is_list(images.posters)
       assert is_list(images.backdrops)
-      assert length(images.posters) > 0
+      assert images.posters != []
     end
 
     test "returns error for non-existent ID" do
@@ -309,7 +309,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
                Relay.search(@config, "The Matrix", media_type: :movie, language: "es-ES")
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
     end
 
     test "fetches metadata with custom language" do
@@ -343,7 +343,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
       assert is_list(page1)
       assert is_list(page2)
-      assert length(page1) > 0
+      assert page1 != []
 
       # Pages should have different results (unless there's only one page of results)
       # We just verify both queries succeed
@@ -400,7 +400,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
                Relay.search(@config, "Breaking Bad", media_type: :tv_show, provider: :tmdb)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       first_result = List.first(results)
       assert first_result.media_type == :tv_show
@@ -412,7 +412,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
                Relay.search(@config, "Breaking Bad", media_type: :tv_show, provider: :tvdb)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       first_result = List.first(results)
       assert first_result.media_type == :tv_show
@@ -423,7 +423,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, results} = Relay.search(@config, "Breaking Bad", media_type: :tv_show)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
       assert List.first(results).media_type == :tv_show
     end
 
@@ -432,7 +432,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
                Relay.search(@config, "The Matrix", media_type: :movie, provider: :tvdb)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
       assert List.first(results).media_type == :movie
     end
   end

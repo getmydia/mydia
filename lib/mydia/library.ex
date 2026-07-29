@@ -777,7 +777,7 @@ defmodule Mydia.Library do
       episode_numbers = parsed_info.episodes
 
       cond do
-        not (is_integer(season) and is_list(episode_numbers) and length(episode_numbers) > 0) ->
+        not (is_integer(season) and is_list(episode_numbers) and episode_numbers != []) ->
           Logger.debug("File did not contain valid episode information", filename: filename)
           {:error, :no_episode_info}
 
@@ -1734,7 +1734,7 @@ defmodule Mydia.Library do
         else
           {component, new_visited} = bfs_component(id, adjacencies, visited)
 
-          if length(component) > 0 do
+          if component != [] do
             component_files = Enum.map(component, &Map.get(file_map, &1))
             {[component_files | components], new_visited}
           else

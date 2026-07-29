@@ -59,7 +59,7 @@ defmodule Mydia.Indexers.CardigannLiveSearchTest do
               {:ok, results} ->
                 IO.puts("  #{indexer_name}: #{length(results)} results")
 
-                if length(results) > 0 do
+                if results != [] do
                   first = hd(results)
 
                   # Verify essential fields

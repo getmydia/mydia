@@ -85,7 +85,7 @@ defmodule Mydia.RemoteAccess.CertificatesTest do
       # Verify it can be decoded
       decoded = :public_key.pem_decode(key_pem)
       assert is_list(decoded)
-      assert length(decoded) > 0
+      assert decoded != []
     end
 
     test "private key file has restrictive permissions" do

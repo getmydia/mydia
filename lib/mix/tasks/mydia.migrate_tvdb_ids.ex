@@ -138,7 +138,7 @@ defmodule Mix.Tasks.Mydia.MigrateTvdbIds do
       Mix.shell().info("Discovered: #{length(discovered)}")
       Mix.shell().info("No match:   #{length(no_match)}")
 
-      if length(errors) > 0 do
+      if errors != [] do
         Mix.shell().error("Errors:     #{length(errors)}")
       end
     end

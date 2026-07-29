@@ -88,7 +88,7 @@ defmodule Mydia.ReleaseTest do
       # After creating 12 backups (with cleanup running after each),
       # we should have at most 10 backups remaining
       assert length(existing_backups) <= 10
-      assert length(existing_backups) > 0
+      assert existing_backups != []
     end
   end
 

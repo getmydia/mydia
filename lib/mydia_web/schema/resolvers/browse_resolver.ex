@@ -191,8 +191,8 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     page_info = %{
       has_next_page: length(items) > first,
       has_previous_page: false,
-      start_cursor: if(length(paginated) > 0, do: encode_cursor(0), else: nil),
-      end_cursor: if(length(paginated) > 0, do: encode_cursor(length(paginated) - 1), else: nil)
+      start_cursor: if(paginated != [], do: encode_cursor(0), else: nil),
+      end_cursor: if(paginated != [], do: encode_cursor(length(paginated) - 1), else: nil)
     }
 
     {paginated, page_info}
@@ -209,9 +209,9 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
     page_info = %{
       has_next_page: length(remaining) > first,
       has_previous_page: offset > 0,
-      start_cursor: if(length(paginated) > 0, do: encode_cursor(offset), else: nil),
+      start_cursor: if(paginated != [], do: encode_cursor(offset), else: nil),
       end_cursor:
-        if(length(paginated) > 0, do: encode_cursor(offset + length(paginated) - 1), else: nil)
+        if(paginated != [], do: encode_cursor(offset + length(paginated) - 1), else: nil)
     }
 
     {paginated, page_info}
@@ -264,7 +264,7 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
       has_files =
         Enum.any?(episodes, fn ep ->
           files = Library.get_media_files_for_episode(ep.id)
-          length(files) > 0
+          files != []
         end)
 
       # Count aired episodes
@@ -414,11 +414,11 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
       case determine_node_type(parent) do
         :movie ->
           files = Library.get_media_files_for_item(parent.id)
-          length(files) > 0
+          files != []
 
         :episode ->
           files = Library.get_media_files_for_episode(parent.id)
-          length(files) > 0
+          files != []
 
         _ ->
           false

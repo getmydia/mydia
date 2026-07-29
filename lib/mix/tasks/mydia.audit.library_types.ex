@@ -89,7 +89,7 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
     print_summary(movies_in_series_libs, shows_in_movies_libs, dry_run)
 
     # Apply fixes if requested
-    if not dry_run and (length(movies_in_series_libs) > 0 or length(shows_in_movies_libs) > 0) do
+    if not dry_run and (movies_in_series_libs != [] or shows_in_movies_libs != []) do
       apply_fixes(movies_in_series_libs, shows_in_movies_libs, library_paths)
     end
   end
@@ -134,7 +134,7 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
 
       Mix.shell().info("  Found #{length(mismatches)} movies in series-only libraries\n")
 
-      if verbose and length(mismatches) > 0 do
+      if verbose and mismatches != [] do
         print_detailed_mismatches(mismatches)
       end
 
@@ -185,7 +185,7 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
 
       Mix.shell().info("  Found #{length(mismatches)} TV episodes in movies-only libraries\n")
 
-      if verbose and length(mismatches) > 0 do
+      if verbose and mismatches != [] do
         print_detailed_mismatches(mismatches)
       end
 

@@ -37,7 +37,7 @@ defmodule Mydia.Media.EpisodeStatus do
   @spec get_episode_status(Episode.t()) :: status()
   def get_episode_status(%Episode{monitored: false}), do: :not_monitored
 
-  def get_episode_status(%Episode{media_files: media_files}) when length(media_files) > 0,
+  def get_episode_status(%Episode{media_files: media_files}) when media_files != [],
     do: :downloaded
 
   def get_episode_status(%Episode{air_date: air_date}) when not is_nil(air_date) do
@@ -66,7 +66,7 @@ defmodule Mydia.Media.EpisodeStatus do
   def get_episode_status_with_downloads(%Episode{monitored: false}), do: :not_monitored
 
   def get_episode_status_with_downloads(%Episode{media_files: media_files})
-      when length(media_files) > 0,
+      when media_files != [],
       do: :downloaded
 
   def get_episode_status_with_downloads(%Episode{air_date: air_date} = episode)
@@ -173,7 +173,7 @@ defmodule Mydia.Media.EpisodeStatus do
   """
   @spec status_details(Episode.t()) :: String.t()
   def status_details(%Episode{media_files: media_files})
-      when length(media_files) > 0 do
+      when media_files != [] do
     file_count = length(media_files)
     quality = get_best_quality(media_files)
 

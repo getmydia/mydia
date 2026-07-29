@@ -1371,7 +1371,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   defp has_media_files?(%Episode{} = episode) do
     active_files_query = from(mf in MediaFile, where: is_nil(mf.trashed_at))
     episode = Repo.preload(episode, [media_files: active_files_query], force: true)
-    length(episode.media_files) > 0
+    episode.media_files != []
   end
 
   defp future_episode?(%Episode{air_date: nil}), do: false
