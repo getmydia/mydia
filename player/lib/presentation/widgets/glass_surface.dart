@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../core/player/platform_features.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
 
@@ -56,6 +57,11 @@ class GlassSurface extends StatelessWidget {
   /// false.
   final bool grouped;
 
+  /// Backdrop saturation multiplier applied *before* the blur. `1.0` means no
+  /// colour matrix is composed, which is the default and leaves every existing
+  /// call site unchanged.
+  final double saturation;
+
   final Widget? child;
 
   const GlassSurface({
@@ -67,6 +73,7 @@ class GlassSurface extends StatelessWidget {
     this.borderRadius = BorderRadius.zero,
     this.border,
     this.grouped = false,
+    this.saturation = 1.0,
     this.child,
   });
 
@@ -162,6 +169,64 @@ class GlassSurface extends StatelessWidget {
           child: child,
         );
 
+  /// The playback chrome material.
+  ///
+  /// Unlike the browse-UI chrome, this sits over live video — the one backdrop
+  /// that justifies a real [BackdropFilter] and can carry genuine transparency.
+  /// It differs from [GlassSurface.appBar] in four ways: a much higher blur
+  /// sigma, a much lower fill opacity, a saturation boost, and a *directional*
+  /// rim (light on top, dark on the bottom) rather than a uniform border.
+  ///
+  /// [tier] defaults to [PlatformFeatures.playerGlassTier]; pass it explicitly
+  /// in golden tests so images do not vary with the host platform.
+  GlassSurface.playerChrome({
+    Key? key,
+    BorderRadius? borderRadius,
+    PlayerGlassTier? tier,
+    Widget? child,
+  }) : this(
+          key: key,
+          blurSigma:
+              (tier ?? PlatformFeatures.playerGlassTier) == PlayerGlassTier.faux
+                  ? DepthTokens.blurNone
+                  : DepthTokens.blurPlayerChrome,
+          live: (tier ?? PlatformFeatures.playerGlassTier) !=
+              PlayerGlassTier.faux,
+          saturation:
+              (tier ?? PlatformFeatures.playerGlassTier) == PlayerGlassTier.full
+                  ? DepthTokens.playerChromeSaturation
+                  : 1.0,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              DepthTokens.playerChromeTint.withValues(
+                // The faux tier has no blur to hide the backdrop, so it
+                // compensates with a denser fill.
+                alpha: (tier ?? PlatformFeatures.playerGlassTier) ==
+                        PlayerGlassTier.faux
+                    ? 0.70
+                    : DepthTokens.playerChromeFillTopAlpha,
+              ),
+              DepthTokens.playerChromeTint.withValues(
+                alpha: (tier ?? PlatformFeatures.playerGlassTier) ==
+                        PlayerGlassTier.faux
+                    ? 0.70
+                    : DepthTokens.playerChromeFillBottomAlpha,
+              ),
+            ],
+          ),
+          borderRadius: borderRadius ??
+              const BorderRadius.all(
+                Radius.circular(DepthTokens.radiusPlayerPanel),
+              ),
+          border: const Border(
+            top: BorderSide(color: DepthTokens.playerRimTop),
+            bottom: BorderSide(color: DepthTokens.playerRimBottom),
+          ),
+          child: child,
+        );
+
   @override
   Widget build(BuildContext context) {
     // Faux-glass: no BackdropFilter at all (R8).
@@ -174,7 +239,13 @@ class GlassSurface extends StatelessWidget {
       );
     }
 
-    final filter = ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
+    final blur = ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
+    final filter = saturation == 1.0
+        ? blur
+        : ImageFilter.compose(
+            outer: blur,
+            inner: ColorFilter.matrix(_saturationMatrix(saturation)),
+          );
     final backdrop = grouped
         ? BackdropFilter.grouped(filter: filter, child: _fill())
         : BackdropFilter(filter: filter, child: _fill());
@@ -188,14 +259,60 @@ class GlassSurface extends StatelessWidget {
   }
 
   Widget _fill() {
+    // Flutter's `Border.paint` refuses to combine a non-zero `borderRadius`
+    // with a border whose visible sides aren't all one color (it throws "A
+    // borderRadius can only be given on borders with uniform colors."). The
+    // directional playerChrome rim (light top, dark bottom) is deliberately
+    // non-uniform, so for that case only, this decoration's own borderRadius
+    // is dropped; the enclosing ClipRRect (built with the real borderRadius,
+    // see build()) still clips the fill and border to rounded corners, so the
+    // rendered result is unaffected. Every existing call site's border is
+    // uniform (or absent), so this is a no-op for them.
+    final effectiveBorder = border;
+    final radius =
+        effectiveBorder is Border && !_hasUniformVisibleColor(effectiveBorder)
+            ? BorderRadius.zero
+            : borderRadius;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: gradient == null ? fillColor : null,
         gradient: gradient,
-        borderRadius: borderRadius,
+        borderRadius: radius,
         border: border,
       ),
       child: child,
     );
   }
+}
+
+/// Whether every side of [border] that is actually painted (i.e. not
+/// [BorderStyle.none]) shares the same color. See [GlassSurface._fill] for
+/// why this matters.
+bool _hasUniformVisibleColor(Border border) {
+  final visibleSides = <BorderSide>[
+    border.top,
+    border.right,
+    border.bottom,
+    border.left,
+  ].where((side) => side.style != BorderStyle.none);
+  if (visibleSides.isEmpty) return true;
+  final firstColor = visibleSides.first.color;
+  return visibleSides.every((side) => side.color == firstColor);
+}
+
+/// A 4x5 colour matrix that scales saturation by [s] while preserving
+/// luminance, using the Rec. 709 coefficients.
+///
+/// This is what separates real vibrancy from a plain Gaussian blur: blurring
+/// alone averages a video frame toward grey, while boosting saturation first
+/// keeps the backdrop's colour reading through the glass.
+List<double> _saturationMatrix(double s) {
+  const lr = 0.2126, lg = 0.7152, lb = 0.0722;
+  final ir = (1 - s) * lr, ig = (1 - s) * lg, ib = (1 - s) * lb;
+  return <double>[
+    ir + s, ig, ib, 0, 0, //
+    ir, ig + s, ib, 0, 0, //
+    ir, ig, ib + s, 0, 0, //
+    0, 0, 0, 1, 0, //
+  ];
 }

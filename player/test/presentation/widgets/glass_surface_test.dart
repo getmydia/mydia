@@ -2,7 +2,9 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/player/platform_features.dart';
 import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 Widget _host(Widget child) => MaterialApp(
@@ -33,14 +35,14 @@ void main() {
     testWidgets('renders a BackdropFilter with sigma 10 and the fill opacity',
         (tester) async {
       await tester.pumpWidget(
-        _host(GlassSurface.appBar(child: const SizedBox(width: 50, height: 50))),
+        _host(
+            GlassSurface.appBar(child: const SizedBox(width: 50, height: 50))),
       );
 
       expect(find.byType(BackdropFilter), findsOneWidget);
       expect(_hasBlurSigma(_backdropOf(tester), 10), isTrue);
 
-      final decoration =
-          _decoratedBoxOf(tester).decoration as BoxDecoration;
+      final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(
         decoration.color,
         AppColors.background.withValues(alpha: 0.8),
@@ -51,8 +53,7 @@ void main() {
       await tester.pumpWidget(
         _host(GlassSurface.appBar(opacity: 0.85, child: const SizedBox())),
       );
-      final decoration =
-          _decoratedBoxOf(tester).decoration as BoxDecoration;
+      final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(
         decoration.color,
         AppColors.background.withValues(alpha: 0.85),
@@ -69,8 +70,7 @@ void main() {
 
       expect(_hasBlurSigma(_backdropOf(tester), 8), isTrue);
 
-      final decoration =
-          _decoratedBoxOf(tester).decoration as BoxDecoration;
+      final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(decoration.color, AppColors.surface.withValues(alpha: 0.6));
       expect(decoration.border, isNotNull);
       expect(decoration.borderRadius, BorderRadius.circular(20));
@@ -86,8 +86,7 @@ void main() {
 
       expect(_hasBlurSigma(_backdropOf(tester), 2), isTrue);
 
-      final decoration =
-          _decoratedBoxOf(tester).decoration as BoxDecoration;
+      final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(decoration.gradient, isA<LinearGradient>());
       expect(decoration.borderRadius, BorderRadius.circular(12));
     });
@@ -101,8 +100,7 @@ void main() {
           ),
         ),
       );
-      final decoration =
-          _decoratedBoxOf(tester).decoration as BoxDecoration;
+      final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(decoration.borderRadius, BorderRadius.circular(8));
     });
   });
@@ -171,7 +169,8 @@ void main() {
       expect(decoration.gradient, isA<LinearGradient>());
     });
 
-    testWidgets('a faux surface and a real-blur surface co-render; only the '
+    testWidgets(
+        'a faux surface and a real-blur surface co-render; only the '
         'real one adds a blur pass', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -191,7 +190,8 @@ void main() {
   });
 
   group('grouped rendering', () {
-    testWidgets('a BackdropGroup wrapping two grouped surfaces builds and '
+    testWidgets(
+        'a BackdropGroup wrapping two grouped surfaces builds and '
         'both render', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -245,6 +245,144 @@ void main() {
         ),
         findsWidgets,
       );
+    });
+  });
+
+  group('GlassSurface.playerChrome', () {
+    Widget host(Widget child) => MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                const Positioned.fill(child: ColoredBox(color: Colors.white)),
+                Align(alignment: Alignment.bottomCenter, child: child),
+              ],
+            ),
+          ),
+        );
+
+    BoxDecoration decorationOf(WidgetTester tester) => tester
+        .widget<DecoratedBox>(
+          find
+              .descendant(
+                of: find.byType(GlassSurface),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+        )
+        .decoration as BoxDecoration;
+
+    testWidgets('full tier composes blur with a saturation matrix',
+        (tester) async {
+      await tester.pumpWidget(
+        host(
+          GlassSurface.playerChrome(
+            tier: PlayerGlassTier.full,
+            child: const SizedBox(width: 200, height: 60),
+          ),
+        ),
+      );
+
+      expect(find.byType(BackdropFilter), findsOneWidget);
+      final filter =
+          tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter;
+      // A composed filter is not equal to a bare blur of the same sigma.
+      expect(
+        filter,
+        isNot(ImageFilter.blur(
+          sigmaX: DepthTokens.blurPlayerChrome,
+          sigmaY: DepthTokens.blurPlayerChrome,
+        )),
+      );
+    });
+
+    testWidgets('reduced tier uses a bare blur, no colour matrix',
+        (tester) async {
+      await tester.pumpWidget(
+        host(
+          GlassSurface.playerChrome(
+            tier: PlayerGlassTier.reduced,
+            child: const SizedBox(width: 200, height: 60),
+          ),
+        ),
+      );
+
+      final filter =
+          tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter;
+      expect(
+        filter,
+        ImageFilter.blur(
+          sigmaX: DepthTokens.blurPlayerChrome,
+          sigmaY: DepthTokens.blurPlayerChrome,
+        ),
+      );
+    });
+
+    testWidgets('faux tier renders no BackdropFilter', (tester) async {
+      await tester.pumpWidget(
+        host(
+          GlassSurface.playerChrome(
+            tier: PlayerGlassTier.faux,
+            child: const SizedBox(width: 200, height: 60),
+          ),
+        ),
+      );
+
+      expect(find.byType(BackdropFilter), findsNothing);
+    });
+
+    testWidgets('fill is a vertical gradient, denser at the bottom',
+        (tester) async {
+      await tester.pumpWidget(
+        host(
+          GlassSurface.playerChrome(
+            tier: PlayerGlassTier.full,
+            child: const SizedBox(width: 200, height: 60),
+          ),
+        ),
+      );
+
+      final gradient = decorationOf(tester).gradient! as LinearGradient;
+      expect(gradient.begin, Alignment.topCenter);
+      expect(gradient.end, Alignment.bottomCenter);
+      expect(gradient.colors.first.a, DepthTokens.playerChromeFillTopAlpha);
+      expect(gradient.colors.last.a, DepthTokens.playerChromeFillBottomAlpha);
+      expect(gradient.colors.last.a, greaterThan(gradient.colors.first.a));
+    });
+
+    testWidgets('rim is directional: top and bottom only, no side borders',
+        (tester) async {
+      await tester.pumpWidget(
+        host(
+          GlassSurface.playerChrome(
+            tier: PlayerGlassTier.full,
+            child: const SizedBox(width: 200, height: 60),
+          ),
+        ),
+      );
+
+      final border = decorationOf(tester).border! as Border;
+      expect(border.top.color, DepthTokens.playerRimTop);
+      expect(border.bottom.color, DepthTokens.playerRimBottom);
+      expect(border.left.style, BorderStyle.none);
+      expect(border.right.style, BorderStyle.none);
+    });
+
+    testWidgets('children remain hit-testable', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        host(
+          GlassSurface.playerChrome(
+            tier: PlayerGlassTier.full,
+            child: ElevatedButton(
+              onPressed: () => tapped = true,
+              child: const Text('play'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('play'));
+      expect(tapped, isTrue);
     });
   });
 }
