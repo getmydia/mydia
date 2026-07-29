@@ -36,6 +36,8 @@ defmodule MydiaWeb.MediaLive.Show do
     # Load downloads with real-time status
     downloads_with_status = load_downloads_with_status(media_item)
 
+    user_preference = Mydia.Accounts.get_user_preference!(socket.assigns.current_user)
+
     # Load timeline events from Events system
     timeline_events = load_timeline_events(media_item)
 
@@ -90,7 +92,10 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:manual_search_query, "")
      |> assign(:manual_search_context, nil)
      |> assign(:searching, false)
-     |> assign(:downloading_release_url, nil)
+     |> assign(
+       :close_after_grab,
+       Mydia.Accounts.UserPreference.close_manual_search_after_grab?(user_preference)
+     )
      |> assign(:download_error, nil)
      |> assign(:min_seeders, 0)
      |> assign(:quality_filter, nil)
@@ -282,6 +287,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("delete_download_record", params, socket),
     do: DownloadEvents.delete_download_record(params, socket)
 
+  def handle_event("dismiss_failed_grab", params, socket),
+    do: DownloadEvents.dismiss_failed_grab(params, socket)
+
   def handle_event("show_download_details", params, socket),
     do: DownloadEvents.show_download_details(params, socket)
 
@@ -296,6 +304,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("sort_search", params, socket),
     do: SearchEvents.sort_search(params, socket)
+
+  def handle_event("toggle_close_after_grab", params, socket),
+    do: SearchEvents.toggle_close_after_grab(params, socket)
 
   def handle_event("download_from_search", params, socket),
     do: SearchEvents.download_from_search(params, socket)
@@ -514,6 +525,15 @@ defmodule MydiaWeb.MediaLive.Show do
     {:noreply, assign(socket, :transcode_jobs, load_transcode_jobs(media_item))}
   end
 
+  def handle_info({:grab_completed, payload}, socket),
+    do: SearchEvents.handle_grab_completed(payload, socket)
+
+  def handle_info({:grab_failed, payload}, socket),
+    do: SearchEvents.handle_grab_failed(payload, socket)
+
+  def handle_info({:grab_duplicate, payload}, socket),
+    do: SearchEvents.handle_grab_duplicate(payload, socket)
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # handle_async dispatches to event modules
@@ -521,9 +541,6 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_async(:search, result, socket),
     do: SearchEvents.handle_search_async(result, socket)
-
-  def handle_async(:download_release, result, socket),
-    do: SearchEvents.handle_download_release_async(result, socket)
 
   def handle_async(:refresh_files, result, socket),
     do: FileEvents.handle_refresh_files_async(result, socket)
