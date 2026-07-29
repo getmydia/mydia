@@ -272,13 +272,12 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     end)
   end
 
-  # Names only, never values: this lands in logs and the admin UI, and the
-  # value is a live session token.
+  # Names only, never values: this lands in logs, and the value is a live
+  # session token.
   defp observed_cookie_names(response) do
-    headers = Req.Response.get_header(response, "set-cookie")
-    headers_list = if is_list(headers), do: headers, else: (headers && [headers]) || []
-
-    Enum.map(headers_list, fn cookie ->
+    response
+    |> Req.Response.get_header("set-cookie")
+    |> Enum.map(fn cookie ->
       cookie |> String.split("=", parts: 2) |> hd() |> String.trim()
     end)
   end

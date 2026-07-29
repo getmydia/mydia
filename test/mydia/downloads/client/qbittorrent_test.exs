@@ -170,8 +170,8 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
         # Real qBittorrent sometimes sets a CSRF cookie alongside SID.
         # We must pick the SID cookie, not the first one.
         conn
-        |> Plug.Conn.put_resp_header("set-cookie", "_csrf=ignored; Path=/")
-        |> Plug.Conn.merge_resp_headers([
+        |> Plug.Conn.prepend_resp_headers([
+          {"set-cookie", "_csrf=ignored; Path=/"},
           {"set-cookie", "SID=session-abc-123; HttpOnly; Path=/"}
         ])
         |> Plug.Conn.resp(200, "Ok.")
@@ -248,8 +248,10 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
 
         Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
           conn
-          |> Plug.Conn.put_resp_header("set-cookie", "_csrf=ignored; Path=/")
-          |> Plug.Conn.merge_resp_headers([{"set-cookie", unquote(set_cookie)}])
+          |> Plug.Conn.prepend_resp_headers([
+            {"set-cookie", "_csrf=ignored; Path=/"},
+            {"set-cookie", unquote(set_cookie)}
+          ])
           |> Plug.Conn.resp(unquote(login_status), unquote(login_body))
         end)
 
@@ -268,15 +270,17 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
     } do
       Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
         conn
-        |> Plug.Conn.put_resp_header("set-cookie", "_csrf=ignored; Path=/")
-        |> Plug.Conn.merge_resp_headers([{"set-cookie", "NEWNAME_9=abc; Path=/"}])
+        |> Plug.Conn.prepend_resp_headers([
+          {"set-cookie", "_csrf=ignored; Path=/"},
+          {"set-cookie", "NEWNAME_9=abc; Path=/"}
+        ])
         |> Plug.Conn.resp(204, "")
       end)
 
       assert {:error, error} = QBittorrent.test_connection(config)
       assert error.type == :authentication_failed
       assert error.message =~ "session cookie"
-      assert "NEWNAME_9" in error.details.cookies_seen
+      assert Enum.sort(error.details.cookies_seen) == ["NEWNAME_9", "_csrf"]
     end
   end
 
