@@ -1988,8 +1988,8 @@ defmodule Mydia.Media do
       |> group_by([e], e.id)
       |> having([_e, _m, mf], count(mf.id) == 0)
       |> select([e], e.media_item_id)
+      |> distinct(true)
       |> Repo.all()
-      |> Enum.uniq()
 
     MediaItem
     |> where([m], m.id in ^show_ids)

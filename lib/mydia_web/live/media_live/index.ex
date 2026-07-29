@@ -951,12 +951,18 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp auto_search_flash(0, 0), do: "Nothing to search"
 
+  defp auto_search_flash(0, 1), do: "Nothing to search. The selected item does not need a search."
+
   defp auto_search_flash(0, skipped) do
-    "Nothing to search. None of the #{skipped} selected #{pluralize_items(skipped)} need a search."
+    "Nothing to search. None of the #{skipped} selected items need a search."
   end
 
   defp auto_search_flash(queued, 0) do
     "Queued #{queued} #{pluralize_searches(queued)}"
+  end
+
+  defp auto_search_flash(queued, 1) do
+    "Queued #{queued} #{pluralize_searches(queued)}, skipped 1 that does not need one"
   end
 
   defp auto_search_flash(queued, skipped) do

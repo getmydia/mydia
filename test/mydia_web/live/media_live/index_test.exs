@@ -377,7 +377,7 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       view |> element("#batch-auto-search-btn") |> render_click()
 
       assert view |> element("#flash-info") |> render() =~
-               "Queued 1 search, skipped 1 that do not need one"
+               "Queued 1 search, skipped 1 that does not need one"
 
       assert [job] = Mydia.Repo.all(Oban.Job)
       assert job.worker == "Mydia.Jobs.MovieSearch"
@@ -409,8 +409,13 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       render_click(view, "toggle_selection_mode", %{})
       render_click(view, "toggle_select", %{"id" => needs_search.id})
 
-      for i <- 1..50 do
-        render_click(view, "toggle_select", %{"id" => "fake-id-#{i}"})
+      # Real UUIDs for rows that do not exist: `binary_id` is a plain string on
+      # SQLite but a genuine uuid column on Postgres, so a synthetic id like
+      # "fake-id-1" casts fine on one adapter and raises Ecto.Query.CastError on
+      # the other. partition_for_auto_search/1 counts absent ids in neither
+      # number, which is what keeps the assertions below stable.
+      for _ <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => Ecto.UUID.generate()})
       end
 
       refute has_element?(view, "#auto-search-confirm-modal[open]")
@@ -439,8 +444,13 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       render_click(view, "toggle_selection_mode", %{})
       render_click(view, "toggle_select", %{"id" => needs_search.id})
 
-      for i <- 1..50 do
-        render_click(view, "toggle_select", %{"id" => "fake-id-#{i}"})
+      # Real UUIDs for rows that do not exist: `binary_id` is a plain string on
+      # SQLite but a genuine uuid column on Postgres, so a synthetic id like
+      # "fake-id-1" casts fine on one adapter and raises Ecto.Query.CastError on
+      # the other. partition_for_auto_search/1 counts absent ids in neither
+      # number, which is what keeps the assertions below stable.
+      for _ <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => Ecto.UUID.generate()})
       end
 
       view |> element("#batch-auto-search-btn") |> render_click()
