@@ -1893,4 +1893,199 @@ defmodule Mydia.MediaTest do
       assert File.exists?(abs)
     end
   end
+
+  describe "partition_for_auto_search/1 with movies" do
+    test "returns a movie with no files and no downloads" do
+      movie = insert(:media_item, type: "movie")
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "skips a movie with an untrashed media file" do
+      movie = insert(:media_item, type: "movie")
+      insert(:media_file, media_item: movie, episode: nil)
+
+      assert {[], 1} = Media.partition_for_auto_search([movie.id])
+    end
+
+    test "returns a movie whose only media file is trashed" do
+      movie = insert(:media_item, type: "movie")
+
+      insert(:media_file,
+        media_item: movie,
+        episode: nil,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "skips a movie with an occupying download" do
+      movie = insert(:media_item, type: "movie")
+      insert(:download, media_item: movie)
+
+      assert {[], 1} = Media.partition_for_auto_search([movie.id])
+    end
+
+    test "returns a movie whose only download failed terminally" do
+      movie = insert(:media_item, type: "movie")
+
+      insert(:download,
+        media_item: movie,
+        import_failed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        import_next_retry_at: nil
+      )
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "returns an unmonitored movie with no files" do
+      movie = insert(:media_item, type: "movie", monitored: false)
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "ignores ids that do not exist" do
+      assert {[], 0} = Media.partition_for_auto_search([Ecto.UUID.generate()])
+    end
+
+    test "returns an empty result for an empty id list" do
+      assert {[], 0} = Media.partition_for_auto_search([])
+    end
+  end
+
+  describe "partition_for_auto_search/1 with TV shows" do
+    setup do
+      %{yesterday: Date.add(Date.utc_today(), -1), tomorrow: Date.add(Date.utc_today(), 1)}
+    end
+
+    test "returns a show with an aired monitored episode that has no file", %{
+      yesterday: yesterday
+    } do
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: yesterday)
+
+      assert {[found], 0} = Media.partition_for_auto_search([show.id])
+      assert found.id == show.id
+    end
+
+    test "skips a show whose only aired episode already has a file", %{yesterday: yesterday} do
+      show = insert(:tv_show)
+      episode = insert(:episode, media_item: show, air_date: yesterday)
+      insert(:media_file, episode: episode, media_item: nil)
+
+      assert {[], 1} = Media.partition_for_auto_search([show.id])
+    end
+
+    test "returns a show whose episode file is trashed", %{yesterday: yesterday} do
+      show = insert(:tv_show)
+      episode = insert(:episode, media_item: show, air_date: yesterday)
+
+      insert(:media_file,
+        episode: episode,
+        media_item: nil,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      assert {[found], 0} = Media.partition_for_auto_search([show.id])
+      assert found.id == show.id
+    end
+
+    test "skips a show whose only missing episode has not aired", %{tomorrow: tomorrow} do
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: tomorrow)
+
+      assert {[], 1} = Media.partition_for_auto_search([show.id])
+    end
+
+    test "skips a show whose only missing episode has no air date" do
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: nil)
+
+      assert {[], 1} = Media.partition_for_auto_search([show.id])
+    end
+
+    test "skips a show whose only missing episode is unmonitored", %{yesterday: yesterday} do
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: yesterday, monitored: false)
+
+      assert {[], 1} = Media.partition_for_auto_search([show.id])
+    end
+
+    test "skips an unmonitored show with missing episodes", %{yesterday: yesterday} do
+      show = insert(:tv_show, monitored: false)
+      insert(:episode, media_item: show, air_date: yesterday)
+
+      assert {[], 1} = Media.partition_for_auto_search([show.id])
+    end
+
+    test "skips a show whose only missing episode has an occupying download", %{
+      yesterday: yesterday
+    } do
+      show = insert(:tv_show)
+      episode = insert(:episode, media_item: show, air_date: yesterday)
+      insert(:download, media_item: show, episode: episode)
+
+      assert {[], 1} = Media.partition_for_auto_search([show.id])
+    end
+
+    test "skips a show whose only missing episode is a special", %{yesterday: yesterday} do
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: yesterday, season_number: 0)
+
+      assert {[], 1} = Media.partition_for_auto_search([show.id])
+    end
+
+    test "returns a show with a missing special when specials are monitored", %{
+      yesterday: yesterday
+    } do
+      original = Application.get_env(:mydia, :episode_monitor, [])
+
+      Application.put_env(
+        :mydia,
+        :episode_monitor,
+        Keyword.put(original, :monitor_special_episodes, true)
+      )
+
+      on_exit(fn -> Application.put_env(:mydia, :episode_monitor, original) end)
+
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: yesterday, season_number: 0)
+
+      assert {[found], 0} = Media.partition_for_auto_search([show.id])
+      assert found.id == show.id
+    end
+
+    test "returns a show once even when several episodes are missing", %{yesterday: yesterday} do
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: yesterday, episode_number: 1)
+      insert(:episode, media_item: show, air_date: yesterday, episode_number: 2)
+
+      assert {[found], 0} = Media.partition_for_auto_search([show.id])
+      assert found.id == show.id
+    end
+
+    test "counts movies and shows together", %{yesterday: yesterday} do
+      movie = insert(:media_item, type: "movie")
+      complete_movie = insert(:media_item, type: "movie")
+      insert(:media_file, media_item: complete_movie, episode: nil)
+
+      show = insert(:tv_show)
+      insert(:episode, media_item: show, air_date: yesterday)
+
+      complete_show = insert(:tv_show)
+      complete_episode = insert(:episode, media_item: complete_show, air_date: yesterday)
+      insert(:media_file, episode: complete_episode, media_item: nil)
+
+      ids = [movie.id, complete_movie.id, show.id, complete_show.id]
+      {items, skipped} = Media.partition_for_auto_search(ids)
+
+      assert skipped == 2
+      assert Enum.sort(Enum.map(items, & &1.id)) == Enum.sort([movie.id, show.id])
+    end
+  end
 end
