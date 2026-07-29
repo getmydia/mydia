@@ -187,16 +187,38 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     with {:ok, req} <- authenticate(config) do
       case fun.(req) do
         {:error, %Error{type: :stale_session}} ->
-          # Session expired between authenticate() and the call — re-auth and retry once.
-          with {:ok, fresh_req} <- authenticate(config) do
-            fun.(fresh_req)
-          end
+          retry_after_stale_session(config, fun)
 
         other ->
           other
       end
     end
   end
+
+  # API-key auth has no session to refresh: a 403 means the key was rejected.
+  # Re-running `fun` would also resend mutating requests such as
+  # POST /torrents/add, so fail fast rather than retrying.
+  defp retry_after_stale_session(config, fun) do
+    if api_key?(config) do
+      {:error,
+       Error.authentication_failed("qBittorrent rejected the API key", %{
+         hint: "Regenerate the key in qBittorrent under Preferences, WebUI, API Key"
+       })}
+    else
+      with {:ok, fresh_req} <- authenticate(config) do
+        case fun.(fresh_req) do
+          # Never leak the internal marker: it is meaningless to an operator.
+          {:error, %Error{type: :stale_session}} ->
+            {:error, Error.authentication_failed("qBittorrent session could not be established")}
+
+          other ->
+            other
+        end
+      end
+    end
+  end
+
+  defp api_key?(config), do: is_binary(config[:api_key]) and config[:api_key] != ""
 
   # Marker error indicating the caller should re-authenticate and retry.
   defp stale_session, do: Error.new(:stale_session, "Session expired")

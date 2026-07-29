@@ -218,6 +218,25 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
       assert :counters.get(counter, 1) == 2
     end
 
+    test "never leaks the internal stale_session marker when the retry also fails", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=always-stale; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        Plug.Conn.resp(conn, 403, "Forbidden")
+      end)
+
+      assert {:error, error} = QBittorrent.list_torrents(config)
+      assert error.type == :authentication_failed
+      refute error.type == :stale_session
+    end
+
     for {version, login_status, login_body, set_cookie, expected_cookie} <- @dialects do
       test "authenticates and echoes the session cookie on qBittorrent #{version}", %{
         bypass: bypass,
@@ -611,6 +630,30 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
       assert {:error, error} = QBittorrent.test_connection(bare)
       assert error.type == :invalid_config
       assert error.message =~ "API key"
+    end
+
+    test "a 403 does not trigger a login retry and does not resend the request", %{
+      bypass: bypass,
+      config: config
+    } do
+      logins = :counters.new(1, [])
+      infos = :counters.new(1, [])
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        :counters.add(logins, 1, 1)
+        Plug.Conn.resp(conn, 200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        :counters.add(infos, 1, 1)
+        Plug.Conn.resp(conn, 403, "Forbidden")
+      end)
+
+      assert {:error, error} = QBittorrent.list_torrents(config)
+      assert error.type == :authentication_failed
+      assert error.message =~ "API key"
+      assert :counters.get(logins, 1) == 0
+      assert :counters.get(infos, 1) == 1
     end
   end
 
