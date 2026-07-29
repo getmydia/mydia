@@ -10,13 +10,9 @@
       
       
       
-        <link rel="canonical" href="https://docs.mydia.dev/dev/development/setup/">
+        <link rel="canonical" href="https://docs.mydia.dev/dev/development/cast-manual-test-checklist/">
       
       
-        <link rel="prev" href="../../plugins/authoring/">
-      
-      
-        <link rel="next" href="../testing/">
       
       
         
@@ -27,7 +23,7 @@
     
     
       
-        <title>Setup - Mydia Documentation</title>
+        <title>Cast manual test checklist - Mydia Documentation</title>
       
     
     
@@ -85,7 +81,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#development-setup" class="md-skip">
+        <a href="#cast-manual-test-checklist" class="md-skip">
           Skip to content
         </a>
       
@@ -125,7 +121,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Setup
+              Cast manual test checklist
             
           </span>
         </div>
@@ -1218,8 +1214,6 @@
       
   
   
-    
-  
   
   
     
@@ -1232,11 +1226,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
         
           
           <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
@@ -1257,7 +1253,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1272,37 +1268,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Setup
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
         
   
   
@@ -1318,192 +1287,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prerequisites
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#per-worktree-ports-overrides" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Per-worktree ports &amp; overrides
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#postgresql-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PostgreSQL (optional)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-dev-script" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The ./dev Script
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="The ./dev Script">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#process-lifecycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Process lifecycle
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#shells-mix" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Shells &amp; mix
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#shortcuts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Shortcuts
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#code-quality" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Code Quality
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Code Quality">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#pre-commit-checks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pre-commit checks
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#git-hooks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Git hooks
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#player-flutter" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Player (Flutter)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#project-structure" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Project Structure
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1627,10 +1410,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#hardware-needed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Prerequisites
+        Hardware needed
       
     </span>
   </a>
@@ -1638,10 +1421,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#matrix" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick Start
+        Matrix
       
     </span>
   </a>
@@ -1649,10 +1432,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#per-worktree-ports-overrides" class="md-nav__link">
+  <a href="#session-restore" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Per-worktree ports &amp; overrides
+        Session restore
       
     </span>
   </a>
@@ -1660,132 +1443,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#postgresql-optional" class="md-nav__link">
+  <a href="#known-limitations-to-confirm-not-file-as-bugs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PostgreSQL (optional)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-dev-script" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The ./dev Script
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="The ./dev Script">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#process-lifecycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Process lifecycle
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#shells-mix" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Shells &amp; mix
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#shortcuts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Shortcuts
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#code-quality" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Code Quality
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Code Quality">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#pre-commit-checks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pre-commit checks
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#git-hooks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Git hooks
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#player-flutter" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Player (Flutter)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#project-structure" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Project Structure
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
+        Known limitations to confirm, not file as bugs
       
     </span>
   </a>
@@ -1812,155 +1473,169 @@
   
 
 
-<h1 id="development-setup">Development Setup</h1>
-<p>Set up a local development environment for Mydia.</p>
-<p>The local developer environment is built on <a href="https://devenv.sh">devenv.sh</a> (a
-Nix-based, declarative dev environment) and auto-loaded per git worktree via
-<a href="https://direnv.net">direnv</a>. The daily loop — Phoenix server, <code>mix test</code>,
-<code>mix precommit</code>, Flutter codegen — runs <strong>natively</strong> (no Docker dev container).
-Each worktree derives its own non-colliding ports and isolated state, so several
-worktrees can run their full stacks at once.</p>
-<blockquote>
-<p>Docker is still used for the production image (<code>Dockerfile</code>), the player E2E
-stack (<code>compose.player-e2e.yml</code>), and the metadata-relay deploy — but <strong>not</strong>
-for day-to-day development.</p>
-</blockquote>
-<h2 id="prerequisites">Prerequisites</h2>
+<h1 id="cast-manual-test-checklist">Cast manual test checklist</h1>
+<p>Automated tests cover routing, state, and UI. They cannot cover real receivers,
+so run this checklist against actual hardware before shipping a cast change.</p>
+<h2 id="hardware-needed">Hardware needed</h2>
 <ul>
-<li><strong>Nix</strong> — https://nixos.org/download (the Determinate Systems installer works well)</li>
-<li><strong>devenv</strong> — <code>nix profile install nixpkgs#devenv</code></li>
-<li><strong>direnv</strong> — https://direnv.net (install + hook into your shell)</li>
-<li><strong>Git</strong></li>
+<li>One Chromecast, Google TV, or Cast-enabled TV</li>
+<li>One DLNA/UPnP TV or renderer (not needed for the iOS runs)</li>
 </ul>
-<p>Your user must be a Nix <strong>trusted user</strong> (devenv requires it). If <code>devenv shell</code>
-fails with <code>ignoring the client-specified setting 'system' … you are not a
-trusted user</code>, add yourself:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;extra-trusted-users = </span><span class="nv">$USER</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>tee<span class="w"> </span>-a<span class="w"> </span>/etc/nix/nix.custom.conf
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>nix-daemon<span class="w">   </span><span class="c1"># or: sudo launchctl kickstart -k system/org.nixos.nix-daemon (macOS)</span>
-</code></pre></div>
-<h2 id="quick-start">Quick Start</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/getmydia/mydia.git
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>mydia
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Authorize direnv for this worktree (one time). This builds the toolchain and</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># runs first-run setup (deps.get, ecto.create/migrate, asset npm install,</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># flutter pub get). The first build downloads the toolchain and can take a while.</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>direnv<span class="w"> </span>allow
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># Start the stack (Phoenix + Flutter codegen watcher)</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>./dev<span class="w"> </span>up
-</code></pre></div>
-<p>On shell entry devenv prints this worktree's assigned URL and ports, e.g.:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Mydia dev environment (devenv) — /home/you/mydia
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  Phoenix:   http://localhost:4740
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  P2P bind:  4741
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  Flutter:   dev-server port 4743
-</code></pre></div>
-<p>Open the printed Phoenix URL (the port is derived from the worktree path, so it
-is stable across restarts but differs between worktrees).</p>
-<p>If you don't use direnv, run commands through <code>devenv shell</code> directly, or just
-use the <code>./dev</code> wrapper (it loads the environment for each command).</p>
-<h2 id="per-worktree-ports-overrides">Per-worktree ports &amp; overrides</h2>
-<p>Ports are derived deterministically by hashing the worktree's absolute path, so
-two worktrees never collide and you can run both stacks simultaneously. Ports
-change only if the checkout physically moves (a branch rename does not change
-them).</p>
-<p>To pin ports explicitly (escape hatch for a hash collision or a fixed port),
-copy the example override (git-ignored) and edit it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>cp<span class="w"> </span>devenv.local.nix.example<span class="w"> </span>devenv.local.nix
-</code></pre></div>
-<h2 id="postgresql-optional">PostgreSQL (optional)</h2>
-<p>SQLite is the default adapter and needs no service. To develop against
-PostgreSQL, set <code>DATABASE_TYPE=postgres</code> before entering the shell; devenv then
-runs a per-worktree Postgres (data under <code>.devenv/state/postgres</code>) on a derived
-port and creates <code>mydia_dev</code> / <code>mydia_test</code>.</p>
-<blockquote>
-<p><code>initialDatabases</code> only runs on first init. To change it later, delete
-<code>.devenv/state/postgres</code> and re-enter the shell.</p>
-</blockquote>
-<h2 id="the-dev-script">The <code>./dev</code> Script</h2>
-<p><code>./dev</code> is a thin wrapper over devenv that preserves the historical command
-vocabulary. Run <code>./dev</code> with no arguments to see everything.</p>
-<h3 id="process-lifecycle">Process lifecycle</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>./dev<span class="w"> </span>up<span class="w"> </span>-d<span class="w">        </span><span class="c1"># Start the stack in the background</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>./dev<span class="w"> </span>down<span class="w">         </span><span class="c1"># Stop background processes</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>./dev<span class="w"> </span>restart<span class="w">      </span><span class="c1"># Restart the stack</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>./dev<span class="w"> </span>logs<span class="w"> </span>phoenix<span class="w"> </span><span class="c1"># Show a process&#39;s logs</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>./dev<span class="w"> </span>ps<span class="w">           </span><span class="c1"># List managed processes</span>
-</code></pre></div>
-<h3 id="shells-mix">Shells &amp; mix</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>./dev<span class="w"> </span>shell<span class="w">        </span><span class="c1"># Interactive devenv shell</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>./dev<span class="w"> </span>iex<span class="w">          </span><span class="c1"># IEx console (iex -S mix)</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>./dev<span class="w"> </span>mix<span class="w"> </span>&lt;args&gt;<span class="w">   </span><span class="c1"># Any mix command</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>./dev<span class="w"> </span>mix<span class="w"> </span><span class="nb">test</span><span class="w">     </span><span class="c1"># Run tests</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>./dev<span class="w"> </span>mix<span class="w"> </span>format<span class="w">   </span><span class="c1"># Format code</span>
-</code></pre></div>
-<h3 id="shortcuts">Shortcuts</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>./dev<span class="w"> </span><span class="nb">test</span><span class="w">         </span><span class="c1"># Run tests</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>./dev<span class="w"> </span>format<span class="w">       </span><span class="c1"># Format code</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>./dev<span class="w"> </span>deps.get<span class="w">     </span><span class="c1"># Fetch dependencies</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>./dev<span class="w"> </span>ecto.migrate<span class="w"> </span><span class="c1"># Run migrations</span>
-</code></pre></div>
-<h2 id="code-quality">Code Quality</h2>
-<h3 id="pre-commit-checks">Pre-commit checks</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>./dev<span class="w"> </span>mix<span class="w"> </span>precommit
-</code></pre></div>
-<p>Runs Dependencies → Compile (warnings-as-errors) → Unused deps → Format →
-Database → Tests, with a compact per-step summary.</p>
-<blockquote>
-<p>Precommit runs against the active adapter. SQLite (the default) serializes
-async tests; <code>DATABASE_TYPE=postgres ./dev mix precommit</code> uses the warm
-Postgres and keeps async tests parallel.</p>
-</blockquote>
-<h3 id="git-hooks">Git hooks</h3>
-<p>Pre-commit hooks are managed by devenv (<code>git-hooks.hooks</code> in <code>devenv.nix</code>) and
-installed automatically when you enter the shell. They lint Rust (cargo
-fmt/clippy against the pinned 1.96.0 toolchain), the WASM plugin guests, and
-Elixir/Dart formatting — no <code>nix develop</code> needed. devenv owns the generated
-<code>.pre-commit-config.yaml</code> (git-ignored); edit <code>devenv.nix</code> to change hooks.</p>
-<h2 id="player-flutter">Player (Flutter)</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>./dev<span class="w"> </span>flutter<span class="w"> </span>&lt;args&gt;<span class="w">   </span><span class="c1"># Run a flutter command in player/</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>./dev<span class="w"> </span>player<span class="w"> </span>setup<span class="w">     </span><span class="c1"># Install deps + run code generation</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>./dev<span class="w"> </span>player<span class="w"> </span>build<span class="w">     </span><span class="c1"># Build + deploy web assets to priv/static/player</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>./dev<span class="w"> </span>player<span class="w"> </span>logs<span class="w">      </span><span class="c1"># Show recent build_runner (codegen) process logs</span>
-</code></pre></div>
-<p>Access the player at the Phoenix URL under <code>/player</code> (e.g.
-<code>http://localhost:4740/player</code>). <code>MydiaWeb.FlutterWatcher</code> rebuilds the web app
-on source changes; the <code>flutter-codegen</code> process runs <code>build_runner watch</code> for
-GraphQL/Riverpod codegen.</p>
-<p>Android builds use the player's own Nix flake (not devenv):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>./dev<span class="w"> </span>player<span class="w"> </span>android<span class="w"> </span>build<span class="w">   </span><span class="c1"># Build release APK</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>./dev<span class="w"> </span>player<span class="w"> </span>android<span class="w"> </span>shell<span class="w">   </span><span class="c1"># nix develop shell in player/</span>
-</code></pre></div>
-<p>macOS app builds use the host toolchain (not devenv, not the flake) — Xcode and
-CocoaPods are Apple-licensed SDKs Nix cannot provide, and cargokit builds the
-Rust p2p core via <code>rustup</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>./dev<span class="w"> </span>player<span class="w"> </span>macos<span class="w"> </span>run<span class="w">                  </span><span class="c1"># Debug build + run, hot reload</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>./dev<span class="w"> </span>player<span class="w"> </span>macos<span class="w"> </span>build<span class="w">                </span><span class="c1"># Release build</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>./dev<span class="w"> </span>player<span class="w"> </span>macos<span class="w"> </span>run<span class="w"> </span>--skip-codegen<span class="w">   </span><span class="c1"># Reuse existing build_runner output</span>
-</code></pre></div>
-<p>Requires <strong>full Xcode</strong> (the Command Line Tools alone cannot build app bundles),
-CocoaPods (<code>pod</code>), Flutter, and rustup on the host; <code>./dev</code> preflights all four
-and tells you how to fix whichever is missing. Release output lands in
-<code>player/build/macos/Build/Products/Release/Mydia Player.app</code>.</p>
-<h2 id="project-structure">Project Structure</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mydia/
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>├── assets/           # Frontend assets (JS, CSS)
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>├── config/           # Configuration files
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>├── devenv.nix        # Developer environment (toolchain, services, hooks)
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>├── lib/
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>│   ├── mydia/        # Business logic
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>│   └── mydia_web/    # Web layer (LiveViews, controllers)
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>├── priv/
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>│   ├── repo/         # Database migrations
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>│   └── static/       # Static assets
-<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>└── test/             # Test files
-</code></pre></div>
-<h2 id="next-steps">Next Steps</h2>
+<h2 id="matrix">Matrix</h2>
+<p>Run every row on macOS, Windows, Linux, and Android. On iOS run only the
+Chromecast rows: DLNA discovery needs the multicast entitlement we do not
+request, so DLNA devices must not appear at all.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Scenario</th>
+<th>Expected</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Open the picker at home</td>
+<td>Receivers appear within ~5s, grouped by protocol</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Cast a movie, server reachable</td>
+<td>Plays on the receiver; app shows remote controls</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Pause / play / seek from the app</td>
+<td>Receiver responds within ~1s</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Let it play 30s, check the library</td>
+<td>Resume position updated on the item</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Pick a subtitle track (direct route)</td>
+<td>Subtitles appear on the receiver</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Cast while connected over p2p</td>
+<td>Falls back to the bridge and plays; subtitle picker is disabled with a reason</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Kill the app mid-cast, direct route</td>
+<td>Receiver keeps playing</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Reopen the app within 12h</td>
+<td><strong>No session is restored</strong> (see "Session restore" below) and, critically, the receiver is <em>not</em> interrupted</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Reopen after 12h</td>
+<td>No phantom session; picker behaves normally</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Stop casting from the mini controller</td>
+<td>Receiver stops; the player screen re-initialises local playback from the current position</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Cast to a receiver on an isolated guest wifi</td>
+<td>Bridge retry runs; a specific error appears if it also fails</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Deny local network permission (iOS/macOS)</td>
+<td>Picker shows the permission message, not an empty list</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Close the picker</td>
+<td>Discovery stops (verify no ongoing multicast in logs); on Android the multicast lock is released with it</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Power off the receiver mid-playback</td>
+<td>Session marked stale; <strong>Reconnect</strong> re-casts that session's media (not the open screen's), <strong>Stop casting</strong> returns to local playback</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Cast a file the receiver cannot decode</td>
+<td>Automatically retries with TRANSCODE and plays</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Open a file the local player cannot decode, then cast it</td>
+<td>The cast button is reachable from the loading and error states, not only from a playing video</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Cast over p2p, then stop</td>
+<td>While casting, <code>LocalProxyService</code> is LAN-bound; after stopping, <code>isLanAccessible</code> is false again and the proxy is loopback-only</td>
+</tr>
+<tr>
+<td>18</td>
+<td>Cast over p2p to a Chromecast</td>
+<td>A server-side streaming session is started for the bridge URL and ended when casting stops (check the server's session list)</td>
+</tr>
+<tr>
+<td>19</td>
+<td>Open the picker on a network with no receivers</td>
+<td>After ~10s the picker says "No cast devices found" rather than spinning forever</td>
+</tr>
+<tr>
+<td>20</td>
+<td>Cast to receiver A, then straight to receiver B</td>
+<td>A stops playing and is disconnected before B starts</td>
+</tr>
+<tr>
+<td>21</td>
+<td>Cast with a VPN connected (macOS <code>utun</code>, WireGuard)</td>
+<td>The bridge URL uses the real LAN address, not the tunnel address</td>
+</tr>
+</tbody>
+</table>
+<h2 id="session-restore">Session restore</h2>
+<p>The design calls for reattaching to a session left running by a previous app
+launch — but only when the receiver is <em>still playing our media</em>, and never by
+taking a receiver over to find that out.</p>
+<p><code>dart_cast</code> 0.7.3 offers no way to ask. <code>CastService.connect</code> is the only entry
+point to a session, and <code>ChromecastSession.connect</code> sends <code>LAUNCH CC1AD845</code>,
+which evicts whatever app the receiver is running. So
+<code>DartCastBackend.probeReceiverContentUrl</code> returns null ("cannot tell"), and
+<code>CastSessionManager.restoreSession</code> discards the stored session rather than
+risk stopping the film someone else started on the TV.</p>
+<p><strong>Practical effect:</strong> reopening the app within 12h of a cast shows no restored
+session and no mini controller. This is deliberate. The one thing to verify by
+hand is the negative: reopening Mydia must never interrupt the receiver.</p>
+<p>The probe is a seam, not dead code — a backend that can answer (hand-written
+CASTV2 <code>GET_STATUS</code>, or a future dart_cast release) restores the reattach path
+without touching the manager. The bridge-route reload at the stored position is
+already implemented behind the same gate.</p>
+<h2 id="known-limitations-to-confirm-not-file-as-bugs">Known limitations to confirm, not file as bugs</h2>
 <ul>
-<li><a href="../testing/">Testing</a> - Unit and integration testing</li>
-<li><a href="../e2e-testing/">E2E Testing</a> - Browser-based testing</li>
-<li><a href="../architecture/">Architecture</a> - System design overview</li>
+<li>Subtitles do not work on the bridge route (p2p). The picker is disabled there.</li>
+<li>DLNA subtitle support is best-effort and varies by TV.</li>
+<li>Session restore never reattaches today; see "Session restore" above.</li>
+<li>App restart on the bridge route would reload from the stored position with a
+  visible blip, rather than resuming seamlessly — reachable only once a backend
+  can probe receiver state.</li>
+<li>Casting cannot start while the LAN interface is genuinely unusable, and the
+  bridge attempt briefly binds and unbinds the proxy to discover that: whether
+  a bridge URL exists is only knowable once the proxy has been LAN-bound.</li>
+<li><code>dart_cast</code> 0.7.3 reports both "receiver could not reach the URL" and
+  "receiver could not decode the file" as the same <code>mediaLoadFailed</code> error, so
+  the app cannot distinguish an unreachable server from a rejected codec from
+  the exception alone. It tries the LAN bridge first (which fixes the
+  unreachable case) and only escalates to a transcode if that also fails — a
+  failing cast may take up to three attempts (direct → bridge → transcode)
+  before reporting an error to the user.</li>
 </ul>
 
 
@@ -1994,44 +1669,6 @@ and tells you how to fix whichever is missing. Release output lands in
       
         <footer class="md-footer">
   
-    
-      
-      <nav class="md-footer__inner md-grid" aria-label="Footer" >
-        
-          
-          <a href="../../plugins/authoring/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Reference">
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
-            </div>
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Previous
-              </span>
-              <div class="md-ellipsis">
-                Reference
-              </div>
-            </div>
-          </a>
-        
-        
-          
-          <a href="../testing/" class="md-footer__link md-footer__link--next" aria-label="Next: Testing">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                Testing
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
-            </div>
-          </a>
-        
-      </nav>
     
   
   <div class="md-footer-meta md-typeset">
