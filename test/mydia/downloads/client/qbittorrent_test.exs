@@ -261,6 +261,23 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
         assert {:ok, _} = QBittorrent.get_status(config, hash)
       end
     end
+
+    test "reports the cookie names it actually saw when none is a session cookie", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "_csrf=ignored; Path=/")
+        |> Plug.Conn.merge_resp_headers([{"set-cookie", "NEWNAME_9=abc; Path=/"}])
+        |> Plug.Conn.resp(204, "")
+      end)
+
+      assert {:error, error} = QBittorrent.test_connection(config)
+      assert error.type == :authentication_failed
+      assert error.message =~ "session cookie"
+      assert "NEWNAME_9" in error.details.cookies_seen
+    end
   end
 
   describe "add_torrent/3 (Bypass)" do

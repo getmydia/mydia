@@ -220,7 +220,13 @@ defmodule Mydia.Downloads.Client.QBittorrent do
             {:ok, Req.Request.put_header(req, "cookie", cookie)}
 
           :error ->
-            {:error, Error.authentication_failed("Failed to extract session cookie")}
+            {:error,
+             Error.authentication_failed("Failed to extract session cookie", %{
+               hint:
+                 "qBittorrent returned no recognisable session cookie " <>
+                   "(expected SID or QBT_SID_<port>)",
+               cookies_seen: observed_cookie_names(response)
+             })}
         end
 
       {:ok, %{status: 403}} ->
@@ -263,6 +269,17 @@ defmodule Mydia.Downloads.Client.QBittorrent do
         [_, pair] -> {:ok, pair}
         _ -> nil
       end
+    end)
+  end
+
+  # Names only, never values: this lands in logs and the admin UI, and the
+  # value is a live session token.
+  defp observed_cookie_names(response) do
+    headers = Req.Response.get_header(response, "set-cookie")
+    headers_list = if is_list(headers), do: headers, else: (headers && [headers]) || []
+
+    Enum.map(headers_list, fn cookie ->
+      cookie |> String.split("=", parts: 2) |> hd() |> String.trim()
     end)
   end
 
