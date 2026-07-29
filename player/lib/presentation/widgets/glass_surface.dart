@@ -62,6 +62,17 @@ class GlassSurface extends StatelessWidget {
   /// call site unchanged.
   final double saturation;
 
+  /// Gradient stroked around the rounded-rect silhouette ([borderRadius]),
+  /// painted on top of the fill/blur once both are clipped. Null (the
+  /// default, used by every existing named constructor) paints no rim at
+  /// all. [GlassSurface.playerChrome] uses this instead of [border] for its
+  /// directional rim: a gradient-shaded stroke traces the rounded corners
+  /// exactly, whereas a [Border] with different per-side colors cannot be
+  /// combined with a non-zero [borderRadius] (Flutter's `Border.paint`
+  /// rejects it) and a same-color-only border would have to stop short of
+  /// the corners to avoid that.
+  final Gradient? rimGradient;
+
   final Widget? child;
 
   const GlassSurface({
@@ -74,6 +85,7 @@ class GlassSurface extends StatelessWidget {
     this.border,
     this.grouped = false,
     this.saturation = 1.0,
+    this.rimGradient,
     this.child,
   });
 
@@ -220,9 +232,10 @@ class GlassSurface extends StatelessWidget {
               const BorderRadius.all(
                 Radius.circular(DepthTokens.radiusPlayerPanel),
               ),
-          border: const Border(
-            top: BorderSide(color: DepthTokens.playerRimTop),
-            bottom: BorderSide(color: DepthTokens.playerRimBottom),
+          rimGradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [DepthTokens.playerRimTop, DepthTokens.playerRimBottom],
           ),
           child: child,
         );
@@ -234,7 +247,7 @@ class GlassSurface extends StatelessWidget {
       return RepaintBoundary(
         child: ClipRRect(
           borderRadius: borderRadius,
-          child: _fill(),
+          child: _withRim(_fill()),
         ),
       );
     }
@@ -244,7 +257,7 @@ class GlassSurface extends StatelessWidget {
         ? blur
         : ImageFilter.compose(
             outer: blur,
-            inner: ColorFilter.matrix(_saturationMatrix(saturation)),
+            inner: ColorFilter.matrix(saturationColorMatrix(saturation)),
           );
     final backdrop = grouped
         ? BackdropFilter.grouped(filter: filter, child: _fill())
@@ -253,60 +266,105 @@ class GlassSurface extends StatelessWidget {
     return RepaintBoundary(
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: backdrop,
+        child: _withRim(backdrop),
       ),
     );
   }
 
   Widget _fill() {
-    // Flutter's `Border.paint` refuses to combine a non-zero `borderRadius`
-    // with a border whose visible sides aren't all one color (it throws "A
-    // borderRadius can only be given on borders with uniform colors."). The
-    // directional playerChrome rim (light top, dark bottom) is deliberately
-    // non-uniform, so for that case only, this decoration's own borderRadius
-    // is dropped; the enclosing ClipRRect (built with the real borderRadius,
-    // see build()) still clips the fill and border to rounded corners, so the
-    // rendered result is unaffected. Every existing call site's border is
-    // uniform (or absent), so this is a no-op for them.
-    final effectiveBorder = border;
-    final radius =
-        effectiveBorder is Border && !_hasUniformVisibleColor(effectiveBorder)
-            ? BorderRadius.zero
-            : borderRadius;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: gradient == null ? fillColor : null,
         gradient: gradient,
-        borderRadius: radius,
+        borderRadius: borderRadius,
         border: border,
       ),
       child: child,
     );
   }
+
+  /// Paints [rimGradient] as a gradient-shaded stroke around the
+  /// [borderRadius] silhouette, on top of [content]. No-op (returns [content]
+  /// unchanged) when [rimGradient] is null — the case for every existing
+  /// named constructor, so this only ever adds a paint pass for
+  /// [GlassSurface.playerChrome].
+  Widget _withRim(Widget content) {
+    final rim = rimGradient;
+    if (rim == null) return content;
+    return CustomPaint(
+      foregroundPainter: PlayerChromeRimPainter(
+        borderRadius: borderRadius,
+        gradient: rim,
+      ),
+      child: content,
+    );
+  }
 }
 
-/// Whether every side of [border] that is actually painted (i.e. not
-/// [BorderStyle.none]) shares the same color. See [GlassSurface._fill] for
-/// why this matters.
-bool _hasUniformVisibleColor(Border border) {
-  final visibleSides = <BorderSide>[
-    border.top,
-    border.right,
-    border.bottom,
-    border.left,
-  ].where((side) => side.style != BorderStyle.none);
-  if (visibleSides.isEmpty) return true;
-  final firstColor = visibleSides.first.color;
-  return visibleSides.every((side) => side.color == firstColor);
+/// Strokes a rounded-rect outline with a gradient shader, tracing
+/// [borderRadius] exactly — including the corners — rather than
+/// approximating it with per-side [BorderSide]s. A [Border] with differing
+/// side colors cannot be combined with a non-zero [BoxDecoration.borderRadius]
+/// (Flutter's `Border.paint` throws "A borderRadius can only be given on
+/// borders with uniform colors."), and even a same-color border would have to
+/// stop short of the corners to stay inside the [ClipRRect]. Painting the
+/// stroke directly with [Canvas.drawRRect] sidesteps both problems: the rim
+/// follows the curve continuously, with [gradient] free to vary color along
+/// it.
+///
+/// Used by [GlassSurface.playerChrome] for its directional (light top, dark
+/// bottom) rim; see [GlassSurface._withRim]. Public (rather than
+/// library-private) so tests can assert on its fields directly instead of
+/// re-deriving them from painted pixels.
+@visibleForTesting
+class PlayerChromeRimPainter extends CustomPainter {
+  const PlayerChromeRimPainter({
+    required this.borderRadius,
+    required this.gradient,
+    this.strokeWidth = DepthTokens.rimWidth,
+  });
+
+  final BorderRadius borderRadius;
+  final Gradient gradient;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    // A centered stroke straddles the RRect boundary; since this painter
+    // sits inside the same ClipRRect that defines that boundary, the outer
+    // half would otherwise be clipped away, thinning the visible line.
+    // Deflating first keeps the whole stroke width inside the clip.
+    final rrect = borderRadius.toRRect(rect).deflate(strokeWidth / 2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..shader = gradient.createShader(rect);
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant PlayerChromeRimPainter oldDelegate) {
+    return oldDelegate.borderRadius != borderRadius ||
+        oldDelegate.gradient != gradient ||
+        oldDelegate.strokeWidth != strokeWidth;
+  }
 }
 
 /// A 4x5 colour matrix that scales saturation by [s] while preserving
-/// luminance, using the Rec. 709 coefficients.
+/// luminance, using the Rec. 709 coefficients. `s == 1.0` yields the identity
+/// matrix (no change); `s == 0.0` yields full desaturation (grayscale).
 ///
 /// This is what separates real vibrancy from a plain Gaussian blur: blurring
 /// alone averages a video frame toward grey, while boosting saturation first
 /// keeps the backdrop's colour reading through the glass.
-List<double> _saturationMatrix(double s) {
+///
+/// Public (rather than library-private) so its numeric coefficients — the
+/// actual defect this task fixes — can be unit-tested directly (identity at
+/// `s = 1.0`, luminance preservation for arbitrary `s`) rather than only
+/// verified indirectly through the composed [ImageFilter].
+@visibleForTesting
+List<double> saturationColorMatrix(double s) {
   const lr = 0.2126, lg = 0.7152, lb = 0.0722;
   final ir = (1 - s) * lr, ig = (1 - s) * lg, ib = (1 - s) * lb;
   return <double>[
