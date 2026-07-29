@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/cache/poster_cache_manager.dart';
+import '../../core/graphql/watch/query_key.dart';
 import '../widgets/ambient_backdrop_provider.dart';
 import '../widgets/content_rail.dart';
+import '../widgets/freshness_header.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/shimmer_card.dart';
 import '../../core/layout/breakpoints.dart';
@@ -37,115 +39,130 @@ class HomeScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: isDesktop ? null : _ModernAppBar(),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await ref.read(homeControllerProvider.notifier).refresh();
-        },
-        child: homeData.when(
-          loading: () {
-            // No hero pick yet -> calm static fallback.
-            publishBackdropSource(ref, BackdropSource.none);
-            return _buildShimmerLoading(context);
-          },
-          error: (error, stackTrace) {
-            publishBackdropSource(ref, BackdropSource.none);
-            return _buildErrorView(context, error, ref);
-          },
-          data: (data) {
-            if (data.isEmpty) {
-              publishBackdropSource(ref, BackdropSource.none);
-              return _buildEmptyState(context);
-            }
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [QueryKeys.home],
+            topInset: freshnessTopInset(
+              context,
+              appBarHeight: isDesktop ? null : kToolbarHeight,
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await ref.read(homeControllerProvider.notifier).refresh();
+              },
+              child: homeData.when(
+                loading: () {
+                  // No hero pick yet -> calm static fallback.
+                  publishBackdropSource(ref, BackdropSource.none);
+                  return _buildShimmerLoading(context);
+                },
+                error: (error, stackTrace) {
+                  publishBackdropSource(ref, BackdropSource.none);
+                  return _buildErrorView(context, error, ref);
+                },
+                data: (data) {
+                  if (data.isEmpty) {
+                    publishBackdropSource(ref, BackdropSource.none);
+                    return _buildEmptyState(context);
+                  }
 
-            // Feed the shell ambient backdrop from the hero pick:
-            // continueWatching.first ?? recentlyAdded.first, using
-            // backdropUrl ?? posterUrl (plan U5 / AE1). Branch by concrete
-            // type so the getters resolve (the two lists hold different types).
-            final BackdropSource heroSource;
-            if (data.continueWatching.isNotEmpty) {
-              final item = data.continueWatching.first;
-              heroSource = BackdropSource(
-                imageUrl: item.backdropUrl ?? item.posterUrl,
-                id: item.id,
-              );
-            } else if (data.recentlyAdded.isNotEmpty) {
-              final item = data.recentlyAdded.first;
-              heroSource = BackdropSource(
-                imageUrl: item.backdropUrl ?? item.posterUrl,
-                id: item.id,
-              );
-            } else {
-              heroSource = BackdropSource.none;
-            }
-            publishBackdropSource(ref, heroSource);
+                  // Feed the shell ambient backdrop from the hero pick:
+                  // continueWatching.first ?? recentlyAdded.first, using
+                  // backdropUrl ?? posterUrl (plan U5 / AE1). Branch by
+                  // concrete type so the getters resolve (the two lists
+                  // hold different types).
+                  final BackdropSource heroSource;
+                  if (data.continueWatching.isNotEmpty) {
+                    final item = data.continueWatching.first;
+                    heroSource = BackdropSource(
+                      imageUrl: item.backdropUrl ?? item.posterUrl,
+                      id: item.id,
+                    );
+                  } else if (data.recentlyAdded.isNotEmpty) {
+                    final item = data.recentlyAdded.first;
+                    heroSource = BackdropSource(
+                      imageUrl: item.backdropUrl ?? item.posterUrl,
+                      id: item.id,
+                    );
+                  } else {
+                    heroSource = BackdropSource.none;
+                  }
+                  publishBackdropSource(ref, heroSource);
 
-            return CustomScrollView(
-              slivers: [
-                // Hero section with featured content
-                if (data.continueWatching.isNotEmpty ||
-                    data.recentlyAdded.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Builder(builder: (context) {
-                      if (data.continueWatching.isNotEmpty) {
-                        final item = data.continueWatching.first;
-                        return _HeroSection(
-                          item: item,
-                          onTap: () =>
-                              _handleItemTap(context, item.id, item.type),
-                        );
-                      } else {
-                        final item = data.recentlyAdded.first;
-                        return _HeroSection(
-                          item: item,
-                          onTap: () =>
-                              _handleItemTap(context, item.id, item.type),
-                        );
-                      }
-                    }),
-                  ),
+                  return CustomScrollView(
+                    slivers: [
+                      // Hero section with featured content
+                      if (data.continueWatching.isNotEmpty ||
+                          data.recentlyAdded.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: Builder(builder: (context) {
+                            if (data.continueWatching.isNotEmpty) {
+                              final item = data.continueWatching.first;
+                              return _HeroSection(
+                                item: item,
+                                onTap: () =>
+                                    _handleItemTap(context, item.id, item.type),
+                              );
+                            } else {
+                              final item = data.recentlyAdded.first;
+                              return _HeroSection(
+                                item: item,
+                                onTap: () =>
+                                    _handleItemTap(context, item.id, item.type),
+                              );
+                            }
+                          }),
+                        ),
 
-                // Content rails
-                SliverList(
-                  delegate: SliverChildListDelegate([
-                    if (data.continueWatching.isNotEmpty)
-                      ContentRail(
-                        title: 'Continue Watching',
-                        items: data.continueWatching,
-                        showProgress: true,
-                        onItemTap: (id, type) =>
-                            _handleItemTap(context, id, type),
+                      // Content rails
+                      SliverList(
+                        delegate: SliverChildListDelegate([
+                          if (data.continueWatching.isNotEmpty)
+                            ContentRail(
+                              title: 'Continue Watching',
+                              items: data.continueWatching,
+                              showProgress: true,
+                              onItemTap: (id, type) =>
+                                  _handleItemTap(context, id, type),
+                            ),
+                          if (data.recentlyAdded.isNotEmpty)
+                            ContentRail(
+                              title: 'Recently Added',
+                              items: data.recentlyAdded,
+                              onItemTap: (id, type) =>
+                                  _handleItemTap(context, id, type),
+                              onSeeAllTap: () =>
+                                  context.push('/recently-added'),
+                            ),
+                          if (data.favorites.isNotEmpty)
+                            ContentRail(
+                              title: 'Favorites',
+                              items: data.favorites,
+                              onItemTap: (id, type) =>
+                                  _handleItemTap(context, id, type),
+                              onSeeAllTap: () => context.push('/favorites'),
+                            ),
+                          if (data.upNext.isNotEmpty)
+                            ContentRail(
+                              title: 'Up Next',
+                              items: data.upNext,
+                              showEpisodeInfo: true,
+                              onItemTap: (id, type) =>
+                                  _handleItemTap(context, id, type),
+                            ),
+                          SizedBox(height: bottomPadding),
+                        ]),
                       ),
-                    if (data.recentlyAdded.isNotEmpty)
-                      ContentRail(
-                        title: 'Recently Added',
-                        items: data.recentlyAdded,
-                        onItemTap: (id, type) =>
-                            _handleItemTap(context, id, type),
-                        onSeeAllTap: () => context.push('/recently-added'),
-                      ),
-                    if (data.favorites.isNotEmpty)
-                      ContentRail(
-                        title: 'Favorites',
-                        items: data.favorites,
-                        onItemTap: (id, type) =>
-                            _handleItemTap(context, id, type),
-                        onSeeAllTap: () => context.push('/favorites'),
-                      ),
-                    if (data.upNext.isNotEmpty)
-                      ContentRail(
-                        title: 'Up Next',
-                        items: data.upNext,
-                        showEpisodeInfo: true,
-                        onItemTap: (id, type) =>
-                            _handleItemTap(context, id, type),
-                      ),
-                    SizedBox(height: bottomPadding),
-                  ]),
-                ),
-              ],
-            );
-          },
-        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

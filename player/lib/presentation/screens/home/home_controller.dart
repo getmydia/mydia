@@ -1,7 +1,8 @@
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/home_data.dart';
 
 part 'home_controller.g.dart';
@@ -79,53 +80,30 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
 }
 ''';
 
+const Map<String, dynamic> homeScreenVariables = {
+  'continueWatchingLimit': 10,
+  'recentlyAddedLimit': 20,
+  'upNextLimit': 10,
+  'favoritesLimit': 10,
+};
+
 @riverpod
 class HomeController extends _$HomeController {
+  // Plain `late`, not `late final`: Riverpod may re-run build() on the same
+  // notifier instance, and a second assignment to a late final throws.
+  late QueryWatcher<HomeData> _watcher;
+
   @override
-  Future<HomeData> build() async {
-    return _fetchHomeData();
-  }
-
-  Future<HomeData> _fetchHomeData() async {
-    // Use async provider to wait for client to be ready
-    final client = await ref.read(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(homeScreenQuery),
-        variables: const {
-          'continueWatchingLimit': 10,
-          'recentlyAddedLimit': 20,
-          'upNextLimit': 10,
-          'favoritesLimit': 10,
-        },
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  Stream<HomeData> build() {
+    _watcher = createWatcher<HomeData>(
+      ref,
+      key: QueryKeys.home,
+      document: gql(homeScreenQuery),
+      variables: homeScreenVariables,
+      parse: HomeData.fromJson,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null) {
-      throw Exception('No data received from server');
-    }
-
-    return HomeData.fromJson(result.data!);
+    return _watcher.stream;
   }
 
-  Future<void> refresh() async {
-    final previousData = state.value;
-    state = const AsyncValue.loading();
-
-    final result = await AsyncValue.guard(() => _fetchHomeData());
-    if (result.hasError && previousData != null) {
-      // Keep showing stale data instead of replacing with error
-      debugPrint(
-          '[HomeController] Refresh failed, keeping previous data: ${result.error}');
-      state = AsyncValue.data(previousData);
-      return;
-    }
-    state = result;
-  }
+  Future<void> refresh() => _watcher.refetch();
 }

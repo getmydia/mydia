@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,8 @@ import 'core/auth/auth_status.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/providers.dart';
 import 'core/graphql/graphql_provider.dart';
+import 'core/graphql/watch/resume_gate.dart';
+import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
@@ -16,10 +20,13 @@ class MyApp extends ConsumerStatefulWidget {
   ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends ConsumerState<MyApp> {
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
+  final ResumeGate _resumeGate = ResumeGate();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Initialize P2P services
     Future.microtask(() async {
       try {
@@ -70,6 +77,30 @@ class _MyAppState extends ConsumerState<MyApp> {
       await manager.restoreSession();
     } catch (e) {
       debugPrint('[MyApp] Failed to restore cast session: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (applyAppLifecycleState(_resumeGate, state, DateTime.now())) {
+      // Live screens refetch now; dormant ones become cold for their next
+      // mount. Fire-and-forget: a lifecycle callback cannot await, so any
+      // failure is caught here rather than becoming an unhandled rejection.
+      unawaited(_invalidateOnResume());
+    }
+  }
+
+  Future<void> _invalidateOnResume() async {
+    try {
+      await ref.read(invalidatorProvider).invalidateAll();
+    } catch (e) {
+      debugPrint('[MyApp] Resume invalidation failed: $e');
     }
   }
 
