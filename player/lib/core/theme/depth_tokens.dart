@@ -202,28 +202,47 @@ abstract final class DepthTokens {
   static const double blurPlayerChrome = 28.0;
 
   /// Nominal fill opacity for playback chrome — the mean of the gradient
-  /// endpoints below. Deliberately under [glassLegibilityFloor]: legibility is
-  /// bought with blur strength and gradient weighting instead of flat fill.
-  ///
-  /// Mean of [playerChromeFillTopAlpha] (0.68) and [playerChromeFillBottomAlpha]
-  /// (0.38) — see [playerChromeFillTopAlpha] for why the dense end is at the
-  /// top.
-  static const double playerChromeFillOpacity = 0.53;
+  /// endpoints below, for reference only. **No production code reads this
+  /// token** — `GlassSurface.playerChrome` reads [playerChromeFillTopAlpha]
+  /// and [playerChromeFillBottomAlpha] directly, and the panel's actual,
+  /// rendered density is whichever of those two is in effect at a given
+  /// point, not their mean. Do not use this value to argue the panel clears
+  /// (or misses) [glassLegibilityFloor] — assert on [playerChromeFillTopAlpha]
+  /// directly (see `depth_tokens_test.dart`), since that is the dense end
+  /// that actually has to carry the claim.
+  static const double playerChromeFillOpacity = 0.47;
 
   /// Fill alpha at the top edge of the playback panel — the dense end.
   ///
   /// [ChromePanel] puts the control row (row 1: volume/transport/secondary)
   /// at the top of the panel and the scrubber (row 2) below it, so density
-  /// follows the content that needs legibility: the controls are the
-  /// high-contrast-critical row, and the scrubber below reads fine as a
-  /// white track over less fill. This was originally 0.38 (the *sheer*
-  /// value, swapped from [playerChromeFillBottomAlpha] below) on the mistaken
-  /// assumption that the control row sat at the bottom; `glass_legibility_test`
-  /// samples ~30% down the panel (the control row's actual position) and
-  /// measured only 3.38:1 there at 0.52 — under the 4.5:1 floor — so this was
-  /// raised in the same file's prescribed 0.04 increments (0.52 -> 0.56 ->
-  /// ... -> 0.68) until the measured contrast cleared it (4.90:1 at 0.68).
-  static const double playerChromeFillTopAlpha = 0.68;
+  /// follows the content that needs legibility most: the controls are here.
+  ///
+  /// Deliberately kept **under** [glassLegibilityFloor] (0.60) — the
+  /// redesign's whole differentiation from browse-UI chrome is that this
+  /// panel can afford more transparency, and a value at or above the floor
+  /// would quietly erase that. An earlier iteration pushed this to 0.68 to
+  /// make a single-point legibility test pass; that made the panel read as
+  /// dense as browse chrome and, per WCAG 2.1 SC 1.4.3 (text contrast,
+  /// 4.5:1) measured across the *edges* of row 1's icons (not just its
+  /// center), still didn't reliably clear 4.5:1 there without an even higher
+  /// fill — while failing the transparency claim outright. Icons/glyphs are
+  /// graphical objects, not text, so they're correctly held to WCAG 2.1 SC
+  /// 1.4.11 (non-text contrast, 3:1) instead — `glass_legibility_test`
+  /// verifies fill-alone clears 3:1 across row 1's full icon band at this
+  /// value, with real margin (not a near-miss).
+  ///
+  /// The row-2 timecodes (12–13px text, held to the stricter 4.5:1 text
+  /// standard) cannot clear that bar from fill alone at any value under the
+  /// floor — buying the rest of the way with more fill is exactly the
+  /// flat-slab look this redesign removes. Per the human-ruled direction,
+  /// that gap is closed with a small, targeted text shadow on the timecodes
+  /// only (not on any icon), implemented alongside the timecodes themselves
+  /// (Task 12's `_ScrubberRow`) rather than here — `glass_legibility_test`
+  /// models that shadow's contribution analytically so the combined
+  /// fill+shadow contract is locked in and verified even though the shadow
+  /// paint code lives elsewhere.
+  static const double playerChromeFillTopAlpha = 0.56;
 
   /// Fill alpha at the bottom edge of the playback panel — the sheer end.
   ///

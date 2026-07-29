@@ -54,7 +54,9 @@ class PanelMetrics {
       );
     }
     return PanelMetrics(
-      maxWidth: width - 32,
+      // Clamp: below a 32px-wide viewport this would otherwise go negative,
+      // which trips BoxConstraints' normalization assert downstream.
+      maxWidth: math.max(0.0, width - 32),
       bottomOffset: 24,
       showVolume: false,
       touchTargets: true,
@@ -110,6 +112,14 @@ class ChromePanel extends StatelessWidget {
   /// Vertical gap between the controls row and the scrubber row.
   static const double rowGap = 18.0;
 
+  /// Vertical padding above row 1 and below row 2. Public so tests (e.g.
+  /// `glass_legibility_test`) can derive real panel-geometry fractions
+  /// instead of hand-rounded literals.
+  static const double verticalPadding = 16.0;
+
+  /// Horizontal padding on both sides of the panel.
+  static const double horizontalPadding = 20.0;
+
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
@@ -120,7 +130,10 @@ class ChromePanel extends StatelessWidget {
           Radius.circular(DepthTokens.radiusPlayerPanel),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: verticalPadding,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -157,13 +170,20 @@ class ChromePanel extends StatelessWidget {
   /// flip (see the [volume] dartdoc) instead of adding/removing it from the
   /// tree. `maintainSize: false` means it still takes zero space when hidden,
   /// matching the prior (unmounted) layout exactly.
+  ///
+  /// `maintainAnimation: false` (the default) is deliberate, not an
+  /// oversight: it still preserves `State` — the whole point of this
+  /// [Visibility] — by adding only a disabled `TickerMode` around the hidden
+  /// child, so `VolumeCluster`'s `_lastVolume` still survives. Setting it to
+  /// `true` would additionally keep the hidden widget's tickers/animations
+  /// running while offstage, which is wasted work with nothing to show for
+  /// it.
   Widget _volumeSlot() {
     final child = volume;
     if (child == null) return const SizedBox.shrink();
     return Visibility(
       visible: metrics.showVolume,
       maintainState: true,
-      maintainAnimation: true,
       child: child,
     );
   }

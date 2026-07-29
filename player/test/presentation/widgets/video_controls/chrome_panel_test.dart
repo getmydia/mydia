@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/platform_features.dart';
+import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 
 /// Tracks how many times it has been mounted (`initState` called), so tests
@@ -96,10 +97,65 @@ void main() {
       expect(find.byKey(const Key('s')), findsOneWidget);
     });
 
+    testWidgets('clips to DepthTokens.radiusPlayerPanel', (tester) async {
+      await tester.pumpWidget(host(PanelMetrics.forWidth(1600)));
+      final clip = tester.widget<ClipRRect>(find.byType(ClipRRect));
+      expect(
+        clip.borderRadius,
+        const BorderRadius.all(Radius.circular(DepthTokens.radiusPlayerPanel)),
+      );
+    });
+
     testWidgets('omits the volume slot when not supplied', (tester) async {
       await tester.pumpWidget(host(PanelMetrics.forWidth(400)));
       expect(find.byKey(const Key('v')), findsNothing);
     });
+
+    testWidgets(
+      'below the mobile breakpoint, a SUPPLIED volume widget stays mounted '
+      'but goes offstage/zero-size (regression: this must fail if '
+      "PanelMetrics.showVolume stops gating visibility, e.g. Visibility's "
+      "'visible' is ever hardcoded to true)",
+      (tester) async {
+        await tester.pumpWidget(
+          host(
+            PanelMetrics.forWidth(400),
+            volume: const SizedBox(key: Key('v'), width: 110, height: 40),
+          ),
+        );
+
+        // Still mounted (this is the whole point of Visibility+maintainState:
+        // the previous "omits the volume slot when not supplied" test above
+        // passes `volume: null`, so it can't tell a hidden-but-mounted
+        // widget apart from a genuinely absent one). `skipOffstage: false` is
+        // required here — Flutter's finders skip offstage elements by
+        // default, so the un-qualified `find.byKey` used elsewhere in this
+        // file would (incorrectly, for this specific check) also report
+        // "not found" for a widget that's mounted-but-hidden by design.
+        final volumeKey = find.byKey(const Key('v'), skipOffstage: false);
+        expect(volumeKey, findsOneWidget);
+
+        // ...and it's offstage specifically because of
+        // PanelMetrics.showVolume (false below the mobile breakpoint), not
+        // some incidental zero-sized ancestor constraint. RenderOffstage
+        // still lays its child out at its natural size (per its own doc
+        // comment: "the child is laid out as if it was in the tree ... but
+        // without taking any room in the parent") — it's the Offstage
+        // wrapper itself that reports zero size upward, not the child — so
+        // the meaningful assertion is on `offstage`, not on the child's own
+        // size.
+        // `.first` (the closest match, not `findsOneWidget`/exactly-one):
+        // Scaffold/Navigator's own internals also have an unrelated
+        // `Offstage(offstage: false)` further up the tree (outside
+        // ChromePanel entirely, for inactive routes/overlays), so this must
+        // pick the nearest one — ChromePanel's own — rather than assume
+        // there's exactly one Offstage anywhere above the key.
+        final offstage = tester.widget<Offstage>(
+          find.ancestor(of: volumeKey, matching: find.byType(Offstage)).first,
+        );
+        expect(offstage.offstage, isTrue);
+      },
+    );
 
     testWidgets('includes the volume slot when supplied', (tester) async {
       await tester.pumpWidget(

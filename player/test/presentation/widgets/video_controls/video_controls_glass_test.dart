@@ -55,8 +55,8 @@ void main() {
     });
 
     testWidgets(
-        'stays below the browse legibility floor at the bottom, where only '
-        'the scrubber track sits, by design', (tester) async {
+        'stays below the browse legibility floor at both edges, by design',
+        (tester) async {
       await tester.pumpWidget(_host(_panel(PlayerGlassTier.full)));
 
       final decoration = tester
@@ -73,10 +73,16 @@ void main() {
 
       // The gradient is asymmetric and dense-at-the-top: ChromePanel puts the
       // control row (row 1) at the top of the panel, so density follows it
-      // there — glass_legibility_test measures the actual worst-case contrast
-      // at that row directly. The bottom, under the scrubber's white track,
-      // stays under the browse-UI floor, deliberately more transparent than
-      // browse chrome can afford to be.
+      // there. Unlike an earlier iteration, the dense (top) end itself also
+      // stays under the browse-UI floor — glassLegibilityFloor guards this
+      // directly in depth_tokens_test — so *nowhere* in the panel is as
+      // dense as browse chrome. glass_legibility_test measures the actual
+      // worst-case WCAG contrast at the control-row icons (3:1, non-text)
+      // and the scrubber timecodes (4.5:1, text, with a targeted shadow).
+      expect(
+        gradient.colors.first.a,
+        lessThan(DepthTokens.glassLegibilityFloor),
+      );
       expect(
         gradient.colors.last.a,
         lessThan(DepthTokens.glassLegibilityFloor),

@@ -124,6 +124,18 @@ void main() {
       );
     });
 
+    test(
+      'the dense end stays under the browse legibility floor — the '
+      'redesign\'s actual differentiation claim, guarded directly rather '
+      'than via playerChromeFillOpacity (which no production code reads)',
+      () {
+        expect(
+          DepthTokens.playerChromeFillTopAlpha,
+          lessThan(DepthTokens.glassLegibilityFloor),
+        );
+      },
+    );
+
     test('rim is directional: light on top, dark on the bottom', () {
       expect(DepthTokens.playerRimTop.a, greaterThan(0));
       expect(DepthTokens.playerRimBottom.a, greaterThan(0));
