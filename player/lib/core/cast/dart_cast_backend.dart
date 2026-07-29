@@ -189,6 +189,16 @@ class DartCastBackend implements CastBackend {
     );
   }
 
+  /// Builds a backend over a caller-supplied `dart_cast` service.
+  ///
+  /// The only seam through which `connect`'s session handover can be
+  /// exercised without two real receivers on the network — the default
+  /// factory builds a live `dc.CastService` that would try to open sockets.
+  @visibleForTesting
+  factory DartCastBackend.withService(dc.CastService service) {
+    return DartCastBackend._(service, BonsoirChromecastDiscovery());
+  }
+
   @override
   Stream<List<CastDevice>> startDiscovery({
     required CastCapabilities capabilities,

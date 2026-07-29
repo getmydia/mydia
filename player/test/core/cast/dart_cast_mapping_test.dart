@@ -24,7 +24,113 @@ class _FakeServiceResolver with ServiceResolver {
   FutureOr<bool> supportsMdnsHostname() => false;
 }
 
+/// A [dc.CastSession] that records the lifecycle calls made against it.
+///
+/// Deliberately inert: `dc.CastService.connect` disconnects its own previous
+/// session, so a fake that did the same would mask whether *this* backend
+/// hands the old receiver back. Nothing here happens unless the code under
+/// test asks for it.
+class _RecordingSession extends dc.CastSession {
+  _RecordingSession(super.device);
+
+  bool disconnected = false;
+  bool disposed = false;
+
+  @override
+  Future<void> loadMedia(dc.CastMedia media) async {}
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> seek(Duration position) async {}
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> setSubtitle(dc.CastSubtitle? subtitle) async {}
+
+  @override
+  Future<void> disconnect() async {
+    disconnected = true;
+  }
+
+  @override
+  void dispose() {
+    disposed = true;
+    super.dispose();
+  }
+}
+
+class _RecordingCastService extends dc.CastService {
+  final List<_RecordingSession> sessions = [];
+
+  @override
+  Future<dc.CastSession> connect(dc.CastDevice device) async {
+    final session = _RecordingSession(device);
+    sessions.add(session);
+    return session;
+  }
+}
+
 void main() {
+  group('DartCastBackend.connect session handover', () {
+    const receiverA = CastDevice(
+      id: 'a',
+      name: 'Living room',
+      protocol: CastProtocolKind.chromecast,
+      host: '192.168.1.50',
+      port: 8009,
+    );
+    const receiverB = CastDevice(
+      id: 'b',
+      name: 'Bedroom',
+      protocol: CastProtocolKind.chromecast,
+      host: '192.168.1.51',
+      port: 8009,
+    );
+
+    test('casting to a second receiver hands the first one back', () async {
+      // Regression test: `_session` used to be overwritten on the second
+      // connect. The first receiver was then left playing our media with
+      // nothing able to stop it, and its stream controllers leaked.
+      final service = _RecordingCastService();
+      final backend = DartCastBackend.withService(service);
+      addTearDown(backend.dispose);
+
+      await backend.connect(receiverA);
+      await backend.connect(receiverB);
+
+      expect(service.sessions, hasLength(2));
+      expect(service.sessions.first.disconnected, isTrue,
+          reason: 'the first receiver must be released');
+      expect(service.sessions.first.disposed, isTrue,
+          reason: 'the first session must not leak its stream controllers');
+      expect(service.sessions.last.disconnected, isFalse);
+      expect(backend.connectedDevice?.id, 'b');
+    });
+
+    test('reconnecting to the same receiver does not tear its session down',
+        () async {
+      final service = _RecordingCastService();
+      final backend = DartCastBackend.withService(service);
+      addTearDown(backend.dispose);
+
+      await backend.connect(receiverA);
+      await backend.connect(receiverA);
+
+      expect(service.sessions.first.disconnected, isFalse);
+      expect(backend.connectedDevice?.id, 'a');
+    });
+  });
+
   group('chromecastDeviceFromBonsoir', () {
     test('maps a resolved Bonsoir service to a dart_cast device', () {
       final device = chromecastDeviceFromBonsoir(const {
