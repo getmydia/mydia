@@ -167,6 +167,31 @@ class AppShell extends ConsumerStatefulWidget {
     required this.location,
   });
 
+  /// Routes whose own screen already renders a [CastButton] in a real,
+  /// always-visible app bar.
+  ///
+  /// [CastOverlayButton] exists only for screens with nowhere else to put the
+  /// affordance — the desktop browse screens that suppress their app bar
+  /// entirely (Home/Unwatched/Favorites/RecentlyAdded/Collections). Library,
+  /// Downloads, Settings and Search all keep a real app bar on every
+  /// platform, with their own action buttons (sort/view-toggle, cancel-all,
+  /// clear, etc.) living in the exact top-right band this overlay paints
+  /// into. Rendering the overlay there too would sit on top of — and
+  /// intercept taps for — those existing buttons. Do not delete this check
+  /// "to simplify": it is what keeps the overlay from colliding with a
+  /// screen's own app bar the next time one grows an action.
+  ///
+  /// Public (rather than a private helper on [_AppShellState]) and annotated
+  /// `@visibleForTesting` purely so a test can assert the routing decision
+  /// directly, without reconstructing the shell's full provider graph.
+  @visibleForTesting
+  static bool hasOwnCastButton(String location) =>
+      location.startsWith('/movies') ||
+      location.startsWith('/shows') ||
+      location.startsWith('/downloads') ||
+      location.startsWith('/settings') ||
+      location.startsWith('/search');
+
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
 }
@@ -376,6 +401,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // proper repaint propagation on mobile when combined with GlobalKey
     // on the Scaffold (causing the "stuck navigation" bug).
     final isDesktop = Breakpoints.isDesktop(context);
+    final showCastOverlay = !AppShell.hasOwnCastButton(location);
 
     // Shell-level ambient backdrop, fed by the active browse screen. Sits behind
     // the (now transparent) in-shell Scaffolds for all browse screens (plan U5).
@@ -416,7 +442,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
               ],
             ),
-            CastOverlayButton(topInset: _macOSTitleBarPadding + 12),
+            if (showCastOverlay)
+              CastOverlayButton(topInset: _macOSTitleBarPadding + 12),
           ],
         ),
       );
@@ -449,7 +476,8 @@ class _AppShellState extends ConsumerState<AppShell> {
               Expanded(child: widget.child),
             ],
           ),
-          const CastOverlayButton(topInset: kToolbarHeight + 8),
+          if (showCastOverlay)
+            const CastOverlayButton(topInset: kToolbarHeight + 8),
         ],
       ),
       bottomNavigationBar: _ModernBottomNav(

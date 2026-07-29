@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+import 'package:player/core/cast/cast_capabilities.dart';
+import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/domain/models/search_result.dart';
 import 'package:player/presentation/screens/search/search_controller.dart';
@@ -60,6 +62,9 @@ void main() {
     return ProviderScope(
       overrides: [
         asyncGraphqlClientProvider.overrideWith((ref) async => client),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
       ],
       child: MaterialApp(
         home: SearchScreen(
@@ -286,5 +291,16 @@ void main() {
     for (final label in ['Movies', 'TV Shows', 'Episodes', 'Collections']) {
       expect(find.text(label), findsOneWidget);
     }
+  });
+
+  testWidgets(
+      'carries its own cast button in the app bar '
+      '(the shell overlay skips this route)', (tester) async {
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(host());
+      await tester.pumpAndSettle();
+    });
+
+    expect(find.byKey(const Key('cast-button')), findsOneWidget);
   });
 }

@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/search_result.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import 'search_controller.dart';
 import 'widgets/episode_result_row.dart';
 import 'widgets/search_filter_chip.dart';
@@ -155,6 +157,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onPressed: _onClear,
               tooltip: 'Clear',
             ),
+          // SearchScreen's app bar is always visible (no desktop
+          // suppression), so it carries its own cast affordance instead of
+          // the shell's overlay — see AppShell._hasOwnCastButton.
+          CastButton(onPressed: () => pickCastDevice(context, ref)),
           const SizedBox(width: 8),
         ],
       ),

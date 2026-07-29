@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'library_controller.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/app_shell.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/media_poster.dart';
@@ -246,6 +248,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             : Icons.grid_view_rounded,
                         onPressed: _toggleViewMode,
                         tooltip: 'Toggle view',
+                      ),
+                      const SizedBox(width: 4),
+                      // LibraryScreen keeps a real app bar on every platform
+                      // (unlike the desktop-suppressed browse screens), so it
+                      // carries its own cast affordance instead of the
+                      // shell's overlay — see AppShell._hasOwnCastButton.
+                      CastButton(
+                        onPressed: () => pickCastDevice(context, ref),
                       ),
                     ],
                   ),
