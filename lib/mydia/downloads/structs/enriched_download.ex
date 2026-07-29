@@ -9,6 +9,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
   and represents the current state of a download at any given moment.
   """
 
+  alias Mydia.Downloads.Client.FailureCategory
+
   @enforce_keys [:id, :title, :download_client, :status]
 
   defstruct [
@@ -41,6 +43,13 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :save_path,
     :completed_at,
     :error_message,
+    # Client-reported failure detail. Deliberately SEPARATE from
+    # `error_message`, which is bound to the database column: DownloadMonitor
+    # uses `is_nil(error_message)` to find failures it hasn't handled yet
+    # (lib/mydia/jobs/download_monitor.ex:91), so folding client detail into
+    # it would make every failed download look already-handled.
+    :client_failure_category,
+    :client_error_detail,
     :db_completed_at,
     :imported_at,
     # Import retry tracking (displayed in Issues tab)
@@ -100,6 +109,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           save_path: String.t() | nil,
           completed_at: DateTime.t() | nil,
           error_message: String.t() | nil,
+          client_failure_category: FailureCategory.t() | nil,
+          client_error_detail: String.t() | nil,
           db_completed_at: DateTime.t() | nil,
           imported_at: DateTime.t() | nil,
           import_retry_count: integer() | nil,
