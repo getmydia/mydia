@@ -127,6 +127,8 @@ defmodule Mydia.Media.MetadataType do
       videos: parse_videos_list(data[:videos]),
       origin_country: data[:origin_country],
       original_language: data[:original_language],
+      collection_id: data[:collection_id],
+      collection_name: data[:collection_name],
       number_of_seasons: data[:number_of_seasons],
       number_of_episodes: data[:number_of_episodes],
       episode_run_time: data[:episode_run_time],

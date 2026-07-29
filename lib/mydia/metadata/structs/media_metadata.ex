@@ -44,6 +44,9 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     # Classification fields (for category auto-detection)
     :origin_country,
     :original_language,
+    # Franchise membership (movies only; TMDB never sends this for TV)
+    :collection_id,
+    :collection_name,
     # TV show specific fields
     :number_of_seasons,
     :number_of_episodes,
@@ -84,6 +87,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           videos: [Video.t()] | nil,
           origin_country: [String.t()] | nil,
           original_language: String.t() | nil,
+          collection_id: integer() | nil,
+          collection_name: String.t() | nil,
           number_of_seasons: integer() | nil,
           number_of_episodes: integer() | nil,
           episode_run_time: [integer()] | nil,
@@ -105,6 +110,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     title = get_title(data, media_type)
     year = extract_year(data, media_type)
     release_date = parse_date(get_release_date(data, media_type))
+    {collection_id, collection_name} = parse_collection(data["belongs_to_collection"])
 
     base_metadata = %__MODULE__{
       id: data["id"],
@@ -135,7 +141,9 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
       alternative_titles: parse_alternative_titles(data["alternative_titles"]),
       videos: parse_videos(data["videos"]),
       origin_country: parse_origin_country(data["origin_country"]),
-      original_language: data["original_language"]
+      original_language: data["original_language"],
+      collection_id: collection_id,
+      collection_name: collection_name
     }
 
     case media_type do
@@ -243,6 +251,13 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   defp parse_origin_country(nil), do: []
   defp parse_origin_country(countries) when is_list(countries), do: countries
   defp parse_origin_country(_), do: []
+
+  # TMDB nests franchise membership under "belongs_to_collection" on movie
+  # details. The key is absent for TV and null for standalone movies.
+  defp parse_collection(%{"id" => id, "name" => name}) when is_integer(id),
+    do: {id, name}
+
+  defp parse_collection(_), do: {nil, nil}
 
   defp parse_cast(nil), do: []
 
