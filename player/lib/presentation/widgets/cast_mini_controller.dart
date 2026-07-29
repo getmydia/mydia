@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_status.dart';
 import '../../core/cast/cast_providers.dart';
+import '../../core/cast/cast_seek.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../domain/models/cast_device.dart';
 
@@ -45,9 +46,8 @@ class CastMiniController extends ConsumerWidget {
     }
 
     final isPlaying = playbackState == CastPlaybackState.playing;
-    final progress = mediaInfo.duration.inSeconds > 0
-        ? mediaInfo.position.inSeconds / mediaInfo.duration.inSeconds
-        : 0.0;
+    final progress =
+        castProgressFraction(mediaInfo.position, mediaInfo.duration);
 
     // Deliberately not tappable: the full remote lives on the player screen,
     // and this bar has no media ids to route there with. An affordance that
@@ -59,104 +59,103 @@ class CastMiniController extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-            // Progress bar
-            LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.grey[300],
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
-              minHeight: 2,
-            ),
-            // Controller content
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  // Cast icon
-                  const Icon(
-                    Icons.cast_connected,
-                    color: Colors.blue,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  // Media info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+          // Progress bar
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.grey[300],
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
+            minHeight: 2,
+          ),
+          // Controller content
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // Cast icon
+                const Icon(
+                  Icons.cast_connected,
+                  color: Colors.blue,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                // Media info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        mediaInfo.title,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (device != null)
                         Text(
-                          mediaInfo.title,
+                          'Casting to ${device.name}',
                           style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[600],
                                   ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (device != null)
-                          Text(
-                            'Casting to ${device.name}',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[600],
-                                    ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  // Play/pause button
-                  IconButton(
-                    icon: Icon(
-                      isPlaying ? Icons.pause : Icons.play_arrow,
-                      size: 28,
-                    ),
-                    onPressed: () async {
-                      if (isPlaying) {
-                        await manager.pause();
-                      } else {
-                        await manager.play();
-                      }
-                    },
+                ),
+                const SizedBox(width: 12),
+                // Play/pause button
+                IconButton(
+                  icon: Icon(
+                    isPlaying ? Icons.pause : Icons.play_arrow,
+                    size: 28,
                   ),
-                  // Stop/disconnect button
-                  IconButton(
-                    icon: const Icon(
-                      Icons.stop,
-                      size: 28,
-                    ),
-                    onPressed: () async {
-                      // Show confirmation dialog
-                      final shouldStop = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Stop Casting'),
-                          content: const Text(
-                            'Do you want to stop casting and disconnect?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              child: const Text('Stop'),
-                            ),
-                          ],
+                  onPressed: () async {
+                    if (isPlaying) {
+                      await manager.pause();
+                    } else {
+                      await manager.play();
+                    }
+                  },
+                ),
+                // Stop/disconnect button
+                IconButton(
+                  icon: const Icon(
+                    Icons.stop,
+                    size: 28,
+                  ),
+                  onPressed: () async {
+                    // Show confirmation dialog
+                    final shouldStop = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Stop Casting'),
+                        content: const Text(
+                          'Do you want to stop casting and disconnect?',
                         ),
-                      );
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('Stop'),
+                          ),
+                        ],
+                      ),
+                    );
 
-                      if (shouldStop == true) {
-                        await manager.stopCast();
-                      }
-                    },
-                  ),
-                ],
-              ),
+                    if (shouldStop == true) {
+                      await manager.stopCast();
+                    }
+                  },
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );

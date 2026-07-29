@@ -19,6 +19,7 @@ import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
+import '../../../core/cast/cast_seek.dart';
 import '../../../core/player/duration_override.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
@@ -1811,6 +1812,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           title: widget.title ?? 'Untitled',
           subtitleLabel: widget.mediaType == 'episode' ? 'Episode' : 'Movie',
           startPosition: _player?.state.position,
+          // The receiver cannot work this out for itself: Mydia's HLS
+          // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
+          // Chromecast reports `duration: -1` for the whole session. Hand it
+          // the runtime the server already told us (`_totalDuration`, set
+          // from the candidates metadata), falling back to whatever the local
+          // player managed to work out.
+          duration: _knownCastDuration(),
           subtitles: _subtitleTracks
               .where((track) => track.url != null)
               .map((track) => CastSubtitleTrack(
@@ -1963,9 +1971,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     final isPlaying = playbackState == CastPlaybackState.playing;
     final isBuffering = playbackState == CastPlaybackState.buffering;
-    final progress = mediaInfo.duration.inSeconds > 0
-        ? mediaInfo.position.inSeconds / mediaInfo.duration.inSeconds
-        : 0.0;
+    // A receiver that cannot report a length (every HLS cast — see
+    // `cast_seek.dart`) leaves this false, and the scrub bar goes read-only
+    // rather than seeking to a position computed from a bogus duration.
+    final durationKnown = hasKnownDuration(mediaInfo.duration);
+    final progress =
+        castProgressFraction(mediaInfo.position, mediaInfo.duration);
 
     return Stack(
       children: [
@@ -2022,14 +2033,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 Column(
                   children: [
                     Slider(
-                      value: progress.clamp(0.0, 1.0),
-                      onChanged: (value) async {
-                        final newPosition = Duration(
-                          seconds:
-                              (value * mediaInfo.duration.inSeconds).round(),
-                        );
-                        await manager.seek(newPosition);
-                      },
+                      value: progress,
+                      // Null disables the slider outright. Leaving it live
+                      // with an unknown duration is the bug this replaces:
+                      // every drag resolved to `fraction * -1s` and threw the
+                      // receiver back to the start of the video.
+                      onChanged: !durationKnown
+                          ? null
+                          : (value) async {
+                              final newPosition = seekTargetForFraction(
+                                value,
+                                mediaInfo.duration,
+                              );
+                              if (newPosition == null) return;
+                              await manager.seek(newPosition);
+                            },
                       activeColor: Colors.red,
                       inactiveColor: Colors.grey[800],
                     ),
@@ -2046,7 +2064,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                     ),
                           ),
                           Text(
-                            _formatDuration(mediaInfo.duration),
+                            // `_formatDuration` renders a -1s duration as
+                            // "00:-1"; an unknown length gets a placeholder.
+                            durationKnown
+                                ? _formatDuration(mediaInfo.duration)
+                                : '--:--',
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: Colors.grey[400],
@@ -2067,11 +2089,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       icon: const Icon(Icons.replay_10, color: Colors.white),
                       iconSize: 40,
                       onPressed: () async {
-                        final newPosition =
-                            mediaInfo.position - const Duration(seconds: 10);
-                        await manager.seek(
-                          newPosition.isNegative ? Duration.zero : newPosition,
-                        );
+                        await manager.seek(clampSeekTarget(
+                          mediaInfo.position - const Duration(seconds: 10),
+                          mediaInfo.duration,
+                        ));
                       },
                     ),
                     const SizedBox(width: 24),
@@ -2108,12 +2129,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       icon: const Icon(Icons.forward_10, color: Colors.white),
                       iconSize: 40,
                       onPressed: () async {
-                        final newPosition =
-                            mediaInfo.position + const Duration(seconds: 10);
-                        final maxPosition = mediaInfo.duration;
-                        await manager.seek(
-                          newPosition > maxPosition ? maxPosition : newPosition,
-                        );
+                        // Clamping only applies when the duration is real;
+                        // clamping against the receiver's -1 placeholder is
+                        // what turned "skip ahead" into "back to the start".
+                        await manager.seek(clampSeekTarget(
+                          mediaInfo.position + const Duration(seconds: 10),
+                          mediaInfo.duration,
+                        ));
                       },
                     ),
                   ],
@@ -2155,6 +2177,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         ),
       ],
     );
+  }
+
+  /// The item's runtime, from the most trustworthy source available.
+  ///
+  /// Prefers `_totalDuration` (the server's own figure, from the candidates
+  /// metadata) over the local player's, because on an HLS stream media_kit is
+  /// working from the same incomplete playlist the receiver is. Returns null
+  /// when neither knows yet, which the cast UI renders as an unknown length
+  /// rather than as zero.
+  Duration? _knownCastDuration() {
+    final fromServer = _totalDuration;
+    if (fromServer != null && fromServer > Duration.zero) return fromServer;
+
+    final fromPlayer = _player?.state.duration;
+    if (fromPlayer != null && fromPlayer > Duration.zero) return fromPlayer;
+
+    return null;
   }
 
   /// Format duration as HH:MM:SS or MM:SS.

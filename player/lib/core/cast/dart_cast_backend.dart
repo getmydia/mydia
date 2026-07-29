@@ -117,8 +117,31 @@ CastFailureKind failureKindFor(dc.CastException e) {
 /// composition wiring [BonsoirChromecastDiscovery.failures] into
 /// [CastBackend.failureStream] is unit-testable without a real `CastService`.
 @visibleForTesting
-Stream<CastFailureKind> mapDiscoveryFailures(Stream<dc.CastException> failures) {
+Stream<CastFailureKind> mapDiscoveryFailures(
+    Stream<dc.CastException> failures) {
   return failures.map(failureKindFor);
+}
+
+/// Drops receiver "durations" that are not durations.
+///
+/// A Chromecast reports `duration: -1` for any stream whose length it cannot
+/// determine, which is every HLS playlist Mydia serves: the server runs
+/// FFmpeg without `-hls_playlist_type` on purpose (see
+/// `ffmpeg_hls_transcoder.ex`) so playback can start before the whole file is
+/// remuxed, which means no `#EXT-X-ENDLIST` and therefore no advertised
+/// length. `dart_cast` only null-checks the field
+/// (`chromecast_session.dart`'s `status.duration != null`), so the `-1`
+/// arrives here verbatim.
+///
+/// This is the single point where that placeholder is stopped. Letting it
+/// past made the cast scrub bar render `00:-1`, made the slider seek to
+/// `fraction * -1s` — i.e. the start of the video — and made the skip-ahead
+/// button clamp every target against a `-1s` "end", also landing at the
+/// start. Zero is filtered for the same reason: it is the pre-first-status
+/// placeholder, never a real runtime.
+@visibleForTesting
+Stream<Duration> sanitizeDurations(Stream<Duration> durations) {
+  return durations.where((duration) => duration > Duration.zero);
 }
 
 /// Builds the protocol-specific `dart_cast` session for a discovered device.
@@ -167,8 +190,8 @@ class DartCastBackend implements CastBackend {
     // it never forwards them (see discovery_manager.dart) — so a discovery
     // denial would otherwise surface as a silently empty device list rather
     // than reaching the UI. This is the only path that gets it there.
-    _discoveryFailureSub =
-        mapDiscoveryFailures(_chromecastDiscovery.failures).listen(_failures.add);
+    _discoveryFailureSub = mapDiscoveryFailures(_chromecastDiscovery.failures)
+        .listen(_failures.add);
   }
 
   factory DartCastBackend() {
@@ -292,7 +315,8 @@ class DartCastBackend implements CastBackend {
       }
     });
     _positionSub = session.positionStream.listen(_positions.add);
-    _durationSub = session.durationStream.listen(_durations.add);
+    _durationSub =
+        sanitizeDurations(session.durationStream).listen(_durations.add);
   }
 
   /// Always null: `dart_cast` 0.7.x offers no way to ask a receiver what it is

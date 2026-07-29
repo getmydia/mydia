@@ -306,7 +306,9 @@ void main() {
         protocol: dc.CastProtocol.dlna,
         address: InternetAddress('192.168.1.51'),
         port: 1900,
-        metadata: const {'avTransportControlUrl': 'http://192.168.1.51:1900/AVTransport'},
+        metadata: const {
+          'avTransportControlUrl': 'http://192.168.1.51:1900/AVTransport'
+        },
       ));
 
       expect(domain.protocol, CastProtocolKind.dlna);
@@ -339,7 +341,8 @@ void main() {
       expect(rebuilt.metadata['md'], 'Chromecast Ultra');
     });
 
-    test('rebuilds a DLNA device including the control-URL metadata '
+    test(
+        'rebuilds a DLNA device including the control-URL metadata '
         'DlnaSession.fromDevice needs', () {
       const domain = CastDevice(
         id: 'uuid:1',
@@ -348,7 +351,8 @@ void main() {
         host: '192.168.1.51',
         port: 1900,
         metadata: {
-          'avTransportControlUrl': 'http://192.168.1.51:1900/AVTransport/control',
+          'avTransportControlUrl':
+              'http://192.168.1.51:1900/AVTransport/control',
         },
       );
 
@@ -415,19 +419,27 @@ void main() {
 
   group('playbackStateFrom', () {
     test('maps every dart_cast session state', () {
-      expect(playbackStateFrom(dc.SessionState.playing), CastPlaybackState.playing);
-      expect(playbackStateFrom(dc.SessionState.paused), CastPlaybackState.paused);
-      expect(playbackStateFrom(dc.SessionState.buffering), CastPlaybackState.buffering);
-      expect(playbackStateFrom(dc.SessionState.loading), CastPlaybackState.buffering);
-      expect(playbackStateFrom(dc.SessionState.connecting), CastPlaybackState.buffering);
+      expect(playbackStateFrom(dc.SessionState.playing),
+          CastPlaybackState.playing);
+      expect(
+          playbackStateFrom(dc.SessionState.paused), CastPlaybackState.paused);
+      expect(playbackStateFrom(dc.SessionState.buffering),
+          CastPlaybackState.buffering);
+      expect(playbackStateFrom(dc.SessionState.loading),
+          CastPlaybackState.buffering);
+      expect(playbackStateFrom(dc.SessionState.connecting),
+          CastPlaybackState.buffering);
       expect(playbackStateFrom(dc.SessionState.idle), CastPlaybackState.idle);
-      expect(playbackStateFrom(dc.SessionState.connected), CastPlaybackState.idle);
-      expect(playbackStateFrom(dc.SessionState.disconnected), CastPlaybackState.idle);
+      expect(
+          playbackStateFrom(dc.SessionState.connected), CastPlaybackState.idle);
+      expect(playbackStateFrom(dc.SessionState.disconnected),
+          CastPlaybackState.idle);
     });
   });
 
   group('failureKindFor', () {
-    test('maps DeviceUnreachableException to unreachable (future-proofing; '
+    test(
+        'maps DeviceUnreachableException to unreachable (future-proofing; '
         'never actually thrown today)', () {
       expect(
         failureKindFor(dc.DeviceUnreachableException('unreachable')),
@@ -435,7 +447,8 @@ void main() {
       );
     });
 
-    test('maps ProxyUpstreamException to unreachable (future-proofing; '
+    test(
+        'maps ProxyUpstreamException to unreachable (future-proofing; '
         'never actually thrown today)', () {
       expect(
         failureKindFor(dc.ProxyUpstreamException('proxy failed')),
@@ -443,7 +456,8 @@ void main() {
       );
     });
 
-    test('maps MediaLoadFailedException (the real Chromecast LOAD failure) '
+    test(
+        'maps MediaLoadFailedException (the real Chromecast LOAD failure) '
         'to mediaLoadFailed', () {
       expect(
         failureKindFor(dc.MediaLoadFailedException('LOAD_FAILED')),
@@ -451,7 +465,8 @@ void main() {
       );
     });
 
-    test('maps ProtocolException (the real DLNA SOAP failure) to '
+    test(
+        'maps ProtocolException (the real DLNA SOAP failure) to '
         'mediaLoadFailed, the same as Chromecast\'s LOAD failure', () {
       expect(
         failureKindFor(dc.ProtocolException('HTTP 500', dc.CastProtocol.dlna)),
@@ -459,7 +474,8 @@ void main() {
       );
     });
 
-    test('maps ConnectionLostException to connectionLost (future-proofing; '
+    test(
+        'maps ConnectionLostException to connectionLost (future-proofing; '
         'never actually thrown today)', () {
       expect(
         failureKindFor(dc.ConnectionLostException('lost')),
@@ -475,12 +491,14 @@ void main() {
     });
 
     test('maps an unrecognized CastException to unknown', () {
-      expect(failureKindFor(dc.CastException('mystery')), CastFailureKind.unknown);
+      expect(
+          failureKindFor(dc.CastException('mystery')), CastFailureKind.unknown);
     });
   });
 
   group('mapDiscoveryFailures', () {
-    test('translates each discovery exception through failureKindFor', () async {
+    test('translates each discovery exception through failureKindFor',
+        () async {
       final controller = StreamController<dc.CastException>();
       addTearDown(controller.close);
 
@@ -491,6 +509,51 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(kinds, [CastFailureKind.discoveryDenied]);
+    });
+  });
+
+  group('sanitizeDurations', () {
+    /// A Chromecast fed one of Mydia's live-style HLS playlists reports
+    /// `duration: -1`, and `dart_cast` forwards it verbatim. Letting that
+    /// through is what made the scrub bar read `00:-1` and both the slider
+    /// and the skip-ahead button seek to the start of the video.
+    test('drops the receiver\'s -1 unknown-duration placeholder', () async {
+      final controller = StreamController<Duration>();
+      addTearDown(controller.close);
+
+      final durations = <Duration>[];
+      sanitizeDurations(controller.stream).listen(durations.add);
+
+      controller.add(const Duration(seconds: -1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(durations, isEmpty);
+    });
+
+    test('drops zero, which is equally not a runtime', () async {
+      final controller = StreamController<Duration>();
+      addTearDown(controller.close);
+
+      final durations = <Duration>[];
+      sanitizeDurations(controller.stream).listen(durations.add);
+
+      controller.add(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(durations, isEmpty);
+    });
+
+    test('passes a real runtime through', () async {
+      final controller = StreamController<Duration>();
+      addTearDown(controller.close);
+
+      final durations = <Duration>[];
+      sanitizeDurations(controller.stream).listen(durations.add);
+
+      controller.add(const Duration(minutes: 107));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(durations, [const Duration(minutes: 107)]);
     });
   });
 }
