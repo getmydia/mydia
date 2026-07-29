@@ -112,6 +112,17 @@ class SearchState {
 
 @riverpod
 class SearchController extends _$SearchController {
+  /// Id of the most recently started request.
+  ///
+  /// The 400ms debounce narrows overlap but does not remove it: a request for
+  /// "al" issued before the user finished typing "alien" can still be in
+  /// flight when the "alien" request completes, and on a slow connection it
+  /// lands last. Without this guard its stale results replace the newer ones
+  /// and the screen shows matches for a query the search box no longer holds.
+  /// Anything that supersedes a search — a newer search, [clear], or emptying
+  /// the query — bumps the id, and a response carrying a stale id is dropped.
+  int _requestId = 0;
+
   @override
   SearchState build() {
     return const SearchState();
@@ -144,10 +155,12 @@ class SearchController extends _$SearchController {
   Future<void> search() async {
     final query = state.query.trim();
     if (query.isEmpty) {
+      _requestId++;
       state = state.copyWith(clearResults: true, clearError: true);
       return;
     }
 
+    final requestId = ++_requestId;
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
@@ -171,6 +184,10 @@ class SearchController extends _$SearchController {
           fetchPolicy: FetchPolicy.networkOnly,
         ),
       );
+
+      // A newer search (or a clear) started while this one was in flight, so
+      // this response is stale no matter how it turned out.
+      if (requestId != _requestId) return;
 
       if (result.hasException) {
         state = state.copyWith(
@@ -197,6 +214,7 @@ class SearchController extends _$SearchController {
         results: searchResults,
       );
     } catch (e) {
+      if (requestId != _requestId) return;
       state = state.copyWith(
         isLoading: false,
         error: describeSearchError(e),
@@ -205,6 +223,7 @@ class SearchController extends _$SearchController {
   }
 
   void clear() {
+    _requestId++;
     state = const SearchState();
   }
 }

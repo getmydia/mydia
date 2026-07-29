@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
@@ -200,5 +202,94 @@ void main() {
     );
 
     expect(message.toLowerCase(), contains('update the app'));
+  });
+
+  test('a slow earlier response does not overwrite the newer search', () async {
+    final container = makeContainer();
+    final earlier = Completer<QueryResult>();
+    final newer = Completer<QueryResult>();
+    var calls = 0;
+    when(client.query(any)).thenAnswer((_) {
+      calls++;
+      return calls == 1 ? earlier.future : newer.future;
+    });
+
+    final notifier = container.read(searchControllerProvider.notifier);
+    notifier.updateQuery('al');
+    final earlierSearch = notifier.search();
+    notifier.updateQuery('alien');
+    final newerSearch = notifier.search();
+
+    newer.complete(
+      _searchResult(const {
+        'totalCount': 1,
+        'sections': [
+          {
+            'type': 'MOVIE',
+            'totalCount': 1,
+            'results': [
+              {'id': 'm1', 'type': 'MOVIE', 'title': 'Alien'},
+            ],
+          },
+        ],
+      }),
+    );
+    await newerSearch;
+
+    // The superseded request finishes last, which is the whole point.
+    earlier.complete(
+      _searchResult(const {
+        'totalCount': 1,
+        'sections': [
+          {
+            'type': 'MOVIE',
+            'totalCount': 1,
+            'results': [
+              {'id': 'm2', 'type': 'MOVIE', 'title': 'Aladdin'},
+            ],
+          },
+        ],
+      }),
+    );
+    await earlierSearch;
+
+    final state = container.read(searchControllerProvider);
+    expect(state.isLoading, isFalse);
+    expect(
+      state.results!.sections.single.results.single.title,
+      'Alien',
+    );
+  });
+
+  test('an in-flight response is dropped after clear', () async {
+    final container = makeContainer();
+    final pending = Completer<QueryResult>();
+    when(client.query(any)).thenAnswer((_) => pending.future);
+
+    final notifier = container.read(searchControllerProvider.notifier);
+    notifier.updateQuery('alien');
+    final search = notifier.search();
+
+    notifier.clear();
+    pending.complete(
+      _searchResult(const {
+        'totalCount': 1,
+        'sections': [
+          {
+            'type': 'MOVIE',
+            'totalCount': 1,
+            'results': [
+              {'id': 'm1', 'type': 'MOVIE', 'title': 'Alien'},
+            ],
+          },
+        ],
+      }),
+    );
+    await search;
+
+    final state = container.read(searchControllerProvider);
+    expect(state.results, isNull);
+    expect(state.query, isEmpty);
+    expect(state.isLoading, isFalse);
   });
 }
