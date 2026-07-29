@@ -168,7 +168,9 @@ class _GestureControlsState extends State<GestureControls> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      _isSeekForward ? Icons.fast_forward : Icons.fast_rewind,
+                      _isSeekForward
+                          ? Icons.fast_forward_rounded
+                          : Icons.fast_rewind_rounded,
                       color: Colors.white,
                       size: 32,
                     ),
@@ -206,10 +208,10 @@ class _GestureControlsState extends State<GestureControls> {
                     children: [
                       Icon(
                         _volume > 0.5
-                            ? Icons.volume_up
+                            ? Icons.volume_up_rounded
                             : _volume > 0
-                                ? Icons.volume_down
-                                : Icons.volume_off,
+                                ? Icons.volume_down_rounded
+                                : Icons.volume_off_rounded,
                         color: Colors.white,
                         size: 24,
                       ),
@@ -260,8 +262,8 @@ class _GestureControlsState extends State<GestureControls> {
                     children: [
                       Icon(
                         _brightness > 0.5
-                            ? Icons.brightness_high
-                            : Icons.brightness_low,
+                            ? Icons.brightness_high_rounded
+                            : Icons.brightness_low_rounded,
                         color: Colors.white,
                         size: 24,
                       ),

@@ -88,7 +88,7 @@ class _BottomControlsBarState extends State<BottomControlsBar> {
           _buildPositionText(),
           const Spacer(),
           _buildActionButton(
-            icon: Icons.subtitles_outlined,
+            icon: Icons.subtitles_rounded,
             tooltip: subtitleEnabled
                 ? 'Subtitles: ${widget.selectedSubtitleLabel ?? 'Off'}'
                 : 'No subtitles',
@@ -97,7 +97,7 @@ class _BottomControlsBarState extends State<BottomControlsBar> {
           ),
           const SizedBox(width: 6),
           _buildActionButton(
-            icon: Icons.audiotrack_outlined,
+            icon: Icons.audiotrack_rounded,
             tooltip: audioEnabled
                 ? 'Audio: ${widget.selectedAudioLabel ?? 'Default'}'
                 : 'No audio tracks',
@@ -107,7 +107,7 @@ class _BottomControlsBarState extends State<BottomControlsBar> {
           if (canShowQuality) ...[
             const SizedBox(width: 6),
             _buildActionButton(
-              icon: Icons.hd_outlined,
+              icon: Icons.hd_rounded,
               tooltip: 'Quality: ${widget.selectedQualityLabel ?? 'Auto'}',
               onTap: widget.onQualityTap,
               enabled: true,
