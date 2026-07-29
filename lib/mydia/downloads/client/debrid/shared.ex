@@ -12,20 +12,16 @@ defmodule Mydia.Downloads.Client.Debrid.Shared do
       into `Mydia.Downloads.Client.Error` types. Each provider also has
       its own per-code translation table; this module covers the cases
       shared across all four.
-    * **Security primitives**: `redact_url/1`, `validate_download_url/1`,
-      and `sanitize_error_body/2`. These wrap every URL or response body
-      the providers see *before* it flows into a log line, an `Error`
-      envelope, or `Download.metadata`.
+    * **Security primitives**: `redact_url/1` (delegated to
+      `Mydia.Downloads.Client.Helpers`), `validate_download_url/1`, and
+      `sanitize_error_body/2`.
   """
 
   alias Mydia.Downloads.Client.Debrid.ProviderJob
   alias Mydia.Downloads.Client.Error
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Structs.DownloadStatus
-
-  # Query-param keys that *may* carry an operator credential. Lowercased
-  # comparison is used so `Token=` and `TOKEN=` are caught too.
-  @sensitive_url_params ~w(token auth apikey api_key agent _apikey password)
 
   # JSON object keys we drop entirely from response bodies before they
   # land in `Error.details`. Lowercased comparison.
@@ -52,40 +48,15 @@ defmodule Mydia.Downloads.Client.Debrid.Shared do
   # ── URL safety ────────────────────────────────────────────────────────
 
   @doc """
-  Strips credential-bearing query parameters from a URL. Used everywhere
-  a URL might end up in a `Logger` line or an `Error` envelope.
+  Strips credential-bearing query parameters from a URL.
 
-  Returns the URL unchanged if parsing fails (safer to log a half-redacted
-  string than to crash inside an error-handling path).
+  Delegated to `Mydia.Downloads.Client.Helpers` — `failure_detail`
+  sanitisation needs the same redaction from adapters that have no business
+  reaching into the debrid namespace, so the implementation lives with the
+  adapter-agnostic helpers. Kept here as a delegate because the four call
+  sites in this module and the provider modules all reference it unqualified.
   """
-  @spec redact_url(String.t() | nil) :: String.t() | nil
-  def redact_url(nil), do: nil
-
-  def redact_url(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{query: nil} ->
-        url
-
-      %URI{query: query} = uri ->
-        scrubbed =
-          query
-          |> URI.decode_query()
-          |> Enum.map(fn {k, v} ->
-            if String.downcase(k) in @sensitive_url_params do
-              {k, "[REDACTED]"}
-            else
-              {k, v}
-            end
-          end)
-          |> Enum.map_join("&", fn {k, v} ->
-            "#{URI.encode_www_form(k)}=#{URI.encode_www_form(v)}"
-          end)
-
-        URI.to_string(%{uri | query: scrubbed})
-    end
-  rescue
-    _ -> url
-  end
+  defdelegate redact_url(url), to: Helpers
 
   @doc """
   Enforces that a provider-returned URL is HTTPS and not pointing at

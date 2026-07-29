@@ -16,6 +16,15 @@ defmodule Mydia.Downloads.Client.Helpers do
   # `FileSizeMB` field (both report mebibytes, not megabytes).
   @bytes_per_mib 1_048_576
 
+  # Query-param keys that *may* carry an operator credential. Lowercased
+  # comparison is used so `Token=` and `TOKEN=` are caught too.
+  @sensitive_url_params ~w(token auth apikey api_key agent _apikey password)
+
+  # Upper bound on a `DownloadStatus.failure_detail`. Provider detail is a
+  # short native token; anything longer is a payload dump that has no
+  # business in a log line, an event, or the database.
+  @failure_detail_max_length 200
+
   @doc """
   Converts a value expressed in mebibytes (MiB) into bytes.
 
@@ -123,6 +132,66 @@ defmodule Mydia.Downloads.Client.Helpers do
   def priority_profile(config) do
     Map.get(config, :priority_profile) || get_in(config, [:options, :priority_profile]) ||
       %{}
+  end
+
+  @doc """
+  Strips credential-bearing query parameters from a URL. Used everywhere a
+  URL might end up in a `Logger` line or an `Error` envelope.
+
+  Returns the URL unchanged if parsing fails (safer to log a half-redacted
+  string than to crash inside an error-handling path).
+  """
+  @spec redact_url(String.t() | nil) :: String.t() | nil
+  def redact_url(nil), do: nil
+
+  def redact_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{query: nil} ->
+        url
+
+      %URI{query: query} = uri ->
+        scrubbed =
+          query
+          |> URI.decode_query()
+          |> Enum.map(fn {k, v} ->
+            if String.downcase(k) in @sensitive_url_params do
+              {k, "[REDACTED]"}
+            else
+              {k, v}
+            end
+          end)
+          |> Enum.map_join("&", fn {k, v} ->
+            "#{URI.encode_www_form(k)}=#{URI.encode_www_form(v)}"
+          end)
+
+        URI.to_string(%{uri | query: scrubbed})
+    end
+  rescue
+    _ -> url
+  end
+
+  @doc """
+  Normalises a client-reported failure detail before it reaches a log line,
+  a `download.failed` event, or the database.
+
+  Every adapter routes its detail through here rather than sanitising
+  locally, so a future adapter cannot quietly skip the redaction step.
+  """
+  @spec sanitize_failure_detail(String.t() | nil) :: String.t() | nil
+  def sanitize_failure_detail(nil), do: nil
+
+  def sanitize_failure_detail(detail) when is_binary(detail) do
+    detail
+    |> redact_url()
+    |> truncate_detail()
+  end
+
+  defp truncate_detail(detail) when is_binary(detail) do
+    if String.length(detail) > @failure_detail_max_length do
+      String.slice(detail, 0, @failure_detail_max_length)
+    else
+      detail
+    end
   end
 
   # Floors strings/numbers to a float; defaults unparseable input to 0.0.
