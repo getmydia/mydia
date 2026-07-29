@@ -297,28 +297,48 @@ defmodule Mydia.Search do
   `Mydia.Jobs.TVShowSearch` in `"show"` mode, the same jobs and modes the media
   detail page queues.
 
-  Both workers declare `unique: [period: 60, fields: [:args]]`, which
-  `Oban.insert_all/1` honors, so repeated clicks cannot double-queue.
+  Jobs are inserted one at a time with singular `Oban.insert/1`, not
+  `Oban.insert_all/1`. On this project's engines (`Oban.Engines.Basic` for
+  Postgres, `Oban.Engines.Lite` for SQLite, configured in `config/config.exs`)
+  `insert_all/1` performs a raw bulk insert and never checks the workers'
+  `unique: [period: 60, fields: [:args]]` option — bulk unique-job support is
+  an Oban Pro (Smart Engine) feature this project does not use. Only the
+  singular `insert/1` path checks uniqueness before inserting, so repeated
+  calls within the window cannot double-queue. Do not change this back to
+  `insert_all/1` as a "one round trip" optimization: that reintroduces
+  duplicate-queuing on repeated clicks.
+
+  Media items whose `type` is neither `"movie"` nor `"tv_show"` are skipped
+  (and logged) rather than raising, so one unsupported item cannot fail the
+  whole batch.
 
   Callers are expected to have filtered the list already, typically with
   `Mydia.Media.partition_for_auto_search/1`.
 
-  Returns `{:ok, count}` with the number of jobs inserted.
+  Returns `{:ok, count}` with the number of jobs inserted, or `{:error,
+  reason}` if any insert failed.
   """
   @spec queue_auto_searches([MediaItem.t()]) :: {:ok, non_neg_integer()} | {:error, term()}
   def queue_auto_searches([]), do: {:ok, 0}
 
   def queue_auto_searches(items) when is_list(items) do
-    jobs =
-      items
-      |> Enum.map(&auto_search_job/1)
-      |> insert_all_jobs()
-
-    {:ok, length(jobs)}
+    items
+    |> Enum.map(&auto_search_job/1)
+    |> Enum.reject(&is_nil/1)
+    |> insert_jobs(0)
   rescue
     error ->
       Logger.error("Failed to queue automatic searches: #{inspect(error)}")
       {:error, error}
+  end
+
+  defp insert_jobs([], count), do: {:ok, count}
+
+  defp insert_jobs([changeset | rest], count) do
+    case insert_job(changeset) do
+      {:ok, _job} -> insert_jobs(rest, count + 1)
+      {:error, _reason} = error -> error
+    end
   end
 
   defp auto_search_job(%MediaItem{type: "movie", id: id}) do
@@ -329,13 +349,26 @@ defmodule Mydia.Search do
     Mydia.Jobs.TVShowSearch.new(%{mode: "show", media_item_id: id})
   end
 
-  # Insert Oban jobs in one round trip, falling back to direct Repo inserts
-  # when Oban's engine is disabled (test mode). Mirrors the pattern in
-  # DownloadMonitor and Downloads.Queue.
-  defp insert_all_jobs(changesets) do
-    Oban.insert_all(changesets)
+  defp auto_search_job(%MediaItem{id: id, type: type}) do
+    Logger.warning("Skipping auto search for unsupported media type",
+      media_item_id: id,
+      type: type
+    )
+
+    nil
+  end
+
+  # Insert an Oban job, falling back to a direct Repo insert when Oban's engine
+  # is disabled (test mode). Mirrors the pattern in Downloads.Queue and
+  # DownloadMonitor.
+  #
+  # This repo's test config sets `engine: false` (see config/test.exs), so
+  # this fallback branch is the only one the test suite exercises. It gives
+  # no signal on the real `Oban.insert/1` path or its uniqueness behavior.
+  defp insert_job(changeset) do
+    Oban.insert(changeset)
   rescue
-    RuntimeError -> Enum.map(changesets, &Repo.insert!/1)
+    RuntimeError -> Repo.insert(changeset)
   end
 
   ## Private Functions

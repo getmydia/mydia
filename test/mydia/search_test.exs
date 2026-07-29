@@ -43,5 +43,16 @@ defmodule Mydia.SearchTest do
       refute_enqueued(worker: Mydia.Jobs.MovieSearch)
       refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
     end
+
+    test "skips an item with an unsupported type instead of failing the batch" do
+      movie = insert(:media_item, type: "movie")
+      unsupported = insert(:media_item, type: "documentary")
+
+      assert {:ok, 1} = Search.queue_auto_searches([movie, unsupported])
+
+      assert_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: movie.id})
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: unsupported.id})
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch, args: %{media_item_id: unsupported.id})
+    end
   end
 end
