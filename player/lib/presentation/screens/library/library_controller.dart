@@ -180,13 +180,18 @@ class LibraryController extends _$LibraryController {
   /// call `_watcher.refetch()` directly rather than going through the guard,
   /// and both reset this flag, since going back to page 1 is exactly what
   /// the user asked for.
-  bool _hasPaginated = false;
+  late bool _hasPaginated;
 
   bool get _isMovies => libraryType == LibraryType.movies;
   String get _connectionField => _isMovies ? 'movies' : 'tvShows';
 
   @override
   Stream<LibraryData> build(LibraryType libraryType) {
+    // Reset the pagination flag when the watcher is created. The flag tracks
+    // the *current* watcher's pagination state, so a new watcher always starts
+    // at page 1 with the flag cleared.
+    _hasPaginated = false;
+
     _watcher = createWatcher<LibraryData>(
       ref,
       key: _isMovies ? QueryKeys.moviesList : QueryKeys.tvShowsList,
