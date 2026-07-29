@@ -1929,6 +1929,12 @@ defmodule Mydia.Media do
   part of the movie rule: `Mydia.Jobs.MovieSearch` in `"specific"` mode does not
   check it either, so an unmonitored movie is still searchable on request.
 
+  A TV show needs a search when at least one of its episodes is monitored (show
+  and episode), has aired, has no untrashed media file, and has no occupying
+  download, excluding S00 specials unless `:monitor_special_episodes` is set.
+  That is the same set `Mydia.Jobs.TVShowSearch` searches in `"show"` mode, so
+  the caller's queued/skipped counts match what the job will actually do.
+
   Ids that no longer exist are counted in neither the returned list nor the
   skipped count, so a stale selection still reports truthful numbers.
 
@@ -1938,7 +1944,7 @@ defmodule Mydia.Media do
   def partition_for_auto_search([]), do: {[], 0}
 
   def partition_for_auto_search(ids) when is_list(ids) do
-    items = movies_needing_search(ids)
+    items = movies_needing_search(ids) ++ shows_needing_search(ids)
 
     existing_count =
       MediaItem
@@ -1964,6 +1970,50 @@ defmodule Mydia.Media do
     Mydia.Downloads.Download.occupying()
     |> where([d], not is_nil(d.media_item_id))
     |> select([d], d.media_item_id)
+    |> distinct(true)
+  end
+
+  defp shows_needing_search(ids) do
+    show_ids =
+      Episode
+      |> join(:inner, [e], m in assoc(e, :media_item))
+      |> where([e, m], e.media_item_id in ^ids and m.type == "tv_show")
+      |> where([e, m], e.monitored == true and m.monitored == true)
+      |> where([e], e.air_date <= ^Date.utc_today())
+      |> exclude_special_episodes()
+      |> where([e], e.id not in subquery(occupying_download_episode_ids()))
+      |> join(:left, [e], mf in Mydia.Library.MediaFile,
+        on: mf.episode_id == e.id and is_nil(mf.trashed_at)
+      )
+      |> group_by([e], e.id)
+      |> having([_e, _m, mf], count(mf.id) == 0)
+      |> select([e], e.media_item_id)
+      |> Repo.all()
+      |> Enum.uniq()
+
+    MediaItem
+    |> where([m], m.id in ^show_ids)
+    |> Repo.all()
+  end
+
+  defp exclude_special_episodes(query) do
+    if monitor_special_episodes?() do
+      query
+    else
+      where(query, [e], e.season_number != 0)
+    end
+  end
+
+  defp monitor_special_episodes? do
+    :mydia
+    |> Application.get_env(:episode_monitor, [])
+    |> Keyword.get(:monitor_special_episodes, false)
+  end
+
+  defp occupying_download_episode_ids do
+    Mydia.Downloads.Download.occupying()
+    |> where([d], not is_nil(d.episode_id))
+    |> select([d], d.episode_id)
     |> distinct(true)
   end
 
