@@ -204,13 +204,26 @@ abstract final class DepthTokens {
   /// Nominal fill opacity for playback chrome — the mean of the gradient
   /// endpoints below. Deliberately under [glassLegibilityFloor]: legibility is
   /// bought with blur strength and gradient weighting instead of flat fill.
-  static const double playerChromeFillOpacity = 0.45;
+  ///
+  /// Raised from 0.45 (mean of 0.38/0.52) alongside [playerChromeFillBottomAlpha]
+  /// — see that field for why.
+  static const double playerChromeFillOpacity = 0.69;
 
   /// Fill alpha at the top edge of the playback panel.
   static const double playerChromeFillTopAlpha = 0.38;
 
-  /// Fill alpha at the bottom edge, where the control row sits.
-  static const double playerChromeFillBottomAlpha = 0.52;
+  /// Fill alpha at the bottom edge of the playback panel.
+  ///
+  /// Raised from 0.52 to 1.0: `glass_legibility_test` samples 30% down the
+  /// panel — the control row, per [ChromePanel]'s row order (controls on
+  /// top, scrubber below) — where the top-to-bottom gradient contributes only
+  /// 30% of the top/bottom delta. Measured worst-case contrast at 0.52 was
+  /// 2.85:1 against a solid-white backdrop, far under the 4.5:1 floor,
+  /// because that sample point sits much closer to [playerChromeFillTopAlpha]
+  /// than to this value. Reaching 4.5:1 at that sample point requires this
+  /// value at (not below) 1.0 while holding the top alpha fixed; the gradient
+  /// still keeps most of the panel lighter than a flat 0.69 fill would.
+  static const double playerChromeFillBottomAlpha = 1.0;
 
   /// Backdrop saturation multiplier. Real vibrancy boosts saturation before
   /// blurring; without it, blurred video reads as grey mush rather than
