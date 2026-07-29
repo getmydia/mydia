@@ -272,6 +272,36 @@ defmodule Mydia.Downloads.Client.Debrid.SharedTest do
       assert status.state == :queued
       refute status.save_path
     end
+
+    test "carries failure category and detail through the :error clause" do
+      status =
+        Shared.synthesize_status(
+          job(:error, %{failure_category: :missing_files, failure_detail: "missingFiles"}),
+          :not_started,
+          nil
+        )
+
+      assert status.state == :error
+      assert status.failure_category == :missing_files
+      assert status.failure_detail == "missingFiles"
+    end
+
+    test "leaves failure fields nil on an unclassified error" do
+      status = Shared.synthesize_status(job(:error), :not_started, nil)
+
+      assert status.state == :error
+      assert status.failure_category == nil
+      assert status.failure_detail == nil
+    end
+
+    test "never sets failure fields on a non-error state" do
+      for state <- [:queued, :downloading, :finalizing, :ready] do
+        status = Shared.synthesize_status(job(state), :not_started, nil)
+
+        assert status.failure_category == nil, "#{state} leaked a failure_category"
+        assert status.failure_detail == nil, "#{state} leaked a failure_detail"
+      end
+    end
   end
 
   describe "map_error/2" do

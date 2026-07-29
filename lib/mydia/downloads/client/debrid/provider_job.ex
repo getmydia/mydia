@@ -9,7 +9,15 @@ defmodule Mydia.Downloads.Client.Debrid.ProviderJob do
   of which debrid service the operator picked.
 
   See `t:state/0` for the unified state taxonomy.
+
+  Terminal jobs (`state: :error`) also carry `:failure_category` and
+  `:failure_detail` — the provider's own answer to *why*, normalised into
+  the shared vocabulary in `Mydia.Downloads.Client.FailureCategory`. Both
+  are `nil` for every non-terminal state and for terminal states a provider
+  has not mapped.
   """
+
+  alias Mydia.Downloads.Client.FailureCategory
 
   @type state :: :queued | :downloading | :finalizing | :ready | :error
 
@@ -22,7 +30,9 @@ defmodule Mydia.Downloads.Client.Debrid.ProviderJob do
     :total_bytes,
     :files,
     :hoster_links,
-    :raw_status
+    :raw_status,
+    :failure_category,
+    :failure_detail
   ]
 
   @type file_entry :: %{
@@ -41,7 +51,9 @@ defmodule Mydia.Downloads.Client.Debrid.ProviderJob do
           total_bytes: non_neg_integer() | nil,
           files: [file_entry()] | nil,
           hoster_links: [String.t()] | nil,
-          raw_status: term() | nil
+          raw_status: term() | nil,
+          failure_category: FailureCategory.t() | nil,
+          failure_detail: String.t() | nil
         }
 
   @doc """

@@ -405,8 +405,19 @@ defmodule Mydia.Downloads.Client.Debrid.Shared do
   defp apply_state(base, %ProviderJob{state: :ready}, _fetcher_state, _download),
     do: %{base | state: :queued, progress: 0.0, downloaded: 0}
 
-  defp apply_state(base, %ProviderJob{state: :error}, _fs, _dl),
-    do: %{base | state: :error, progress: 0.0, downloaded: 0}
+  # A terminal provider failure. `failure_category` / `failure_detail` are
+  # whatever the provider managed to classify; both may be nil, which the
+  # monitor renders as the pre-#237 generic message.
+  defp apply_state(base, %ProviderJob{state: :error} = job, _fs, _dl) do
+    %{
+      base
+      | state: :error,
+        progress: 0.0,
+        downloaded: 0,
+        failure_category: job.failure_category,
+        failure_detail: job.failure_detail
+    }
+  end
 
   defp mirror_downloaded(%ProviderJob{total_bytes: total, progress: p})
        when is_integer(total) and total > 0 and is_number(p) do
