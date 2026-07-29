@@ -2,13 +2,21 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<!--
+	    Mydia Player ships as a Developer ID app outside the App Store and is
+	    deliberately NOT sandboxed: it needs access to user-chosen media and
+	    download directories, and enabling the sandbox would relocate app data
+	    into ~/Library/Containers.
+
+	    Do not re-add com.apple.security.app-sandbox without also granting a
+	    real keychain access group. flutter_secure_storage's data-protection
+	    keychain requires one; without it every keychain write fails with
+	    errSecMissingEntitlement (-34018) and pairing silently stops persisting.
+	    See lib/core/storage/secure_storage_options.dart.
+	-->
 	<key>com.apple.security.network.server</key>
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<key>keychain-access-groups</key>
-	<array/>
 </dict>
 </plist>
