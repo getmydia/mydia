@@ -335,7 +335,13 @@ defmodule Mydia.Search do
   defp insert_jobs([], count), do: {:ok, count}
 
   defp insert_jobs([changeset | rest], count) do
+    # A deduped insert returns {:ok, %Oban.Job{conflict?: true}} rather than an
+    # error, so it must not bump the "queued" count. This branch cannot be
+    # regression-tested here: config/test.exs sets `engine: false`, so
+    # insert_job/1 always falls through to the Repo.insert/1 rescue clause
+    # below, which never sets conflict?: true.
     case insert_job(changeset) do
+      {:ok, %Oban.Job{conflict?: true}} -> insert_jobs(rest, count)
       {:ok, _job} -> insert_jobs(rest, count + 1)
       {:error, _reason} = error -> error
     end

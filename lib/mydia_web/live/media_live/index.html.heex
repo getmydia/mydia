@@ -770,6 +770,36 @@
       </:actions>
     </.modal>
 
+    <%!-- Bulk Auto Search Confirmation Modal --%>
+    <.modal
+      id="auto-search-confirm-modal"
+      show={@show_auto_search_confirm_modal}
+      on_cancel="cancel_batch_auto_search"
+    >
+      <:title>Search for many items?</:title>
+
+      <p>
+        This will queue searches for <strong>{MapSet.size(@selected_ids)}</strong>
+        selected {if MapSet.size(@selected_ids) == 1, do: "item", else: "items"}.
+        Searches run two at a time, so a batch this size can take hours of indexer requests
+        to work through.
+      </p>
+
+      <:actions>
+        <button type="button" class="btn btn-ghost" phx-click="cancel_batch_auto_search">
+          Cancel
+        </button>
+        <button
+          type="button"
+          id="confirm-batch-auto-search-btn"
+          class="btn btn-primary"
+          phx-click="confirm_batch_auto_search"
+        >
+          <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Queue searches
+        </button>
+      </:actions>
+    </.modal>
+
     <%!-- Add to Collection Modal --%>
     <.modal
       id="add-to-collection-modal"

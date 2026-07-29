@@ -346,8 +346,8 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       %{conn: log_in_user(conn, admin_user_fixture())}
     end
 
-    test "renders the auto search button in selection mode", %{conn: conn} do
-      insert(:media_item, type: "movie")
+    test "renders the auto search button disabled until something is selected", %{conn: conn} do
+      movie = insert(:media_item, type: "movie")
 
       {:ok, view, _html} = live(conn, ~p"/movies")
 
@@ -356,6 +356,11 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       render_click(view, "toggle_selection_mode", %{})
 
       assert has_element?(view, "#batch-auto-search-btn")
+      assert has_element?(view, "#batch-auto-search-btn[disabled]")
+
+      render_click(view, "toggle_select", %{"id" => movie.id})
+
+      refute has_element?(view, "#batch-auto-search-btn[disabled]")
     end
 
     test "queues searches for selected items and reports skipped ones", %{conn: conn} do
@@ -372,7 +377,7 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       view |> element("#batch-auto-search-btn") |> render_click()
 
       assert view |> element("#flash-info") |> render() =~
-               "Queued 1 search, skipped 1 already complete"
+               "Queued 1 search, skipped 1 that do not need one"
 
       assert [job] = Mydia.Repo.all(Oban.Job)
       assert job.worker == "Mydia.Jobs.MovieSearch"
@@ -393,6 +398,63 @@ defmodule MydiaWeb.MediaLive.IndexTest do
 
       assert view |> element("#flash-info") |> render() =~ "Nothing to search"
       assert Mydia.Repo.all(Oban.Job) == []
+    end
+
+    test "selecting more than the threshold shows a confirmation modal and queues nothing until confirmed",
+         %{conn: conn} do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+
+      for i <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => "fake-id-#{i}"})
+      end
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert has_element?(view, "#auto-search-confirm-modal[open]")
+      assert Mydia.Repo.all(Oban.Job) == []
+
+      view |> element("#confirm-batch-auto-search-btn") |> render_click()
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+
+      assert view |> element("#flash-info") |> render() =~ "Queued 1 search"
+      assert [job] = Mydia.Repo.all(Oban.Job)
+      assert job.args["media_item_id"] == needs_search.id
+    end
+
+    test "cancelling the confirmation modal queues nothing and keeps the selection", %{
+      conn: conn
+    } do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+
+      for i <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => "fake-id-#{i}"})
+      end
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+      assert has_element?(view, "#auto-search-confirm-modal[open]")
+
+      render_click(view, "cancel_batch_auto_search", %{})
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+      assert Mydia.Repo.all(Oban.Job) == []
+
+      # Selection survives the cancel: the toolbar is still in selection mode
+      # with the same count shown.
+      assert has_element?(view, "#batch-auto-search-btn")
+      assert has_element?(view, ".tabular-nums", "51")
     end
 
     test "denies a user without download permission", %{conn: conn} do
