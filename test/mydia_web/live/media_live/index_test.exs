@@ -1,6 +1,7 @@
 defmodule MydiaWeb.MediaLive.IndexTest do
   use MydiaWeb.ConnCase
 
+  import Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
@@ -321,6 +322,83 @@ defmodule MydiaWeb.MediaLive.IndexTest do
                view,
                "#test-debug-info[data-search-query='Unmonitored'][data-stream-count='0']"
              )
+    end
+  end
+
+  describe "date sorting" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "Added (Newest) puts the most recently added item first across a month boundary", %{
+      conn: conn
+    } do
+      june = media_item_fixture(%{title: "Added June 30", type: "movie"})
+      july = media_item_fixture(%{title: "Added July 1", type: "movie"})
+
+      set_inserted_at(june, ~U[2026-06-30 12:00:00Z])
+      set_inserted_at(july, ~U[2026-07-01 09:00:00Z])
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert sorted_item_ids(view, "added_desc") == [july.id, june.id]
+    end
+
+    test "Added (Oldest) puts the earliest added item first across a month boundary", %{
+      conn: conn
+    } do
+      june = media_item_fixture(%{title: "Added June 30", type: "movie"})
+      july = media_item_fixture(%{title: "Added July 1", type: "movie"})
+
+      set_inserted_at(june, ~U[2026-06-30 12:00:00Z])
+      set_inserted_at(july, ~U[2026-07-01 09:00:00Z])
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert sorted_item_ids(view, "added_asc") == [june.id, july.id]
+    end
+
+    test "Last Aired (Recent) orders shows by their most recent episode air date", %{conn: conn} do
+      older = media_item_fixture(%{title: "Aired Long Ago", type: "tv_show"})
+      recent = media_item_fixture(%{title: "Aired Recently", type: "tv_show"})
+
+      episode_fixture(%{media_item_id: older.id, air_date: ~D[2020-01-15]})
+      episode_fixture(%{media_item_id: recent.id, air_date: ~D[2026-01-15]})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert sorted_item_ids(view, "last_aired_desc") == [recent.id, older.id]
+    end
+
+    test "Next Airing (Soon) orders shows by their next upcoming episode", %{conn: conn} do
+      soon = media_item_fixture(%{title: "Airing Soon", type: "tv_show"})
+      later = media_item_fixture(%{title: "Airing Later", type: "tv_show"})
+
+      episode_fixture(%{media_item_id: soon.id, air_date: Date.add(Date.utc_today(), 7)})
+      episode_fixture(%{media_item_id: later.id, air_date: Date.add(Date.utc_today(), 30)})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert sorted_item_ids(view, "next_aired_asc") == [soon.id, later.id]
+    end
+
+    defp set_inserted_at(media_item, %DateTime{} = at) do
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^media_item.id),
+        set: [inserted_at: at]
+      )
+    end
+
+    # Picks `sort_by` in the library toolbar and returns the resulting grid item
+    # ids in DOM order, stripped back to the bare media item id.
+    defp sorted_item_ids(view, sort_by) do
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"sort_by" => sort_by})
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#media-items > div")
+      |> LazyHTML.attribute("id")
+      |> Enum.map(&String.replace_prefix(&1, "media_items-", ""))
     end
   end
 
