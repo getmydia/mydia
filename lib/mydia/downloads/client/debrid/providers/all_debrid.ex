@@ -25,6 +25,7 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebrid do
 
   alias Mydia.Downloads.Client.Debrid.{ProviderJob, Shared}
   alias Mydia.Downloads.Client.Error
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.Structs.ClientInfo
 
   @default_base_url "https://api.alldebrid.com"
@@ -272,6 +273,7 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebrid do
 
   defp parse_magnet(%{} = m) do
     state = map_status_code(m["statusCode"])
+    {category, detail} = classify_failure(state, m)
 
     %ProviderJob{
       provider_id: to_string(m["id"]),
@@ -281,7 +283,9 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebrid do
       total_bytes: m["size"] || 0,
       files: m["files"] || [],
       hoster_links: [],
-      raw_status: m
+      raw_status: m,
+      failure_category: category,
+      failure_detail: detail
     }
   end
 
@@ -296,6 +300,31 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebrid do
   defp map_status_code(4), do: :ready
   defp map_status_code(code) when is_integer(code) and code >= 5, do: :error
   defp map_status_code(_), do: :queued
+
+  defp classify_failure(:error, %{} = m) do
+    {failure_category(m["statusCode"]), failure_detail(m)}
+  end
+
+  defp classify_failure(_state, _m), do: {nil, nil}
+
+  # Documented AllDebrid terminal codes. `map_status_code/1` already treats
+  # anything >= 5 as terminal, so codes beyond this table stay terminal and
+  # simply carry no category rather than a guessed one.
+  defp failure_category(code) when code in [5, 6, 9], do: :provider_error
+  defp failure_category(code) when code in [7, 10], do: :no_peers
+  defp failure_category(8), do: :rejected_content
+  defp failure_category(11), do: :missing_files
+  defp failure_category(_), do: nil
+
+  defp failure_detail(%{"status" => status}) when is_binary(status) and status != "" do
+    Helpers.sanitize_failure_detail(status)
+  end
+
+  defp failure_detail(%{"statusCode" => code}) when is_integer(code) do
+    Helpers.sanitize_failure_detail("statusCode #{code}")
+  end
+
+  defp failure_detail(_), do: nil
 
   ## ── 200-on-error wrapper ────────────────────────────────────────────
 
