@@ -7,11 +7,15 @@ const PORT = process.env.PORT || 8080;
 const USERNAME = process.env.USERNAME || "admin";
 const PASSWORD = process.env.PASSWORD || "adminpass";
 
-// Which qBittorrent WebAPI dialect to emulate.
-//   5.1 -> login returns 200 "Ok."  and sets SID
-//   5.2 -> login returns 204 empty  and sets QBT_SID_<port>
-// 5.2 is the default because that is what current installs speak. The port in
-// the cookie name is the server's own listening port, matching real behaviour.
+// Which qBittorrent WebAPI dialect to emulate. Captured from real servers:
+//   5.1 -> login OK returns 200 "Ok."  and sets SID
+//          login FAIL returns 200 "Fails."
+//   5.2 -> login OK returns 204 empty  and sets QBT_SID_<port>
+//          login FAIL returns 401 "Unauthorized"
+// Note the rejection shapes differ as much as the success ones: 5.1 reports a
+// bad password with a 2xx and only the body distinguishes it. 5.2 is the
+// default because that is what current installs speak. The port in the cookie
+// name is the server's own listening port, matching real behaviour.
 const DIALECT = process.env.QB_DIALECT || "5.2";
 const SESSION_COOKIE = DIALECT === "5.1" ? "SID" : `QBT_SID_${PORT}`;
 const APP_VERSION = DIALECT === "5.1" ? "v5.1.2-mock" : "v5.2.0-mock";
@@ -54,7 +58,11 @@ app.post("/api/v2/auth/login", (req, res) => {
     return DIALECT === "5.1" ? res.send("Ok.") : res.status(204).end();
   }
 
-  res.status(401).send("Fails.");
+  // Rejection shape is dialect-specific. 5.1 answers 200 with a "Fails." body,
+  // so a client that only checks the status code sees a success.
+  return DIALECT === "5.1"
+    ? res.status(200).send("Fails.")
+    : res.status(401).send("Unauthorized");
 });
 
 // Logout endpoint
