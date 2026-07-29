@@ -594,6 +594,18 @@
 
             <%!-- Primary action buttons (icon only with tooltips) --%>
             <div class="flex items-center">
+              <div class="tooltip tooltip-top" data-tip="Auto Search">
+                <button
+                  id="batch-auto-search-btn"
+                  type="button"
+                  class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
+                  phx-click="batch_auto_search"
+                  disabled={!has_selection}
+                >
+                  <.icon name="hero-magnifying-glass" class="w-4 h-4" />
+                </button>
+              </div>
+
               <div class="tooltip tooltip-top" data-tip="Monitor">
                 <button
                   type="button"

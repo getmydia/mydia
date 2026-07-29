@@ -5,6 +5,8 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings
   alias Mydia.Collections
+  alias Mydia.Search
+  alias MydiaWeb.Live.Authorization
 
   require Logger
 
@@ -301,10 +303,30 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
-  def handle_event("batch_download", _params, socket) do
-    # TODO: Implement download functionality
-    # For now, just show a placeholder message
-    {:noreply, put_flash(socket, :info, "Download functionality coming soon")}
+  def handle_event("batch_auto_search", _params, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      ids = MapSet.to_list(socket.assigns.selected_ids)
+      {items, skipped} = Media.partition_for_auto_search(ids)
+
+      case Search.queue_auto_searches(items) do
+        {:ok, queued} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, auto_search_flash(queued, skipped))
+           |> assign(:selection_mode, false)
+           |> assign(:selected_ids, MapSet.new())}
+
+        {:error, reason} ->
+          Logger.error("Failed to queue bulk auto search",
+            media_item_ids: ids,
+            reason: inspect(reason)
+          )
+
+          {:noreply, put_flash(socket, :error, "Failed to queue searches")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
   end
 
   def handle_event("batch_reclassify", _params, socket) do
@@ -902,6 +924,23 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp pluralize_files(1), do: "file"
   defp pluralize_files(_), do: "files"
+
+  defp auto_search_flash(0, 0), do: "Nothing to search"
+
+  defp auto_search_flash(0, skipped) do
+    "Nothing to search. All #{skipped} selected #{pluralize_items(skipped)} already have files or downloads in progress."
+  end
+
+  defp auto_search_flash(queued, 0) do
+    "Queued #{queued} #{pluralize_searches(queued)}"
+  end
+
+  defp auto_search_flash(queued, skipped) do
+    "Queued #{queued} #{pluralize_searches(queued)}, skipped #{skipped} already complete"
+  end
+
+  defp pluralize_searches(1), do: "search"
+  defp pluralize_searches(_), do: "searches"
 
   defp maybe_add_attr(attrs, _key, nil), do: attrs
   defp maybe_add_attr(attrs, _key, ""), do: attrs

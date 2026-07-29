@@ -340,4 +340,77 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert socket.assigns.delete_files == true
     end
   end
+
+  describe "bulk auto search" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "renders the auto search button in selection mode", %{conn: conn} do
+      insert(:media_item, type: "movie")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      refute has_element?(view, "#batch-auto-search-btn")
+
+      render_click(view, "toggle_selection_mode", %{})
+
+      assert has_element?(view, "#batch-auto-search-btn")
+    end
+
+    test "queues searches for selected items and reports skipped ones", %{conn: conn} do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+      already_have = insert(:media_item, type: "movie", title: "Already Downloaded")
+      insert(:media_file, media_item: already_have, episode: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+      render_click(view, "toggle_select", %{"id" => already_have.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-info") |> render() =~
+               "Queued 1 search, skipped 1 already complete"
+
+      assert [job] = Mydia.Repo.all(Oban.Job)
+      assert job.worker == "Mydia.Jobs.MovieSearch"
+      assert job.args["mode"] == "specific"
+      assert job.args["media_item_id"] == needs_search.id
+    end
+
+    test "reports when nothing in the selection needs a search", %{conn: conn} do
+      already_have = insert(:media_item, type: "movie", title: "Already Downloaded")
+      insert(:media_file, media_item: already_have, episode: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => already_have.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-info") |> render() =~ "Nothing to search"
+      assert Mydia.Repo.all(Oban.Job) == []
+    end
+
+    test "denies a user without download permission", %{conn: conn} do
+      readonly = user_fixture(%{role: "readonly"})
+      conn = log_in_user(conn, readonly)
+      movie = insert(:media_item, type: "movie")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => movie.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-error") |> render() =~
+               "You do not have permission to manage downloads"
+
+      assert Mydia.Repo.all(Oban.Job) == []
+    end
+  end
 end
