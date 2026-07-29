@@ -1,4 +1,6 @@
 defmodule Mydia.LibrarySearch.Tokenizer do
+  @max_tokens 8
+
   @moduledoc """
   Normalizes a raw library-search query into database-safe tokens.
 
@@ -7,15 +9,13 @@ defmodule Mydia.LibrarySearch.Tokenizer do
   1. Downcase and trim.
   2. Split on whitespace.
   3. Discard empty tokens.
-  4. Cap at #{8} tokens to bound query size.
+  4. Cap at #{@max_tokens} tokens to bound query size.
   5. Escape `%`, `_` and `\\` so a user query cannot inject `LIKE` wildcards.
 
   Step 5 is not optional. Without it a query containing `%` matches the entire
   library. Every `LIKE` built from these patterns must carry an explicit
   `ESCAPE '\\'` clause; both SQLite and PostgreSQL implement it identically.
   """
-
-  @max_tokens 8
 
   @enforce_keys [:query, :tokens]
   defstruct [:query, :tokens]
