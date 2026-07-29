@@ -28,6 +28,16 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebridTest do
     Jason.encode!(%{"status" => "error", "error" => %{"code" => code, "message" => message}})
   end
 
+  # A real `.torrent` is bencoded with a `pieces` field of raw SHA-1 bytes,
+  # so the multipart body must carry arbitrary (invalid-UTF8) bytes through
+  # untouched. Using an ASCII-only fixture would not catch a body that gets
+  # mangled by an encoding step on the way out.
+  defp torrent_fixture do
+    "d8:announce13:https://tr/abc4:infod6:lengthi1e4:name7:mayabee6:pieces20:" <>
+      <<0xFF, 0xFE, 0x00, 0x01, 0x80, 0x7F, 0xC3, 0x28, 0xA0, 0xA1, 0xF0, 0x9F, 0x92, 0xA9, 0x00,
+        0xDE, 0xAD, 0xBE, 0xEF, 0x00>> <> "ee"
+  end
+
   describe "validate_credentials/1" do
     test "premium user returns ok", %{bypass: bypass, config: config} do
       Bypass.expect(bypass, "GET", "/v4/user", fn conn ->
@@ -102,6 +112,31 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebridTest do
 
       assert {:error, %Error{type: :api_error, details: %{reason: :slot_limit}}} =
                AllDebrid.submit_torrent(config, {:magnet, "magnet:?xt=full"})
+    end
+
+    test "torrent file upload uses Req-compatible multipart body", %{
+      bypass: bypass,
+      config: config
+    } do
+      test_pid = self()
+
+      Bypass.expect(bypass, "POST", "/v4/magnet/upload/file", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        send(test_pid, {:upload, Plug.Conn.get_req_header(conn, "content-type"), body})
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success_envelope(%{"files" => [%{"id" => 77}]}))
+      end)
+
+      assert {:ok, "77"} = AllDebrid.submit_torrent(config, {:file, torrent_fixture()})
+
+      assert_received {:upload, [content_type | _], body}
+      assert content_type =~ "multipart/form-data"
+      assert body =~ ~s(name="files[]")
+      assert body =~ ~s(filename="release.torrent")
+      assert body =~ "application/x-bittorrent"
+      assert body =~ torrent_fixture()
     end
   end
 

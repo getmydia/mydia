@@ -75,10 +75,31 @@ Android builds use the player's Nix flake (`player/flake.nix`) which provides Fl
 - Rust toolchain with Android targets (aarch64, armv7, x86_64, i686)
 - All necessary environment variables for Rust cross-compilation
 
+### Player macOS Builds
+
+macOS builds use the **host** toolchain — neither devenv nor `player/flake.nix`. Xcode and CocoaPods are Apple-licensed SDKs Nix cannot provide, and cargokit shells out to `rustup` to compile the Rust p2p core into the app bundle.
+
+**Commands:**
+
+- `./dev player macos run` - Debug build and run on this Mac (hot reload)
+- `./dev player macos build` - Release build
+- Both accept `--skip-codegen` to reuse existing build_runner output; extra args after `run` pass through to `flutter run`
+
+**Output:** `player/build/macos/Build/Products/Release/Mydia Player.app`
+
+**Requirements:** **Full Xcode** (Command Line Tools alone cannot build app bundles), CocoaPods (`pod`), Flutter, and rustup installed on the host. `./dev` preflights all four and prints the fix for whichever is missing.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+
+### Download client gotchas
+
+- Debrid provider modules live under `lib/mydia/downloads/client/debrid/providers/` and are exercised with Bypass tests under `test/mydia/downloads/client/debrid/providers/`.
+- TorBox is documented as bypass-only in `Mydia.Downloads.Client.Debrid.Providers.TorBox`: treat live-account failures as provider/client integration issues until proven otherwise.
+- Req multipart file fields must use the `{body, opts}` shape, for example `file: {bin, filename: "release.torrent", content_type: "application/x-bittorrent"}`. `Req.Utils.encode_form_part/2` only has clauses for `{name, {value, opts}}` and `{name, value}`, so a three-element `{name, value, opts}` tuple raises `FunctionClauseError` on *every* upload, not just malformed ones. Field names that are not valid keyword keys (`:"files[]"`) still need the explicit two-tuple form `{:"files[]", {bin, opts}}`.
+- TorBox no-seed states such as `"stalled (no seeds)"` are provider-side stalls, not immediate terminal failures. Keep them active so `DownloadMonitor`/`StallDetector` can observe them over the configured grace window before escalation.
 
 ### DRY Patterns (Don't Repeat Yourself)
 

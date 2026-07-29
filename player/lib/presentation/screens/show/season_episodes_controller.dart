@@ -1,6 +1,11 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/progress.dart';
 import '../../../graphql/mutations/mark_watched.graphql.dart';
@@ -43,53 +48,34 @@ query SeasonEpisodes($showId: ID!, $seasonNumber: Int!) {
 }
 ''';
 
+List<Episode> _parseEpisodes(Map<String, dynamic> data) {
+  return (data['seasonEpisodes'] as List<dynamic>? ?? [])
+      .map((e) => Episode.fromJson(e as Map<String, dynamic>))
+      // Only episodes with files available in Mydia.
+      .where((episode) => episode.hasFile)
+      .toList();
+}
+
 @riverpod
 class SeasonEpisodesController extends _$SeasonEpisodesController {
+  late QueryWatcher<List<Episode>> _watcher;
+
   @override
-  Future<List<Episode>> build({
+  Stream<List<Episode>> build({
     required String showId,
     required int seasonNumber,
-  }) async {
-    return _fetchEpisodes(showId, seasonNumber);
-  }
-
-  Future<List<Episode>> _fetchEpisodes(String showId, int seasonNumber) async {
-    // Use async provider to wait for client to be ready
-    final client = await ref.read(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(seasonEpisodesQuery),
-        variables: {
-          'showId': showId,
-          'seasonNumber': seasonNumber,
-        },
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  }) {
+    _watcher = createWatcher<List<Episode>>(
+      ref,
+      key: QueryKeys.seasonEpisodes(showId, seasonNumber),
+      document: gql(seasonEpisodesQuery),
+      variables: {'showId': showId, 'seasonNumber': seasonNumber},
+      parse: _parseEpisodes,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null) {
-      throw Exception('No data received from server');
-    }
-
-    final episodesData = result.data!['seasonEpisodes'] as List<dynamic>? ?? [];
-    // Only return episodes that have files available in Mydia
-    return episodesData
-        .map((e) => Episode.fromJson(e as Map<String, dynamic>))
-        .where((episode) => episode.hasFile)
-        .toList();
+    return _watcher.stream;
   }
 
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => _fetchEpisodes(showId, seasonNumber),
-    );
-  }
+  Future<void> refresh() => _watcher.refetch();
 
   // ── Watched-status actions (optimistic, revert-on-error) ──────────────
   //
@@ -119,8 +105,9 @@ class SeasonEpisodesController extends _$SeasonEpisodesController {
       watched: false,
       options: MutationOptions(
         document: documentNodeMutationMarkEpisodeUnwatched,
-        variables: Variables$Mutation$MarkEpisodeUnwatched(episodeId: episode.id)
-            .toJson(),
+        variables:
+            Variables$Mutation$MarkEpisodeUnwatched(episodeId: episode.id)
+                .toJson(),
       ),
     );
   }
@@ -180,6 +167,14 @@ class SeasonEpisodesController extends _$SeasonEpisodesController {
     final snapshot = state.value;
     if (snapshot == null) return;
 
+    // Captured before the optimistic update, not read after the mutation
+    // awaits: this controller is auto-dispose, so if the user navigates away
+    // before the server responds, `ref` is torn down and a later
+    // `ref.read(invalidatorProvider)` would throw `UnmountedRefException`,
+    // silently dropping the invalidation into the revert-on-error catch
+    // block below. `Invalidator` itself does not depend on `ref` afterwards.
+    final invalidator = ref.read(invalidatorProvider);
+
     // Optimistically reflect the new watched state before the server responds.
     state = AsyncValue.data(applyOptimisticWatched(snapshot, affects, watched));
 
@@ -192,10 +187,19 @@ class SeasonEpisodesController extends _$SeasonEpisodesController {
         throw result.exception!;
       }
 
-      // The optimistic state already matches the server's new watched state, so
-      // there is nothing to reconcile for the season list (mirrors
-      // movie_detail_controller's toggleFavorite, which keeps optimistic state).
-      // Show-level next-up/counts refresh on the next natural load.
+      // This season's own key is included deliberately, not because there is
+      // anything to reconcile here: the optimistic state above already
+      // matches. It exists so this list converges against a racing
+      // `cacheAndNetwork` emission — a network response for this same query,
+      // already in flight from a previous mount, landing after this write and
+      // overwriting it with stale data. Everything else that shows watched
+      // state also needs to hear about this change.
+      await invalidator.invalidate(
+        InvalidationRules.watchedChanged(
+          showId: showId,
+          seasonNumber: seasonNumber,
+        ),
+      );
     } catch (e) {
       state = AsyncValue.data(snapshot);
       rethrow;

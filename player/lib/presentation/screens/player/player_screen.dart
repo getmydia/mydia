@@ -13,19 +13,23 @@ import 'package:http/http.dart' as http;
 import '../../../core/auth/auth_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/duration_override.dart';
-import '../../../core/player/streaming_strategy.dart';
+import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
+import '../../../core/cast/cast_session_manager.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../widgets/resume_dialog.dart';
 import '../../widgets/subtitle_track_selector.dart';
 import '../../widgets/audio_track_selector.dart';
 import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/gesture_controls.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/up_next_overlay.dart';
@@ -72,6 +76,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Captured in [initState] rather than read from `dispose()`: by the time
+  /// `dispose()` runs the widget's element may already be defunct, and
+  /// `ref.read` on a disposed `ConsumerState` is not safe.
+  /// `invalidatorProvider` is a keepAlive root provider, so the
+  /// `Invalidator` it returns does not depend on the widget's element and
+  /// stays valid to call after disposal.
+  late final Invalidator _invalidator;
+
+  /// Set once the 90% watched threshold is first crossed, so the invalidation
+  /// fires once per playback rather than on every position tick.
+  bool _watchedInvalidationSent = false;
+
   StreamSubscription<Duration>? _positionSubscription;
   bool _isLoading = true;
   String? _error;
@@ -122,6 +139,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _invalidator = ref.read(invalidatorProvider);
     _initializePlayer();
 
     // Force landscape orientation on mobile devices
@@ -859,6 +877,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       debugPrint('Content is considered watched (90% complete)');
       // Trigger "Up Next" overlay for episodes with a next episode available
       _maybeShowUpNext();
+
+      if (!_watchedInvalidationSent) {
+        _watchedInvalidationSent = true;
+        // Save the current position before invalidating: the server only
+        // learns position/duration from a save (the periodic sync, or this
+        // one), never a watched flag, so it derives "watched" the same way
+        // the client does — from position. Invalidating first would refetch
+        // pre-watched data and re-stamp the fetch log as freshly fetched
+        // with the wrong value.
+        _saveProgress().whenComplete(_invalidateAfterPlayback);
+      }
     }
   }
 
@@ -1077,6 +1106,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } else if (widget.mediaType == 'episode') {
       await _progressService!.saveEpisodeProgress(_player!, widget.mediaId);
     }
+  }
+
+  /// Refreshes everything that reflects watched state. Deliberately not called
+  /// from the 10-second progress sync: that would refetch Home hundreds of
+  /// times per movie over what may be a p2p relay.
+  void _invalidateAfterPlayback() {
+    _invalidator.invalidate(
+      InvalidationRules.playbackFinished(
+        mediaType: widget.mediaType,
+        mediaId: widget.mediaId,
+        showId: widget.showId,
+      ),
+    );
   }
 
   /// Terminate the HLS session on the server and clean up P2P resources.
@@ -1330,8 +1372,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ]);
     }
 
-    // Save progress before disposing (fire and forget - can't await in dispose)
-    _saveProgress();
+    // Save progress before disposing (fire and forget - can't await in
+    // dispose), then invalidate: the second of the roughly two invalidations
+    // per session. Chained, not independent fire-and-forget calls, so the
+    // refetch it triggers can't race the save and pick up pre-save data.
+    // `whenComplete` (not `then`) so a failing save still lets the
+    // invalidation run instead of it being silently dropped.
+    _saveProgress().whenComplete(_invalidateAfterPlayback);
 
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
     _terminateHlsSession();
@@ -1362,6 +1409,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Ending a cast rebinds the local proxy on a fresh ephemeral port (and
+    // drops the LAN path token), which invalidates the URL media_kit is
+    // holding. Nothing else re-initialises the local player, so without this
+    // the screen comes back from casting to a dead video surface.
+    ref.listen<bool>(isCastingProvider, (previous, next) {
+      if (previous == true && next == false) {
+        unawaited(_restartLocalPlayback());
+      }
+    });
+
     final isCasting = ref.watch(isCastingProvider);
     Widget body = isCasting ? _buildCastRemoteControlUI() : _buildBody();
 
@@ -1383,37 +1440,88 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
+  /// Tear the local player down and rebuild it from scratch.
+  ///
+  /// Used when casting stops: the media source the old [Player] was opened
+  /// with no longer resolves, and media_kit gives no way to re-point it.
+  Future<void> _restartLocalPlayback() async {
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+    _progressService?.stopSync();
+
+    final player = _player;
+    _player = null;
+    if (mounted) {
+      setState(() {
+        _videoController = null;
+        _isLoading = true;
+        _error = null;
+      });
+    } else {
+      _videoController = null;
+    }
+
+    await player?.dispose();
+
+    if (!mounted) return;
+    await _initializePlayer();
+  }
+
+  /// Keep the cast affordance reachable in every state.
+  ///
+  /// Casting is the natural remedy for a file the local player cannot decode,
+  /// so hiding the button behind "local playback is ready" removes it exactly
+  /// when it is most useful.
+  Widget _withCastAffordance(Widget child) {
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: SafeArea(
+            child: CastButton(onPressed: _showCastDevicePicker),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(
-              color: Colors.red,
-            ),
-            if (_loadingMessage != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _loadingMessage!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[400],
-                    ),
+      return _withCastAffordance(
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                color: Colors.red,
               ),
+              if (_loadingMessage != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _loadingMessage!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[400],
+                      ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       );
     }
 
     if (_error != null) {
-      return _buildError();
+      return _withCastAffordance(_buildError());
     }
 
     if (_videoController == null) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.red,
+      return _withCastAffordance(
+        const Center(
+          child: CircularProgressIndicator(
+            color: Colors.red,
+          ),
         ),
       );
     }
@@ -1554,6 +1662,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           )
         else
           const Spacer(),
+        CastButton(onPressed: _showCastDevicePicker),
       ],
     );
   }
@@ -1684,132 +1793,169 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  // TODO: Re-enable cast button in top bar once casting is working
-  /// Build the cast button that opens device picker.
-  // ignore: unused_element
-  Widget _buildCastButton() {
-    final isCasting = ref.watch(isCastingProvider);
-    final castDevice = ref.watch(currentCastDeviceProvider);
-
-    return IconButton(
-      icon: Icon(
-        isCasting ? Icons.cast_connected : Icons.cast,
-        color: isCasting ? Colors.blue : Colors.white,
-      ),
-      onPressed: _showCastDevicePicker,
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.5),
-      ),
-      tooltip: isCasting && castDevice != null
-          ? 'Casting to ${castDevice.name}'
-          : 'Cast to device',
-    );
-  }
-
-  /// Show the cast device picker dialog.
+  /// Show the cast device picker dialog, then hand the selected device to
+  /// [CastSessionManager] to resolve a route and start playback.
   Future<void> _showCastDevicePicker() async {
     final device = await showCastDevicePicker(context);
+    if (device == null || !mounted) return;
 
-    if (device != null && mounted) {
-      // Device was connected, now load the media
-      await _startCasting(device);
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+
+      await manager.startCast(
+        device: device,
+        request: CastLaunchRequest(
+          fileId: widget.fileId,
+          mediaId: widget.mediaId,
+          mediaType: widget.mediaType,
+          title: widget.title ?? 'Untitled',
+          subtitleLabel: widget.mediaType == 'episode' ? 'Episode' : 'Movie',
+          startPosition: _player?.state.position,
+          subtitles: _subtitleTracks
+              .where((track) => track.url != null)
+              .map((track) => CastSubtitleTrack(
+                    url: track.url!,
+                    label: track.displayName,
+                    language: track.language,
+                  ))
+              .toList(),
+        ),
+      );
+
+      await _player?.pause();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Casting to ${device.name}'),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    } on CastBackendException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_castErrorMessage(e)),
+        backgroundColor: Colors.red,
+      ));
+    } catch (e) {
+      // Anything that isn't a CastBackendException: the session manager
+      // itself resolving (Hive, GraphQL client), or a non-typed failure from
+      // _setLanAccess/_store.save inside startCast. Without this, those
+      // failures would close the picker with no snackbar and no log.
+      debugPrint('[PlayerScreen] Unexpected error starting cast: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to start casting: $e'),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 
-  /// Start casting the current media to the selected device.
-  Future<void> _startCasting(CastDevice device) async {
-    final castService = ref.read(castServiceProvider);
-    final serverUrlAsync = ref.read(serverUrlProvider);
-    final authTokenAsync = ref.read(authTokenProvider);
-
-    final serverUrl = serverUrlAsync.when(
-      data: (url) => url,
-      loading: () => null,
-      error: (_, __) => null,
-    );
-
-    final token = authTokenAsync.when(
-      data: (t) => t,
-      loading: () => null,
-      error: (_, __) => null,
-    );
-
-    if (serverUrl == null || token == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot start casting: server URL or token missing'),
-          ),
-        );
-      }
-      return;
-    }
-
+  /// Re-cast the media the stored (now stale) session was playing.
+  Future<void> _reconnectStaleSession() async {
     try {
-      // Get media token service for media access
-      final mediaTokenService =
-          await ref.read(asyncMediaTokenServiceProvider.future);
-      await mediaTokenService.ensureValidToken();
-      final mediaToken = await mediaTokenService.getToken();
-
-      // Determine optimal streaming strategy
-      final strategy = StreamingStrategyService.getOptimalStrategy();
-
-      final streamUrl = StreamingStrategyService.buildStreamUrl(
-        serverUrl: serverUrl,
-        fileId: widget.fileId,
-        strategy: strategy,
-        mediaToken: mediaToken,
-      );
-
-      // Get current playback position if available
-      Duration? startPosition;
-      if (_player != null) {
-        startPosition = _player!.state.position;
-      }
-
-      // Load media into cast session
-      await castService.loadMedia(
-        mediaUrl: streamUrl,
-        title: widget.title ?? 'Untitled',
-        subtitle: widget.mediaType == 'episode' ? 'Episode' : 'Movie',
-        startPosition: startPosition,
-      );
-
-      // Pause local player
-      if (_player != null && _player!.state.playing) {
-        await _player!.pause();
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Casting to ${device.name}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.reconnectStoredSession();
+    } on CastBackendException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_castErrorMessage(e)),
+        backgroundColor: Colors.red,
+      ));
     } catch (e) {
-      debugPrint('Error starting cast: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to start casting: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      debugPrint('[PlayerScreen] Unexpected error reconnecting cast: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to reconnect: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  /// Drop the cast session and fall back to local playback.
+  Future<void> _stopCasting() async {
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.stopCast();
+    } catch (e) {
+      debugPrint('[PlayerScreen] Unexpected error stopping cast: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to stop casting: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  /// Turn a cast failure into something the user can act on. A bare
+  /// "cast failed" leaves a firewall or codec problem undiagnosable, so the
+  /// unreachable case names the actual port that needs to be open.
+  String _castErrorMessage(CastBackendException e) {
+    final proxy = ref.read(localProxyServiceProvider);
+
+    switch (e.kind) {
+      case CastFailureKind.unreachable:
+        final port = proxy.isLanAccessible ? proxy.port : null;
+        final portHint =
+            port == null ? '' : ' Allow incoming connections on port $port.';
+        return 'The device could not reach your media. Check that both are on '
+            'the same network and that your firewall is not blocking '
+            'Mydia.$portHint';
+      case CastFailureKind.mediaLoadFailed:
+        return 'The device could not play this file. It may not support the '
+            'video or audio format.';
+      case CastFailureKind.connectionLost:
+        return 'Lost the connection to the device.';
+      case CastFailureKind.discoveryDenied:
+        return 'Mydia needs local network permission to find cast devices.';
+      case CastFailureKind.unknown:
+        return 'Casting failed: ${e.message}';
     }
   }
 
   /// Build the remote control UI when casting.
   Widget _buildCastRemoteControlUI() {
+    final session = ref.watch(castSessionProvider).value;
+    if (session != null && session.isStale) {
+      return Center(
+        key: const Key('cast-session-stale'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cast_outlined, size: 48, color: Colors.white70),
+            const SizedBox(height: 16),
+            Text(
+              'Lost connection to ${session.device.name}',
+              style: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              key: const Key('cast-stale-reconnect'),
+              // Re-cast what the *stale session* was playing. Opening the
+              // picker here would silently start whatever file this screen
+              // happens to be showing instead.
+              onPressed: _reconnectStaleSession,
+              child: const Text('Reconnect'),
+            ),
+            const SizedBox(height: 8),
+            // Without this the screen is a dead end: `isCastingProvider`
+            // stays true while the session is stale, so the normal player
+            // body never renders and there is no way back.
+            TextButton(
+              key: const Key('cast-stale-stop'),
+              onPressed: _stopCasting,
+              child: const Text('Stop casting'),
+            ),
+          ],
+        ),
+      );
+    }
+
     final mediaInfo = ref.watch(castMediaInfoProvider);
     final playbackState = ref.watch(castPlaybackStateProvider);
     final castDevice = ref.watch(currentCastDeviceProvider);
-    final castService = ref.read(castServiceProvider);
+    final manager = ref.watch(castSessionManagerProvider).value;
 
-    if (mediaInfo == null || castDevice == null) {
+    if (mediaInfo == null || castDevice == null || manager == null) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.red),
       );
@@ -1882,7 +2028,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           seconds:
                               (value * mediaInfo.duration.inSeconds).round(),
                         );
-                        await castService.seek(newPosition);
+                        await manager.seek(newPosition);
                       },
                       activeColor: Colors.red,
                       inactiveColor: Colors.grey[800],
@@ -1923,7 +2069,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       onPressed: () async {
                         final newPosition =
                             mediaInfo.position - const Duration(seconds: 10);
-                        await castService.seek(
+                        await manager.seek(
                           newPosition.isNegative ? Duration.zero : newPosition,
                         );
                       },
@@ -1950,9 +2096,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         iconSize: 64,
                         onPressed: () async {
                           if (isPlaying) {
-                            await castService.pause();
+                            await manager.pause();
                           } else {
-                            await castService.play();
+                            await manager.play();
                           }
                         },
                       ),
@@ -1965,7 +2111,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         final newPosition =
                             mediaInfo.position + const Duration(seconds: 10);
                         final maxPosition = mediaInfo.duration;
-                        await castService.seek(
+                        await manager.seek(
                           newPosition > maxPosition ? maxPosition : newPosition,
                         );
                       },
@@ -1978,7 +2124,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   icon: const Icon(Icons.stop),
                   label: const Text('Stop Casting'),
                   onPressed: () async {
-                    await castService.disconnect();
+                    await manager.stopCast();
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,

@@ -434,14 +434,14 @@ defmodule Mydia.Jobs.DownloadMonitor do
       "Removed from download client '#{download_map.download_client}' before import completed. " <>
         "The download may have been manually deleted, or the client may have encountered an error."
 
-    case Downloads.update_download(download, %{
-           status: "missing",
-           error_message: error_msg
-         }) do
-      {:ok, updated} ->
+    # `Download` has no `:status` field — status is derived at read time from the
+    # client poll (see `Downloads.list_downloads_with_status/1`). Persisting
+    # `error_message` is what moves the row into the Issues tab.
+    case Downloads.update_download(download, %{error_message: error_msg}) do
+      {:ok, _updated} ->
         Logger.info("Download marked as missing (preserved for Issues tab)",
           download_id: download_map.id,
-          status: updated.status
+          client: download_map.download_client
         )
 
         # Track event for user visibility

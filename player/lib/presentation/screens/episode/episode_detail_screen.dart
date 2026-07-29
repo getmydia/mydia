@@ -5,10 +5,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import 'episode_detail_controller.dart';
 import '../../../domain/models/episode_detail.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_job_providers.dart';
+import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/smart_play_button.dart';
@@ -27,10 +29,20 @@ class EpisodeDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: episodeAsync.when(
-        data: (episode) => _buildContent(context, ref, episode),
-        loading: () => _buildLoadingState(context),
-        error: (error, stack) => _buildErrorState(context, ref, error),
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [QueryKeys.episodeDetail(id)],
+            topInset: freshnessTopInset(context, appBarHeight: 0),
+          ),
+          Expanded(
+            child: episodeAsync.when(
+              data: (episode) => _buildContent(context, ref, episode),
+              loading: () => _buildLoadingState(context),
+              error: (error, stack) => _buildErrorState(context, ref, error),
+            ),
+          ),
+        ],
       ),
     );
   }

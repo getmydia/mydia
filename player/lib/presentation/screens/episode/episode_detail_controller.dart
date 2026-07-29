@@ -1,6 +1,8 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/episode_detail.dart';
 
 part 'episode_detail_controller.g.dart';
@@ -58,38 +60,27 @@ query EpisodeDetail($id: ID!) {
 }
 ''';
 
+EpisodeDetail _parseEpisode(Map<String, dynamic> data) {
+  final episode = data['episode'];
+  if (episode == null) throw Exception('Episode not found');
+  return EpisodeDetail.fromJson(episode as Map<String, dynamic>);
+}
+
 @riverpod
 class EpisodeDetailController extends _$EpisodeDetailController {
+  late QueryWatcher<EpisodeDetail> _watcher;
+
   @override
-  Future<EpisodeDetail> build(String id) async {
-    return _fetchEpisode(id);
-  }
-
-  Future<EpisodeDetail> _fetchEpisode(String id) async {
-    final client = await ref.read(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(episodeDetailQuery),
-        variables: {'id': id},
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  Stream<EpisodeDetail> build(String id) {
+    _watcher = createWatcher<EpisodeDetail>(
+      ref,
+      key: QueryKeys.episodeDetail(id),
+      document: gql(episodeDetailQuery),
+      variables: {'id': id},
+      parse: _parseEpisode,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null || result.data!['episode'] == null) {
-      throw Exception('Episode not found');
-    }
-
-    return EpisodeDetail.fromJson(
-        result.data!['episode'] as Map<String, dynamic>);
+    return _watcher.stream;
   }
 
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchEpisode(id));
-  }
+  Future<void> refresh() => _watcher.refetch();
 }

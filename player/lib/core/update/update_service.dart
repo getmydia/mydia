@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../domain/models/app_update.dart';
+import '../storage/secure_storage_options.dart';
 import 'github_release_client.dart';
 import 'version_comparator.dart';
 
@@ -12,10 +13,8 @@ class UpdateService {
 
   final GitHubReleaseClient _client;
   static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    mOptions: MacOsOptions(
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
+    aOptions: kAndroidSecureStorageOptions,
+    mOptions: kMacOsSecureStorageOptions,
   );
 
   UpdateService({GitHubReleaseClient? client})

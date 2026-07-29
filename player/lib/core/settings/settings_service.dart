@@ -1,17 +1,15 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../storage/secure_storage_options.dart';
+
 /// Service for managing user settings and preferences.
 ///
 /// Uses secure storage to persist user preferences like default quality
 /// and auto-play settings.
 class SettingsService {
   static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-    ),
-    mOptions: MacOsOptions(
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
+    aOptions: kAndroidSecureStorageOptions,
+    mOptions: kMacOsSecureStorageOptions,
   );
 
   static const _defaultQualityKey = 'default_quality';

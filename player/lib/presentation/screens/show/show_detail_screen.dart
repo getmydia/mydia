@@ -13,7 +13,9 @@ import '../../../domain/models/show_detail.dart';
 import '../../../domain/models/season_info.dart';
 import '../../../domain/models/episode.dart';
 import '../../widgets/episode_card.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
+import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/media_file_selector.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/smart_play_button.dart';
@@ -29,13 +31,27 @@ class ShowDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showAsync = ref.watch(showDetailControllerProvider(id));
+    final selectedSeason = ref.watch(selectedSeasonProvider(id));
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: showAsync.when(
-        data: (show) => _buildContent(context, ref, show),
-        loading: () => _buildLoadingState(context),
-        error: (error, stack) => _buildErrorState(context, ref, error),
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [
+              QueryKeys.showDetail(id),
+              QueryKeys.seasonEpisodes(id, selectedSeason),
+            ],
+            topInset: freshnessTopInset(context, appBarHeight: 0),
+          ),
+          Expanded(
+            child: showAsync.when(
+              data: (show) => _buildContent(context, ref, show),
+              loading: () => _buildLoadingState(context),
+              error: (error, stack) => _buildErrorState(context, ref, error),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -347,8 +363,7 @@ class ShowDetailScreen extends ConsumerWidget {
                       files: show.nextEpisode!.files,
                       onFileSelected: (file) {
                         final nextEp = show.nextEpisode!;
-                        final title =
-                            '${show.title} - ${nextEp.episodeCode}';
+                        final title = '${show.title} - ${nextEp.episodeCode}';
                         context.push(
                           '/player/episode/${nextEp.id}?fileId=${file.id}&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${nextEp.seasonNumber}',
                         );

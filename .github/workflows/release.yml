@@ -599,9 +599,24 @@ jobs:
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         run: |
+          APP="${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
+
+          # --force replaces the signature Xcode produced, and codesign does NOT
+          # carry entitlements forward. Without --entitlements the app ships with
+          # none at all, which breaks keychain access and silently drops the
+          # user's pairing on every launch. Always re-apply them here.
           codesign --deep --force --options runtime \
+            --entitlements "${{ env.PLAYER_PATH }}/macos/Runner/Release.entitlements" \
             --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" \
-            "${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
+            "$APP"
+
+          # Fail loudly rather than shipping an entitlement-less bundle again.
+          ENTITLEMENTS=$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)
+          echo "$ENTITLEMENTS"
+          if ! grep -q "com.apple.security.network.client" <<<"$ENTITLEMENTS"; then
+            echo "::error::Signed app is missing its entitlements — codesign dropped them."
+            exit 1
+          fi
 
       - name: Notarize app bundle
         if: steps.check_macos.outputs.enabled == 'true' && env.MACOS_CERTIFICATE != ''

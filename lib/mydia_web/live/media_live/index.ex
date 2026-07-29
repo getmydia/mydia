@@ -751,10 +751,10 @@ defmodule MydiaWeb.MediaLive.Index do
         Enum.sort_by(items, &(&1.year || 0), :desc)
 
       "added_asc" ->
-        Enum.sort_by(items, & &1.inserted_at, :asc)
+        Enum.sort_by(items, & &1.inserted_at, {:asc, DateTime})
 
       "added_desc" ->
-        Enum.sort_by(items, & &1.inserted_at, :desc)
+        Enum.sort_by(items, & &1.inserted_at, {:desc, DateTime})
 
       "rating_asc" ->
         Enum.sort_by(items, &get_rating(&1), :asc)
@@ -763,16 +763,16 @@ defmodule MydiaWeb.MediaLive.Index do
         Enum.sort_by(items, &get_rating(&1), :desc)
 
       "last_aired_asc" ->
-        Enum.sort_by(items, &get_last_aired_date(&1), {:asc, NaiveDateTime})
+        Enum.sort_by(items, &get_last_aired_date(&1), {:asc, Date})
 
       "last_aired_desc" ->
-        Enum.sort_by(items, &get_last_aired_date(&1), {:desc, NaiveDateTime})
+        Enum.sort_by(items, &get_last_aired_date(&1), {:desc, Date})
 
       "next_aired_asc" ->
-        Enum.sort_by(items, &get_next_aired_date(&1), {:asc, NaiveDateTime})
+        Enum.sort_by(items, &get_next_aired_date(&1), {:asc, Date})
 
       "next_aired_desc" ->
-        Enum.sort_by(items, &get_next_aired_date(&1), {:desc, NaiveDateTime})
+        Enum.sort_by(items, &get_next_aired_date(&1), {:desc, Date})
 
       "episode_count_asc" ->
         Enum.sort_by(items, &get_episode_count(&1), :asc)
@@ -793,38 +793,43 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
+  # Episode `air_date` is a Date, so these sentinels and comparisons stay in Date
+  # terms: sorting them as NaiveDateTime raises, since a Date has no time fields.
+  @never_aired ~D[1970-01-01]
+  @no_upcoming_airing ~D[2999-12-31]
+
   defp get_last_aired_date(media_item) do
     if media_item.type == "tv_show" && Ecto.assoc_loaded?(media_item.episodes) do
       media_item.episodes
       |> Enum.map(& &1.air_date)
       |> Enum.reject(&is_nil/1)
-      |> Enum.sort({:desc, NaiveDateTime})
+      |> Enum.sort({:desc, Date})
       |> List.first()
       |> case do
-        nil -> ~N[1970-01-01 00:00:00]
+        nil -> @never_aired
         date -> date
       end
     else
-      ~N[1970-01-01 00:00:00]
+      @never_aired
     end
   end
 
   defp get_next_aired_date(media_item) do
     if media_item.type == "tv_show" && Ecto.assoc_loaded?(media_item.episodes) do
-      now = NaiveDateTime.utc_now()
+      today = Date.utc_today()
 
       media_item.episodes
       |> Enum.map(& &1.air_date)
       |> Enum.reject(&is_nil/1)
-      |> Enum.filter(&(NaiveDateTime.compare(&1, now) == :gt))
-      |> Enum.sort({:asc, NaiveDateTime})
+      |> Enum.filter(&(Date.compare(&1, today) == :gt))
+      |> Enum.sort({:asc, Date})
       |> List.first()
       |> case do
-        nil -> ~N[2999-12-31 23:59:59]
+        nil -> @no_upcoming_airing
         date -> date
       end
     else
-      ~N[2999-12-31 23:59:59]
+      @no_upcoming_airing
     end
   end
 
