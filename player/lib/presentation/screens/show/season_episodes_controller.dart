@@ -2,8 +2,10 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/progress.dart';
 import '../../../graphql/mutations/mark_watched.graphql.dart';
@@ -177,10 +179,15 @@ class SeasonEpisodesController extends _$SeasonEpisodesController {
         throw result.exception!;
       }
 
-      // The optimistic state already matches the server's new watched state, so
-      // there is nothing to reconcile for the season list (mirrors
-      // movie_detail_controller's toggleFavorite, which keeps optimistic state).
-      // Show-level next-up/counts refresh on the next natural load.
+      // The optimistic state already matches the server's new watched state,
+      // so there is nothing to reconcile for the season list. Everything else
+      // that shows watched state does need to hear about it.
+      await ref.read(invalidatorProvider).invalidate(
+            InvalidationRules.watchedChanged(
+              showId: showId,
+              seasonNumber: seasonNumber,
+            ),
+          );
     } catch (e) {
       state = AsyncValue.data(snapshot);
       rethrow;

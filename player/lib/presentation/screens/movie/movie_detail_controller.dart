@@ -2,8 +2,10 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/movie_detail.dart';
 
 part 'movie_detail_controller.g.dart';
@@ -89,9 +91,6 @@ class MovieDetailController extends _$MovieDetailController {
     final currentState = state.value;
     if (currentState == null) return;
 
-    final client = ref.read(graphqlClientProvider);
-    if (client == null) return;
-
     // Optimistically update UI
     state = AsyncValue.data(
       MovieDetail(
@@ -117,6 +116,7 @@ class MovieDetailController extends _$MovieDetailController {
     );
 
     try {
+      final client = await ref.read(asyncGraphqlClientProvider.future);
       final result = await client.mutate(
         MutationOptions(
           document: gql(toggleMovieFavoriteMutation),
@@ -129,6 +129,13 @@ class MovieDetailController extends _$MovieDetailController {
         state = AsyncValue.data(currentState);
         throw result.exception!;
       }
+
+      await ref.read(invalidatorProvider).invalidate(
+            InvalidationRules.favoriteToggled(
+              isMovie: true,
+              id: currentState.id,
+            ),
+          );
     } catch (e) {
       // Revert on error
       state = AsyncValue.data(currentState);

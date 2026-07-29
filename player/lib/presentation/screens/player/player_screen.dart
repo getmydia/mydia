@@ -13,6 +13,8 @@ import 'package:http/http.dart' as http;
 import '../../../core/auth/auth_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
@@ -72,6 +74,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Captured in [initState] rather than read from `dispose()`: by the time
+  /// `dispose()` runs the widget's element may already be defunct, and
+  /// `ref.read` on a disposed `ConsumerState` is not safe.
+  /// `invalidatorProvider` is a keepAlive root provider, so the
+  /// `Invalidator` it returns does not depend on the widget's element and
+  /// stays valid to call after disposal.
+  late final Invalidator _invalidator;
+
+  /// Set once the 90% watched threshold is first crossed, so the invalidation
+  /// fires once per playback rather than on every position tick.
+  bool _watchedInvalidationSent = false;
+
   StreamSubscription<Duration>? _positionSubscription;
   bool _isLoading = true;
   String? _error;
@@ -122,6 +137,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _invalidator = ref.read(invalidatorProvider);
     _initializePlayer();
 
     // Force landscape orientation on mobile devices
@@ -859,6 +875,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       debugPrint('Content is considered watched (90% complete)');
       // Trigger "Up Next" overlay for episodes with a next episode available
       _maybeShowUpNext();
+
+      if (!_watchedInvalidationSent) {
+        _watchedInvalidationSent = true;
+        _invalidateAfterPlayback();
+      }
     }
   }
 
@@ -1077,6 +1098,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } else if (widget.mediaType == 'episode') {
       await _progressService!.saveEpisodeProgress(_player!, widget.mediaId);
     }
+  }
+
+  /// Refreshes everything that reflects watched state. Deliberately not called
+  /// from the 10-second progress sync: that would refetch Home hundreds of
+  /// times per movie over what may be a p2p relay.
+  void _invalidateAfterPlayback() {
+    _invalidator.invalidate(
+      InvalidationRules.playbackFinished(
+        mediaType: widget.mediaType,
+        mediaId: widget.mediaId,
+        showId: widget.showId,
+      ),
+    );
   }
 
   /// Terminate the HLS session on the server and clean up P2P resources.
@@ -1332,6 +1366,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // Save progress before disposing (fire and forget - can't await in dispose)
     _saveProgress();
+
+    // Playback stopped: the second of the roughly two invalidations per
+    // session.
+    _invalidateAfterPlayback();
 
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
     _terminateHlsSession();

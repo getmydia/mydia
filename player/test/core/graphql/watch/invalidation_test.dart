@@ -116,6 +116,22 @@ void main() {
       expect(keys, isNot(contains(QueryKeys.tvShowsList)));
     });
 
+    test('toggling a show favorite with an id also refreshes its own detail',
+        () {
+      final keys = InvalidationRules.favoriteToggled(isMovie: false, id: 's1');
+
+      expect(keys, contains(QueryKeys.showDetail('s1')));
+      expect(keys, isNot(contains(QueryKeys.movieDetail('s1'))));
+    });
+
+    test('toggling a movie favorite with an id also refreshes its own detail',
+        () {
+      final keys = InvalidationRules.favoriteToggled(isMovie: true, id: 'm1');
+
+      expect(keys, contains(QueryKeys.movieDetail('m1')));
+      expect(keys, isNot(contains(QueryKeys.showDetail('m1'))));
+    });
+
     test('marking watched refreshes home, unwatched and that show', () {
       final keys = InvalidationRules.watchedChanged(showId: '7');
 
@@ -124,6 +140,13 @@ void main() {
         QueryKeys.unwatched,
         QueryKeys.showDetail('7'),
       });
+    });
+
+    test('marking watched with a season number also refreshes that season', () {
+      final keys =
+          InvalidationRules.watchedChanged(showId: '7', seasonNumber: 2);
+
+      expect(keys, contains(QueryKeys.seasonEpisodes('7', 2)));
     });
 
     test('progress sync invalidates nothing', () {

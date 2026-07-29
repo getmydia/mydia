@@ -5,16 +5,36 @@ import 'query_key.dart';
 /// Eleven call sites each deciding what to invalidate is how invalidation
 /// rots. Add rules here, never inline at a call site.
 abstract final class InvalidationRules {
-  static Set<QueryKey> favoriteToggled({required bool isMovie}) => {
+  /// [id] is the toggled item's own id. Passing it adds that item's detail
+  /// key to the set, so the mutating screen itself converges to the
+  /// server's authoritative state on the next refetch — closing a window
+  /// where `cacheAndNetwork` re-mounts with a stale cached value shortly
+  /// after an optimistic write and silently overwrites it.
+  static Set<QueryKey> favoriteToggled({
+    required bool isMovie,
+    String? id,
+  }) =>
+      {
         QueryKeys.favorites,
         QueryKeys.home,
         if (isMovie) QueryKeys.moviesList else QueryKeys.tvShowsList,
+        if (id != null)
+          isMovie ? QueryKeys.movieDetail(id) : QueryKeys.showDetail(id),
       };
 
-  static Set<QueryKey> watchedChanged({required String showId}) => {
+  /// [seasonNumber] is the season the mutating screen is scoped to. Passing
+  /// it adds that season's episode-list key to the set, for the same
+  /// self-convergence reason as [favoriteToggled]'s [id].
+  static Set<QueryKey> watchedChanged({
+    required String showId,
+    int? seasonNumber,
+  }) =>
+      {
         QueryKeys.home,
         QueryKeys.unwatched,
         QueryKeys.showDetail(showId),
+        if (seasonNumber != null)
+          QueryKeys.seasonEpisodes(showId, seasonNumber),
       };
 
   /// Playback stopped, or the 90% watched threshold was first crossed.
