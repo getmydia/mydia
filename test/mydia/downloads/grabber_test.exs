@@ -55,6 +55,24 @@ defmodule Mydia.Downloads.GrabberTest do
       reloaded = Repo.get!(Download, download.id)
       assert reloaded.error_message == reason
     end
+
+    test "removes the optimistic record when the background task can't be started" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      # A supervisor that refuses every child, so start_child/2 returns
+      # {:error, :max_children} instead of {:ok, pid}.
+      full_supervisor = start_supervised!({Task.Supervisor, max_children: 0})
+
+      assert {:error, {:task_start_failed, :max_children}} =
+               Downloads.grab_async(search_result(),
+                 media_item_id: movie.id,
+                 manual: true,
+                 supervisor: full_supervisor
+               )
+
+      # Nothing left behind to occupy the target and block a re-grab.
+      assert Repo.all(Download) == []
+    end
   end
 
   describe "run_grab/3 — duplicate" do

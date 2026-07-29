@@ -262,9 +262,12 @@ defmodule Mydia.Downloads do
   run in a supervised background task. Outcomes are broadcast on the
   `"downloads"` PubSub topic as `:grab_completed` / `:grab_failed` /
   `:grab_duplicate` messages.
+
+  Returns `{:error, {:task_start_failed, reason}}` if the background task
+  can't be started; the optimistic record is removed in that case.
   """
   @spec grab_async(SearchResult.t(), keyword()) ::
-          {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, Download.t()} | {:error, Ecto.Changeset.t() | {:task_start_failed, term()}}
   defdelegate grab_async(search_result, opts \\ []), to: Mydia.Downloads.Grabber
 
   @doc """

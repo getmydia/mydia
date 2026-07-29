@@ -15,6 +15,11 @@ defmodule Mydia.Downloads.Grabber do
     * `{:grab_duplicate, %{download_url: url}}`
 
   A duplicate is benign: the optimistic record is deleted rather than failed.
+  So is a task that never starts: the record is deleted and the caller gets
+  `{:error, {:task_start_failed, reason}}` rather than a `MatchError`.
+
+  `grab_async/2` accepts a `:supervisor` option so tests can point the task at
+  a supervisor they control; it defaults to `Mydia.Downloads.GrabSupervisor`.
   """
 
   import Ecto.Query, warn: false
@@ -34,7 +39,7 @@ defmodule Mydia.Downloads.Grabber do
   @max_error_length 500
 
   @spec grab_async(SearchResult.t(), keyword()) ::
-          {:ok, Download.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, Download.t()} | {:error, Ecto.Changeset.t() | {:task_start_failed, term()}}
   def grab_async(%SearchResult{} = search_result, opts \\ []) do
     attrs = %{
       indexer: search_result.indexer,
@@ -46,13 +51,32 @@ defmodule Mydia.Downloads.Grabber do
       metadata: Queue.build_download_metadata(search_result)
     }
 
+    supervisor = Keyword.get(opts, :supervisor, @supervisor)
+
     with {:ok, download} <- History.create_download(attrs) do
-      {:ok, _pid} =
-        Task.Supervisor.start_child(@supervisor, fn ->
+      start_result =
+        Task.Supervisor.start_child(supervisor, fn ->
           run_grab(download, search_result, opts)
         end)
 
-      {:ok, download}
+      case start_result do
+        {:error, reason} ->
+          # Nothing will ever run `run_grab/3` for this record, so the
+          # optimistic row would sit in "grabbing" until the DownloadMonitor
+          # sweep times it out — blocking re-grabs of its target for the whole
+          # timeout window. Drop it now and let the caller report the failure.
+          Logger.error("Could not start grab task",
+            download_id: download.id,
+            title: download.title,
+            reason: inspect(reason)
+          )
+
+          History.delete_download(download)
+          {:error, {:task_start_failed, reason}}
+
+        _started ->
+          {:ok, download}
+      end
     end
   end
 
