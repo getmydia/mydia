@@ -236,6 +236,38 @@ defmodule Mydia.Metadata do
   end
 
   @doc """
+  Fetches a movie collection (franchise) with its member movies, cached in ETS.
+
+  Cached for 24 hours: franchises gain a member every few years, and the page
+  that reads this is opened often.
+
+  The language is part of the cache key for the same reason it is in
+  `fetch_by_id_cached/3` — a non-English library must not read English-cached
+  titles.
+
+  ## Examples
+
+      iex> Mydia.Metadata.fetch_collection_cached(config, 1241)
+      {:ok, %Mydia.Metadata.Structs.Collection{name: "Harry Potter Collection", ...}}
+  """
+  def fetch_collection_cached(%{type: type} = config, collection_id, opts \\ [])
+      when is_atom(type) do
+    alias Mydia.Metadata.Cache
+    alias Mydia.Metadata.Provider.Relay
+
+    language = Keyword.get(opts, :language, config_language(config))
+    cache_key = "collection:#{type}:#{collection_id}:#{language}"
+
+    Cache.fetch(
+      cache_key,
+      fn ->
+        Relay.fetch_collection(config, collection_id, opts)
+      end,
+      ttl: :timer.hours(24)
+    )
+  end
+
+  @doc """
   Fetches images for a specific media item.
 
   ## Parameters
