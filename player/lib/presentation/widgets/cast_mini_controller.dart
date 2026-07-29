@@ -85,6 +85,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
             IconButton(
               key: const Key('cast-bar-idle-clear'),
               icon: const Icon(Icons.close),
+              // This bar is the only cast surface in the app, so an unlabelled
+              // icon here leaves a screen-reader user no route to the control
+              // at all — there is no longer a full-screen remote to fall back
+              // to. Same reasoning for every button below.
+              tooltip: 'Cancel casting to ${device.name}',
               onPressed: () => ref.read(castTargetProvider.notifier).clear(),
             ),
           ],
@@ -226,6 +231,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 IconButton(
                   key: const Key('cast-bar-rewind'),
                   icon: const Icon(Icons.replay_10),
+                  tooltip: 'Back 10 seconds',
                   onPressed: () async {
                     final manager =
                         await ref.read(castSessionManagerProvider.future);
@@ -241,6 +247,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     isPlaying ? Icons.pause : Icons.play_arrow,
                     size: 28,
                   ),
+                  tooltip: isPlaying ? 'Pause' : 'Play',
                   onPressed: () async {
                     final manager =
                         await ref.read(castSessionManagerProvider.future);
@@ -254,6 +261,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 IconButton(
                   key: const Key('cast-bar-forward'),
                   icon: const Icon(Icons.forward_10),
+                  tooltip: 'Forward 10 seconds',
                   onPressed: () async {
                     final manager =
                         await ref.read(castSessionManagerProvider.future);
@@ -266,6 +274,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 IconButton(
                   key: const Key('cast-bar-stop'),
                   icon: const Icon(Icons.stop, size: 28),
+                  tooltip: 'Stop casting',
                   onPressed: _confirmStop,
                 ),
               ],
