@@ -1595,4 +1595,58 @@ defmodule Mydia.Jobs.MediaImportTest do
       |> Enum.sort()
     end
   end
+
+  describe "download client removed from configuration" do
+    # A download whose `download_client` no longer resolves to any configured
+    # client cannot self-heal: every retry re-reads the same config and gets the
+    # same answer. With max_attempts: 1000 the row retried indefinitely, and
+    # because `Download.occupying/1` treats a non-nil `import_next_retry_at` as
+    # "still working", the episode stayed occupied and was never re-searched.
+    # Observed in production after an rqbit client was retired.
+    setup do
+      media_item = media_item_fixture(%{type: "movie", title: "Retired Client Movie", year: 2024})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          completed_at: DateTime.utc_now(),
+          download_client: "RetiredClient",
+          download_client_id: "retired-client-1"
+        })
+
+      %{download: download}
+    end
+
+    test "retries the first attempts so a config reload can still recover it", %{
+      download: download
+    } do
+      assert {:error, :no_client} =
+               perform_job(MediaImport, %{"download_id" => download.id}, attempt: 1)
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert updated.import_failure_reason == "no_client"
+      assert updated.import_next_retry_at != nil
+    end
+
+    test "goes terminal after the third attempt so the episode is released", %{
+      download: download
+    } do
+      assert {:cancel, :no_client} =
+               perform_job(MediaImport, %{"download_id" => download.id}, attempt: 3)
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert updated.import_failure_reason == "no_client"
+
+      assert is_nil(updated.import_next_retry_at),
+             "a terminal failure must clear import_next_retry_at so Download.occupying/1 releases the target"
+
+      refute updated.id in occupying_download_ids()
+    end
+
+    defp occupying_download_ids do
+      Mydia.Downloads.Download.occupying()
+      |> Repo.all()
+      |> Enum.map(& &1.id)
+    end
+  end
 end

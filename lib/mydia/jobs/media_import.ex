@@ -209,6 +209,14 @@ defmodule Mydia.Jobs.MediaImport do
   # gets the same answer; only an operator changing the client's layout (or
   # adding a path mapping) fixes it.
   defp terminal_failure?({:save_path_is_download_root, _path}, _attempt), do: true
+  # The download names a client that is no longer in the configuration — the
+  # operator retired or renamed it. Every retry re-reads the same config, so
+  # with max_attempts: 1000 the row retried effectively forever, and because
+  # `Download.occupying/1` treats a pending `import_next_retry_at` as work still
+  # in flight, the episode stayed occupied and was never re-searched. Allow a
+  # small budget first: config is applied at boot, so a job that runs during a
+  # restart can legitimately see no client for a cycle.
+  defp terminal_failure?(:no_client, attempt) when attempt >= 3, do: true
   # A partial import means some files landed and some failed. A couple of
   # retries can pick up a transient per-file failure, but with max_attempts:
   # 1000 an unfixable one re-walks (and historically re-copied) the whole
