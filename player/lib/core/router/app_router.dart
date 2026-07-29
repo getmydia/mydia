@@ -21,6 +21,7 @@ import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/collections/collections_screen.dart';
 import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
+import '../../domain/models/search_result.dart';
 import '../../presentation/widgets/app_shell.dart';
 import '../auth/auth_status.dart';
 import '../graphql/graphql_provider.dart';
@@ -180,15 +181,17 @@ GoRouter appRouter(Ref ref) {
             name: 'settings',
             builder: (context, state) => const SettingsScreen(),
           ),
+          GoRoute(
+            path: '/search',
+            name: 'search',
+            builder: (context, state) => SearchScreen(
+              initialQuery: state.uri.queryParameters['q'],
+              initialType: SearchResultType.fromQueryValue(
+                state.uri.queryParameters['type'],
+              ),
+            ),
+          ),
         ],
-      ),
-
-      // Search route - outside shell
-      GoRoute(
-        path: '/search',
-        name: 'search',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const SearchScreen(),
       ),
 
       // Detail routes - outside shell
@@ -283,8 +286,8 @@ GoRouter appRouter(Ref ref) {
           final fileId = state.uri.queryParameters['fileId'];
           final title = state.uri.queryParameters['title'];
           final showId = state.uri.queryParameters['showId'];
-          final seasonNumber = int.tryParse(
-              state.uri.queryParameters['seasonNumber'] ?? '');
+          final seasonNumber =
+              int.tryParse(state.uri.queryParameters['seasonNumber'] ?? '');
 
           if (fileId == null) {
             // If no fileId provided, show error

@@ -121,16 +121,8 @@ in
     ffmpeg
 
     # Build tools for NIFs (bcrypt_elixir, argon2_elixir, membrane, exqlite)
-    gcc
     gnumake
     pkg-config
-
-    # File watching (live reload)
-    inotify-tools
-
-    # Browser testing with Wallaby
-    chromium
-    chromedriver
 
     # deps + general utilities
     git
@@ -138,7 +130,22 @@ in
 
     # Inspect/validate WASM components (WIT plugin guests)
     wasm-tools
-  ];
+  ]
+  # ── Linux-only packages (KTD7) ────────────────────────────────────────────
+  # These have meta.platforms = linux, so listing them unconditionally made the
+  # whole devenv-shell derivation fail to evaluate on darwin ("Package 'chromium'
+  # is not available on the requested hostPlatform") — breaking every ./dev
+  # command that enters the shell, not just browser tests. Keep this list
+  # Linux-gated; darwin covers each one natively:
+  #   inotify-tools  Phoenix live reload uses fs_events on darwin
+  #   chromium/…     Wallaby feature tests are Linux/CI-only (see env below)
+  #   gcc            NIFs build against the host clang from the Xcode CLT
+  ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+    gcc
+    inotify-tools
+    chromium
+    chromedriver
+  ]);
 
   env = {
     # Locale for Elixir (mirrors the retired default devShell).
@@ -147,10 +154,6 @@ in
 
     # IEx shell history.
     ERL_AFLAGS = "-kernel shell_history enabled";
-
-    # Wallaby browser tests.
-    CHROME_PATH = "${pkgs.chromium}/bin/chromium";
-    CHROMEDRIVER_PATH = "${pkgs.chromedriver}/bin/chromedriver";
 
     # Shared, worktree-independent caches (KTD4 / R11).
     MIX_HOME = "${sharedCache}/mix";
@@ -170,6 +173,16 @@ in
     DATABASE_HOST = "127.0.0.1";
     DATABASE_PORT = lib.mkDefault (toString pgPort);
     DATABASE_USER = lib.mkDefault (builtins.getEnv "USER");
+  }
+  # Wallaby browser tests. Linux-gated alongside the chromium/chromedriver
+  # packages above — interpolating a Linux-only derivation's store path here is
+  # what actually broke darwin evaluation, since `env` is evaluated even when
+  # the packages are not. config/test.exs falls back to auto-detecting
+  # chromedriver when CHROMEDRIVER_PATH is unset, so darwin just needs its own
+  # chromedriver on PATH to run feature tests.
+  // lib.optionalAttrs pkgs.stdenv.isLinux {
+    CHROME_PATH = "${pkgs.chromium}/bin/chromium";
+    CHROMEDRIVER_PATH = "${pkgs.chromedriver}/bin/chromedriver";
   };
 
   # ── Postgres service (R4) ───────────────────────────────────────────────────

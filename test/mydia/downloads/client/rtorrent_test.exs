@@ -196,6 +196,103 @@ defmodule Mydia.Downloads.Client.RtorrentTest do
     end
   end
 
+  describe "file scoping (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        @config
+        | host: "localhost",
+          port: bypass.port,
+          username: nil,
+          password: nil
+      }
+
+      {:ok, bypass: bypass, config: config}
+    end
+
+    test "scopes a single-file torrent to d.base_path, not the shared directory",
+         %{bypass: bypass, config: config} do
+      hash = "ABC123DEF456789012345678901234567890ABCD"
+
+      # For a single-file torrent d.directory is the *containing* download
+      # root; d.base_path is the file itself. Recursively importing the former
+      # sweeps in every neighbouring torrent.
+      stub_multicall(bypass,
+        hash: hash,
+        directory: "/downloads",
+        base_path: "/downloads/Silo.S03E02.1080p.mkv"
+      )
+
+      assert {:ok, status} = Rtorrent.get_status(config, hash)
+      assert status.save_path == "/downloads"
+      assert status.files == ["/downloads/Silo.S03E02.1080p.mkv"]
+    end
+
+    test "scopes a multi-file torrent to its own directory",
+         %{bypass: bypass, config: config} do
+      hash = "BCD123DEF456789012345678901234567890ABCD"
+
+      stub_multicall(bypass,
+        hash: hash,
+        directory: "/downloads/Silo.S03.1080p-GROUP",
+        base_path: "/downloads/Silo.S03.1080p-GROUP"
+      )
+
+      assert {:ok, status} = Rtorrent.get_status(config, hash)
+      assert status.files == ["/downloads/Silo.S03.1080p-GROUP"]
+    end
+
+    test "leaves files nil when base_path is not yet allocated",
+         %{bypass: bypass, config: config} do
+      hash = "CDE123DEF456789012345678901234567890ABCD"
+
+      stub_multicall(bypass, hash: hash, directory: "/downloads", base_path: "")
+
+      assert {:ok, status} = Rtorrent.get_status(config, hash)
+      assert status.files == nil
+    end
+
+    # d.multicall2 returns one array per torrent, values in the exact order the
+    # fields were requested.
+    defp stub_multicall(bypass, opts) do
+      values = [
+        {:string, Keyword.fetch!(opts, :hash)},
+        {:string, "Silo.S03E02.1080p.mkv"},
+        {:int, 1},
+        {:int, 1},
+        {:int, 1},
+        {:int, 0},
+        {:int, 100},
+        {:int, 100},
+        {:int, 0},
+        {:int, 0},
+        {:int, 0},
+        {:int, 1000},
+        {:string, Keyword.fetch!(opts, :directory)},
+        {:string, Keyword.fetch!(opts, :base_path)},
+        {:int, 1_700_000_000},
+        {:int, 1_700_000_100}
+      ]
+
+      body = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <methodResponse><params><param><value><array><data><value><array><data>
+      #{Enum.map_join(values, "\n", &xmlrpc_value/1)}
+      </data></array></value></data></array></value></param></params></methodResponse>
+      """
+
+      Bypass.stub(bypass, "POST", "/RPC2", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/xml")
+        |> Plug.Conn.resp(200, body)
+      end)
+    end
+
+    defp xmlrpc_value({:string, v}), do: "<value><string>#{v}</string></value>"
+    defp xmlrpc_value({:int, v}), do: "<value><i8>#{v}</i8></value>"
+  end
+
   describe "priority profile resolution (Bypass)" do
     setup do
       bypass = Bypass.open()

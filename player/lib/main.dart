@@ -44,10 +44,6 @@ void main() async {
       // Initialize media_kit for video playback
       MediaKit.ensureInitialized();
 
-      // TODO: Chromecast support temporarily disabled due to API incompatibility
-      // with flutter_chrome_cast package. See backlog task for fix.
-      // await _initializeCastSdk();
-
       // Initialize GraphQL Hive cache for offline support
       await initHiveForFlutter();
 

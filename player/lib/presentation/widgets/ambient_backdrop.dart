@@ -72,8 +72,7 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
   @override
   Widget build(BuildContext context) {
     final reduceMotion = context.reduceMotion;
-    final duration =
-        reduceMotion ? Duration.zero : widget.crossfadeDuration;
+    final duration = reduceMotion ? Duration.zero : widget.crossfadeDuration;
 
     return RepaintBoundary(
       child: Stack(
@@ -88,7 +87,7 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
             layoutBuilder: (currentChild, previousChildren) => Stack(
               fit: StackFit.expand,
               children: [
-                ...previousChildren,
+                ..._dedupedByKey(previousChildren, currentChild),
                 if (currentChild != null) currentChild,
               ],
             ),
@@ -97,6 +96,33 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
         ],
       ),
     );
+  }
+
+  /// Drops outgoing layers whose key is already spoken for, keeping the most
+  /// recent one per key.
+  ///
+  /// The fallback layer carries a constant key, so hovering across a poster
+  /// grid — which flips the source artwork <-> none on every mouse enter and
+  /// leave, far faster than [crossfadeDuration] — parks several identically
+  /// keyed fallback layers in the switcher at once. [AnimatedSwitcher] only
+  /// filters outgoing children against the *current* child's key
+  /// (`animated_switcher.dart`, `build`), never against each other, so those
+  /// duplicates reach the [Stack] below and trip its duplicate-key assertion.
+  /// That assertion corrupts the element tree (`_dependents.isEmpty`, then
+  /// duplicate `GlobalKey`) and replaces the whole shell subtree with an
+  /// [ErrorWidget] — every browse screen renders as an error box.
+  static Iterable<Widget> _dedupedByKey(
+    List<Widget> previousChildren,
+    Widget? currentChild,
+  ) {
+    final seen = <Key?>{if (currentChild != null) currentChild.key};
+    // Outgoing children are ordered oldest-first, so walk in reverse to keep
+    // the newest layer of each key — the one that just started fading and is
+    // still the most opaque — then restore paint order.
+    return [
+      for (final child in previousChildren.reversed)
+        if (seen.add(child.key)) child,
+    ].reversed;
   }
 
   Widget _buildLayer(BuildContext context) {

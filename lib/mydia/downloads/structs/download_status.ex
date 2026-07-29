@@ -44,7 +44,13 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     :ratio,
     :save_path,
     :added_at,
-    :completed_at
+    :completed_at,
+    # Absolute paths of files that belong to THIS torrent/NZB only.
+    # When present and non-empty, MediaImport must import these paths
+    # instead of recursively listing `save_path` — clients like rqbit
+    # often share one output folder across many torrents, and a recursive
+    # listing would cross-contaminate series libraries.
+    files: nil
   ]
 
   @state_values [
@@ -81,6 +87,7 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
           eta: integer() | nil,
           ratio: float(),
           save_path: String.t(),
+          files: [String.t()] | nil,
           added_at: DateTime.t() | nil,
           completed_at: DateTime.t() | nil
         }
