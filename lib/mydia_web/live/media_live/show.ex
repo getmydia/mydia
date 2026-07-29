@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias Mydia.Settings
   alias MydiaWeb.MediaLive.Show.Modals
   alias MydiaWeb.MediaLive.Show.Components
+  alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.EpisodeEvents
   alias MydiaWeb.MediaLive.Show.DownloadEvents
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
@@ -12,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
   alias MydiaWeb.MediaLive.Show.SearchEvents
+  alias MydiaWeb.MediaLive.Show.FranchiseEvents
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
@@ -130,6 +132,14 @@ defmodule MydiaWeb.MediaLive.Show do
      # Feature flags
      |> assign(:playback_enabled, playback_enabled?())
      |> assign(:subtitle_feature_enabled, subtitle_feature_enabled?())
+     # Franchise section state
+     |> assign(:franchise, nil)
+     |> assign(:adding_franchise_tmdb_id, nil)
+     |> assign(:metadata_config, Mydia.Metadata.default_relay_config())
+     |> assign(
+       :can_create_media,
+       Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
+     )
      |> assign(:raw_search_results, [])
      # Category modal state
      |> assign(:show_category_modal, false)
@@ -139,6 +149,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_trailer_modal, false)
      # Collection state
      |> CollectionEvents.load_collection_data(media_item)
+     |> FranchiseEvents.maybe_load()
      |> stream_configure(:search_results, dom_id: &generate_positioned_id/1)
      |> stream(:search_results, [])}
   end
@@ -363,6 +374,11 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("remove_from_collection", params, socket),
     do: CollectionEvents.remove_from_collection(params, socket)
 
+  # Franchise events
+
+  def handle_event("add_franchise_movie", params, socket),
+    do: FranchiseEvents.add_franchise_movie(params, socket)
+
   @impl true
   def handle_info({:download_created, download}, socket) do
     if download_for_media?(download, socket.assigns.media_item) do
@@ -554,6 +570,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async(:download_subtitle, result, socket),
     do: SubtitleEvents.handle_download_subtitle_async(result, socket)
+
+  def handle_async(:load_franchise, result, socket),
+    do: FranchiseEvents.handle_load_result(result, socket)
+
+  def handle_async(:add_franchise_movie, result, socket),
+    do: FranchiseEvents.handle_add_result(result, socket)
 
   # Private helpers
 
