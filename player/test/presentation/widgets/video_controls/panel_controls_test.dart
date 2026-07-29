@@ -61,6 +61,25 @@ void main() {
       );
     });
 
+    testWidgets(
+        'shows the loud glyph at exactly half volume — the <50 vs '
+        '>=50 seam', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          VolumeSurface(
+            volume: 50,
+            onVolumeChanged: (_) {},
+            onToggleMute: () {},
+          ),
+        ),
+      );
+
+      expect(
+        tester.widget<ControlButton>(find.byKey(VolumeSurface.muteKey)).icon,
+        Icons.volume_up_rounded,
+      );
+    });
+
     testWidgets('mute button fires', (tester) async {
       var toggled = false;
       await tester.pumpWidget(
@@ -95,6 +114,110 @@ void main() {
 
       expect(muteRect.right, lessThanOrEqualTo(sliderRect.left));
       expect(sliderRect.width, VolumeSurface.sliderWidth);
+    });
+
+    testWidgets(
+        'dragging the slider fully right reports volume on the 0-100 '
+        'scale, not the raw 0-1 slider fraction', (tester) async {
+      double? received;
+      await tester.pumpWidget(
+        _host(
+          VolumeSurface(
+            volume: 50,
+            onVolumeChanged: (v) => received = v,
+            onToggleMute: () {},
+          ),
+        ),
+      );
+
+      final sliderFinder = find.descendant(
+        of: find.byKey(VolumeSurface.sliderKey),
+        matching: find.byType(Slider),
+      );
+
+      // A drag far larger than the track saturates at the slider's max
+      // (1.0), so this pins down the multiplier regardless of exactly
+      // where the thumb starts: if `onVolumeChanged` still multiplied by
+      // anything other than 100 (e.g. forgot the conversion and passed
+      // the raw 0-1 fraction, or used the wrong constant), this would
+      // report 1 (or some other wrong value) instead of 100.
+      await tester.drag(sliderFinder, const Offset(1000, 0));
+      await tester.pump();
+
+      expect(received, isNotNull);
+      expect(received!, closeTo(100.0, 0.5));
+    });
+
+    testWidgets(
+        'dragging the slider fully left reports 0, not a residual '
+        'fraction', (tester) async {
+      double? received;
+      await tester.pumpWidget(
+        _host(
+          VolumeSurface(
+            volume: 50,
+            onVolumeChanged: (v) => received = v,
+            onToggleMute: () {},
+          ),
+        ),
+      );
+
+      final sliderFinder = find.descendant(
+        of: find.byKey(VolumeSurface.sliderKey),
+        matching: find.byType(Slider),
+      );
+
+      await tester.drag(sliderFinder, const Offset(-1000, 0));
+      await tester.pump();
+
+      expect(received, isNotNull);
+      expect(received!, closeTo(0.0, 0.5));
+    });
+
+    testWidgets(
+        'a volume above 100 clamps the slider to its max instead of '
+        'throwing', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          VolumeSurface(
+            volume: 150,
+            onVolumeChanged: (_) {},
+            onToggleMute: () {},
+          ),
+        ),
+      );
+
+      final slider = tester.widget<Slider>(
+        find.descendant(
+          of: find.byKey(VolumeSurface.sliderKey),
+          matching: find.byType(Slider),
+        ),
+      );
+      expect(slider.value, 1.0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'a negative volume clamps the slider to its min instead of '
+        'throwing', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          VolumeSurface(
+            volume: -20,
+            onVolumeChanged: (_) {},
+            onToggleMute: () {},
+          ),
+        ),
+      );
+
+      final slider = tester.widget<Slider>(
+        find.descendant(
+          of: find.byKey(VolumeSurface.sliderKey),
+          matching: find.byType(Slider),
+        ),
+      );
+      expect(slider.value, 0.0);
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -160,6 +283,20 @@ void main() {
             .widget<ControlButton>(find.byKey(SecondaryCluster.fullscreenKey))
             .icon,
         Icons.fullscreen_exit_rounded,
+      );
+    });
+
+    testWidgets('shows the enter-fullscreen glyph when not fullscreen',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onFullscreenTap: () {})),
+      );
+
+      expect(
+        tester
+            .widget<ControlButton>(find.byKey(SecondaryCluster.fullscreenKey))
+            .icon,
+        Icons.fullscreen_rounded,
       );
     });
 
