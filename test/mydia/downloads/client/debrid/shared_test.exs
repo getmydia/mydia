@@ -296,7 +296,10 @@ defmodule Mydia.Downloads.Client.Debrid.SharedTest do
 
     test "never sets failure fields on a non-error state" do
       for state <- [:queued, :downloading, :finalizing, :ready] do
-        status = Shared.synthesize_status(job(state), :not_started, nil)
+        leaky =
+          job(state, %{failure_category: :missing_files, failure_detail: "missingFiles"})
+
+        status = Shared.synthesize_status(leaky, :not_started, nil)
 
         assert status.failure_category == nil, "#{state} leaked a failure_category"
         assert status.failure_detail == nil, "#{state} leaked a failure_detail"
