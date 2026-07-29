@@ -6,6 +6,8 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/downloads/download_service.dart';
+import 'package:flutter/services.dart';
+
 import 'core/graphql/watch/fetch_log.dart';
 
 // Only import FRB on native platforms (not web)
@@ -24,6 +26,13 @@ void main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      // Register Inter font license
+      LicenseRegistry.addLicense(() async* {
+        final license =
+            await rootBundle.loadString('assets/fonts/Inter-LICENSE.txt');
+        yield LicenseEntryWithLineBreaks(<String>['Inter'], license);
+      });
 
       // Initialize Rust Bridge (native platforms only - not available on web)
       // This MUST complete before any P2P/Libp2p code runs

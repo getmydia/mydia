@@ -62,6 +62,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
   hive_ce_generator: ^1.10.0
   freezed: ^3.2.3
+  yaml: ^3.1.2
 
 flutter_launcher_icons:
   android: true
@@ -79,6 +80,9 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/fonts/Inter-LICENSE.txt
 
   fonts:
     - family: Inter
