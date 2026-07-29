@@ -17,6 +17,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
+import 'cast_actions.dart';
 import 'glass_surface.dart';
 import 'offline_banner.dart';
 
@@ -415,6 +416,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
               ],
             ),
+            CastOverlayButton(topInset: _macOSTitleBarPadding + 12),
           ],
         ),
       );
@@ -447,6 +449,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               Expanded(child: widget.child),
             ],
           ),
+          const CastOverlayButton(topInset: kToolbarHeight + 8),
         ],
       ),
       bottomNavigationBar: _ModernBottomNav(

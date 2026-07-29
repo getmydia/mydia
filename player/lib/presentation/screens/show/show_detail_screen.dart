@@ -18,6 +18,8 @@ import '../../widgets/quality_download_dialog.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/media_file_selector.dart';
 import '../../../core/theme/colors.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/smart_play_button.dart';
 
 class ShowDetailScreen extends ConsumerWidget {
@@ -264,6 +266,10 @@ class ShowDetailScreen extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: CastButton(onPressed: () => pickCastDevice(context, ref)),
         ),
         const SizedBox(width: 8),
       ],

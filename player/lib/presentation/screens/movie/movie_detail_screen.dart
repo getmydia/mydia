@@ -12,6 +12,8 @@ import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/smart_play_button.dart';
 
 class MovieDetailScreen extends ConsumerWidget {
@@ -256,6 +258,10 @@ class MovieDetailScreen extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: CastButton(onPressed: () => pickCastDevice(context, ref)),
         ),
         const SizedBox(width: 8),
       ],

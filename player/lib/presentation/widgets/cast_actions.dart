@@ -6,6 +6,7 @@ import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_session_manager.dart';
 import '../../core/cast/cast_target.dart';
 import '../../core/p2p/local_proxy_service.dart';
+import 'cast_button.dart';
 import 'cast_device_picker.dart';
 
 /// Turn a cast failure into something the user can act on.
@@ -96,5 +97,33 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
       content: Text(castErrorMessage(e, ref: ref)),
       backgroundColor: Colors.red,
     ));
+  }
+}
+
+/// The cast affordance for screens with no app bar to put it in.
+///
+/// `AppShell` has no app bar of its own, and on desktop the browse screens
+/// deliberately suppress theirs (`HomeScreen` passes `appBar: null`;
+/// `UnwatchedScreen` and friends return a zero-height `SizedBox.shrink()`).
+/// An app-bar-only affordance would therefore be invisible on macOS across
+/// most of the app, so the shell pins this into its existing `Stack`.
+class CastOverlayButton extends ConsumerWidget {
+  /// Distance from the top of the safe area.
+  ///
+  /// Mobile browse screens *do* render an app bar with its own actions, so
+  /// this clears it rather than sitting on top of it.
+  final double topInset;
+
+  const CastOverlayButton({super.key, required this.topInset});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Positioned(
+      top: topInset,
+      right: 12,
+      child: SafeArea(
+        child: CastButton(onPressed: () => pickCastDevice(context, ref)),
+      ),
+    );
   }
 }
