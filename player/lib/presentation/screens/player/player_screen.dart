@@ -878,7 +878,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       if (!_watchedInvalidationSent) {
         _watchedInvalidationSent = true;
-        _invalidateAfterPlayback();
+        // Save the current position before invalidating: the server only
+        // learns position/duration from a save (the periodic sync, or this
+        // one), never a watched flag, so it derives "watched" the same way
+        // the client does — from position. Invalidating first would refetch
+        // pre-watched data and re-stamp the fetch log as freshly fetched
+        // with the wrong value.
+        _saveProgress().whenComplete(_invalidateAfterPlayback);
       }
     }
   }
@@ -1364,12 +1370,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ]);
     }
 
-    // Save progress before disposing (fire and forget - can't await in dispose)
-    _saveProgress();
-
-    // Playback stopped: the second of the roughly two invalidations per
-    // session.
-    _invalidateAfterPlayback();
+    // Save progress before disposing (fire and forget - can't await in
+    // dispose), then invalidate: the second of the roughly two invalidations
+    // per session. Chained, not independent fire-and-forget calls, so the
+    // refetch it triggers can't race the save and pick up pre-save data.
+    // `whenComplete` (not `then`) so a failing save still lets the
+    // invalidation run instead of it being silently dropped.
+    _saveProgress().whenComplete(_invalidateAfterPlayback);
 
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
     _terminateHlsSession();

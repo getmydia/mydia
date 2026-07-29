@@ -167,6 +167,14 @@ class SeasonEpisodesController extends _$SeasonEpisodesController {
     final snapshot = state.value;
     if (snapshot == null) return;
 
+    // Captured before the optimistic update, not read after the mutation
+    // awaits: this controller is auto-dispose, so if the user navigates away
+    // before the server responds, `ref` is torn down and a later
+    // `ref.read(invalidatorProvider)` would throw `UnmountedRefException`,
+    // silently dropping the invalidation into the revert-on-error catch
+    // block below. `Invalidator` itself does not depend on `ref` afterwards.
+    final invalidator = ref.read(invalidatorProvider);
+
     // Optimistically reflect the new watched state before the server responds.
     state = AsyncValue.data(applyOptimisticWatched(snapshot, affects, watched));
 
@@ -179,15 +187,19 @@ class SeasonEpisodesController extends _$SeasonEpisodesController {
         throw result.exception!;
       }
 
-      // The optimistic state already matches the server's new watched state,
-      // so there is nothing to reconcile for the season list. Everything else
-      // that shows watched state does need to hear about it.
-      await ref.read(invalidatorProvider).invalidate(
-            InvalidationRules.watchedChanged(
-              showId: showId,
-              seasonNumber: seasonNumber,
-            ),
-          );
+      // This season's own key is included deliberately, not because there is
+      // anything to reconcile here: the optimistic state above already
+      // matches. It exists so this list converges against a racing
+      // `cacheAndNetwork` emission — a network response for this same query,
+      // already in flight from a previous mount, landing after this write and
+      // overwriting it with stale data. Everything else that shows watched
+      // state also needs to hear about this change.
+      await invalidator.invalidate(
+        InvalidationRules.watchedChanged(
+          showId: showId,
+          seasonNumber: seasonNumber,
+        ),
+      );
     } catch (e) {
       state = AsyncValue.data(snapshot);
       rethrow;

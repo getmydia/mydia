@@ -87,6 +87,14 @@ class ShowDetailController extends _$ShowDetailController {
     final currentState = state.value;
     if (currentState == null) return;
 
+    // Captured before the optimistic update, not read after the mutation
+    // awaits: this controller is auto-dispose, so if the user navigates away
+    // before the server responds, `ref` is torn down and a later
+    // `ref.read(invalidatorProvider)` would throw `UnmountedRefException`,
+    // silently dropping the invalidation into the revert-on-error catch
+    // block below. `Invalidator` itself does not depend on `ref` afterwards.
+    final invalidator = ref.read(invalidatorProvider);
+
     // Optimistically update UI
     state = AsyncValue.data(
       ShowDetail(
@@ -128,12 +136,12 @@ class ShowDetailController extends _$ShowDetailController {
         throw result.exception!;
       }
 
-      await ref.read(invalidatorProvider).invalidate(
-            InvalidationRules.favoriteToggled(
-              isMovie: false,
-              id: currentState.id,
-            ),
-          );
+      await invalidator.invalidate(
+        InvalidationRules.favoriteToggled(
+          isMovie: false,
+          id: currentState.id,
+        ),
+      );
     } catch (e) {
       // Revert on error
       state = AsyncValue.data(currentState);
