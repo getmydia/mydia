@@ -97,6 +97,17 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
       content: Text(castErrorMessage(e, ref: ref)),
       backgroundColor: Colors.red,
     ));
+  } catch (e) {
+    // Anything that isn't a CastBackendException: the session manager
+    // itself resolving (Hive, GraphQL client), or a non-typed failure from
+    // _setLanAccess/_store.save inside startCast. Without this, those
+    // failures would close the picker with no snackbar and no log.
+    debugPrint('[cast_actions] Unexpected error starting cast: $e');
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Failed to start casting: $e'),
+      backgroundColor: Colors.red,
+    ));
   }
 }
 

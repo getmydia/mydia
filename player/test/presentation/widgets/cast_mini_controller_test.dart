@@ -279,4 +279,67 @@ void main() {
         seekTargetForFraction(draggedValue, initialSession.mediaInfo!.duration);
     expect(harness.backend.seeks.single, expectedTarget);
   });
+
+  testWidgets(
+      'confirming stop clears a target set while the session was already '
+      'live', (tester) async {
+    final harness = _buildManagerHarness();
+    addTearDown(harness.manager.dispose);
+
+    final sessionController = StreamController<CastSession?>();
+    addTearDown(sessionController.close);
+
+    final container = await _pumpWithManager(
+      tester,
+      harness: harness,
+      sessionStream: sessionController.stream,
+    );
+    sessionController.add(_session(duration: const Duration(minutes: 44)));
+    await tester.pump();
+    await tester.pump();
+
+    // Mirrors cast_actions.dart's re-target fallback: a target can be set
+    // while a session is already live, when nothing is persisted behind it
+    // to re-cast. The idle "x" does not render in that state, so stopping
+    // the session must be the path that clears it.
+    container.read(castTargetProvider.notifier).set(_device);
+
+    await tester.tap(find.byKey(const Key('cast-bar-stop')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Stop'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(castTargetProvider), isNull,
+        reason: 'stopping a cast must clear castTargetProvider, or the '
+            'next playback would silently cast again');
+  });
+
+  testWidgets('the stale-session stop button clears the target',
+      (tester) async {
+    final harness = _buildManagerHarness();
+    addTearDown(harness.manager.dispose);
+
+    final sessionController = StreamController<CastSession?>();
+    addTearDown(sessionController.close);
+
+    final container = await _pumpWithManager(
+      tester,
+      harness: harness,
+      sessionStream: sessionController.stream,
+    );
+    sessionController.add(_session(
+      duration: const Duration(minutes: 44),
+      isStale: true,
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    container.read(castTargetProvider.notifier).set(_device);
+
+    await tester.tap(find.byKey(const Key('cast-stale-stop')));
+    await tester.pumpAndSettle();
+
+    expect(container.read(castTargetProvider), isNull);
+  });
 }

@@ -299,11 +299,21 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   }
 
   /// Drop the cast session and fall back to local playback.
+  ///
+  /// Also clears `castTargetProvider`: stopping a cast is a clear signal
+  /// that the user wants to stop casting, and a lingering target would make
+  /// the *next* playback silently cast again. This is the only place a live
+  /// session's stop reaches the target — `cast_actions.dart` can set a
+  /// target while a session is active (re-targeting with nothing persisted
+  /// behind it), and the idle ✕ is not shown in that window, so this is
+  /// also the only way to clear it until the session ends.
   Future<void> _stopCasting() async {
     if (!mounted) return;
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
       await manager.stopCast();
+      if (!mounted) return;
+      ref.read(castTargetProvider.notifier).clear();
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error stopping cast: $e');
       if (!mounted) return;
