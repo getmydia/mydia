@@ -77,6 +77,28 @@ void main() {
     expect(find.byKey(const Key('cast-device-d1')), findsOneWidget);
   });
 
+  testWidgets(
+      'keeps showing devices past the search timeout when devices arrive early',
+      (tester) async {
+    // Devices are present from the very first frame, so the search-timeout
+    // timer should never have been armed; if it fired anyway and flipped
+    // `_searchExpired`, this would still pass today (that flag is only read
+    // for empty lists), but a stray timer firing after the widget tree
+    // changed shape would surface as an exception here.
+    await pumpPicker(tester,
+        devices: const AsyncValue.data([
+          CastDevice(
+              id: 'c1',
+              name: 'Living Room',
+              protocol: CastProtocolKind.chromecast),
+        ]));
+
+    await tester.pump(const Duration(seconds: 11));
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('cast-group-chromecast')), findsOneWidget);
+  });
+
   testWidgets('omits the DLNA group when the platform cannot discover it',
       (tester) async {
     await pumpPicker(

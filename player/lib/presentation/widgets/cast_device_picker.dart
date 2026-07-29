@@ -97,6 +97,21 @@ class _DeviceListState extends State<_DeviceList> {
   @override
   void initState() {
     super.initState();
+    if (widget.devices.isEmpty) {
+      _startTimeout();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_DeviceList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.devices.isNotEmpty) {
+      _timeout?.cancel();
+      _timeout = null;
+    }
+  }
+
+  void _startTimeout() {
     _timeout = Timer(_DeviceList.searchTimeout, () {
       if (mounted) setState(() => _searchExpired = true);
     });
