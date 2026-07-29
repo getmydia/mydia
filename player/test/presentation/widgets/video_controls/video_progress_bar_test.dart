@@ -27,6 +27,13 @@ void main() {
         _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
       );
 
+      // Resting state, asserted before any pointer interaction: half the
+      // original complaint was the 3px hairline track, so its height at
+      // rest gets its own assertion, not just the thumb's.
+      final restingTrack =
+          tester.getSize(find.byKey(ProgressBarSurface.trackKey));
+      expect(restingTrack.height, 6.0);
+
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: Offset.zero);
       addTearDown(gesture.removePointer);
@@ -36,6 +43,9 @@ void main() {
 
       final size = tester.getSize(find.byKey(ProgressBarSurface.thumbKey));
       expect(size.width, VideoProgressBar.activeThumbSize);
+      final activeTrack =
+          tester.getSize(find.byKey(ProgressBarSurface.trackKey));
+      expect(activeTrack.height, 8.0);
     });
 
     testWidgets('renders played, buffered, and base track layers',
@@ -56,6 +66,25 @@ void main() {
       );
       expect(buffered.widthFactor, 0.6);
       expect(played.widthFactor, 0.4);
+    });
+
+    testWidgets(
+        'left-anchors the played and buffered fills to the track\'s '
+        'left edge — regression guard for the centered-fill defect',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+
+      final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
+      final played = tester.getRect(find.byKey(ProgressBarSurface.playedKey));
+      final buffered =
+          tester.getRect(find.byKey(ProgressBarSurface.bufferedKey));
+
+      expect(played.left, track.left);
+      expect(played.width, closeTo(track.width * 0.4, 0.5));
+      expect(buffered.left, track.left);
+      expect(buffered.width, closeTo(track.width * 0.6, 0.5));
     });
 
     testWidgets('reports the tapped fraction', (tester) async {
@@ -89,6 +118,70 @@ void main() {
 
       final size = tester.getSize(find.byType(ProgressBarSurface));
       expect(size.height, greaterThanOrEqualTo(44));
+    });
+
+    testWidgets('hit area defaults to the 32px pointer minimum',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+
+      final size = tester.getSize(find.byType(ProgressBarSurface));
+      expect(size.height, 32);
+    });
+
+    testWidgets(
+        'drag reports start, live updates, and commits the final '
+        'position on end', (tester) async {
+      final updates = <double>[];
+      double? committed;
+      var started = false;
+      var ended = false;
+
+      await tester.pumpWidget(
+        _host(
+          ProgressBarSurface(
+            progress: 0.0,
+            buffered: 0.0,
+            onSeekStart: () => started = true,
+            onSeekEnd: () => ended = true,
+            onSeekUpdate: updates.add,
+            onSeekTo: (f) => committed = f,
+          ),
+        ),
+      );
+
+      final box = tester.getRect(find.byType(ProgressBarSurface));
+      final gesture = await tester.startGesture(
+        Offset(box.left + box.width * 0.1, box.center.dy),
+      );
+      addTearDown(() => gesture.removePointer());
+
+      // First move must clear the touch slop before the horizontal drag
+      // recognizer accepts the gesture and fires onHorizontalDragStart.
+      await gesture.moveBy(const Offset(40, 0));
+      await tester.pump();
+      expect(started, isTrue);
+
+      // While seeking, the thumb and track sit in the active (larger)
+      // state — the same `_active` flag hover uses, exercised here via
+      // the drag path instead.
+      await tester.pumpAndSettle();
+      final activeSize =
+          tester.getSize(find.byKey(ProgressBarSurface.thumbKey));
+      expect(activeSize.width, VideoProgressBar.activeThumbSize);
+
+      await gesture.moveBy(const Offset(160, 0));
+      await tester.pump();
+      expect(updates, isNotEmpty);
+      expect(updates.last, closeTo(0.6, 0.05));
+
+      await gesture.up();
+      await tester.pump();
+
+      expect(ended, isTrue);
+      expect(committed, isNotNull);
+      expect(committed!, closeTo(0.6, 0.05));
     });
 
     testWidgets('clamps out-of-range fractions', (tester) async {

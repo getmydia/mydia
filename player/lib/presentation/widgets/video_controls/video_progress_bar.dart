@@ -126,39 +126,46 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                           ),
                         ),
                       ),
-                      // Buffered
-                      Center(
-                        child: FractionallySizedBox(
-                          key: ProgressBarSurface.bufferedKey,
-                          alignment: Alignment.centerLeft,
-                          widthFactor: buffered,
-                          child: AnimatedContainer(
-                            duration: DepthTokens.motionFast,
-                            curve: DepthTokens.curveStandard,
-                            height: _trackHeight,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.40),
-                              borderRadius:
-                                  BorderRadius.circular(_trackHeight / 2),
-                            ),
+                      // Buffered — a direct (non-`Center`-wrapped) Stack
+                      // child so the Stack's own `alignment: centerLeft`
+                      // left-anchors it. A `Center` wrapper here is a bug:
+                      // `FractionallySizedBox` shrinks itself to the
+                      // fraction (`RenderFractionallySizedOverflowBox.size
+                      // = constraints.constrain(child.size)`), so by the
+                      // time its own `alignment: centerLeft` would apply,
+                      // its size already equals its child's — the alignment
+                      // becomes a no-op, and the surrounding `Center` then
+                      // centers the shrunken bar in the middle of the track
+                      // instead of anchoring it to the left edge.
+                      FractionallySizedBox(
+                        key: ProgressBarSurface.bufferedKey,
+                        alignment: Alignment.centerLeft,
+                        widthFactor: buffered,
+                        child: AnimatedContainer(
+                          duration: DepthTokens.motionFast,
+                          curve: DepthTokens.curveStandard,
+                          height: _trackHeight,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.40),
+                            borderRadius:
+                                BorderRadius.circular(_trackHeight / 2),
                           ),
                         ),
                       ),
-                      // Played
-                      Center(
-                        child: FractionallySizedBox(
-                          key: ProgressBarSurface.playedKey,
-                          alignment: Alignment.centerLeft,
-                          widthFactor: _displayed,
-                          child: AnimatedContainer(
-                            duration: DepthTokens.motionFast,
-                            curve: DepthTokens.curveStandard,
-                            height: _trackHeight,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius:
-                                  BorderRadius.circular(_trackHeight / 2),
-                            ),
+                      // Played — see the buffered layer's comment above;
+                      // same reasoning applies here.
+                      FractionallySizedBox(
+                        key: ProgressBarSurface.playedKey,
+                        alignment: Alignment.centerLeft,
+                        widthFactor: _displayed,
+                        child: AnimatedContainer(
+                          duration: DepthTokens.motionFast,
+                          curve: DepthTokens.curveStandard,
+                          height: _trackHeight,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius:
+                                BorderRadius.circular(_trackHeight / 2),
                           ),
                         ),
                       ),
@@ -168,25 +175,41 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                       // half its own width past the track ends, which is the
                       // conventional scrubber look and is accounted for by
                       // the glass bar's own padding in the caller.
-                      Positioned(
-                        left: (width * _displayed) - (_thumbSize / 2),
-                        child: AnimatedContainer(
-                          key: ProgressBarSurface.thumbKey,
-                          duration: DepthTokens.motionFast,
-                          curve: DepthTokens.curveStandard,
-                          width: _thumbSize,
-                          height: _thumbSize,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Color(0x40000000), // black @ 0.25
-                                blurRadius: 6,
+                      //
+                      // Tweens its own size directly, rather than pairing an
+                      // `AnimatedContainer` with a `Positioned.left` computed
+                      // from the synchronous (already-updated) `_thumbSize`.
+                      // That pairing let `left` jump to its new value
+                      // instantly while `width`/`height` animated toward it
+                      // over 150ms, producing a ~2px lateral wobble as the
+                      // implied centre (`left + width / 2`) briefly
+                      // disagreed with the target. Deriving `left` from the
+                      // same interpolated value on every animation frame
+                      // keeps the centre fixed throughout the transition.
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(end: _thumbSize),
+                        duration: DepthTokens.motionFast,
+                        curve: DepthTokens.curveStandard,
+                        builder: (context, size, _) {
+                          return Positioned(
+                            left: (width * _displayed) - (size / 2),
+                            child: Container(
+                              key: ProgressBarSurface.thumbKey,
+                              width: size,
+                              height: size,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Color(0x40000000), // black @ 0.25
+                                    blurRadius: 6,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
