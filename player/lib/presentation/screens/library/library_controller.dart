@@ -1,9 +1,14 @@
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
-import '../../../core/graphql/graphql_provider.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../core/graphql/watch/connection_merge.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
 import '../../models/library_data.dart';
 
 part 'library_controller.g.dart';
+
+const int _pageSize = 20;
 
 enum LibraryType { movies, tvShows }
 
@@ -99,180 +104,110 @@ query TvShowsList($first: Int, $after: String) {
 }
 ''';
 
+LibraryData _parseMovies(Map<String, dynamic> data) {
+  final connection = data['movies'] as Map<String, dynamic>;
+  return _parseConnection(
+    connection,
+    (node) => LibraryItem(
+      id: node['id'] as String,
+      title: node['title'] as String,
+      year: node['year'] as int?,
+      posterUrl:
+          (node['artwork'] as Map<String, dynamic>?)?['posterUrl'] as String?,
+      progressPercentage:
+          (node['progress'] as Map<String, dynamic>?)?['percentage'] as double?,
+      isFavorite: node['isFavorite'] as bool,
+      type: 'movie',
+      subtitle: node['year']?.toString(),
+    ),
+  );
+}
+
+LibraryData _parseTvShows(Map<String, dynamic> data) {
+  final connection = data['tvShows'] as Map<String, dynamic>;
+  return _parseConnection(
+    connection,
+    (node) => LibraryItem(
+      id: node['id'] as String,
+      title: node['title'] as String,
+      year: node['year'] as int?,
+      posterUrl:
+          (node['artwork'] as Map<String, dynamic>?)?['posterUrl'] as String?,
+      // TV shows have no overall progress.
+      progressPercentage: null,
+      isFavorite: node['isFavorite'] as bool,
+      type: 'tv_show',
+      subtitle: node['year'] != null ? '${node['year']}' : null,
+      seasonCount: node['seasonCount'] as int?,
+      episodeCount: node['episodeCount'] as int?,
+    ),
+  );
+}
+
+LibraryData _parseConnection(
+  Map<String, dynamic> connection,
+  LibraryItem Function(Map<String, dynamic> node) toItem,
+) {
+  final edges = connection['edges'] as List<dynamic>? ?? const [];
+  final pageInfo = connection['pageInfo'] as Map<String, dynamic>? ?? const {};
+
+  return LibraryData(
+    items: edges
+        .map((edge) => toItem(
+              (edge as Map<String, dynamic>)['node'] as Map<String, dynamic>,
+            ))
+        .toList(),
+    hasMore: pageInfo['hasNextPage'] as bool? ?? false,
+    totalCount: connection['totalCount'] as int?,
+    endCursor: pageInfo['endCursor'] as String?,
+  );
+}
+
 @riverpod
 class LibraryController extends _$LibraryController {
-  String? _endCursor;
-  bool _hasMore = true;
-  SortOption _currentSort = SortOption.recentlyAdded;
-  List<LibraryItem> _items = [];
+  late QueryWatcher<LibraryData> _watcher;
+  bool _loadingMore = false;
+
+  bool get _isMovies => libraryType == LibraryType.movies;
+  String get _connectionField => _isMovies ? 'movies' : 'tvShows';
 
   @override
-  Future<LibraryData> build(LibraryType libraryType) async {
-    return _fetchLibrary(reset: true);
+  Stream<LibraryData> build(LibraryType libraryType) {
+    _watcher = createWatcher<LibraryData>(
+      ref,
+      key: _isMovies ? QueryKeys.moviesList : QueryKeys.tvShowsList,
+      document: gql(_isMovies ? moviesListQuery : tvShowsListQuery),
+      variables: const {'first': _pageSize},
+      parse: _isMovies ? _parseMovies : _parseTvShows,
+    );
+    return _watcher.stream;
   }
+
+  Future<void> refresh() => _watcher.refetch();
+
+  /// Sort is not part of either query document, so this refetches rather than
+  /// re-querying with a sort argument. Preserved from the pre-migration
+  /// behavior; wiring sort into the query is a separate change.
+  Future<void> setSort(SortOption sort) => _watcher.refetch();
 
   Future<void> loadMore() async {
-    if (!_hasMore || state.isLoading) return;
+    if (_loadingMore) return;
 
-    state = const AsyncValue.loading();
+    final current = state.value;
+    final cursor = current?.endCursor;
+    if (current == null || !current.hasMore || cursor == null) return;
 
+    _loadingMore = true;
     try {
-      final newData = await _fetchLibrary(reset: false);
-      state = AsyncValue.data(newData);
-    } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
-    }
-  }
-
-  Future<void> setSort(SortOption sort) async {
-    if (_currentSort == sort) return;
-
-    _currentSort = sort;
-    state = const AsyncValue.loading();
-
-    try {
-      final newData = await _fetchLibrary(reset: true);
-      state = AsyncValue.data(newData);
-    } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
-    }
-  }
-
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-
-    try {
-      final newData = await _fetchLibrary(reset: true);
-      state = AsyncValue.data(newData);
-    } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
-    }
-  }
-
-  Future<LibraryData> _fetchLibrary({required bool reset}) async {
-    if (reset) {
-      _endCursor = null;
-      _hasMore = true;
-      _items = [];
-    }
-
-    // Use async provider to wait for client to be ready
-    final client = await ref.read(asyncGraphqlClientProvider.future);
-
-    if (libraryType == LibraryType.movies) {
-      return _fetchMovies(client);
-    } else {
-      return _fetchTvShows(client);
-    }
-  }
-
-  Future<LibraryData> _fetchMovies(GraphQLClient client) async {
-    final result = await client.query(
-      QueryOptions(
-        document: gql(moviesListQuery),
-        variables: {
-          'first': 20,
-          if (_endCursor != null) 'after': _endCursor,
-        },
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
-    );
-
-    if (result.hasException) {
-      throw Exception(result.exception.toString());
-    }
-
-    if (result.data == null) {
-      throw Exception('No data returned from query');
-    }
-
-    final moviesData = result.data!['movies'] as Map<String, dynamic>;
-    final edges = moviesData['edges'] as List<dynamic>;
-    final pageInfo = moviesData['pageInfo'] as Map<String, dynamic>;
-
-    _endCursor = pageInfo['endCursor'] as String?;
-    _hasMore = pageInfo['hasNextPage'] as bool;
-
-    final newItems = edges.map((edge) {
-      final edgeMap = edge as Map<String, dynamic>;
-      final node = edgeMap['node'] as Map<String, dynamic>;
-      final artwork = node['artwork'] as Map<String, dynamic>?;
-      final progress = node['progress'] as Map<String, dynamic>?;
-
-      return LibraryItem(
-        id: node['id'] as String,
-        title: node['title'] as String,
-        year: node['year'] as int?,
-        posterUrl: artwork?['posterUrl'] as String?,
-        progressPercentage: progress?['percentage'] as double?,
-        isFavorite: node['isFavorite'] as bool,
-        type: 'movie',
-        subtitle: node['year']?.toString(),
+      await _watcher.fetchMore(
+        FetchMoreOptions(
+          variables: {'first': _pageSize, 'after': cursor},
+          updateQuery: (previous, fetched) =>
+              mergeConnection(_connectionField, previous, fetched),
+        ),
       );
-    }).toList();
-
-    _items.addAll(newItems);
-
-    return LibraryData(
-      items: List.from(_items),
-      hasMore: _hasMore,
-      totalCount: moviesData['totalCount'] as int?,
-    );
-  }
-
-  Future<LibraryData> _fetchTvShows(GraphQLClient client) async {
-    final result = await client.query(
-      QueryOptions(
-        document: gql(tvShowsListQuery),
-        variables: {
-          'first': 20,
-          if (_endCursor != null) 'after': _endCursor,
-        },
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
-    );
-
-    if (result.hasException) {
-      throw Exception(result.exception.toString());
+    } finally {
+      _loadingMore = false;
     }
-
-    if (result.data == null) {
-      throw Exception('No data returned from query');
-    }
-
-    final tvShowsData = result.data!['tvShows'] as Map<String, dynamic>;
-    final edges = tvShowsData['edges'] as List<dynamic>;
-    final pageInfo = tvShowsData['pageInfo'] as Map<String, dynamic>;
-
-    _endCursor = pageInfo['endCursor'] as String?;
-    _hasMore = pageInfo['hasNextPage'] as bool;
-
-    final newItems = edges.map((edge) {
-      final edgeMap = edge as Map<String, dynamic>;
-      final node = edgeMap['node'] as Map<String, dynamic>;
-      final artwork = node['artwork'] as Map<String, dynamic>?;
-
-      final subtitle = node['year'] != null ? '${node['year']}' : null;
-      return LibraryItem(
-        id: node['id'] as String,
-        title: node['title'] as String,
-        year: node['year'] as int?,
-        posterUrl: artwork?['posterUrl'] as String?,
-        progressPercentage: null, // TV shows don't have overall progress
-        isFavorite: node['isFavorite'] as bool,
-        type: 'tv_show',
-        subtitle: subtitle,
-        seasonCount: node['seasonCount'] as int?,
-        episodeCount: node['episodeCount'] as int?,
-      );
-    }).toList();
-
-    _items.addAll(newItems);
-
-    return LibraryData(
-      items: List.from(_items),
-      hasMore: _hasMore,
-      totalCount: tvShowsData['totalCount'] as int?,
-    );
   }
 }
