@@ -190,7 +190,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 Expanded(
                   child: Slider(
                     key: const Key('cast-bar-scrubber'),
-                    value: value.clamp(0.0, 1.0),
+                    value: value,
                     // Null disables the control outright. Leaving it live
                     // against an unknown duration resolves every drag to
                     // `fraction * -1s`, i.e. the start.
@@ -278,6 +278,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
   /// Re-cast the media the stored (now stale) session was playing.
   Future<void> _reconnectStaleSession() async {
+    if (!mounted) return;
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
       await manager.reconnectStoredSession();
@@ -299,6 +300,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
   /// Drop the cast session and fall back to local playback.
   Future<void> _stopCasting() async {
+    if (!mounted) return;
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
       await manager.stopCast();

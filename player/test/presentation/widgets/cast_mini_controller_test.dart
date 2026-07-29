@@ -7,10 +7,19 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/cast/cast_route_resolver.dart';
+import 'package:player/core/cast/cast_seek.dart';
+import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/player/progress_service.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
+
+import '../../test_utils/fake_cast_backend.dart';
+import '../../test_utils/fake_streaming_session_service.dart';
+import '../../test_utils/stub_graphql_client.dart';
 
 class _FakeAuthNotifier extends AuthStateNotifier {
   _FakeAuthNotifier(this._initial);
@@ -54,6 +63,76 @@ Future<ProviderContainer> _pump(
     asyncGraphqlClientProvider
         .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionProvider.overrideWith((ref) => Stream.value(session)),
+  ]);
+  addTearDown(container.dispose);
+
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+  ));
+  await tester.pump();
+  return container;
+}
+
+/// A real [CastSessionManager] wired to a [FakeCastBackend], so seeks the
+/// widget issues can be observed on `backend.seeks` without a network.
+///
+/// `seek` on the manager just forwards to `backend.seek` (see
+/// `CastSessionManager.seek`), so nothing here needs a live `startCast` —
+/// the manager's other dependencies (store, GraphQL client, route resolver)
+/// only matter for casting/reconnecting, which this test never exercises.
+class _ManagerHarness {
+  _ManagerHarness(this.manager, this.backend);
+
+  final CastSessionManager manager;
+  final FakeCastBackend backend;
+}
+
+_ManagerHarness _buildManagerHarness() {
+  final backend = FakeCastBackend();
+  final sessions = FakeStreamingSessionService();
+  final client = stubClient(
+    StubLink((request, callIndex) => const {'__typename': 'Query'}),
+  );
+
+  final manager = CastSessionManager(
+    backend: backend,
+    store: InMemoryCastSessionStore(),
+    progressService: ProgressService(client),
+    resolverFactory: () => CastRouteResolver(
+      isP2pMode: false,
+      serverUrl: 'https://mydia.test',
+      mediaToken: () async => null,
+      lanBaseUrl: () => null,
+      streamingSessions: sessions,
+    ),
+    streamingSessions: sessions,
+    setLanAccess: (enabled) async {},
+  );
+
+  return _ManagerHarness(manager, backend);
+}
+
+/// Like [_pump], but backs `castSessionManagerProvider` with a real manager
+/// over a [FakeCastBackend] and lets the caller push more than one session
+/// onto `castSessionProvider` (a plain `Stream.value` can only ever emit
+/// one), which the mid-drag-update assertion needs.
+Future<ProviderContainer> _pumpWithManager(
+  WidgetTester tester, {
+  required _ManagerHarness harness,
+  required Stream<CastSession?> sessionStream,
+}) async {
+  final container = ProviderContainer(overrides: [
+    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+    authStateProvider.overrideWith(() =>
+        _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+    asyncGraphqlClientProvider
+        .overrideWith((ref) => Completer<GraphQLClient>().future),
+    castSessionManagerProvider.overrideWith((ref) async {
+      ref.onDispose(harness.manager.dispose);
+      return harness.manager;
+    }),
+    castSessionProvider.overrideWith((ref) => sessionStream),
   ]);
   addTearDown(container.dispose);
 
@@ -138,5 +217,66 @@ void main() {
 
     expect(container.read(castTargetProvider), isNull);
     expect(find.textContaining('Will play on'), findsNothing);
+  });
+
+  testWidgets(
+      'seeks once on release, not during the drag, and the thumb holds the '
+      'dragged position against a stale mid-drag update', (tester) async {
+    final harness = _buildManagerHarness();
+    addTearDown(harness.manager.dispose);
+
+    final sessionController = StreamController<CastSession?>();
+    addTearDown(sessionController.close);
+
+    final initialSession = _session(
+      duration: const Duration(minutes: 44),
+      position: const Duration(seconds: 60),
+    );
+
+    await _pumpWithManager(
+      tester,
+      harness: harness,
+      sessionStream: sessionController.stream,
+    );
+    sessionController.add(initialSession);
+    await tester.pump();
+    await tester.pump();
+
+    final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
+    expect(sliderFinder, findsOneWidget);
+    final startValue = tester.widget<Slider>(sliderFinder).value;
+
+    // Press down and drag right, but do not release yet.
+    final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
+    await tester.pump();
+    await gesture.moveBy(const Offset(120, 0));
+    await tester.pump();
+
+    final draggedValue = tester.widget<Slider>(sliderFinder).value;
+    expect(draggedValue, isNot(closeTo(startValue, 0.01)),
+        reason: 'the thumb must follow the drag');
+    expect(harness.backend.seeks, isEmpty,
+        reason: 'dragging must not seek on every frame, only on release');
+
+    // The receiver's own position stream keeps ticking during a drag; a new
+    // session update carrying the pre-drag position must not snap the thumb
+    // back to it.
+    sessionController.add(initialSession);
+    await tester.pump();
+
+    final midDragValue = tester.widget<Slider>(sliderFinder).value;
+    expect(midDragValue, draggedValue,
+        reason: 'a position event mid-drag must not override the local '
+            'drag position');
+    expect(harness.backend.seeks, isEmpty);
+
+    await gesture.up();
+    await tester.pump();
+
+    expect(harness.backend.seeks, hasLength(1),
+        reason: 'release must seek exactly once');
+    final expectedTarget =
+        seekTargetForFraction(draggedValue, initialSession.mediaInfo!.duration);
+    expect(harness.backend.seeks.single, expectedTarget);
   });
 }
