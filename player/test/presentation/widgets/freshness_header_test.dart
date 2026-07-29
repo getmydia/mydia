@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
+// Riverpod 3.x; it lives in the `misc.dart` sub-library alongside other
+// advanced/library-author types (see `test/test_utils/riverpod_helpers.dart`).
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/graphql/watch/freshness.dart';
 import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/graphql/watch/watcher_registry.dart';
 import 'package:player/presentation/widgets/freshness_header.dart';
 
 class _StubFreshnessRegistry extends FreshnessRegistry {
@@ -25,11 +30,26 @@ class _StubAuthState extends AuthStateNotifier {
   AsyncValue<AuthStatus> build() => AsyncValue.data(_status);
 }
 
+/// Records exactly which keys the widget asked to be invalidated, so tests
+/// can tell a correct wiring from a hardcoded or mismatched one.
+class _RecordingInvalidator implements Invalidator {
+  final List<QueryKey> invalidatedKeys = [];
+
+  @override
+  Future<void> invalidate(Iterable<QueryKey> keys) async {
+    invalidatedKeys.addAll(keys);
+  }
+
+  @override
+  Future<void> invalidateAll() async {}
+}
+
 Future<void> pumpHeader(
   WidgetTester tester, {
   required Map<QueryKey, Freshness> freshness,
   AuthStatus authStatus = AuthStatus.authenticated,
   List<QueryKey> keys = const [QueryKeys.home],
+  List<Override> extraOverrides = const [],
 }) {
   return tester.pumpWidget(
     ProviderScope(
@@ -37,6 +57,7 @@ Future<void> pumpHeader(
         freshnessRegistryProvider
             .overrideWith(() => _StubFreshnessRegistry(freshness)),
         authStateProvider.overrideWith(() => _StubAuthState(authStatus)),
+        ...extraOverrides,
       ],
       child: MaterialApp(
         home: Scaffold(body: FreshnessHeader(queryKeys: keys)),
@@ -60,6 +81,22 @@ void main() {
   testWidgets('shows the in-flight line while refreshing', (tester) async {
     await pumpHeader(tester, freshness: {
       QueryKeys.home: Freshness(fetchedAt: now, isRefreshing: true),
+    });
+
+    expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
+    expect(find.byKey(const Key('freshness-banner')), findsNothing);
+  });
+
+  testWidgets('suppresses the stale banner while a refresh is already running',
+      (tester) async {
+    // Tier 1 already covers a running refresh; showing both at once for the
+    // same underlying condition is exactly what tier 2 exists to avoid.
+    await pumpHeader(tester, freshness: {
+      QueryKeys.home: Freshness(
+        fetchedAt: now.subtract(const Duration(hours: 2)),
+        isStale: true,
+        isRefreshing: true,
+      ),
     });
 
     expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
@@ -139,5 +176,36 @@ void main() {
     );
 
     expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
+  });
+
+  testWidgets("tapping the action invalidates exactly this header's query keys",
+      (tester) async {
+    final recorder = _RecordingInvalidator();
+    final keys = [QueryKeys.home, QueryKeys.unwatched];
+
+    await pumpHeader(
+      tester,
+      keys: keys,
+      freshness: {
+        QueryKeys.home: Freshness(
+          fetchedAt: now.subtract(const Duration(hours: 2)),
+          refreshFailed: true,
+          isStale: true,
+        ),
+        QueryKeys.unwatched: Freshness(
+          fetchedAt: now.subtract(const Duration(hours: 2)),
+          refreshFailed: true,
+          isStale: true,
+        ),
+      },
+      extraOverrides: [
+        invalidatorProvider.overrideWithValue(recorder),
+      ],
+    );
+
+    await tester.tap(find.byKey(const Key('freshness-action')));
+    await tester.pump();
+
+    expect(recorder.invalidatedKeys, equals(keys));
   });
 }
