@@ -52,6 +52,10 @@ DOWNLOAD_CLIENT_1_HOST=qbittorrent
 DOWNLOAD_CLIENT_1_PORT=8080
 DOWNLOAD_CLIENT_1_USERNAME=admin
 DOWNLOAD_CLIENT_1_PASSWORD=adminpass
+# Alternative to username/password on qBittorrent 5.2 and newer. Generate the
+# key in qBittorrent under Preferences, WebUI, API Key. When set, it takes
+# precedence over the username and password.
+# DOWNLOAD_CLIENT_1_API_KEY=qbt_yourkeyhere
 
 # Transmission
 DOWNLOAD_CLIENT_2_NAME=Transmission
@@ -119,7 +123,7 @@ variable, so a block without one is silently ignored.
 | Port | Client port | `8080` |
 | Username | Auth username | `admin` |
 | Password | Auth password | `secret` |
-| API Key | API key (SABnzbd, debrid) | `abc123` |
+| API Key | API key (SABnzbd, debrid, qBittorrent 5.2+) | `abc123` |
 | Provider | Debrid provider (debrid only) | `real_debrid` |
 | Use SSL | Enable HTTPS | `true` |
 | Category | Default category | `mydia` |

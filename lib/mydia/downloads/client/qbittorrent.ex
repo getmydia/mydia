@@ -21,6 +21,26 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   tries the legacy endpoint first and falls back to the 5.x name on 404, and
   maps the new state names to their equivalent internal states.
 
+  qBittorrent 5.2 changed authentication in two ways. `/api/v2/auth/login` now
+  answers 204 with an empty body instead of 200 `Ok.`, so any 2xx is treated as
+  success. The session cookie was renamed from `SID` to `QBT_SID_<port>`, where
+  the port is the server's own WebUI port rather than the port we dial, so the
+  cookie name is read from `Set-Cookie` and echoed back verbatim instead of
+  being reconstructed. The old `SID` name is rejected outright by 5.2.
+
+  ## Authentication modes
+
+  Either an API key or a username and password is required.
+
+  An `api_key` (qBittorrent 5.2+) is sent as `Authorization: Bearer <key>` on
+  every request, with no login round trip and no session to expire. Keys are
+  generated inside qBittorrent under Preferences, WebUI, API Key. qBittorrent
+  holds exactly one key at a time and generating a new one immediately
+  invalidates the previous one, so mydia never generates keys itself.
+
+  Otherwise the adapter logs in with the username and password and maintains
+  the session cookie, re-authenticating once when a request comes back 403.
+
   ## State Mapping
 
   qBittorrent states are mapped to our internal states:
@@ -180,9 +200,12 @@ defmodule Mydia.Downloads.Client.QBittorrent do
 
   ## Private Functions
 
-  # Authenticates, runs `fun` with the authenticated Req struct, and re-authenticates
-  # once if the inner call returns a 403 (stale/expired session). This matches the
-  # pattern used by the Transmission adapter for 409 session-id retries.
+  # Authenticates, runs `fun` with the authenticated Req struct, and handles a
+  # 403 from the inner call. In cookie mode this is a stale/expired session, so
+  # we re-authenticate once and retry (matching the pattern used by the
+  # Transmission adapter for 409 session-id retries). Under API-key auth a 403
+  # means the key itself was rejected, so it is terminal: see
+  # `retry_after_stale_session/2`.
   defp with_authenticated_session(config, fun) when is_function(fun, 1) do
     with {:ok, req} <- authenticate(config) do
       case fun.(req) do
