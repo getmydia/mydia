@@ -35,23 +35,16 @@ class CastMiniController extends ConsumerWidget {
         ? mediaInfo.position.inSeconds / mediaInfo.duration.inSeconds
         : 0.0;
 
+    // Deliberately not tappable: the full remote lives on the player screen,
+    // and this bar has no media ids to route there with. An affordance that
+    // only apologises for itself is worse than no affordance — the play/pause
+    // and stop buttons below are the real controls.
     return Material(
       elevation: 8,
       color: Theme.of(context).colorScheme.surface,
-      child: InkWell(
-        onTap: () {
-          // Navigate to player screen (which will show remote control UI)
-          // For now, just show a message since we'd need media IDs
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Full remote control coming soon'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
             // Progress bar
             LinearProgressIndicator(
               value: progress,
@@ -150,8 +143,7 @@ class CastMiniController extends ConsumerWidget {
                 ],
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

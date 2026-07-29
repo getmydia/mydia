@@ -34,6 +34,32 @@ void main() {
     expect(find.byKey(const Key('cast-picker-searching')), findsOneWidget);
   });
 
+  testWidgets('admits it found nothing once the sweep is over',
+      (tester) async {
+    // Otherwise a network with no receivers spins forever with no terminal
+    // state and nothing for the user to act on.
+    await pumpPicker(tester, devices: const AsyncValue.data([]));
+
+    await tester.pump(const Duration(seconds: 11));
+
+    expect(find.byKey(const Key('cast-picker-empty')), findsOneWidget);
+    expect(find.byKey(const Key('cast-picker-searching')), findsNothing);
+  });
+
+  testWidgets('a still-loading discovery stream also terminates',
+      (tester) async {
+    // The discovery stream emits nothing at all until the first device
+    // answers, so the loading branch is the one a quiet network actually
+    // renders.
+    await pumpPicker(tester, devices: const AsyncValue.loading());
+
+    expect(find.byKey(const Key('cast-picker-searching')), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 11));
+
+    expect(find.byKey(const Key('cast-picker-empty')), findsOneWidget);
+  });
+
   testWidgets('groups devices by protocol', (tester) async {
     await pumpPicker(tester,
         devices: const AsyncValue.data([

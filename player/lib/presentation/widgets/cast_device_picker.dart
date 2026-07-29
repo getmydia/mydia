@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,7 +48,15 @@ class CastDevicePickerDialog extends ConsumerWidget {
             capabilities: capabilities,
             currentDeviceId: currentDevice?.id,
           ),
-          loading: () => const Center(child: CircularProgressIndicator()),
+          // Same widget as the empty-data case: the discovery stream emits
+          // nothing at all until the first device answers, so a distinct
+          // "loading" spinner here is what left a network with no receivers
+          // spinning forever with no terminal state.
+          loading: () => _DeviceList(
+            devices: const [],
+            capabilities: capabilities,
+            currentDeviceId: currentDevice?.id,
+          ),
           error: (error, _) => _DiscoveryError(error: error),
         ),
       ),
@@ -60,10 +70,15 @@ class CastDevicePickerDialog extends ConsumerWidget {
   }
 }
 
-class _DeviceList extends StatelessWidget {
+class _DeviceList extends StatefulWidget {
   final List<CastDevice> devices;
   final CastCapabilities capabilities;
   final String? currentDeviceId;
+
+  /// How long an empty list keeps showing a spinner before admitting it found
+  /// nothing. Matches `CastBackend.startDiscovery`'s default sweep timeout —
+  /// past it the spinner is a lie, because nothing more is coming.
+  static const searchTimeout = Duration(seconds: 10);
 
   const _DeviceList({
     required this.devices,
@@ -72,8 +87,57 @@ class _DeviceList extends StatelessWidget {
   });
 
   @override
+  State<_DeviceList> createState() => _DeviceListState();
+}
+
+class _DeviceListState extends State<_DeviceList> {
+  Timer? _timeout;
+  bool _searchExpired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timeout = Timer(_DeviceList.searchTimeout, () {
+      if (mounted) setState(() => _searchExpired = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timeout?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final devices = widget.devices;
+    final capabilities = widget.capabilities;
+    final currentDeviceId = widget.currentDeviceId;
+
     if (devices.isEmpty) {
+      if (_searchExpired) {
+        return Column(
+          key: const Key('cast-picker-empty'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.tv_off, size: 48, color: AppColors.textSecondary),
+            const SizedBox(height: 16),
+            Text(
+              'No cast devices found',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Make sure the device is powered on and on the same Wi-Fi '
+              'network as this one.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        );
+      }
+
       return const Column(
         key: Key('cast-picker-searching'),
         mainAxisSize: MainAxisSize.min,

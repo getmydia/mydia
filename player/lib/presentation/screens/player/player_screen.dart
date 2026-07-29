@@ -1364,6 +1364,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Ending a cast rebinds the local proxy on a fresh ephemeral port (and
+    // drops the LAN path token), which invalidates the URL media_kit is
+    // holding. Nothing else re-initialises the local player, so without this
+    // the screen comes back from casting to a dead video surface.
+    ref.listen<bool>(isCastingProvider, (previous, next) {
+      if (previous == true && next == false) {
+        unawaited(_restartLocalPlayback());
+      }
+    });
+
     final isCasting = ref.watch(isCastingProvider);
     Widget body = isCasting ? _buildCastRemoteControlUI() : _buildBody();
 
@@ -1385,37 +1395,88 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
+  /// Tear the local player down and rebuild it from scratch.
+  ///
+  /// Used when casting stops: the media source the old [Player] was opened
+  /// with no longer resolves, and media_kit gives no way to re-point it.
+  Future<void> _restartLocalPlayback() async {
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+    _progressService?.stopSync();
+
+    final player = _player;
+    _player = null;
+    if (mounted) {
+      setState(() {
+        _videoController = null;
+        _isLoading = true;
+        _error = null;
+      });
+    } else {
+      _videoController = null;
+    }
+
+    await player?.dispose();
+
+    if (!mounted) return;
+    await _initializePlayer();
+  }
+
+  /// Keep the cast affordance reachable in every state.
+  ///
+  /// Casting is the natural remedy for a file the local player cannot decode,
+  /// so hiding the button behind "local playback is ready" removes it exactly
+  /// when it is most useful.
+  Widget _withCastAffordance(Widget child) {
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: SafeArea(
+            child: CastButton(onPressed: _showCastDevicePicker),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(
-              color: Colors.red,
-            ),
-            if (_loadingMessage != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _loadingMessage!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[400],
-                    ),
+      return _withCastAffordance(
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                color: Colors.red,
               ),
+              if (_loadingMessage != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _loadingMessage!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[400],
+                      ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       );
     }
 
     if (_error != null) {
-      return _buildError();
+      return _withCastAffordance(_buildError());
     }
 
     if (_videoController == null) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.red,
+      return _withCastAffordance(
+        const Center(
+          child: CircularProgressIndicator(
+            color: Colors.red,
+          ),
         ),
       );
     }
@@ -1744,6 +1805,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// Re-cast the media the stored (now stale) session was playing.
+  Future<void> _reconnectStaleSession() async {
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.reconnectStoredSession();
+    } on CastBackendException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_castErrorMessage(e)),
+        backgroundColor: Colors.red,
+      ));
+    } catch (e) {
+      debugPrint('[PlayerScreen] Unexpected error reconnecting cast: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to reconnect: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  /// Drop the cast session and fall back to local playback.
+  Future<void> _stopCasting() async {
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.stopCast();
+    } catch (e) {
+      debugPrint('[PlayerScreen] Unexpected error stopping cast: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to stop casting: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
   /// Turn a cast failure into something the user can act on. A bare
   /// "cast failed" leaves a firewall or codec problem undiagnosable, so the
   /// unreachable case names the actual port that needs to be open.
@@ -1787,8 +1884,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: _showCastDevicePicker,
+              key: const Key('cast-stale-reconnect'),
+              // Re-cast what the *stale session* was playing. Opening the
+              // picker here would silently start whatever file this screen
+              // happens to be showing instead.
+              onPressed: _reconnectStaleSession,
               child: const Text('Reconnect'),
+            ),
+            const SizedBox(height: 8),
+            // Without this the screen is a dead end: `isCastingProvider`
+            // stays true while the session is stale, so the normal player
+            // body never renders and there is no way back.
+            TextButton(
+              key: const Key('cast-stale-stop'),
+              onPressed: _stopCasting,
+              child: const Text('Stop casting'),
             ),
           ],
         ),

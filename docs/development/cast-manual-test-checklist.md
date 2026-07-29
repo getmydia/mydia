@@ -23,27 +23,54 @@ request, so DLNA devices must not appear at all.
 | 5 | Pick a subtitle track (direct route) | Subtitles appear on the receiver |
 | 6 | Cast while connected over p2p | Falls back to the bridge and plays; subtitle picker is disabled with a reason |
 | 7 | Kill the app mid-cast, direct route | Receiver keeps playing |
-| 8 | Reopen the app within 12h | Mini controller reappears attached to the session |
+| 8 | Reopen the app within 12h | **No session is restored** (see "Session restore" below) and, critically, the receiver is *not* interrupted |
 | 9 | Reopen after 12h | No phantom session; picker behaves normally |
-| 10 | Stop casting from the mini controller | Receiver stops; local playback resumes control |
+| 10 | Stop casting from the mini controller | Receiver stops; the player screen re-initialises local playback from the current position |
 | 11 | Cast to a receiver on an isolated guest wifi | Bridge retry runs; a specific error appears if it also fails |
 | 12 | Deny local network permission (iOS/macOS) | Picker shows the permission message, not an empty list |
-| 13 | Close the picker | Discovery stops (verify no ongoing multicast in logs) |
-| 14 | Power off the receiver mid-playback | Session marked stale; a Reconnect button appears rather than dead controls |
+| 13 | Close the picker | Discovery stops (verify no ongoing multicast in logs); on Android the multicast lock is released with it |
+| 14 | Power off the receiver mid-playback | Session marked stale; **Reconnect** re-casts that session's media (not the open screen's), **Stop casting** returns to local playback |
 | 15 | Cast a file the receiver cannot decode | Automatically retries with TRANSCODE and plays |
+| 16 | Open a file the local player cannot decode, then cast it | The cast button is reachable from the loading and error states, not only from a playing video |
+| 17 | Cast over p2p, then stop | While casting, `LocalProxyService` is LAN-bound; after stopping, `isLanAccessible` is false again and the proxy is loopback-only |
+| 18 | Cast over p2p to a Chromecast | A server-side streaming session is started for the bridge URL and ended when casting stops (check the server's session list) |
+| 19 | Open the picker on a network with no receivers | After ~10s the picker says "No cast devices found" rather than spinning forever |
+| 20 | Cast to receiver A, then straight to receiver B | A stops playing and is disconnected before B starts |
+| 21 | Cast with a VPN connected (macOS `utun`, WireGuard) | The bridge URL uses the real LAN address, not the tunnel address |
+
+## Session restore
+
+The design calls for reattaching to a session left running by a previous app
+launch — but only when the receiver is *still playing our media*, and never by
+taking a receiver over to find that out.
+
+`dart_cast` 0.7.3 offers no way to ask. `CastService.connect` is the only entry
+point to a session, and `ChromecastSession.connect` sends `LAUNCH CC1AD845`,
+which evicts whatever app the receiver is running. So
+`DartCastBackend.probeReceiverContentUrl` returns null ("cannot tell"), and
+`CastSessionManager.restoreSession` discards the stored session rather than
+risk stopping the film someone else started on the TV.
+
+**Practical effect:** reopening the app within 12h of a cast shows no restored
+session and no mini controller. This is deliberate. The one thing to verify by
+hand is the negative: reopening Mydia must never interrupt the receiver.
+
+The probe is a seam, not dead code — a backend that can answer (hand-written
+CASTV2 `GET_STATUS`, or a future dart_cast release) restores the reattach path
+without touching the manager. The bridge-route reload at the stored position is
+already implemented behind the same gate.
 
 ## Known limitations to confirm, not file as bugs
 
 - Subtitles do not work on the bridge route (p2p). The picker is disabled there.
 - DLNA subtitle support is best-effort and varies by TV.
-- App restart on the bridge route reloads from the stored position with a
-  visible blip, rather than resuming seamlessly.
-- If a cast escalates to a transcode retry on the direct route after a failed
-  bridge attempt, the LAN proxy stays enabled until the session is stopped.
-  `CastSessionManager` only tears the proxy down in `stopCast` and in
-  `startCast`'s failure rollback — a transcode retry that *succeeds* after the
-  bridge attempt enabled LAN access leaves it enabled for the rest of the
-  (now direct-route) session.
+- Session restore never reattaches today; see "Session restore" above.
+- App restart on the bridge route would reload from the stored position with a
+  visible blip, rather than resuming seamlessly — reachable only once a backend
+  can probe receiver state.
+- Casting cannot start while the LAN interface is genuinely unusable, and the
+  bridge attempt briefly binds and unbinds the proxy to discover that: whether
+  a bridge URL exists is only knowable once the proxy has been LAN-bound.
 - `dart_cast` 0.7.3 reports both "receiver could not reach the URL" and
   "receiver could not decode the file" as the same `mediaLoadFailed` error, so
   the app cannot distinguish an unreachable server from a rejected codec from
