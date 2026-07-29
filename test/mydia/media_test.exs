@@ -1893,4 +1893,68 @@ defmodule Mydia.MediaTest do
       assert File.exists?(abs)
     end
   end
+
+  describe "partition_for_auto_search/1 with movies" do
+    test "returns a movie with no files and no downloads" do
+      movie = insert(:media_item, type: "movie")
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "skips a movie with an untrashed media file" do
+      movie = insert(:media_item, type: "movie")
+      insert(:media_file, media_item: movie, episode: nil)
+
+      assert {[], 1} = Media.partition_for_auto_search([movie.id])
+    end
+
+    test "returns a movie whose only media file is trashed" do
+      movie = insert(:media_item, type: "movie")
+
+      insert(:media_file,
+        media_item: movie,
+        episode: nil,
+        trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "skips a movie with an occupying download" do
+      movie = insert(:media_item, type: "movie")
+      insert(:download, media_item: movie)
+
+      assert {[], 1} = Media.partition_for_auto_search([movie.id])
+    end
+
+    test "returns a movie whose only download failed terminally" do
+      movie = insert(:media_item, type: "movie")
+
+      insert(:download,
+        media_item: movie,
+        import_failed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        import_next_retry_at: nil
+      )
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "returns an unmonitored movie with no files" do
+      movie = insert(:media_item, type: "movie", monitored: false)
+
+      assert {[found], 0} = Media.partition_for_auto_search([movie.id])
+      assert found.id == movie.id
+    end
+
+    test "ignores ids that do not exist" do
+      assert {[], 0} = Media.partition_for_auto_search([Ecto.UUID.generate()])
+    end
+
+    test "returns an empty result for an empty id list" do
+      assert {[], 0} = Media.partition_for_auto_search([])
+    end
+  end
 end
