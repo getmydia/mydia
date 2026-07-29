@@ -1,17 +1,25 @@
 #import '../fragments/artwork_fragment.graphql'
 
-query Search($query: String!, $types: [MediaType], $first: Int) {
+query Search($query: String!, $types: [SearchResultType], $first: Int) {
   search(query: $query, types: $types, first: $first) {
-    results {
-      id
+    totalCount
+    sections {
       type
-      title
-      year
-      score
-      artwork {
-        ...ArtworkFragment
+      totalCount
+      results {
+        id
+        type
+        title
+        year
+        subtitle
+        seasonNumber
+        episodeNumber
+        parentId
+        score
+        artwork {
+          ...ArtworkFragment
+        }
       }
     }
-    totalCount
   }
 }

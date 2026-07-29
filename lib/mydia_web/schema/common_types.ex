@@ -76,16 +76,32 @@ defmodule MydiaWeb.Schema.CommonTypes do
   @desc "Search result with relevance score"
   object :search_result do
     field :id, non_null(:id)
-    field :type, non_null(:media_type)
+    field :type, non_null(:search_result_type)
     field :title, non_null(:string)
     field :year, :integer
     field :artwork, :artwork
-    field :score, :float, description: "Relevance score"
+    field :score, :float, description: "Relevance score: 100, 75, 50 or 25"
+
+    field :subtitle, :string,
+      description: "Parent show title for episodes, item count for collections"
+
+    field :season_number, :integer, description: "Season number, episodes only"
+    field :episode_number, :integer, description: "Episode number, episodes only"
+    field :parent_id, :id, description: "Owning show ID, episodes only"
+  end
+
+  @desc "One grouped section of search results"
+  object :search_section do
+    field :type, non_null(:search_result_type)
+    field :results, non_null(list_of(non_null(:search_result)))
+
+    field :total_count, non_null(:integer),
+      description: "True number of matches, not the length of results"
   end
 
   @desc "Search results container"
   object :search_results do
-    field :results, non_null(list_of(non_null(:search_result)))
+    field :sections, non_null(list_of(non_null(:search_section)))
     field :total_count, non_null(:integer)
   end
 

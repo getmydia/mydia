@@ -525,8 +525,12 @@ class MydiaLogoPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Shared sidebar navigation content used by both desktop and mobile drawers.
-class _SidebarContent extends StatelessWidget {
+/// Shared sidebar navigation content used by both the desktop sidebar and the
+/// mobile drawer.
+///
+/// Public so the navigation destinations are unit-testable without mounting the
+/// full shell's provider graph, matching [GlassSidebarPanel].
+class SidebarContent extends StatelessWidget {
   final String location;
   final ValueChanged<String> onNavigate;
   final bool homeExpanded;
@@ -537,7 +541,8 @@ class _SidebarContent extends StatelessWidget {
   final double topPadding;
   final Widget? backToMydiaWidget;
 
-  const _SidebarContent({
+  const SidebarContent({
+    super.key,
     required this.location,
     required this.onNavigate,
     required this.homeExpanded,
@@ -569,12 +574,16 @@ class _SidebarContent extends StatelessWidget {
             children: [
               const MydiaLogo(size: 36),
               const SizedBox(width: 12),
-              Text(
-                'Mydia Player',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
+              Expanded(
+                child: Text(
+                  'Mydia Player',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.5,
+                      ),
+                ),
               ),
             ],
           ),
@@ -669,6 +678,15 @@ class _SidebarContent extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                _SidebarItem(
+                  icon: Icons.search_outlined,
+                  selectedIcon: Icons.search_rounded,
+                  label: 'Search',
+                  isSelected: location.startsWith('/search'),
+                  isDisabled: isOffline,
+                  onTap: () => onNavigate('/search'),
+                ),
                 if (isDownloadSupported) ...[
                   const SizedBox(height: 8),
                   _SidebarItem(
@@ -731,7 +749,7 @@ class _DesktopSidebar extends StatelessWidget {
     return GlassSidebarPanel(
       child: SafeArea(
         top: false,
-        child: _SidebarContent(
+        child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
           homeExpanded: homeExpanded,
@@ -1027,12 +1045,16 @@ class _SidebarItemState extends State<_SidebarItem> {
                 ],
               ),
               const SizedBox(width: 14),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: textColor,
+              Expanded(
+                child: Text(
+                  widget.label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: textColor,
+                  ),
                 ),
               ),
             ],
@@ -1085,67 +1107,67 @@ class _ModernBottomNav extends StatelessWidget {
               color: AppColors.border.withValues(alpha: 0.2),
             ),
             child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                if (showBackToMydia)
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  if (showBackToMydia)
+                    _NavItem(
+                      icon: Icons.arrow_back_rounded,
+                      selectedIcon: Icons.arrow_back_rounded,
+                      label: 'Mydia',
+                      isSelected: false,
+                      onTap: navigateToMydiaApp,
+                    ),
                   _NavItem(
-                    icon: Icons.arrow_back_rounded,
-                    selectedIcon: Icons.arrow_back_rounded,
-                    label: 'Mydia',
-                    isSelected: false,
-                    onTap: navigateToMydiaApp,
-                  ),
-                _NavItem(
-                  icon: Icons.home_outlined,
-                  selectedIcon: Icons.home_rounded,
-                  label: 'Home',
-                  isSelected: _AppShellState._isHomeSection(location),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/'),
-                ),
-                _NavItem(
-                  icon: Icons.movie_outlined,
-                  selectedIcon: Icons.movie_rounded,
-                  label: 'Movies',
-                  isSelected: location.startsWith('/movies'),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/movies'),
-                ),
-                _NavItem(
-                  icon: Icons.tv_outlined,
-                  selectedIcon: Icons.tv_rounded,
-                  label: 'Shows',
-                  isSelected: location.startsWith('/shows'),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/shows'),
-                ),
-                if (isDownloadSupported)
-                  _NavItem(
-                    icon: Icons.download_outlined,
-                    selectedIcon: Icons.download_rounded,
-                    label: 'Downloads',
-                    isSelected: location.startsWith('/downloads'),
-                    onTap: () => onNavigate('/downloads'),
-                  )
-                else
-                  _NavItem(
-                    icon: Icons.favorite_outline_rounded,
-                    selectedIcon: Icons.favorite_rounded,
-                    label: 'Favorites',
-                    isSelected: location.startsWith('/favorites'),
+                    icon: Icons.home_outlined,
+                    selectedIcon: Icons.home_rounded,
+                    label: 'Home',
+                    isSelected: _AppShellState._isHomeSection(location),
                     isDisabled: isOffline,
-                    onTap: () => onNavigate('/favorites'),
+                    onTap: () => onNavigate('/'),
                   ),
-                _SettingsNavItem(
-                  isSelected: location.startsWith('/settings'),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/settings'),
-                ),
-              ],
+                  _NavItem(
+                    icon: Icons.movie_outlined,
+                    selectedIcon: Icons.movie_rounded,
+                    label: 'Movies',
+                    isSelected: location.startsWith('/movies'),
+                    isDisabled: isOffline,
+                    onTap: () => onNavigate('/movies'),
+                  ),
+                  _NavItem(
+                    icon: Icons.tv_outlined,
+                    selectedIcon: Icons.tv_rounded,
+                    label: 'Shows',
+                    isSelected: location.startsWith('/shows'),
+                    isDisabled: isOffline,
+                    onTap: () => onNavigate('/shows'),
+                  ),
+                  if (isDownloadSupported)
+                    _NavItem(
+                      icon: Icons.download_outlined,
+                      selectedIcon: Icons.download_rounded,
+                      label: 'Downloads',
+                      isSelected: location.startsWith('/downloads'),
+                      onTap: () => onNavigate('/downloads'),
+                    )
+                  else
+                    _NavItem(
+                      icon: Icons.favorite_outline_rounded,
+                      selectedIcon: Icons.favorite_rounded,
+                      label: 'Favorites',
+                      isSelected: location.startsWith('/favorites'),
+                      isDisabled: isOffline,
+                      onTap: () => onNavigate('/favorites'),
+                    ),
+                  _SettingsNavItem(
+                    isSelected: location.startsWith('/settings'),
+                    isDisabled: isOffline,
+                    onTap: () => onNavigate('/settings'),
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         ),
       ),
@@ -1180,7 +1202,7 @@ class _MobileDrawer extends StatelessWidget {
     return Drawer(
       backgroundColor: AppColors.background,
       child: SafeArea(
-        child: _SidebarContent(
+        child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
           homeExpanded: homeExpanded,

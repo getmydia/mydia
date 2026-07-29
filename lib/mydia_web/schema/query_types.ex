@@ -169,10 +169,10 @@ defmodule MydiaWeb.Schema.QueryTypes do
 
   # Search queries
   object :search_queries do
-    @desc "Search across movies and TV shows"
+    @desc "Search the library across movies, TV shows, episodes, and collections"
     field :search, :search_results do
       arg(:query, non_null(:string))
-      arg(:types, list_of(:media_type))
+      arg(:types, list_of(:search_result_type))
       arg(:first, :integer, default_value: 20)
       resolve(&SearchResolver.search/3)
     end
