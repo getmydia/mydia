@@ -208,9 +208,14 @@ class LibraryController extends _$LibraryController {
     return _watcher.refetch();
   }
 
-  /// Sort is not part of either query document, so this refetches rather than
-  /// re-querying with a sort argument. Preserved from the pre-migration
-  /// behavior; wiring sort into the query is a separate change.
+  /// Refetches from page 1 after the user picks a sort order.
+  ///
+  /// [sort] is deliberately unused: neither `moviesListQuery` nor
+  /// `tvShowsListQuery` takes a sort argument, so sorting has never changed
+  /// what the server returns, and this migration preserved that rather than
+  /// quietly changing it. The parameter stays because the screen already
+  /// passes its selection and this is where sort belongs once the query grows
+  /// an argument for it. Until then the only honest behavior is a refetch.
   Future<void> setSort(SortOption sort) {
     _hasPaginated = false;
     return _watcher.refetch();

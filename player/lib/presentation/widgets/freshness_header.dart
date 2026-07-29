@@ -9,11 +9,21 @@ import '../../core/graphql/watch/query_key.dart';
 import '../../core/graphql/watch/watcher_registry.dart';
 import '../../core/theme/colors.dart';
 
-/// The space a screen must reserve above the header so it lands below a
-/// translucent app bar rather than behind it.
+/// The space a screen must reserve above the header so it lands below
+/// whatever is drawn over the top of its body, rather than behind it.
 ///
-/// Pass [appBarHeight] for screens with `extendBodyBehindAppBar: true`; pass
-/// null when the screen has no app bar of its own.
+/// [appBarHeight] has three meaningful values, one per layout this app uses:
+///
+/// - **omitted or null**: nothing is drawn over the body's top edge, so no
+///   inset at all. Desktop layouts inside `AppShell`, which have no app bar
+///   of their own.
+/// - **0**: only the status bar overlaps. Screens whose app bar is a
+///   `SliverAppBar` inside the scroll view, since that scrolls with the
+///   content instead of sitting above it.
+/// - **a height**: the status bar plus a bar of that height. Screens with
+///   `extendBodyBehindAppBar: true` and a real app bar; pass the bar's actual
+///   height, which is not always `kToolbarHeight` (the library's app bar is
+///   taller while its search row is expanded).
 double freshnessTopInset(BuildContext context, {double? appBarHeight}) {
   if (appBarHeight == null) return 0;
   return MediaQuery.paddingOf(context).top + appBarHeight;
