@@ -30,6 +30,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   require Logger
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.UntrackedMatcher
   alias Mydia.Events
@@ -277,23 +278,38 @@ defmodule Mydia.Jobs.DownloadMonitor do
   end
 
   defp handle_failure(download_map) do
+    # `error_message` is nil by construction here — the caller's filter only
+    # selects failures we haven't handled yet. The `||` is belt-and-braces
+    # for any future caller.
+    error_msg =
+      download_map.error_message ||
+        FailureCategory.message(
+          download_map.download_client,
+          download_map.client_failure_category,
+          download_map.client_error_detail
+        )
+
     Logger.info("Handling failed download",
       download_id: download_map.id,
       title: download_map.title,
-      error: download_map.error_message
+      failure_category: download_map.client_failure_category,
+      failure_detail: download_map.client_error_detail,
+      error: error_msg
     )
 
     # Get the download struct from database (with media_item preloaded)
     download = Downloads.get_download!(download_map.id, preload: [:media_item])
 
-    error_msg = download_map.error_message || "Download failed in client"
-
-    # Track failure event before deletion
+    # Track failure event before deletion. This metadata is what the activity
+    # feed and the media-item history render, so the composed message is the
+    # operator's only lasting record — the Download row is deleted below.
     Events.download_failed(download, error_msg, media_item: download.media_item)
 
     # Blacklist the release so the next search excludes it (issue #123).
+    # The reason is the provider's own classification when we have one
+    # (issue #237), falling back to the pre-existing generic slug.
     # This MUST NOT block failure handling — wrap in try/rescue and log.
-    record_blacklist_entry(download, "client_reported_failure")
+    record_blacklist_entry(download, FailureCategory.slug(download_map.client_failure_category))
 
     # Delete the download record - downloads table is ephemeral
     case Downloads.delete_download(download) do
