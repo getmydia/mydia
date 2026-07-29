@@ -214,10 +214,10 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     login_body = %{username: config.username, password: config.password}
 
     case HTTP.post(req, "/api/v2/auth/login", form: login_body) do
-      {:ok, %{status: 200} = response} ->
-        case extract_sid_cookie(response) do
-          {:ok, sid} ->
-            {:ok, Req.Request.put_header(req, "cookie", "SID=#{sid}")}
+      {:ok, %{status: status} = response} when status in 200..299 ->
+        case extract_session_cookie(response) do
+          {:ok, cookie} ->
+            {:ok, Req.Request.put_header(req, "cookie", cookie)}
 
           :error ->
             {:error, Error.authentication_failed("Failed to extract session cookie")}
@@ -241,15 +241,26 @@ defmodule Mydia.Downloads.Client.QBittorrent do
     end
   end
 
-  # Find the Set-Cookie header value that actually contains "SID=".
-  # qBittorrent occasionally emits multiple cookies (e.g. CSRF) and we must not
-  # pick the wrong one.
-  defp extract_sid_cookie(response) do
+  # Session cookie under any qBittorrent naming scheme:
+  #   <= 5.1  ->  SID=<value>
+  #   >= 5.2  ->  QBT_SID_<webui_port>=<value>
+  #
+  # The port suffix is qBittorrent's OWN listening port, not the port we dial:
+  # a 5.2 server listening on 8282 still issues QBT_SID_8282 when reached
+  # through a proxy on another port. So the name cannot be derived from config
+  # and must be read off Set-Cookie, then echoed back verbatim.
+  #
+  # Anchoring on (?:^|[\s;]) keeps unrelated cookies out: qBittorrent sometimes
+  # emits a _csrf cookie alongside the session one, and a name like MYSID= must
+  # not match either.
+  @session_cookie ~r/(?:^|[\s;])((?:QBT_)?SID(?:_\d+)?=[^;]+)/
+
+  defp extract_session_cookie(response) do
     response
     |> Req.Response.get_header("set-cookie")
     |> Enum.find_value(:error, fn cookie ->
-      case Regex.run(~r/SID=([^;]+)/, cookie) do
-        [_, sid] -> {:ok, sid}
+      case Regex.run(@session_cookie, cookie) do
+        [_, pair] -> {:ok, pair}
         _ -> nil
       end
     end)

@@ -140,6 +140,20 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
   # Bypass-based integration tests
   # ──────────────────────────────────────────────────────────────────
 
+  # Login dialects observed from real servers.
+  # 5.1.2 -> 200 "Ok."  + SID=<v>
+  # 5.2.0 -> 204 ""     + QBT_SID_<webui_port>=<v>
+  # The 5.2 cookie's port (8080) is deliberately NOT the port Bypass listens on,
+  # which is what makes the echo assertion meaningful: the name cannot be
+  # reconstructed from our config, it must be read off Set-Cookie.
+  @dialects [
+    {"5.1", 200, "Ok.", "SID=session-abc-123; HttpOnly; SameSite=Strict; path=/",
+     "SID=session-abc-123"},
+    {"5.2", 204, "",
+     "QBT_SID_8080=session-abc-123; HttpOnly; SameSite=Strict; " <>
+       "expires=Wed, 29-Jul-2026 01:06:04 GMT; path=/", "QBT_SID_8080=session-abc-123"}
+  ]
+
   describe "authentication (Bypass)" do
     setup do
       bypass = Bypass.open()
@@ -202,6 +216,50 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
       assert {:ok, _status} = QBittorrent.get_status(config, hash)
       # Two logins: one initial, one after the 403
       assert :counters.get(counter, 1) == 2
+    end
+
+    for {version, login_status, login_body, set_cookie, expected_cookie} <- @dialects do
+      test "authenticates and echoes the session cookie on qBittorrent #{version}", %{
+        bypass: bypass,
+        config: config
+      } do
+        hash = "1234567890abcdef1234567890abcdef12345678"
+
+        Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+          conn
+          |> Plug.Conn.put_resp_header("set-cookie", unquote(set_cookie))
+          |> Plug.Conn.resp(unquote(login_status), unquote(login_body))
+        end)
+
+        Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+          assert [unquote(expected_cookie)] == Plug.Conn.get_req_header(conn, "cookie")
+          json_resp(conn, 200, [torrent_payload(hash)])
+        end)
+
+        assert {:ok, download_status} = QBittorrent.get_status(config, hash)
+        assert download_status.id == hash
+      end
+
+      test "skips the _csrf cookie on qBittorrent #{version}", %{
+        bypass: bypass,
+        config: config
+      } do
+        hash = "1234567890abcdef1234567890abcdef12345678"
+
+        Bypass.expect(bypass, "POST", "/api/v2/auth/login", fn conn ->
+          conn
+          |> Plug.Conn.put_resp_header("set-cookie", "_csrf=ignored; Path=/")
+          |> Plug.Conn.merge_resp_headers([{"set-cookie", unquote(set_cookie)}])
+          |> Plug.Conn.resp(unquote(login_status), unquote(login_body))
+        end)
+
+        Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+          assert [unquote(expected_cookie)] == Plug.Conn.get_req_header(conn, "cookie")
+          json_resp(conn, 200, [torrent_payload(hash)])
+        end)
+
+        assert {:ok, _} = QBittorrent.get_status(config, hash)
+      end
     end
   end
 
