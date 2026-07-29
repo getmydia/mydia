@@ -32,6 +32,7 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.RealDebrid do
 
   alias Mydia.Downloads.Client.Debrid.{ProviderJob, Shared}
   alias Mydia.Downloads.Client.Error
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.Structs.ClientInfo
 
   @default_base_url "https://api.real-debrid.com/rest/1.0"
@@ -244,19 +245,21 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.RealDebrid do
   ## ── Parsing ─────────────────────────────────────────────────────────
 
   defp parse_torrent_info(id, body) do
-    state = map_status(body["status"])
-    progress = body["progress"] || 0.0
-    bytes = body["bytes"] || 0
+    native_status = body["status"]
+    state = map_status(native_status)
+    {category, detail} = classify_failure(state, native_status)
 
     %ProviderJob{
       provider_id: id,
       state: state,
-      progress: progress * 1.0,
+      progress: (body["progress"] || 0.0) * 1.0,
       name: body["filename"],
-      total_bytes: bytes,
+      total_bytes: body["bytes"] || 0,
       files: body["files"] || [],
       hoster_links: body["links"] || [],
-      raw_status: body
+      raw_status: body,
+      failure_category: category,
+      failure_detail: detail
     }
   end
 
@@ -272,6 +275,20 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.RealDebrid do
   defp map_status("dead"), do: :error
   defp map_status("magnet_error"), do: :error
   defp map_status(_), do: :queued
+
+  # The detail is the native status string alone — never the body, whose
+  # `links` are credentialed CDN URLs.
+  defp classify_failure(:error, native_status) when is_binary(native_status) do
+    {failure_category(native_status), Helpers.sanitize_failure_detail(native_status)}
+  end
+
+  defp classify_failure(_state, _native_status), do: {nil, nil}
+
+  defp failure_category("dead"), do: :no_peers
+  defp failure_category("virus"), do: :rejected_content
+  defp failure_category("magnet_error"), do: :rejected_content
+  defp failure_category("error"), do: :provider_error
+  defp failure_category(_), do: nil
 
   ## ── Error mapping ────────────────────────────────────────────────────
 
