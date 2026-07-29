@@ -131,4 +131,36 @@ void main() {
 
     expect(link.requests.length, before);
   });
+
+  test('loadMore ignores a concurrent call while one is already in flight',
+      () async {
+    final link = StubLink((_, callIndex) {
+      return callIndex == 0
+          ? _moviesPage(['1', '2'], hasNextPage: true)
+          : _moviesPage(['3', '4'], hasNextPage: false);
+    });
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(link),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final provider = libraryControllerProvider(LibraryType.movies);
+    await waitForValue(container, provider, (value) => value.items.isNotEmpty);
+    final before = link.requests.length;
+
+    // Mimics rapid scrolling: `_onScroll` firing `loadMore()` twice before
+    // the first network round-trip resolves. The `_loadingMore` guard runs
+    // synchronously before any `await`, so the second call must return
+    // without issuing a second network request.
+    final notifier = container.read(provider.notifier);
+    final first = notifier.loadMore();
+    final second = notifier.loadMore();
+    await Future.wait([first, second]);
+
+    expect(link.requests.length, before + 1);
+  });
 }

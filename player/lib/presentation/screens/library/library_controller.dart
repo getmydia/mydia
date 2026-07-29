@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/watch/connection_merge.dart';
@@ -206,6 +207,12 @@ class LibraryController extends _$LibraryController {
               mergeConnection(_connectionField, previous, fetched),
         ),
       );
+    } catch (error) {
+      // A merge/cache-write failure (e.g. `mergeConnection` throwing on a
+      // schema-shape violation) must not blank the already-rendered library
+      // to an error screen just because page 2 hiccuped. Leave `state.value`
+      // as-is; the guard above lets a later scroll retry.
+      debugPrint('LibraryController($libraryType).loadMore failed: $error');
     } finally {
       _loadingMore = false;
     }
