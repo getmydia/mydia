@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/auth/auth_status.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/providers.dart';
 import 'core/graphql/graphql_provider.dart';
@@ -32,17 +33,44 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     // Reattach to a cast session left running by a previous app launch, on
     // builds that can actually cast.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final capabilities = ref.read(castCapabilitiesProvider);
-      if (!capabilities.any) return;
+    //
+    // Deliberately gated on authentication rather than fired at startup. The
+    // cast stack awaits `asyncGraphqlClientProvider`, which stays in the
+    // loading state until the user is authenticated. Kicking it off before
+    // then leaves that chain in flight indefinitely, and if the container is
+    // disposed while it is still loading — app teardown, or an integration
+    // test finishing on the pairing screen — Riverpod completes the pending
+    // future with a StateError from inside `castSessionManagerProvider`'s own
+    // body, where no caller can catch it. It surfaces as an unhandled async
+    // error and fails the test run. Restoring a cast session before auth is
+    // meaningless anyway: there is no reachable server yet.
+    ref.listenManual<AsyncValue<AuthStatus>>(
+      authStateProvider,
+      (previous, next) {
+        if (next.value != AuthStatus.authenticated) return;
+        _restoreCastSession();
+      },
+      fireImmediately: true,
+    );
+  }
 
-      try {
-        final manager = await ref.read(castSessionManagerProvider.future);
-        await manager.restoreSession();
-      } catch (e) {
-        debugPrint('[MyApp] Failed to restore cast session: $e');
-      }
-    });
+  /// Whether a restore has already been attempted this launch. Auth state can
+  /// re-emit `authenticated` (a token refresh, a reconnect) and restoring is a
+  /// once-per-launch action.
+  bool _castRestoreAttempted = false;
+
+  Future<void> _restoreCastSession() async {
+    if (_castRestoreAttempted) return;
+    if (!ref.read(castCapabilitiesProvider).any) return;
+    _castRestoreAttempted = true;
+
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      if (!mounted) return;
+      await manager.restoreSession();
+    } catch (e) {
+      debugPrint('[MyApp] Failed to restore cast session: $e');
+    }
   }
 
   @override

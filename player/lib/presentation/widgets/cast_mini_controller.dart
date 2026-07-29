@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/auth/auth_status.dart';
 import '../../core/cast/cast_providers.dart';
+import '../../core/graphql/graphql_provider.dart';
 import '../../domain/models/cast_device.dart';
 
 /// Mini controller that shows at the bottom of the screen during casting.
@@ -14,6 +16,18 @@ class CastMiniController extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final capabilities = ref.watch(castCapabilitiesProvider);
     if (!capabilities.any) return const SizedBox.shrink();
+
+    // Gate on authentication before touching anything else in the cast stack.
+    // `isCastingProvider` reaches `castSessionManagerProvider`, whose body
+    // awaits `asyncGraphqlClientProvider` — and that provider does not resolve
+    // until the user is authenticated. Building the chain beforehand leaves it
+    // loading indefinitely on every screen, and when the container is disposed
+    // while it is still pending (app teardown, or an integration test finishing
+    // on the pairing screen) Riverpod completes it with a StateError that
+    // escapes as an unhandled async error. There is also nothing to show: you
+    // cannot be casting before you have a server.
+    final auth = ref.watch(authStateProvider);
+    if (auth.value != AuthStatus.authenticated) return const SizedBox.shrink();
 
     final isCasting = ref.watch(isCastingProvider);
     if (!isCasting) return const SizedBox.shrink();
