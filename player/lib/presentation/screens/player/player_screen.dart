@@ -23,6 +23,7 @@ import '../../../core/player/duration_override.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
+import '../../../core/cast/cast_target.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../widgets/resume_dialog.dart';
 import '../../widgets/subtitle_track_selector.dart';
@@ -157,6 +158,80 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// Start on the receiver instead of locally, when a device was chosen
+  /// before playback began.
+  ///
+  /// Returns true when a cast was started, in which case the caller must not
+  /// build a local `Player` — the point of choosing a device up front is that
+  /// the file never opens on this machine. Called from three points inside
+  /// [_initializePlayer], each immediately before it would otherwise start
+  /// local-only setup (HLS session negotiation, the P2P proxy, or opening a
+  /// downloaded file): the offline-playback branch, the "already downloaded,
+  /// still online" branch, and the network streaming branch. Checking before
+  /// that setup — rather than once at the top of [_initializePlayer], or once
+  /// right before each `Player` is constructed — means a chosen cast target
+  /// never pays for local streaming infrastructure it immediately throws
+  /// away, while still reaching the metadata fetch that populates
+  /// `_totalDuration` on the streaming path.
+  ///
+  /// `castNotifier` is read once, up front: `castTargetProvider` is a
+  /// keep-alive root provider, like `invalidatorProvider` (see
+  /// [_invalidator]), so the notifier itself stays valid to call even if this
+  /// widget is disposed while `startCast` is awaited. `ref.read` itself is
+  /// not safe to call again at that point, which is why the notifier is
+  /// captured before any `await` rather than re-read after one.
+  Future<bool> _castToTargetIfSet() async {
+    final target = ref.read(castTargetProvider);
+    if (target == null) return false;
+
+    final castNotifier = ref.read(castTargetProvider.notifier);
+
+    // Downloaded media lives only on this device; the route resolver has no
+    // server-side file to hand the receiver. Playing locally is the useful
+    // outcome, but silently ignoring the chosen device is not, so say why.
+    if (widget.fileId == 'offline') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Downloads cannot be cast — playing on this device.'),
+        ));
+      }
+      return false;
+    }
+
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.startCast(
+        device: target,
+        request: CastLaunchRequest(
+          fileId: widget.fileId,
+          mediaId: widget.mediaId,
+          mediaType: widget.mediaType,
+          title: widget.title ?? 'Untitled',
+          duration: _knownCastDuration(),
+        ),
+      );
+      // The session now owns the device; currentCastDeviceProvider reports
+      // it from here on. Leaving the target set would make every future
+      // playback cast forever with no way to opt out.
+      castNotifier.clear();
+      return true;
+    } catch (e) {
+      // A dead screen is the one outcome worse than not casting: clear the
+      // target and fall through so the user still gets their episode.
+      debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
+      castNotifier.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e is CastBackendException
+              ? castErrorMessage(e, ref: ref)
+              : 'Failed to start casting: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return false;
+    }
+  }
+
   Future<void> _initializePlayer() async {
     try {
       setState(() {
@@ -198,6 +273,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           return;
         }
 
+        if (await _castToTargetIfSet()) return;
+
         // Play downloaded content in offline mode
         await _initializeOfflinePlayback(offlinePath);
         return;
@@ -210,6 +287,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             await _resolveDownloadedFilePath(downloadedMedia.filePath);
         if (localPath != null) {
           debugPrint('Playing from local file: $localPath');
+
+          if (await _castToTargetIfSet()) return;
 
           // Try to initialize progress sync (optional - local playback
           // works even if server is unreachable)
@@ -310,6 +389,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               '[PlayerScreen] Total duration from candidates: $_totalDuration');
         }
       }
+
+      if (await _castToTargetIfSet()) return;
 
       String mediaSource;
       Map<String, String> httpHeaders = {};
