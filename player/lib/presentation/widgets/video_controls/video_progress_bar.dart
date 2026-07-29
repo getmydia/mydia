@@ -2,33 +2,223 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/duration_override.dart';
+import '../../../core/theme/depth_tokens.dart';
 
-/// A thin, seekable progress bar for video playback.
+/// The scrubber's painting and gesture surface, free of any [Player]
+/// dependency so it can be widget-tested directly.
 ///
-/// Features:
-/// - Thin design (4px normally, 8px when interacting)
-/// - Tap to seek to position
-/// - Drag to scrub through video
-/// - Shows buffered progress
-/// - Position indicator circle at current position
-class VideoProgressBar extends StatefulWidget {
+/// [VideoProgressBar] is the thin `StreamBuilder` wrapper that feeds this.
+class ProgressBarSurface extends StatefulWidget {
+  /// Played fraction, 0..1. Values outside the range are clamped.
+  final double progress;
+
+  /// Buffered fraction, 0..1. Values outside the range are clamped.
+  final double buffered;
+
+  /// Called with the target fraction when the user taps or finishes a drag.
+  final ValueChanged<double>? onSeekTo;
+
+  /// Called with the live fraction during a drag.
+  final ValueChanged<double>? onSeekUpdate;
+
+  /// Called when a drag begins.
+  final VoidCallback? onSeekStart;
+
+  /// Called when a drag ends.
+  final VoidCallback? onSeekEnd;
+
+  /// Whether to use the 44px touch hit area instead of the 32px pointer one.
+  final bool touchTarget;
+
+  const ProgressBarSurface({
+    super.key,
+    required this.progress,
+    required this.buffered,
+    this.onSeekTo,
+    this.onSeekUpdate,
+    this.onSeekStart,
+    this.onSeekEnd,
+    this.touchTarget = false,
+  });
+
+  static const Key trackKey = Key('progress-track');
+  static const Key bufferedKey = Key('progress-buffered');
+  static const Key playedKey = Key('progress-played');
+  static const Key thumbKey = Key('progress-thumb');
+
+  @override
+  State<ProgressBarSurface> createState() => _ProgressBarSurfaceState();
+}
+
+class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
+  bool _hovering = false;
+  bool _seeking = false;
+  double _seekFraction = 0;
+
+  bool get _active => _hovering || _seeking;
+
+  double get _trackHeight => _active ? 8.0 : 6.0;
+
+  double get _thumbSize => _active
+      ? VideoProgressBar.activeThumbSize
+      : VideoProgressBar.restingThumbSize;
+
+  double get _displayed =>
+      (_seeking ? _seekFraction : widget.progress).clamp(0.0, 1.0);
+
+  void _emit(double dx, double width, {required bool commit}) {
+    final fraction = width > 0 ? (dx / width).clamp(0.0, 1.0) : 0.0;
+    setState(() => _seekFraction = fraction);
+    if (commit) {
+      widget.onSeekTo?.call(fraction);
+    } else {
+      widget.onSeekUpdate?.call(fraction);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final buffered = widget.buffered.clamp(0.0, 1.0);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) => _emit(d.localPosition.dx, width, commit: true),
+            onHorizontalDragStart: (d) {
+              setState(() => _seeking = true);
+              widget.onSeekStart?.call();
+              _emit(d.localPosition.dx, width, commit: false);
+            },
+            onHorizontalDragUpdate: (d) =>
+                _emit(d.localPosition.dx, width, commit: false),
+            onHorizontalDragEnd: (_) {
+              widget.onSeekTo?.call(_seekFraction);
+              setState(() => _seeking = false);
+              widget.onSeekEnd?.call();
+            },
+            child: SizedBox(
+              width: double.infinity,
+              height: widget.touchTarget ? 44 : 32,
+              child: Center(
+                child: SizedBox(
+                  height: VideoProgressBar.activeThumbSize,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      // Base track
+                      Center(
+                        child: AnimatedContainer(
+                          key: ProgressBarSurface.trackKey,
+                          duration: DepthTokens.motionFast,
+                          curve: DepthTokens.curveStandard,
+                          height: _trackHeight,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            borderRadius:
+                                BorderRadius.circular(_trackHeight / 2),
+                          ),
+                        ),
+                      ),
+                      // Buffered
+                      Center(
+                        child: FractionallySizedBox(
+                          key: ProgressBarSurface.bufferedKey,
+                          alignment: Alignment.centerLeft,
+                          widthFactor: buffered,
+                          child: AnimatedContainer(
+                            duration: DepthTokens.motionFast,
+                            curve: DepthTokens.curveStandard,
+                            height: _trackHeight,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.40),
+                              borderRadius:
+                                  BorderRadius.circular(_trackHeight / 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Played
+                      Center(
+                        child: FractionallySizedBox(
+                          key: ProgressBarSurface.playedKey,
+                          alignment: Alignment.centerLeft,
+                          widthFactor: _displayed,
+                          child: AnimatedContainer(
+                            duration: DepthTokens.motionFast,
+                            curve: DepthTokens.curveStandard,
+                            height: _trackHeight,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius:
+                                  BorderRadius.circular(_trackHeight / 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Thumb — always present, unlike the previous
+                      // hover-only implementation. Centered exactly on the
+                      // progress fraction: at the 0.0/1.0 extremes it bleeds
+                      // half its own width past the track ends, which is the
+                      // conventional scrubber look and is accounted for by
+                      // the glass bar's own padding in the caller.
+                      Positioned(
+                        left: (width * _displayed) - (_thumbSize / 2),
+                        child: AnimatedContainer(
+                          key: ProgressBarSurface.thumbKey,
+                          duration: DepthTokens.motionFast,
+                          curve: DepthTokens.curveStandard,
+                          width: _thumbSize,
+                          height: _thumbSize,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0x40000000), // black @ 0.25
+                                blurRadius: 6,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A seekable progress bar for video playback.
+///
+/// Thin `StreamBuilder` wrapper that feeds player position, duration, and
+/// buffer into [ProgressBarSurface], which does the painting and gestures.
+class VideoProgressBar extends StatelessWidget {
   /// The media_kit player instance.
   final Player player;
 
-  /// Called when seeking starts (user begins dragging).
+  /// Called when seeking starts.
   final VoidCallback? onSeekStart;
 
-  /// Called when seeking ends (user releases drag).
+  /// Called when seeking ends.
   final VoidCallback? onSeekEnd;
 
   /// Called during seeking with the current seek position.
   final ValueChanged<Duration>? onSeekUpdate;
 
-  /// The height of the progress bar when not interacting.
-  final double height;
-
-  /// The height of the progress bar when interacting.
-  final double activeHeight;
+  /// Whether to use the 44px touch hit area.
+  final bool touchTarget;
 
   const VideoProgressBar({
     super.key,
@@ -36,152 +226,51 @@ class VideoProgressBar extends StatefulWidget {
     this.onSeekStart,
     this.onSeekEnd,
     this.onSeekUpdate,
-    this.height = 3,
-    this.activeHeight = 5,
+    this.touchTarget = false,
   });
 
-  @override
-  State<VideoProgressBar> createState() => _VideoProgressBarState();
-}
+  /// Thumb diameter at rest.
+  static const double restingThumbSize = 12.0;
 
-class _VideoProgressBarState extends State<VideoProgressBar> {
-  bool _isSeeking = false;
-  double _seekPosition = 0;
-  bool _isHovering = false;
-
-  double get _currentHeight =>
-      (_isSeeking || _isHovering) ? widget.activeHeight : widget.height;
+  /// Thumb diameter while hovered or scrubbing.
+  static const double activeThumbSize = 16.0;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Duration>(
-      stream: widget.player.stream.position,
-      initialData: widget.player.state.position,
+      stream: player.stream.position,
+      initialData: player.state.position,
       builder: (context, positionSnapshot) {
         return StreamBuilder<Duration>(
-          stream: widget.player.stream.duration,
-          initialData: widget.player.state.duration,
+          stream: player.stream.duration,
+          initialData: player.state.duration,
           builder: (context, durationSnapshot) {
             return StreamBuilder<Duration>(
-              stream: widget.player.stream.buffer,
-              initialData: widget.player.state.buffer,
+              stream: player.stream.buffer,
+              initialData: player.state.buffer,
               builder: (context, bufferSnapshot) {
                 final position = positionSnapshot.data ?? Duration.zero;
-                // Use duration override if available (for HLS live playlists)
-                final playerDuration = durationSnapshot.data ?? Duration.zero;
-                final duration = DurationOverride.getDuration(playerDuration);
+                final duration = DurationOverride.getDuration(
+                  durationSnapshot.data ?? Duration.zero,
+                );
                 final buffer = bufferSnapshot.data ?? Duration.zero;
+                final totalMs = duration.inMilliseconds.toDouble();
 
-                final durationMs = duration.inMilliseconds.toDouble();
-                final positionMs = position.inMilliseconds.toDouble();
-                final bufferMs = buffer.inMilliseconds.toDouble();
-
-                final progress = durationMs > 0
-                    ? (positionMs / durationMs).clamp(0.0, 1.0)
+                double fraction(Duration d) => totalMs > 0
+                    ? (d.inMilliseconds / totalMs).clamp(0.0, 1.0)
                     : 0.0;
-                final buffered = durationMs > 0
-                    ? (bufferMs / durationMs).clamp(0.0, 1.0)
-                    : 0.0;
-                final displayProgress = _isSeeking ? _seekPosition : progress;
 
-                return MouseRegion(
-                  onEnter: (_) => setState(() => _isHovering = true),
-                  onExit: (_) => setState(() => _isHovering = false),
-                  child: GestureDetector(
-                    onHorizontalDragStart: (details) => _handleDragStart(
-                      details,
-                      context,
-                      duration,
-                    ),
-                    onHorizontalDragUpdate: (details) => _handleDragUpdate(
-                      details,
-                      context,
-                      duration,
-                    ),
-                    onHorizontalDragEnd: (details) => _handleDragEnd(
-                      details,
-                      duration,
-                    ),
-                    onTapUp: (details) => _handleTap(
-                      details,
-                      context,
-                      duration,
-                    ),
-                    child: Container(
-                      height: 32, // Touch target size
-                      color: Colors.transparent, // Expand hit area
-                      child: Center(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          height: _currentHeight,
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              return Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  // Background track
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(
-                                          _currentHeight / 2),
-                                    ),
-                                  ),
-                                  // Buffered progress
-                                  FractionallySizedBox(
-                                    widthFactor: buffered,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.35),
-                                        borderRadius: BorderRadius.circular(
-                                            _currentHeight / 2),
-                                      ),
-                                    ),
-                                  ),
-                                  // Current progress
-                                  FractionallySizedBox(
-                                    widthFactor: displayProgress,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(
-                                            _currentHeight / 2),
-                                      ),
-                                    ),
-                                  ),
-                                  // Position indicator
-                                  if (_isSeeking || _isHovering)
-                                    Positioned(
-                                      left: (constraints.maxWidth *
-                                              displayProgress) -
-                                          7,
-                                      top: (_currentHeight - 14) / 2,
-                                      child: Container(
-                                        width: 14,
-                                        height: 14,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black
-                                                  .withValues(alpha: 0.3),
-                                              blurRadius: 4,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                Duration at(double f) =>
+                    Duration(milliseconds: (totalMs * f).round());
+
+                return ProgressBarSurface(
+                  progress: fraction(position),
+                  buffered: fraction(buffer),
+                  touchTarget: touchTarget,
+                  onSeekStart: onSeekStart,
+                  onSeekEnd: onSeekEnd,
+                  onSeekUpdate: (f) => onSeekUpdate?.call(at(f)),
+                  onSeekTo: (f) => player.seek(at(f)),
                 );
               },
             );
@@ -189,63 +278,5 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         );
       },
     );
-  }
-
-  void _handleDragStart(
-    DragStartDetails details,
-    BuildContext context,
-    Duration duration,
-  ) {
-    setState(() => _isSeeking = true);
-    widget.onSeekStart?.call();
-    _updateSeekPosition(details.localPosition.dx, context, duration);
-  }
-
-  void _handleDragUpdate(
-    DragUpdateDetails details,
-    BuildContext context,
-    Duration duration,
-  ) {
-    _updateSeekPosition(details.localPosition.dx, context, duration);
-  }
-
-  void _handleDragEnd(DragEndDetails details, Duration duration) {
-    final seekDuration = Duration(
-      milliseconds: (duration.inMilliseconds * _seekPosition).toInt(),
-    );
-    widget.player.seek(seekDuration);
-    setState(() => _isSeeking = false);
-    widget.onSeekEnd?.call();
-  }
-
-  void _handleTap(
-    TapUpDetails details,
-    BuildContext context,
-    Duration duration,
-  ) {
-    final box = context.findRenderObject() as RenderBox;
-    final position = details.localPosition.dx / box.size.width;
-    final clampedPosition = position.clamp(0.0, 1.0);
-    final seekDuration = Duration(
-      milliseconds: (duration.inMilliseconds * clampedPosition).toInt(),
-    );
-    widget.player.seek(seekDuration);
-  }
-
-  void _updateSeekPosition(
-    double dx,
-    BuildContext context,
-    Duration duration,
-  ) {
-    final box = context.findRenderObject() as RenderBox;
-    final position = dx / box.size.width;
-    final clampedPosition = position.clamp(0.0, 1.0);
-
-    setState(() => _seekPosition = clampedPosition);
-
-    final seekDuration = Duration(
-      milliseconds: (duration.inMilliseconds * clampedPosition).toInt(),
-    );
-    widget.onSeekUpdate?.call(seekDuration);
   }
 }
