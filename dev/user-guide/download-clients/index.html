@@ -2115,6 +2115,7 @@ variable, so a block without one is silently ignored.</p>
 <li>Provider: one of <code>real_debrid</code>, <code>all_debrid</code>, <code>premiumize</code>, <code>tor_box</code></li>
 </ul>
 <p>Debrid clients use a 24-hour stall-detection grace period by default (other clients use 60 minutes), because remote caching can take longer to resolve a download before it begins transferring. The provider's API endpoint is built in, so <code>Host</code>/<code>Port</code> are ignored.</p>
+<p>A debrid provider can accept one release and still fail to fetch another: a submission that succeeds only proves your account and the API path work, not that the chosen torrent has seeds. When a provider reports a release as stalled with no seeds, Mydia keeps it active and lets the normal stall detection decide, rather than failing it immediately. TorBox in particular has not been validated against a live subscription, so please <a href="https://github.com/getmydia/mydia/issues">open an issue</a> if you see behavior that differs from the above.</p>
 <h2 id="blackhole">Blackhole</h2>
 <p>A blackhole client writes <code>.torrent</code> files into a watched folder for a separate torrent client to pick up, then detects finished downloads in a completed folder. It uses no host or port — only the two folder paths.</p>
 <p>Use these values when adding a blackhole client:</p>
