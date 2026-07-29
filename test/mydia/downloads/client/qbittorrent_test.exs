@@ -297,6 +297,89 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
     end
   end
 
+  describe "file scoping (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+      stub_login(bypass)
+      {:ok, bypass: bypass, config: bypass_config(bypass)}
+    end
+
+    test "scopes a single-file torrent to its own file, not the shared save_path", %{
+      bypass: bypass,
+      config: config
+    } do
+      hash = "single0000000000000000000000000000file01"
+
+      # qBittorrent reports save_path as the *containing* directory, so a
+      # single-file torrent points at the shared download root. Recursively
+      # importing that sweeps in every neighbouring release.
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [
+          torrent_payload(hash,
+            save_path: "/downloads",
+            content_path: "/downloads/Silo.S03E02.1080p.mkv"
+          )
+        ])
+      end)
+
+      assert {:ok, status} = QBittorrent.get_status(config, hash)
+      assert status.save_path == "/downloads"
+      assert status.files == ["/downloads/Silo.S03E02.1080p.mkv"]
+    end
+
+    test "scopes a multi-file torrent to its own root folder", %{
+      bypass: bypass,
+      config: config
+    } do
+      hash = "multi000000000000000000000000000file001"
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [
+          torrent_payload(hash,
+            save_path: "/downloads",
+            content_path: "/downloads/Silo.S03.1080p-GROUP"
+          )
+        ])
+      end)
+
+      assert {:ok, status} = QBittorrent.get_status(config, hash)
+      assert status.files == ["/downloads/Silo.S03.1080p-GROUP"]
+    end
+
+    test "leaves files nil when the server predates content_path", %{
+      bypass: bypass,
+      config: config
+    } do
+      hash = "old00000000000000000000000000000server1"
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [torrent_payload(hash, save_path: "/downloads")])
+      end)
+
+      assert {:ok, status} = QBittorrent.get_status(config, hash)
+      assert status.files == nil
+    end
+
+    test "leaves files nil when content_path is the save_path itself", %{
+      bypass: bypass,
+      config: config
+    } do
+      # Multi-file torrent added with subfolder creation disabled: there is no
+      # per-torrent path to scope to, so fall back rather than assert that the
+      # whole save_path belongs to this torrent.
+      hash = "nosub00000000000000000000000000folder01"
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        json_resp(conn, 200, [
+          torrent_payload(hash, save_path: "/downloads", content_path: "/downloads/")
+        ])
+      end)
+
+      assert {:ok, status} = QBittorrent.get_status(config, hash)
+      assert status.files == nil
+    end
+  end
+
   describe "state mapping (Bypass)" do
     setup do
       bypass = Bypass.open()

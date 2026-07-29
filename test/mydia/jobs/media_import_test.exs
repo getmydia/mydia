@@ -1423,6 +1423,49 @@ defmodule Mydia.Jobs.MediaImportTest do
       # library path permissions and available disk space." while the real
       # cause was duplicate media_files rows making Repo.one/1 raise
       # "expected at most one result" on the reuse-existing-file path.
+      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+
+      assert {:error, _reason} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      updated = Mydia.Downloads.get_download!(download.id)
+
+      # The classification tag stays stable for Issues-tab filtering...
+      assert updated.import_failure_reason == "partial_import"
+
+      # ...but the human message must name the real underlying error, not
+      # just the generic permissions/disk-space hint.
+      assert updated.import_last_error =~ "Some files could not be imported"
+      assert updated.import_last_error =~ "First error: expected at most one result"
+      refute updated.import_last_error =~ "Check library path permissions"
+    end
+
+    @tag :tmp_dir
+    test "still goes terminal after three attempts once the reason is attached",
+         %{tmp_dir: tmp_dir} do
+      # Attaching the underlying reason turns the error from the bare atom
+      # :partial_import into {:partial_import, reason}. terminal_failure?/2
+      # must match the tuple too — otherwise an unfixable partial import falls
+      # through to the catch-all, never cancels, and re-walks the whole
+      # download for all 1000 of Oban's attempts.
+      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+
+      assert {:cancel, {:partial_import, _reason}} =
+               perform_job(
+                 MediaImport,
+                 %{"download_id" => download.id, "save_path" => download_dir},
+                 attempt: 3
+               )
+    end
+
+    # Builds the production shape: a two-episode season pack where S01E01's
+    # destination already exists and carries TWO media_files rows for the same
+    # (library_path_id, relative_path), so the reuse-existing-file path raises
+    # while S01E02 imports cleanly — i.e. a genuine partial import.
+    defp duplicate_media_file_scenario(tmp_dir) do
       library_path = create_test_library_path(tmp_dir, :series, auto_rename: false)
 
       download_dir = Path.join(tmp_dir, "downloads")
@@ -1439,9 +1482,6 @@ defmodule Mydia.Jobs.MediaImportTest do
       _ep_s1e2 =
         episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 2})
 
-      # Pre-create the S01E01 destination file plus TWO media_files rows for
-      # the same (library_path_id, relative_path) — the duplicate-row state
-      # that made Library.get_media_file_by_path/1 raise in prod.
       dest_dir =
         Path.join(MediaImport.build_series_base_path(media_item, library_path), "Season 01")
 
@@ -1480,22 +1520,79 @@ defmodule Mydia.Jobs.MediaImportTest do
           metadata: %{"season_pack" => true, "season_number" => 1}
         })
 
-      assert {:error, _reason} =
-               perform_job(MediaImport, %{
-                 "download_id" => download.id,
-                 "save_path" => download_dir
-               })
+      {download, download_dir}
+    end
+  end
 
-      updated = Mydia.Downloads.get_download!(download.id)
+  describe "destination filename conflicts" do
+    @tag :tmp_dir
+    test "re-running an import adopts the earlier conflict copy instead of duplicating it",
+         %{tmp_dir: tmp_dir} do
+      # Conflict names used to carry a unix timestamp, so every retry of an
+      # import minted a fresh filename and re-copied the whole file. Under
+      # max_attempts: 1000 that is how misplaced episodes became ~980 GiB of
+      # duplicates. Numbering deterministically means a retry finds what the
+      # previous attempt wrote and adopts it.
+      library_path = create_test_library_path(tmp_dir, :movies)
 
-      # The classification tag stays stable for Issues-tab filtering...
-      assert updated.import_failure_reason == "partial_import"
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      source = Path.join(download_dir, "Conflict.Movie.2024.1080p.mkv")
+      File.write!(source, "the freshly downloaded copy")
 
-      # ...but the human message must name the real underlying error, not
-      # just the generic permissions/disk-space hint.
-      assert updated.import_last_error =~ "Some files could not be imported"
-      assert updated.import_last_error =~ "First error: expected at most one result"
-      refute updated.import_last_error =~ "Check library path permissions"
+      media_item = media_item_fixture(%{type: "movie", title: "Conflict Movie", year: 2024})
+
+      # Squat the destination with different content so the import is forced
+      # down the conflict path.
+      dest_dir = Path.join(library_path.path, "Conflict Movie (2024)")
+      File.mkdir_p!(dest_dir)
+      File.write!(Path.join(dest_dir, "Conflict Movie (2024).mkv"), "a different, older file")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "ConflictClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "ConflictClient",
+          download_client_id: "conflict-1"
+        })
+
+      args = %{"download_id" => download.id, "save_path" => download_dir}
+
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir)
+
+      # Clear imported_at so the job re-runs the import rather than
+      # short-circuiting on the already-done guard. Re-fetch first: the local
+      # struct predates the import, so changing it produces an empty changeset.
+      download.id
+      |> Mydia.Downloads.get_download!()
+      |> Ecto.Changeset.change(%{imported_at: nil})
+      |> Repo.update!()
+
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir),
+             "retry must reuse the existing conflict copy, not mint another one"
+    end
+
+    defp conflict_copies(dest_dir) do
+      dest_dir
+      |> File.ls!()
+      |> Enum.filter(&(&1 != "Conflict Movie (2024).mkv" and String.ends_with?(&1, ".mkv")))
+      |> Enum.sort()
     end
   end
 end
