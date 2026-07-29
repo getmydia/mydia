@@ -185,4 +185,52 @@ abstract final class DepthTokens {
 
   /// Emphasized easing for crossfades / symmetric transitions.
   static const Curve curveEmphasized = Curves.easeInOut;
+
+  // ---------------------------------------------------------------------------
+  // Player chrome glass
+  //
+  // A separate material from the browse-UI chrome tokens above. The playback
+  // panel sits over live video, which is the one backdrop that justifies a real
+  // BackdropFilter and can carry genuine transparency. Browse chrome sits over
+  // static artwork and keeps its denser fill, so these are additive: nothing
+  // above changes.
+  // ---------------------------------------------------------------------------
+
+  /// Blur sigma for playback chrome. Far above [blurChrome] — at this strength
+  /// no high-frequency detail survives, only average luminance, which is what
+  /// makes the low fill opacity below legible.
+  static const double blurPlayerChrome = 28.0;
+
+  /// Nominal fill opacity for playback chrome — the mean of the gradient
+  /// endpoints below. Deliberately under [glassLegibilityFloor]: legibility is
+  /// bought with blur strength and gradient weighting instead of flat fill.
+  static const double playerChromeFillOpacity = 0.45;
+
+  /// Fill alpha at the top edge of the playback panel.
+  static const double playerChromeFillTopAlpha = 0.38;
+
+  /// Fill alpha at the bottom edge, where the control row sits.
+  static const double playerChromeFillBottomAlpha = 0.52;
+
+  /// Backdrop saturation multiplier. Real vibrancy boosts saturation before
+  /// blurring; without it, blurred video reads as grey mush rather than
+  /// transmitted colour.
+  static const double playerChromeSaturation = 1.8;
+
+  /// Neutral near-black tint. Unlike [AppColors.background] (`#0A1120`) this
+  /// carries no blue cast, so backdrop colour survives the fill.
+  static const Color playerChromeTint = Color(0xFF0B0E14);
+
+  /// Top-edge rim — a white highlight. Glass catches light on its upper edge.
+  static const Color playerRimTop = Color(0x24FFFFFF); // white @ ~0.14
+
+  /// Bottom-edge rim — a dark shade. Together with [playerRimTop] this reads as
+  /// a lit edge rather than a uniform border.
+  static const Color playerRimBottom = Color(0x33000000); // black @ 0.20
+
+  /// Corner radius for the playback panel.
+  static const double radiusPlayerPanel = 16.0;
+
+  /// Corner radius for the 36px-tall top-bar pills (fully rounded).
+  static const double radiusPlayerPill = 18.0;
 }

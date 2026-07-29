@@ -89,6 +89,61 @@ void main() {
     });
   });
 
+  group('player chrome glass', () {
+    test('is more transparent and more blurred than browse chrome', () {
+      // The player panel sits over live video, so it can afford real
+      // transparency; browse chrome sits over static art and cannot.
+      expect(
+        DepthTokens.playerChromeFillOpacity,
+        lessThan(DepthTokens.chromeFillOpacity),
+      );
+      expect(
+        DepthTokens.blurPlayerChrome,
+        greaterThan(DepthTokens.blurChrome),
+      );
+    });
+
+    test('boosts backdrop saturation', () {
+      expect(DepthTokens.playerChromeSaturation, greaterThan(1.0));
+    });
+
+    test('fill gradient brackets the nominal opacity', () {
+      expect(
+        DepthTokens.playerChromeFillTopAlpha,
+        lessThan(DepthTokens.playerChromeFillOpacity),
+      );
+      expect(
+        DepthTokens.playerChromeFillBottomAlpha,
+        greaterThan(DepthTokens.playerChromeFillOpacity),
+      );
+      // Denser at the bottom, where the control row sits.
+      expect(
+        DepthTokens.playerChromeFillBottomAlpha,
+        greaterThan(DepthTokens.playerChromeFillTopAlpha),
+      );
+    });
+
+    test('rim is directional: light on top, dark on the bottom', () {
+      expect(DepthTokens.playerRimTop.a, greaterThan(0));
+      expect(DepthTokens.playerRimBottom.a, greaterThan(0));
+      // Top rim is a white highlight, bottom rim is a black shade.
+      expect(DepthTokens.playerRimTop.r, greaterThan(0.5));
+      expect(DepthTokens.playerRimBottom.r, lessThan(0.5));
+    });
+
+    test('tint is neutral, not the navy browse background', () {
+      expect(DepthTokens.playerChromeTint, isNot(AppColors.background));
+      final t = DepthTokens.playerChromeTint;
+      // Neutral means the blue channel does not dominate red by much.
+      expect(t.b - t.r, lessThanOrEqualTo(0.036));
+    });
+
+    test('exposes panel and pill radii', () {
+      expect(DepthTokens.radiusPlayerPanel, 16.0);
+      expect(DepthTokens.radiusPlayerPill, 18.0);
+    });
+  });
+
   group('motion (R11)', () {
     test('exposes durations and curves', () {
       expect(DepthTokens.motionFast, isA<Duration>());
