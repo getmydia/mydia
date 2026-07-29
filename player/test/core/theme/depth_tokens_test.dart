@@ -110,16 +110,17 @@ void main() {
     test('fill gradient brackets the nominal opacity', () {
       expect(
         DepthTokens.playerChromeFillTopAlpha,
-        lessThan(DepthTokens.playerChromeFillOpacity),
-      );
-      expect(
-        DepthTokens.playerChromeFillBottomAlpha,
         greaterThan(DepthTokens.playerChromeFillOpacity),
       );
-      // Denser at the bottom, where the control row sits.
       expect(
         DepthTokens.playerChromeFillBottomAlpha,
-        greaterThan(DepthTokens.playerChromeFillTopAlpha),
+        lessThan(DepthTokens.playerChromeFillOpacity),
+      );
+      // Denser at the top, where the control row sits; sheer at the bottom,
+      // where only the scrubber track does.
+      expect(
+        DepthTokens.playerChromeFillTopAlpha,
+        greaterThan(DepthTokens.playerChromeFillBottomAlpha),
       );
     });
 

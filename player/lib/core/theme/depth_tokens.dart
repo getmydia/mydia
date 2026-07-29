@@ -205,25 +205,32 @@ abstract final class DepthTokens {
   /// endpoints below. Deliberately under [glassLegibilityFloor]: legibility is
   /// bought with blur strength and gradient weighting instead of flat fill.
   ///
-  /// Raised from 0.45 (mean of 0.38/0.52) alongside [playerChromeFillBottomAlpha]
-  /// — see that field for why.
-  static const double playerChromeFillOpacity = 0.69;
+  /// Mean of [playerChromeFillTopAlpha] (0.68) and [playerChromeFillBottomAlpha]
+  /// (0.38) — see [playerChromeFillTopAlpha] for why the dense end is at the
+  /// top.
+  static const double playerChromeFillOpacity = 0.53;
 
-  /// Fill alpha at the top edge of the playback panel.
-  static const double playerChromeFillTopAlpha = 0.38;
-
-  /// Fill alpha at the bottom edge of the playback panel.
+  /// Fill alpha at the top edge of the playback panel — the dense end.
   ///
-  /// Raised from 0.52 to 1.0: `glass_legibility_test` samples 30% down the
-  /// panel — the control row, per [ChromePanel]'s row order (controls on
-  /// top, scrubber below) — where the top-to-bottom gradient contributes only
-  /// 30% of the top/bottom delta. Measured worst-case contrast at 0.52 was
-  /// 2.85:1 against a solid-white backdrop, far under the 4.5:1 floor,
-  /// because that sample point sits much closer to [playerChromeFillTopAlpha]
-  /// than to this value. Reaching 4.5:1 at that sample point requires this
-  /// value at (not below) 1.0 while holding the top alpha fixed; the gradient
-  /// still keeps most of the panel lighter than a flat 0.69 fill would.
-  static const double playerChromeFillBottomAlpha = 1.0;
+  /// [ChromePanel] puts the control row (row 1: volume/transport/secondary)
+  /// at the top of the panel and the scrubber (row 2) below it, so density
+  /// follows the content that needs legibility: the controls are the
+  /// high-contrast-critical row, and the scrubber below reads fine as a
+  /// white track over less fill. This was originally 0.38 (the *sheer*
+  /// value, swapped from [playerChromeFillBottomAlpha] below) on the mistaken
+  /// assumption that the control row sat at the bottom; `glass_legibility_test`
+  /// samples ~30% down the panel (the control row's actual position) and
+  /// measured only 3.38:1 there at 0.52 — under the 4.5:1 floor — so this was
+  /// raised in the same file's prescribed 0.04 increments (0.52 -> 0.56 ->
+  /// ... -> 0.68) until the measured contrast cleared it (4.90:1 at 0.68).
+  static const double playerChromeFillTopAlpha = 0.68;
+
+  /// Fill alpha at the bottom edge of the playback panel — the sheer end.
+  ///
+  /// The panel's bottom edge sits nearest the screen's own bottom edge (or,
+  /// in a smaller panel, under the scrubber only), so it can afford to stay
+  /// the most transparent part of the gradient.
+  static const double playerChromeFillBottomAlpha = 0.38;
 
   /// Backdrop saturation multiplier. Real vibrancy boosts saturation before
   /// blurring; without it, blurred video reads as grey mush rather than

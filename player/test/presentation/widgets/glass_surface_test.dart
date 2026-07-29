@@ -401,7 +401,7 @@ void main() {
       expect(find.byType(BackdropFilter), findsNothing);
     });
 
-    testWidgets('fill is a vertical gradient, denser at the bottom',
+    testWidgets('fill is a vertical gradient, denser at the top',
         (tester) async {
       await tester.pumpWidget(
         host(
@@ -417,7 +417,10 @@ void main() {
       expect(gradient.end, Alignment.bottomCenter);
       expect(gradient.colors.first.a, DepthTokens.playerChromeFillTopAlpha);
       expect(gradient.colors.last.a, DepthTokens.playerChromeFillBottomAlpha);
-      expect(gradient.colors.last.a, greaterThan(gradient.colors.first.a));
+      // Dense at the top, where ChromePanel's control row sits; sheer at the
+      // bottom, under the scrubber's white track (see
+      // DepthTokens.playerChromeFillTopAlpha's doc comment).
+      expect(gradient.colors.first.a, greaterThan(gradient.colors.last.a));
     });
 
     testWidgets(
