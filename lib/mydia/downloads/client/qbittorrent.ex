@@ -201,11 +201,25 @@ defmodule Mydia.Downloads.Client.QBittorrent do
   # Marker error indicating the caller should re-authenticate and retry.
   defp stale_session, do: Error.new(:stale_session, "Session expired")
 
+  # An API key (qBittorrent 5.2+, WebAPI 2.14.1+) authenticates every request
+  # directly, so there is no login round trip and no session to maintain.
+  # put_header replaces, so this Bearer header wins over the Basic header that
+  # HTTP.new_request/1 sets when credentials are also present.
+  defp authenticate(%{api_key: key} = config) when is_binary(key) and key != "" do
+    {:ok,
+     config
+     |> HTTP.new_request()
+     |> Req.Request.put_header("authorization", "Bearer " <> key)}
+  end
+
   defp authenticate(config) do
     if config[:username] && config[:password] do
       do_authenticate(config)
     else
-      {:error, Error.invalid_config("Username and password are required for qBittorrent")}
+      {:error,
+       Error.invalid_config(
+         "qBittorrent requires either an API key (5.2+) or a username and password"
+       )}
     end
   end
 

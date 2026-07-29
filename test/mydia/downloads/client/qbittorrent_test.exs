@@ -27,7 +27,7 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
 
       {:error, error} = QBittorrent.test_connection(config_without_username)
       assert error.type == :invalid_config
-      assert error.message =~ "Username and password are required"
+      assert error.message =~ "API key"
     end
 
     test "test_connection fails with unreachable host" do
@@ -567,6 +567,50 @@ defmodule Mydia.Downloads.Client.QBittorrentTest do
 
       assert {:error, error} = QBittorrent.remove_torrent(config, "abc123")
       assert error.type == :not_found
+    end
+  end
+
+  describe "API-key authentication (Bypass)" do
+    @api_key "qbt_TESTKEY0123456789abcdefghij"
+
+    setup do
+      bypass = Bypass.open()
+
+      config =
+        bypass
+        |> bypass_config()
+        |> Map.merge(%{api_key: @api_key, username: nil, password: nil})
+
+      {:ok, bypass: bypass, config: config}
+    end
+
+    test "sends Bearer auth and never calls the login endpoint", %{
+      bypass: bypass,
+      config: config
+    } do
+      logins = :counters.new(1, [])
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        :counters.add(logins, 1, 1)
+        Plug.Conn.resp(conn, 200, "Ok.")
+      end)
+
+      Bypass.expect(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        assert ["Bearer " <> @api_key] == Plug.Conn.get_req_header(conn, "authorization")
+        assert [] == Plug.Conn.get_req_header(conn, "cookie")
+        json_resp(conn, 200, [])
+      end)
+
+      assert {:ok, []} = QBittorrent.list_torrents(config)
+      assert :counters.get(logins, 1) == 0
+    end
+
+    test "requires an API key or a username and password", %{config: config} do
+      bare = Map.merge(config, %{api_key: nil, username: nil, password: nil})
+
+      assert {:error, error} = QBittorrent.test_connection(bare)
+      assert error.type == :invalid_config
+      assert error.message =~ "API key"
     end
   end
 
