@@ -94,6 +94,13 @@ macOS builds use the **host** toolchain — neither devenv nor `player/flake.nix
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
+### Download client gotchas
+
+- Debrid provider modules live under `lib/mydia/downloads/client/debrid/providers/` and are exercised with Bypass tests under `test/mydia/downloads/client/debrid/providers/`.
+- TorBox is documented as bypass-only in `Mydia.Downloads.Client.Debrid.Providers.TorBox`: treat live-account failures as provider/client integration issues until proven otherwise.
+- Req multipart file fields must use the `{body, opts}` shape, for example `file: {bin, filename: "release.torrent", content_type: "application/x-bittorrent"}`. `Req.Utils.encode_form_part/2` only has clauses for `{name, {value, opts}}` and `{name, value}`, so a three-element `{name, value, opts}` tuple raises `FunctionClauseError` on *every* upload, not just malformed ones. Field names that are not valid keyword keys (`:"files[]"`) still need the explicit two-tuple form `{:"files[]", {bin, opts}}`.
+- TorBox no-seed states such as `"stalled (no seeds)"` are provider-side stalls, not immediate terminal failures. Keep them active so `DownloadMonitor`/`StallDetector` can observe them over the configured grace window before escalation.
+
 ### DRY Patterns (Don't Repeat Yourself)
 
 **Extract repeated logic into private functions:**

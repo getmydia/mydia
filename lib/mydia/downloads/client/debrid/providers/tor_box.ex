@@ -79,17 +79,8 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBox do
 
   @impl true
   def submit_torrent(config, input) do
-    multipart =
-      case input do
-        {:magnet, magnet} ->
-          [{:magnet, magnet}]
-
-        {:file, bin} ->
-          [{:file, bin, filename: "release.torrent", content_type: "application/x-bittorrent"}]
-      end
-
     case Req.post(base_url() <> "/torrents/createtorrent",
-           form_multipart: multipart,
+           form_multipart: torrent_multipart(input),
            headers: auth_headers(config)
          ) do
       {:ok, %Req.Response{status: 200, body: body}} ->
@@ -113,6 +104,14 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBox do
       {:error, %Req.TransportError{} = err} ->
         {:error, Error.from_req_error(err)}
     end
+  end
+
+  defp torrent_multipart({:magnet, magnet}), do: [magnet: magnet]
+
+  defp torrent_multipart({:file, bin}) do
+    [
+      file: {bin, filename: "release.torrent", content_type: "application/x-bittorrent"}
+    ]
   end
 
   @impl true
@@ -265,14 +264,16 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBox do
   defp map_download_state("paused"), do: :queued
   defp map_download_state("downloading"), do: :downloading
   defp map_download_state("metaDL"), do: :downloading
+  defp map_download_state("checking"), do: :downloading
   defp map_download_state("checkingResumeData"), do: :downloading
+  defp map_download_state("stalledDL"), do: :downloading
+  defp map_download_state("stalled (no seeds)"), do: :downloading
   defp map_download_state("allocating"), do: :downloading
   defp map_download_state("completed"), do: :finalizing
   defp map_download_state("cached"), do: :finalizing
   defp map_download_state("uploading"), do: :finalizing
   defp map_download_state("error"), do: :error
   defp map_download_state("missingFiles"), do: :error
-  defp map_download_state("stalled (no seeds)"), do: :error
   defp map_download_state(_), do: :queued
 
   defp parse_int(n) when is_integer(n), do: n
