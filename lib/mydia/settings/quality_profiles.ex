@@ -314,6 +314,29 @@ defmodule Mydia.Settings.QualityProfiles do
     end
   end
 
+  @doc """
+  Resolves the quality profile that governs ranking for a media item.
+
+  Takes the item's own `quality_profile_id`. When that is `nil`, or when it
+  points at a row that no longer exists, the configured default
+  (`media.default_quality_profile_id`) is used instead. Returns `nil` only when
+  there is no stamped profile and no default is configured.
+
+  Accepts an ID rather than a struct so this module keeps no dependency on
+  `Mydia.Media`. Movies, episodes, and season packs all reach their profile
+  through a `MediaItem`, so one function serves every search path.
+
+  This is the only place profile resolution happens. Search paths must call it
+  rather than reading `media_item.quality_profile` directly, or the fallback
+  will drift back out of one of them.
+  """
+  @spec effective_quality_profile(String.t() | nil) :: QualityProfile.t() | nil
+  def effective_quality_profile(nil), do: get_default_quality_profile()
+
+  def effective_quality_profile(id) when is_binary(id) do
+    Repo.get(QualityProfile, id) || get_default_quality_profile()
+  end
+
   def set_default_quality_profile(nil) do
     case Mydia.Settings.RuntimeConfig.get_config_setting_by_key(
            "media.default_quality_profile_id"

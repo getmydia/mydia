@@ -310,6 +310,23 @@ defmodule Mydia.Settings do
   defdelegate get_default_quality_profile(), to: Mydia.Settings.QualityProfiles
 
   @doc """
+  Resolves the quality profile that governs ranking for a media item.
+
+  Falls back to the configured default when the item has no profile of its own.
+  See `Mydia.Settings.QualityProfiles.effective_quality_profile/1`.
+
+  ## Examples
+
+      iex> effective_quality_profile(nil)
+      %QualityProfile{name: "Any"}
+
+      iex> effective_quality_profile("550e8400-e29b-41d4-a716-446655440000")
+      %QualityProfile{name: "HD-1080p"}
+  """
+  @spec effective_quality_profile(String.t() | nil) :: QualityProfile.t() | nil
+  defdelegate effective_quality_profile(profile_id), to: Mydia.Settings.QualityProfiles
+
+  @doc """
   Sets the default quality profile.
 
   Accepts a quality profile ID (string UUID or integer) or nil to clear the default.
