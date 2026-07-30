@@ -16,17 +16,6 @@ concurrency:
 
 env:
   MIX_ENV: test
-  # ⚠️ KEEP IN SYNC — the Elixir/OTP/Rust toolchain for the test jobs now comes
-  # from devenv.nix (the jobs run `devenv shell -- …`), so it is NOT duplicated
-  # here anymore. Only Flutter is still pinned in two non-devenv places:
-  #   - this var (FLUTTER_VERSION)        — used by the Flutter `test-player` job
-  #   - .github/workflows/ci-player.yml   (FLUTTER_VERSION)
-  #   - devenv.nix                        (flutter344 = 3.44.2)
-  #   - Dockerfile                        (cirruslabs/flutter builder stage + the
-  #                                         elixir:1.19-otp-28 prod base image)
-  # Bump Flutter in all four together. Elixir/OTP/Rust are bumped once in
-  # devenv.nix (plus the Dockerfile prod base) — CI follows automatically.
-  FLUTTER_VERSION: "3.44.2"
   # Harden Rust crate fetches against transient crates.io flakiness. The Rustler
   # NIF (native/mydia_p2p) is built during `mix compile`; CI intermittently hit
   # "download of … failed / curl failed / [16] Error in the HTTP2 framing layer".
@@ -242,7 +231,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: player/.fvmrc
           channel: stable
           cache: true
 

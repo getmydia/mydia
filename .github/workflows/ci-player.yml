@@ -20,8 +20,6 @@ concurrency:
 
 env:
   PLAYER_PATH: 'player'
-  # KEEP IN SYNC with devenv.nix (flutter344 = 3.44.2) and ci.yml FLUTTER_VERSION.
-  FLUTTER_VERSION: '3.44.2'
 
 jobs:
   build:
@@ -86,7 +84,7 @@ jobs:
         if: steps.check_platform.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: player/.fvmrc
           channel: 'stable'
           cache: true
 
