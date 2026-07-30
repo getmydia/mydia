@@ -587,8 +587,16 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
     # Build the same ranking options the manual list was ordered with, so the
     # per-result breakdown (including penalties) matches the unified ranker.
+    # This component receives the already-resolved profile via the
+    # `:quality_profile` attr (the LiveView resolves it once via
+    # Settings.effective_quality_profile/1 at load time); build_manual_ranking_opts/1
+    # reads it back under the `:effective_quality_profile` key it shares with the
+    # socket.assigns call sites, so bridge the attr into that key here rather
+    # than letting it re-resolve (and re-query) from the media item.
     manual_ranking_opts =
-      MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(assigns)
+      MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(
+        Map.put(assigns, :effective_quality_profile, assigns.quality_profile)
+      )
 
     assigns =
       assigns

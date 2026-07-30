@@ -67,6 +67,10 @@ defmodule MydiaWeb.MediaLive.Show do
     {:ok,
      socket
      |> assign(:media_item, media_item)
+     |> assign(
+       :effective_quality_profile,
+       Settings.effective_quality_profile(media_item.quality_profile_id)
+     )
      |> assign(:downloads_with_status, downloads_with_status)
      |> assign(:timeline_events, timeline_events)
      |> assign(:page_title, media_item.title)

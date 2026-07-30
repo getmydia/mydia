@@ -5,9 +5,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
   alias Mydia.Indexers.{QualityParser, RankingOptions, ReleaseRanker, SearchResult}
   alias Mydia.Settings.QualityProfile
 
-  import Mydia.SettingsFixtures
-  import Mydia.MediaFixtures
-
   # Test Fixtures
 
   defp build_result(attrs) do
@@ -386,23 +383,31 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     end
   end
 
-  describe "build_manual_ranking_opts/1 default profile fallback" do
-    test "uses the configured default when the media item has no profile" do
-      default =
-        quality_profile_fixture(%{
-          name: "Default-#{System.unique_integer([:positive])}",
-          quality_standards: %{preferred_resolutions: ["1080p"]}
+  describe "build_manual_ranking_opts/1" do
+    # The caller (the LiveView, or the manual search modal bridging its own
+    # attr) is responsible for resolving the profile via
+    # Mydia.Settings.effective_quality_profile/1 before calling in — this
+    # function must stay a pure field read with no database access, exactly
+    # like Mydia.Indexers.RankingOptions.build/1 downstream of it.
+    test "carries the pre-resolved :effective_quality_profile straight through" do
+      media_item = %{title: "The Matrix", type: "movie"}
+      profile = %QualityProfile{id: Ecto.UUID.generate(), name: "Resolved"}
+
+      opts =
+        SearchHelpers.build_manual_ranking_opts(%{
+          media_item: media_item,
+          effective_quality_profile: profile
         })
 
-      {:ok, _} = Mydia.Settings.set_default_quality_profile(default.id)
+      assert Keyword.get(opts, :quality_profile) == profile
+    end
 
-      media_item = media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999})
-      assert media_item.quality_profile_id == nil
+    test "carries nil through when no profile has been resolved" do
+      media_item = %{title: "The Matrix", type: "movie"}
 
       opts = SearchHelpers.build_manual_ranking_opts(%{media_item: media_item})
 
-      assert %QualityProfile{id: id} = Keyword.get(opts, :quality_profile)
-      assert id == default.id
+      refute Keyword.get(opts, :quality_profile)
     end
   end
 end

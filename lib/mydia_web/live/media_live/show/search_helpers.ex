@@ -10,7 +10,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.SearchScorer
   alias Mydia.Media
-  alias Mydia.Settings
 
   def generate_result_id(%SearchResult{} = result) do
     # Generate a unique ID based on the download URL and indexer
@@ -215,6 +214,12 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   Build the shared ranking options for the manual search dialog from the socket
   assigns, deriving the expected title and (for episode/season searches) the
   expected season/episode from the `manual_search_context`.
+
+  Pure field read, no database access: `:effective_quality_profile` must
+  already be resolved (via `Mydia.Settings.effective_quality_profile/1`) and
+  present in `assigns` before calling this. `socket.assigns` carries it once
+  the LiveView assigns it at load time; the manual search modal component
+  bridges its `:quality_profile` attr into the same key before calling in.
   """
   def build_manual_ranking_opts(assigns) do
     media_item = assigns.media_item
@@ -223,7 +228,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     {expected_season, expected_episode} = expected_identity(context)
 
     RankingOptions.build(%{
-      quality_profile: Settings.effective_quality_profile(media_item.quality_profile_id),
+      quality_profile: Map.get(assigns, :effective_quality_profile),
       media_type: get_media_type(media_item),
       min_seeders: Map.get(assigns, :min_seeders),
       search_query: Map.get(assigns, :manual_search_query),

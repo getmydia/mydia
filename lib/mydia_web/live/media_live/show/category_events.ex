@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
   import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Mydia.Media
+  alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
 
   import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 1]
@@ -118,6 +119,10 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
           {:noreply,
            socket
            |> assign(:media_item, reloaded_item)
+           |> assign(
+             :effective_quality_profile,
+             Settings.effective_quality_profile(reloaded_item.quality_profile_id)
+           )
            |> put_flash(:info, "Quality profile updated")}
 
         {:error, _changeset} ->
