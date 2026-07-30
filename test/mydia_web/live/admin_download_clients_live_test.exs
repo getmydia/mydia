@@ -110,6 +110,33 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       end
     end
 
+    test "a second delete click is a no-op rather than a crash", %{conn: conn} do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-doubleclick",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+
+      view |> element("#delete-download-client-#{client.id}") |> render_click()
+      view |> element("#confirm-delete-download-client") |> render_click()
+
+      # The modal is gone and pending_delete_client is nil now. A second
+      # "delete_download_client" event, as a fast double-click would send
+      # before the DOM re-renders, must not reach
+      # Settings.delete_download_client_config/1 with nil and crash the
+      # LiveView process.
+      assert render_click(view, "delete_download_client", %{}) =~ "Download Clients"
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Mydia.Settings.get_download_client_config!(client.id)
+      end
+    end
+
     test "shows a plain zero-reference message when no downloads reference the client", %{
       conn: conn
     } do

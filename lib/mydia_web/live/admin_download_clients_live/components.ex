@@ -718,10 +718,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
         <h3 class="text-lg font-bold">Delete '{@client.name}'?</h3>
 
         <p :if={@count > 0} class="py-2">
-          {@count} download(s) are assigned to this client. Deleting it will not stop them
-          in the client itself. They will move to Downloads then Issues, where you can
-          clear them. If you re-add a client holding these same torrents, Mydia picks them
-          back up automatically.
+          {@count} {if @count == 1, do: "download is", else: "downloads are"} assigned to this
+          client. Deleting it will not stop them in the client itself. They will move to
+          Downloads then Issues, where you can clear them. If you re-add a client holding
+          these same torrents, Mydia picks them back up automatically.
         </p>
 
         <p :if={@count == 0} class="py-2">
@@ -740,6 +740,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
             id="confirm-delete-download-client"
             class="btn btn-error"
             phx-click="delete_download_client"
+            phx-disable-with="Deleting..."
           >
             Delete client
           </button>

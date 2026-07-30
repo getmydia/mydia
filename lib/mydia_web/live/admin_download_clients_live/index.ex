@@ -140,6 +140,19 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
      |> assign(:pending_delete_count, 0)}
   end
 
+  # Nothing pending means the modal already fired once (a double-click sends
+  # two events before the DOM re-renders) or the event arrived out of band.
+  # The native data-confirm dialog used to debounce this implicitly; the modal
+  # does not, so guard explicitly.
+  @impl true
+  def handle_event(
+        "delete_download_client",
+        _params,
+        %{assigns: %{pending_delete_client: nil}} = socket
+      ) do
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_event("delete_download_client", _params, socket) do
     client = socket.assigns.pending_delete_client
