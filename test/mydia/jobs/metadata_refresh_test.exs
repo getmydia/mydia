@@ -75,4 +75,25 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
       assert [] = Events.list_events(category: "system", type: "job.failed")
     end
   end
+
+  describe "scheduled jitter" do
+    test "first attempt snoozes instead of sleeping" do
+      assert {:snooze, seconds} = perform_job(MetadataRefresh, %{"refresh_all" => true})
+      assert seconds >= 1
+      assert seconds <= 1800
+    end
+
+    test "runs the pass on a later attempt" do
+      assert :ok = perform_job(MetadataRefresh, %{"refresh_all" => true}, attempt: 2)
+    end
+
+    test "runs immediately when skip_delay is set" do
+      assert :ok =
+               perform_job(MetadataRefresh, %{"refresh_all" => true, "skip_delay" => true})
+    end
+
+    test "runs immediately for a manual empty-args trigger" do
+      assert :ok = perform_job(MetadataRefresh, %{})
+    end
+  end
 end

@@ -56,6 +56,9 @@ defmodule Mydia.Jobs.MetadataRefresh do
   # Cap on how many individual failures are attached to the reported event.
   @max_failure_samples 10
 
+  # Random jitter range for scheduled refresh_all runs (0-30 minutes, in seconds).
+  @max_startup_delay_seconds 30 * 60
+
   @spec perform(Oban.Job.t()) :: :ok | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"media_item_id" => media_item_id} = raw_args}) do
@@ -64,7 +67,23 @@ defmodule Mydia.Jobs.MetadataRefresh do
   end
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"refresh_all" => true}}), do: run_all()
+  def perform(%Oban.Job{attempt: attempt, args: %{"refresh_all" => true} = raw_args}) do
+    args = Args.parse(raw_args)
+
+    # Spread load across self-hosted instances hitting the shared metadata relay
+    # at 05:00 Sunday. Snoozing releases the queue slot instead of holding it for
+    # up to half an hour, and Oban increments max_attempts so the jitter does not
+    # consume one of the pass's real attempts.
+    if attempt == 1 and not args.skip_delay do
+      delay_seconds = :rand.uniform(@max_startup_delay_seconds)
+
+      Logger.info("Metadata refresh scheduled, snoozing #{delay_seconds}s to spread relay load")
+
+      {:snooze, delay_seconds}
+    else
+      run_all()
+    end
+  end
 
   # Manual trigger from the UI sends empty args.
   @impl Oban.Worker
