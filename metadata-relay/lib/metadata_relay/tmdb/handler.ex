@@ -175,4 +175,12 @@ defmodule MetadataRelay.TMDB.Handler do
   def get_list(id, params) do
     Client.get("/list/#{id}", params: params)
   end
+
+  @doc """
+  GET /tmdb/collections/{id}
+  Get a movie collection (franchise) by ID.
+  """
+  def get_collection(id, params) do
+    Client.get("/collection/#{id}", params: params)
+  end
 end
