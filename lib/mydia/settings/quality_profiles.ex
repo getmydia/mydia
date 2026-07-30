@@ -13,6 +13,11 @@ defmodule Mydia.Settings.QualityProfiles do
     DefaultQualityProfiles
   }
 
+  # Shipped default. Sets no resolution or size constraints, so seeding it does
+  # not narrow what an existing install grabs, but it still routes every search
+  # through ReleaseRanker instead of the bare seeders sort a nil profile hits.
+  @seeded_default_profile_name "Any"
+
   ## Quality Profile CRUD
 
   def list_quality_profiles(opts \\ []) do
@@ -159,6 +164,8 @@ defmodule Mydia.Settings.QualityProfiles do
             {:error, _changeset} -> count
           end
         end)
+
+      maybe_seed_default_quality_profile()
 
       {:ok, created_count}
     rescue
@@ -373,6 +380,26 @@ defmodule Mydia.Settings.QualityProfiles do
   end
 
   ## Private Functions
+
+  # Seeds `media.default_quality_profile_id` on a genuinely fresh install.
+  #
+  # Only runs when the ConfigSetting row is absent entirely.
+  # `set_default_quality_profile(nil)` stores `value: ""` rather than deleting
+  # the row, so an operator who deliberately cleared the default leaves a row
+  # behind and is never overridden on the next boot.
+  defp maybe_seed_default_quality_profile do
+    existing =
+      Mydia.Settings.RuntimeConfig.get_config_setting_by_key("media.default_quality_profile_id")
+
+    if is_nil(existing) do
+      case Repo.get_by(QualityProfile, name: @seeded_default_profile_name) do
+        %QualityProfile{id: id} -> set_default_quality_profile(id)
+        nil -> :ok
+      end
+    end
+
+    :ok
+  end
 
   defp apply_quality_profile_filters(query, opts) do
     query
