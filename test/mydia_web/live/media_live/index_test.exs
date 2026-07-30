@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.IndexTest do
   import Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
+  import Mydia.DownloadsFixtures
   import Mydia.AccountsFixtures
   import MydiaWeb.AuthHelpers
 
@@ -321,6 +322,259 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert has_element?(
                view,
                "#test-debug-info[data-search-query='Unmonitored'][data-stream-count='0']"
+             )
+    end
+
+    test "progress filter narrows movies by downloaded and missing files", %{conn: conn} do
+      downloaded_movie =
+        media_item_fixture(%{
+          title: "Progress Movie Downloaded",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: downloaded_movie.id})
+
+      _missing_movie =
+        media_item_fixture(%{
+          title: "Progress Movie Missing",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie without a local file"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(view, "select[name='progress']")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Movie"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Movie'][data-stream-count='2']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloaded"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter narrows series by released episode coverage", %{conn: conn} do
+      missing_show =
+        media_item_fixture(%{
+          title: "Progress Show Missing",
+          original_title: nil,
+          year: 2024,
+          type: "tv_show",
+          monitored: true,
+          metadata: %{"overview" => "A show with no local episodes"}
+        })
+
+      episode_fixture(%{
+        media_item_id: missing_show.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2024-01-01]
+      })
+
+      partial_show =
+        media_item_fixture(%{
+          title: "Progress Show Partial",
+          original_title: nil,
+          year: 2024,
+          type: "tv_show",
+          monitored: true,
+          metadata: %{"overview" => "A show with some local episodes"}
+        })
+
+      partial_downloaded_episode =
+        episode_fixture(%{
+          media_item_id: partial_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2024-01-01]
+        })
+
+      episode_fixture(%{
+        media_item_id: partial_show.id,
+        season_number: 1,
+        episode_number: 2,
+        air_date: ~D[2024-01-02]
+      })
+
+      media_file_fixture(%{episode_id: partial_downloaded_episode.id})
+
+      downloaded_show =
+        media_item_fixture(%{
+          title: "Progress Show Downloaded",
+          original_title: nil,
+          year: 2024,
+          type: "tv_show",
+          monitored: true,
+          metadata: %{"overview" => "A show with every released episode local"}
+        })
+
+      downloaded_episode =
+        episode_fixture(%{
+          media_item_id: downloaded_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2024-01-01]
+        })
+
+      media_file_fixture(%{episode_id: downloaded_episode.id})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Show"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Show'][data-stream-count='3']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "partial"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='partial'][data-stream-count='1']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloaded"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter excludes movies with an active download from missing", %{conn: conn} do
+      _missing_movie =
+        media_item_fixture(%{
+          title: "Progress Grabbing Missing",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie with neither file nor download"}
+        })
+
+      downloading_movie =
+        media_item_fixture(%{
+          title: "Progress Grabbing Active",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie already being downloaded"}
+        })
+
+      download_fixture(%{media_item_id: downloading_movie.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Grabbing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Grabbing'][data-stream-count='2']"
+             )
+
+      # The in-flight movie is :downloading, matching its status badge, so it
+      # must not be offered up as something still to grab.
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter excludes unmonitored items", %{conn: conn} do
+      monitored_movie =
+        media_item_fixture(%{
+          title: "Progress Monitoring On",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A monitored movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: monitored_movie.id})
+
+      unmonitored_movie =
+        media_item_fixture(%{
+          title: "Progress Monitoring Off",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: false,
+          metadata: %{"overview" => "An unmonitored movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: unmonitored_movie.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Monitoring"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Monitoring'][data-stream-count='2']"
+             )
+
+      # Unmonitored items are :not_monitored rather than :downloaded, so the
+      # filter agrees with the badge instead of contradicting it.
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloaded"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
              )
     end
   end

@@ -25,6 +25,7 @@ defmodule MydiaWeb.MediaLive.Index do
      socket
      |> assign(:view_mode, :grid)
      |> assign(:search_query, "")
+     |> assign(:filter_progress, nil)
      |> assign(:filter_monitored, nil)
      |> assign(:filter_quality, nil)
      |> assign(:sort_by, "title_asc")
@@ -108,6 +109,14 @@ defmodule MydiaWeb.MediaLive.Index do
   def handle_event("filter", params, socket) do
     Logger.debug("Filter params: #{inspect(params)}")
 
+    progress =
+      case params["progress"] do
+        "missing" -> :missing
+        "partial" -> :partial
+        "downloaded" -> :downloaded
+        _ -> nil
+      end
+
     monitored =
       case params["monitored"] do
         "all" -> nil
@@ -128,6 +137,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
     {:noreply,
      socket
+     |> assign(:filter_progress, progress)
      |> assign(:filter_monitored, monitored)
      |> assign(:filter_quality, quality)
      |> assign(:sort_by, sort_by)
@@ -172,6 +182,7 @@ defmodule MydiaWeb.MediaLive.Index do
     items = Media.list_media_items(query_opts)
     items = apply_search_filter(items, socket.assigns.search_query)
     items = apply_quality_filter(items, socket.assigns.filter_quality)
+    items = apply_progress_filter(items, socket.assigns.filter_progress)
 
     all_ids = MapSet.new(items, & &1.id)
 
@@ -226,6 +237,7 @@ defmodule MydiaWeb.MediaLive.Index do
     items = Media.list_media_items(query_opts)
     items = apply_search_filter(items, socket.assigns.search_query)
     items = apply_quality_filter(items, socket.assigns.filter_quality)
+    items = apply_progress_filter(items, socket.assigns.filter_progress)
 
     all_ids = MapSet.new(items, & &1.id)
 
@@ -672,6 +684,10 @@ defmodule MydiaWeb.MediaLive.Index do
     items = apply_quality_filter(items, socket.assigns.filter_quality)
     Logger.debug("load_media_items: after quality filter=#{length(items)}")
 
+    # Apply progress filtering (client-side for now)
+    items = apply_progress_filter(items, socket.assigns.filter_progress)
+    Logger.debug("load_media_items: after progress filter=#{length(items)}")
+
     # Apply sorting
     items = apply_sorting(items, socket.assigns.sort_by)
 
@@ -777,6 +793,19 @@ defmodule MydiaWeb.MediaLive.Index do
     Enum.filter(items, fn item ->
       item.media_files
       |> Enum.any?(fn file -> file.resolution == quality end)
+    end)
+  end
+
+  defp apply_progress_filter(items, nil), do: items
+
+  # Reuses `Media.get_media_status/1` — the same classifier that renders each
+  # item's status badge — so the filter can never disagree with what the badge
+  # says. Statuses outside the dropdown (`:downloading`, `:upcoming`,
+  # `:not_monitored`, `:tba`) simply match nothing and are filtered out.
+  defp apply_progress_filter(items, progress) do
+    Enum.filter(items, fn item ->
+      {status, _counts} = Media.get_media_status(item)
+      status == progress
     end)
   end
 

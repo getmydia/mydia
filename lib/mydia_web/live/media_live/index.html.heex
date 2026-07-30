@@ -88,6 +88,7 @@
       class="hidden"
       id="test-debug-info"
       data-search-query={@search_query}
+      data-progress-filter={@filter_progress || ""}
       data-stream-count={Enum.count(@streams.media_items)}
     >
     </div>
@@ -116,6 +117,18 @@
 
       <%!-- Filters and Sort --%>
       <.form for={%{}} phx-change="filter" id="library-filter-form" class="join">
+        <select
+          name="progress"
+          class="select select-bordered join-item"
+        >
+          <option value="" selected={is_nil(@filter_progress)}>All Progress</option>
+          <option value="missing" selected={@filter_progress == :missing}>Missing</option>
+          <option value="partial" selected={@filter_progress == :partial}>Partial</option>
+          <option value="downloaded" selected={@filter_progress == :downloaded}>
+            Downloaded
+          </option>
+        </select>
+
         <select
           name="monitored"
           class="select select-bordered join-item"
