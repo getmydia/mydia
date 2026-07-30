@@ -104,5 +104,44 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
 
       assert html =~ "can&#39;t be blank" or html =~ "can't be blank"
     end
+
+    test "default selector renders \"None (no default)\" when nothing is configured", %{
+      conn: conn
+    } do
+      {:ok, _} = Settings.set_default_quality_profile(nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+
+      assert has_element?(
+               view,
+               ~s{#default-quality-profile-select option[value=""]},
+               "None (no default)"
+             )
+    end
+
+    test "default selector never interpolates a profile name, even when a default is configured",
+         %{conn: conn} do
+      {:ok, profile} =
+        Settings.create_quality_profile(%{
+          name: "Custom-#{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      {:ok, _} = Settings.set_default_quality_profile(profile.id)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+
+      assert has_element?(
+               view,
+               ~s{#default-quality-profile-select option[value=""]},
+               "None (no default)"
+             )
+
+      refute has_element?(
+               view,
+               ~s{#default-quality-profile-select option[value=""]},
+               profile.name
+             )
+    end
   end
 end
