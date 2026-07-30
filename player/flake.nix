@@ -2,10 +2,16 @@
   description = "Mydia Player - Flutter media player client";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Same revs as devenv.lock, so the Android shell and the dev shell agree on
+    # Flutter, the Android toolchain and Rust. Bump alongside devenv, not alone.
+    #
+    # The rust-overlay rev is load-bearing, not cosmetic: the previously pinned
+    # overlay has no rust-bin.stable."1.96.0", so the toolchain below cannot
+    # evaluate without it.
+    nixpkgs.url = "github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
-      url = "github:oxalica/rust-overlay";
+      url = "github:oxalica/rust-overlay/d0e019d9543f0f1215a3d961fc4dca59aa29c638";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -21,6 +27,10 @@
             android_sdk.accept_license = true;
           };
         };
+
+        # Flutter comes from player/.fvmrc via the shared resolver, the same one
+        # devenv.nix uses. Never name a Flutter version here.
+        flutterPkg = import ./flutter-version.nix { inherit pkgs; };
 
         # Android SDK configuration with NDK
         androidComposition = pkgs.androidenv.composeAndroidPackages {
@@ -38,8 +48,11 @@
         androidSdk = androidComposition.androidsdk;
         ndkPath = "${androidSdk}/libexec/android-sdk/ndk/28.2.13676358";
 
-        # Rust toolchain with Android targets
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        # Rust pinned to 1.96.0 to match devenv.nix (languages.rust.version).
+        # This toolchain cross-compiles the same p2p crate devenv builds
+        # natively, so a floating `stable.latest` here means the Android APK and
+        # the desktop build can disagree on the compiler.
+        rustToolchain = pkgs.rust-bin.stable."1.96.0".default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
           targets = [
             "aarch64-linux-android"
@@ -87,7 +100,7 @@
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
-            pkgs.flutter
+            flutterPkg
             androidSdk
             pkgs.jdk17
             rustToolchain
@@ -118,7 +131,13 @@
           AR_i686_linux_android = "${ndkPath}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar";
 
           shellHook = ''
-            export PATH="${androidSdk}/libexec/android-sdk/platform-tools:$HOME/.cargo/bin:$PATH"
+            # $HOME/.cargo/bin goes LAST, after the store paths. It holds
+            # cargo-installed helpers (flutter_rust_bridge_codegen) and the
+            # `rustup` cargokit shells out to, both of which must stay findable
+            # — but its `rustc` and `cargo` are rustup shims resolving to
+            # whatever toolchain the host defaults to. Ahead of $PATH they
+            # shadow rustToolchain and silently undo the pin above.
+            export PATH="${androidSdk}/libexec/android-sdk/platform-tools:$PATH:$HOME/.cargo/bin"
             # Note: Do NOT add NDK toolchain to PATH - it interferes with Linux builds.
             # Rust cross-compilation uses the CARGO_TARGET_* env vars instead.
 
@@ -145,15 +164,9 @@
           '';
         };
 
-        packages.default = pkgs.flutter.buildFlutterApplication {
-          pname = "mydia-player";
-          version = "1.0.0";
-          src = ./.;
-
-          nativeBuildInputs = linuxBuildDeps;
-
-          pubspecLock = pkgs.lib.importJSON ./pubspec.lock.json;
-        };
+        # Exposed so CI can assert the pinned Flutter resolves without building
+        # an SDK or any Android tooling: `nix eval ./player#packages.<sys>.flutter.version`.
+        packages.flutter = flutterPkg;
       }
     );
 }
