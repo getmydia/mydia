@@ -224,7 +224,10 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
   describe "missing download detection" do
     test "marks downloads that no longer exist in any client as missing" do
-      # Setup with no actual clients (simulates missing downloads)
+      # Setup with no actual clients (simulates missing downloads). This is
+      # also the single-client operator's shape: deleting your only client
+      # leaves `all_configured == []`, and that must still classify as
+      # :removed rather than silently falling back to nil.
       setup_runtime_config([])
 
       media_item = media_item_fixture()
@@ -245,8 +248,12 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       # Download should have error_message set (preserved for Issues tab)
       updated = Downloads.get_download!(download.id)
-      assert updated.error_message =~ "Removed from download client"
+      assert updated.error_message =~ "no longer configured in Mydia"
       assert updated.error_message =~ "test-client"
+      # The `no_client` tag is what Task 5's Issues tab groups and
+      # bulk-clears on — it must still be written when there is no
+      # configured client at all, not just when a mismatched one exists.
+      assert updated.import_failure_reason == "no_client"
     end
 
     test "does not remove downloads that are already completed" do
@@ -318,9 +325,14 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert :ok = perform_job(DownloadMonitor, %{})
 
       # All missing downloads should have error_message set (preserved for Issues tab)
-      assert Downloads.get_download!(download1.id).error_message =~ "Removed from download client"
-      assert Downloads.get_download!(download2.id).error_message =~ "Removed from download client"
-      assert Downloads.get_download!(download3.id).error_message =~ "Removed from download client"
+      assert Downloads.get_download!(download1.id).error_message =~
+               "no longer configured in Mydia"
+
+      assert Downloads.get_download!(download2.id).error_message =~
+               "no longer configured in Mydia"
+
+      assert Downloads.get_download!(download3.id).error_message =~
+               "no longer configured in Mydia"
     end
 
     test "handles mix of missing, active, and completed downloads" do
@@ -356,7 +368,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       # The missing download should have error_message set (preserved for Issues tab)
       updated_missing = Downloads.get_download!(missing_download.id)
-      assert updated_missing.error_message =~ "Removed from download client"
+      assert updated_missing.error_message =~ "no longer configured in Mydia"
 
       # Completed and failed downloads should still exist unchanged
       assert Downloads.get_download!(completed_download.id)
@@ -485,7 +497,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       preserved = Mydia.Repo.get(Mydia.Downloads.Download, tracked.id)
       assert preserved
-      assert preserved.error_message =~ "Removed from download client"
+      assert preserved.error_message =~ "no longer configured in Mydia"
     end
 
     test "does not delete unmatched downloads while their client is unreachable" do

@@ -502,6 +502,28 @@ defmodule Mydia.Jobs.DownloadMonitor do
   # unrelated import failure keeps it: adoption fixes which client owns the
   # torrent, it does not vindicate a broken import.
   defp maybe_clear_orphan_state(attrs, %{import_failure_reason: "no_client"}) do
+    clear_orphan_attrs(attrs)
+  end
+
+  # A row written by the release that predates the `no_client` tag: it carries
+  # the old "Removed from download client" copy with no `import_failure_reason`
+  # at all. Without this clause such a row is adopted (the client re-points)
+  # but the stale message never clears, so it displays a permanent failure
+  # forever while downloading fine, and stays outside `Download.occupying/1`.
+  # A genuine import failure always sets `import_failure_reason`, so this
+  # can't misfire on one.
+  defp maybe_clear_orphan_state(attrs, %{import_failure_reason: nil, error_message: error_message})
+       when is_binary(error_message) do
+    if String.starts_with?(error_message, "Removed from download client") do
+      clear_orphan_attrs(attrs)
+    else
+      attrs
+    end
+  end
+
+  defp maybe_clear_orphan_state(attrs, _download), do: attrs
+
+  defp clear_orphan_attrs(attrs) do
     Map.merge(attrs, %{
       error_message: nil,
       import_failure_reason: nil,
@@ -510,8 +532,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
       import_next_retry_at: nil
     })
   end
-
-  defp maybe_clear_orphan_state(attrs, _download), do: attrs
 
   defp handle_missing(download_map) do
     Logger.warning("Download missing from client - preserving for user investigation",

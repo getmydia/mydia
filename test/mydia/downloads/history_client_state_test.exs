@@ -77,6 +77,41 @@ defmodule Mydia.Downloads.HistoryClientStateTest do
       assert enriched.client_config_state == :present
     end
 
+    test "marks a download as :removed when no clients are configured at all" do
+      # The single-client operator's shape: deleting your only client leaves
+      # `all_configured == []`, an early-return branch that used to leave
+      # `client_config_state` nil unconditionally. A download that still
+      # names a client must classify :removed here too, not just when a
+      # mismatched client is present in a non-empty list.
+      setup_runtime_config([])
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: "gone",
+        download_client_id: "hash-e"
+      })
+
+      [enriched] = Downloads.list_downloads_with_status(filter: :all)
+
+      assert enriched.client_config_state == :removed
+    end
+
+    test "leaves client_config_state nil with no clients configured and no client assigned" do
+      setup_runtime_config([])
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: nil,
+        download_client_id: nil
+      })
+
+      [enriched] = Downloads.list_downloads_with_status(filter: :all)
+
+      assert enriched.client_config_state == nil
+    end
+
     test "does not write the adoption candidate to the database" do
       setup_runtime_config([client_config(%{name: "kept", enabled: true})])
       media_item = media_item_fixture()

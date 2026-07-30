@@ -94,10 +94,24 @@ defmodule Mydia.Downloads.History do
 
     if all_configured == [] do
       Logger.warning("No download clients configured")
-      # Return downloads with empty status. `client_config_state` stays nil,
-      # per EnrichedDownload's contract, because there is nothing configured
-      # to classify against — not even a disabled entry to point to.
-      Enum.map(downloads, &enrich_download_with_empty_status/1)
+
+      # No clients at all means every download that names one references a
+      # client that is gone: for a self-hosted operator with a single client,
+      # deleting it IS this scenario, not an edge case of it. Classify those
+      # rows :removed so the honest copy and the `no_client` tag still apply.
+      # A download with no `download_client` at all has nothing to classify
+      # against, so `client_config_state` stays nil for it, per
+      # EnrichedDownload's contract. Polling and `apply_status_filters` stay
+      # skipped either way — there is nothing to poll.
+      Enum.map(downloads, fn download ->
+        enriched = enrich_download_with_empty_status(download)
+
+        if is_nil(download.download_client) do
+          enriched
+        else
+          with_client_state(enriched, :removed)
+        end
+      end)
     else
       # Get status from all clients
       client_statuses = fetch_all_client_statuses(clients, downloads)
