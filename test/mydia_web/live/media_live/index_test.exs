@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.IndexTest do
   import Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
+  import Mydia.DownloadsFixtures
   import Mydia.AccountsFixtures
   import MydiaWeb.AuthHelpers
 
@@ -323,6 +324,259 @@ defmodule MydiaWeb.MediaLive.IndexTest do
                "#test-debug-info[data-search-query='Unmonitored'][data-stream-count='0']"
              )
     end
+
+    test "progress filter narrows movies by downloaded and missing files", %{conn: conn} do
+      downloaded_movie =
+        media_item_fixture(%{
+          title: "Progress Movie Downloaded",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: downloaded_movie.id})
+
+      _missing_movie =
+        media_item_fixture(%{
+          title: "Progress Movie Missing",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie without a local file"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(view, "select[name='progress']")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Movie"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Movie'][data-stream-count='2']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloaded"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter narrows series by released episode coverage", %{conn: conn} do
+      missing_show =
+        media_item_fixture(%{
+          title: "Progress Show Missing",
+          original_title: nil,
+          year: 2024,
+          type: "tv_show",
+          monitored: true,
+          metadata: %{"overview" => "A show with no local episodes"}
+        })
+
+      episode_fixture(%{
+        media_item_id: missing_show.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2024-01-01]
+      })
+
+      partial_show =
+        media_item_fixture(%{
+          title: "Progress Show Partial",
+          original_title: nil,
+          year: 2024,
+          type: "tv_show",
+          monitored: true,
+          metadata: %{"overview" => "A show with some local episodes"}
+        })
+
+      partial_downloaded_episode =
+        episode_fixture(%{
+          media_item_id: partial_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2024-01-01]
+        })
+
+      episode_fixture(%{
+        media_item_id: partial_show.id,
+        season_number: 1,
+        episode_number: 2,
+        air_date: ~D[2024-01-02]
+      })
+
+      media_file_fixture(%{episode_id: partial_downloaded_episode.id})
+
+      downloaded_show =
+        media_item_fixture(%{
+          title: "Progress Show Downloaded",
+          original_title: nil,
+          year: 2024,
+          type: "tv_show",
+          monitored: true,
+          metadata: %{"overview" => "A show with every released episode local"}
+        })
+
+      downloaded_episode =
+        episode_fixture(%{
+          media_item_id: downloaded_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2024-01-01]
+        })
+
+      media_file_fixture(%{episode_id: downloaded_episode.id})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Show"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Show'][data-stream-count='3']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "partial"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='partial'][data-stream-count='1']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloaded"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
+             )
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter excludes movies with an active download from missing", %{conn: conn} do
+      _missing_movie =
+        media_item_fixture(%{
+          title: "Progress Grabbing Missing",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie with neither file nor download"}
+        })
+
+      downloading_movie =
+        media_item_fixture(%{
+          title: "Progress Grabbing Active",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie already being downloaded"}
+        })
+
+      download_fixture(%{media_item_id: downloading_movie.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Grabbing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Grabbing'][data-stream-count='2']"
+             )
+
+      # The in-flight movie is :downloading, matching its status badge, so it
+      # must not be offered up as something still to grab.
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter excludes unmonitored items", %{conn: conn} do
+      monitored_movie =
+        media_item_fixture(%{
+          title: "Progress Monitoring On",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A monitored movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: monitored_movie.id})
+
+      unmonitored_movie =
+        media_item_fixture(%{
+          title: "Progress Monitoring Off",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: false,
+          metadata: %{"overview" => "An unmonitored movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: unmonitored_movie.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Monitoring"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Monitoring'][data-stream-count='2']"
+             )
+
+      # Unmonitored items are :not_monitored rather than :downloaded, so the
+      # filter agrees with the badge instead of contradicting it.
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloaded"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
+             )
+    end
   end
 
   describe "date sorting" do
@@ -416,6 +670,151 @@ defmodule MydiaWeb.MediaLive.IndexTest do
 
       assert socket.assigns.show_delete_modal == true
       assert socket.assigns.delete_files == true
+    end
+  end
+
+  describe "bulk auto search" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "renders the auto search button disabled until something is selected", %{conn: conn} do
+      movie = insert(:media_item, type: "movie")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      refute has_element?(view, "#batch-auto-search-btn")
+
+      render_click(view, "toggle_selection_mode", %{})
+
+      assert has_element?(view, "#batch-auto-search-btn")
+      assert has_element?(view, "#batch-auto-search-btn[disabled]")
+
+      render_click(view, "toggle_select", %{"id" => movie.id})
+
+      refute has_element?(view, "#batch-auto-search-btn[disabled]")
+    end
+
+    test "queues searches for selected items and reports skipped ones", %{conn: conn} do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+      already_have = insert(:media_item, type: "movie", title: "Already Downloaded")
+      insert(:media_file, media_item: already_have, episode: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+      render_click(view, "toggle_select", %{"id" => already_have.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-info") |> render() =~
+               "Queued 1 search, skipped 1 that does not need one"
+
+      assert [job] = Mydia.Repo.all(Oban.Job)
+      assert job.worker == "Mydia.Jobs.MovieSearch"
+      assert job.args["mode"] == "specific"
+      assert job.args["media_item_id"] == needs_search.id
+    end
+
+    test "reports when nothing in the selection needs a search", %{conn: conn} do
+      already_have = insert(:media_item, type: "movie", title: "Already Downloaded")
+      insert(:media_file, media_item: already_have, episode: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => already_have.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-info") |> render() =~ "Nothing to search"
+      assert Mydia.Repo.all(Oban.Job) == []
+    end
+
+    test "selecting more than the threshold shows a confirmation modal and queues nothing until confirmed",
+         %{conn: conn} do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+
+      # Real UUIDs for rows that do not exist: `binary_id` is a plain string on
+      # SQLite but a genuine uuid column on Postgres, so a synthetic id like
+      # "fake-id-1" casts fine on one adapter and raises Ecto.Query.CastError on
+      # the other. partition_for_auto_search/1 counts absent ids in neither
+      # number, which is what keeps the assertions below stable.
+      for _ <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => Ecto.UUID.generate()})
+      end
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert has_element?(view, "#auto-search-confirm-modal[open]")
+      assert Mydia.Repo.all(Oban.Job) == []
+
+      view |> element("#confirm-batch-auto-search-btn") |> render_click()
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+
+      assert view |> element("#flash-info") |> render() =~ "Queued 1 search"
+      assert [job] = Mydia.Repo.all(Oban.Job)
+      assert job.args["media_item_id"] == needs_search.id
+    end
+
+    test "cancelling the confirmation modal queues nothing and keeps the selection", %{
+      conn: conn
+    } do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+
+      # Real UUIDs for rows that do not exist: `binary_id` is a plain string on
+      # SQLite but a genuine uuid column on Postgres, so a synthetic id like
+      # "fake-id-1" casts fine on one adapter and raises Ecto.Query.CastError on
+      # the other. partition_for_auto_search/1 counts absent ids in neither
+      # number, which is what keeps the assertions below stable.
+      for _ <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => Ecto.UUID.generate()})
+      end
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+      assert has_element?(view, "#auto-search-confirm-modal[open]")
+
+      render_click(view, "cancel_batch_auto_search", %{})
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+      assert Mydia.Repo.all(Oban.Job) == []
+
+      # Selection survives the cancel: the toolbar is still in selection mode
+      # with the same count shown.
+      assert has_element?(view, "#batch-auto-search-btn")
+      assert has_element?(view, ".tabular-nums", "51")
+    end
+
+    test "denies a user without download permission", %{conn: conn} do
+      readonly = user_fixture(%{role: "readonly"})
+      conn = log_in_user(conn, readonly)
+      movie = insert(:media_item, type: "movie")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => movie.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-error") |> render() =~
+               "You do not have permission to manage downloads"
+
+      assert Mydia.Repo.all(Oban.Job) == []
     end
   end
 end

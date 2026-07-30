@@ -174,6 +174,89 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebridTest do
     end
   end
 
+  describe "failure classification" do
+    defp magnet_payload(status_code, status_text) do
+      %{
+        "id" => 99,
+        "filename" => "Some.Release.1080p",
+        "statusCode" => status_code,
+        "status" => status_text,
+        "size" => 100,
+        "downloaded" => 0,
+        "files" => []
+      }
+    end
+
+    defp fetch_magnet(bypass, config, payload) do
+      Bypass.expect(bypass, "POST", "/v4.1/magnet/status", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success_envelope(%{"magnets" => payload}))
+      end)
+
+      AllDebrid.get_job(config, "99")
+    end
+
+    # Generated one-test-per-code, mirroring the `describe "get_job/2 status
+    # code mapping"` block at line 108 — a loop inside a single test would
+    # stop at the first bad code and hide the rest.
+    for {code, category} <- [
+          {5, :provider_error},
+          {6, :provider_error},
+          {7, :no_peers},
+          {8, :rejected_content},
+          {9, :provider_error},
+          {10, :no_peers},
+          {11, :missing_files}
+        ] do
+      test "statusCode #{code} classifies as #{inspect(category)}",
+           %{bypass: bypass, config: config} do
+        assert {:ok, %ProviderJob{} = job} =
+                 fetch_magnet(bypass, config, magnet_payload(unquote(code), "Some failure"))
+
+        assert job.state == :error
+        assert job.failure_category == unquote(category)
+      end
+    end
+
+    test "prefers the payload's status text as the detail",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_magnet(bypass, config, magnet_payload(7, "Not downloaded in 20 min"))
+
+      assert job.failure_detail == "Not downloaded in 20 min"
+    end
+
+    test "falls back to the numeric code when no status text is present",
+         %{bypass: bypass, config: config} do
+      payload = magnet_payload(9, nil) |> Map.delete("status")
+
+      assert {:ok, %ProviderJob{} = job} = fetch_magnet(bypass, config, payload)
+
+      assert job.failure_detail == "statusCode 9"
+    end
+
+    test "an undocumented code stays terminal but unclassified",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_magnet(bypass, config, magnet_payload(12, "Something new"))
+
+      assert job.state == :error
+      assert job.failure_category == nil
+      assert job.failure_detail == "Something new"
+    end
+
+    test "a healthy magnet carries no failure fields",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_magnet(bypass, config, magnet_payload(1, "Downloading"))
+
+      assert job.state == :downloading
+      assert job.failure_category == nil
+      assert job.failure_detail == nil
+    end
+  end
+
   describe "list_jobs/2" do
     test "empty input returns empty map", %{config: config} do
       assert {:ok, %{}} = AllDebrid.list_jobs(config, [])

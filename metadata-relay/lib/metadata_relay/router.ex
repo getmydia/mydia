@@ -160,6 +160,12 @@ defmodule MetadataRelay.Router do
     handle_tmdb_request(conn, fn -> Handler.get_list(id, params) end)
   end
 
+  # TMDB Collection Details (franchise metadata)
+  get "/tmdb/collections/:id" do
+    params = extract_query_params(conn)
+    handle_tmdb_request(conn, fn -> Handler.get_collection(id, params) end)
+  end
+
   # TMDB Movie Details
   get "/tmdb/movies/:id" do
     params = extract_query_params(conn)

@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias Mydia.Settings
   alias MydiaWeb.MediaLive.Show.Modals
   alias MydiaWeb.MediaLive.Show.Components
+  alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.EpisodeEvents
   alias MydiaWeb.MediaLive.Show.DownloadEvents
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
@@ -12,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
   alias MydiaWeb.MediaLive.Show.SearchEvents
+  alias MydiaWeb.MediaLive.Show.FranchiseEvents
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
@@ -35,6 +37,8 @@ defmodule MydiaWeb.MediaLive.Show do
 
     # Load downloads with real-time status
     downloads_with_status = load_downloads_with_status(media_item)
+
+    user_preference = Mydia.Accounts.get_user_preference!(socket.assigns.current_user)
 
     # Load timeline events from Events system
     timeline_events = load_timeline_events(media_item)
@@ -90,7 +94,10 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:manual_search_query, "")
      |> assign(:manual_search_context, nil)
      |> assign(:searching, false)
-     |> assign(:downloading_release_url, nil)
+     |> assign(
+       :close_after_grab,
+       Mydia.Accounts.UserPreference.close_manual_search_after_grab?(user_preference)
+     )
      |> assign(:download_error, nil)
      |> assign(:min_seeders, 0)
      |> assign(:quality_filter, nil)
@@ -130,6 +137,14 @@ defmodule MydiaWeb.MediaLive.Show do
      # Feature flags
      |> assign(:playback_enabled, playback_enabled?())
      |> assign(:subtitle_feature_enabled, subtitle_feature_enabled?())
+     # Franchise section state
+     |> assign(:franchise, nil)
+     |> assign(:adding_franchise_tmdb_ids, MapSet.new())
+     |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
+     |> assign(
+       :can_create_media,
+       Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
+     )
      |> assign(:raw_search_results, [])
      # Category modal state
      |> assign(:show_category_modal, false)
@@ -139,6 +154,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_trailer_modal, false)
      # Collection state
      |> CollectionEvents.load_collection_data(media_item)
+     |> FranchiseEvents.maybe_load()
      |> stream_configure(:search_results, dom_id: &generate_positioned_id/1)
      |> stream(:search_results, [])}
   end
@@ -282,6 +298,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("delete_download_record", params, socket),
     do: DownloadEvents.delete_download_record(params, socket)
 
+  def handle_event("dismiss_failed_grab", params, socket),
+    do: DownloadEvents.dismiss_failed_grab(params, socket)
+
   def handle_event("show_download_details", params, socket),
     do: DownloadEvents.show_download_details(params, socket)
 
@@ -296,6 +315,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("sort_search", params, socket),
     do: SearchEvents.sort_search(params, socket)
+
+  def handle_event("toggle_close_after_grab", params, socket),
+    do: SearchEvents.toggle_close_after_grab(params, socket)
 
   def handle_event("download_from_search", params, socket),
     do: SearchEvents.download_from_search(params, socket)
@@ -362,6 +384,11 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("remove_from_collection", params, socket),
     do: CollectionEvents.remove_from_collection(params, socket)
+
+  # Franchise events
+
+  def handle_event("add_franchise_movie", params, socket),
+    do: FranchiseEvents.add_franchise_movie(params, socket)
 
   @impl true
   def handle_info({:download_created, download}, socket) do
@@ -514,6 +541,15 @@ defmodule MydiaWeb.MediaLive.Show do
     {:noreply, assign(socket, :transcode_jobs, load_transcode_jobs(media_item))}
   end
 
+  def handle_info({:grab_completed, payload}, socket),
+    do: SearchEvents.handle_grab_completed(payload, socket)
+
+  def handle_info({:grab_failed, payload}, socket),
+    do: SearchEvents.handle_grab_failed(payload, socket)
+
+  def handle_info({:grab_duplicate, payload}, socket),
+    do: SearchEvents.handle_grab_duplicate(payload, socket)
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # handle_async dispatches to event modules
@@ -521,9 +557,6 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_async(:search, result, socket),
     do: SearchEvents.handle_search_async(result, socket)
-
-  def handle_async(:download_release, result, socket),
-    do: SearchEvents.handle_download_release_async(result, socket)
 
   def handle_async(:refresh_files, result, socket),
     do: FileEvents.handle_refresh_files_async(result, socket)
@@ -554,6 +587,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async(:download_subtitle, result, socket),
     do: SubtitleEvents.handle_download_subtitle_async(result, socket)
+
+  def handle_async(:load_franchise, result, socket),
+    do: FranchiseEvents.handle_load_result(result, socket)
+
+  def handle_async({:add_franchise_movie, tmdb_id}, result, socket),
+    do: FranchiseEvents.handle_add_result(tmdb_id, result, socket)
 
   # Private helpers
 

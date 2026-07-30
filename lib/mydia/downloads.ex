@@ -206,6 +206,20 @@ defmodule Mydia.Downloads do
   defdelegate list_stuck_downloads(opts \\ []), to: Mydia.Downloads.History
 
   @doc """
+  Lists client-less grab records abandoned mid-flight (grab task died before
+  writing an outcome) whose `inserted_at` is older than
+  `Mydia.Downloads.History.grab_timeout_minutes/0`. See `History.list_stale_grabs/1`.
+  """
+  @spec list_stale_grabs(DateTime.t()) :: [Download.t()]
+  defdelegate list_stale_grabs(now \\ DateTime.utc_now()), to: Mydia.Downloads.History
+
+  @doc """
+  The grab-timeout threshold (minutes). See `Mydia.Downloads.History.grab_timeout_minutes/0`.
+  """
+  @spec grab_timeout_minutes() :: pos_integer()
+  defdelegate grab_timeout_minutes(), to: Mydia.Downloads.History
+
+  @doc """
   Broadcasts a download update to all subscribed LiveViews.
   """
   @spec broadcast_download_update(binary()) :: :ok | {:error, term()}
@@ -239,6 +253,22 @@ defmodule Mydia.Downloads do
   """
   @spec initiate_download(SearchResult.t(), keyword()) :: {:ok, Download.t()} | {:error, term()}
   defdelegate initiate_download(search_result, opts \\ []), to: Mydia.Downloads.Queue
+
+  @doc """
+  Optimistically starts a download for a manual search result.
+
+  Inserts the Download record synchronously (derived status `"grabbing"`) and
+  returns immediately; the duplicate check, torrent fetch, and client handoff
+  run in a supervised background task. Outcomes are broadcast on the
+  `"downloads"` PubSub topic as `:grab_completed` / `:grab_failed` /
+  `:grab_duplicate` messages.
+
+  Returns `{:error, {:task_start_failed, reason}}` if the background task
+  can't be started; the optimistic record is removed in that case.
+  """
+  @spec grab_async(SearchResult.t(), keyword()) ::
+          {:ok, Download.t()} | {:error, Ecto.Changeset.t() | {:task_start_failed, term()}}
+  defdelegate grab_async(search_result, opts \\ []), to: Mydia.Downloads.Grabber
 
   @doc """
   Cancels a download by removing it from the download client.

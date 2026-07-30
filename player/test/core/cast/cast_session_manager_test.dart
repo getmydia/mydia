@@ -222,8 +222,7 @@ void main() {
       expect(backend.connectedDevice, isNull);
     });
 
-    test(
-        'does not retry a codec failure on the bridge route, and rolls back',
+    test('does not retry a codec failure on the bridge route, and rolls back',
         () async {
       final manager = build(isP2pMode: true);
       addTearDown(manager.dispose);
@@ -271,7 +270,8 @@ void main() {
   });
 
   group('codec failure escalation', () {
-    test('retries via the bridge rather than TRANSCODE when a bridge is available',
+    test(
+        'retries via the bridge rather than TRANSCODE when a bridge is available',
         () async {
       final manager = build();
       addTearDown(manager.dispose);
@@ -362,6 +362,63 @@ void main() {
     });
   });
 
+  group('media duration', () {
+    /// The runtime the app already knows locally. Casting has to carry it
+    /// across, because a Chromecast playing one of Mydia's live-style HLS
+    /// playlists reports `duration: -1` and never learns the real length.
+    const knownRuntime = Duration(minutes: 107);
+
+    const launchWithDuration = CastLaunchRequest(
+      fileId: 'file-1',
+      mediaId: 'movie-1',
+      mediaType: 'movie',
+      title: 'Arrival',
+      duration: knownRuntime,
+    );
+
+    test('seeds the published session from the launch request', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchWithDuration);
+
+      expect(manager.currentSession?.mediaInfo?.duration, knownRuntime);
+    });
+
+    test('ignores a receiver-reported -1 placeholder', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithDuration);
+
+      backend.emitDuration(const Duration(seconds: -1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.mediaInfo?.duration, knownRuntime);
+    });
+
+    test('accepts a real duration the receiver does report', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithDuration);
+
+      backend.emitDuration(const Duration(minutes: 108));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.mediaInfo?.duration,
+          const Duration(minutes: 108));
+    });
+
+    test('persists the duration so a reconnect keeps a usable scrub bar',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchWithDuration);
+
+      expect((await store.load())?.duration, knownRuntime);
+    });
+  });
+
   group('progress sync', () {
     test('syncs position to the server as the receiver reports it', () async {
       final manager = build();
@@ -380,6 +437,21 @@ void main() {
       addTearDown(manager.dispose);
       await manager.startCast(device: device, request: launch);
 
+      backend.emitPosition(const Duration(seconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      verifyNever(client.mutate(any));
+    });
+
+    /// `-1` is the Chromecast's "I don't know" placeholder, not a length.
+    /// Syncing against it would write `durationSeconds: -1` into the user's
+    /// watch history — and, worse, a nonsense watched verdict derived from it.
+    test('does not sync against the receiver\'s -1 placeholder', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+
+      backend.emitDuration(const Duration(seconds: -1));
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
@@ -480,8 +552,7 @@ void main() {
       expect(await store.load(), isNull);
     });
 
-    test('reconnects a recent session the receiver is still playing',
-        () async {
+    test('reconnects a recent session the receiver is still playing', () async {
       await storeSession();
       backend.receiverContentUrl =
           'https://mydia.test/api/v1/stream/file/file-1';

@@ -6,8 +6,11 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
 
   alias Mydia.Downloads
   alias Mydia.Indexers.SearchResult
+  alias MydiaWeb.Live.Authorization
 
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 1]
+  import MydiaWeb.MediaLive.Show.Loaders,
+    only: [load_media_item: 1, load_downloads_with_status: 1]
+
   import MydiaWeb.MediaLive.Show.Helpers, only: [maybe_add_opt: 3]
 
   require Logger
@@ -134,6 +137,25 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to update download")}
+    end
+  end
+
+  @doc false
+  # Deletes a failed-grab record from the header alert. No confirm modal: the
+  # record never reached a client, so there is nothing to clean up remotely.
+  def dismiss_failed_grab(%{"id" => id}, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      download = Downloads.get_download!(id)
+      {:ok, _} = Downloads.delete_download(download)
+
+      {:noreply,
+       assign(
+         socket,
+         :downloads_with_status,
+         load_downloads_with_status(socket.assigns.media_item)
+       )}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 end

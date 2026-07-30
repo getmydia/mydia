@@ -45,6 +45,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     * `:tvdb_id` - Explicit TVDB ID to use
     * `:metadata_source` - Provenance to stamp (`:tvdb` | `:tmdb` | `nil`).
       Recorded for TV shows only; movies always leave it nil.
+    * `:monitored` - Monitored flag for the new item (default: `true`)
+    * `:quality_profile_id` - Quality profile to assign. Omitted from the attrs
+      entirely when nil.
 
   If neither id is given, falls back to parsing `metadata.provider_id` as tmdb_id.
   """
@@ -71,8 +74,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       tvdb_id: tvdb_id,
       imdb_id: metadata.imdb_id,
       metadata: metadata,
-      monitored: true
+      monitored: Keyword.get(opts, :monitored, true)
     }
+
+    attrs = maybe_put_quality_profile(attrs, opts[:quality_profile_id])
 
     # Record provenance for TV shows only; movies leave metadata_source nil.
     if media_type == :movie do
@@ -81,6 +86,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       Map.put(attrs, :metadata_source, opts[:metadata_source])
     end
   end
+
+  defp maybe_put_quality_profile(attrs, nil), do: attrs
+  defp maybe_put_quality_profile(attrs, id), do: Map.put(attrs, :quality_profile_id, id)
 
   @doc """
   Looks up TVDB ID for a TV show by searching TVDB by title+year.
@@ -120,8 +128,18 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   An optional `config` (relay config map) can be injected for testing; it
   defaults to `Metadata.default_relay_config()`.
+
+  `opts` are forwarded to `build_media_item_attrs/3`; `:monitored` and
+  `:quality_profile_id` let a caller inherit settings from an item the user is
+  already looking at. TV shows ignore them today.
   """
-  def handle_add_media_to_library(provider_id, media_type, library_status_map, config \\ nil) do
+  def handle_add_media_to_library(
+        provider_id,
+        media_type,
+        library_status_map,
+        config \\ nil,
+        opts \\ []
+      ) do
     provider_id_int = parse_provider_id(provider_id)
     config = config || Metadata.default_relay_config()
 
@@ -129,7 +147,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       if media_type == :tv_show do
         add_tv_show_to_library(provider_id, provider_id_int, config)
       else
-        add_movie_to_library(provider_id, provider_id_int, config)
+        add_movie_to_library(provider_id, provider_id_int, config, opts)
       end
 
     case result do
@@ -192,10 +210,15 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   # Private helpers
 
-  defp add_movie_to_library(provider_id, provider_id_int, config) do
+  defp add_movie_to_library(provider_id, provider_id_int, config, opts) do
     case Metadata.fetch_by_id(config, provider_id, media_type: :movie, provider: :tmdb) do
       {:ok, metadata} ->
-        attrs = build_media_item_attrs(metadata, :movie, tmdb_id: provider_id_int)
+        attrs =
+          build_media_item_attrs(
+            metadata,
+            :movie,
+            Keyword.put(opts, :tmdb_id, provider_id_int)
+          )
 
         case Media.create_media_item(attrs) do
           {:ok, media_item} -> {:ok, media_item}

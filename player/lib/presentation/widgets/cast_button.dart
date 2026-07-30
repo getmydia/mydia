@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cast/cast_providers.dart';
+import '../../core/cast/cast_target.dart';
 
 /// Cast button for the player's top bar.
 ///
@@ -20,20 +21,29 @@ class CastButton extends ConsumerWidget {
 
     final isCasting = ref.watch(isCastingProvider);
     final castDevice = ref.watch(currentCastDeviceProvider);
+    final target = ref.watch(castTargetProvider);
+    final active = isCasting || target != null;
+
+    final String tooltip;
+    if (isCasting && castDevice != null) {
+      tooltip = 'Casting to ${castDevice.name}';
+    } else if (target != null) {
+      tooltip = 'Will play on ${target.name}';
+    } else {
+      tooltip = 'Cast to device';
+    }
 
     return IconButton(
       key: const Key('cast-button'),
       icon: Icon(
-        isCasting ? Icons.cast_connected : Icons.cast,
-        color: isCasting ? Colors.blue : Colors.white,
+        active ? Icons.cast_connected : Icons.cast,
+        color: active ? Colors.blue : Colors.white,
       ),
       onPressed: onPressed,
       style: IconButton.styleFrom(
         backgroundColor: Colors.black.withValues(alpha: 0.5),
       ),
-      tooltip: isCasting && castDevice != null
-          ? 'Casting to ${castDevice.name}'
-          : 'Cast to device',
+      tooltip: tooltip,
     );
   }
 }

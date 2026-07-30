@@ -5,6 +5,15 @@ defmodule MetadataRelay.TMDB.Client do
   This module provides a thin wrapper around the TMDB API using Req.
   It handles authentication and forwards requests to TMDB, returning
   the raw API responses.
+
+  ## Testing
+
+  For testing, you can configure a custom HTTP adapter via application config:
+
+      config :metadata_relay, :tmdb_http_adapter, fn request ->
+        {request, Req.Response.new(status: 200, body: %{})}
+      end
+
   """
 
   @base_url "https://api.themoviedb.org/3"
@@ -17,14 +26,19 @@ defmodule MetadataRelay.TMDB.Client do
   def new do
     api_key = get_api_key()
 
-    Req.new(
+    base_opts = [
       base_url: @base_url,
       params: [api_key: api_key],
       headers: [
         {"accept", "application/json"},
         {"content-type", "application/json"}
       ]
-    )
+    ]
+
+    adapter = Application.get_env(:metadata_relay, :tmdb_http_adapter)
+    opts = if adapter, do: Keyword.put(base_opts, :adapter, adapter), else: base_opts
+
+    Req.new(opts)
   end
 
   @doc """

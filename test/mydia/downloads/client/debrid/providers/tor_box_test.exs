@@ -186,6 +186,63 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBoxTest do
     end
   end
 
+  describe "failure classification" do
+    defp failure_payload(download_state) do
+      %{
+        "id" => 7,
+        "name" => "Some.Release.1080p",
+        "download_state" => download_state,
+        "download_finished" => false,
+        "download_present" => false,
+        "progress" => 0.0,
+        "size" => 100,
+        "files" => []
+      }
+    end
+
+    defp fetch_job(bypass, config, download_state) do
+      Bypass.expect(bypass, "GET", "/torrents/mylist", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success(failure_payload(download_state)))
+      end)
+
+      TorBox.get_job(config, "7")
+    end
+
+    test "missingFiles classifies as :missing_files", %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} = fetch_job(bypass, config, "missingFiles")
+
+      assert job.state == :error
+      assert job.failure_category == :missing_files
+      assert job.failure_detail == "missingFiles"
+    end
+
+    test "error classifies as :provider_error", %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} = fetch_job(bypass, config, "error")
+
+      assert job.state == :error
+      assert job.failure_category == :provider_error
+      assert job.failure_detail == "error"
+    end
+
+    test "a non-terminal state carries no failure fields", %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} = fetch_job(bypass, config, "downloading")
+
+      assert job.state == :downloading
+      assert job.failure_category == nil
+      assert job.failure_detail == nil
+    end
+
+    test "stalled (no seeds) stays non-terminal and unclassified (PR #221)",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} = fetch_job(bypass, config, "stalled (no seeds)")
+
+      assert job.state == :downloading
+      assert job.failure_category == nil
+    end
+  end
+
   describe "get_download_urls/2 (descriptors)" do
     test "returns tokenless descriptors with provider/torrent_id/file_id", %{config: config} do
       job = %ProviderJob{

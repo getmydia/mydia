@@ -140,23 +140,62 @@
               </div>
             <% end %>
           </div>
-          <%!-- Active Download Status --%>
+          <%!-- Active Download / Grab Status --%>
           <%= if download = get_download_status(@downloads_with_status) do %>
-            <div class="alert alert-info mb-6">
-              <.icon name="hero-arrow-down-tray" class="w-6 h-6" />
-              <div class="flex-1">
-                <h3 class="font-bold">Downloading</h3>
-                <div class="text-sm">
-                  {format_download_status(download.status)}
-                  <%= if download.progress do %>
-                    - {format_progress(download.progress)}%
-                  <% end %>
+            <%= cond do %>
+              <% download.status == "failed" -> %>
+                <div class="alert alert-error mb-6" id="failed-grab-alert">
+                  <.icon name="hero-exclamation-triangle" class="w-6 h-6" />
+                  <div class="flex-1">
+                    <h3 class="font-bold">Download failed</h3>
+                    <div class="text-sm">
+                      {download.title}
+                      <%= if download.error_message do %>
+                        — {download.error_message}
+                      <% end %>
+                    </div>
+                  </div>
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    id="dismiss-failed-grab"
+                    phx-click="dismiss_failed_grab"
+                    phx-value-id={download.id}
+                  >
+                    Dismiss
+                  </button>
                 </div>
-              </div>
-            </div>
+              <% download.status == "grabbing" -> %>
+                <div class="alert alert-info mb-6" id="grabbing-alert">
+                  <span class="loading loading-spinner loading-sm"></span>
+                  <div class="flex-1">
+                    <h3 class="font-bold">Sending to download client</h3>
+                    <div class="text-sm">{download.title}</div>
+                  </div>
+                </div>
+              <% true -> %>
+                <div class="alert alert-info mb-6">
+                  <.icon name="hero-arrow-down-tray" class="w-6 h-6" />
+                  <div class="flex-1">
+                    <h3 class="font-bold">Downloading</h3>
+                    <div class="text-sm">
+                      {format_download_status(download.status)}
+                      <%= if download.progress do %>
+                        - {format_progress(download.progress)}%
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
+            <% end %>
           <% end %>
           <%!-- Overview Section --%>
           <Components.overview_section media_item={@media_item} />
+          <%!-- Franchise Section (Movies in the same TMDB collection) --%>
+          <FranchiseComponents.franchise_section
+            :if={@franchise}
+            franchise={@franchise}
+            can_add={@can_create_media}
+            adding_tmdb_ids={@adding_franchise_tmdb_ids}
+          />
           <%!-- Episodes Section (TV Shows Only) --%>
           <Components.episodes_section
             media_item={@media_item}
@@ -218,7 +257,7 @@
       media_item={@media_item}
       manual_search_query={@manual_search_query}
       searching={@searching}
-      downloading_release_url={@downloading_release_url}
+      close_after_grab={@close_after_grab}
       download_error={@download_error}
       results_empty?={@results_empty?}
       indexer_errors={@indexer_errors}

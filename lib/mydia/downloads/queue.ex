@@ -26,7 +26,7 @@ defmodule Mydia.Downloads.Queue do
     # Normalize metadata: callers (e.g. TVShowSearch) may pass a plain map.
     # Coerce to %SearchResultMetadata{} so downstream pattern matches and
     # persistence in create_download_record/4 work uniformly.
-    search_result = %{search_result | metadata: normalize_metadata(search_result.metadata)}
+    search_result = normalize_search_result_metadata(search_result)
 
     # Use protocol from search result
     download_type = search_result.download_protocol
@@ -197,6 +197,16 @@ defmodule Mydia.Downloads.Queue do
     {:ok, success_count}
   end
 
+  @doc false
+  # Normalizes a SearchResult's metadata into a %SearchResultMetadata{}
+  # struct. Public so the optimistic grab pipeline (Mydia.Downloads.Grabber)
+  # can normalize before its own duplicate check, matching what
+  # initiate_download/2 does before check_for_duplicate_download/2 — keeping
+  # season-pack-aware duplicate-check guards working from both entry points.
+  def normalize_search_result_metadata(%SearchResult{} = search_result) do
+    %{search_result | metadata: normalize_metadata(search_result.metadata)}
+  end
+
   # Normalizes search-result metadata into a SearchResultMetadata struct.
   # Some call sites (e.g. tv_show_search.ex) historically passed a plain
   # map, which silently bypassed every season-pack-aware guard below.
@@ -220,7 +230,10 @@ defmodule Mydia.Downloads.Queue do
     manual? = Keyword.get(opts, :manual, false)
 
     # Always check for active downloads to prevent downloading the same thing twice
-    with :ok <- check_for_active_download(search_result, media_item_id, episode_id) do
+    with :ok <-
+           check_for_active_download(search_result, media_item_id, episode_id,
+             exclude_download_id: Keyword.get(opts, :exclude_download_id)
+           ) do
       # Skip media file check for manual downloads - the user explicitly chose this release
       # (they may want to upgrade quality or grab a different version)
       if manual? do
@@ -231,12 +244,18 @@ defmodule Mydia.Downloads.Queue do
     end
   end
 
-  def check_for_active_download(search_result, media_item_id, episode_id) do
+  def check_for_active_download(search_result, media_item_id, episode_id, opts \\ []) do
     # Query for downloads still occupying their target — actively downloading,
     # downloaded-but-awaiting-import, or import-retrying. A completed-but-not-yet
     # imported download still counts, so we don't grab a duplicate while the
     # first one is queued for import. See Mydia.Downloads.Download.occupying/1.
     base_query = Download.occupying()
+
+    base_query =
+      case Keyword.get(opts, :exclude_download_id) do
+        nil -> base_query
+        id -> where(base_query, [d], d.id != ^id)
+      end
 
     # Add filters based on what we're downloading
     query =
@@ -679,7 +698,9 @@ defmodule Mydia.Downloads.Queue do
   end
 
   # Selects appropriate client and adds the download, with smart fallback if type is detected
-  defp select_and_add_to_client(search_result, opts) do
+  @doc false
+  # Public so Mydia.Downloads.Grabber can reuse the fetch/select/add pipeline.
+  def select_and_add_to_client(search_result, opts) do
     download_type = Keyword.get(opts, :download_type)
 
     # First, prepare the torrent/nzb input (download file if needed)
@@ -898,8 +919,13 @@ defmodule Mydia.Downloads.Queue do
     end
   end
 
-  defp create_download_record(search_result, client_config, client_id, opts) do
-    # Build DownloadMetadata struct from search result
+  @doc false
+  # Builds the metadata map persisted on a Download for a search result.
+  # Public so the optimistic grab pipeline (Mydia.Downloads.Grabber) can build
+  # identical records without going through the synchronous pipeline.
+  def build_download_metadata(%SearchResult{} = search_result) do
+    search_result = %{search_result | metadata: normalize_metadata(search_result.metadata)}
+
     metadata_attrs = %{
       size: search_result.size,
       seeders: search_result.seeders,
@@ -908,7 +934,6 @@ defmodule Mydia.Downloads.Queue do
       download_protocol: search_result.download_protocol
     }
 
-    # Add season pack metadata if present
     metadata_attrs =
       case search_result.metadata do
         %SearchResultMetadata{season_pack: true, season_number: season_number} = m ->
@@ -923,21 +948,15 @@ defmodule Mydia.Downloads.Queue do
           metadata_attrs
       end
 
-    # Create DownloadMetadata struct and convert to map for database storage
-    metadata = metadata_attrs |> DownloadMetadata.new() |> DownloadMetadata.to_map()
+    metadata_attrs
+    |> DownloadMetadata.new()
+    |> DownloadMetadata.to_map()
+    |> Map.put(:indexer, search_result.indexer)
+    |> Map.put(:guid, search_result.guid || fallback_release_guid(search_result))
+  end
 
-    # Plumb the release's stable indexer + guid through to the download record
-    # so failure handling (DownloadMonitor → Blacklists.add/4, #123) can key
-    # off the original search result. `DownloadMetadata.to_map/1` produces a
-    # plain map for JSON storage; adding the extra fields here is safe.
-    metadata =
-      metadata
-      |> Map.put(:indexer, search_result.indexer)
-      |> Map.put(
-        :guid,
-        search_result.guid ||
-          fallback_release_guid(search_result)
-      )
+  defp create_download_record(search_result, client_config, client_id, opts) do
+    metadata = build_download_metadata(search_result)
 
     attrs = %{
       indexer: search_result.indexer,

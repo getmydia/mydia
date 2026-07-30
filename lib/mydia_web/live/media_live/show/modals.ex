@@ -566,7 +566,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :media_item, :map, required: true
   attr :manual_search_query, :string, required: true
   attr :searching, :boolean, required: true
-  attr :downloading_release_url, :string, default: nil
+  attr :close_after_grab, :boolean, default: false
   attr :download_error, :any, default: nil
   attr :results_empty?, :boolean, required: true
   attr :indexer_errors, :list, default: []
@@ -596,7 +596,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
       |> assign(:manual_ranking_opts, manual_ranking_opts)
 
     ~H"""
-    <div class="modal modal-open">
+    <div class="modal modal-open" id="manual-search-modal">
       <div class="modal-box max-w-4xl h-[90vh] flex flex-col p-0">
         <%!-- Modal Header --%>
         <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-4 sm:p-6">
@@ -661,6 +661,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 </div>
               </form>
               <div class="flex-1"></div>
+              <label
+                class="label cursor-pointer gap-2"
+                id="close-after-grab-toggle"
+                title="Close this dialog as soon as a release is grabbed"
+              >
+                <span class="label-text text-xs">Close after grabbing</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-primary"
+                  checked={@close_after_grab}
+                  phx-click="toggle_close_after_grab"
+                />
+              </label>
               <form phx-change="sort_search">
                 <select name="sort_by" class="select select-bordered select-sm">
                   <option value="quality" selected={@sort_by == :quality}>Best Score</option>
@@ -859,6 +872,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       {result.indexer}
                     </span>
                   </div>
+                  <%= if reason = Map.get(result, :grab_failed) do %>
+                    <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
+                  <% end %>
                 </div>
                 <%!-- Download Action --%>
                 <div class="flex items-center">
@@ -868,10 +884,31 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         <.icon name="hero-check" class="w-4 h-4" />
                         <span class="hidden sm:inline">Grabbed</span>
                       </button>
+                    <% Map.get(result, :duplicate) -> %>
+                      <button class="btn btn-ghost btn-sm btn-disabled" disabled>
+                        <.icon name="hero-check-circle" class="w-4 h-4" />
+                        <span class="hidden sm:inline">Already downloading</span>
+                      </button>
                     <% Map.get(result, :downloading) -> %>
                       <button class="btn btn-primary btn-sm btn-disabled" disabled>
                         <span class="loading loading-spinner loading-xs"></span>
-                        <span class="hidden sm:inline">Sending...</span>
+                        <span class="hidden sm:inline">Grabbing…</span>
+                      </button>
+                    <% Map.get(result, :grab_failed) -> %>
+                      <button
+                        class="btn btn-error btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
+                        phx-click="download_from_search"
+                        phx-value-download-url={result.download_url}
+                        phx-value-title={result.title}
+                        phx-value-indexer={result.indexer}
+                        phx-value-size={result.size || 0}
+                        phx-value-seeders={result.seeders || 0}
+                        phx-value-leechers={result.leechers || 0}
+                        phx-value-quality={get_search_quality_badge(result) || "Unknown"}
+                        title={"Failed: #{Map.get(result, :grab_failed)} — click to retry"}
+                      >
+                        <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
+                        <span class="hidden sm:inline">Failed — retry</span>
                       </button>
                     <% true -> %>
                       <button

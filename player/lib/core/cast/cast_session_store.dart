@@ -15,6 +15,14 @@ class PersistedCastSession {
   final CastRouteKind routeKind;
   final DateTime savedAt;
 
+  /// The item's runtime as the *app* knows it, not as the receiver reports it.
+  ///
+  /// Persisted because a Chromecast never learns the length of the live-style
+  /// HLS playlists Mydia serves — so a reconnect that did not carry this
+  /// across would come back with an unknown duration and a scrub bar that
+  /// cannot be dragged. Zero means "was not known when this was saved".
+  final Duration duration;
+
   /// The exact URL handed to the receiver.
   ///
   /// Persisted so a restore can ask the receiver what it is playing and
@@ -32,6 +40,7 @@ class PersistedCastSession {
     required this.routeKind,
     required this.savedAt,
     this.mediaUrl = '',
+    this.duration = Duration.zero,
   });
 
   /// Sessions older than this are discarded without a reconnect attempt.
@@ -50,6 +59,7 @@ class PersistedCastSession {
             routeKind == CastRouteKind.localBridge ? 'bridge' : 'direct',
         'savedAt': savedAt.toIso8601String(),
         'mediaUrl': mediaUrl,
+        'durationSeconds': duration.inSeconds,
       };
 
   factory PersistedCastSession.fromMap(Map<dynamic, dynamic> map) {
@@ -70,10 +80,17 @@ class PersistedCastSession {
       // carry no URL; an empty one can never match, so they are discarded
       // rather than restored blind.
       mediaUrl: map['mediaUrl'] as String? ?? '',
+      // Records written before the cast session carried a duration have no
+      // such key; zero reads as "unknown", which the UI already handles.
+      duration: Duration(seconds: map['durationSeconds'] as int? ?? 0),
     );
   }
 
-  PersistedCastSession copyWith({Duration? position, DateTime? savedAt}) {
+  PersistedCastSession copyWith({
+    Duration? position,
+    DateTime? savedAt,
+    Duration? duration,
+  }) {
     return PersistedCastSession(
       device: device,
       mediaId: mediaId,
@@ -84,6 +101,7 @@ class PersistedCastSession {
       routeKind: routeKind,
       savedAt: savedAt ?? this.savedAt,
       mediaUrl: mediaUrl,
+      duration: duration ?? this.duration,
     );
   }
 }

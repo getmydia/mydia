@@ -4,6 +4,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/glass_surface.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_queue_providers.dart';
@@ -762,45 +764,53 @@ class DownloadsScreen extends ConsumerWidget {
     return PreferredSize(
       preferredSize: const Size.fromHeight(kToolbarHeight),
       child: GlassSurface.appBar(
-          opacity: 0.85,
-          child: SafeArea(
-              child: SizedBox(
-                height: kToolbarHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.download_rounded,
-                        color: AppColors.primary,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Downloads',
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.3,
-                                ),
-                      ),
-                      const Spacer(),
-                      if (queuedCount > 0)
-                        IconButton(
-                          onPressed: () => _showCancelAllQueuedDialog(
-                              context, ref, queuedCount),
-                          tooltip: 'Cancel all queued',
-                          icon: const Icon(
-                            Icons.clear_all_rounded,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                    ],
+        opacity: 0.85,
+        child: SafeArea(
+          child: SizedBox(
+            height: kToolbarHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.download_rounded,
+                    color: AppColors.primary,
+                    size: 24,
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Downloads',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.3,
+                        ),
+                  ),
+                  const Spacer(),
+                  if (queuedCount > 0) ...[
+                    IconButton(
+                      onPressed: () =>
+                          _showCancelAllQueuedDialog(context, ref, queuedCount),
+                      tooltip: 'Cancel all queued',
+                      icon: const Icon(
+                        Icons.clear_all_rounded,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  // DownloadsScreen's app bar is always visible (no
+                  // desktop suppression), so it carries its own cast
+                  // affordance instead of the shell's overlay — see
+                  // AppShell._hasOwnCastButton.
+                  CastButton(
+                    onPressed: () => pickCastDevice(context, ref),
+                  ),
+                ],
               ),
             ),
+          ),
         ),
+      ),
     );
   }
 
