@@ -5,18 +5,23 @@ targets:
         # Scope the generator to hand-written sources only. A bare
         # `lib/**/*.dart` also matches generated output — riverpod's own
         # `*.g.dart`, freezed's `*.freezed.dart`, the flutter_rust_bridge
-        # bindings under lib/native/, and graphql_codegen's
-        # lib/graphql/generated/ — which feeds a generator its own outputs as
-        # inputs. That produced an endless "Starting build #N with updated
-        # builders" rebuild loop on macOS CI (Linux and Windows happened to
-        # survive it), which only surfaced once the frb bindings were
-        # regenerated for 2.12.0.
+        # bindings under lib/native/, and graphql_codegen's `*.graphql.dart` —
+        # which feeds a generator its own outputs as inputs. That produced an
+        # endless "Starting build #N with updated builders" rebuild loop on
+        # macOS CI (Linux and Windows happened to survive it), which only
+        # surfaced once the frb bindings were regenerated for 2.12.0.
+        #
+        # The GraphQL entry must match by extension, not by directory. An
+        # earlier `lib/graphql/generated/**` never excluded anything: that
+        # directory has never existed, because the `output_dir` below is not a
+        # key graphql_codegen reads (see the note there), so output has always
+        # landed beside its sources as `lib/graphql/**/*.graphql.dart`.
         generate_for:
           include:
             - lib/**/*.dart
           exclude:
             - lib/native/**
-            - lib/graphql/generated/**
+            - lib/**/*.graphql.dart
             - lib/**/*.g.dart
             - lib/**/*.freezed.dart
         options:
@@ -24,6 +29,32 @@ targets:
 
       graphql_codegen:
         enabled: true
+        # WARNING: every option below is inert and has never had any effect.
+        #
+        # graphql_codegen's config keys are camelCase; these are snake_case, and
+        # its config class is a plain @JsonSerializable() without
+        # disallowUnrecognizedKeys, so unrecognised keys are silently dropped
+        # rather than rejected. This is not version drift: the accepted key set
+        # is byte-identical in graphql_codegen 2.x and 3.x.
+        #
+        # The accepted keys are: addTypename, addTypenameExcludedPaths,
+        # allowMissingNullableKeysInFromJson, assetsPath, clients,
+        # disableContextReplacement, disableCopyWithGeneration, enums,
+        # extraKeywords, generatedFileHeader, namingSeparator, outputDirectory,
+        # scalars, scopes, setOperationName.
+        #
+        # Two consequences worth knowing before "fixing" this:
+        #   * `output_dir` is inert, so output lands beside its sources. The
+        #     riverpod exclude above depends on that being true.
+        #   * `scalar_mapping` is inert, so DateTime and Date generate as
+        #     String. That is why every build logs "Missing scalar DateTime.
+        #     Defaulting to String". The player's hand-written models also
+        #     declare these fields as String?, so the two agree today.
+        #
+        # Porting these to real keys (`scalars: {DateTime: {type: DateTime}}`)
+        # is a genuine improvement but regenerates all 28 outputs with changed
+        # types and ripples into every call site that reads a date field.
+        # Deliberately left as a follow-up rather than smuggled into this PR.
         options:
           # Path to the GraphQL schema file (symlink to shared server schema)
           schema: lib/graphql/schema.graphql
