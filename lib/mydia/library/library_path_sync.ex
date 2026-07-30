@@ -196,28 +196,9 @@ defmodule Mydia.Library.LibraryPathSync do
     if existing do
       existing |> LibraryPath.changeset(attrs) |> Repo.update()
     else
-      # New row: force scan_interval into the changeset even when nil.
-      # library_paths.scan_interval still carries a leftover SQLite column
-      # DEFAULT of 3600 (only the PostgreSQL-side default was dropped, see
-      # priv/repo/migrations/20260730153426_make_scan_interval_opt_in.exs).
-      # Ecto's cast/4 leaves a field out of `changes` whenever the cast value
-      # equals the struct's current field value, which is true here (nil ==
-      # nil on a freshly built %LibraryPath{}). A field absent from `changes`
-      # is left out of the INSERT statement entirely, so the SQLite default
-      # would silently persist 3600 instead of the intended "manual only".
-      # force_change/3 guarantees NULL is actually written for new rows.
-      changeset =
-        %LibraryPath{}
-        |> LibraryPath.changeset(Map.put(attrs, :path, runtime_path.path))
-
-      changeset =
-        if is_nil(runtime_path.scan_interval) do
-          Ecto.Changeset.force_change(changeset, :scan_interval, nil)
-        else
-          changeset
-        end
-
-      Repo.insert(changeset)
+      %LibraryPath{}
+      |> LibraryPath.changeset(Map.put(attrs, :path, runtime_path.path))
+      |> Repo.insert()
     end
   end
 

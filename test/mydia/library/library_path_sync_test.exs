@@ -3,6 +3,7 @@ defmodule Mydia.Library.LibraryPathSyncTest do
 
   alias Mydia.Library.LibraryPathSync
   alias Mydia.Repo
+  alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
 
   # Builds the in-memory struct shape that Settings.get_runtime_library_paths/0
@@ -58,6 +59,22 @@ defmodule Mydia.Library.LibraryPathSyncTest do
       row = Repo.get_by!(LibraryPath, path: path)
       assert row.scan_interval == nil
       assert row.from_env == true
+    end
+  end
+
+  describe "Settings.create_library_path/1 without the SQLite scan_interval default" do
+    test "a path created with no explicit interval reloads as nil, not the leftover SQLite default" do
+      path = "/media/admin-created"
+
+      assert {:ok, _library_path} = Settings.create_library_path(%{path: path, type: :movies})
+
+      # The returned struct is not proof by itself: before the DEFAULT 3600 was
+      # dropped from the library_paths table, Ecto's insert omitted the
+      # scan_interval column entirely (its cast value, nil, equaled the fresh
+      # struct's own value), so the leftover SQLite column default silently
+      # won. The in-memory struct still reported nil even while the row said
+      # 3600, so only a fresh reload from the database proves the fix.
+      assert Repo.get_by!(LibraryPath, path: path).scan_interval == nil
     end
   end
 end
