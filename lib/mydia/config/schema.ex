@@ -7,9 +7,17 @@ defmodule Mydia.Config.Schema do
   use Ecto.Schema
   import Ecto.Changeset
 
+  require Logger
+
   alias Mydia.Settings.PathMappingConfig
 
   @primary_key false
+
+  # Lower bound for an automatic library scan interval, in seconds. Mirrors the
+  # floor enforced by Mydia.Settings.LibraryPath, which is the database-layer
+  # guarantee. Configured values below it are clamped rather than rejected: see
+  # clamp_scan_interval/1.
+  @min_scan_interval 900
 
   @type t :: %__MODULE__{
           server: __MODULE__.Server.t() | nil,
@@ -69,7 +77,6 @@ defmodule Mydia.Config.Schema do
       field :tv_path, :string
       field :movies_auto_organize, :boolean, default: false
       field :tv_auto_organize, :boolean, default: false
-      field :scan_interval_hours, :integer, default: 1
       field :auto_search_on_add, :boolean, default: true
       field :monitor_by_default, :boolean, default: true
       field :season_refresh_threshold_hours, :integer, default: 24
@@ -186,7 +193,7 @@ defmodule Mydia.Config.Schema do
       field :path, :string
       field :type, Ecto.Enum, values: [:movies, :series, :mixed, :music, :books, :adult]
       field :monitored, :boolean, default: true
-      field :scan_interval, :integer, default: 3600
+      field :scan_interval, :integer
       field :quality_profile_id, :integer
     end
 
@@ -298,14 +305,12 @@ defmodule Mydia.Config.Schema do
       :tv_path,
       :movies_auto_organize,
       :tv_auto_organize,
-      :scan_interval_hours,
       :auto_search_on_add,
       :monitor_by_default,
       :season_refresh_threshold_hours,
       :completed_show_refresh_threshold_hours
     ])
     # movies_path and tv_path are optional legacy fields
-    |> validate_number(:scan_interval_hours, greater_than: 0)
     |> validate_number(:season_refresh_threshold_hours, greater_than: 0)
     |> validate_number(:completed_show_refresh_threshold_hours, greater_than: 0)
   end
@@ -520,8 +525,28 @@ defmodule Mydia.Config.Schema do
     ])
     |> validate_required([:path, :type])
     |> validate_inclusion(:type, [:movies, :series, :mixed, :music, :books, :adult])
-    |> validate_number(:scan_interval, greater_than: 0)
+    |> clamp_scan_interval()
     |> validate_number(:quality_profile_id, greater_than: 0)
+  end
+
+  # Config is loaded by Mydia.Application before the supervision tree starts, and
+  # Config.Loader.load!/1 raises on an invalid changeset, so rejecting a too-small
+  # scan_interval would put an upgrading instance into a boot crash loop over a
+  # value that did nothing in any released version. Clamp and say so instead.
+  # Applies to every config source (env, YAML, database) because they all merge
+  # into this changeset.
+  defp clamp_scan_interval(changeset) do
+    case get_change(changeset, :scan_interval) do
+      interval when is_integer(interval) and interval < @min_scan_interval ->
+        Logger.warning(
+          "Library path scan_interval of #{interval}s is below the #{@min_scan_interval}s minimum; using #{@min_scan_interval}s"
+        )
+
+        put_change(changeset, :scan_interval, @min_scan_interval)
+
+      _ ->
+        changeset
+    end
   end
 
   defp plugin_install_changeset(schema, attrs) do

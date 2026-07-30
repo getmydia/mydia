@@ -197,4 +197,82 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
       end)
     end
   end
+
+  describe "Automatic scanning" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/library-paths")
+      %{conn: conn, view: view}
+    end
+
+    test "the form exposes an automatic scanning control", %{view: view} do
+      open_new_form(view)
+
+      assert has_element?(view, ~s{select[name="library_path[scan_interval]"]})
+    end
+
+    test "choosing an interval persists it", %{view: view} do
+      dir = tmp_library_dir()
+
+      open_new_form(view)
+
+      view
+      |> form("#library-path-form",
+        library_path: %{
+          path: dir,
+          type: "movies",
+          monitored: "true",
+          scan_interval: "3600"
+        }
+      )
+      |> render_submit()
+
+      Process.sleep(100)
+
+      assert saved_path(dir).scan_interval == 3600
+    end
+
+    test "the Off option saves a nil interval, meaning manual only", %{view: view} do
+      dir = tmp_library_dir()
+
+      open_new_form(view)
+
+      view
+      |> form("#library-path-form",
+        library_path: %{
+          path: dir,
+          type: "movies",
+          monitored: "true",
+          scan_interval: ""
+        }
+      )
+      |> render_submit()
+
+      Process.sleep(100)
+
+      assert saved_path(dir).scan_interval == nil
+    end
+  end
+
+  defp open_new_form(view) do
+    view |> element(~s{button[phx-click="new_library_path"]}) |> render_click()
+  end
+
+  defp tmp_library_dir do
+    dir = Path.join(System.tmp_dir!(), "scan_interval_#{:erlang.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf(dir) end)
+    dir
+  end
+
+  defp saved_path(dir) do
+    Enum.find(Mydia.Settings.list_library_paths(), &(&1.path == dir))
+  end
 end

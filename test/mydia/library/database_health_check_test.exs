@@ -175,7 +175,47 @@ defmodule Mydia.Library.DatabaseHealthCheckTest do
     end
   end
 
+  describe "run/0 boot repair scan" do
+    # This scan runs on every boot, and self-hosted restarts cluster because
+    # everyone pulls a new image at the same time, so it must be jittered rather
+    # than fired immediately at the shared metadata relay. It regressed to an
+    # immediate insert once and nothing covered it. The manual Scan Library path
+    # is pinned as "available" in test/mydia/library_scan_trigger_test.exs; this
+    # is the other half of that contract.
+    test "queues the repair scan for the future rather than running it immediately" do
+      enable_auto_repair!(threshold: 1)
+
+      library_path = create_library_path(:movies)
+      insert_media_file(library_path)
+
+      assert DatabaseHealthCheck.run() == :ok
+
+      job = Repo.one!(from(j in Oban.Job, where: j.worker == "Mydia.Jobs.LibraryScanner"))
+
+      assert job.args == %{}
+      assert job.state == "scheduled"
+      assert DateTime.compare(job.scheduled_at, DateTime.utc_now()) == :gt
+      assert DateTime.diff(job.scheduled_at, DateTime.utc_now(), :second) <= 1800
+    end
+  end
+
   ## Private Helpers
+
+  defp enable_auto_repair!(opts) do
+    original_enabled = Application.get_env(:mydia, :database_auto_repair)
+    original_threshold = Application.get_env(:mydia, :database_auto_repair_threshold)
+
+    Application.put_env(:mydia, :database_auto_repair, true)
+    Application.put_env(:mydia, :database_auto_repair_threshold, Keyword.fetch!(opts, :threshold))
+
+    on_exit(fn ->
+      restore_app_env(:database_auto_repair, original_enabled)
+      restore_app_env(:database_auto_repair_threshold, original_threshold)
+    end)
+  end
+
+  defp restore_app_env(key, nil), do: Application.delete_env(:mydia, key)
+  defp restore_app_env(key, value), do: Application.put_env(:mydia, key, value)
 
   defp create_library_path(type) do
     path =
