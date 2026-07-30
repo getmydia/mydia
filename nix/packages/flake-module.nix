@@ -171,7 +171,7 @@
       # Pre-fetch npm dependencies (required for sandbox build)
       npmDeps = pkgs.fetchNpmDeps {
         src = ../../assets;
-        hash = "sha256-vioTiuz6YvUiNP8a31LSlKoXW/HibPwypf48Sa/S42Y=";
+        hash = "sha256-DhOg4p37GgILp0IzzgqyoiyTBx6saHz6j4624/+Smj4=";
       };
 
       # Tailwind CSS v4 binary (not yet in nixpkgs)
