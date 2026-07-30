@@ -174,24 +174,52 @@
         hash = "sha256-DhOg4p37GgILp0IzzgqyoiyTBx6saHz6j4624/+Smj4=";
       };
 
-      # Tailwind CSS v4 binary (not yet in nixpkgs)
-      # Needs to be patched for NixOS
+      # Tailwind CSS v4 standalone binary. nixpkgs does ship tailwindcss_4, but
+      # at 4.2.0, behind the 4.3.3 pinned in lockstep across config, nix and npm
+      # (344719f8), so the release binary is fetched directly instead.
       tailwindVersion = "4.3.3";
-      tailwindBinaryName = {
-        "x86_64-linux" = "tailwindcss-linux-x64";
-        "aarch64-linux" = "tailwindcss-linux-arm64";
-        "x86_64-darwin" = "tailwindcss-macos-x64";
-        "aarch64-darwin" = "tailwindcss-macos-arm64";
-      }.${system} or "tailwindcss-linux-x64";
-      tailwindBinaryHash = {
-        "x86_64-linux" = "sha256-c3vs+NStERXqmN9p+pQCbUAsqP65EwagNbWwBBZ9qN0=";
-        "aarch64-linux" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-        "x86_64-darwin" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-        "aarch64-darwin" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-      }.${system} or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+      # Keep in sync with tailwindVersion. These are content hashes, so every
+      # entry can be computed from any machine regardless of its own platform:
+      #   nix store prefetch-file \
+      #     https://github.com/tailwindlabs/tailwindcss/releases/download/v<version>/<binary>
+      tailwindBinaries = {
+        "x86_64-linux" = {
+          name = "tailwindcss-linux-x64";
+          hash = "sha256-3GGzrGuMnKh0wMxMV7JAl5GmTFVAQEyl9TZzYLq8MTo=";
+        };
+        "aarch64-linux" = {
+          name = "tailwindcss-linux-arm64";
+          hash = "sha256-Vf0LJBIU7/PeHo7k8ieWZi8tLnpJvPynR3z9C6w5gZU=";
+        };
+        "x86_64-darwin" = {
+          name = "tailwindcss-macos-x64";
+          hash = "sha256-eSLglT8hEMBZduO/WPFOZD2QQnV152a31DP1+Ay+5+E=";
+        };
+        "aarch64-darwin" = {
+          name = "tailwindcss-macos-arm64";
+          hash = "sha256-zfZGcCmHp0NGTf9NnGD9RIDRwec92Bmppn8QeIFdzp0=";
+        };
+      };
+
+      # Fail loudly on an unrecognised system. The previous fallback handed out
+      # an all-A placeholder hash, which surfaced as an opaque hash mismatch
+      # rather than "this platform was never set up".
+      tailwindBinary = tailwindBinaries.${system} or (throw
+        "mydia: no Tailwind ${tailwindVersion} binary recorded for ${system}; add one to tailwindBinaries in nix/packages/flake-module.nix");
+
       tailwindcss_4_src = pkgs.fetchurl {
-        url = "https://github.com/tailwindlabs/tailwindcss/releases/download/v${tailwindVersion}/${tailwindBinaryName}";
-        hash = tailwindBinaryHash;
+        # Version-qualified on purpose. Fixed-output derivations are keyed by
+        # (hash, name) and ignore the URL entirely, so a stale hash can be
+        # satisfied by whatever is already in the local store under the same
+        # name. That is exactly what happened when 344719f8 bumped the version
+        # without updating the hash: the 4.1.18 artifact already present
+        # matched, the package built 4.1.18 while claiming 4.3.3, and it only
+        # failed on machines with a cold store. Including the version in the
+        # name makes a stale hash force a real fetch, and fail immediately.
+        name = "tailwindcss-${tailwindVersion}-${platformSuffix}";
+        url = "https://github.com/tailwindlabs/tailwindcss/releases/download/v${tailwindVersion}/${tailwindBinary.name}";
+        hash = tailwindBinary.hash;
       };
       # Patch the binary for NixOS (fix interpreter and library paths)
       tailwindcss_4 = pkgs.stdenv.mkDerivation {
@@ -205,8 +233,12 @@
         # runs as bare Bun and silently emits an EMPTY stylesheet — the package
         # builds fine and the app boots with no CSS at all. Never strip it.
         dontStrip = true;
-        nativeBuildInputs = [ pkgs.autoPatchelfHook pkgs.makeWrapper ];
-        buildInputs = [ pkgs.stdenv.cc.cc.lib ];
+        # autoPatchelfHook and the libstdc++ wrapping below are ELF-only. The
+        # macOS builds are self-contained Mach-O binaries and need neither.
+        nativeBuildInputs = [ pkgs.makeWrapper ]
+          ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.autoPatchelfHook;
+        buildInputs =
+          pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.stdenv.cc.cc.lib;
         installPhase = ''
           mkdir -p $out/bin
           cp $src $out/bin/tailwindcss
@@ -216,9 +248,24 @@
         # at RUNTIME, so autoPatchelfHook cannot reach it — it does not exist at
         # build time. Without libstdc++ on the loader path the addon fails with
         # ERR_DLOPEN_FAILED. Wrap rather than patch.
-        postFixup = ''
+        postFixup = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
           wrapProgram $out/bin/tailwindcss \
             --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.cc.cc.lib}/lib
+        '';
+        # Assert the packaged binary really is the pinned version. Combined with
+        # the version-qualified src name, this makes a hash/version mismatch a
+        # build failure rather than a silently wrong Tailwind, and it also
+        # re-checks that the payload survived fixup (see dontStrip above): a
+        # stripped binary runs as bare Bun and prints no Tailwind version.
+        doInstallCheck = true;
+        installCheckPhase = ''
+          runHook preInstallCheck
+          if ! $out/bin/tailwindcss --help 2>&1 | grep -q "v${tailwindVersion}"; then
+            echo "ERROR: packaged Tailwind does not report v${tailwindVersion}:" >&2
+            $out/bin/tailwindcss --help 2>&1 | head -2 >&2
+            exit 1
+          fi
+          runHook postInstallCheck
         '';
       };
 
@@ -385,6 +432,11 @@
       packages = {
         default = mydia;
         postgres = mydia-postgres;
+        # Exposed so the pinned Tailwind binary can be built and version-checked
+        # per platform (`nix build .#tailwindcss`) without building the whole
+        # Elixir release. The hash table above was wrong on every platform and
+        # nothing could catch it cheaply.
+        tailwindcss = tailwindcss_4;
       };
     };
 }
