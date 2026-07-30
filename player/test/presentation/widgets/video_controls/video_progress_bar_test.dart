@@ -24,7 +24,13 @@ void main() {
 
     testWidgets('thumb and track grow on hover', (tester) async {
       await tester.pumpWidget(
-        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+        // Seekable: the hover affordance only exists when a seek can
+        // actually be committed.
+        _host(ProgressBarSurface(
+          progress: 0.4,
+          buffered: 0.6,
+          onSeekTo: (_) {},
+        )),
       );
 
       // Resting state, asserted before any pointer interaction: half the
@@ -182,6 +188,39 @@ void main() {
       expect(ended, isTrue);
       expect(committed, isNotNull);
       expect(committed!, closeTo(0.6, 0.05));
+    });
+
+    testWidgets(
+        'offers no interaction without onSeekTo — no hover affordance and '
+        'no gesture handlers', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(ProgressBarSurface),
+          matching: find.byType(GestureDetector),
+        ),
+        findsNothing,
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(ProgressBarSurface)));
+      await tester.pumpAndSettle();
+
+      // Still at rest: hovering a read-only bar must not grow it.
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
+        VideoProgressBar.restingThumbSize,
+      );
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
+        6.0,
+      );
     });
 
     testWidgets('clamps out-of-range fractions', (tester) async {

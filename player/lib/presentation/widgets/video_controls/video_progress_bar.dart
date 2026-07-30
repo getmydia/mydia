@@ -55,7 +55,14 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
   bool _seeking = false;
   double _seekFraction = 0;
 
-  bool get _active => _hovering || _seeking;
+  /// Whether a seek can actually be committed. Without [onSeekTo] a tap or
+  /// drag has nowhere to land, so the surface offers no interaction at all
+  /// rather than an affordance that goes nowhere: the gesture handlers and
+  /// the hover tracking are both dropped in [build], and [_active] stays
+  /// false even if the widget is updated out of seekability mid-hover.
+  bool get _seekable => widget.onSeekTo != null;
+
+  bool get _active => _seekable && (_hovering || _seeking);
 
   double get _trackHeight => _active ? 8.0 : 6.0;
 
@@ -78,16 +85,20 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
 
   @override
   Widget build(BuildContext context) {
-    final buffered = widget.buffered.clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final bar = _bar(width);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
+        // Read-only usage (no `onSeekTo`) gets the bar and nothing else: no
+        // gesture handlers to enter the seeking state a caller cannot
+        // commit, and no hover tracking to light up the active affordance.
+        if (!_seekable) return bar;
 
-          return GestureDetector(
+        return MouseRegion(
+          onEnter: (_) => setState(() => _hovering = true),
+          onExit: (_) => setState(() => _hovering = false),
+          child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapUp: (d) => _emit(d.localPosition.dx, width, commit: true),
             onHorizontalDragStart: (d) {
@@ -102,122 +113,125 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
               setState(() => _seeking = false);
               widget.onSeekEnd?.call();
             },
-            child: SizedBox(
-              width: double.infinity,
-              height: widget.touchTarget ? 44 : 32,
-              child: Center(
-                child: SizedBox(
-                  height: VideoProgressBar.activeThumbSize,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.centerLeft,
-                    children: [
-                      // Base track
-                      Center(
-                        child: AnimatedContainer(
-                          key: ProgressBarSurface.trackKey,
-                          duration: DepthTokens.motionFast,
-                          curve: DepthTokens.curveStandard,
-                          height: _trackHeight,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            borderRadius:
-                                BorderRadius.circular(_trackHeight / 2),
-                          ),
-                        ),
-                      ),
-                      // Buffered — a direct (non-`Center`-wrapped) Stack
-                      // child so the Stack's own `alignment: centerLeft`
-                      // left-anchors it. A `Center` wrapper here is a bug:
-                      // `FractionallySizedBox` shrinks itself to the
-                      // fraction (`RenderFractionallySizedOverflowBox.size
-                      // = constraints.constrain(child.size)`), so by the
-                      // time its own `alignment: centerLeft` would apply,
-                      // its size already equals its child's — the alignment
-                      // becomes a no-op, and the surrounding `Center` then
-                      // centers the shrunken bar in the middle of the track
-                      // instead of anchoring it to the left edge.
-                      FractionallySizedBox(
-                        key: ProgressBarSurface.bufferedKey,
-                        alignment: Alignment.centerLeft,
-                        widthFactor: buffered,
-                        child: AnimatedContainer(
-                          duration: DepthTokens.motionFast,
-                          curve: DepthTokens.curveStandard,
-                          height: _trackHeight,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.40),
-                            borderRadius:
-                                BorderRadius.circular(_trackHeight / 2),
-                          ),
-                        ),
-                      ),
-                      // Played — see the buffered layer's comment above;
-                      // same reasoning applies here.
-                      FractionallySizedBox(
-                        key: ProgressBarSurface.playedKey,
-                        alignment: Alignment.centerLeft,
-                        widthFactor: _displayed,
-                        child: AnimatedContainer(
-                          duration: DepthTokens.motionFast,
-                          curve: DepthTokens.curveStandard,
-                          height: _trackHeight,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(_trackHeight / 2),
-                          ),
-                        ),
-                      ),
-                      // Thumb — always present, unlike the previous
-                      // hover-only implementation. Centered exactly on the
-                      // progress fraction: at the 0.0/1.0 extremes it bleeds
-                      // half its own width past the track ends, which is the
-                      // conventional scrubber look and is accounted for by
-                      // the glass bar's own padding in the caller.
-                      //
-                      // Tweens its own size directly, rather than pairing an
-                      // `AnimatedContainer` with a `Positioned.left` computed
-                      // from the synchronous (already-updated) `_thumbSize`.
-                      // That pairing let `left` jump to its new value
-                      // instantly while `width`/`height` animated toward it
-                      // over 150ms, producing a ~2px lateral wobble as the
-                      // implied centre (`left + width / 2`) briefly
-                      // disagreed with the target. Deriving `left` from the
-                      // same interpolated value on every animation frame
-                      // keeps the centre fixed throughout the transition.
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(end: _thumbSize),
-                        duration: DepthTokens.motionFast,
-                        curve: DepthTokens.curveStandard,
-                        builder: (context, size, _) {
-                          return Positioned(
-                            left: (width * _displayed) - (size / 2),
-                            child: Container(
-                              key: ProgressBarSurface.thumbKey,
-                              width: size,
-                              height: size,
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Color(0x40000000), // black @ 0.25
-                                    blurRadius: 6,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+            child: bar,
+          ),
+        );
+      },
+    );
+  }
+
+  /// The painted bar: base track, buffered fill, played fill, and thumb.
+  /// Identical whether or not the surface is seekable — only the wrappers
+  /// [build] puts around it differ.
+  Widget _bar(double width) {
+    final buffered = widget.buffered.clamp(0.0, 1.0);
+
+    return SizedBox(
+      width: double.infinity,
+      height: widget.touchTarget ? 44 : 32,
+      child: Center(
+        child: SizedBox(
+          height: VideoProgressBar.activeThumbSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.centerLeft,
+            children: [
+              // Base track
+              Center(
+                child: AnimatedContainer(
+                  key: ProgressBarSurface.trackKey,
+                  duration: DepthTokens.motionFast,
+                  curve: DepthTokens.curveStandard,
+                  height: _trackHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(_trackHeight / 2),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+              // Buffered — a direct (non-`Center`-wrapped) Stack child so the
+              // Stack's own `alignment: centerLeft` left-anchors it. A
+              // `Center` wrapper here is a bug: `FractionallySizedBox` shrinks
+              // itself to the fraction
+              // (`RenderFractionallySizedOverflowBox.size =
+              // constraints.constrain(child.size)`), so by the time its own
+              // `alignment: centerLeft` would apply, its size already equals
+              // its child's — the alignment becomes a no-op, and the
+              // surrounding `Center` then centers the shrunken bar in the
+              // middle of the track instead of anchoring it to the left edge.
+              FractionallySizedBox(
+                key: ProgressBarSurface.bufferedKey,
+                alignment: Alignment.centerLeft,
+                widthFactor: buffered,
+                child: AnimatedContainer(
+                  duration: DepthTokens.motionFast,
+                  curve: DepthTokens.curveStandard,
+                  height: _trackHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.40),
+                    borderRadius: BorderRadius.circular(_trackHeight / 2),
+                  ),
+                ),
+              ),
+              // Played — see the buffered layer's comment above; same
+              // reasoning applies here.
+              FractionallySizedBox(
+                key: ProgressBarSurface.playedKey,
+                alignment: Alignment.centerLeft,
+                widthFactor: _displayed,
+                child: AnimatedContainer(
+                  duration: DepthTokens.motionFast,
+                  curve: DepthTokens.curveStandard,
+                  height: _trackHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(_trackHeight / 2),
+                  ),
+                ),
+              ),
+              // Thumb — always present, unlike the previous hover-only
+              // implementation. Centered exactly on the progress fraction: at
+              // the 0.0/1.0 extremes it bleeds half its own width past the
+              // track ends, which is the conventional scrubber look and is
+              // accounted for by the glass bar's own padding in the caller.
+              //
+              // Tweens its own size directly, rather than pairing an
+              // `AnimatedContainer` with a `Positioned.left` computed from the
+              // synchronous (already-updated) `_thumbSize`. That pairing let
+              // `left` jump to its new value instantly while `width`/`height`
+              // animated toward it over 150ms, producing a ~2px lateral wobble
+              // as the implied centre (`left + width / 2`) briefly disagreed
+              // with the target. Deriving `left` from the same interpolated
+              // value on every animation frame keeps the centre fixed
+              // throughout the transition.
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: _thumbSize),
+                duration: DepthTokens.motionFast,
+                curve: DepthTokens.curveStandard,
+                builder: (context, size, _) {
+                  return Positioned(
+                    left: (width * _displayed) - (size / 2),
+                    child: Container(
+                      key: ProgressBarSurface.thumbKey,
+                      width: size,
+                      height: size,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0x40000000), // black @ 0.25
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

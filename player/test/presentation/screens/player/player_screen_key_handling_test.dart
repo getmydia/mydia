@@ -14,8 +14,22 @@ import 'package:flutter/widgets.dart' show KeyEventResult;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
+/// The physical key that actually produces each logical key on a standard
+/// layout. Kept in step with [_keyDown] so a synthetic event is never
+/// internally inconsistent (a `pageDown` logical key riding a `pageUp`
+/// physical key), which would quietly mask a handler that switched on the
+/// physical key instead.
+// Not `const`: `LogicalKeyboardKey` overrides `==`, which Dart forbids as a
+// constant map key (`const_map_key_not_primitive_equality`).
+final _physicalKeys = <LogicalKeyboardKey, PhysicalKeyboardKey>{
+  LogicalKeyboardKey.pageUp: PhysicalKeyboardKey.pageUp,
+  LogicalKeyboardKey.pageDown: PhysicalKeyboardKey.pageDown,
+  LogicalKeyboardKey.space: PhysicalKeyboardKey.space,
+};
+
 KeyDownEvent _keyDown(LogicalKeyboardKey key) => KeyDownEvent(
-      physicalKey: PhysicalKeyboardKey.pageUp,
+      physicalKey: _physicalKeys[key] ??
+          (throw ArgumentError('add $key to _physicalKeys')),
       logicalKey: key,
       timeStamp: Duration.zero,
     );

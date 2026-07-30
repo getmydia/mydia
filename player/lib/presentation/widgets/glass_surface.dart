@@ -191,54 +191,53 @@ class GlassSurface extends StatelessWidget {
   ///
   /// [tier] defaults to [PlatformFeatures.playerGlassTier]; pass it explicitly
   /// in golden tests so images do not vary with the host platform.
-  GlassSurface.playerChrome({
+  /// A factory rather than a redirecting constructor so the tier is resolved
+  /// exactly once: a redirecting constructor's initializer list cannot hold a
+  /// local, which is what forced `tier ?? PlatformFeatures.playerGlassTier` to
+  /// be repeated per field — and left a new tier-dependent field free to
+  /// resolve it a second, divergent way.
+  factory GlassSurface.playerChrome({
     Key? key,
     BorderRadius? borderRadius,
     PlayerGlassTier? tier,
     Widget? child,
-  }) : this(
-          key: key,
-          blurSigma:
-              (tier ?? PlatformFeatures.playerGlassTier) == PlayerGlassTier.faux
-                  ? DepthTokens.blurNone
-                  : DepthTokens.blurPlayerChrome,
-          live: (tier ?? PlatformFeatures.playerGlassTier) !=
-              PlayerGlassTier.faux,
-          saturation:
-              (tier ?? PlatformFeatures.playerGlassTier) == PlayerGlassTier.full
-                  ? DepthTokens.playerChromeSaturation
-                  : 1.0,
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              DepthTokens.playerChromeTint.withValues(
-                // The faux tier has no blur to hide the backdrop, so it
-                // compensates with a denser fill.
-                alpha: (tier ?? PlatformFeatures.playerGlassTier) ==
-                        PlayerGlassTier.faux
-                    ? 0.70
-                    : DepthTokens.playerChromeFillTopAlpha,
-              ),
-              DepthTokens.playerChromeTint.withValues(
-                alpha: (tier ?? PlatformFeatures.playerGlassTier) ==
-                        PlayerGlassTier.faux
-                    ? 0.70
-                    : DepthTokens.playerChromeFillBottomAlpha,
-              ),
-            ],
+  }) {
+    final resolvedTier = tier ?? PlatformFeatures.playerGlassTier;
+    final faux = resolvedTier == PlayerGlassTier.faux;
+
+    // The faux tier has no blur to hide the backdrop, so it compensates with
+    // a denser fill.
+    final fillTopAlpha = faux ? 0.70 : DepthTokens.playerChromeFillTopAlpha;
+    final fillBottomAlpha =
+        faux ? 0.70 : DepthTokens.playerChromeFillBottomAlpha;
+
+    return GlassSurface(
+      key: key,
+      blurSigma: faux ? DepthTokens.blurNone : DepthTokens.blurPlayerChrome,
+      live: !faux,
+      saturation: resolvedTier == PlayerGlassTier.full
+          ? DepthTokens.playerChromeSaturation
+          : 1.0,
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          DepthTokens.playerChromeTint.withValues(alpha: fillTopAlpha),
+          DepthTokens.playerChromeTint.withValues(alpha: fillBottomAlpha),
+        ],
+      ),
+      borderRadius: borderRadius ??
+          const BorderRadius.all(
+            Radius.circular(DepthTokens.radiusPlayerPanel),
           ),
-          borderRadius: borderRadius ??
-              const BorderRadius.all(
-                Radius.circular(DepthTokens.radiusPlayerPanel),
-              ),
-          rimGradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [DepthTokens.playerRimTop, DepthTokens.playerRimBottom],
-          ),
-          child: child,
-        );
+      rimGradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [DepthTokens.playerRimTop, DepthTokens.playerRimBottom],
+      ),
+      child: child,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
