@@ -38,16 +38,57 @@ defmodule Mydia.Media.Refresh do
     fetch_episodes = Keyword.get(opts, :fetch_episodes, true)
     media_type = media_type(media_item)
 
-    case resolve_provider(media_item) do
-      {nil, _source} ->
+    recover? = Keyword.get(opts, :recover_by_title, false)
+
+    case resolve_or_recover(media_item, media_type, recover?, config) do
+      {nil, _source, _item} ->
         {:error, :missing_provider_id}
 
-      {provider_id, source} ->
+      {provider_id, source, item} ->
         with {:ok, metadata} <- fetch(provider_id, media_type, source, config),
-             {:ok, updated} <- apply_metadata(media_item, metadata, source) do
+             {:ok, updated} <- apply_metadata(item, metadata, source) do
           post_update(updated, media_type, fetch_episodes)
           {:ok, updated}
         end
+    end
+  end
+
+  # Returns the item alongside the resolution because recovery persists the
+  # discovered id; downstream steps must see the updated struct.
+  defp resolve_or_recover(media_item, media_type, recover?, config) do
+    case resolve_provider(media_item) do
+      {nil, _source} when recover? ->
+        recover(media_item, media_type, config)
+
+      {nil, _source} ->
+        {nil, nil, media_item}
+
+      {provider_id, source} ->
+        {provider_id, source, media_item}
+    end
+  end
+
+  defp recover(media_item, media_type, config) do
+    Logger.info("No provider id found, attempting recovery by title search",
+      media_item_id: media_item.id,
+      title: media_item.title
+    )
+
+    case Media.recover_provider_id_by_title(media_item, media_type, config) do
+      {:ok, _found_id, updated_item} ->
+        # Recovery persists the id to the correct column, so re-resolving the
+        # updated item yields the authoritative {id, source} pair.
+        {id, source} = resolve_provider(updated_item)
+        {id, source, updated_item}
+
+      {:error, reason} ->
+        Logger.warning("Failed to recover provider id by title search",
+          media_item_id: media_item.id,
+          title: media_item.title,
+          reason: inspect(reason)
+        )
+
+        {nil, nil, media_item}
     end
   end
 

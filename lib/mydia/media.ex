@@ -2091,13 +2091,17 @@ defmodule Mydia.Media do
 
   For TV shows, searches TVDB and stores tvdb_id. For movies, searches TMDB and stores tmdb_id.
 
+  Pass `config` to reuse a caller's relay config; it defaults to
+  `Metadata.default_relay_config/0`. A caller running against a specific relay
+  must not have its recovery search silently fall back to the global default.
+
   Returns {:ok, provider_id, updated_media_item} or {:error, reason}
   """
-  @spec recover_provider_id_by_title(MediaItem.t(), atom()) ::
+  @spec recover_provider_id_by_title(MediaItem.t(), atom(), map() | nil) ::
           {:ok, integer(), MediaItem.t()} | {:error, term()}
-  def recover_provider_id_by_title(%MediaItem{} = media_item, media_type) do
+  def recover_provider_id_by_title(%MediaItem{} = media_item, media_type, config \\ nil) do
     alias Mydia.Metadata
-    config = Metadata.default_relay_config()
+    config = config || Metadata.default_relay_config()
     do_recover_provider_id_by_title(media_item, media_type, config)
   end
 

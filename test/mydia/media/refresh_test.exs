@@ -195,5 +195,65 @@ defmodule Mydia.Media.RefreshTest do
 
       assert {:error, :missing_provider_id} = Refresh.run(item, config: config)
     end
+
+    test "recovers a TV show by title and routes the id to tvdb_id", %{
+      bypass: bypass,
+      config: config
+    } do
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Recoverable Show",
+          tmdb_id: nil,
+          tvdb_id: nil
+        })
+
+      Bypass.expect_once(bypass, "GET", "/tvdb/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "data" => [
+              %{
+                "tvdb_id" => "4242",
+                "name" => "Recoverable Show",
+                "year" => "2015",
+                "type" => "series"
+              }
+            ]
+          })
+        )
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/tvdb/series/4242/extended", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "id" => 4242,
+              "name" => "Recoverable Show",
+              "firstAired" => "2015-03-01",
+              "overview" => "x",
+              "genres" => [],
+              "seasons" => [],
+              "characters" => []
+            }
+          })
+        )
+      end)
+
+      assert {:ok, updated} =
+               Refresh.run(item,
+                 config: config,
+                 recover_by_title: true,
+                 fetch_episodes: false
+               )
+
+      assert updated.tvdb_id == 4242
+      refute updated.tmdb_id == 4242
+    end
   end
 end
