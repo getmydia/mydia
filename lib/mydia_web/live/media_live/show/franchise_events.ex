@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   import Phoenix.LiveView, only: [start_async: 3, put_flash: 3, connected?: 1]
 
   alias Mydia.Media.Franchises
+  alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
   require Logger
@@ -44,16 +45,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   @doc """
   Adds a missing franchise member, inheriting the viewed movie's quality profile
   and monitored flag.
-
-  Permission is enforced against the `:can_create_media` assign computed once at
-  mount, mirroring what already governs whether the add button renders at all;
-  a crafted request against a hidden button still gets refused here.
   """
   def add_franchise_movie(%{"tmdb_id" => tmdb_id}, socket) do
-    if socket.assigns.can_create_media do
+    with :ok <- Authorization.authorize_create_media(socket) do
       start_add(tmdb_id, socket)
     else
-      {:noreply, socket}
+      {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 

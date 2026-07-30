@@ -2,6 +2,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
   use Mydia.DataCase, async: false
 
   import Mydia.MediaFixtures
+  import Mydia.AccountsFixtures
 
   alias Mydia.Media
   alias Mydia.Media.{Franchise, FranchiseEntry}
@@ -25,7 +26,8 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       flash: %{},
       franchise: nil,
       adding_franchise_tmdb_id: nil,
-      can_create_media: true
+      can_create_media: true,
+      current_user: user_fixture()
     }
 
     %Phoenix.LiveView.Socket{
@@ -116,7 +118,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
         stub_socket(%{
           media_item: current,
           metadata_config: config,
-          can_create_media: false,
+          current_user: user_fixture(%{role: "readonly"}),
           franchise: franchise_with_missing(current, 1012)
         })
 
