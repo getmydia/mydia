@@ -6,6 +6,8 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/downloads/download_service.dart';
+import 'package:flutter/services.dart';
+
 import 'core/graphql/watch/fetch_log.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
@@ -26,6 +28,18 @@ void main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      // Register the bundled Inter font's license. Deliberately out here
+      // rather than in `_startApp`: `addLicense` only stores the callback,
+      // and the `rootBundle` read inside it does not run until someone opens
+      // the licenses page. There is no startup step to fail, so it needs
+      // none of `_startApp`'s degraded-mode handling.
+      LicenseRegistry.addLicense(() async* {
+        final license =
+            await rootBundle.loadString('assets/fonts/Inter-LICENSE.txt');
+        yield LicenseEntryWithLineBreaks(<String>['Inter'], license);
+      });
+
       await _startApp();
     },
     (error, stack) {

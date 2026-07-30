@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-/// A large centered play/pause button with animated icon transition.
+/// A large centred play/pause button.
 ///
-/// Subscribes to the player's playing state stream and displays
-/// the appropriate icon with a smooth animation between states.
+/// Mobile only. On desktop and web the transport lives inside the control
+/// panel; on touch a one-handed thumb reach to a 48px in-bar button is worse
+/// than a centre target. Skip buttons are deliberately absent here because
+/// `gesture_controls.dart` already implements double-tap-left/right for ±10s.
 class CenterPlayButton extends StatelessWidget {
   /// The media_kit player instance.
   final Player player;
@@ -21,6 +23,22 @@ class CenterPlayButton extends StatelessWidget {
     this.size = 72,
     this.iconSize = 56,
   });
+
+  /// Shadow behind the glyph.
+  ///
+  /// Every other control's "no per-glyph shadow" rule (see
+  /// `ControlButton`'s doc comment) assumes a glass panel sits behind it —
+  /// this button is the one exception: it paints directly on live video,
+  /// with no backing surface at all. Without a shadow, a bright frame (snow,
+  /// sky, a white title card) washes a plain white glyph out to 1:1
+  /// contrast, on the one control mobile relies on most. Held to WCAG SC
+  /// 1.4.11 (non-text, 3:1) against a worst-case pure-white frame — see
+  /// `glass_legibility_test.dart`'s `CenterPlayButton` case, which fails if
+  /// this shadow is removed or weakened.
+  static const Shadow glyphShadow = Shadow(
+    color: Color(0x99000000), // black @ 0.6
+    blurRadius: 8,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -61,12 +79,7 @@ class CenterPlayButton extends StatelessWidget {
                     key: ValueKey(isPlaying),
                     size: iconSize,
                     color: Colors.white,
-                    shadows: const [
-                      Shadow(
-                        color: Color(0x60000000),
-                        blurRadius: 8,
-                      ),
-                    ],
+                    shadows: const [glyphShadow],
                   ),
                 ),
               ),

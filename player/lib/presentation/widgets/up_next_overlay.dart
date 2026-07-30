@@ -109,7 +109,7 @@ class UpNextOverlay extends StatelessWidget {
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: onPlayNow,
-                      icon: const Icon(Icons.play_arrow, size: 20),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
                       label: const Text('Play Now'),
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.white,
@@ -199,7 +199,7 @@ class _PlaceholderThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Icon(
-        Icons.play_circle_outline,
+        Icons.play_circle_outline_rounded,
         color: Colors.white.withValues(alpha: 0.5),
         size: 28,
       ),

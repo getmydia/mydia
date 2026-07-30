@@ -128,9 +128,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Fullscreen state
   bool _isFullscreen = false;
 
-  // Controls overlay visibility (synced with video controls)
-  bool _controlsVisible = true;
-
   // Auto-play next episode state
   bool _showUpNext = false;
   int _autoPlayCountdown = 10;
@@ -1066,6 +1063,36 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _navigateToEpisode(nextEpisode.id, firstFile.id, title);
   }
 
+  /// Play the previous episode immediately.
+  void _playPreviousEpisode() {
+    _upNextTimer?.cancel();
+    _upNextTimer = null;
+
+    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
+      return;
+    }
+
+    final previousIndex = _currentEpisodeIndex! - 1;
+    if (previousIndex < 0) {
+      return;
+    }
+
+    final previousEpisode = _seasonEpisodes![previousIndex];
+    final files = previousEpisode.files;
+    if (files == null || files.isEmpty) {
+      return;
+    }
+
+    final firstFile = files.first;
+    if (firstFile == null) {
+      return;
+    }
+
+    final title =
+        'S${previousEpisode.seasonNumber}E${previousEpisode.episodeNumber}${previousEpisode.title != null ? ' - ${previousEpisode.title}' : ''}';
+    _navigateToEpisode(previousEpisode.id, firstFile.id, title);
+  }
+
   /// Get the title for the next episode (for display in Up Next overlay).
   String? _getNextEpisodeTitle() {
     if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
@@ -1408,6 +1435,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
         return KeyEventResult.handled;
 
+      // Previous/next episode. This is the only reachable path to episode
+      // navigation on a narrow window: below `PanelMetrics.touchTargets`'s
+      // breakpoint, `ChromePanel`'s in-bar transport drops to play/pause
+      // only (see `TransportSurface.compact`), and that gate is on viewport
+      // *width*, not `PlatformFeatures.isMobile` — so a narrowed desktop or
+      // web browser window loses the in-bar buttons too, with no
+      // `UpNextOverlay` (autoplay-only, next-episode-only) or touch gesture
+      // to fall back on. This actually covers web now that
+      // `PlatformFeatures.supportsKeyboardShortcuts` includes it (see that
+      // getter's own dartdoc) — previously this whole `Focus`/`onKeyEvent`
+      // wrapper was desktop-only, so a narrowed *web* window had no
+      // fallback at all, keyboard or otherwise.
+      case LogicalKeyboardKey.pageUp:
+      case LogicalKeyboardKey.pageDown:
+        return handleEpisodeNavKey(
+          event,
+          hasPreviousEpisode: _hasPreviousEpisode,
+          hasNextEpisode: _hasNextEpisode,
+          onPreviousEpisode: _playPreviousEpisode,
+          onNextEpisode: _playNextEpisode,
+        );
+
       default:
         return KeyEventResult.ignored;
     }
@@ -1507,7 +1556,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         ? _buildCastPlaceholder(castDevice)
         : _buildBody();
 
-    // Wrap with keyboard listener for desktop
+    // Wrap with keyboard listener wherever a physical keyboard exists
+    // (native desktop or web — see supportsKeyboardShortcuts' own dartdoc).
     if (PlatformFeatures.supportsKeyboardShortcuts && !isCasting) {
       body = Focus(
         focusNode: _focusNode,
@@ -1617,15 +1667,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       child: Video(
         controller: _videoController!,
         controls: customVideoControlsBuilderWithCallback(
-          onVisibilityChanged: (visible) {
-            if (mounted) {
-              setState(() => _controlsVisible = visible);
+          title: widget.title,
+          onBack: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
             }
           },
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
           onQualityTap: PlatformFeatures.isWeb ? _showQualitySelector : null,
           onFullscreenTap: _toggleFullscreen,
+          onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
+          onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
           isFullscreen: _isFullscreen,
           audioTrackCount: _audioTracks.length,
           subtitleTrackCount: _subtitleTracks.length,
@@ -1657,28 +1712,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return Stack(
       children: [
         videoPlayer,
-        // Top bar + overlays - synced with video controls visibility
-        AnimatedOpacity(
-          opacity: _controlsVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 200),
-          child: IgnorePointer(
-            ignoring: !_controlsVisible,
-            child: Stack(
-              children: [
-                // Top bar
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: _buildTopBar(),
-                ),
-                // Episode navigation buttons
-                if (_seasonEpisodes != null && _currentEpisodeIndex != null)
-                  _buildEpisodeNavigation(),
-              ],
-            ),
-          ),
-        ),
         // Up Next overlay for auto-play (always interactive, not tied to controls)
         if (_showUpNext && _getNextEpisodeTitle() != null)
           UpNextOverlay(
@@ -1691,143 +1724,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  Widget _buildTopBar() {
-    return Row(
-      children: [
-        // Back button
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/');
-              }
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.chevron_left_rounded,
-                color: Colors.white,
-                size: 28,
-                shadows: [
-                  Shadow(
-                    color: Color(0x60000000),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // Title
-        if (widget.title != null)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                widget.title!,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
-        else
-          const Spacer(),
-        CastButton(onPressed: _showCastDevicePicker),
-      ],
-    );
-  }
+  /// Whether a previous episode exists in the current season's episode list.
+  bool get _hasPreviousEpisode =>
+      _seasonEpisodes != null &&
+      _currentEpisodeIndex != null &&
+      _currentEpisodeIndex! > 0;
 
-  Widget _buildEpisodeNavigation() {
-    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
-      return const SizedBox.shrink();
-    }
-
-    final hasPrevious = _currentEpisodeIndex! > 0;
-    final hasNext = _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
-
-    return Positioned(
-      bottom: 80,
-      left: 0,
-      right: 0,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (hasPrevious)
-            IconButton(
-              icon: const Icon(Icons.skip_previous,
-                  color: Colors.white,
-                  size: 32,
-                  shadows: [
-                    Shadow(
-                      color: Color(0x60000000),
-                      blurRadius: 8,
-                    ),
-                  ]),
-              onPressed: () {
-                final prevEpisode = _seasonEpisodes![_currentEpisodeIndex! - 1];
-                final files = prevEpisode.files;
-                if (files != null && files.isNotEmpty) {
-                  final firstFile = files.first;
-                  if (firstFile != null) {
-                    final title =
-                        'S${prevEpisode.seasonNumber}E${prevEpisode.episodeNumber}${prevEpisode.title != null ? ' - ${prevEpisode.title}' : ''}';
-                    _navigateToEpisode(prevEpisode.id, firstFile.id, title);
-                  }
-                }
-              },
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(12),
-              ),
-              tooltip: 'Previous Episode',
-            ),
-          if (hasPrevious && hasNext) const SizedBox(width: 32),
-          if (hasNext)
-            IconButton(
-              icon: const Icon(Icons.skip_next,
-                  color: Colors.white,
-                  size: 32,
-                  shadows: [
-                    Shadow(
-                      color: Color(0x60000000),
-                      blurRadius: 8,
-                    ),
-                  ]),
-              onPressed: () {
-                final nextEpisode = _seasonEpisodes![_currentEpisodeIndex! + 1];
-                final files = nextEpisode.files;
-                if (files != null && files.isNotEmpty) {
-                  final firstFile = files.first;
-                  if (firstFile != null) {
-                    final title =
-                        'S${nextEpisode.seasonNumber}E${nextEpisode.episodeNumber}${nextEpisode.title != null ? ' - ${nextEpisode.title}' : ''}';
-                    _navigateToEpisode(nextEpisode.id, firstFile.id, title);
-                  }
-                }
-              },
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(12),
-              ),
-              tooltip: 'Next Episode',
-            ),
-        ],
-      ),
-    );
-  }
+  /// Whether a next episode exists in the current season's episode list.
+  bool get _hasNextEpisode =>
+      _seasonEpisodes != null &&
+      _currentEpisodeIndex != null &&
+      _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
 
   Widget _buildError() {
     return Center(
@@ -2022,5 +1929,54 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (fromPlayer != null && fromPlayer > Duration.zero) return fromPlayer;
 
     return null;
+  }
+}
+
+/// Pure `PageUp`/`PageDown` episode-navigation key handling, extracted from
+/// `_PlayerScreenState._handleKeyEvent` so it can be unit-tested directly.
+///
+/// `_handleKeyEvent`'s other cases (`space`, arrows, `keyF`, `keyM`,
+/// `escape`) all reach directly into a real media_kit [Player] or call
+/// `setState`/native fullscreen APIs, and `PlayerScreen` itself is a
+/// `ConsumerStatefulWidget` that creates its own real [Player] and depends on
+/// Riverpod/GraphQL providers with no existing test harness — pumping the
+/// full screen to test one `switch` case is impractical. This case is the
+/// one exception: it only needs two booleans and two callbacks, so it is
+/// pulled out as a free function that takes those as parameters instead of
+/// closing over `State` fields, making it directly testable with a
+/// synthetic [KeyEvent] and no widget tree at all.
+///
+/// Mirrors exactly what the in-bar previous/next-episode buttons do
+/// (`TransportSurface`'s `onPreviousEpisode`/`onNextEpisode`, gated the same
+/// way by [hasPreviousEpisode]/[hasNextEpisode]) — this key handler is a
+/// fallback for when those buttons aren't reachable (see the call site's own
+/// comment), not a separate, independently-gated feature.
+@visibleForTesting
+KeyEventResult handleEpisodeNavKey(
+  KeyEvent event, {
+  required bool hasPreviousEpisode,
+  required bool hasNextEpisode,
+  required VoidCallback onPreviousEpisode,
+  required VoidCallback onNextEpisode,
+}) {
+  if (event is! KeyDownEvent) {
+    return KeyEventResult.ignored;
+  }
+
+  switch (event.logicalKey) {
+    case LogicalKeyboardKey.pageUp:
+      if (hasPreviousEpisode) {
+        onPreviousEpisode();
+      }
+      return KeyEventResult.handled;
+
+    case LogicalKeyboardKey.pageDown:
+      if (hasNextEpisode) {
+        onNextEpisode();
+      }
+      return KeyEventResult.handled;
+
+    default:
+      return KeyEventResult.ignored;
   }
 }

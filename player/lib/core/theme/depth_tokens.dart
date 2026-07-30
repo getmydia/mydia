@@ -185,4 +185,92 @@ abstract final class DepthTokens {
 
   /// Emphasized easing for crossfades / symmetric transitions.
   static const Curve curveEmphasized = Curves.easeInOut;
+
+  // ---------------------------------------------------------------------------
+  // Player chrome glass
+  //
+  // A separate material from the browse-UI chrome tokens above. The playback
+  // panel sits over live video, which is the one backdrop that justifies a real
+  // BackdropFilter and can carry genuine transparency. Browse chrome sits over
+  // static artwork and keeps its denser fill, so these are additive: nothing
+  // above changes.
+  // ---------------------------------------------------------------------------
+
+  /// Blur sigma for playback chrome. Far above [blurChrome] — at this strength
+  /// no high-frequency detail survives, only average luminance, which is what
+  /// makes the low fill opacity below legible.
+  static const double blurPlayerChrome = 28.0;
+
+  /// Nominal fill opacity for playback chrome — the mean of the gradient
+  /// endpoints below, for reference only. **No production code reads this
+  /// token** — `GlassSurface.playerChrome` reads [playerChromeFillTopAlpha]
+  /// and [playerChromeFillBottomAlpha] directly, and the panel's actual,
+  /// rendered density is whichever of those two is in effect at a given
+  /// point, not their mean. Do not use this value to argue the panel clears
+  /// (or misses) [glassLegibilityFloor] — assert on [playerChromeFillTopAlpha]
+  /// directly (see `depth_tokens_test.dart`), since that is the dense end
+  /// that actually has to carry the claim.
+  static const double playerChromeFillOpacity = 0.47;
+
+  /// Fill alpha at the top edge of the playback panel — the dense end.
+  ///
+  /// [ChromePanel] puts the control row (row 1: volume/transport/secondary)
+  /// at the top of the panel and the scrubber (row 2) below it, so density
+  /// follows the content that needs legibility most: the controls are here.
+  ///
+  /// Deliberately kept **under** [glassLegibilityFloor] (0.60) — the
+  /// redesign's whole differentiation from browse-UI chrome is that this
+  /// panel can afford more transparency, and a value at or above the floor
+  /// would quietly erase that. An earlier iteration pushed this to 0.68 to
+  /// make a single-point legibility test pass; that made the panel read as
+  /// dense as browse chrome and, per WCAG 2.1 SC 1.4.3 (text contrast,
+  /// 4.5:1) measured across the *edges* of row 1's icons (not just its
+  /// center), still didn't reliably clear 4.5:1 there without an even higher
+  /// fill — while failing the transparency claim outright. Icons/glyphs are
+  /// graphical objects, not text, so they're correctly held to WCAG 2.1 SC
+  /// 1.4.11 (non-text contrast, 3:1) instead — `glass_legibility_test`
+  /// verifies fill-alone clears 3:1 across row 1's full icon band at this
+  /// value, with real margin (not a near-miss).
+  ///
+  /// The row-2 timecodes (12–13px text, held to the stricter 4.5:1 text
+  /// standard) cannot clear that bar from fill alone at any value under the
+  /// floor — buying the rest of the way with more fill is exactly the
+  /// flat-slab look this redesign removes. Per the human-ruled direction,
+  /// that gap is closed with a small, targeted text shadow on the timecodes
+  /// only (not on any icon), implemented alongside the timecodes themselves
+  /// (`_ScrubberRow` in `playback_chrome.dart`) rather than here —
+  /// `glass_legibility_test`
+  /// models that shadow's contribution analytically so the combined
+  /// fill+shadow contract is locked in and verified even though the shadow
+  /// paint code lives elsewhere.
+  static const double playerChromeFillTopAlpha = 0.56;
+
+  /// Fill alpha at the bottom edge of the playback panel — the sheer end.
+  ///
+  /// The panel's bottom edge sits nearest the screen's own bottom edge (or,
+  /// in a smaller panel, under the scrubber only), so it can afford to stay
+  /// the most transparent part of the gradient.
+  static const double playerChromeFillBottomAlpha = 0.38;
+
+  /// Backdrop saturation multiplier. Real vibrancy boosts saturation before
+  /// blurring; without it, blurred video reads as grey mush rather than
+  /// transmitted colour.
+  static const double playerChromeSaturation = 1.8;
+
+  /// Neutral near-black tint. Unlike [AppColors.background] (`#0A1120`) this
+  /// carries no blue cast, so backdrop colour survives the fill.
+  static const Color playerChromeTint = Color(0xFF0B0E14);
+
+  /// Top-edge rim — a white highlight. Glass catches light on its upper edge.
+  static const Color playerRimTop = Color(0x24FFFFFF); // white @ ~0.14
+
+  /// Bottom-edge rim — a dark shade. Together with [playerRimTop] this reads as
+  /// a lit edge rather than a uniform border.
+  static const Color playerRimBottom = Color(0x33000000); // black @ 0.20
+
+  /// Corner radius for the playback panel.
+  static const double radiusPlayerPanel = 16.0;
+
+  /// Corner radius for the 36px-tall top-bar pills (fully rounded).
+  static const double radiusPlayerPill = 18.0;
 }
