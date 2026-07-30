@@ -12,6 +12,7 @@ defmodule Mydia.Downloads.History do
     ]
 
   alias Mydia.Repo
+  alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Structs.DownloadMetadata
@@ -77,25 +78,106 @@ defmodule Mydia.Downloads.History do
     |> Repo.aggregate(:count)
   end
 
+  @doc """
+  Counts the downloads still waiting on `client_name`: rows assigned to it that
+  have not been imported.
+
+  Called before deleting a download client, while that client still exists, to
+  show the operator the blast radius. Deliberately not restricted to orphans,
+  since a healthy in-flight download is exactly what the warning is about, but
+  imported rows are excluded. Import does not delete the row (`MediaImport`
+  stamps `imported_at` and leaves it, which is why `count_completed/0` exists),
+  so on a mature instance import history dominates any count that includes it,
+  while deleting the client does nothing at all to that history: it never
+  reaches the `missing` filter, never gets an error, and never gets tagged.
+  """
+  @spec count_downloads_for_client(String.t()) :: non_neg_integer()
+  def count_downloads_for_client(client_name) do
+    Download
+    |> where([d], d.download_client == ^client_name)
+    |> where([d], is_nil(d.imported_at))
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
+  Groups orphaned downloads by the client they reference, ordered by name.
+
+  The ordering is load-bearing rather than cosmetic: the Issues tab derives a
+  DOM id per group, and an unordered result could reassign those ids between
+  renders, which is exactly what LiveView's id-keyed patching must not see.
+
+  An orphan is a row tagged `import_failure_reason == "no_client"`, written
+  either by `DownloadMonitor.handle_missing/1` for a download still in flight
+  or by `MediaImport` for one that died at import. The Issues tab renders one
+  bulk-clear banner per group.
+  """
+  @spec removed_client_groups() :: [%{download_client: String.t(), count: non_neg_integer()}]
+  def removed_client_groups do
+    Download
+    |> where([d], d.import_failure_reason == "no_client" and not is_nil(d.download_client))
+    |> group_by([d], d.download_client)
+    |> order_by([d], asc: d.download_client)
+    |> select([d], %{download_client: d.download_client, count: count(d.id)})
+    |> Repo.all()
+  end
+
+  @doc """
+  Deletes the orphaned downloads referencing `client_name`.
+
+  Scoped on purpose, unlike `dismiss_all_cancelled/0`, which deletes every
+  errored row in the Issues tab. No attempt is made to remove anything from
+  the download client: that client is precisely what no longer exists.
+  """
+  @spec clear_downloads_for_removed_client(String.t()) :: {non_neg_integer(), nil | [term()]}
+  def clear_downloads_for_removed_client(client_name) do
+    Download
+    |> where([d], d.download_client == ^client_name and d.import_failure_reason == "no_client")
+    |> Repo.delete_all()
+  end
+
   def list_downloads_with_status(opts \\ []) do
     # Get all download records from database
     # Preload episode.media_item to get parent show info for episode downloads
     downloads = list_downloads(preload: [:media_item, episode: :media_item])
 
-    # Get all configured download clients
-    clients = get_configured_clients()
+    # Every configured client, including disabled ones. Disabled clients are
+    # never polled, but we still need their names to tell "disabled" apart
+    # from "deleted" when classifying a download's client.
+    all_configured = Settings.list_download_client_configs()
+    clients = Enum.filter(all_configured, & &1.enabled)
 
-    if clients == [] do
+    configured_names = MapSet.new(all_configured, & &1.name)
+    client_types = Map.new(all_configured, &{&1.name, &1.type})
+
+    if all_configured == [] do
       Logger.warning("No download clients configured")
-      # Return downloads with empty status
-      Enum.map(downloads, &enrich_download_with_empty_status/1)
+
+      # No clients at all means every download that names one references a
+      # client that is gone: for a self-hosted operator with a single client,
+      # deleting it IS this scenario, not an edge case of it. Classify those
+      # rows :removed so the honest copy and the `no_client` tag still apply.
+      # A download with no `download_client` at all has nothing to classify
+      # against, so `client_config_state` stays nil for it, per
+      # EnrichedDownload's contract. Polling and `apply_status_filters` stay
+      # skipped either way — there is nothing to poll.
+      Enum.map(downloads, fn download ->
+        enriched = enrich_download_with_empty_status(download)
+
+        if is_nil(download.download_client) do
+          enriched
+        else
+          with_client_state(enriched, :removed)
+        end
+      end)
     else
       # Get status from all clients
       client_statuses = fetch_all_client_statuses(clients, downloads)
 
       # Enrich downloads with client status
       downloads
-      |> Enum.map(&enrich_download_with_status(&1, client_statuses))
+      |> Enum.map(
+        &enrich_download_with_status(&1, client_statuses, client_types, configured_names)
+      )
       |> apply_status_filters(opts[:filter] || :all)
     end
   end
@@ -228,11 +310,6 @@ defmodule Mydia.Downloads.History do
 
   ## Private Functions - Client Status Fetching
 
-  defp get_configured_clients do
-    Settings.list_download_client_configs()
-    |> Enum.filter(& &1.enabled)
-  end
-
   defp fetch_all_client_statuses(clients, downloads) do
     # Fetch torrents from all clients concurrently. We deliberately distinguish
     # between two outcomes that previously collapsed into "empty list":
@@ -316,28 +393,103 @@ defmodule Mydia.Downloads.History do
     end)
   end
 
-  defp enrich_download_with_status(download, client_statuses) do
-    case Map.get(client_statuses, download.download_client) do
+  defp enrich_download_with_status(download, client_statuses, client_types, configured_names) do
+    case classify_client(download.download_client, client_statuses, configured_names) do
       {:reachable, torrents_map} ->
         case Map.get(torrents_map, download.download_client_id) do
           nil ->
             # Client confirmed it doesn't have this torrent — genuinely missing.
-            enrich_download_with_empty_status(download, false)
+            download
+            |> enrich_download_with_empty_status(false)
+            |> with_client_state(:present)
 
           torrent_status ->
-            enrich_download_with_torrent_status(download, torrent_status)
+            download
+            |> enrich_download_with_torrent_status(torrent_status)
+            |> with_client_state(:present)
+            |> heal_own_client()
         end
 
       :unreachable ->
         # Client is misbehaving (down, restarting, network blip). We can't tell
         # whether the torrent is there — DO NOT mark missing. Surface status as
         # "unknown" so DownloadMonitor's missing-handler skips it this cycle.
-        enrich_download_with_unknown_status(download)
+        download
+        |> enrich_download_with_unknown_status()
+        |> with_client_state(:present)
 
-      nil ->
-        # The client referenced by the download isn't configured at all (deleted,
-        # renamed, or never existed) — treat as genuinely missing.
+      :no_client_assigned ->
+        # A grab record that never reached a client. `list_stale_grabs/1`
+        # owns these; classification has nothing to say about them.
         enrich_download_with_empty_status(download)
+
+      config_state when config_state in [:disabled, :removed] ->
+        adopt_or_orphan(download, client_statuses, client_types, config_state)
+    end
+  end
+
+  # Distinguishes the three ways a download's client can fail to appear in the
+  # poll results. `:removed` and `:disabled` used to collapse into one branch,
+  # which is why a disabled client produced "removed from download client".
+  defp classify_client(nil, _client_statuses, _configured_names), do: :no_client_assigned
+
+  defp classify_client(client_name, client_statuses, configured_names) do
+    case Map.get(client_statuses, client_name) do
+      {:reachable, _torrents} = reachable -> reachable
+      :unreachable -> :unreachable
+      nil -> if MapSet.member?(configured_names, client_name), do: :disabled, else: :removed
+    end
+  end
+
+  # A download whose client is gone or switched off. If exactly one reachable
+  # torrent client holds this torrent, the download is alive under a new client
+  # name: report the real torrent status so the UI shows genuine progress, and
+  # flag the candidate for `DownloadMonitor` to persist. Otherwise it is a true
+  # orphan.
+  defp adopt_or_orphan(download, client_statuses, client_types, config_state) do
+    case ClientAdoption.find_claimant(download.download_client_id, client_statuses, client_types) do
+      {:ok, claimant} ->
+        {:reachable, torrents} = Map.fetch!(client_statuses, claimant)
+        torrent_status = Map.fetch!(torrents, download.download_client_id)
+
+        download
+        |> enrich_download_with_torrent_status(torrent_status)
+        |> with_client_state(config_state)
+        |> with_adoptable_client(claimant)
+
+      :none ->
+        download
+        |> enrich_download_with_empty_status()
+        |> with_client_state(config_state)
+    end
+  end
+
+  defp with_client_state(%EnrichedDownload{} = enriched, config_state) do
+    %{enriched | client_config_state: config_state}
+  end
+
+  defp with_adoptable_client(%EnrichedDownload{} = enriched, claimant) do
+    %{enriched | adoptable_client: claimant}
+  end
+
+  # The download's own client answered and still holds the torrent, so whatever
+  # took the client away is over: it was re-enabled, or deleted and re-added
+  # under the same name. Both are what Mydia's own copy tells the operator to
+  # do (the disabled-client message says "re-enable the client", the admin
+  # delete modal says re-adding picks the downloads back up).
+  #
+  # Nothing else clears orphan state on that route, so without this the row
+  # keeps a false error message forever, stays out of `Download.occupying/1`,
+  # and keeps its group in the Issues-tab banner, whose "Clear them" button
+  # would delete the record of a download that is visibly running on the Queue
+  # tab. Naming the row's own client as the adoption candidate routes the heal
+  # through `DownloadMonitor.adopt_download/1`: same writer, same clearing
+  # rule, and its `download_client` write is a no-op.
+  defp heal_own_client(%EnrichedDownload{} = enriched) do
+    if ClientAdoption.orphan_state?(enriched.import_failure_reason, enriched.error_message) do
+      with_adoptable_client(enriched, enriched.download_client)
+    else
+      enriched
     end
   end
 

@@ -338,6 +338,15 @@ defmodule Mydia.Downloads do
   @spec count_completed() :: non_neg_integer()
   defdelegate count_completed(), to: Mydia.Downloads.History
 
+  @spec count_downloads_for_client(String.t()) :: non_neg_integer()
+  defdelegate count_downloads_for_client(client_name), to: Mydia.Downloads.History
+
+  @spec removed_client_groups() :: [%{download_client: String.t(), count: non_neg_integer()}]
+  defdelegate removed_client_groups(), to: Mydia.Downloads.History
+
+  @spec clear_downloads_for_removed_client(String.t()) :: {non_neg_integer(), nil | [term()]}
+  defdelegate clear_downloads_for_removed_client(client_name), to: Mydia.Downloads.History
+
   @doc """
   Checks for duplicate downloads (active downloads or existing media files).
   """

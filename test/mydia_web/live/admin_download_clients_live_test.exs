@@ -63,6 +63,170 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       assert html =~ "Download Clients"
     end
 
+    test "warns about referencing downloads before deleting a client", %{conn: conn} do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-doomed",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      media_item = Mydia.MediaFixtures.media_item_fixture()
+
+      Mydia.DownloadsFixtures.download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: "qbit-doomed"
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+
+      view
+      |> element("#delete-download-client-#{client.id}")
+      |> render_click()
+
+      assert has_element?(view, "#delete-download-client-modal")
+      assert has_element?(view, "#delete-download-client-modal", "1 download is still waiting")
+    end
+
+    test "the delete warning counts only downloads that are still waiting", %{conn: conn} do
+      # More than one reference, because a count of 1 cannot tell a correct
+      # count from an inflated one. Imported rows are not deleted after import
+      # (`MediaImport` stamps `imported_at` and the row stays as history), so
+      # on a mature instance they dominate any count that includes them, while
+      # deleting the client does nothing whatsoever to them.
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-mature",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      media_item = Mydia.MediaFixtures.media_item_fixture()
+
+      for _ <- 1..2 do
+        Mydia.DownloadsFixtures.download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: "qbit-mature"
+        })
+      end
+
+      for _ <- 1..3 do
+        Mydia.DownloadsFixtures.download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: "qbit-mature",
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+
+      view
+      |> element("#delete-download-client-#{client.id}")
+      |> render_click()
+
+      assert has_element?(view, "#delete-download-client-modal", "2 downloads are still waiting")
+      refute has_element?(view, "#delete-download-client-modal", "5 downloads")
+    end
+
+    test "deletes the client after the warning is confirmed", %{conn: conn} do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-doomed-2",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+
+      view |> element("#delete-download-client-#{client.id}") |> render_click()
+      view |> element("#confirm-delete-download-client") |> render_click()
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Mydia.Settings.get_download_client_config!(client.id)
+      end
+    end
+
+    test "a second delete click is a no-op rather than a crash", %{conn: conn} do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-doubleclick",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+
+      view |> element("#delete-download-client-#{client.id}") |> render_click()
+      view |> element("#confirm-delete-download-client") |> render_click()
+
+      # The modal is gone and pending_delete_client is nil now. A second
+      # "delete_download_client" event, as a fast double-click would send
+      # before the DOM re-renders, must not reach
+      # Settings.delete_download_client_config/1 with nil and crash the
+      # LiveView process.
+      assert render_click(view, "delete_download_client", %{}) =~ "Download Clients"
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Mydia.Settings.get_download_client_config!(client.id)
+      end
+    end
+
+    test "shows a plain zero-reference message when no downloads reference the client", %{
+      conn: conn
+    } do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-unused",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+
+      view
+      |> element("#delete-download-client-#{client.id}")
+      |> render_click()
+
+      assert has_element?(view, "#delete-download-client-modal")
+
+      assert has_element?(
+               view,
+               "#delete-download-client-modal",
+               "No downloads are waiting on this client."
+             )
+    end
+
+    test "cancelling the delete warning leaves the client intact", %{conn: conn} do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-keep",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+
+      view |> element("#delete-download-client-#{client.id}") |> render_click()
+      assert has_element?(view, "#delete-download-client-modal")
+
+      view |> element("#cancel-delete-download-client") |> render_click()
+
+      refute has_element?(view, "#delete-download-client-modal")
+      assert Mydia.Settings.get_download_client_config!(client.id)
+    end
+
     test "creates a new download client", %{view: view} do
       view
       |> element(~s{button[phx-click="new_download_client"]})

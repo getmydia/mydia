@@ -53,6 +53,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   require Logger
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.UntrackedMatcher
@@ -100,6 +101,25 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     # Get all downloads with their real-time status from clients
     downloads = Downloads.list_downloads_with_status(filter: :all)
+
+    # Re-adopt downloads whose client was renamed, deleted, or disabled but
+    # whose torrent is still sitting in exactly one other configured client.
+    # This is the only writer for adoptions: `list_downloads_with_status/1`
+    # is a read path called from LiveViews and must stay pure.
+    downloads
+    |> Enum.filter(&(&1.adoptable_client != nil))
+    |> Enum.each(&adopt_download/1)
+
+    # Backfill the grouping tag onto orphans the previously released code
+    # already marked. Those rows carry an `error_message`, and the `missing`
+    # filter below requires a nil one, so they can never re-enter
+    # `handle_missing/1` to be tagged: without this the operator upgrading with
+    # a backlog of falsely blamed orphans, which is exactly who this feature is
+    # for, would see no banner at all. Runs after the adoption pass and skips
+    # anything it just healed.
+    downloads
+    |> Enum.filter(&legacy_orphan?/1)
+    |> Enum.each(&tag_legacy_orphan/1)
 
     # Find downloads that have completed or failed
     # Note: "seeding" means download is complete and now seeding (100% progress)
@@ -466,26 +486,152 @@ defmodule Mydia.Jobs.DownloadMonitor do
     end
   end
 
+  # Persist an adoption proposed by the read path.
+  #
+  # Clearing the orphan error state is what makes re-adding a client a real
+  # fix: delete a client, its downloads park in the Issues tab, re-add it (or
+  # a client holding the same torrents) and they come back to life on the next
+  # poll with no operator action. Renames heal by the same path.
+  #
+  # The proposed client can also be the row's own, which is how a client that
+  # was merely disabled and then re-enabled heals (see `heal_own_client/1` in
+  # `Mydia.Downloads.History`). The `download_client` write is then a no-op and
+  # only the orphan state clears.
+  defp adopt_download(download_map) do
+    download = Downloads.get_download!(download_map.id)
+
+    attrs =
+      %{download_client: download_map.adoptable_client}
+      |> maybe_clear_orphan_state(download)
+
+    if attrs == %{download_client: download.download_client} do
+      # Nothing to persist: the row already names this client and carries no
+      # orphan state to clear. Writing anyway would broadcast a download update
+      # on every single poll, and every open Downloads view re-polls all its
+      # clients on that broadcast. Only reachable if the row changed between
+      # the poll's snapshot and this write.
+      :ok
+    else
+      Logger.info("Adopting download onto reconfigured client",
+        download_id: download_map.id,
+        previous_client: download.download_client,
+        adopted_client: download_map.adoptable_client
+      )
+
+      persist_adoption(download, download_map, attrs)
+    end
+  end
+
+  defp persist_adoption(download, download_map, attrs) do
+    case Downloads.update_download(download, attrs) do
+      {:ok, _updated} ->
+        :ok
+
+      {:error, changeset} ->
+        Logger.warning("Failed to adopt download onto new client",
+          download_id: download_map.id,
+          errors: inspect(changeset.errors)
+        )
+
+        :ok
+    end
+  end
+
+  # Only clear failure state this feature created. A download carrying an
+  # unrelated import failure keeps it: adoption fixes which client owns the
+  # torrent, it does not vindicate a broken import.
+  #
+  # The predicate is shared with the read path that proposes the adoption in
+  # the first place (see `Mydia.Downloads.ClientAdoption.orphan_state?/2`), so
+  # the two can never disagree about whether a heal is available.
+  defp maybe_clear_orphan_state(attrs, download) do
+    if ClientAdoption.orphan_state?(download.import_failure_reason, download.error_message) do
+      clear_orphan_attrs(attrs)
+    else
+      attrs
+    end
+  end
+
+  defp clear_orphan_attrs(attrs) do
+    Map.merge(attrs, %{
+      error_message: nil,
+      import_failure_reason: nil,
+      import_last_error: nil,
+      import_failed_at: nil,
+      import_next_retry_at: nil
+    })
+  end
+
+  # An orphan the previous release marked: the old "Removed from download
+  # client" copy, no `import_failure_reason` (the tag did not exist yet), and a
+  # client that is still gone or switched off today.
+  defp legacy_orphan?(%{import_failure_reason: nil} = download_map) do
+    download_map.client_config_state in [:removed, :disabled] and
+      is_nil(download_map.adoptable_client) and
+      ClientAdoption.orphan_state?(nil, download_map.error_message)
+  end
+
+  defp legacy_orphan?(_download_map), do: false
+
+  # Tag only. The message is left exactly as it was written, and no
+  # `Events.download_failed/3` is emitted: these failures already happened and
+  # were already reported, so replaying them would dump a backlog of stale
+  # failures into the activity feed on the first poll after an upgrade.
+  defp tag_legacy_orphan(download_map) do
+    Logger.info("Tagging pre-existing orphaned download for grouping",
+      download_id: download_map.id,
+      client: download_map.download_client,
+      client_config_state: download_map.client_config_state
+    )
+
+    download = Downloads.get_download!(download_map.id)
+
+    case Downloads.update_download(download, %{import_failure_reason: "no_client"}) do
+      {:ok, _updated} ->
+        :ok
+
+      {:error, changeset} ->
+        Logger.warning("Failed to tag pre-existing orphaned download",
+          download_id: download_map.id,
+          errors: inspect(changeset.errors)
+        )
+
+        :ok
+    end
+  end
+
   defp handle_missing(download_map) do
     Logger.warning("Download missing from client - preserving for user investigation",
       download_id: download_map.id,
       title: download_map.title,
-      client: download_map.download_client
+      client: download_map.download_client,
+      client_config_state: download_map.client_config_state
     )
 
     # Get the download struct from database (with media_item preloaded)
     download = Downloads.get_download!(download_map.id, preload: [:media_item])
 
-    # Instead of deleting, mark as missing with error message
-    # This preserves the record in the Issues tab for user investigation
-    error_msg =
-      "Removed from download client '#{download_map.download_client}' before import completed. " <>
-        "The download may have been manually deleted, or the client may have encountered an error."
+    error_msg = missing_error_message(download_map)
 
     # `Download` has no `:status` field — status is derived at read time from the
     # client poll (see `Downloads.list_downloads_with_status/1`). Persisting
-    # `error_message` is what moves the row into the Issues tab.
-    case Downloads.update_download(download, %{error_message: error_msg}) do
+    # `error_message` is what moves the row into the Issues tab, and what drops
+    # it out of `Download.occupying/1` so the target is released.
+    #
+    # For an orphan we also persist the grouping tag the Issues tab bulk-clear
+    # keys on. It is deliberately the same tag `MediaImport` emits for
+    # `:no_client`, so a still-downloading orphan and one that died in import
+    # group together.
+    attrs =
+      case download_map.client_config_state do
+        state when state in [:removed, :disabled] ->
+          %{error_message: error_msg, import_failure_reason: "no_client"}
+
+        _present_or_unassigned ->
+          %{error_message: error_msg}
+      end
+
+    case Downloads.update_download(download, attrs) do
       {:ok, _updated} ->
         Logger.info("Download marked as missing (preserved for Issues tab)",
           download_id: download_map.id,
@@ -504,6 +650,37 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
         :ok
     end
+  end
+
+  @doc false
+  # Public, with a function head, only so the copy-selection branches can be
+  # tested without standing up a reachable client behind a Bypass stub. The
+  # function is pure: it maps a config state to a string and touches nothing
+  # else. Not part of the module's intended API.
+  def missing_error_message(download_map)
+
+  # The client is gone: deleted from the UI, dropped from env vars, or renamed
+  # (matching is by name, so a rename is indistinguishable from a delete).
+  # Naming the removal is the point — the operator otherwise goes and inspects
+  # a download client that is perfectly healthy.
+  def missing_error_message(%{client_config_state: :removed} = download_map) do
+    "Download client '#{download_map.download_client}' is no longer configured in Mydia. " <>
+      "The download may still be running in the client itself. " <>
+      "Re-add the client to resume tracking, or clear this download."
+  end
+
+  # The client still exists but is switched off, so Mydia never polls it.
+  def missing_error_message(%{client_config_state: :disabled} = download_map) do
+    "Download client '#{download_map.download_client}' is disabled in Mydia, so its " <>
+      "downloads are no longer tracked. Re-enable the client to resume tracking, " <>
+      "or clear this download."
+  end
+
+  # The original case: a configured, reachable client reported that it does not
+  # have this torrent.
+  def missing_error_message(download_map) do
+    "Removed from download client '#{download_map.download_client}' before import completed. " <>
+      "The download may have been manually deleted, or the client may have encountered an error."
   end
 
   defp handle_stuck(download) do

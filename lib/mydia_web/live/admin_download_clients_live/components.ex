@@ -195,10 +195,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                         <.icon name="hero-pencil" class="w-4 h-4" />
                       </button>
                       <button
+                        id={"delete-download-client-#{client.id}"}
                         class="btn btn-sm btn-ghost join-item text-error"
-                        phx-click="delete_download_client"
+                        phx-click="confirm_delete_download_client"
                         phx-value-id={client.id}
-                        data-confirm="Are you sure you want to delete this download client?"
                         title="Delete"
                       >
                         <.icon name="hero-trash" class="w-4 h-4" />
@@ -700,6 +700,60 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
         </.form>
       </div>
       <div class="modal-backdrop bg-black/50" phx-click="close_download_client_modal"></div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the delete-confirmation modal for a download client, warning the
+  operator how many downloads are still waiting on it.
+
+  The count comes from `Mydia.Downloads.count_downloads_for_client/1` and
+  excludes imported downloads, which keep their row as history and are
+  untouched by the delete. The copy is hedged about where the rest end up
+  because not all of them land in Issues: a row that is downloaded but not yet
+  imported, or one that was never matched, never enters the missing handler
+  that writes the Issues-tab error.
+  """
+  attr :client, :map, default: nil
+  attr :count, :integer, default: 0
+
+  def delete_download_client_modal(assigns) do
+    ~H"""
+    <div :if={@client} id="delete-download-client-modal" class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="text-lg font-bold">Delete '{@client.name}'?</h3>
+
+        <p :if={@count > 0} class="py-2">
+          {@count} {if @count == 1, do: "download is", else: "downloads are"} still waiting on
+          this client. Deleting it will not stop them in the client itself, and the ones still
+          in flight move to the Issues tab where you can clear them. If you re-add a client
+          holding these same torrents, Mydia picks them back up automatically.
+        </p>
+
+        <p :if={@count == 0} class="py-2">
+          No downloads are waiting on this client.
+        </p>
+
+        <div class="modal-action">
+          <button
+            id="cancel-delete-download-client"
+            class="btn btn-ghost"
+            phx-click="cancel_delete_download_client"
+          >
+            Cancel
+          </button>
+          <button
+            id="confirm-delete-download-client"
+            class="btn btn-error"
+            phx-click="delete_download_client"
+            phx-disable-with="Deleting..."
+          >
+            Delete client
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" phx-click="cancel_delete_download_client"></div>
     </div>
     """
   end
