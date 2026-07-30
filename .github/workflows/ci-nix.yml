@@ -30,6 +30,27 @@ jobs:
       - name: Build PostgreSQL package
         run: nix build .#checks.x86_64-linux.package-postgres -L
 
+  flutter-pin:
+    name: Check / Flutter Pin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # The assertion lives in player/flutter-version.nix; this step only forces
+      # evaluation. It builds nothing -- no SDK, no Android tooling -- so it costs
+      # a nixpkgs fetch and nothing more. A mismatch between player/.fvmrc and
+      # the flake's nixpkgs fails here with the message that names the fix.
+      - name: Assert the Android shell resolves the pinned Flutter
+        run: nix eval --raw ./player#packages.x86_64-linux.flutter.version
+
   test-sqlite-module:
     name: Test / NixOS Module (SQLite)
     runs-on: ubuntu-latest
