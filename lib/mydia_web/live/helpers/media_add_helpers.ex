@@ -47,7 +47,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       Recorded for TV shows only; movies always leave it nil.
     * `:monitored` - Monitored flag for the new item (default: `true`)
     * `:quality_profile_id` - Quality profile to assign. Omitted from the attrs
-      entirely when nil, so `Media.create_media_item/2` applies its own default.
+      entirely when nil.
 
   If neither id is given, falls back to parsing `metadata.provider_id` as tmdb_id.
   """
