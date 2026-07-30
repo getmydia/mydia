@@ -60,8 +60,10 @@ defmodule Mydia.Media.Franchises do
       {:ok, _no_franchise} ->
         :none
 
-      # A relay that predates this endpoint is the normal state today; nothing
-      # to warn about.
+      # This is the long-standing movie-details endpoint, not the new collections
+      # one: a 404 means TMDB has no movie under this id, which is a stale or
+      # wrong tmdb_id on the row rather than anything to alarm the operator
+      # about. There is no franchise to show either way.
       {:error, %Error{type: :not_found}} ->
         :none
 
