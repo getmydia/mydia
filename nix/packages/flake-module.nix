@@ -171,12 +171,12 @@
       # Pre-fetch npm dependencies (required for sandbox build)
       npmDeps = pkgs.fetchNpmDeps {
         src = ../../assets;
-        hash = "sha256-A1EUX4zXRJnbnWk+KKt8u1xpZO4qEBQnrkEVx/WXIt4=";
+        hash = "sha256-vioTiuz6YvUiNP8a31LSlKoXW/HibPwypf48Sa/S42Y=";
       };
 
       # Tailwind CSS v4 binary (not yet in nixpkgs)
       # Needs to be patched for NixOS
-      tailwindVersion = "4.1.7";
+      tailwindVersion = "4.3.3";
       tailwindBinaryName = {
         "x86_64-linux" = "tailwindcss-linux-x64";
         "aarch64-linux" = "tailwindcss-linux-arm64";
@@ -184,7 +184,7 @@
         "aarch64-darwin" = "tailwindcss-macos-arm64";
       }.${system} or "tailwindcss-linux-x64";
       tailwindBinaryHash = {
-        "x86_64-linux" = "sha256-BwYpKTWpdzxsh54X0jYlMi5EkOfo96CtDmiPquTe+YE=";
+        "x86_64-linux" = "sha256-c3vs+NStERXqmN9p+pQCbUAsqP65EwagNbWwBBZ9qN0=";
         "aarch64-linux" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
         "x86_64-darwin" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
         "aarch64-darwin" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -318,9 +318,14 @@
 
             # Link platform-specific binaries for esbuild and tailwind
             # Use tailwindcss v4 binary (patched for NixOS)
+            # The tailwind mix installer (>= 0.5) embeds the configured
+            # version in the expected binary path (tailwind-<target>-<version>),
+            # so the symlink name must include it or install_and_run/2 thinks
+            # the binary is missing and tries to fetch it over the network,
+            # which fails in the sandboxed build.
             mkdir -p _build
             ln -sf ${pkgs.esbuild}/bin/esbuild _build/esbuild-${platformSuffix}
-            ln -sf ${tailwindcss_4}/bin/tailwindcss _build/tailwind-${platformSuffix}
+            ln -sf ${tailwindcss_4}/bin/tailwindcss _build/tailwind-${platformSuffix}-${tailwindVersion}
 
             # Build assets (use --no-deps-check to skip lock verification for Nix-managed deps)
             export MIX_ENV=prod
