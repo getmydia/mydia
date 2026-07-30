@@ -122,9 +122,11 @@ defmodule MetadataRelay.TMDB.HandlerTest do
 
   describe "GET /tmdb/collections/:id" do
     test "dispatches to the handler and returns the TMDB body verbatim" do
+      fixture = collection_fixture()
+
       TMDBHelpers.set_tmdb_adapter(
         TMDBHelpers.mock_adapter_with_routes(%{
-          "/3/collection/10" => {200, collection_fixture()}
+          "/3/collection/10" => {200, fixture}
         })
       )
 
@@ -135,8 +137,10 @@ defmodule MetadataRelay.TMDB.HandlerTest do
       assert conn.status == 200
       response = Jason.decode!(conn.resp_body)
 
-      assert response["id"] == 10
-      assert response["name"] == "Star Wars Collection"
+      # Whole-body equality, not a field spot-check: anything the pipeline adds,
+      # drops, or renames would hide the franchise on the mydia side rather than
+      # fail, so a partial assertion is not enough to catch it.
+      assert response == fixture
       assert length(response["parts"]) == 2
       assert Enum.map(response["parts"], & &1["id"]) == [11, 1891]
     end
@@ -156,6 +160,28 @@ defmodule MetadataRelay.TMDB.HandlerTest do
       assert conn.status == 200
       assert_received {:request_url, url}
       assert URI.decode_query(url.query || "")["language"] == "fr-FR"
+    end
+
+    test "propagates a TMDB 404 with its status and error body" do
+      error_body = %{
+        "status_code" => 34,
+        "status_message" => "The resource you requested could not be found."
+      }
+
+      TMDBHelpers.set_tmdb_adapter(
+        TMDBHelpers.mock_adapter_with_routes(%{
+          "/3/collection/999999999" => {404, error_body}
+        })
+      )
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/collections/999999999?language=en-US")
+        |> Router.call([])
+
+      # mydia turns this 404 into a silently absent section, so the status has to
+      # survive the pipeline rather than being collapsed into a 500.
+      assert conn.status == 404
+      assert Jason.decode!(conn.resp_body) == error_body
     end
   end
 end
