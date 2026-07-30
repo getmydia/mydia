@@ -65,7 +65,14 @@ defmodule MydiaWeb.UnhandledMessageTest do
           assert {:noreply, ^socket} = module.handle_info(grab_message, socket)
         end)
 
-      assert log == ""
+      # Deliberately not `assert log == ""`. `capture_log/1` intercepts the
+      # Logger globally rather than per-process, so under `async: true` any
+      # unrelated test that happens to log during this window bleeds into the
+      # capture and an emptiness assertion fails at random. Asserting the
+      # absence of the catch-all's own line tests the property we actually
+      # care about: the grab message was matched by a silent clause and never
+      # reached the fall-through.
+      refute log =~ "Unhandled message in #{short_name(module)}"
     end
   end
 end
