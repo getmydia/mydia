@@ -185,10 +185,24 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   /// wakelock) would throw "setState() called during build". Deferring
   /// unconditionally, not only on that path, means callers never need to
   /// know which call site triggered it.
+  ///
+  /// The `mounted` check has to live *inside* the deferred closure, not
+  /// guard the call to `addPostFrameCallback` itself: `mounted` is true at
+  /// scheduling time (this method only ever runs while the State is alive)
+  /// but the whole reason to defer is that the frame's remaining work — and
+  /// possibly disposal of this State and its ancestors, e.g. navigating away
+  /// from the player — happens between scheduling and firing. Without this
+  /// check, a callback into an already-disposed consumer that calls
+  /// `setState` in response throws "setState() called after dispose()" —
+  /// trading the build-phase crash this method exists to prevent for a
+  /// narrower, but equally real, post-dispose one.
   void _notifyVisibility(bool visible) {
     final callback = widget.onVisibilityChanged;
     if (callback == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) => callback(visible));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      callback(visible);
+    });
   }
 
   @override

@@ -265,6 +265,48 @@ void main() {
       expect(harnessState.visibilityEvents, greaterThan(0));
     });
 
+    testWidgets(
+        'a notification scheduled just before disposal does not fire and '
+        'does not throw — the deferral must not trade a build-phase crash '
+        'for a post-dispose one', (tester) async {
+      final events = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onVisibilityChanged: events.add,
+            // Bounded and top-left, so the tap below (at an empty region)
+            // reaches the background toggle rather than self-hitting via
+            // RenderParagraph — see the "empty region" test above.
+            child: const Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: 100, height: 40, child: Text('chrome')),
+            ),
+          ),
+        ),
+      );
+
+      // Chrome starts visible, so this tap calls _hide(), which schedules
+      // the deferred notification via addPostFrameCallback. `tap()` only
+      // dispatches raw pointer events — it does not itself pump a frame —
+      // so nothing has fired yet.
+      await tester.tapAt(const Offset(400, 300));
+
+      // Swap in an entirely different tree. This single pumpWidget call
+      // disposes ChromeVisibility's State during its build phase, then, in
+      // the very same frame, runs the already-scheduled post-frame
+      // callback — exercising the exact race: scheduled while mounted,
+      // firing after disposal.
+      await tester.pumpWidget(_host(const SizedBox()));
+
+      expect(tester.takeException(), isNull);
+      expect(
+        events,
+        isEmpty,
+        reason: 'onVisibilityChanged fired after the widget was disposed',
+      );
+    });
+
     // --- Supplementary coverage below, added on top of the brief's own
     // test set. The brief only asserts the FadeTransition's opacity
     // property; these assert real hit-testing geometry, per direction: a
