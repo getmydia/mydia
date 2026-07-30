@@ -7,10 +7,16 @@ on:
       - main
     paths:
       - "player/**"
+      # player/rust/mydia_player_p2p depends on ../../native/mydia_p2p_core by
+      # relative path, so build-android cross-compiles code that lives outside
+      # player/. Without this, a change breaking the Android target lands green
+      # (ci.yml only builds the NIF for the host) and surfaces at release time.
+      - "native/**"
       - ".github/workflows/ci-player.yml"
   pull_request:
     paths:
       - "player/**"
+      - "native/**"
       - ".github/workflows/ci-player.yml"
   workflow_dispatch:
 
