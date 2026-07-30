@@ -374,7 +374,7 @@ case "$COMMAND" in
                 ;;
             setup)
                 echo -e "${GREEN}Setting up player project (pub get + build_runner)...${NC}"
-                in_shell_sh "cd player && flutter pub get && flutter pub run build_runner build --delete-conflicting-outputs"
+                in_shell_sh "cd player && flutter pub get && flutter pub run build_runner build"
                 echo -e "${GREEN}Player project setup complete!${NC}"
                 ;;
             shell)
@@ -548,7 +548,7 @@ case "$COMMAND" in
                     flutter pub get
                     if [ "$run_codegen" = true ]; then
                         echo -e "${GREEN}Running code generation...${NC}"
-                        flutter pub run build_runner build --delete-conflicting-outputs
+                        flutter pub run build_runner build
                     fi
                     case "$macos_cmd" in
                         build)

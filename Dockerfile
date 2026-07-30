@@ -26,7 +26,7 @@ COPY priv/graphql/schema.graphql ./lib/graphql/schema.graphql
 RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
     flutter config --no-analytics && \
     flutter pub get && \
-    dart run build_runner build --delete-conflicting-outputs && \
+    dart run build_runner build && \
     flutter build web --release --base-href /player/ --tree-shake-icons
 
 # ============================================

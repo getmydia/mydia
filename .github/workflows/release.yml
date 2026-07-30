@@ -262,7 +262,7 @@ jobs:
 
       - name: Run code generation
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build
 
       - name: Build web
         working-directory: ${{ env.PLAYER_PATH }}
@@ -328,7 +328,7 @@ jobs:
       - name: Run code generation
         if: steps.check_android.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build
 
       - name: Decode keystore
         if: steps.check_android.outputs.enabled == 'true' && env.ANDROID_KEYSTORE_BASE64 != ''
@@ -436,7 +436,7 @@ jobs:
       - name: Run code generation
         if: steps.check_ios.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build
 
       - name: Install certificate and provisioning profile
         if: steps.check_ios.outputs.enabled == 'true' && env.IOS_CERTIFICATE_BASE64 != ''
@@ -567,7 +567,7 @@ jobs:
       - name: Run code generation
         if: steps.check_macos.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build
 
       - name: Build macOS
         if: steps.check_macos.outputs.enabled == 'true'
@@ -819,7 +819,7 @@ jobs:
       - name: Run code generation
         if: steps.check_windows.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build
 
       - name: Build Windows
         if: steps.check_windows.outputs.enabled == 'true'
@@ -897,7 +897,7 @@ jobs:
       - name: Run code generation
         if: steps.check_linux.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build
 
       - name: Build Linux
         if: steps.check_linux.outputs.enabled == 'true'

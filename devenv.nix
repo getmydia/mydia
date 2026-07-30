@@ -204,7 +204,7 @@ in
   # `flutter build web` on source changes — codegen feeds the web build, so both
   # are needed and they do not double-run.
   processes.flutter-codegen.exec =
-    "cd player && flutter pub run build_runner watch --delete-conflicting-outputs";
+    "cd player && flutter pub run build_runner watch";
 
   # ── First-run / re-entry setup tasks (R6) ───────────────────────────────────
   # Replace docker-entrypoint.sh. Guarded with execIfModified so re-entry is

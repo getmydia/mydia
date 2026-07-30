@@ -50,8 +50,13 @@ app.*.map.json
 .direnv/
 
 # Generated code (build_runner)
+# Owned entirely by codegen; every consumer (Dockerfile, CI, release
+# workflows, the devenv watcher) runs build_runner before analyze/test/build.
+# Tracking generated output means it drifts silently and lands as unrelated
+# churn in whoever's next PR.
 *.g.dart
 *.freezed.dart
+*.graphql.dart
 
 # Android extras
 **/android/**/gradle-wrapper.jar
