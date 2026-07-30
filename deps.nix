@@ -452,12 +452,12 @@ let
 
     finch = buildMix rec {
       name = "finch";
-      version = "0.22.0";
+      version = "0.23.0";
 
       src = fetchHex {
         pkg = "finch";
         version = "${version}";
-        sha256 = "b94e83c47780fc6813f746a1f1a34ee65cda42da4c5ea26a68f0acc4498e23dc";
+        sha256 = "80e58d3f936f57e3fdf404f83a3642897ae6d9fb642934e46da4d8fe761b99d5";
       };
 
       beamDeps = [ mime mint nimble_options nimble_pool telemetry ];
@@ -933,12 +933,12 @@ let
 
     req = buildMix rec {
       name = "req";
-      version = "0.6.1";
+      version = "0.7.1";
 
       src = fetchHex {
         pkg = "req";
         version = "${version}";
-        sha256 = "aaf11c9c80f2df2364630b3594e1857fe610d8ea7cb994e1ce3dcb55f204ff1c";
+        sha256 = "254638b15ceb9a2624d15aff13bf7903ea2e95cd4b9c1aa18da1fb06e1086b50";
       };
 
       beamDeps = [ finch jason mime plug ];
