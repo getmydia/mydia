@@ -75,7 +75,8 @@ defmodule Mydia.Metadata.Provider.Relay do
     MediaMetadata,
     SeasonData,
     ImagesResponse,
-    Collection
+    Collection,
+    Video
   }
 
   @default_language "en-US"
@@ -305,8 +306,16 @@ defmodule Mydia.Metadata.Provider.Relay do
         # Transform TVDB response to TMDB-like format for parsing
         transformed = transform_tvdb_to_tmdb_format(data, media_type, language)
         metadata = parse_metadata(transformed, media_type, provider_id)
-        # Override provider to :tvdb
-        metadata = %{metadata | provider: :tvdb}
+        # Override provider to :tvdb. Trailers live outside the transformed
+        # payload, so videos are resolved separately.
+        preferred = tvdb_preferred_codes(language, data["originalLanguage"])
+
+        metadata = %{
+          metadata
+          | provider: :tvdb,
+            videos: resolve_tvdb_videos(config, data, preferred)
+        }
+
         {:ok, metadata}
 
       {:ok, %{status: 404}} ->
@@ -319,6 +328,51 @@ defmodule Mydia.Metadata.Provider.Relay do
         {:error, error}
     end
   end
+
+  # TVDB's own `trailers` array is sparse — popular shows such as Game of
+  # Thrones and Stranger Things carry none — so fall back to TMDB's videos via
+  # the cross-reference TVDB publishes in `remoteIds`. A missing trailer must
+  # never fail the fetch, so every failure path degrades to an empty list.
+  defp resolve_tvdb_videos(config, data, preferred_codes) do
+    case Video.from_tvdb_trailers(data["trailers"], preferred_codes) do
+      [] -> fetch_tmdb_videos_for_tvdb(config, data)
+      videos -> videos
+    end
+  end
+
+  defp fetch_tmdb_videos_for_tvdb(config, data) do
+    case tmdb_id_from_remote_ids(data["remoteIds"]) do
+      nil ->
+        []
+
+      tmdb_id ->
+        fetch_tmdb_videos(config, tmdb_id)
+    end
+  end
+
+  defp fetch_tmdb_videos(config, tmdb_id) do
+    case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: ["videos"]) do
+      {:ok, %MediaMetadata{videos: videos}} when is_list(videos) ->
+        videos
+
+      other ->
+        Logger.debug("TMDB trailer fallback returned no videos",
+          tmdb_id: tmdb_id,
+          result: inspect(other)
+        )
+
+        []
+    end
+  end
+
+  defp tmdb_id_from_remote_ids(remote_ids) when is_list(remote_ids) do
+    Enum.find_value(remote_ids, fn
+      %{"sourceName" => "TheMovieDB.com", "id" => id} when is_binary(id) and id != "" -> id
+      _ -> nil
+    end)
+  end
+
+  defp tmdb_id_from_remote_ids(_), do: nil
 
   # Transform TVDB API response to match TMDB format for consistent parsing
   defp transform_tvdb_to_tmdb_format(data, _media_type, language) when is_map(data) do
