@@ -164,11 +164,16 @@ print_test_rerun_hints() {
 }
 
 run_precommit() {
-    # Run all six steps inside a SINGLE devenv shell so the environment (and the
+    # Run all seven steps inside a SINGLE devenv shell so the environment (and the
     # enterShell setup-task guards) load once and _build/test stays warm across
     # steps — no per-step shell re-entry, no recompilation between steps. Runs
     # against the active adapter (SQLite by default; DATABASE_TYPE=postgres keeps
     # async tests parallel — the deferred KTD6 tuning knob).
+    #
+    # KEEP IN SYNC with the `precommit` alias in mix.exs. This function is a
+    # reimplementation, not a wrapper, so a step added there is NOT picked up
+    # here. Credo was missing for exactly that reason and a --strict regression
+    # reached CI green-locally, red-in-CI.
     devenv shell -- bash <<'PRECOMMIT'
 set +e
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
@@ -201,6 +206,7 @@ run_step "Dependencies" "mix deps.get >/dev/null 2>&1 || mix deps.get"
 run_step "Compile"      "mix compile --warnings-as-errors"
 run_step "Unused deps"  "mix deps.unlock --unused"
 run_step "Format"       "mix format --check-formatted"
+run_step "Credo"        "mix credo --strict"
 run_step "Database"     "mix ecto.create --quiet && mix ecto.migrate --quiet"
 run_step "Tests"        "mix test --color"
 
