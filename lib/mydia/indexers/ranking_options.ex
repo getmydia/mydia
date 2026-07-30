@@ -16,6 +16,22 @@ defmodule Mydia.Indexers.RankingOptions do
   the schema actually populates. The movie path's old `rules` source is dropped;
   a profile that only set `min_ratio` under `rules` no longer affects ranking.
 
+  ## preferred_qualities ordering (stored order is not authoritative)
+
+  `ReleaseRanker` treats the *position* of a resolution in `:preferred_qualities`
+  as the primary sort key, with score only a tie-break: index 0 wins. Profiles,
+  however, store `preferred_resolutions` ascending — the shipped "Any" preset is
+  `["360p", ..., "2160p"]`, and the Admin editor renders its checkboxes
+  ascending, so HTML array params come back ascending too. Handing that stored
+  order straight to the ranker made every multi-resolution profile grab the
+  *lowest* resolution available.
+
+  So this builder sorts `:preferred_qualities` into descending quality order
+  before handing it over, using `Mydia.Settings.QualityProfile.valid_resolutions/0`
+  as the canonical ordering. Resolutions outside that vocabulary sort last, in
+  a stable alphabetical order, rather than crashing. The upshot: the order a
+  profile happens to store its resolutions in does not decide what gets grabbed.
+
   ## Profile resolution (do not reimplement here)
 
   This builder takes an already-resolved `%QualityProfile{}` or `nil` and stays
@@ -85,14 +101,16 @@ defmodule Mydia.Indexers.RankingOptions do
   @doc """
   Extract `:preferred_qualities`, `:min_ratio`, and `:size_range` from a quality
   profile for the given media type. `:preferred_qualities` is sourced from
-  `quality_standards.preferred_resolutions`.
+  `quality_standards.preferred_resolutions` and re-sorted into descending
+  quality order (see the moduledoc: the ranker reads position as priority, and
+  profiles store their resolutions ascending).
   """
   @spec build_quality_options(QualityProfile.t(), media_type()) :: keyword()
   def build_quality_options(%QualityProfile{} = quality_profile, media_type) do
     quality_opts =
       case QualityProfile.preferred_resolutions(quality_profile) do
         [] -> []
-        resolutions -> [preferred_qualities: resolutions]
+        resolutions -> [preferred_qualities: sort_by_quality_desc(resolutions)]
       end
 
     ratio_opts = extract_min_ratio(quality_profile)
@@ -101,6 +119,21 @@ defmodule Mydia.Indexers.RankingOptions do
     quality_opts
     |> Keyword.merge(ratio_opts)
     |> Keyword.merge(size_opts)
+  end
+
+  # Order resolutions best-first. The canonical vocabulary is ascending, so a
+  # known resolution sorts on its negated index (highest quality first) and an
+  # unrecognized one sorts after every known resolution, ordered by its own
+  # value so the result stays deterministic instead of crashing.
+  defp sort_by_quality_desc(resolutions) do
+    canonical = QualityProfile.valid_resolutions()
+
+    Enum.sort_by(resolutions, fn resolution ->
+      case Enum.find_index(canonical, &(&1 == resolution)) do
+        nil -> {1, to_string(resolution)}
+        index -> {0, -index}
+      end
+    end)
   end
 
   # Single source of truth for min_ratio: quality_standards (atom or string key).

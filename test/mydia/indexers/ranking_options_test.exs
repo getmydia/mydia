@@ -159,4 +159,68 @@ defmodule Mydia.Indexers.RankingOptionsTest do
       refute Keyword.has_key?(opts, :min_ratio)
     end
   end
+
+  describe "preferred_qualities ordering" do
+    # ReleaseRanker reads the position of a resolution in :preferred_qualities as
+    # the primary sort key, so an ascending stored list made it grab the lowest
+    # resolution on offer. Profiles do store ascending: the shipped "Any" preset
+    # and the Admin editor's checkbox order both produce ascending lists.
+    test "an ascending stored list is handed to the ranker descending" do
+      opts =
+        RankingOptions.build(%{
+          media_type: :movie,
+          quality_profile:
+            profile(%{
+              quality_standards: %{
+                preferred_resolutions: ["360p", "480p", "576p", "720p", "1080p", "2160p"]
+              }
+            })
+        })
+
+      assert Keyword.get(opts, :preferred_qualities) == [
+               "2160p",
+               "1080p",
+               "720p",
+               "576p",
+               "480p",
+               "360p"
+             ]
+    end
+
+    test "an already-descending stored list is left in best-first order" do
+      opts =
+        RankingOptions.build(%{
+          media_type: :movie,
+          quality_profile:
+            profile(%{quality_standards: %{preferred_resolutions: ["2160p", "1080p", "720p"]}})
+        })
+
+      assert Keyword.get(opts, :preferred_qualities) == ["2160p", "1080p", "720p"]
+    end
+
+    test "unknown resolutions sort after every known one, deterministically" do
+      opts =
+        RankingOptions.build(%{
+          media_type: :movie,
+          quality_profile:
+            profile(%{
+              quality_standards: %{
+                preferred_resolutions: ["zebra", "720p", "aardvark", "2160p"]
+              }
+            })
+        })
+
+      assert Keyword.get(opts, :preferred_qualities) == ["2160p", "720p", "aardvark", "zebra"]
+    end
+
+    test "a single-resolution profile is unaffected" do
+      opts =
+        RankingOptions.build(%{
+          media_type: :movie,
+          quality_profile: profile(%{quality_standards: %{preferred_resolutions: ["1080p"]}})
+        })
+
+      assert Keyword.get(opts, :preferred_qualities) == ["1080p"]
+    end
+  end
 end
