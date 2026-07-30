@@ -134,8 +134,8 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:subtitle_feature_enabled, subtitle_feature_enabled?())
      # Franchise section state
      |> assign(:franchise, nil)
-     |> assign(:adding_franchise_tmdb_id, nil)
-     |> assign(:metadata_config, Mydia.Metadata.default_relay_config())
+     |> assign(:adding_franchise_tmdb_ids, MapSet.new())
+     |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign(
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
@@ -574,8 +574,8 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_async(:load_franchise, result, socket),
     do: FranchiseEvents.handle_load_result(result, socket)
 
-  def handle_async(:add_franchise_movie, result, socket),
-    do: FranchiseEvents.handle_add_result(result, socket)
+  def handle_async({:add_franchise_movie, tmdb_id}, result, socket),
+    do: FranchiseEvents.handle_add_result(tmdb_id, result, socket)
 
   # Private helpers
 

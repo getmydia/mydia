@@ -16,7 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   """
   attr :franchise, :map, required: true
   attr :can_add, :boolean, required: true
-  attr :adding_tmdb_id, :integer, default: nil
+  attr :adding_tmdb_ids, MapSet, required: true
 
   def franchise_section(assigns) do
     ~H"""
@@ -39,7 +39,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
           :for={entry <- @franchise.entries}
           entry={entry}
           can_add={@can_add}
-          adding={@adding_tmdb_id == entry.tmdb_id}
+          adding={MapSet.member?(@adding_tmdb_ids, entry.tmdb_id)}
         />
       </div>
     </div>

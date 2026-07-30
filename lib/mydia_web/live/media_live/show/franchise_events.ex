@@ -42,9 +42,23 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     {:noreply, socket}
   end
 
+  # Defensive: an unmatched shape would otherwise raise in the LiveView process,
+  # and the client would reconnect, re-mount and crash again, taking the whole
+  # movie page down for a section that is meant to be silently absent when the
+  # lookup does not work out.
+  def handle_load_result(other, socket) do
+    Logger.warning("Franchise lookup returned an unexpected result: #{inspect(other)}")
+    {:noreply, socket}
+  end
+
   @doc """
   Adds a missing franchise member, inheriting the viewed movie's quality profile
   and monitored flag.
+
+  Adds are keyed per TMDB id so several can be in flight at once: a franchise is
+  usually missing more than one entry, and `start_async/3` overwrites rather than
+  cancels a task under an existing key, which would silently drop the first
+  result.
   """
   def add_franchise_movie(%{"tmdb_id" => tmdb_id}, socket) do
     with :ok <- Authorization.authorize_create_media(socket) do
@@ -56,21 +70,29 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
 
   defp start_add(tmdb_id, socket) do
     case Integer.parse(tmdb_id) do
-      {tmdb_id, ""} ->
-        media_item = socket.assigns.media_item
-        config = socket.assigns.metadata_config
+      {tmdb_id, ""} -> dispatch_add(tmdb_id, socket)
+      _ -> {:noreply, socket}
+    end
+  end
 
-        socket =
-          socket
-          |> assign(:adding_franchise_tmdb_id, tmdb_id)
-          |> start_async(:add_franchise_movie, fn ->
-            perform_add(media_item, tmdb_id, config)
-          end)
+  # An impatient double-click sends the event twice. The second add would hit the
+  # tmdb_id unique index and flash a failure for a row the first add just
+  # created, so a repeat for an id already in flight is dropped.
+  defp dispatch_add(tmdb_id, socket) do
+    if MapSet.member?(socket.assigns.adding_franchise_tmdb_ids, tmdb_id) do
+      {:noreply, socket}
+    else
+      media_item = socket.assigns.media_item
+      config = socket.assigns.metadata_config
 
-        {:noreply, socket}
+      socket =
+        socket
+        |> mark_in_flight(tmdb_id)
+        |> start_async({:add_franchise_movie, tmdb_id}, fn ->
+          perform_add(media_item, tmdb_id, config)
+        end)
 
-      _ ->
-        {:noreply, socket}
+      {:noreply, socket}
     end
   end
 
@@ -93,31 +115,49 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     end
   end
 
-  def handle_add_result({:ok, {:ok, added}}, socket) do
+  def handle_add_result(tmdb_id, {:ok, {:ok, added}}, socket) do
     {:noreply,
      socket
-     |> assign(:adding_franchise_tmdb_id, nil)
+     |> clear_in_flight(tmdb_id)
      |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
      |> put_flash(:info, "Added #{added.title} to your library")}
   end
 
-  def handle_add_result({:ok, {:error, reason}}, socket) do
+  def handle_add_result(tmdb_id, {:ok, {:error, reason}}, socket) do
+    Logger.warning("Franchise add failed for tmdb #{tmdb_id}: #{inspect(reason)}")
+
     {:noreply,
      socket
-     |> assign(:adding_franchise_tmdb_id, nil)
+     |> clear_in_flight(tmdb_id)
      |> put_flash(:error, "Could not add that movie: #{describe(reason)}")}
   end
 
-  def handle_add_result({:exit, reason}, socket) do
+  def handle_add_result(tmdb_id, {:exit, reason}, socket) do
     Logger.warning("Franchise add crashed: #{inspect(reason)}")
 
     {:noreply,
      socket
-     |> assign(:adding_franchise_tmdb_id, nil)
+     |> clear_in_flight(tmdb_id)
      |> put_flash(:error, "Could not add that movie")}
   end
 
   ## Private
+
+  defp mark_in_flight(socket, tmdb_id) do
+    assign(
+      socket,
+      :adding_franchise_tmdb_ids,
+      MapSet.put(socket.assigns.adding_franchise_tmdb_ids, tmdb_id)
+    )
+  end
+
+  defp clear_in_flight(socket, tmdb_id) do
+    assign(
+      socket,
+      :adding_franchise_tmdb_ids,
+      MapSet.delete(socket.assigns.adding_franchise_tmdb_ids, tmdb_id)
+    )
+  end
 
   defp mark_owned(nil, _added), do: nil
 
@@ -137,6 +177,6 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   defp describe({:changeset, changeset}),
     do: MediaAddHelpers.format_changeset_errors(changeset)
 
-  defp describe({:metadata, reason}), do: "metadata lookup failed (#{inspect(reason)})"
+  defp describe({:metadata, _reason}), do: "the metadata service could not be reached"
   defp describe(reason), do: inspect(reason)
 end

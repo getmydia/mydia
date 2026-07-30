@@ -29,7 +29,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponentsTest do
     render_component(&FranchiseComponents.franchise_section/1, %{
       franchise: franchise,
       can_add: Keyword.get(opts, :can_add, true),
-      adding_tmdb_id: Keyword.get(opts, :adding_tmdb_id)
+      adding_tmdb_ids: MapSet.new(Keyword.get(opts, :adding_tmdb_ids, []))
     })
   end
 
@@ -44,6 +44,8 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponentsTest do
 
     assert html =~ "Harry Potter Collection"
     assert html =~ "1 of 2"
+    assert html =~ "badge-ghost"
+    refute html =~ "badge-success"
     assert html =~ ~s(id="franchise-section")
   end
 
@@ -124,12 +126,29 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponentsTest do
           entry(%{tmdb_id: 671, in_library?: true, current?: true, media_item_id: "a"}),
           entry(%{tmdb_id: 672})
         ]),
-        adding_tmdb_id: 672
+        adding_tmdb_ids: [672]
       )
 
     missing = extract_entry(html, 672)
     assert missing =~ "loading-spinner"
     assert missing =~ "disabled"
+  end
+
+  test "every entry in flight shows a spinner, and only those" do
+    html =
+      render(
+        franchise([
+          entry(%{tmdb_id: 671, in_library?: true, current?: true, media_item_id: "a"}),
+          entry(%{tmdb_id: 672}),
+          entry(%{tmdb_id: 673}),
+          entry(%{tmdb_id: 674})
+        ]),
+        adding_tmdb_ids: [672, 673]
+      )
+
+    assert extract_entry(html, 672) =~ "loading-spinner"
+    assert extract_entry(html, 673) =~ "loading-spinner"
+    refute extract_entry(html, 674) =~ "loading-spinner"
   end
 
   test "renders a placeholder when a poster is missing" do
