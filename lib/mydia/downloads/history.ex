@@ -12,6 +12,7 @@ defmodule Mydia.Downloads.History do
     ]
 
   alias Mydia.Repo
+  alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Structs.DownloadMetadata
@@ -82,12 +83,20 @@ defmodule Mydia.Downloads.History do
     # Preload episode.media_item to get parent show info for episode downloads
     downloads = list_downloads(preload: [:media_item, episode: :media_item])
 
-    # Get all configured download clients
-    clients = get_configured_clients()
+    # Every configured client, including disabled ones. Disabled clients are
+    # never polled, but we still need their names to tell "disabled" apart
+    # from "deleted" when classifying a download's client.
+    all_configured = Settings.list_download_client_configs()
+    clients = Enum.filter(all_configured, & &1.enabled)
 
-    if clients == [] do
+    configured_names = MapSet.new(all_configured, & &1.name)
+    client_types = Map.new(all_configured, &{&1.name, &1.type})
+
+    if all_configured == [] do
       Logger.warning("No download clients configured")
-      # Return downloads with empty status
+      # Return downloads with empty status. `client_config_state` stays nil,
+      # per EnrichedDownload's contract, because there is nothing configured
+      # to classify against — not even a disabled entry to point to.
       Enum.map(downloads, &enrich_download_with_empty_status/1)
     else
       # Get status from all clients
@@ -95,7 +104,9 @@ defmodule Mydia.Downloads.History do
 
       # Enrich downloads with client status
       downloads
-      |> Enum.map(&enrich_download_with_status(&1, client_statuses))
+      |> Enum.map(
+        &enrich_download_with_status(&1, client_statuses, client_types, configured_names)
+      )
       |> apply_status_filters(opts[:filter] || :all)
     end
   end
@@ -228,11 +239,6 @@ defmodule Mydia.Downloads.History do
 
   ## Private Functions - Client Status Fetching
 
-  defp get_configured_clients do
-    Settings.list_download_client_configs()
-    |> Enum.filter(& &1.enabled)
-  end
-
   defp fetch_all_client_statuses(clients, downloads) do
     # Fetch torrents from all clients concurrently. We deliberately distinguish
     # between two outcomes that previously collapsed into "empty list":
@@ -316,29 +322,78 @@ defmodule Mydia.Downloads.History do
     end)
   end
 
-  defp enrich_download_with_status(download, client_statuses) do
-    case Map.get(client_statuses, download.download_client) do
+  defp enrich_download_with_status(download, client_statuses, client_types, configured_names) do
+    case classify_client(download.download_client, client_statuses, configured_names) do
       {:reachable, torrents_map} ->
         case Map.get(torrents_map, download.download_client_id) do
           nil ->
             # Client confirmed it doesn't have this torrent — genuinely missing.
-            enrich_download_with_empty_status(download, false)
+            download
+            |> enrich_download_with_empty_status(false)
+            |> with_client_state(:present)
 
           torrent_status ->
-            enrich_download_with_torrent_status(download, torrent_status)
+            download
+            |> enrich_download_with_torrent_status(torrent_status)
+            |> with_client_state(:present)
         end
 
       :unreachable ->
         # Client is misbehaving (down, restarting, network blip). We can't tell
         # whether the torrent is there — DO NOT mark missing. Surface status as
         # "unknown" so DownloadMonitor's missing-handler skips it this cycle.
-        enrich_download_with_unknown_status(download)
+        download
+        |> enrich_download_with_unknown_status()
+        |> with_client_state(:present)
 
-      nil ->
-        # The client referenced by the download isn't configured at all (deleted,
-        # renamed, or never existed) — treat as genuinely missing.
+      :no_client_assigned ->
+        # A grab record that never reached a client. `list_stale_grabs/1`
+        # owns these; classification has nothing to say about them.
         enrich_download_with_empty_status(download)
+
+      config_state when config_state in [:disabled, :removed] ->
+        adopt_or_orphan(download, client_statuses, client_types, config_state)
     end
+  end
+
+  # Distinguishes the three ways a download's client can fail to appear in the
+  # poll results. `:removed` and `:disabled` used to collapse into one branch,
+  # which is why a disabled client produced "removed from download client".
+  defp classify_client(nil, _client_statuses, _configured_names), do: :no_client_assigned
+
+  defp classify_client(client_name, client_statuses, configured_names) do
+    case Map.get(client_statuses, client_name) do
+      {:reachable, _torrents} = reachable -> reachable
+      :unreachable -> :unreachable
+      nil -> if MapSet.member?(configured_names, client_name), do: :disabled, else: :removed
+    end
+  end
+
+  # A download whose client is gone or switched off. If exactly one reachable
+  # torrent client holds this torrent, the download is alive under a new client
+  # name: report the real torrent status so the UI shows genuine progress, and
+  # flag the candidate for `DownloadMonitor` to persist. Otherwise it is a true
+  # orphan.
+  defp adopt_or_orphan(download, client_statuses, client_types, config_state) do
+    case ClientAdoption.find_claimant(download.download_client_id, client_statuses, client_types) do
+      {:ok, claimant} ->
+        {:reachable, torrents} = Map.fetch!(client_statuses, claimant)
+        torrent_status = Map.fetch!(torrents, download.download_client_id)
+
+        download
+        |> enrich_download_with_torrent_status(torrent_status)
+        |> with_client_state(config_state)
+        |> Map.put(:adoptable_client, claimant)
+
+      :none ->
+        download
+        |> enrich_download_with_empty_status()
+        |> with_client_state(config_state)
+    end
+  end
+
+  defp with_client_state(%EnrichedDownload{} = enriched, config_state) do
+    %{enriched | client_config_state: config_state}
   end
 
   defp enrich_download_with_torrent_status(download, torrent_status) do
