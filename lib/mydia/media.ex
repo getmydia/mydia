@@ -1083,10 +1083,11 @@ defmodule Mydia.Media do
   @doc """
   Re-fetches metadata from the provider and updates the media item.
 
-  Determines the provider (TVDB/TMDB) from the media item's IDs,
-  fetches fresh metadata via `Metadata.fetch_by_id/3` (uncached),
-  and updates the media item's metadata field. For TV shows, also
-  refreshes episodes.
+  Delegates to `Mydia.Media.Refresh.run/2`, which owns provider resolution,
+  the attribute writes, episode refresh and NFO regeneration.
+
+  The second argument is a bare config map rather than a keyword list, for
+  backwards compatibility with existing callers.
 
   ## Returns
     - `{:ok, media_item}` - Updated media item
@@ -1095,65 +1096,8 @@ defmodule Mydia.Media do
   @spec refresh_metadata(MediaItem.t(), map() | nil) ::
           {:ok, MediaItem.t()} | {:error, term()}
   def refresh_metadata(%MediaItem{} = media_item, config \\ nil) do
-    alias Mydia.Metadata
-
-    config = config || Metadata.default_relay_config()
-    media_type = if media_item.type == "tv_show", do: :tv_show, else: :movie
-
-    {provider_id, provider_source} = refresh_provider_preference(media_item)
-
-    if is_nil(provider_id) do
-      {:error, :missing_provider_id}
-    else
-      fetch_opts = [
-        media_type: media_type,
-        provider: provider_source,
-        append_to_response: ["credits", "images", "videos", "keywords"]
-      ]
-
-      case Metadata.fetch_by_id(config, provider_id, fetch_opts) do
-        {:ok, full_metadata} ->
-          attrs = %{metadata: full_metadata}
-
-          case update_media_item(media_item, attrs, reason: "Metadata refreshed from provider") do
-            {:ok, updated_item} = result ->
-              # Regenerate NFO files if enabled for any library path
-              Mydia.Metadata.NfoWriter.maybe_write_nfos(updated_item)
-              result
-
-            error ->
-              error
-          end
-
-        {:error, reason} ->
-          Logger.warning("Failed to refresh metadata for #{media_item.title}: #{inspect(reason)}")
-          {:error, reason}
-      end
-    end
+    Mydia.Media.Refresh.run(media_item, config: config)
   end
-
-  # Resolve the `{provider_id, provider_source}` a refresh should fetch from.
-  #
-  # `metadata_source` is the authoritative provenance recorded when an item was
-  # matched under per-library provider selection, so it wins even when a
-  # back-filled id for the other provider is also present (e.g. a TMDB-sourced
-  # show that carries a discovered `tvdb_id`). Only when it is absent do we fall
-  # back to the legacy TVDB-precedence rule (prefer `tvdb_id`, then `tmdb_id`).
-  defp refresh_provider_preference(%MediaItem{metadata_source: :tmdb, tmdb_id: tmdb_id})
-       when not is_nil(tmdb_id),
-       do: {to_string(tmdb_id), :tmdb}
-
-  defp refresh_provider_preference(%MediaItem{metadata_source: :tvdb, tvdb_id: tvdb_id})
-       when not is_nil(tvdb_id),
-       do: {to_string(tvdb_id), :tvdb}
-
-  defp refresh_provider_preference(%MediaItem{tvdb_id: tvdb_id}) when not is_nil(tvdb_id),
-    do: {to_string(tvdb_id), :tvdb}
-
-  defp refresh_provider_preference(%MediaItem{tmdb_id: tmdb_id}) when not is_nil(tmdb_id),
-    do: {to_string(tmdb_id), :tmdb}
-
-  defp refresh_provider_preference(%MediaItem{}), do: {nil, nil}
 
   @doc """
   Refreshes episodes for a TV show by fetching metadata and creating missing episodes.
@@ -1193,16 +1137,15 @@ defmodule Mydia.Media do
     # Resolve the provider to fetch from. `metadata_source` (when set) is the
     # authoritative provenance; only fall back to the legacy TVDB-precedence
     # rule and the stored metadata provider_id when it is absent.
+    # Refresh.resolve_provider/1 already includes the stored-metadata fallback,
+    # reading struct fields rather than string keys. (The old fallback here
+    # matched %{"provider_id" => id} against an atom-keyed %MediaMetadata{} and
+    # could never fire.) It returns an integer id; this function threads
+    # provider ids as strings.
     {provider_id, provider_source} =
-      case refresh_provider_preference(media_item) do
-        {nil, nil} ->
-          case media_item.metadata do
-            %{"provider_id" => id} when is_binary(id) -> {id, :tmdb}
-            _ -> {nil, nil}
-          end
-
-        pair ->
-          pair
+      case Mydia.Media.Refresh.resolve_provider(media_item) do
+        {nil, nil} -> {nil, nil}
+        {id, source} -> {to_string(id), source}
       end
 
     # If we have a TMDB ID but no TVDB ID, try to discover the TVDB ID so we can
@@ -2091,13 +2034,17 @@ defmodule Mydia.Media do
 
   For TV shows, searches TVDB and stores tvdb_id. For movies, searches TMDB and stores tmdb_id.
 
+  Pass `config` to reuse a caller's relay config; it defaults to
+  `Metadata.default_relay_config/0`. A caller running against a specific relay
+  must not have its recovery search silently fall back to the global default.
+
   Returns {:ok, provider_id, updated_media_item} or {:error, reason}
   """
-  @spec recover_provider_id_by_title(MediaItem.t(), atom()) ::
+  @spec recover_provider_id_by_title(MediaItem.t(), atom(), map() | nil) ::
           {:ok, integer(), MediaItem.t()} | {:error, term()}
-  def recover_provider_id_by_title(%MediaItem{} = media_item, media_type) do
+  def recover_provider_id_by_title(%MediaItem{} = media_item, media_type, config \\ nil) do
     alias Mydia.Metadata
-    config = Metadata.default_relay_config()
+    config = config || Metadata.default_relay_config()
     do_recover_provider_id_by_title(media_item, media_type, config)
   end
 
