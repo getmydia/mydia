@@ -111,7 +111,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
 
       assert {:ok, results} = result
       assert is_list(results)
-      assert length(results) > 0, "Expected at least one parsed result"
+      assert results != [], "Expected at least one parsed result"
     end
 
     test "extracts title from href attribute", %{html: html} do
@@ -123,7 +123,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
 
       # Extract title link
       title_links = Floki.find(first_row, "div.tt-name > a[href^=\"/\"]")
-      assert length(title_links) > 0, "Should find title link in row"
+      assert title_links != [], "Should find title link in row"
 
       # Get href attribute
       [href | _] = Floki.attribute(title_links, "href")
@@ -138,7 +138,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
       [first_row | _] = rows
 
       size_cells = Floki.find(first_row, "td:nth-child(3)")
-      assert length(size_cells) > 0, "Should find size cell"
+      assert size_cells != [], "Should find size cell"
 
       size_text = Floki.text(size_cells) |> String.trim()
 
@@ -154,7 +154,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
       [first_row | _] = rows
 
       seeder_cells = Floki.find(first_row, ".tdseed")
-      assert length(seeder_cells) > 0, "Should find seeder cell"
+      assert seeder_cells != [], "Should find seeder cell"
 
       seeder_text = Floki.text(seeder_cells) |> String.trim() |> String.replace(",", "")
 
@@ -219,7 +219,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
       [first_row | _] = rows
 
       title_links = Floki.find(first_row, "td:nth-child(2) a:last-of-type")
-      assert length(title_links) > 0, "Should find title link"
+      assert title_links != [], "Should find title link"
 
       title_text = Floki.text(title_links) |> String.trim()
       assert String.length(title_text) > 0, "Title should not be empty"
@@ -232,7 +232,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
       [first_row | _] = rows
 
       magnet_links = Floki.find(first_row, "td:nth-child(3) a[href^=\"magnet:?\"]")
-      assert length(magnet_links) > 0, "Should find magnet link"
+      assert magnet_links != [], "Should find magnet link"
 
       [href | _] = Floki.attribute(magnet_links, "href")
       assert String.starts_with?(href, "magnet:?"), "Should be a magnet link"
@@ -283,7 +283,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
       result = CardigannResultParser.parse_results(definition, response, "Nyaa")
 
       assert {:ok, results} = result
-      assert length(results) > 0, "Should have parsed results"
+      assert results != [], "Should have parsed results"
 
       # Check first result has magnet link as download
       [first | _] = results
@@ -341,15 +341,15 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
       {:ok, document} = Floki.parse_document(html)
       rows = Floki.find(document, "tr[name='hover'].forum_header_border")
 
-      if length(rows) > 0 do
+      if rows != [] do
         [first_row | _] = rows
 
         title_links = Floki.find(first_row, "td:nth-child(2) a")
-        assert length(title_links) > 0, "Should find title link"
+        assert title_links != [], "Should find title link"
 
         titles = Floki.attribute(title_links, "title")
 
-        if length(titles) > 0 do
+        if titles != [] do
           [title | _] = titles
           assert String.length(title) > 0, "Title should not be empty"
           # EZTV titles typically contain show name and quality info
@@ -565,7 +565,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
           {:ok, results} =
             CardigannResultParser.parse_results(definition, response, "LimeTorrents")
 
-          assert length(results) > 0, "Should find results from live site"
+          assert results != [], "Should find results from live site"
 
         {:ok, %{status: status}} ->
           flunk("Got unexpected status #{status} from LimeTorrents")
@@ -605,7 +605,7 @@ defmodule Mydia.Indexers.CardigannHtmlFixtureTest do
 
           {:ok, results} = CardigannResultParser.parse_results(definition, response, "Nyaa")
 
-          assert length(results) > 0, "Should find results from live site"
+          assert results != [], "Should find results from live site"
 
         {:ok, %{status: status}} ->
           flunk("Got unexpected status #{status} from Nyaa")

@@ -89,7 +89,7 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
 
       assert {:ok, results} = Prowlarr.search(config, "ubuntu", limit: 5)
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       # Check first result has required fields
       result = hd(results)
@@ -169,7 +169,7 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
       assert %{searching: searching, categories: categories} = capabilities
       assert is_map(searching)
       assert is_list(categories)
-      assert length(categories) > 0
+      refute Enum.empty?(categories)
 
       # Check standard search capabilities
       assert searching.search.available == true

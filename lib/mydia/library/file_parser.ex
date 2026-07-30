@@ -578,7 +578,7 @@ defmodule Mydia.Library.FileParser do
       base_confidence
       |> add_confidence(title != nil && String.length(title) > 0, 0.15)
       |> add_confidence(season != nil, 0.1)
-      |> add_confidence(episodes != nil && length(episodes) > 0, 0.1)
+      |> add_confidence(episodes != nil && episodes != [], 0.1)
       |> add_confidence(quality.resolution != nil, 0.05)
 
     min(confidence, 1.0)

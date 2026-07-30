@@ -82,7 +82,7 @@ defmodule Mydia.Indexers.CardigannGoldenDefinitionsTest do
                      "Missing :seeders field"
 
               # Verify search paths exist
-              assert length(parsed.search.paths) > 0,
+              assert parsed.search.paths != [],
                      "No search paths configured"
 
               # Verify rows selector exists

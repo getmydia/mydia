@@ -2,8 +2,23 @@ targets:
   $default:
     builders:
       riverpod_generator:
+        # Scope the generator to hand-written sources only. A bare
+        # `lib/**/*.dart` also matches generated output — riverpod's own
+        # `*.g.dart`, freezed's `*.freezed.dart`, the flutter_rust_bridge
+        # bindings under lib/native/, and graphql_codegen's
+        # lib/graphql/generated/ — which feeds a generator its own outputs as
+        # inputs. That produced an endless "Starting build #N with updated
+        # builders" rebuild loop on macOS CI (Linux and Windows happened to
+        # survive it), which only surfaced once the frb bindings were
+        # regenerated for 2.12.0.
         generate_for:
-          - lib/**/*.dart
+          include:
+            - lib/**/*.dart
+          exclude:
+            - lib/native/**
+            - lib/graphql/generated/**
+            - lib/**/*.g.dart
+            - lib/**/*.freezed.dart
         options:
           # Riverpod generator options
 

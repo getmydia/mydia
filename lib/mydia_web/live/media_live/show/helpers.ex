@@ -14,13 +14,13 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
 
   def has_media_files?(media_item) do
     # Check if media item has any files (movie files or episode files)
-    movie_files = length(media_item.media_files || []) > 0
+    movie_files = (media_item.media_files || []) != []
 
     episode_files =
       case media_item.type do
         "tv_show" ->
           media_item.episodes
-          |> Enum.any?(fn episode -> length(episode.media_files || []) > 0 end)
+          |> Enum.any?(fn episode -> (episode.media_files || []) != [] end)
 
         _ ->
           false

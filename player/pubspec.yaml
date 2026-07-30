@@ -36,15 +36,15 @@ dependencies:
   crypto: ^3.0.3
   cryptography: ^2.9.0
   uuid: ^4.5.1
-  connectivity_plus: ^6.0.0
-  device_info_plus: ^12.3.0
-  package_info_plus: ^9.0.0
+  connectivity_plus: ^7.3.1
+  device_info_plus: ^13.2.0
+  package_info_plus: ^10.2.1
   mobile_scanner: ^7.0.1
   url_launcher: ^6.3.0
   flutter_rust_bridge: ^2.0.0
   mydia_player_p2p:
     path: rust_builder
-  flutter_foreground_task: ^9.2.0
+  flutter_foreground_task: ^10.0.0
   hive_ce: ^2.16.0
   hive_ce_flutter: ^2.3.4
   freezed_annotation: ^3.1.0

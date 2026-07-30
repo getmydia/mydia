@@ -19,12 +19,16 @@
         targets = [ "wasm32-wasip2" ];
       };
 
-      # Fine package (needed for lazy_html)
-      fineVersion = "0.1.4";
+      # Fine package (needed for lazy_html). Keep in lockstep with mix.lock's
+      # `fine` entry — lazy_html's C++ NIF build copies this source tree to
+      # /build/fine-${fineVersion} so its Makefile can find fine.hpp there; a
+      # stale version here silently breaks the sandbox build (the compiler
+      # looks for /build/fine-<mix.lock version>/c_include/fine.hpp).
+      fineVersion = "0.1.6";
       fineSrc = beamPackages.fetchHex {
         pkg = "fine";
         version = fineVersion;
-        sha256 = "be3324cc454a42d80951cf6023b9954e9ff27c6daa255483b3e8d608670303f5";
+        sha256 = "5638eb4495488e885ebec167fa57973e5c35e1a50c344eb7666c90ec1c4e3b12";
       };
 
       # Pre-fetch Rust/Cargo dependencies for the p2p NIF (required for sandbox build).
@@ -167,12 +171,12 @@
       # Pre-fetch npm dependencies (required for sandbox build)
       npmDeps = pkgs.fetchNpmDeps {
         src = ../../assets;
-        hash = "sha256-hkcy/pcrWC8dtDwx+9wmHPAiI3rT9eZTQfIxafkztos=";
+        hash = "sha256-DhOg4p37GgILp0IzzgqyoiyTBx6saHz6j4624/+Smj4=";
       };
 
       # Tailwind CSS v4 binary (not yet in nixpkgs)
       # Needs to be patched for NixOS
-      tailwindVersion = "4.1.7";
+      tailwindVersion = "4.3.3";
       tailwindBinaryName = {
         "x86_64-linux" = "tailwindcss-linux-x64";
         "aarch64-linux" = "tailwindcss-linux-arm64";
@@ -180,7 +184,7 @@
         "aarch64-darwin" = "tailwindcss-macos-arm64";
       }.${system} or "tailwindcss-linux-x64";
       tailwindBinaryHash = {
-        "x86_64-linux" = "sha256-BwYpKTWpdzxsh54X0jYlMi5EkOfo96CtDmiPquTe+YE=";
+        "x86_64-linux" = "sha256-c3vs+NStERXqmN9p+pQCbUAsqP65EwagNbWwBBZ9qN0=";
         "aarch64-linux" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
         "x86_64-darwin" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
         "aarch64-darwin" = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -195,12 +199,26 @@
         version = tailwindVersion;
         src = tailwindcss_4_src;
         dontUnpack = true;
-        nativeBuildInputs = [ pkgs.autoPatchelfHook ];
+        # Tailwind v4's standalone binary is a bun single-file executable: the Bun
+        # runtime with the JS payload appended past the ELF sections. stdenv's
+        # default fixupPhase strip discards that payload, leaving a binary that
+        # runs as bare Bun and silently emits an EMPTY stylesheet — the package
+        # builds fine and the app boots with no CSS at all. Never strip it.
+        dontStrip = true;
+        nativeBuildInputs = [ pkgs.autoPatchelfHook pkgs.makeWrapper ];
         buildInputs = [ pkgs.stdenv.cc.cc.lib ];
         installPhase = ''
           mkdir -p $out/bin
           cp $src $out/bin/tailwindcss
           chmod +x $out/bin/tailwindcss
+        '';
+        # bun unpacks the bundled @parcel/watcher native addon to /$bunfs/root/
+        # at RUNTIME, so autoPatchelfHook cannot reach it — it does not exist at
+        # build time. Without libstdc++ on the loader path the addon fails with
+        # ERR_DLOPEN_FAILED. Wrap rather than patch.
+        postFixup = ''
+          wrapProgram $out/bin/tailwindcss \
+            --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.cc.cc.lib}/lib
         '';
       };
 
@@ -314,9 +332,14 @@
 
             # Link platform-specific binaries for esbuild and tailwind
             # Use tailwindcss v4 binary (patched for NixOS)
+            # The tailwind mix installer (>= 0.5) embeds the configured
+            # version in the expected binary path (tailwind-<target>-<version>),
+            # so the symlink name must include it or install_and_run/2 thinks
+            # the binary is missing and tries to fetch it over the network,
+            # which fails in the sandboxed build.
             mkdir -p _build
             ln -sf ${pkgs.esbuild}/bin/esbuild _build/esbuild-${platformSuffix}
-            ln -sf ${tailwindcss_4}/bin/tailwindcss _build/tailwind-${platformSuffix}
+            ln -sf ${tailwindcss_4}/bin/tailwindcss _build/tailwind-${platformSuffix}-${tailwindVersion}
 
             # Build assets (use --no-deps-check to skip lock verification for Nix-managed deps)
             export MIX_ENV=prod

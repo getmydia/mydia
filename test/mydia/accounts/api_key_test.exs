@@ -71,7 +71,7 @@ defmodule Mydia.Accounts.ApiKeyTest do
 
       assert {:error, changeset} = Accounts.create_api_key(user.id, attrs)
       errors = errors_on(changeset).permissions
-      assert length(errors) > 0
+      assert errors != []
       assert hd(errors) =~ "contains invalid permissions"
     end
   end

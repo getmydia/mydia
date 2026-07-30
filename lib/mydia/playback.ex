@@ -398,7 +398,7 @@ defmodule Mydia.Playback do
       |> Repo.all()
 
     # Filter out episodes without media files
-    episodes_with_files = Enum.filter(episodes, fn ep -> length(ep.media_files) > 0 end)
+    episodes_with_files = Enum.filter(episodes, fn ep -> ep.media_files != [] end)
 
     if Enum.empty?(episodes_with_files) do
       nil

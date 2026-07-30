@@ -617,7 +617,7 @@ defmodule Mydia.Downloads.Client.Rtorrent do
     # Each element could be a simple value or another array (for d.multicall results)
     inner_array = xpath(element, ~x"./array/data/value"el)
 
-    if inner_array && length(inner_array) > 0 do
+    if inner_array && inner_array != [] do
       # This is a nested array (like from d.multicall)
       Enum.map(inner_array, fn inner_elem ->
         extract_simple_value(inner_elem)

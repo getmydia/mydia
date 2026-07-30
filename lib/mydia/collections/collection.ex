@@ -148,7 +148,7 @@ defmodule Mydia.Collections.Collection do
       {:ok, decoded} ->
         conditions = Map.get(decoded, "conditions", [])
 
-        if is_list(conditions) && length(conditions) > 0 do
+        if is_list(conditions) && conditions != [] do
           changeset
         else
           add_error(

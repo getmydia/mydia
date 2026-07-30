@@ -355,7 +355,7 @@ defmodule Mydia.Library.ReleaseParser do
     base
     |> add(title != nil and byte_size(title) > 0, 0.15)
     |> add(season != nil, 0.1)
-    |> add(episodes != nil and episodes != [] and length(episodes) > 0, 0.1)
+    |> add(episodes != nil and episodes != [], 0.1)
     |> add(quality.resolution != nil, 0.05)
     |> min_clamp(1.0)
   end

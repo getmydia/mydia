@@ -240,7 +240,7 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       response = json_response(conn, 200)
 
       assert is_list(response["candidates"])
-      assert length(response["candidates"]) >= 1
+      assert response["candidates"] != []
 
       # First candidate should be DIRECT_PLAY for compatible file
       first_candidate = List.first(response["candidates"])
@@ -291,7 +291,7 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       response = json_response(conn, 200)
 
       assert is_list(response["candidates"])
-      assert length(response["candidates"]) >= 1
+      assert response["candidates"] != []
 
       # Should have HLS_COPY candidates for native HEVC support (Safari)
       # and TRANSCODE fallback
@@ -304,7 +304,7 @@ defmodule MydiaWeb.Api.StreamControllerTest do
           c["video_codec"] && String.starts_with?(c["video_codec"], "hvc1")
         end)
 
-      assert length(hevc_candidates) >= 1
+      assert hevc_candidates != []
 
       # Transcode candidate should have H.264
       transcode_candidate = Enum.find(response["candidates"], &(&1["strategy"] == "TRANSCODE"))

@@ -23,9 +23,32 @@ defmodule Mydia.Jobs.DownloadMonitor do
     max_attempts: 5,
     # Prevent two DownloadMonitor passes from running back-to-back — the cron
     # plugin and the adaptive fast-followup chain (see end of `perform/1`)
-    # could otherwise stack up if a tick is slower than the followup
-    # interval. The period covers ~one cron interval.
-    unique: [period: 120, states: [:available, :scheduled]]
+    # could otherwise stack up if a tick is slower than the followup interval.
+    # The period covers ~one cron interval.
+    #
+    # `:incomplete` is Oban's named group for every pre-completion state
+    # (`:suspended, :available, :scheduled, :executing, :retryable`) — the
+    # form Oban 2.23 itself recommends ("use a unique group like :incomplete")
+    # instead of a literal `:states` list, which now warns at compile time
+    # (a hard failure under --warnings-as-errors) when it's missing a state.
+    #
+    # A plain cron tick and a fast-followup insert are never each other's
+    # duplicate regardless of state: `:fields` isn't overridden here, so
+    # uniqueness is keyed on the default `[:args, :queue, :worker]`, and
+    # `maybe_schedule_fast_followup/2` inserts with a distinct
+    # `"fast_chain_position"` arg the parent tick's own args don't carry (see
+    # DownloadMonitorFastFollowupTest, which asserts a followup inserted while
+    # its parent is still :executing is not flagged as a conflict). So
+    # `:executing` doesn't need excluding for the chain to work.
+    #
+    # `:incomplete` does introduce one real behavior change over the previous
+    # narrower list: a cron tick currently sitting in `:retryable` (backing
+    # off after a failure) now blocks a new cron-triggered insert with the
+    # same (empty) args, where it previously didn't. That's the intended
+    # effect — two monitor passes racing is exactly what this config exists
+    # to prevent — and Oban still retries the backed-off job on its own
+    # schedule once the backoff elapses.
+    unique: [period: 120, states: :incomplete]
 
   require Logger
   alias Mydia.Downloads

@@ -891,7 +891,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       downloads =
         Mydia.Repo.all(from(d in Mydia.Downloads.Download, where: d.episode_id == ^episode.id))
 
-      if length(downloads) > 0 do
+      if downloads != [] do
         download = hd(downloads)
         assert String.contains?(download.title, "S01E01-E03")
       end

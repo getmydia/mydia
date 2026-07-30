@@ -152,7 +152,7 @@ defmodule MydiaWeb.Schema.ApiKeyTest do
       result = run_query(@create_api_key_mutation, variables, user)
 
       assert {:ok, %{errors: errors}} = result
-      assert length(errors) > 0
+      assert errors != []
     end
   end
 

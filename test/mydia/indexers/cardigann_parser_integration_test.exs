@@ -32,7 +32,7 @@ defmodule Mydia.Indexers.CardigannParserIntegrationTest do
         assert is_binary(parsed.language)
         assert parsed.type in ["public", "private", "semi-private"]
         assert is_list(parsed.links)
-        assert length(parsed.links) > 0
+        assert parsed.links != []
 
         # Validate capabilities
         assert is_map(parsed.capabilities)
@@ -42,7 +42,7 @@ defmodule Mydia.Indexers.CardigannParserIntegrationTest do
         # Validate search configuration
         assert is_map(parsed.search)
         assert is_list(parsed.search.paths)
-        assert length(parsed.search.paths) > 0
+        assert parsed.search.paths != []
         assert is_map(parsed.search.fields)
 
         # Validate required search fields are present

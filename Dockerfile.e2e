@@ -13,7 +13,10 @@
 # ============================================
 # Build Stage
 # ============================================
-FROM elixir:1.18-alpine AS builder
+# KEEP IN SYNC with Dockerfile's builder stage and devenv.nix. This image is what
+# ci-player-e2e.yml validates the player against, so a BEAM older than production's
+# means the player is exercised on a runtime it never ships on.
+FROM elixir:1.19-alpine AS builder
 
 # Database type: sqlite (for E2E we always use sqlite)
 ARG DATABASE_TYPE=sqlite
@@ -126,7 +129,10 @@ RUN --mount=type=cache,id=mydia-hex,target=/root/.hex \
 # ============================================
 # Runtime Stage
 # ============================================
-FROM erlang:27-alpine
+# KEEP IN SYNC with Dockerfile's runtime stage (erlang:28-alpine). The release
+# built above by elixir:1.19-alpine targets OTP 28; running it on OTP 27 would
+# mean the E2E suite validates a different runtime than production uses.
+FROM erlang:28-alpine
 
 ARG DATABASE_TYPE=sqlite
 

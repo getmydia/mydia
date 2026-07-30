@@ -76,7 +76,7 @@ defmodule Mydia.CrashReporter.QueueTest do
 
       entries = Queue.list_all()
 
-      if length(entries) > 0 do
+      if entries != [] do
         entry = hd(entries)
         assert Map.has_key?(entry, :id)
         assert Map.has_key?(entry, :report)
@@ -165,7 +165,7 @@ defmodule Mydia.CrashReporter.QueueTest do
       # Report should still be in queue (failed, waiting for retry)
       entries = Queue.list_all()
 
-      if length(entries) > 0 do
+      if entries != [] do
         entry = hd(entries)
         # Should have attempted at least once
         assert entry.retries >= 0
@@ -180,7 +180,7 @@ defmodule Mydia.CrashReporter.QueueTest do
 
       entries = Queue.list_all()
 
-      if length(entries) > 0 do
+      if entries != [] do
         entry = hd(entries)
 
         # Verify all required fields exist

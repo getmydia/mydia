@@ -113,7 +113,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
         has_files =
           Enum.any?(season_episodes, fn ep ->
             files = Library.get_media_files_for_episode(ep.id)
-            length(files) > 0
+            files != []
           end)
 
         # Count aired episodes (air_date is in the past)
@@ -257,7 +257,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
           {:ok, term()} | {:error, term()}
   def resolve_has_file(%{id: episode_id}, _args, _info) do
     files = Library.get_media_files_for_episode(episode_id)
-    {:ok, length(files) > 0}
+    {:ok, files != []}
   end
 
   @spec resolve_parent_show(map(), map(), Absinthe.Resolution.t()) ::

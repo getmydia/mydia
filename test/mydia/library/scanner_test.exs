@@ -119,7 +119,7 @@ defmodule Mydia.Library.ScannerTest do
       {:ok, result} = Scanner.scan(tmp_dir)
 
       # Should find the file through the symlink (and potentially the real path)
-      assert length(result.files) >= 1
+      assert result.files != []
       assert Enum.any?(result.files, &String.contains?(&1.path, "movie.mkv"))
     end
 
@@ -160,7 +160,7 @@ defmodule Mydia.Library.ScannerTest do
       File.chmod!(restricted_dir, 0o755)
 
       # Should complete scan but log errors
-      assert length(result.errors) > 0
+      assert result.errors != []
       assert Enum.any?(result.errors, &(&1.type == :directory_read_error))
     end
 

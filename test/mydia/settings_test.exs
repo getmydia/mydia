@@ -82,7 +82,7 @@ defmodule Mydia.SettingsTest do
       any_profile = Settings.get_quality_profile_by_name("Any")
       assert any_profile.name == "Any"
       assert is_list(any_profile.quality_standards.preferred_resolutions)
-      assert length(any_profile.quality_standards.preferred_resolutions) > 0
+      assert any_profile.quality_standards.preferred_resolutions != []
       assert is_boolean(any_profile.upgrades_allowed)
       assert is_binary(any_profile.description)
 
@@ -185,7 +185,7 @@ defmodule Mydia.SettingsTest do
 
       Enum.each(profiles, fn profile ->
         assert is_list(profile.quality_standards.preferred_resolutions)
-        assert length(profile.quality_standards.preferred_resolutions) > 0
+        assert profile.quality_standards.preferred_resolutions != []
 
         # All quality strings should be valid resolutions
         valid_resolutions = ["360p", "480p", "576p", "720p", "1080p", "2160p"]
@@ -919,7 +919,7 @@ defmodule Mydia.SettingsTest do
     test "list_quality_profiles with is_system filter", %{profile: _profile} do
       # List user profiles
       user_profiles = Settings.list_quality_profiles(is_system: false)
-      assert length(user_profiles) >= 1
+      assert user_profiles != []
       assert Enum.all?(user_profiles, &(&1.is_system == false))
 
       # List system profiles (default profiles have is_system: false by default)
@@ -942,7 +942,7 @@ defmodule Mydia.SettingsTest do
       assert Enum.all?(v1_profiles, &(&1.version == 1))
 
       v2_profiles = Settings.list_quality_profiles(version: 2)
-      assert length(v2_profiles) >= 1
+      assert v2_profiles != []
       assert Enum.all?(v2_profiles, &(&1.version == 2))
     end
 
@@ -1419,7 +1419,7 @@ defmodule Mydia.SettingsTest do
       result = QualityProfile.score_media_file(profile, below_min)
 
       assert result.score == 0.0
-      assert length(result.violations) > 0
+      assert result.violations != []
       assert Enum.any?(result.violations, &String.contains?(&1, "below minimum"))
     end
 
@@ -1441,7 +1441,7 @@ defmodule Mydia.SettingsTest do
       result = QualityProfile.score_media_file(hdr_profile, no_hdr)
 
       assert result.score == 0.0
-      assert length(result.violations) > 0
+      assert result.violations != []
       assert Enum.any?(result.violations, &String.contains?(&1, "HDR is required"))
     end
 

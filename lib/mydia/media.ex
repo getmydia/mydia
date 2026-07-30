@@ -1017,10 +1017,10 @@ defmodule Mydia.Media do
   end
 
   def get_media_status(%MediaItem{type: "movie"} = media_item) do
-    has_files = length(media_item.media_files) > 0
+    has_files = media_item.media_files != []
 
     has_downloads =
-      length(media_item.downloads) > 0 &&
+      media_item.downloads != [] &&
         Enum.any?(media_item.downloads, &download_active?/1)
 
     status =
@@ -1036,7 +1036,7 @@ defmodule Mydia.Media do
   def get_media_status(%MediaItem{type: "tv_show", monitored: false, episodes: episodes}) do
     # For non-monitored TV shows, still show episode counts
     total_episodes = length(episodes)
-    downloaded_count = Enum.count(episodes, fn ep -> length(ep.media_files) > 0 end)
+    downloaded_count = Enum.count(episodes, fn ep -> ep.media_files != [] end)
 
     {:not_monitored, %{downloaded: downloaded_count, total: total_episodes}}
   end
@@ -1048,12 +1048,12 @@ defmodule Mydia.Media do
     if total_monitored == 0 do
       # No monitored episodes - show all episodes count instead
       total_episodes = length(episodes)
-      downloaded_count = Enum.count(episodes, fn ep -> length(ep.media_files) > 0 end)
+      downloaded_count = Enum.count(episodes, fn ep -> ep.media_files != [] end)
       {:not_monitored, %{downloaded: downloaded_count, total: total_episodes}}
     else
       downloaded_count =
         monitored_episodes
-        |> Enum.count(fn ep -> length(ep.media_files) > 0 end)
+        |> Enum.count(fn ep -> ep.media_files != [] end)
 
       has_active_downloads =
         monitored_episodes

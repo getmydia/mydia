@@ -8,7 +8,7 @@ defmodule Mydia.Settings.QualityProfilePresetsTest do
       presets = QualityProfilePresets.list_presets()
 
       assert is_list(presets)
-      assert length(presets) > 0
+      refute Enum.empty?(presets)
 
       # Verify preset structure
       first_preset = List.first(presets)
@@ -29,7 +29,7 @@ defmodule Mydia.Settings.QualityProfilePresetsTest do
         assert Map.has_key?(preset.profile_data, :upgrades_allowed)
         assert Map.has_key?(preset.profile_data, :quality_standards)
         assert is_list(preset.profile_data.quality_standards.preferred_resolutions)
-        assert length(preset.profile_data.quality_standards.preferred_resolutions) > 0
+        assert preset.profile_data.quality_standards.preferred_resolutions != []
       end
     end
 
@@ -112,7 +112,7 @@ defmodule Mydia.Settings.QualityProfilePresetsTest do
 
       assert is_list(presets)
       assert Enum.all?(presets, fn preset -> "4k" in preset.tags end)
-      assert length(presets) > 0
+      assert presets != []
     end
 
     test "filters presets by multiple tags (OR logic)" do
@@ -124,7 +124,7 @@ defmodule Mydia.Settings.QualityProfilePresetsTest do
                "4k" in preset.tags or "hdr" in preset.tags
              end)
 
-      assert length(presets) > 0
+      assert presets != []
     end
 
     test "returns empty list for non-existent tag" do
@@ -218,7 +218,7 @@ defmodule Mydia.Settings.QualityProfilePresetsTest do
         # 4K presets should specify HDR formats
         assert Map.has_key?(standards, :hdr_formats)
         assert is_list(standards.hdr_formats)
-        assert length(standards.hdr_formats) > 0
+        assert standards.hdr_formats != []
       end
     end
   end
@@ -247,7 +247,7 @@ defmodule Mydia.Settings.QualityProfilePresetsTest do
 
       for preset <- presets do
         assert is_list(preset.tags)
-        assert length(preset.tags) > 0
+        assert preset.tags != []
         assert Enum.all?(preset.tags, &is_binary/1)
       end
     end

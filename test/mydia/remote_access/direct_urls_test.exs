@@ -86,7 +86,7 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
       urls = DirectUrls.detect_all()
 
       assert is_list(urls)
-      assert length(urls) > 0
+      assert urls != []
     end
 
     test "includes external URL when configured" do

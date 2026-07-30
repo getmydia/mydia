@@ -965,7 +965,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
 
       result = QualityProfile.score_media_file(profile, media_attrs)
 
-      assert length(result.violations) > 0
+      assert result.violations != []
       assert result.score == 0.0
     end
   end
@@ -1028,7 +1028,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
 
       result = QualityProfile.score_media_file(profile, media_attrs)
 
-      assert length(result.violations) > 0
+      assert result.violations != []
       assert result.score == 0.0
     end
   end

@@ -44,7 +44,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
 
       # Verify URLs were detected and stored
       assert is_list(config.direct_urls)
-      assert length(config.direct_urls) > 0
+      assert config.direct_urls != []
 
       # All URLs should be sslip.io URLs (no external URLs configured)
       # HTTP is the default scheme for auto-detected URLs
@@ -182,7 +182,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
       # Detect URLs
       direct_urls = Mydia.RemoteAccess.DirectUrls.detect_all()
       assert is_list(direct_urls)
-      assert length(direct_urls) > 0
+      assert direct_urls != []
 
       # Generate certificate and get fingerprint
       {:ok, _cert_path, _key_path, fingerprint} =

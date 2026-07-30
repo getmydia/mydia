@@ -102,7 +102,7 @@ defmodule Mydia.LibraryItem.Book do
       "epub" in formats -> "EPUB"
       "pdf" in formats -> "PDF"
       "mobi" in formats -> "MOBI"
-      length(formats) > 0 -> String.upcase(hd(formats))
+      formats != [] -> String.upcase(hd(formats))
       true -> nil
     end
   end
@@ -131,7 +131,7 @@ defmodule Mydia.LibraryItem.Book do
   end
 
   defp has_book_files?(%Mydia.Books.Book{book_files: files}) when is_list(files),
-    do: length(files) > 0
+    do: files != []
 
   defp has_book_files?(_), do: false
 

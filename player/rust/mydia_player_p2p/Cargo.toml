@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-flutter_rust_bridge = "=2.11.1"
+flutter_rust_bridge = "=2.12.0"
 mydia_p2p_core = { path = "../../../native/mydia_p2p_core" }
 tokio = { version = "1.49", features = ["full"] }
 anyhow = "1.0"
