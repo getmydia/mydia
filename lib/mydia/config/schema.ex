@@ -186,7 +186,7 @@ defmodule Mydia.Config.Schema do
       field :path, :string
       field :type, Ecto.Enum, values: [:movies, :series, :mixed, :music, :books, :adult]
       field :monitored, :boolean, default: true
-      field :scan_interval, :integer, default: 3600
+      field :scan_interval, :integer
       field :quality_profile_id, :integer
     end
 
@@ -520,7 +520,7 @@ defmodule Mydia.Config.Schema do
     ])
     |> validate_required([:path, :type])
     |> validate_inclusion(:type, [:movies, :series, :mixed, :music, :books, :adult])
-    |> validate_number(:scan_interval, greater_than: 0)
+    |> validate_number(:scan_interval, greater_than_or_equal_to: 900)
     |> validate_number(:quality_profile_id, greater_than: 0)
   end
 

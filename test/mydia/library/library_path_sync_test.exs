@@ -46,6 +46,13 @@ defmodule Mydia.Library.LibraryPathSyncTest do
       path = "/media/tv"
       sync!([runtime_path(path)])
 
+      # Simulate a DB-set value that config-supplied sync must override, not
+      # just leave alone. Syncing nil then a real value would still pass
+      # against an implementation that only writes when the DB value is empty.
+      Repo.get_by!(LibraryPath, path: path)
+      |> Ecto.Changeset.change(scan_interval: 3600)
+      |> Repo.update!()
+
       sync!([runtime_path(path, %{scan_interval: 21600})])
 
       assert Repo.get_by!(LibraryPath, path: path).scan_interval == 21600
@@ -74,6 +81,37 @@ defmodule Mydia.Library.LibraryPathSyncTest do
       # struct's own value), so the leftover SQLite column default silently
       # won. The in-memory struct still reported nil even while the row said
       # 3600, so only a fresh reload from the database proves the fix.
+      assert Repo.get_by!(LibraryPath, path: path).scan_interval == nil
+    end
+  end
+
+  describe "end-to-end: real Mydia.Config.Schema composition, no env mutation" do
+    # Settings.get_runtime_library_paths/0 (which sync_from_runtime_config/0
+    # reads from) is driven by Application.get_env(:mydia, :runtime_config, ...),
+    # not by hand-built LibraryPath structs. Swapping that application env key
+    # for the duration of one test reaches the real production composition
+    # (Mydia.Config.Schema -> its embedded LibraryPath -> RuntimeConfig mapping)
+    # without touching OS env vars, so it does not violate the
+    # no-global-env-mutation convention.
+    setup do
+      previous = Application.get_env(:mydia, :runtime_config)
+      on_exit(fn -> Application.put_env(:mydia, :runtime_config, previous) end)
+      :ok
+    end
+
+    test "a config-sourced library path with no scan_interval persists as nil, not the embedded schema default" do
+      path = "/media/config-sourced"
+
+      changeset =
+        Mydia.Config.Schema.changeset(Mydia.Config.Schema.defaults(), %{
+          library_paths: [%{path: path, type: "movies"}]
+        })
+
+      {:ok, config} = Ecto.Changeset.apply_action(changeset, :insert)
+      Application.put_env(:mydia, :runtime_config, config)
+
+      assert {:ok, _stats} = LibraryPathSync.sync_from_runtime_config()
+
       assert Repo.get_by!(LibraryPath, path: path).scan_interval == nil
     end
   end
