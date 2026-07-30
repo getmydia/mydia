@@ -128,3 +128,57 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
           retention-days: 7
+
+  build-android:
+    name: Build / Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            player/.dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install dependencies
+        working-directory: player
+        run: flutter pub get
+
+      - name: Run code generation
+        working-directory: player
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      # Drives cargokit, which cross-compiles player/rust_builder against the
+      # NDK. This is what puts the Rust/Dart FFI boundary under PR coverage;
+      # before this job it was only exercised by release.yml. Relies on the
+      # runner's preinstalled rustup, same as release.yml's player-android.
+      - name: Build APK
+        working-directory: player
+        run: flutter build apk --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mydia-player-android-apk
+          path: player/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
