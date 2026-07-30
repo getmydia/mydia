@@ -927,4 +927,52 @@ defmodule Mydia.EventsTest do
       assert event.metadata["mode"] == "specific"
     end
   end
+
+  describe "download_failed/3 failure classification" do
+    setup do
+      media_item = Mydia.MediaFixtures.media_item_fixture()
+
+      download =
+        Mydia.DownloadsFixtures.download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: "my-debrid"
+        })
+
+      %{download: download, media_item: media_item}
+    end
+
+    test "stores both keys when the caller supplies them", %{download: download} do
+      Events.download_failed(download, "boom",
+        failure_category: "missing_files",
+        failure_detail: "missingFiles"
+      )
+
+      Process.sleep(100)
+
+      assert [event] = Events.list_events(type: "download.failed")
+      assert event.metadata["failure_category"] == "missing_files"
+      assert event.metadata["failure_detail"] == "missingFiles"
+    end
+
+    test "omits the detail key when there is no detail", %{download: download} do
+      Events.download_failed(download, "boom", failure_category: "no_peers")
+
+      Process.sleep(100)
+
+      assert [event] = Events.list_events(type: "download.failed")
+      assert event.metadata["failure_category"] == "no_peers"
+      refute Map.has_key?(event.metadata, "failure_detail")
+    end
+
+    test "omits both keys entirely when the caller supplies neither", %{download: download} do
+      Events.download_failed(download, "boom")
+
+      Process.sleep(100)
+
+      assert [event] = Events.list_events(type: "download.failed")
+      refute Map.has_key?(event.metadata, "failure_category")
+      refute Map.has_key?(event.metadata, "failure_detail")
+      assert event.metadata["error_message"] == "boom"
+    end
+  end
 end

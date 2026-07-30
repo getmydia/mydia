@@ -1247,6 +1247,14 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       message = event.metadata["error_message"]
 
       assert message == "my-debrid reported missing files: missingFiles"
+
+      # The event and the blacklist row must carry the identical slug, so the
+      # activity feed and the admin blacklist page can be filtered on one
+      # vocabulary (#237). `handle_failure/1` binds the slug once and passes
+      # the same value to both.
+      assert event.metadata["failure_category"] == "missing_files"
+      assert event.metadata["failure_category"] == row.failure_reason
+      assert event.metadata["failure_detail"] == "missingFiles"
     end
 
     test "an unclassified failure still uses the pre-existing fallback slug" do
