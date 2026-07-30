@@ -22,6 +22,12 @@
 // images are NOT portable to Linux (or vice versa) — font hinting and the
 // Gaussian blur backend both differ across platforms, so a straight copy
 // would immediately mismatch pixel-for-pixel.
+//
+// LIMITATION: there is no `flutter_test_config.dart` in this project, so
+// `MaterialIcons` never loads in the test binding and every glyph renders as
+// its fallback "tofu" box rather than the real icon. These goldens freeze
+// panel geometry and glass compositing (rim, fill gradient, saturation) —
+// glyph *identity* is `icon_family_test.dart`'s job, not this file's.
 
 @TestOn('mac-os')
 library;
@@ -69,7 +75,24 @@ Widget _panel(double width) {
                 metrics: metrics,
                 // Forced so images do not vary with the host platform.
                 tier: PlayerGlassTier.full,
-                transport: const TransportSurface(isPlaying: true),
+                // Episode nav wired on desktop/tablet, matching real usage
+                // whenever adjacent episodes exist (`PlaybackChrome` always
+                // passes them through there) — omitting them, as an earlier
+                // version of this file did, understated real transport width
+                // by 104px and hid how close those two tiers sit to their own
+                // limits. Omitted at the mobile breakpoint
+                // (`metrics.touchTargets`) because `PlaybackChrome` itself
+                // now drops them there (see the wiring comment in
+                // `playback_chrome.dart`) — the panel never actually receives
+                // them at this width in the shipped app, so wiring them here
+                // would freeze a composition production doesn't show.
+                // `chrome_panel_overflow_test.dart` is the CI-visible guard
+                // for the mobile-width case this golden captures instead.
+                transport: TransportSurface(
+                  isPlaying: true,
+                  onPreviousEpisode: metrics.touchTargets ? null : () {},
+                  onNextEpisode: metrics.touchTargets ? null : () {},
+                ),
                 volume: metrics.showVolume
                     ? VolumeSurface(
                         volume: 70,
@@ -169,6 +192,17 @@ Future<ui.Image> _captureChromePanel(WidgetTester tester) async {
 
 /// Crops [scene] to the physical-pixel rectangle corresponding to
 /// [logicalRect] (scaled by [pixelRatio]), returning a new, smaller image.
+///
+/// Asserts [srcRect] is integral (each edge a whole pixel) and paints with
+/// `FilterQuality.none`: with a fractional `srcRect`, the default
+/// `FilterQuality.low` would resample the source image (bilinear
+/// interpolation across a partial pixel), making the golden's exact bytes
+/// depend on the interpolation backend rather than purely on rendering
+/// output — a second, avoidable source of cross-platform drift on top of the
+/// documented font/blur one. All three cases here happen to be integral
+/// today (whole-pixel `physicalSize`s and `devicePixelRatio: 1.0`), but nothing
+/// upstream guarantees that stays true, so this is asserted rather than
+/// assumed.
 Future<ui.Image> _crop(
   ui.Image scene,
   Rect logicalRect,
@@ -180,6 +214,13 @@ Future<ui.Image> _crop(
     logicalRect.width * pixelRatio,
     logicalRect.height * pixelRatio,
   );
+  assert(
+    srcRect.left == srcRect.left.roundToDouble() &&
+        srcRect.top == srcRect.top.roundToDouble() &&
+        srcRect.width == srcRect.width.roundToDouble() &&
+        srcRect.height == srcRect.height.roundToDouble(),
+    'srcRect must be integral so cropping never resamples: $srcRect',
+  );
   final width = srcRect.width.round();
   final height = srcRect.height.round();
 
@@ -189,7 +230,7 @@ Future<ui.Image> _crop(
     scene,
     srcRect,
     Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
-    Paint(),
+    Paint()..filterQuality = FilterQuality.none,
   );
   final picture = recorder.endRecording();
   try {

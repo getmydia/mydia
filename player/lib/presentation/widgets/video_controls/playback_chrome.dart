@@ -448,8 +448,23 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                           onBack10: () => _seekBy(const Duration(seconds: -10)),
                           onForward10: () =>
                               _seekBy(const Duration(seconds: 10)),
-                          onPreviousEpisode: widget.onPreviousEpisode,
-                          onNextEpisode: widget.onNextEpisode,
+                          // Dropped from the in-bar transport at the mobile
+                          // breakpoint (`metrics.touchTargets`): the panel is
+                          // already at its tightest width there, and mobile
+                          // has its own path to adjacent episodes
+                          // (`UpNextOverlay`) instead of reaching into this
+                          // bar — the same reasoning the class doc above
+                          // already gives for why mobile has no floating skip
+                          // buttons either. Wiring both prev/next AND the
+                          // full `SecondaryCluster` at a ~360px phone width
+                          // doesn't fit at natural size; see
+                          // `chrome_panel_overflow_test.dart`.
+                          onPreviousEpisode: metrics.touchTargets
+                              ? null
+                              : widget.onPreviousEpisode,
+                          onNextEpisode: metrics.touchTargets
+                              ? null
+                              : widget.onNextEpisode,
                         ),
                         // Unconditional per ChromePanel's `volume` dartdoc:
                         // it already gates visibility internally via

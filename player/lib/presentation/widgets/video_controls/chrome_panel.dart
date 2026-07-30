@@ -141,41 +141,44 @@ class ChromePanel extends StatelessWidget {
                 children: [
                   // Left and right groups are given equal flex so the
                   // transport stays optically centered regardless of how wide
-                  // either side happens to be.
+                  // either side happens to be — but only when there's a real
+                  // volume slot competing for that space. Below the mobile
+                  // breakpoint (`!metrics.showVolume`) the left slot is
+                  // always offstage (see `_volumeSlot`), so reserving it an
+                  // equal `Expanded` share still costs `secondary` half the
+                  // leftover width for nothing: at a 400px viewport that's
+                  // ~88px handed to an invisible placeholder while
+                  // `SecondaryCluster`'s real, always-visible 3 buttons (128px
+                  // natural width) get squeezed into the other ~88px — a real
+                  // `RenderFlex` overflow on real phones (most are under the
+                  // ~480px this needs), not just a golden-test artifact.
                   //
-                  // Each slot's content is wrapped in a scale-down FittedBox:
-                  // at generous widths (desktop/tablet) the content already
-                  // fits and the FittedBox is a no-op (scale 1.0). Below
-                  // roughly 480px, `metrics.maxWidth` leaves each Expanded
-                  // slot narrower than a fully-populated `SecondaryCluster`'s
-                  // natural width (three 40px glyphs + gaps == 128px), which
-                  // — without this — is a real `RenderFlex` overflow: caught
-                  // by this task's mobile golden, reachable on most phones in
-                  // portrait (see PlaybackChrome's real call site, which
-                  // always wires all three SecondaryCluster callbacks on
-                  // mobile). Scaling down keeps every glyph visible and
-                  // tappable (FittedBox's Transform is hit-test-aware)
-                  // instead of silently clipping the rightmost buttons behind
-                  // GlassSurface's ClipRRect.
+                  // Below the breakpoint, `flex: 0` (rather than swapping to
+                  // a differently-shaped widget, e.g. omitting `Expanded`
+                  // entirely) makes this slot inflexible — sized to its own
+                  // content, which is unconditionally offstage there, so it
+                  // measures zero width and `secondary`'s `Expanded` gets the
+                  // entire remainder. `Expanded`/`Align` stay the same widget
+                  // *types* at this position across a breakpoint crossing;
+                  // only their `flex`/`alignment` values change, which is a
+                  // parent-data update, not an element replacement — critical
+                  // because swapping types here would tear down and remount
+                  // `_volumeSlot()`'s `Visibility` subtree, defeating its
+                  // whole `maintainState: true` point (see the regression
+                  // test this broke: "keeps the volume widget mounted across
+                  // a showVolume breakpoint crossing").
                   Expanded(
+                    flex: metrics.showVolume ? 1 : 0,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: _volumeSlot(),
-                      ),
+                      child: _volumeSlot(),
                     ),
                   ),
                   transport,
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: secondary ?? const SizedBox.shrink(),
-                      ),
+                      child: secondary ?? const SizedBox.shrink(),
                     ),
                   ),
                 ],
