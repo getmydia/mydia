@@ -20,7 +20,35 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   use Oban.Worker,
     queue: :default,
-    max_attempts: 5
+    max_attempts: 5,
+    # Prevent two DownloadMonitor passes from running back-to-back — the cron
+    # plugin and the adaptive fast-followup chain (see end of `perform/1`)
+    # could otherwise stack up if a tick is slower than the followup interval.
+    # The period covers ~one cron interval.
+    #
+    # `:incomplete` is Oban's named group for every pre-completion state
+    # (`:suspended, :available, :scheduled, :executing, :retryable`) — the
+    # form Oban 2.23 itself recommends ("use a unique group like :incomplete")
+    # instead of a literal `:states` list, which now warns at compile time
+    # (a hard failure under --warnings-as-errors) when it's missing a state.
+    #
+    # A plain cron tick and a fast-followup insert are never each other's
+    # duplicate regardless of state: `:fields` isn't overridden here, so
+    # uniqueness is keyed on the default `[:args, :queue, :worker]`, and
+    # `maybe_schedule_fast_followup/2` inserts with a distinct
+    # `"fast_chain_position"` arg the parent tick's own args don't carry (see
+    # DownloadMonitorFastFollowupTest, which asserts a followup inserted while
+    # its parent is still :executing is not flagged as a conflict). So
+    # `:executing` doesn't need excluding for the chain to work.
+    #
+    # `:incomplete` does introduce one real behavior change over the previous
+    # narrower list: a cron tick currently sitting in `:retryable` (backing
+    # off after a failure) now blocks a new cron-triggered insert with the
+    # same (empty) args, where it previously didn't. That's the intended
+    # effect — two monitor passes racing is exactly what this config exists
+    # to prevent — and Oban still retries the backed-off job on its own
+    # schedule once the backoff elapses.
+    unique: [period: 120, states: :incomplete]
 
   require Logger
   alias Mydia.Downloads
@@ -29,38 +57,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Downloads.UntrackedMatcher
   alias Mydia.Events
   alias Mydia.Settings
-
-  # Prevent two DownloadMonitor passes from running back-to-back — the cron
-  # plugin and the adaptive fast-followup chain (see end of `perform/1`)
-  # could otherwise stack up if a tick is slower than the followup interval.
-  # The period covers ~one cron interval.
-  #
-  # `:executing` and `:retryable` are deliberately left out of the deduped
-  # states:
-  #
-  #   * `:executing` — `maybe_schedule_fast_followup/2` inserts the next
-  #     tick from *inside* `perform/1`, while this job is still `:executing`.
-  #     Deduping against `:executing` would make Oban treat that insert as a
-  #     collision with its own still-running parent and silently drop the
-  #     followup.
-  #   * `:retryable` — a failed tick backing off shouldn't pause monitoring;
-  #     the next cron tick should still be free to run rather than wait out
-  #     the backoff window.
-  #
-  # `unique` is declared here and applied via the `new/2` override below,
-  # rather than passed to `use Oban.Worker` directly, because Oban 2.23
-  # warns at compile time (a hard failure under --warnings-as-errors) when a
-  # literal `:states` list omits an incomplete-lifecycle state — a check
-  # meant to catch accidental uniqueness gaps. This one is intentional, so
-  # it's kept out of the statically-inspected `use` opts. Both callers (the
-  # cron plugin and the followup chain) still go through this same `new/2`
-  # and get the identical policy.
-  @unique [period: 120, states: [:suspended, :available, :scheduled]]
-
-  @impl Oban.Worker
-  def new(args, opts) do
-    super(args, Keyword.put(opts, :unique, @unique))
-  end
 
   # Fallback grace window (minutes) when a download has no resolvable client
   # config. The DB schema's default is also 60; this just guards against a nil.
