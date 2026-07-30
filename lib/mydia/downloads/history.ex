@@ -78,6 +78,51 @@ defmodule Mydia.Downloads.History do
     |> Repo.aggregate(:count)
   end
 
+  @doc """
+  Counts every download assigned to `client_name`.
+
+  Called before deleting a download client, while that client still exists, to
+  show the operator the blast radius. Deliberately not restricted to orphans:
+  a healthy in-flight download is exactly what the warning is about.
+  """
+  @spec count_downloads_for_client(String.t()) :: non_neg_integer()
+  def count_downloads_for_client(client_name) do
+    Download
+    |> where([d], d.download_client == ^client_name)
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
+  Groups orphaned downloads by the client they reference.
+
+  An orphan is a row tagged `import_failure_reason == "no_client"`, written
+  either by `DownloadMonitor.handle_missing/1` for a download still in flight
+  or by `MediaImport` for one that died at import. The Issues tab renders one
+  bulk-clear banner per group.
+  """
+  @spec removed_client_groups() :: [%{download_client: String.t(), count: non_neg_integer()}]
+  def removed_client_groups do
+    Download
+    |> where([d], d.import_failure_reason == "no_client" and not is_nil(d.download_client))
+    |> group_by([d], d.download_client)
+    |> select([d], %{download_client: d.download_client, count: count(d.id)})
+    |> Repo.all()
+  end
+
+  @doc """
+  Deletes the orphaned downloads referencing `client_name`.
+
+  Scoped on purpose, unlike `dismiss_all_cancelled/0`, which deletes every
+  errored row in the Issues tab. No attempt is made to remove anything from
+  the download client: that client is precisely what no longer exists.
+  """
+  @spec clear_downloads_for_removed_client(String.t()) :: {non_neg_integer(), nil | [term()]}
+  def clear_downloads_for_removed_client(client_name) do
+    Download
+    |> where([d], d.download_client == ^client_name and d.import_failure_reason == "no_client")
+    |> Repo.delete_all()
+  end
+
   def list_downloads_with_status(opts \\ []) do
     # Get all download records from database
     # Preload episode.media_item to get parent show info for episode downloads
