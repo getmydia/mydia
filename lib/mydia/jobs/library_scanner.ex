@@ -9,8 +9,8 @@ defmodule Mydia.Jobs.LibraryScanner do
   - Tracks scan status and errors
 
   Scans enqueued automatically (the interval scheduler and the boot-time health
-  check) carry a random 0 to 30 minute `schedule_in` delay, which spreads load
-  across self-hosted instances hitting the metadata relay. See
+  check) carry a random `schedule_in` delay of up to 30 minutes, which spreads
+  load across self-hosted instances hitting the metadata relay. See
   `jitter_seconds/0`. Manual triggers insert with no delay and run immediately.
   """
 

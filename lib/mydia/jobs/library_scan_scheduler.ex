@@ -24,7 +24,7 @@ defmodule Mydia.Jobs.LibraryScanScheduler do
   already has a scan waiting, running, or retrying is not enqueued again by a later
   tick; the uniqueness stops applying once that scan finishes.
 
-  Each enqueue carries a random 0 to 30 minute delay
+  Each enqueue carries a random delay of up to 30 minutes
   (`LibraryScanner.jitter_seconds/0`) via `schedule_in`, so instances whose ticks
   land on the same quarter hour do not hit the metadata relay together. The job
   waits in Oban's `:scheduled` state, so it holds no `:media` queue slot meanwhile.
