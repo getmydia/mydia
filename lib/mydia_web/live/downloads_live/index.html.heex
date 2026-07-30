@@ -654,6 +654,30 @@
               </button>
             <% end %>
           </div>
+          <div
+            :for={group <- @removed_client_groups}
+            id={"removed-client-#{group.slug}"}
+            class="alert alert-warning mb-4"
+          >
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+            <div class="flex-1">
+              <div class="font-semibold">
+                {group.count} download(s) reference the removed client '{group.download_client}'
+              </div>
+              <div class="text-sm opacity-80">
+                Re-adding a client that holds these same torrents will restore them automatically.
+              </div>
+            </div>
+            <button
+              id={"clear-removed-client-#{group.slug}"}
+              class="btn btn-sm btn-warning"
+              phx-click="clear_removed_client"
+              phx-value-client={group.download_client}
+              data-confirm={"Clear #{group.count} download(s) from '#{group.download_client}'? This removes the records from Mydia only."}
+            >
+              Clear them
+            </button>
+          </div>
           <ul id="other-issues" phx-update="stream" class="list bg-base-100 rounded-box shadow-lg">
             <li
               id="no-other-issues"

@@ -91,6 +91,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:clearable_count, 0)
      # Issues tab state
      |> assign(:issues_counts, %{unmatched: 0, unresolved: 0, other: 0})
+     |> assign(:removed_client_groups, [])
      |> assign(:search_open_for, nil)
      |> assign(:library_search_value, "")
      |> assign(:library_search_results, [])
@@ -793,6 +794,19 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  def handle_event("clear_removed_client", %{"client" => client_name}, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      {count, _} = Downloads.clear_downloads_for_removed_client(client_name)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Cleared #{count} download(s) from removed client '#{client_name}'")
+       |> load_downloads()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_info({:download_updated, _download_id}, socket) do
     # Reload downloads when we receive an update
@@ -929,10 +943,33 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, all_empty)
     |> assign(:issues_counts, counts)
+    |> assign(:removed_client_groups, removed_client_groups())
     |> assign(:episodes_by_media_item, episodes_by_media_item)
     |> stream(:unmatched_downloads, unmatched, reset: true)
     |> stream(:unresolved_downloads, unresolved, reset: true)
     |> stream(:other_issues, other, reset: true)
+  end
+
+  # Orphan groups annotated with a DOM-safe slug. Client names come from
+  # operator-supplied config (env vars), so unlike most other ids in this
+  # LiveView they aren't guaranteed to already be DOM-id-safe — a name with
+  # spaces or punctuation would otherwise produce an invalid id/CSS selector.
+  # The raw name is preserved in `download_client` for display and for the
+  # `phx-value-client` sent back to `clear_removed_client/2`.
+  defp removed_client_groups do
+    Downloads.removed_client_groups()
+    |> Enum.map(fn group -> Map.put(group, :slug, slugify(group.download_client)) end)
+  end
+
+  defp slugify(name) do
+    name
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
+    |> case do
+      "" -> "client"
+      slug -> slug
+    end
   end
 
   # Re-enqueue every failed mismatch download whose reported path is under the
