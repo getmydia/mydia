@@ -7,9 +7,17 @@ defmodule Mydia.Config.Schema do
   use Ecto.Schema
   import Ecto.Changeset
 
+  require Logger
+
   alias Mydia.Settings.PathMappingConfig
 
   @primary_key false
+
+  # Lower bound for an automatic library scan interval, in seconds. Mirrors the
+  # floor enforced by Mydia.Settings.LibraryPath, which is the database-layer
+  # guarantee. Configured values below it are clamped rather than rejected: see
+  # clamp_scan_interval/1.
+  @min_scan_interval 900
 
   @type t :: %__MODULE__{
           server: __MODULE__.Server.t() | nil,
@@ -517,8 +525,28 @@ defmodule Mydia.Config.Schema do
     ])
     |> validate_required([:path, :type])
     |> validate_inclusion(:type, [:movies, :series, :mixed, :music, :books, :adult])
-    |> validate_number(:scan_interval, greater_than_or_equal_to: 900)
+    |> clamp_scan_interval()
     |> validate_number(:quality_profile_id, greater_than: 0)
+  end
+
+  # Config is loaded by Mydia.Application before the supervision tree starts, and
+  # Config.Loader.load!/1 raises on an invalid changeset, so rejecting a too-small
+  # scan_interval would put an upgrading instance into a boot crash loop over a
+  # value that did nothing in any released version. Clamp and say so instead.
+  # Applies to every config source (env, YAML, database) because they all merge
+  # into this changeset.
+  defp clamp_scan_interval(changeset) do
+    case get_change(changeset, :scan_interval) do
+      interval when is_integer(interval) and interval < @min_scan_interval ->
+        Logger.warning(
+          "Library path scan_interval of #{interval}s is below the #{@min_scan_interval}s minimum; using #{@min_scan_interval}s"
+        )
+
+        put_change(changeset, :scan_interval, @min_scan_interval)
+
+      _ ->
+        changeset
+    end
   end
 
   defp plugin_install_changeset(schema, attrs) do
