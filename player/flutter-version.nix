@@ -3,8 +3,10 @@
 # the Dockerfile. Nothing else in the repo may name a Flutter version.
 #
 # `pkgs` is a parameter rather than an import so this module can be evaluated
-# against a fake attrset in tests, with no nixpkgs fetch. See the plan for the
-# three nix-instantiate cases.
+# against a fake attrset, with no nixpkgs fetch, which is how its three outcomes
+# are exercised: a matching attrset returns the package, a disagreeing
+# pkg.version throws the drift error, and a missing attribute throws the
+# unknown-attribute error.
 { pkgs }:
 
 let
