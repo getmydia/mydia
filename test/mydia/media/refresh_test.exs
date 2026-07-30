@@ -67,6 +67,44 @@ defmodule Mydia.Media.RefreshTest do
 
     # MetadataType.map_to_struct/1 sets provider_id to `to_string(data[:id] || "")`,
     # so an empty string is common — and truthy in Elixir.
+    # The stored blob records its own provenance: fetch_tvdb_by_id/3 stamps
+    # provider: :tvdb, while the TMDB path leaves from_api_response/3's default
+    # of :metadata_relay. Labelling a TVDB id as :tmdb routes it to
+    # /tmdb/tv/shows/<tvdb-id> and fetches an unrelated show.
+    test "a TVDB-sourced blob resolves to :tvdb, not :tmdb" do
+      item = %MediaItem{
+        type: "tv_show",
+        tmdb_id: nil,
+        tvdb_id: nil,
+        metadata: metadata(id: 4242, provider: :tvdb, media_type: :tv_show)
+      }
+
+      assert Refresh.resolve_provider(item) == {4242, :tvdb}
+    end
+
+    test "a relay-sourced blob still resolves to :tmdb" do
+      item = %MediaItem{
+        type: "tv_show",
+        tmdb_id: nil,
+        tvdb_id: nil,
+        metadata: metadata(id: 555, provider: :metadata_relay, media_type: :tv_show)
+      }
+
+      assert Refresh.resolve_provider(item) == {555, :tmdb}
+    end
+
+    test "metadata_source outranks the blob's own provider" do
+      item = %MediaItem{
+        type: "tv_show",
+        metadata_source: :tmdb,
+        tmdb_id: nil,
+        tvdb_id: nil,
+        metadata: metadata(id: 777, provider: :tvdb, media_type: :tv_show)
+      }
+
+      assert Refresh.resolve_provider(item) == {777, :tmdb}
+    end
+
     test "an empty provider_id resolves to no provider, not a bogus id" do
       item = %MediaItem{
         tmdb_id: nil,

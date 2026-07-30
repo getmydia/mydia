@@ -187,14 +187,31 @@ defmodule Mydia.Media.Refresh do
   def resolve_provider(%MediaItem{tvdb_id: id}) when not is_nil(id), do: {id, :tvdb}
   def resolve_provider(%MediaItem{tmdb_id: id}) when not is_nil(id), do: {id, :tmdb}
 
-  def resolve_provider(%MediaItem{metadata: %MediaMetadata{} = metadata}) do
+  def resolve_provider(%MediaItem{metadata: %MediaMetadata{} = metadata} = media_item) do
     case normalize_id(metadata.id) || normalize_id(metadata.provider_id) do
       nil -> {nil, nil}
-      id -> {id, :tmdb}
+      id -> {id, stored_blob_provider(media_item, metadata)}
     end
   end
 
   def resolve_provider(%MediaItem{}), do: {nil, nil}
+
+  # Which provider issued the id stored inside the metadata blob.
+  #
+  # The blob records its own provenance: `Relay.fetch_tvdb_by_id/3` stamps
+  # `provider: :tvdb`, while the TMDB path leaves the
+  # `MediaMetadata.from_api_response/3` default of `:metadata_relay`. Assuming
+  # `:tmdb` unconditionally (as the old duplicated resolvers did) routes a TVDB
+  # id to `/tmdb/tv/shows/<tvdb-id>` and fetches an unrelated title.
+  #
+  # `metadata_source` still outranks the blob when set, since it is the
+  # authoritative provenance recorded at match time.
+  defp stored_blob_provider(%MediaItem{metadata_source: source}, _metadata)
+       when source in [:tvdb, :tmdb],
+       do: source
+
+  defp stored_blob_provider(_media_item, %MediaMetadata{provider: :tvdb}), do: :tvdb
+  defp stored_blob_provider(_media_item, %MediaMetadata{}), do: :tmdb
 
   # Struct field access, never Access syntax. `provider_id` is frequently the
   # empty string because `MetadataType.map_to_struct/1` defaults it to
