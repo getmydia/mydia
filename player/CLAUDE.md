@@ -185,7 +185,7 @@ Widget build(BuildContext context, WidgetRef ref) {
 Store queries in `priv/graphql/` and use codegen:
 
 ```bash
-./dev flutter pub run build_runner build --delete-conflicting-outputs
+./dev flutter pub run build_runner build
 ```
 
 ### Error Handling
@@ -348,7 +348,7 @@ CachedNetworkImage(
 After modifying Riverpod providers or GraphQL queries, run:
 
 ```bash
-./dev flutter pub run build_runner build --delete-conflicting-outputs
+./dev flutter pub run build_runner build
 ```
 
 Generated files (`*.g.dart`) are excluded from analysis and should not be edited manually.

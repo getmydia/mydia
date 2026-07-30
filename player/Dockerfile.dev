@@ -33,7 +33,7 @@ if [ -f "lib/graphql/schema.graphql.dart" ]; then
     echo '→ GraphQL codegen already exists, skipping initial build...'
 else
     echo '→ Running initial code generation (GraphQL, Riverpod)...'
-    flutter pub run build_runner build --delete-conflicting-outputs || true
+    flutter pub run build_runner build || true
 fi
 
 echo ''
@@ -60,7 +60,7 @@ echo '→ Starting build_runner watch...'
 echo ''
 
 # Start build_runner watch in the background
-flutter pub run build_runner watch --delete-conflicting-outputs &
+flutter pub run build_runner watch &
 
 # Keep container alive
 exec tail -f /dev/null

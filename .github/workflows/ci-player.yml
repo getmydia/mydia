@@ -109,7 +109,7 @@ jobs:
       - name: Run code generation
         if: steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
-        # --delete-conflicting-outputs was removed in build_runner 2.15 and is
+        # was removed in build_runner 2.15 and is
         # now warned about and ignored on every run.
         run: flutter pub run build_runner build
 
