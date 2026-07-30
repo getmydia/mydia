@@ -216,11 +216,15 @@ defmodule Mydia.Library.DatabaseHealthCheck do
   end
 
   defp queue_library_rescan(issues) do
+    # This runs on every boot, and self-hosted restarts cluster (everyone pulls a
+    # new image at once), so the repair scan is jittered rather than immediate.
+    delay_seconds = Mydia.Jobs.LibraryScanner.jitter_seconds()
+
     Logger.info(
-      "[DatabaseHealthCheck] Queuing library re-scan to repair #{issues.total_issues} issue(s)"
+      "[DatabaseHealthCheck] Queuing library re-scan to repair #{issues.total_issues} issue(s) in #{delay_seconds}s"
     )
 
-    case Mydia.Library.trigger_full_library_scan() do
+    case Mydia.Library.trigger_full_library_scan(schedule_in: delay_seconds) do
       {:ok, job} ->
         Logger.info("[DatabaseHealthCheck] Library re-scan queued", job_id: job.id)
 

@@ -103,13 +103,29 @@ defmodule Mydia.Jobs.LibraryScanSchedulerTest do
   end
 
   describe "enqueued job shape" do
-    test "the job built for a due path carries library_path_id but not skip_delay" do
+    test "the job built for a due path carries only library_path_id" do
       library_path = insert(:library_path, scan_interval: 900, last_scan_at: nil)
 
       changeset = LibraryScanner.new(%{library_path_id: library_path.id})
 
-      assert changeset.changes.args[:library_path_id] == library_path.id
-      refute Map.has_key?(changeset.changes.args, :skip_delay)
+      assert changeset.changes.args == %{library_path_id: library_path.id}
+    end
+
+    # The scheduler enqueues with a jittered schedule_in so instances whose ticks
+    # land on the same quarter hour do not hit the metadata relay together, and
+    # so the waiting job sits in :scheduled rather than holding a :media slot.
+    # Asserted on the changeset because config/test.exs disables the Oban engine.
+    test "the job is scheduled into the future, not run immediately" do
+      changeset =
+        LibraryScanner.new(%{library_path_id: Ecto.UUID.generate()},
+          schedule_in: LibraryScanner.jitter_seconds()
+        )
+
+      scheduled_at = Ecto.Changeset.get_change(changeset, :scheduled_at)
+
+      assert DateTime.compare(scheduled_at, DateTime.utc_now()) == :gt
+      assert DateTime.diff(scheduled_at, DateTime.utc_now(), :second) <= 1800
+      assert Ecto.Changeset.get_field(changeset, :state) == "scheduled"
     end
   end
 

@@ -20,7 +20,14 @@ defmodule Mydia.Jobs.LibraryScanScheduler do
 
   One job is enqueued per due path rather than a single scan-all, so a slow library
   cannot starve the others and each path's `last_scan_at` stays accurate. `LibraryScanner`
-  is `unique`, so a still-running scan dedupes the next insert instead of stacking.
+  is unique over Oban's incomplete states with `period: :infinity`, so a path that
+  already has a scan waiting, running, or retrying is not enqueued again by a later
+  tick; the uniqueness stops applying once that scan finishes.
+
+  Each enqueue carries a random 0 to 30 minute delay
+  (`LibraryScanner.jitter_seconds/0`) via `schedule_in`, so instances whose ticks
+  land on the same quarter hour do not hit the metadata relay together. The job
+  waits in Oban's `:scheduled` state, so it holds no `:media` queue slot meanwhile.
   """
 
   use Oban.Worker,
@@ -78,7 +85,10 @@ defmodule Mydia.Jobs.LibraryScanScheduler do
   end
 
   defp enqueue_scan(%LibraryPath{} = library_path) do
-    changeset = LibraryScanner.new(%{library_path_id: library_path.id})
+    changeset =
+      LibraryScanner.new(%{library_path_id: library_path.id},
+        schedule_in: LibraryScanner.jitter_seconds()
+      )
 
     case Oban.insert(changeset) do
       {:ok, _job} ->

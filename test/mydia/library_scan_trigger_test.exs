@@ -9,30 +9,54 @@ defmodule Mydia.LibraryScanTriggerTest do
   alias Mydia.Library
 
   describe "manual scan triggers" do
-    test "a single-path scan skips the startup delay" do
+    # Oban only sets :scheduled_at (and with it the "scheduled" state) when a job
+    # is inserted with :schedule_in / :scheduled_at, so the state is what
+    # distinguishes an immediate insert from a delayed one.
+    test "a single-path scan runs immediately" do
       library_path = insert(:library_path)
 
-      {:ok, _job} = Library.trigger_library_scan(library_path.id)
+      {:ok, job} = Library.trigger_library_scan(library_path.id)
 
       assert_enqueued(
         worker: LibraryScanner,
-        args: %{"library_path_id" => library_path.id, "skip_delay" => true}
+        args: %{"library_path_id" => library_path.id}
       )
+
+      assert job.state == "available"
     end
 
-    test "a full scan skips the startup delay" do
-      {:ok, _job} = Library.trigger_full_library_scan()
+    test "a full scan runs immediately and carries no args" do
+      {:ok, job} = Library.trigger_full_library_scan()
 
-      assert_enqueued(worker: LibraryScanner, args: %{"skip_delay" => true})
+      assert_enqueued(worker: LibraryScanner, args: %{})
+      assert job.args == %{}
+      assert job.state == "available"
     end
 
-    test "an adult scan skips the startup delay" do
-      {:ok, _job} = Library.trigger_adult_library_scan()
+    test "an adult scan runs immediately" do
+      {:ok, job} = Library.trigger_adult_library_scan()
 
-      assert_enqueued(
-        worker: LibraryScanner,
-        args: %{"library_type" => "adult", "skip_delay" => true}
-      )
+      assert_enqueued(worker: LibraryScanner, args: %{"library_type" => "adult"})
+
+      assert job.state == "available"
+    end
+
+    test "a full scan can be delayed by automatic callers" do
+      {:ok, job} = Library.trigger_full_library_scan(schedule_in: 600)
+
+      assert job.state == "scheduled"
+      assert DateTime.compare(job.scheduled_at, DateTime.utc_now()) == :gt
+    end
+  end
+
+  describe "jitter_seconds/0" do
+    test "stays inside the 0 to 30 minute window" do
+      for _ <- 1..200 do
+        seconds = LibraryScanner.jitter_seconds()
+
+        assert seconds >= 1
+        assert seconds <= 1800
+      end
     end
   end
 
@@ -45,7 +69,12 @@ defmodule Mydia.LibraryScanTriggerTest do
     test "dedupes on both library_path_id and library_type" do
       unique = LibraryScanner.__opts__()[:unique]
 
-      assert unique[:period] == 900
+      # :infinity, not a fixed window. Oban measures the window from
+      # inserted_at, so any finite period shorter than a scan's own runtime lets
+      # the next scheduler tick insert a duplicate while the first is still
+      # incomplete. Combined with :states below, :infinity means exactly "one
+      # incomplete scan per key at a time" and stops matching once it finishes.
+      assert unique[:period] == :infinity
       assert Enum.sort(unique[:keys]) == [:library_path_id, :library_type]
 
       # Must cover Oban's full :incomplete state group (available, scheduled,
