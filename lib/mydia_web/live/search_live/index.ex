@@ -588,6 +588,12 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
+  def handle_info(msg, socket) do
+    # Catch-all for unhandled messages to prevent crashes
+    Logger.warning("Unhandled message in SearchLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_async(:search, {:ok, {:ok, results, indexer_errors}}, socket) do
     start_time = System.monotonic_time(:millisecond)

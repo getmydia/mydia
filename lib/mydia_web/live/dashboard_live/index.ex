@@ -3,6 +3,8 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   import MydiaWeb.DiscoverComponents
 
+  require Logger
+
   alias Mydia.Media
   alias Mydia.Library
   alias Mydia.Downloads
@@ -256,6 +258,12 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:adding_item_id, nil)
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
     end
+  end
+
+  def handle_info(msg, socket) do
+    # Catch-all for unhandled messages to prevent crashes
+    Logger.warning("Unhandled message in DashboardLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
   end
 
   ## Private Helpers

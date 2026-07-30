@@ -9,6 +9,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.Live.Authorization
   import MydiaWeb.Formatters
 
+  require Logger
+
   @items_per_page 50
 
   @default_sort "added_desc"
@@ -819,6 +821,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
         socket
       end
 
+    {:noreply, socket}
+  end
+
+  def handle_info(msg, socket) do
+    # Catch-all for unhandled messages to prevent crashes
+    Logger.warning("Unhandled message in DownloadsLive.Index: #{inspect(msg)}")
     {:noreply, socket}
   end
 
