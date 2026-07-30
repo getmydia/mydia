@@ -36,6 +36,7 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.RankingOptions
+  alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
@@ -547,7 +548,7 @@ defmodule Mydia.Jobs.MovieSearch do
     # no expected_season/expected_episode are supplied (a TV-pattern release is
     # softly penalized as an identity mismatch inside the ranker).
     RankingOptions.build(%{
-      quality_profile: load_quality_profile(movie),
+      quality_profile: QualityProfileResolver.resolve(movie),
       media_type: :movie,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
@@ -556,14 +557,6 @@ defmodule Mydia.Jobs.MovieSearch do
       blocked_tags: merged_blocked_tags(args.blocked_tags),
       preferred_tags: args.preferred_tags
     })
-  end
-
-  defp load_quality_profile(%MediaItem{quality_profile_id: nil}), do: nil
-
-  defp load_quality_profile(%MediaItem{} = movie) do
-    movie
-    |> Repo.preload(:quality_profile)
-    |> Map.get(:quality_profile)
   end
 
   defp initiate_download(movie, result) do

@@ -56,6 +56,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.RankingOptions
+  alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Media.{MediaItem, Episode}
@@ -1249,7 +1250,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     # the requested episode above wrong episodes and season packs (which match
     # the season but lack the episode).
     RankingOptions.build(%{
-      quality_profile: load_quality_profile(episode),
+      quality_profile: QualityProfileResolver.resolve(episode.media_item),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
@@ -1268,7 +1269,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     # matches on season alone — a season pack for the requested season matches,
     # a wrong-season pack is penalized.
     RankingOptions.build(%{
-      quality_profile: load_season_quality_profile(media_item),
+      quality_profile: QualityProfileResolver.resolve(media_item),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
@@ -1278,18 +1279,6 @@ defmodule Mydia.Jobs.TVShowSearch do
       blocked_tags: merged_blocked_tags(args.blocked_tags),
       preferred_tags: args.preferred_tags
     })
-  end
-
-  defp load_quality_profile(%Episode{media_item: media_item}) do
-    load_season_quality_profile(media_item)
-  end
-
-  defp load_season_quality_profile(%MediaItem{quality_profile_id: nil}), do: nil
-
-  defp load_season_quality_profile(%MediaItem{} = media_item) do
-    media_item
-    |> Repo.preload(:quality_profile)
-    |> then(& &1.quality_profile)
   end
 
   ## Private Functions - Download Initiation
