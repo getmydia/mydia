@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.IndexTest do
   import Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
+  import Mydia.DownloadsFixtures
   import Mydia.AccountsFixtures
   import MydiaWeb.AuthHelpers
 
@@ -480,6 +481,100 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert has_element?(
                view,
                "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter excludes movies with an active download from missing", %{conn: conn} do
+      _missing_movie =
+        media_item_fixture(%{
+          title: "Progress Grabbing Missing",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie with neither file nor download"}
+        })
+
+      downloading_movie =
+        media_item_fixture(%{
+          title: "Progress Grabbing Active",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A movie already being downloaded"}
+        })
+
+      download_fixture(%{media_item_id: downloading_movie.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Grabbing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Grabbing'][data-stream-count='2']"
+             )
+
+      # The in-flight movie is :downloading, matching its status badge, so it
+      # must not be offered up as something still to grab.
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "missing"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='missing'][data-stream-count='1']"
+             )
+    end
+
+    test "progress filter excludes unmonitored items", %{conn: conn} do
+      monitored_movie =
+        media_item_fixture(%{
+          title: "Progress Monitoring On",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A monitored movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: monitored_movie.id})
+
+      unmonitored_movie =
+        media_item_fixture(%{
+          title: "Progress Monitoring Off",
+          original_title: nil,
+          year: 2024,
+          type: "movie",
+          monitored: false,
+          metadata: %{"overview" => "An unmonitored movie with a local file"}
+        })
+
+      media_file_fixture(%{media_item_id: unmonitored_movie.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "Progress Monitoring"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-search-query='Progress Monitoring'][data-stream-count='2']"
+             )
+
+      # Unmonitored items are :not_monitored rather than :downloaded, so the
+      # filter agrees with the badge instead of contradicting it.
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"progress" => "downloaded"})
+
+      assert has_element?(
+               view,
+               "#test-debug-info[data-progress-filter='downloaded'][data-stream-count='1']"
              )
     end
   end

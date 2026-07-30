@@ -798,68 +798,16 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp apply_progress_filter(items, nil), do: items
 
+  # Reuses `Media.get_media_status/1` — the same classifier that renders each
+  # item's status badge — so the filter can never disagree with what the badge
+  # says. Statuses outside the dropdown (`:downloading`, `:upcoming`,
+  # `:not_monitored`, `:tba`) simply match nothing and are filtered out.
   defp apply_progress_filter(items, progress) do
-    Enum.filter(items, &(media_progress_status(&1) == progress))
+    Enum.filter(items, fn item ->
+      {status, _counts} = Media.get_media_status(item)
+      status == progress
+    end)
   end
-
-  defp media_progress_status(%{type: "movie"} = media_item) do
-    cond do
-      has_media_files?(media_item) -> :downloaded
-      progress_movie_upcoming?(media_item) -> :upcoming
-      true -> :missing
-    end
-  end
-
-  defp media_progress_status(%{type: "tv_show", episodes: episodes} = media_item)
-       when is_list(episodes) do
-    episodes
-    |> progress_relevant_episodes(media_item)
-    |> Enum.filter(&released_episode?/1)
-    |> episode_progress_status()
-  end
-
-  defp media_progress_status(_media_item), do: :missing
-
-  defp progress_relevant_episodes(episodes, %{monitored: false}), do: episodes
-
-  defp progress_relevant_episodes(episodes, _media_item) do
-    monitored_episodes = Enum.filter(episodes, & &1.monitored)
-
-    if monitored_episodes == [] do
-      episodes
-    else
-      monitored_episodes
-    end
-  end
-
-  defp episode_progress_status([]), do: :upcoming
-
-  defp episode_progress_status(episodes) do
-    downloaded_count = Enum.count(episodes, &has_media_files?/1)
-
-    cond do
-      downloaded_count == length(episodes) -> :downloaded
-      downloaded_count > 0 -> :partial
-      true -> :missing
-    end
-  end
-
-  defp has_media_files?(%{media_files: media_files}) when is_list(media_files),
-    do: media_files != []
-
-  defp has_media_files?(_item), do: false
-
-  defp released_episode?(%{air_date: %Date{} = air_date}) do
-    Date.compare(air_date, Date.utc_today()) != :gt
-  end
-
-  defp released_episode?(_episode), do: false
-
-  defp progress_movie_upcoming?(%{metadata: %{release_date: %Date{} = release_date}}) do
-    Date.compare(release_date, Date.utc_today()) == :gt
-  end
-
-  defp progress_movie_upcoming?(_media_item), do: false
 
   defp apply_sorting(items, sort_by) do
     Logger.debug("Applying sort: #{inspect(sort_by)} to #{length(items)} items")
