@@ -9,15 +9,18 @@
 # ⚠️ KEEP IN SYNC — this file is the source of truth for the Elixir/OTP/Rust
 # toolchain, and the CI test jobs consume it directly (`devenv shell -- …` in
 # .github/workflows/ci.yml), so those versions are NO LONGER duplicated in CI.
-# Bump Elixir/OTP/Rust here (and the Dockerfile prod base) and CI follows. Only
-# Flutter still needs manual syncing across non-devenv consumers — bump together:
-#   - this file                       (beam.packages.erlang_28 + rust 1.96.0 + flutter344 = 3.44.2)
-#   - .github/workflows/ci.yml        (FLUTTER_VERSION — the Flutter test-player job only)
-#   - .github/workflows/ci-player.yml (FLUTTER_VERSION)
-#   - Dockerfile                      (FROM elixir:1.19-otp-28 prod base AND the
-#                                      cirruslabs/flutter builder stage — bump BOTH)
-# Flutter is pinned to an explicit flutterNNN attribute (not the floating
-# `flutter` alias) so the version here always matches the FLUTTER_VERSION strings.
+# Bump Elixir/OTP/Rust here (and the Dockerfile prod base) and CI follows.
+#   - this file    (beam.packages.erlang_28 + rust 1.96.0)
+#   - Dockerfile   (FROM elixir:1.19-otp-28 prod base)
+#
+# Flutter is NOT listed above and must not be named here: it lives in
+# player/.fvmrc alone, resolved by player/flutter-version.nix. devenv, the
+# Android shell (player/flake.nix), all four workflows and the Dockerfile read
+# that one file, and a mismatch between it and nixpkgs is an eval error rather
+# than something a reader has to notice.
+#
+# One exception worth knowing: player/flake.nix also pins Rust 1.96.0 by hand,
+# because a flake cannot read above its own root and so cannot share this value.
 
 let
   # Elixir 1.19 / OTP 28 built as a matched pair from one beam set. devenv's
@@ -73,6 +76,12 @@ let
   # and drop the enterShell trigger when set. Local shells are unaffected.
   isCI = builtins.getEnv "CI" != "";
   onEnterShell = lib.optionals (!isCI) [ "devenv:enterShell" ];
+
+  # ── Flutter (single source of truth) ────────────────────────────────────────
+  # player/.fvmrc is the only place the Flutter version is written. The resolver
+  # throws if nixpkgs disagrees, so a `devenv update` that moves Flutter fails
+  # loudly here instead of silently shipping a different SDK than CI uses.
+  flutterPkg = import ./player/flutter-version.nix { inherit pkgs; };
 in
 {
   languages.elixir = {
@@ -85,10 +94,10 @@ in
     package = pkgs.erlang_28;
   };
 
-  # Rust pinned to 1.96.0 to match CI (dtolnay/rust-toolchain@1.96.0) and the
-  # retired Dockerfile.dev (--default-toolchain 1.96.0); only the old flake
-  # floated on stable.latest (KTD2). `components` replaces (not appends) the
-  # defaults, so rustc/cargo are restated alongside the lint/analysis tools.
+  # Rust pinned to 1.96.0 to match the retired Dockerfile.dev
+  # (--default-toolchain 1.96.0); only the old flake floated on stable.latest
+  # (KTD2). `components` replaces (not appends) the defaults, so rustc/cargo
+  # are restated alongside the lint/analysis tools.
   languages.rust = {
     enable = true;
     channel = "stable";
@@ -98,18 +107,14 @@ in
   };
 
   # Remaining dev toolchain. Flutter comes from nixpkgs (KTD3): player/flake.nix
-  # already builds against pkgs.flutter, so the NixOS dynamic-linker/patchelf
+  # builds against the same package set, so the NixOS dynamic-linker/patchelf
   # handling is proven for this codebase. wasm-tools is carried from the flake's
   # shells (used by scripts/check-plugins.sh).
   #
-  # Flutter is pinned to an EXPLICIT versioned attribute (flutter344 = 3.44.2),
-  # not the floating `flutter` alias — this is the dev side of the FLUTTER_VERSION
-  # KEEP IN SYNC contract (see header). A `devenv update` that bumps nixpkgs past
-  # this attribute fails loudly (attribute gone) instead of silently shipping a
-  # different Flutter than CI's subosito pin. To bump: change flutterNNN here AND
-  # FLUTTER_VERSION in ci.yml + ci-player.yml together.
+  # The Flutter version is NOT named here. It comes from player/.fvmrc through
+  # flutterPkg above, shared with the Android shell, CI and Docker.
   packages = with pkgs; [
-    flutter344
+    flutterPkg
 
     # Node.js for assets
     nodejs
