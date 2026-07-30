@@ -61,8 +61,8 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       # Note: "status" is calculated dynamically, but error_message persists
       updated_active1 = Downloads.get_download!(active1.id)
       updated_active2 = Downloads.get_download!(active2.id)
-      assert updated_active1.error_message =~ "Removed from download client"
-      assert updated_active2.error_message =~ "Removed from download client"
+      assert updated_active1.error_message =~ "no longer configured in Mydia"
+      assert updated_active2.error_message =~ "no longer configured in Mydia"
 
       # Completed and failed downloads should still exist
       assert Downloads.get_download!(completed.id)
@@ -129,9 +129,9 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert :ok = perform_job(DownloadMonitor, %{})
 
       # All downloads should have error_message set (preserved for Issues tab)
-      assert Downloads.get_download!(d1.id).error_message =~ "Removed from download client"
-      assert Downloads.get_download!(d2.id).error_message =~ "Removed from download client"
-      assert Downloads.get_download!(d3.id).error_message =~ "Removed from download client"
+      assert Downloads.get_download!(d1.id).error_message =~ "no longer configured in Mydia"
+      assert Downloads.get_download!(d2.id).error_message =~ "no longer configured in Mydia"
+      assert Downloads.get_download!(d3.id).error_message =~ "no longer configured in Mydia"
     end
 
     test "marks downloads from disabled clients as missing" do

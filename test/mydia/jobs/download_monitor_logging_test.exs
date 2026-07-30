@@ -36,7 +36,7 @@ defmodule Mydia.Jobs.DownloadMonitorLoggingTest do
       end)
 
       updated = Downloads.get_download!(download.id)
-      assert updated.error_message =~ "Removed from download client"
+      assert updated.error_message =~ "no longer configured in Mydia"
     end
 
     test "marks every missing download in the batch and emits an event for each" do
@@ -54,7 +54,7 @@ defmodule Mydia.Jobs.DownloadMonitorLoggingTest do
       # the first row, so later downloads went unmarked and no event ever fired.
       for download <- downloads do
         assert Downloads.get_download!(download.id).error_message =~
-                 "Removed from download client"
+                 "no longer configured in Mydia"
       end
 
       assert length(Events.list_events(type: "download.failed")) == 3
