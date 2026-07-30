@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.SearchScorer
   alias Mydia.Media
+  alias Mydia.Settings
 
   def generate_result_id(%SearchResult{} = result) do
     # Generate a unique ID based on the download URL and indexer
@@ -222,7 +223,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     {expected_season, expected_episode} = expected_identity(context)
 
     RankingOptions.build(%{
-      quality_profile: media_item.quality_profile,
+      quality_profile: Settings.effective_quality_profile(media_item.quality_profile_id),
       media_type: get_media_type(media_item),
       min_seeders: Map.get(assigns, :min_seeders),
       search_query: Map.get(assigns, :manual_search_query),

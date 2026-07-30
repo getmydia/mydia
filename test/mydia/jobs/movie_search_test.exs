@@ -364,4 +364,47 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert Mydia.Downloads.list_downloads() == []
     end
   end
+
+  describe "default quality profile fallback" do
+    test "an unstamped movie ranks with the configured default profile", %{bypass: bypass} do
+      default =
+        quality_profile_fixture(%{
+          name: "Default-1080p",
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      {:ok, _} = Settings.set_default_quality_profile(default.id)
+
+      # The 720p release has 50x the seeders. A bare seeders sort picks it;
+      # the default profile's preferred resolution picks the 1080p one.
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.movie_result(%{
+            title: "The Matrix",
+            year: 1999,
+            quality: "720p",
+            seeders: 500
+          }),
+          IndexerMock.movie_result(%{
+            title: "The Matrix",
+            year: 1999,
+            quality: "1080p",
+            seeders: 10
+          })
+        ]
+      )
+
+      movie = media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999})
+      assert movie.quality_profile_id == nil
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "specific",
+                 "media_item_id" => movie.id
+               })
+
+      assert [download] = Mydia.Downloads.list_downloads()
+      assert download.title =~ "1080p"
+    end
+  end
 end

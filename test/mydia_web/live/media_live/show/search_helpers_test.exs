@@ -1,9 +1,12 @@
 defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
-  use ExUnit.Case, async: true
+  use Mydia.DataCase, async: false
 
   alias MydiaWeb.MediaLive.Show.SearchHelpers
   alias Mydia.Indexers.{QualityParser, RankingOptions, ReleaseRanker, SearchResult}
   alias Mydia.Settings.QualityProfile
+
+  import Mydia.SettingsFixtures
+  import Mydia.MediaFixtures
 
   # Test Fixtures
 
@@ -380,6 +383,26 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
       # Should sort by size regardless of title match
       first = List.first(sorted)
       assert first.size == large_size
+    end
+  end
+
+  describe "build_manual_ranking_opts/1 default profile fallback" do
+    test "uses the configured default when the media item has no profile" do
+      default =
+        quality_profile_fixture(%{
+          name: "Default-#{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      {:ok, _} = Mydia.Settings.set_default_quality_profile(default.id)
+
+      media_item = media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999})
+      assert media_item.quality_profile_id == nil
+
+      opts = SearchHelpers.build_manual_ranking_opts(%{media_item: media_item})
+
+      assert %QualityProfile{id: id} = Keyword.get(opts, :quality_profile)
+      assert id == default.id
     end
   end
 end
