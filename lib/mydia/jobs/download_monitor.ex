@@ -336,16 +336,25 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Get the download struct from database (with media_item preloaded)
     download = Downloads.get_download!(download_map.id, preload: [:media_item])
 
+    # Bound once and used for both the event and the blacklist row below, so
+    # the activity feed and the admin blacklist page can never disagree about
+    # why this release failed (issue #237).
+    failure_slug = FailureCategory.slug(download_map.client_failure_category)
+
     # Track failure event before deletion. This metadata is what the activity
     # feed and the media-item history render, so the composed message is the
-    # operator's only lasting record — the Download row is deleted below.
-    Events.download_failed(download, error_msg, media_item: download.media_item)
+    # operator's only lasting record. The Download row is deleted below.
+    Events.download_failed(download, error_msg,
+      media_item: download.media_item,
+      failure_category: failure_slug,
+      failure_detail: download_map.client_error_detail
+    )
 
     # Blacklist the release so the next search excludes it (issue #123).
     # The reason is the provider's own classification when we have one
     # (issue #237), falling back to the pre-existing generic slug.
-    # This MUST NOT block failure handling — wrap in try/rescue and log.
-    record_blacklist_entry(download, FailureCategory.slug(download_map.client_failure_category))
+    # This MUST NOT block failure handling, so wrap in try/rescue and log.
+    record_blacklist_entry(download, failure_slug)
 
     # Delete the download record - downloads table is ephemeral
     case Downloads.delete_download(download) do

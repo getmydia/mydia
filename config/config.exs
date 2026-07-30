@@ -155,6 +155,7 @@ config :logger, :default_formatter,
     :device,
     :device1,
     :device2,
+    :quality_profile,
     # Status and results
     :reason,
     :error,

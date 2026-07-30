@@ -25,6 +25,7 @@
           auto_searching={@auto_searching}
           downloads_with_status={@downloads_with_status}
           quality_profiles={@quality_profiles}
+          default_quality_profile_id={@default_quality_profile_id}
           applying_monitoring_preset={@applying_monitoring_preset}
           is_favorite={@is_favorite}
           item_collections={@item_collections}
@@ -265,7 +266,6 @@
       quality_filter={@quality_filter}
       min_seeders={@min_seeders}
       sort_by={@sort_by}
-      quality_profile={@media_item.quality_profile}
     />
   <% end %>
   <%= if @show_rename_modal do %>
