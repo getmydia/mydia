@@ -48,18 +48,38 @@ LIBRARY_PATH_2_TYPE=books
 
 ## Library Scanning
 
-Mydia periodically scans your libraries to discover new media and update existing entries.
+Scanning discovers media files that Mydia did not add itself, such as files you copied
+into a library folder by hand. Files that arrive through the download and import
+pipeline are added automatically and do not need a scan.
 
-### Scan Settings
+Scanning is manual by default. You can enable automatic scanning per library.
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Scan Interval | Hours between automatic scans | 1 hour |
-| Monitored | Enable automatic scanning | true |
+### Automatic Scanning
+
+Set **Automatic scanning** on a library to have Mydia rescan that folder on a schedule.
+Choose from six presets: Off (manual only, the default), every 15 minutes (the
+shortest supported interval), every hour, every 6 hours, every 12 hours, or daily.
+There is no free-form interval entry.
+
+Scheduled scans are spread out by a random delay of up to 30 minutes so that many
+self-hosted instances do not all contact the metadata service at once. Manual scans
+start immediately.
+
+You can also set this with the `LIBRARY_PATH_<N>_SCAN_INTERVAL` environment variable,
+in seconds. When that variable is set it takes precedence and the value is reapplied on
+every restart. When it is not set, your choice in the admin interface is preserved.
 
 ### Manual Scanning
 
-Trigger a manual scan from the library page or admin interface.
+Trigger a scan at any time from the library page or the admin interface. Manual scans
+work whether or not automatic scanning is enabled.
+
+### Monitored
+
+**Monitored** controls whether a library is included when you trigger a scan of all
+libraries. It does not by itself enable automatic scanning, but a library must also
+be Monitored for its automatic scanning schedule to run. Unmonitoring a library
+pauses both its inclusion in scan-all and any automatic schedule you have set for it.
 
 ## Path Management
 

@@ -563,7 +563,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   Uses DaisyUI list components for a cleaner, more scannable UI.
   """
   attr :manual_search_context, :map, default: nil
-  attr :media_item, :map, required: true
+  attr :media_item, Mydia.Media.MediaItem, required: true
   attr :manual_search_query, :string, required: true
   attr :searching, :boolean, required: true
   attr :close_after_grab, :boolean, default: false
@@ -574,7 +574,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :quality_filter, :string, default: nil
   attr :min_seeders, :integer, default: 0
   attr :sort_by, :atom, required: true
-  attr :quality_profile, :map, default: nil
 
   def manual_search_modal(assigns) do
     # Calculate media_type for profile scoring
@@ -747,7 +746,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 class="list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0"
               >
                 <%!-- Score display --%>
-                <%= if @quality_profile do %>
+                <%= if Keyword.get(@manual_ranking_opts, :quality_profile) do %>
                   <%!-- Unified ranker score with breakdown dropdown --%>
                   <% score_data = profile_score_breakdown(result, @manual_ranking_opts) %>
                   <% breakdown = score_data.breakdown %>

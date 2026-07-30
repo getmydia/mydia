@@ -145,41 +145,22 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      |> put_flash(:error, "Provider switch failed unexpectedly")}
   end
 
+  # Refresh.run/2 already refreshes episodes for TV shows and writes NFOs, so
+  # this no longer hand-rolls the two-call sequence. Episode-refresh failures
+  # are logged there rather than surfaced as a flash: they are best-effort and
+  # must not read as a failed metadata refresh.
   defp do_standard_refresh(media_item, socket) do
-    metadata_result = Media.refresh_metadata(media_item)
-
-    case {media_item.type, metadata_result} do
-      {"tv_show", {:ok, updated_item}} ->
-        case Media.refresh_episodes_for_tv_show(updated_item) do
-          {:ok, count} ->
-            {:noreply,
-             socket
-             |> assign(:media_item, load_media_item(media_item.id))
-             |> put_flash(
-               :info,
-               "Refreshed metadata: #{count} episodes updated#{ambiguous_note(media_item)}"
-             )}
-
-          {:error, reason} ->
-            {:noreply,
-             socket
-             |> assign(:media_item, load_media_item(media_item.id))
-             |> put_flash(
-               :warning,
-               "Metadata refreshed but episode refresh failed: #{inspect(reason)}"
-             )}
-        end
-
-      {"movie", {:ok, _updated_item}} ->
+    case Media.Refresh.run(media_item) do
+      {:ok, _updated_item} ->
         {:noreply,
          socket
          |> assign(:media_item, load_media_item(media_item.id))
-         |> put_flash(:info, "Metadata refreshed")}
+         |> put_flash(:info, "Metadata refreshed#{ambiguous_note(media_item)}")}
 
-      {_, {:error, :missing_provider_id}} ->
+      {:error, :missing_provider_id} ->
         {:noreply, put_flash(socket, :error, "Cannot refresh: Missing provider ID (TMDB/TVDB)")}
 
-      {_, {:error, reason}} ->
+      {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to refresh metadata: #{inspect(reason)}")}
     end
   end

@@ -3,6 +3,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
   alias Mydia.Metadata.Provider.Relay
   alias Mydia.Metadata.Provider.Error
+  alias Mydia.Metadata.Structs.Video
 
   @moduletag :external
 
@@ -391,6 +392,29 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert String.contains?(String.downcase(metadata.title), "breaking bad")
       assert is_integer(metadata.year)
       assert is_list(metadata.genres)
+    end
+
+    test "populates videos from TVDB's own trailers when it has them" do
+      # House of the Dragon - TVDB ID: 371572. TVDB carries 8 trailers for this
+      # show, so no TMDB fallback should be needed.
+      assert {:ok, metadata} =
+               Relay.fetch_by_id(@config, "371572", media_type: :tv_show, provider: :tvdb)
+
+      assert metadata.provider == :tvdb
+      assert [%Video{} | _] = metadata.videos
+      assert Enum.all?(metadata.videos, &(&1.site == "YouTube"))
+      assert Enum.all?(metadata.videos, &(is_binary(&1.key) and &1.key != ""))
+    end
+
+    test "falls back to TMDB videos when TVDB has no trailers" do
+      # Game of Thrones - TVDB ID: 121361. TVDB carries no trailers, but its
+      # remoteIds cross-references TheMovieDB.com 1399, which does.
+      assert {:ok, metadata} =
+               Relay.fetch_by_id(@config, "121361", media_type: :tv_show, provider: :tvdb)
+
+      assert metadata.provider == :tvdb
+      assert [%Video{} | _] = metadata.videos
+      assert Enum.all?(metadata.videos, &(&1.site == "YouTube"))
     end
   end
 

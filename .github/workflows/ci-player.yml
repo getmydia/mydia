@@ -7,10 +7,16 @@ on:
       - main
     paths:
       - "player/**"
+      # player/rust/mydia_player_p2p depends on ../../native/mydia_p2p_core by
+      # relative path, so build-android cross-compiles code that lives outside
+      # player/. Without this, a change breaking the Android target lands green
+      # (ci.yml only builds the NIF for the host) and surfaces at release time.
+      - "native/**"
       - ".github/workflows/ci-player.yml"
   pull_request:
     paths:
       - "player/**"
+      - "native/**"
       - ".github/workflows/ci-player.yml"
   workflow_dispatch:
 
@@ -20,8 +26,6 @@ concurrency:
 
 env:
   PLAYER_PATH: 'player'
-  # KEEP IN SYNC with devenv.nix (flutter344 = 3.44.2) and ci.yml FLUTTER_VERSION.
-  FLUTTER_VERSION: '3.44.2'
 
 jobs:
   build:
@@ -86,7 +90,7 @@ jobs:
         if: steps.check_platform.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: player/.fvmrc
           channel: 'stable'
           cache: true
 
@@ -129,4 +133,62 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
+          retention-days: 7
+
+  build-android:
+    name: Build / Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            player/.dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install dependencies
+        working-directory: player
+        run: flutter pub get
+
+      # Not optional: the generated Dart files are gitignored, so without this a
+      # clean checkout fails the build with hundreds of errors pointing nowhere
+      # near codegen. No --delete-conflicting-outputs; it was removed in
+      # build_runner 2.15 and is now warned about and ignored.
+      - name: Run code generation
+        working-directory: player
+        run: flutter pub run build_runner build
+
+      # Drives cargokit, which cross-compiles player/rust_builder against the
+      # NDK. This is what puts the Rust/Dart FFI boundary under PR coverage;
+      # before this job it was only exercised by release.yml. Relies on the
+      # runner's preinstalled rustup, same as release.yml's player-android.
+      - name: Build APK
+        working-directory: player
+        run: flutter build apk --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mydia-player-android-apk
+          path: player/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7

@@ -8,18 +8,25 @@ defmodule Mydia.Jobs.LibraryScanner do
   - Updates the database with file information
   - Tracks scan status and errors
 
-  For scheduled "scan all" runs, a random delay (0-30 minutes) is applied
-  to spread load across self-hosted instances hitting the metadata relay.
+  Scans enqueued automatically (the interval scheduler and the boot-time health
+  check) carry a random `schedule_in` delay of up to 30 minutes, which spreads
+  load across self-hosted instances hitting the metadata relay. See
+  `jitter_seconds/0`. Manual triggers insert with no delay and run immediately.
   """
 
   use Oban.Worker,
     queue: :media,
-    max_attempts: 3
+    max_attempts: 3,
+    unique: [
+      period: :infinity,
+      states: [:available, :scheduled, :executing, :retryable, :suspended],
+      keys: [:library_path_id, :library_type]
+    ]
 
   require Logger
   alias Mydia.{Library, Settings, Repo, Metadata}
 
-  # Random delay range for scheduled scan_all (0-30 minutes in ms)
+  # Upper bound of the insert-time jitter applied to automatic scans.
   @max_startup_delay_ms 30 * 60 * 1000
 
   alias Mydia.Library.{
@@ -35,22 +42,31 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   defmodule Args do
     @moduledoc false
-    defstruct [:library_path_id, :library_type, skip_delay: false]
+    defstruct [:library_path_id, :library_type]
 
     @type t :: %__MODULE__{
             library_path_id: String.t() | nil,
-            library_type: String.t() | nil,
-            skip_delay: boolean()
+            library_type: String.t() | nil
           }
 
     def parse(raw) do
       %__MODULE__{
         library_path_id: Map.get(raw, "library_path_id"),
-        library_type: Map.get(raw, "library_type"),
-        skip_delay: Map.get(raw, "skip_delay", false)
+        library_type: Map.get(raw, "library_type")
       }
     end
   end
+
+  @doc """
+  Random delay for automatically enqueued scans: 1 second to 30 minutes,
+  returned in seconds.
+
+  Spreads metadata-relay load across self-hosted instances whose crons and
+  restarts cluster on the same moments. Applied via Oban `schedule_in` so the
+  job waits in the `:scheduled` state instead of occupying a `:media` queue slot.
+  """
+  @spec jitter_seconds() :: pos_integer()
+  def jitter_seconds, do: :rand.uniform(div(@max_startup_delay_ms, 1000))
 
   @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
@@ -58,16 +74,6 @@ defmodule Mydia.Jobs.LibraryScanner do
     args = Args.parse(raw_args)
     library_path_id = args.library_path_id
     library_type = args.library_type
-
-    # Add random delay for scheduled "scan all" runs to spread load across instances
-    # Skip delay for manual triggers (skip_delay: true) or specific library scans
-    if is_nil(library_path_id) and is_nil(library_type) and not args.skip_delay do
-      delay_ms = :rand.uniform(@max_startup_delay_ms)
-      delay_minutes = Float.round(delay_ms / 60_000, 1)
-
-      Logger.info("Library scan scheduled, waiting #{delay_minutes} minutes before starting")
-      Process.sleep(delay_ms)
-    end
 
     start_time = System.monotonic_time(:millisecond)
 

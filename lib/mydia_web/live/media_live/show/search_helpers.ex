@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   """
 
   alias Mydia.Indexers
+  alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.RankingOptions
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.SearchResult
@@ -222,7 +223,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     {expected_season, expected_episode} = expected_identity(context)
 
     RankingOptions.build(%{
-      quality_profile: media_item.quality_profile,
+      quality_profile: QualityProfileResolver.resolve(media_item),
       media_type: get_media_type(media_item),
       min_seeders: Map.get(assigns, :min_seeders),
       search_query: Map.get(assigns, :manual_search_query),

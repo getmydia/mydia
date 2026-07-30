@@ -532,6 +532,13 @@ defmodule MydiaWeb.MediaLive.Index do
     alias Mydia.Library
 
     case Library.trigger_full_library_scan() do
+      # The scan job is unique, so this insert can be deduped into a scan that is
+      # already queued (the boot-time repair scan waits out a jitter delay before
+      # it runs). Don't claim a scan started, and don't switch the UI into a
+      # scanning state that no broadcast will ever clear.
+      {:ok, %Oban.Job{conflict?: true}} ->
+        {:noreply, put_flash(socket, :info, "A library scan is already queued")}
+
       {:ok, _job} ->
         {:noreply,
          socket

@@ -24,7 +24,7 @@ flutter pub get
 
 # Run code generation
 echo "Running code generation..."
-flutter pub run build_runner build --delete-conflicting-outputs
+flutter pub run build_runner build
 
 # Build web release
 echo "Building web release..."

@@ -122,10 +122,6 @@ media:
   # This creates a monitored library path of type "series"
   tv_path: "/media/tv"
 
-  # How often to scan the media library (in hours)
-  # This is the default scan interval for library paths
-  scan_interval_hours: 1
-
   # Automatically trigger search & download when adding media to library
   # When true: Adding a movie/show automatically queues a search job
   # When false: Requires manual "Auto Search & Download" button click
@@ -144,19 +140,23 @@ media:
 #
 # Note: If you use library_paths, you don't need to set movies_path/tv_path
 # unless you want backward compatibility.
+#
+# scan_interval is opt-in. Omit it (as the examples below do) and the library is
+# scanned only when you ask for it. Set it to enable automatic scanning, in
+# seconds; the minimum is 900 (15 minutes) and smaller values are raised to it.
 library_paths:
   # Example: Movies library
   - path: "/media/movies"
     type: "movies" # Type: movies, series, or mixed
     monitored: true # Enable/disable monitoring
-    scan_interval: 3600 # Scan interval in seconds (3600 = 1 hour)
+    # scan_interval: 3600 # Optional: Scan automatically every hour
     # quality_profile_id: 1 # Optional: Assign a quality profile
 
   # Example: TV shows library
   - path: "/media/tv-shows"
     type: "series"
     monitored: true
-    scan_interval: 3600
+    # scan_interval: 3600
 
   # Example: Mixed media library (not monitored)
   # - path: "/media/mixed"

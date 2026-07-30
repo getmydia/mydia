@@ -2,6 +2,7 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
+  alias Mydia.Events
   alias Mydia.Jobs.MetadataRefresh
 
   import Mydia.MediaFixtures
@@ -14,8 +15,7 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
                perform_job(MetadataRefresh, %{"media_item_id" => fake_id})
     end
 
-    test "returns error when media item has no provider ID and title search fails" do
-      # Create media item without TMDB ID
+    test "returns missing_provider_id when nothing resolves and recovery fails" do
       media_item =
         media_item_fixture(%{
           type: "movie",
@@ -24,103 +24,76 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
           tmdb_id: nil
         })
 
-      # Since title search will fail (no mock results), should return error
-      result = perform_job(MetadataRefresh, %{"media_item_id" => media_item.id})
-
-      assert result == {:error, :no_provider_id}
-    end
-
-    test "refreshes media item when TMDB ID exists" do
-      # Create media item with TMDB ID
-      media_item =
-        media_item_fixture(%{
-          type: "movie",
-          title: "Test Movie",
-          year: 2024,
-          tmdb_id: 12345
-        })
-
-      # This will fail because no mock server, but should get past the TMDB ID check
-      result = perform_job(MetadataRefresh, %{"media_item_id" => media_item.id})
-
-      # Will fail due to no metadata relay, but should not be :no_provider_id
-      assert result != {:error, :no_provider_id}
+      assert {:error, :missing_provider_id} =
+               perform_job(MetadataRefresh, %{"media_item_id" => media_item.id})
     end
   end
 
-  describe "title similarity scoring" do
-    test "exact title match scores highest" do
-      score = calculate_similarity_score("The Matrix", "The Matrix")
-      assert score == 1.0
+  describe "run_all/1 - pass isolation" do
+    test "one raising item does not abort the pass" do
+      for n <- 1..3 do
+        media_item_fixture(%{type: "movie", title: "Item #{n}", year: 2024})
+      end
+
+      attempted = :counters.new(1, [])
+
+      raise_on_second = fn _media_item ->
+        :counters.add(attempted, 1, 1)
+
+        if :counters.get(attempted, 1) == 2 do
+          raise "boom"
+        end
+
+        {:error, :relay_unavailable}
+      end
+
+      assert :ok = MetadataRefresh.run_all(raise_on_second)
+
+      # All three were attempted: the raise was contained, not propagated.
+      assert :counters.get(attempted, 1) == 3
     end
 
-    test "case insensitive match scores high" do
-      score = calculate_similarity_score("the matrix", "The Matrix")
-      assert score == 1.0
+    test "emits a job_failed event carrying accurate counts" do
+      for n <- 1..3 do
+        media_item_fixture(%{type: "movie", title: "Item #{n}", year: 2024})
+      end
+
+      assert :ok = MetadataRefresh.run_all(fn _item -> {:error, :relay_unavailable} end)
+
+      assert [event] = Events.list_events(category: "system", type: "job.failed")
+      assert event.metadata["job_name"] == "metadata_refresh"
+      assert event.metadata["total"] == 3
+      assert event.metadata["succeeded"] == 0
+      assert event.metadata["failed"] == 3
     end
 
-    test "substring match scores well" do
-      score = calculate_similarity_score("The Matrix", "The Matrix Reloaded")
-      assert score >= 0.7
-    end
+    test "emits no event when every item succeeds" do
+      item = media_item_fixture(%{type: "movie", title: "Fine", year: 2024})
 
-    test "completely different titles score low" do
-      score = calculate_similarity_score("The Matrix", "Inception")
-      assert score < 0.6
-    end
-  end
+      assert :ok = MetadataRefresh.run_all(fn _item -> {:ok, item} end)
 
-  describe "year matching" do
-    test "exact year match returns true" do
-      assert year_matches?(2020, 2020)
-    end
-
-    test "year difference of 1 returns true" do
-      assert year_matches?(2020, 2021)
-      assert year_matches?(2021, 2020)
-    end
-
-    test "year difference of 2 or more returns false" do
-      refute year_matches?(2020, 2022)
-    end
-
-    test "nil media year returns true when result has year" do
-      assert year_matches?(2020, nil)
-    end
-
-    test "nil result year returns false" do
-      refute year_matches?(nil, 2020)
-    end
-  end
-
-  # Helper functions to test the scoring logic
-  # These mirror the private functions in MetadataRefresh
-
-  defp calculate_similarity_score(title1, title2) do
-    norm1 = normalize_title(title1)
-    norm2 = normalize_title(title2)
-
-    cond do
-      norm1 == norm2 -> 1.0
-      String.contains?(norm1, norm2) or String.contains?(norm2, norm1) -> 0.8
-      true -> String.jaro_distance(norm1, norm2)
+      assert [] = Events.list_events(category: "system", type: "job.failed")
     end
   end
 
-  defp normalize_title(title) do
-    title
-    |> String.downcase()
-    |> String.replace(~r/[^\w\s]/, "")
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
+  describe "scheduled jitter" do
+    test "first attempt snoozes instead of sleeping" do
+      assert {:snooze, seconds} = perform_job(MetadataRefresh, %{"refresh_all" => true})
+      assert seconds >= 1
+      assert seconds <= 1800
+    end
+
+    test "runs the pass on a later attempt" do
+      assert :ok = perform_job(MetadataRefresh, %{"refresh_all" => true}, attempt: 2)
+    end
+
+    test "runs immediately when skip_delay is set" do
+      assert :ok =
+               perform_job(MetadataRefresh, %{"refresh_all" => true, "skip_delay" => true})
+    end
+
+    test "runs immediately for a manual empty-args trigger" do
+      assert :ok = perform_job(MetadataRefresh, %{})
+    end
   end
-
-  defp year_matches?(result_year, nil), do: result_year != nil
-  defp year_matches?(nil, _media_year), do: false
-
-  defp year_matches?(result_year, media_year) when is_integer(result_year) do
-    abs(result_year - media_year) <= 1
-  end
-
-  defp year_matches?(_result_year, _media_year), do: false
 end

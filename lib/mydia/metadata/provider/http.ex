@@ -228,8 +228,7 @@ defmodule Mydia.Metadata.Provider.HTTP do
   ## Private Functions
 
   defp add_api_key_auth(req, %{api_key: api_key, options: %{auth_method: :query}} = config) do
-    param_name = get_in(config, [:options, :api_key_param]) || "api_key"
-    maybe_add_params(req, [{String.to_atom(param_name), api_key}])
+    put_api_key_param(req, config, api_key)
   end
 
   defp add_api_key_auth(req, %{api_key: api_key, options: %{auth_method: :bearer}}) do
@@ -243,8 +242,45 @@ defmodule Mydia.Metadata.Provider.HTTP do
 
   # Default to query parameter authentication
   defp add_api_key_auth(req, %{api_key: api_key} = config) do
+    put_api_key_param(req, config, api_key)
+  end
+
+  # Append the configured API key to the query as a request step.
+  #
+  # Two things this deliberately avoids.
+  #
+  # It does not write the key into `req.url.query` at construction time.
+  # `Req.merge/2` treats `:url` as a request-struct field and replaces
+  # `request.url` wholesale (`put_in(acc.url, URI.parse(url))`), so a query
+  # written up front is discarded by the first `get/2` or `post/2` call, which
+  # always supplies a `:url`. That was the original bug.
+  #
+  # It also does not pass the key as the `:params` option. `Req.merge/2` merges
+  # that option with `Keyword.merge/2`, which requires atom keys, and
+  # `api_key_param` is operator-supplied configuration. Interning it with
+  # `String.to_atom/1` is unbounded atom growth, which the VM never reclaims.
+  # Keeping the name a string sidesteps that entirely, and `put_params` calls
+  # `to_string/1` on param names anyway.
+  #
+  # Appended steps run after `put_params`, so per-request params are already in
+  # the query by the time this runs. The key is only added when absent, leaving
+  # an explicit per-request value of the same name to win.
+  defp put_api_key_param(req, config, api_key) do
     param_name = get_in(config, [:options, :api_key_param]) || "api_key"
-    maybe_add_params(req, [{String.to_atom(param_name), api_key}])
+
+    Req.Request.append_request_steps(req,
+      mydia_api_key: fn request ->
+        update_in(request.url.query, fn query ->
+          params = Enum.to_list(URI.query_decoder(query || ""))
+
+          if List.keymember?(params, param_name, 0) do
+            URI.encode_query(params)
+          else
+            URI.encode_query(params ++ [{param_name, api_key}])
+          end
+        end)
+      end
+    )
   end
 
   # Unused - kept for potential future use
@@ -262,35 +298,6 @@ defmodule Mydia.Metadata.Provider.HTTP do
   #
   #   %{request | url: new_url}
   # end
-
-  defp maybe_add_params(req, params) when is_list(params) or is_map(params) do
-    # Get existing params and merge with new ones
-    existing_params =
-      case req.url.query do
-        nil -> []
-        query -> URI.decode_query(query) |> Enum.to_list()
-      end
-
-    # Convert params to keyword list
-    new_params =
-      params
-      |> Enum.map(fn
-        {k, v} when is_atom(k) -> {Atom.to_string(k), to_string(v)}
-        {k, v} -> {to_string(k), to_string(v)}
-      end)
-
-    # Merge params (new params override existing)
-    all_params =
-      existing_params
-      |> Keyword.new()
-      |> Keyword.merge(new_params)
-
-    # Update request URL with merged params
-    query_string = URI.encode_query(all_params)
-    new_url = %{req.url | query: query_string}
-
-    %{req | url: new_url}
-  end
 
   defp handle_response({:ok, %Req.Response{} = response}) do
     {:ok, response}

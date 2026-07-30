@@ -1860,19 +1860,27 @@ defmodule Mydia.Library do
   def trigger_library_scan(library_path_id) do
     %{library_path_id: library_path_id}
     |> Mydia.Jobs.LibraryScanner.new()
-    |> Oban.insert()
+    |> insert_scan_job()
   end
 
   @doc """
-  Triggers a manual library scan for all monitored library paths.
+  Triggers a library scan for all monitored library paths.
+
+  ## Options
+
+    - `:schedule_in` - Seconds to wait before the scan runs. Omitted by manual
+      triggers, which should start immediately. Automatic callers pass
+      `Mydia.Jobs.LibraryScanner.jitter_seconds/0` so that instances restarting
+      on the same new image do not hit the metadata relay at once.
 
   Returns an Oban job that will perform the scan.
   """
-  @spec trigger_full_library_scan() :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
-  def trigger_full_library_scan do
+  @spec trigger_full_library_scan(keyword()) ::
+          {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
+  def trigger_full_library_scan(opts \\ []) do
     %{}
-    |> Mydia.Jobs.LibraryScanner.new()
-    |> Oban.insert()
+    |> Mydia.Jobs.LibraryScanner.new(Keyword.take(opts, [:schedule_in]))
+    |> insert_scan_job()
   end
 
   @doc """
@@ -1887,7 +1895,17 @@ defmodule Mydia.Library do
   def trigger_adult_library_scan do
     %{library_type: "adult"}
     |> Mydia.Jobs.LibraryScanner.new()
-    |> Oban.insert()
+    |> insert_scan_job()
+  end
+
+  # Insert an Oban job, falling back to a direct Repo insert when Oban's
+  # engine is disabled (test mode, config/test.exs sets engine: false so no
+  # Oban instance is running). Mirrors the pattern used by
+  # Mydia.Downloads.Queue.insert_job/1 and Mydia.Jobs.DownloadMonitor.
+  defp insert_scan_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
   end
 
   @doc """

@@ -81,7 +81,7 @@ COPY priv/graphql/schema.graphql lib/graphql/schema.graphql
 # Run build_runner for code generation with cache
 RUN --mount=type=cache,target=/root/.pub-cache \
     cp -r /tmp/.pub-cache-copy/* /root/.pub-cache/ 2>/dev/null || true && \
-    flutter pub run build_runner build --delete-conflicting-outputs
+    flutter pub run build_runner build
 
 # Persist pub cache into the image filesystem (cache mounts are ephemeral).
 RUN mkdir -p /root/.pub-cache && \

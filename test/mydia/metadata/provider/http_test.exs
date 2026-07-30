@@ -44,11 +44,13 @@ defmodule Mydia.Metadata.Provider.HTTPTest do
       assert req.options[:max_retries] == 3
     end
 
-    test "adds API key as query parameter by default" do
+    test "registers a request step to inject the API key" do
       req = HTTP.new_request(@config)
 
-      # Check that URL has api_key in query
-      assert req.url.query =~ "api_key=test_api_key"
+      # Only a smoke check that the step is wired up. Asserting the key's
+      # presence on the unsent struct is what hid the original bug, so the
+      # behaviour is covered by the request-level tests further down instead.
+      assert Keyword.has_key?(req.request_steps, :mydia_api_key)
     end
 
     test "adds API key as bearer token when auth_method is :bearer" do
@@ -124,6 +126,154 @@ defmodule Mydia.Metadata.Provider.HTTPTest do
       url = HTTP.build_image_url("https://image.tmdb.org/t/p/w500", "")
 
       assert url == nil
+    end
+  end
+
+  describe "authentication on an actual request" do
+    # The new_request/1 tests above assert on the request struct before it is
+    # sent. That is not enough: Req.merge/2 replaces request.url wholesale when
+    # a :url option is given, so anything written directly into url.query at
+    # construction time is discarded the moment get/2 or post/2 supplies a path.
+    # These tests drive a real request through Bypass and assert on what the
+    # server actually receives.
+
+    setup do
+      bypass = Bypass.open()
+
+      config = fn overrides ->
+        Map.merge(
+          %{
+            type: :tmdb,
+            api_key: "test_api_key",
+            base_url: "http://localhost:#{bypass.port}",
+            options: %{}
+          },
+          overrides
+        )
+      end
+
+      {:ok, bypass: bypass, config: config}
+    end
+
+    defp echo_query(bypass, path, test_pid) do
+      Bypass.expect_once(bypass, "GET", path, fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        send(test_pid, {:query_params, conn.query_params})
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"results": []}))
+      end)
+    end
+
+    test "sends the API key as a query parameter by default", %{
+      bypass: bypass,
+      config: config
+    } do
+      echo_query(bypass, "/movie/603", self())
+
+      req = HTTP.new_request(config.(%{}))
+      assert {:ok, %Req.Response{status: 200}} = HTTP.get(req, "/movie/603")
+
+      assert_receive {:query_params, params}
+      assert params["api_key"] == "test_api_key"
+    end
+
+    test "keeps the API key alongside per-request params", %{
+      bypass: bypass,
+      config: config
+    } do
+      echo_query(bypass, "/search/movie", self())
+
+      req = HTTP.new_request(config.(%{}))
+
+      assert {:ok, %Req.Response{status: 200}} =
+               HTTP.get(req, "/search/movie", params: [query: "Matrix", language: "en-US"])
+
+      assert_receive {:query_params, params}
+      assert params["api_key"] == "test_api_key"
+      assert params["query"] == "Matrix"
+      assert params["language"] == "en-US"
+    end
+
+    test "honours a custom api_key_param name", %{bypass: bypass, config: config} do
+      echo_query(bypass, "/series/1396", self())
+
+      req =
+        config.(%{options: %{auth_method: :query, api_key_param: "apikey"}})
+        |> HTTP.new_request()
+
+      assert {:ok, %Req.Response{status: 200}} = HTTP.get(req, "/series/1396")
+
+      assert_receive {:query_params, params}
+      assert params["apikey"] == "test_api_key"
+      refute Map.has_key?(params, "api_key")
+    end
+
+    test "accepts an arbitrary api_key_param without interning it as an atom", %{
+      bypass: bypass,
+      config: config
+    } do
+      # A name that no atom table would already contain. This passes only
+      # because the param name stays a string end to end; converting it with
+      # String.to_atom/1 would work here too but grows the atom table without
+      # bound, and String.to_existing_atom/1 would raise.
+      param = "x-mydia-provider-key-9f3c"
+      refute_atom_exists = fn -> String.to_existing_atom(param) end
+      assert_raise ArgumentError, refute_atom_exists
+
+      echo_query(bypass, "/movie/603", self())
+
+      req =
+        config.(%{options: %{auth_method: :query, api_key_param: param}})
+        |> HTTP.new_request()
+
+      assert {:ok, %Req.Response{status: 200}} = HTTP.get(req, "/movie/603")
+
+      assert_receive {:query_params, params}
+      assert params[param] == "test_api_key"
+    end
+
+    test "lets a per-request param override the configured API key", %{
+      bypass: bypass,
+      config: config
+    } do
+      echo_query(bypass, "/movie/603", self())
+
+      req = HTTP.new_request(config.(%{}))
+
+      assert {:ok, %Req.Response{status: 200}} =
+               HTTP.get(req, "/movie/603", params: [api_key: "per_request_key"])
+
+      assert_receive {:query_params, params}
+      assert params["api_key"] == "per_request_key"
+    end
+
+    test "sends a bearer token on an actual request", %{bypass: bypass, config: config} do
+      test_pid = self()
+
+      Bypass.expect_once(bypass, "GET", "/movie/603", fn conn ->
+        send(test_pid, {:auth_header, Plug.Conn.get_req_header(conn, "authorization")})
+        Plug.Conn.resp(conn, 200, ~s({}))
+      end)
+
+      req = HTTP.new_request(config.(%{options: %{auth_method: :bearer}}))
+      assert {:ok, %Req.Response{status: 200}} = HTTP.get(req, "/movie/603")
+
+      assert_receive {:auth_header, ["Bearer test_api_key"]}
+    end
+
+    test "omits auth entirely when no API key is configured", %{
+      bypass: bypass,
+      config: config
+    } do
+      echo_query(bypass, "/movie/603", self())
+
+      req = config.(%{}) |> Map.delete(:api_key) |> HTTP.new_request()
+      assert {:ok, %Req.Response{status: 200}} = HTTP.get(req, "/movie/603")
+
+      assert_receive {:query_params, params}
+      refute Map.has_key?(params, "api_key")
     end
   end
 end

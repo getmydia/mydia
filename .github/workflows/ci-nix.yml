@@ -30,6 +30,67 @@ jobs:
       - name: Build PostgreSQL package
         run: nix build .#checks.x86_64-linux.package-postgres -L
 
+  flutter-pin:
+    name: Check / Flutter Pin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The nix eval below only proves player/.fvmrc agrees with nixpkgs. It
+      # cannot see a stale `flutter-version:` literal re-added to a workflow --
+      # the exact regression this pin exists to prevent. So scan every file that
+      # can select an SDK (workflows, Dockerfiles, compose files, nix modules,
+      # scripts) for a version literal sitting in Flutter context. Dart package
+      # manifests are deliberately out of scope: their constraints pin packages,
+      # not the SDK this repo builds with. Needs only the checkout, so it runs
+      # first and fails in seconds.
+      #
+      # `uses:` lines are skipped because an action reference is not an SDK
+      # selection. Without that, SHA-pinning the setup action in the usual
+      # hardening idiom (a commit sha followed by a trailing version comment)
+      # would fail this check for doing the right thing.
+      #
+      # Note this file is in scope for its own scan, so do not write a version
+      # literal in these comments either -- the same rule the check enforces.
+      - name: Assert no other build or CI file names a Flutter version
+        run: |
+          set -euo pipefail
+          hits="$(
+            git ls-files -z \
+                '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
+                'scripts/*' 'dev' \
+              | xargs -0 grep -HnIiE 'flutter' \
+              | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \
+              | grep -E '[0-9]+\.[0-9]+|[Ff]lutter[0-9]' \
+              || true
+          )"
+          if [ -n "$hits" ]; then
+            echo "::error::A Flutter version literal escaped player/.fvmrc"
+            echo "$hits"
+            echo
+            echo "player/.fvmrc is the single source of truth. Read from it instead:"
+            echo "  workflows   -> subosito/flutter-action with flutter-version-file"
+            echo "  Dockerfiles -> jq -r .flutter player/.fvmrc"
+            echo "  nix         -> import player/flutter-version.nix"
+            exit 1
+          fi
+          echo "OK: player/.fvmrc is the only file naming a Flutter version."
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # The assertion lives in player/flutter-version.nix; this step only forces
+      # evaluation. It builds nothing -- no SDK, no Android tooling -- so it costs
+      # a nixpkgs fetch and nothing more. A mismatch between player/.fvmrc and
+      # the flake's nixpkgs fails here with the message that names the fix.
+      - name: Assert the Android shell resolves the pinned Flutter
+        run: nix eval --raw ./player#packages.x86_64-linux.flutter.version
+
   test-sqlite-module:
     name: Test / NixOS Module (SQLite)
     runs-on: ubuntu-latest
