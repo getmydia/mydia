@@ -10,11 +10,119 @@ defmodule Mydia.Media.Refresh do
   `Access`.
   """
 
+  require Logger
+
+  alias Mydia.Media
   alias Mydia.Media.MediaItem
+  alias Mydia.Metadata
+  alias Mydia.Metadata.NfoWriter
   alias Mydia.Metadata.Structs.MediaMetadata
 
   @typedoc "A resolved provider id and the provider that owns it."
   @type resolution :: {pos_integer() | nil, :tvdb | :tmdb | nil}
+
+  @doc """
+  Refreshes one media item's metadata from its provider.
+
+  ## Options
+
+    * `:config` - relay config. Defaults to `Metadata.default_relay_config/0`.
+    * `:fetch_episodes` - refresh episodes for TV shows. Defaults to `true`.
+    * `:recover_by_title` - when no provider id can be resolved, search the
+      provider by title to re-identify the item. Defaults to `false`, because
+      fuzzy re-identification is surprising when triggered from a UI button.
+  """
+  @spec run(MediaItem.t(), keyword()) :: {:ok, MediaItem.t()} | {:error, term()}
+  def run(%MediaItem{} = media_item, opts \\ []) do
+    config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    fetch_episodes = Keyword.get(opts, :fetch_episodes, true)
+    media_type = media_type(media_item)
+
+    case resolve_provider(media_item) do
+      {nil, _source} ->
+        {:error, :missing_provider_id}
+
+      {provider_id, source} ->
+        with {:ok, metadata} <- fetch(provider_id, media_type, source, config),
+             {:ok, updated} <- apply_metadata(media_item, metadata, source) do
+          post_update(updated, media_type, fetch_episodes)
+          {:ok, updated}
+        end
+    end
+  end
+
+  defp media_type(%MediaItem{type: "tv_show"}), do: :tv_show
+  defp media_type(%MediaItem{}), do: :movie
+
+  defp fetch(provider_id, media_type, source, config) do
+    fetch_opts = [
+      media_type: media_type,
+      provider: source,
+      append_to_response: ["credits", "images", "videos", "keywords"]
+    ]
+
+    Metadata.fetch_by_id(config, to_string(provider_id), fetch_opts)
+  end
+
+  # `source` is threaded in from the resolution that actually produced
+  # `metadata`, never re-derived from the pre-update struct. Re-deriving is what
+  # let a recovered id get written to the wrong column.
+  defp apply_metadata(media_item, metadata, source) do
+    attrs =
+      %{
+        title: metadata.title,
+        original_title: metadata.original_title,
+        year: extract_year(metadata),
+        imdb_id: metadata.imdb_id,
+        metadata: metadata
+      }
+      |> put_provider_id(source, metadata.id)
+
+    case Media.update_media_item(media_item, attrs, reason: "Metadata refreshed") do
+      {:ok, updated} ->
+        {:ok, updated}
+
+      {:error, changeset} ->
+        Logger.error("Failed to update media item during refresh",
+          media_item_id: media_item.id,
+          errors: inspect(changeset.errors)
+        )
+
+        {:error, :update_failed}
+    end
+  end
+
+  defp put_provider_id(attrs, _source, nil), do: attrs
+  defp put_provider_id(attrs, :tvdb, id), do: Map.put(attrs, :tvdb_id, id)
+  defp put_provider_id(attrs, _source, id), do: Map.put(attrs, :tmdb_id, id)
+
+  # Episode refresh is best-effort: every other caller already ignores its
+  # result, and a failed episode fetch must not fail an otherwise good metadata
+  # refresh. Log it so the failure is still visible.
+  defp post_update(updated, :tv_show, true) do
+    case Media.refresh_episodes_for_tv_show(updated) do
+      {:ok, _count} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Metadata refreshed but episode refresh failed",
+          media_item_id: updated.id,
+          reason: inspect(reason)
+        )
+    end
+
+    NfoWriter.maybe_write_nfos(updated)
+    :ok
+  end
+
+  defp post_update(updated, _media_type, _fetch_episodes) do
+    NfoWriter.maybe_write_nfos(updated)
+    :ok
+  end
+
+  defp extract_year(%MediaMetadata{release_date: %Date{} = date}), do: date.year
+  defp extract_year(%MediaMetadata{first_air_date: %Date{} = date}), do: date.year
+  defp extract_year(%MediaMetadata{}), do: nil
 
   @doc """
   Resolves which provider and id a refresh should fetch from.

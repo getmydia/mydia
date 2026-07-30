@@ -1,6 +1,8 @@
 defmodule Mydia.Media.RefreshTest do
   use Mydia.DataCase, async: false
 
+  import Mydia.MediaFixtures
+
   alias Mydia.Media.MediaItem
   alias Mydia.Media.Refresh
   alias Mydia.Metadata.Structs.MediaMetadata
@@ -93,6 +95,105 @@ defmodule Mydia.Media.RefreshTest do
     test "a legacy plain-map metadata resolves to no provider instead of raising" do
       item = %MediaItem{tmdb_id: nil, tvdb_id: nil, metadata: %{"id" => 5}}
       assert Refresh.resolve_provider(item) == {nil, nil}
+    end
+  end
+
+  describe "run/2" do
+    setup do
+      bypass = Bypass.open()
+
+      # Inject the relay config directly so this test never mutates the global
+      # METADATA_RELAY_URL env var (which would race concurrent async tests).
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "refreshes a movie and syncs the wide attribute set", %{
+      bypass: bypass,
+      config: config
+    } do
+      item = media_item_fixture(%{type: "movie", title: "Stale Title", year: 1999, tmdb_id: 555})
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/movies/555", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "id" => 555,
+            "title" => "Fresh Title",
+            "original_title" => "Fresh Original",
+            "release_date" => "2020-05-01",
+            "imdb_id" => "tt7654321",
+            "overview" => "x",
+            "credits" => %{"cast" => [], "crew" => []},
+            "genres" => []
+          })
+        )
+      end)
+
+      assert {:ok, updated} = Refresh.run(item, config: config)
+
+      assert updated.title == "Fresh Title"
+      assert updated.original_title == "Fresh Original"
+      assert updated.year == 2020
+      assert updated.imdb_id == "tt7654321"
+      assert updated.tmdb_id == 555
+    end
+
+    # The job's resolver ignored metadata_source entirely, so it would have
+    # fetched this show from TVDB. Only the TMDB path is stubbed, so a
+    # wrong-provider fetch 404s and fails the test.
+    test "a TMDB-sourced show with a back-filled tvdb_id refreshes from TMDB", %{
+      bypass: bypass,
+      config: config
+    } do
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "TMDB Sourced",
+          metadata_source: :tmdb,
+          tmdb_id: 12_345,
+          tvdb_id: 67_890
+        })
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/tv/shows/12345", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "id" => 12_345,
+            "name" => "TMDB Sourced",
+            "first_air_date" => "2010-01-01",
+            "overview" => "x",
+            "credits" => %{"cast" => [], "crew" => []},
+            "genres" => [],
+            "seasons" => []
+          })
+        )
+      end)
+
+      assert {:ok, updated} = Refresh.run(item, config: config, fetch_episodes: false)
+      assert updated.tmdb_id == 12_345
+    end
+
+    test "returns :missing_provider_id and makes no request when nothing resolves", %{
+      bypass: bypass,
+      config: config
+    } do
+      item = media_item_fixture(%{type: "movie", title: "No Ids", year: 2024, tmdb_id: nil})
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/search", fn _conn ->
+        flunk("run/2 must not search when recover_by_title is not set")
+      end)
+
+      assert {:error, :missing_provider_id} = Refresh.run(item, config: config)
     end
   end
 end
