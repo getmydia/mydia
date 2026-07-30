@@ -80,7 +80,7 @@ defmodule Mydia.Jobs.LibraryScanScheduler do
   defp enqueue_scan(%LibraryPath{} = library_path) do
     changeset = LibraryScanner.new(%{library_path_id: library_path.id})
 
-    case insert_job(changeset) do
+    case Oban.insert(changeset) do
       {:ok, _job} ->
         :ok
 
@@ -92,15 +92,5 @@ defmodule Mydia.Jobs.LibraryScanScheduler do
 
         :error
     end
-  end
-
-  # Oban.insert/1 raises in the test environment (config/test.exs sets testing: :manual
-  # and engine: false, so no Oban process is registered). Fall back to a plain Repo
-  # insert so the changeset still lands, matching the pattern used elsewhere
-  # (Mydia.Downloads.Queue, Mydia.Jobs.DownloadMonitor, Mydia.Library).
-  defp insert_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
   end
 end

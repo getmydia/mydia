@@ -1,8 +1,13 @@
 defmodule Mydia.Jobs.LibraryScanSchedulerTest do
-  use Mydia.DataCase, async: true
+  # async: false: the runtime-config test below mutates the global
+  # :mydia, :runtime_config application env (same reason
+  # test/mydia/settings_test.exs's "runtime library paths" describe block
+  # is async: false).
+  use Mydia.DataCase, async: false
 
   import Mydia.Factory
 
+  alias Mydia.Jobs.LibraryScanner
   alias Mydia.Jobs.LibraryScanScheduler
 
   @now ~U[2026-07-30 12:00:00Z]
@@ -94,6 +99,59 @@ defmodule Mydia.Jobs.LibraryScanSchedulerTest do
       tick!()
 
       assert scanned_ids() == Enum.sort([a.id, b.id])
+    end
+  end
+
+  describe "enqueued job shape" do
+    test "the job built for a due path carries library_path_id but not skip_delay" do
+      library_path = insert(:library_path, scan_interval: 900, last_scan_at: nil)
+
+      changeset = LibraryScanner.new(%{library_path_id: library_path.id})
+
+      assert changeset.changes.args[:library_path_id] == library_path.id
+      refute Map.has_key?(changeset.changes.args, :skip_delay)
+    end
+  end
+
+  describe "due_paths/1 and runtime-config paths" do
+    test "does not return a library path that only exists in runtime config" do
+      runtime_config = %Mydia.Config.Schema{
+        # Config.Schema.get_runtime_library_paths/0 also checks the legacy
+        # `media.movies_path`/`media.tv_path` fields; both keys must be present
+        # (even if nil) or dot access on a nil/incomplete :media raises.
+        media: %{movies_path: nil, tv_path: nil},
+        library_paths: [
+          %{
+            path: "/media/runtime-only",
+            type: :movies,
+            monitored: true,
+            scan_interval: 900
+          }
+        ]
+      }
+
+      original_runtime = Application.get_env(:mydia, :runtime_config)
+      Application.put_env(:mydia, :runtime_config, runtime_config)
+
+      on_exit(fn ->
+        if original_runtime do
+          Application.put_env(:mydia, :runtime_config, original_runtime)
+        else
+          Application.delete_env(:mydia, :runtime_config)
+        end
+      end)
+
+      # Sanity check: Settings.list_library_paths/1 merges this path in with a
+      # synthesized runtime:: id and last_scan_at: nil, so it looks perpetually
+      # due. This is exactly the trap due_paths/1 must avoid.
+      assert Enum.any?(
+               Mydia.Settings.list_library_paths(),
+               &(&1.path == "/media/runtime-only")
+             )
+
+      due_paths = LibraryScanScheduler.due_paths(@now)
+
+      refute Enum.any?(due_paths, &(&1.path == "/media/runtime-only"))
     end
   end
 end

@@ -18,7 +18,10 @@ defmodule Mydia.Jobs.LibraryScannerTest do
 
       # Perform the job with the specific library path
       assert {:error, _reason} =
-               perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+               perform_job(LibraryScanner, %{
+                 "library_path_id" => library_path.id,
+                 "skip_delay" => true
+               })
 
       # Verify the library path was updated with failed status
       updated_path = Settings.get_library_path!(library_path.id)
@@ -29,7 +32,7 @@ defmodule Mydia.Jobs.LibraryScannerTest do
     @tag timeout: 120_000
     @tag :external
     test "successfully scans library with no media items" do
-      assert :ok = perform_job(LibraryScanner, %{})
+      assert :ok = perform_job(LibraryScanner, %{"skip_delay" => true})
     end
 
     @tag timeout: 120_000
@@ -39,7 +42,7 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       media_item_fixture(%{title: "Test Movie", type: "movie", monitored: true})
       media_item_fixture(%{title: "Test Show", type: "tv_show", monitored: false})
 
-      assert :ok = perform_job(LibraryScanner, %{})
+      assert :ok = perform_job(LibraryScanner, %{"skip_delay" => true})
     end
 
     @tag timeout: 120_000
@@ -50,7 +53,7 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       media_item_fixture(%{title: "Not Monitored", monitored: false})
 
       # Job should complete successfully
-      assert :ok = perform_job(LibraryScanner, %{})
+      assert :ok = perform_job(LibraryScanner, %{"skip_delay" => true})
 
       # Verify monitored item still exists (job doesn't modify items)
       assert Mydia.Media.get_media_item!(monitored.id).monitored == true
