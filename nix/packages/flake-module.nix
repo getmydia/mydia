@@ -160,13 +160,23 @@
         hash = "sha256-Oup/lGU8a9Dqfho4Llg39t9Y9n4xfUmGk0772OkpnLQ=";
       };
 
-      # Platform-specific binary names for esbuild/tailwind
+      # Platform-specific binary names for esbuild/tailwind.
+      #
+      # Throws rather than falling back. The previous `or "linux-x64"` was
+      # silently wrong on any unlisted system, in three separate ways: it named
+      # the Tailwind fetchurl (collapsing its version-qualified name back onto
+      # the x86_64 one, defeating the stale-hash guard below), and it named the
+      # _build/esbuild-* and _build/tailwind-* symlinks that the Elixir esbuild
+      # and tailwind wrappers look for. A mismatched symlink makes those
+      # wrappers try to download the binary at build time, which fails in the
+      # sandbox for reasons that point nowhere near this table.
       platformSuffix = {
         "x86_64-linux" = "linux-x64";
         "aarch64-linux" = "linux-arm64";
         "x86_64-darwin" = "darwin-x64";
         "aarch64-darwin" = "darwin-arm64";
-      }.${system} or "linux-x64";
+      }.${system} or (throw
+        "mydia: no esbuild/tailwind platform suffix recorded for ${system}; add one to platformSuffix in nix/packages/flake-module.nix (tailwindBinaries below needs an entry too)");
 
       # Pre-fetch npm dependencies (required for sandbox build)
       npmDeps = pkgs.fetchNpmDeps {
@@ -206,7 +216,7 @@
       # an all-A placeholder hash, which surfaced as an opaque hash mismatch
       # rather than "this platform was never set up".
       tailwindBinary = tailwindBinaries.${system} or (throw
-        "mydia: no Tailwind ${tailwindVersion} binary recorded for ${system}; add one to tailwindBinaries in nix/packages/flake-module.nix");
+        "mydia: no Tailwind ${tailwindVersion} binary recorded for ${system}; add one to tailwindBinaries in nix/packages/flake-module.nix (platformSuffix above needs an entry too)");
 
       tailwindcss_4_src = pkgs.fetchurl {
         # Version-qualified on purpose. Fixed-output derivations are keyed by
