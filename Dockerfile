@@ -17,6 +17,11 @@ COPY player/build.yaml ./
 COPY player/lib ./lib
 COPY player/web ./web
 COPY player/rust_builder ./rust_builder
+# Everything `pubspec.yaml` declares under `flutter: assets:`/`fonts:` — the
+# bundled Inter faces and their license. `flutter build web` hard-fails
+# ("unable to locate asset entry in pubspec.yaml") if a declared asset is
+# missing from the build context, so this must track the pubspec.
+COPY player/assets ./assets
 
 # Copy the GraphQL schema (resolves symlink from priv/graphql/)
 COPY priv/graphql/schema.graphql ./lib/graphql/schema.graphql
