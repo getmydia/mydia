@@ -374,12 +374,12 @@ let
 
     error_tracker = buildMix rec {
       name = "error_tracker";
-      version = "0.7.0";
+      version = "0.9.0";
 
       src = fetchHex {
         pkg = "error_tracker";
         version = "${version}";
-        sha256 = "47189e3b38d69e3caccc2fd6e3badf0dd2a37ebc8d720c8f6d526489dd758b05";
+        sha256 = "1de7d89ec9034c3b7282b6bd2d0584ca98cddc51e87bf0979ba71f6182803ac4";
       };
 
       beamDeps = [ ecto ecto_sql ecto_sqlite3 jason phoenix_ecto phoenix_live_view plug postgrex ];
