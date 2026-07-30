@@ -10,9 +10,14 @@
 let
   version = (builtins.fromJSON (builtins.readFile ./.fvmrc)).flutter;
 
-  # "3.44.2" -> [ "3" "44" "2" ] -> "flutter344", nixpkgs' naming for a pinned
-  # Flutter minor. The patch component is deliberately dropped: nixpkgs tracks
-  # one patch per minor, and the equality check below is what catches a drift.
+  # splitVersion "1.2.3" -> [ "1" "2" "3" ]. The first two components join into
+  # nixpkgs' name for a pinned Flutter minor: "1.2.3" becomes "flutter12". The
+  # patch component is deliberately dropped, because nixpkgs tracks one patch per
+  # minor; the equality check below is what catches a drift.
+  #
+  # The example above is deliberately not the pinned version. .fvmrc is the only
+  # file in the repo that may name a Flutter version, and the check is a plain
+  # grep, so an illustrative version here would fail it.
   parts = builtins.splitVersion version;
   attr = "flutter" + builtins.elemAt parts 0 + builtins.elemAt parts 1;
 
