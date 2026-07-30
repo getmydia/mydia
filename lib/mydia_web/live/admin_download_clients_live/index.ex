@@ -1,6 +1,7 @@
 defmodule MydiaWeb.AdminDownloadClientsLive.Index do
   use MydiaWeb, :live_view
 
+  alias Mydia.Downloads
   alias Mydia.Settings
   alias Mydia.Settings.DownloadClientConfig
   alias Mydia.Downloads.ClientHealth
@@ -14,6 +15,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
      socket
      |> assign(:page_title, "Configuration - Download Clients")
      |> assign(:active_tab, :clients)
+     |> assign(:pending_delete_client, nil)
+     |> assign(:pending_delete_count, 0)
      |> load_data()}
   end
 
@@ -107,7 +110,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
   end
 
   @impl true
-  def handle_event("delete_download_client", %{"id" => id}, socket) do
+  def handle_event("confirm_delete_download_client", %{"id" => id}, socket) do
     client = Settings.get_download_client_config!(id)
 
     if Settings.runtime_config?(client) do
@@ -118,28 +121,54 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
          "Cannot delete runtime-configured download client. This client is configured via environment variables and is read-only in the UI."
        )}
     else
-      case Settings.delete_download_client_config(client) do
-        {:ok, _client} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Download client deleted successfully")
-           |> load_data()}
+      # Counted before deletion, while the client still exists, so the operator
+      # sees the real blast radius rather than a bare "are you sure".
+      count = Downloads.count_downloads_for_client(client.name)
 
-        {:error, error} ->
-          MydiaLogger.log_error(:liveview, "Failed to delete download client",
-            error: error,
-            operation: :delete_download_client,
-            client_id: id,
-            client_name: client.name,
-            user_id: socket.assigns.current_user.id
-          )
+      {:noreply,
+       socket
+       |> assign(:pending_delete_client, client)
+       |> assign(:pending_delete_count, count)}
+    end
+  end
 
-          error_msg = MydiaLogger.user_error_message(:delete_download_client, error)
+  @impl true
+  def handle_event("cancel_delete_download_client", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:pending_delete_client, nil)
+     |> assign(:pending_delete_count, 0)}
+  end
 
-          {:noreply,
-           socket
-           |> put_flash(:error, error_msg)}
-      end
+  @impl true
+  def handle_event("delete_download_client", _params, socket) do
+    client = socket.assigns.pending_delete_client
+
+    case Settings.delete_download_client_config(client) do
+      {:ok, _client} ->
+        {:noreply,
+         socket
+         |> assign(:pending_delete_client, nil)
+         |> assign(:pending_delete_count, 0)
+         |> put_flash(:info, "Download client deleted successfully")
+         |> load_data()}
+
+      {:error, error} ->
+        MydiaLogger.log_error(:liveview, "Failed to delete download client",
+          error: error,
+          operation: :delete_download_client,
+          client_id: client.id,
+          client_name: client.name,
+          user_id: socket.assigns.current_user.id
+        )
+
+        error_msg = MydiaLogger.user_error_message(:delete_download_client, error)
+
+        {:noreply,
+         socket
+         |> assign(:pending_delete_client, nil)
+         |> assign(:pending_delete_count, 0)
+         |> put_flash(:error, error_msg)}
     end
   end
 

@@ -27,5 +27,10 @@
         editing_download_client={assigns[:editing_download_client]}
       />
     <% end %>
+
+    <MydiaWeb.AdminDownloadClientsLive.Components.delete_download_client_modal
+      client={assigns[:pending_delete_client]}
+      count={assigns[:pending_delete_count] || 0}
+    />
   </div>
 </Layouts.app>
