@@ -44,6 +44,10 @@ defmodule Mydia.Metadata.Structs.Video do
   # Hosts whose entire path is the key.
   @youtube_short_hosts ~w(youtu.be www.youtu.be)
 
+  # Mirrors the cap in `MediaMetadata.parse_videos/1` so TVDB-sourced and
+  # TMDB-sourced items persist lists of the same maximum length.
+  @max_videos 5
+
   @doc """
   Creates a new Video struct from a map or keyword list.
 
@@ -170,6 +174,9 @@ defmodule Mydia.Metadata.Structs.Video do
   language codes such as `["eng", "en"]` — sort ahead of the rest; order within
   a group is preserved. Unmatched languages are kept, not dropped, because a
   trailer in the wrong language still beats no trailer.
+
+  The result is capped at 5 entries to match `MediaMetadata.parse_videos/1`, so
+  TVDB-sourced items don't persist a longer list than TMDB-sourced ones.
   """
   @spec from_tvdb_trailers(list() | nil, [String.t()]) :: [t()]
   def from_tvdb_trailers(trailers, preferred_codes \\ [])
@@ -183,13 +190,17 @@ defmodule Mydia.Metadata.Structs.Video do
       end
     end)
     |> Enum.sort_by(fn {language, _video} -> language_rank(language, preferred_codes) end)
+    |> Enum.take(@max_videos)
     |> Enum.map(fn {_language, video} -> video end)
   end
 
   def from_tvdb_trailers(_trailers, _preferred_codes), do: []
 
-  defp trailer_id(nil), do: nil
-  defp trailer_id(id), do: to_string(id)
+  # `to_string/1` raises Protocol.UndefinedError for a map, and nothing between
+  # here and the TVDB fetch rescues it, so a malformed `id` would fail the whole
+  # TV show fetch. Only convert types we know are safe.
+  defp trailer_id(id) when is_integer(id) or is_binary(id), do: to_string(id)
+  defp trailer_id(_), do: nil
 
   # Enum.sort_by/2 is stable, so equal ranks keep their input order.
   defp language_rank(language, preferred_codes) do
@@ -199,8 +210,13 @@ defmodule Mydia.Metadata.Structs.Video do
     end
   end
 
+  # `URI.parse/1` does not normalize the host, so "HTTPS://WWW.YouTube.com/..."
+  # parses to host "WWW.YouTube.com". TVDB trailer URLs are user-contributed and
+  # mixed case is common, so downcase before matching.
   defp youtube_key(url) do
-    case URI.parse(url) do
+    uri = URI.parse(url)
+
+    case %{uri | host: downcase_host(uri.host)} do
       %URI{host: host, path: path, query: query} when host in @youtube_hosts ->
         key_from_embed_path(path) || key_from_query(query)
 
@@ -211,6 +227,9 @@ defmodule Mydia.Metadata.Structs.Video do
         nil
     end
   end
+
+  defp downcase_host(host) when is_binary(host), do: String.downcase(host)
+  defp downcase_host(host), do: host
 
   defp key_from_embed_path(nil), do: nil
 

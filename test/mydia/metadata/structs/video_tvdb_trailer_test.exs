@@ -42,6 +42,40 @@ defmodule Mydia.Metadata.Structs.VideoTvdbTrailerTest do
       assert video.key == "M1bhOaLV4FU"
     end
 
+    test "parses a youtube /v/ URL" do
+      assert {:ok, video} =
+               Video.from_tvdb_trailer(
+                 trailer(%{"url" => "https://www.youtube.com/v/M1bhOaLV4FU"})
+               )
+
+      assert video.key == "M1bhOaLV4FU"
+    end
+
+    test "parses a youtube /shorts/ URL" do
+      assert {:ok, video} =
+               Video.from_tvdb_trailer(
+                 trailer(%{"url" => "https://www.youtube.com/shorts/M1bhOaLV4FU"})
+               )
+
+      assert video.key == "M1bhOaLV4FU"
+    end
+
+    test "parses a mixed-case scheme and host" do
+      # URI.parse/1 does not normalize the host, and TVDB trailer URLs are
+      # user-contributed, so mixed case must still match.
+      assert {:ok, video} =
+               Video.from_tvdb_trailer(
+                 trailer(%{"url" => "HTTPS://WWW.YouTube.com/watch?v=M1bhOaLV4FU"})
+               )
+
+      assert video.key == "M1bhOaLV4FU"
+
+      assert {:ok, short} =
+               Video.from_tvdb_trailer(trailer(%{"url" => "HTTPS://YOUTU.BE/M1bhOaLV4FU"}))
+
+      assert short.key == "M1bhOaLV4FU"
+    end
+
     test "rejects a non-YouTube URL" do
       assert :error = Video.from_tvdb_trailer(trailer(%{"url" => "https://vimeo.com/123456"}))
     end
@@ -62,6 +96,26 @@ defmodule Mydia.Metadata.Structs.VideoTvdbTrailerTest do
                })
 
       assert video.id == nil
+    end
+
+    test "tolerates a non-scalar id rather than raising" do
+      # to_string/1 raises Protocol.UndefinedError for a map, and nothing between
+      # here and the TVDB fetch rescues it, so a malformed id must not blow up.
+      assert {:ok, video} =
+               Video.from_tvdb_trailer(%{
+                 "id" => %{"unexpected" => "shape"},
+                 "url" => "https://www.youtube.com/watch?v=M1bhOaLV4FU"
+               })
+
+      assert video.id == nil
+
+      assert {:ok, list_id} =
+               Video.from_tvdb_trailer(%{
+                 "id" => [1, 2],
+                 "url" => "https://www.youtube.com/watch?v=M1bhOaLV4FU"
+               })
+
+      assert list_id.id == nil
     end
   end
 
@@ -118,6 +172,33 @@ defmodule Mydia.Metadata.Structs.VideoTvdbTrailerTest do
         )
 
       assert Enum.map(videos, & &1.key) == ["spakey"]
+    end
+
+    test "caps the result at 5 to match MediaMetadata.parse_videos/1" do
+      # The Boys carries 11 trailers on TVDB; TVDB-sourced items must not
+      # persist a longer list than TMDB-sourced ones.
+      trailers =
+        for n <- 1..11 do
+          trailer(%{"language" => "eng", "url" => "https://www.youtube.com/watch?v=key#{n}"})
+        end
+
+      videos = Video.from_tvdb_trailers(trailers, ["eng"])
+
+      assert length(videos) == 5
+      assert Enum.map(videos, & &1.key) == ["key1", "key2", "key3", "key4", "key5"]
+    end
+
+    test "applies the cap after the language sort, not before" do
+      trailers =
+        for n <- 1..6 do
+          language = if n == 6, do: "eng", else: "spa"
+          trailer(%{"language" => language, "url" => "https://www.youtube.com/watch?v=key#{n}"})
+        end
+
+      videos = Video.from_tvdb_trailers(trailers, ["eng"])
+
+      assert length(videos) == 5
+      assert List.first(videos).key == "key6"
     end
   end
 end
