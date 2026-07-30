@@ -748,9 +748,6 @@
             </label>
             <select name="batch_edit[quality_profile_id]" class="select select-bordered w-full">
               <option value="no_change">— No change —</option>
-              <option value="">
-                {default_quality_profile_label(@default_quality_profile_name)}
-              </option>
               <%= for profile <- @quality_profiles do %>
                 <option value={profile.id}>{profile.name}</option>
               <% end %>

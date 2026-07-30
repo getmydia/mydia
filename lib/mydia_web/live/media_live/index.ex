@@ -38,7 +38,6 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:show_batch_edit_modal, false)
      |> assign(:show_auto_search_confirm_modal, false)
      |> assign(:quality_profiles, [])
-     |> assign(:default_quality_profile_name, nil)
      |> assign(:batch_edit_form, to_form(%{}, as: :batch_edit))
      |> assign(:scanning, false)
      |> assign(:scan_result, nil)
@@ -438,16 +437,9 @@ defmodule MydiaWeb.MediaLive.Index do
   def handle_event("show_batch_edit", _params, socket) do
     quality_profiles = Settings.list_quality_profiles()
 
-    default_quality_profile_name =
-      case Settings.get_default_quality_profile() do
-        nil -> nil
-        profile -> profile.name
-      end
-
     {:noreply,
      socket
      |> assign(:quality_profiles, quality_profiles)
-     |> assign(:default_quality_profile_name, default_quality_profile_name)
      |> assign(:show_batch_edit_modal, true)
      |> assign(:batch_edit_form, to_form(%{}, as: :batch_edit))}
   end
