@@ -122,10 +122,6 @@ media:
   # This creates a monitored library path of type "series"
   tv_path: "/media/tv"
 
-  # How often to scan the media library (in hours)
-  # This is the default scan interval for library paths
-  scan_interval_hours: 1
-
   # Automatically trigger search & download when adding media to library
   # When true: Adding a movie/show automatically queues a search job
   # When false: Requires manual "Auto Search & Download" button click

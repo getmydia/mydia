@@ -48,7 +48,6 @@ This simplifies configuration by eliminating the need for separate port variable
 |----------|-------------|---------|
 | `MOVIES_PATH` | Movies directory path | `/media/movies` |
 | `TV_PATH` | TV shows directory path | `/media/tv` |
-| `MEDIA_SCAN_INTERVAL_HOURS` | Hours between library scans | `1` |
 
 ### Additional Library Paths
 

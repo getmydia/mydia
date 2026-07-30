@@ -303,18 +303,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           type: :string,
           value: config.media.tv_path,
           source: Settings.config_source("TV_PATH", "media.tv_path", all_db_settings)
-        },
-        %{
-          key: "media.scan_interval_hours",
-          label: "Scan Interval (hours)",
-          type: :integer,
-          value: config.media.scan_interval_hours,
-          source:
-            Settings.config_source(
-              "MEDIA_SCAN_INTERVAL_HOURS",
-              "media.scan_interval_hours",
-              all_db_settings
-            )
         }
       ],
       "Metadata" => [

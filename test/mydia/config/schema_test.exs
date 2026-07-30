@@ -171,15 +171,17 @@ defmodule Mydia.Config.SchemaTest do
       assert "is invalid" in errors_on(changeset).logging.level
     end
 
-    test "validates media scan_interval_hours is positive" do
+    test "ignores a removed media scan_interval_hours key without failing to load" do
       attrs = %{
-        media: %{scan_interval_hours: 0}
+        media: %{scan_interval_hours: 2, movies_path: "/media/movies"}
       }
 
       changeset = Schema.changeset(%Schema{}, attrs)
 
-      refute changeset.valid?
-      assert "must be greater than 0" in errors_on(changeset).media.scan_interval_hours
+      assert changeset.valid?
+      media = Ecto.Changeset.get_field(changeset, :media)
+      refute Map.has_key?(media, :scan_interval_hours)
+      assert media.movies_path == "/media/movies"
     end
 
     test "validates downloads monitor_interval_minutes is positive" do

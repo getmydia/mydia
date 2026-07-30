@@ -69,7 +69,6 @@ defmodule Mydia.Config.Schema do
       field :tv_path, :string
       field :movies_auto_organize, :boolean, default: false
       field :tv_auto_organize, :boolean, default: false
-      field :scan_interval_hours, :integer, default: 1
       field :auto_search_on_add, :boolean, default: true
       field :monitor_by_default, :boolean, default: true
       field :season_refresh_threshold_hours, :integer, default: 24
@@ -298,14 +297,12 @@ defmodule Mydia.Config.Schema do
       :tv_path,
       :movies_auto_organize,
       :tv_auto_organize,
-      :scan_interval_hours,
       :auto_search_on_add,
       :monitor_by_default,
       :season_refresh_threshold_hours,
       :completed_show_refresh_threshold_hours
     ])
     # movies_path and tv_path are optional legacy fields
-    |> validate_number(:scan_interval_hours, greater_than: 0)
     |> validate_number(:season_refresh_threshold_hours, greater_than: 0)
     |> validate_number(:completed_show_refresh_threshold_hours, greater_than: 0)
   end
