@@ -109,6 +109,12 @@ defmodule Mydia.MediaFixtures do
       # alone it falls to the second clause (candidates.ex:197), which calls
       # ThumbnailGenerator.get_duration/1 and shells out anyway. Tests that
       # exercise analysis pass analyzed_at: nil explicitly.
+      #
+      # Merging below (Enum.into(attrs, default_attrs)) replaces :metadata
+      # wholesale rather than deep-merging it: a caller that passes its own
+      # `metadata:` overrides this entire map, including the "duration" key,
+      # not just the keys it sets. Any override MUST include "duration" (or
+      # set analyzed_at: nil) or that row will still ffprobe.
       analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
       metadata: %{"container" => "mp4", "duration" => 120.5}
     }

@@ -191,7 +191,7 @@ defmodule MydiaWeb.Api.StreamControllerTest do
             relative_path: test_file_name,
             codec: codec,
             audio_codec: audio_codec,
-            metadata: %{"container" => container}
+            metadata: %{"container" => container, "duration" => 120.5}
           })
 
         conn =
@@ -334,7 +334,7 @@ defmodule MydiaWeb.Api.StreamControllerTest do
           media_item_id: media_item.id,
           codec: "h264",
           audio_codec: "aac",
-          metadata: %{"container" => "mkv"}
+          metadata: %{"container" => "mkv", "duration" => 120.5}
         })
 
       conn =
