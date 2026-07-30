@@ -150,6 +150,28 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
               </div>
             </div>
 
+            <%!-- Automatic scanning: opt-in per library. Presets rather than a
+                  free-form seconds field, which is a demonstrated footgun here. --%>
+            <div>
+              <.input
+                field={@library_path_form[:scan_interval]}
+                type="select"
+                label="Automatic scanning"
+                options={[
+                  {"Off (manual only)", nil},
+                  {"Every 15 minutes", 900},
+                  {"Every hour", 3600},
+                  {"Every 6 hours", 21600},
+                  {"Every 12 hours", 43200},
+                  {"Daily", 86400}
+                ]}
+              />
+              <p class="text-sm text-base-content/60 mt-1">
+                How often Mydia rescans this folder for files added outside of downloads.
+                Manual re-scans always work regardless of this setting.
+              </p>
+            </div>
+
             <%!-- TV Metadata Source (only for series/mixed) --%>
             <%= if to_string(@library_path_form[:type].value) in ["series", "mixed"] do %>
               <div class="grid grid-cols-6 gap-3">
