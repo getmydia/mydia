@@ -433,7 +433,11 @@ case "$COMMAND" in
                 case "$2" in
                     build)
                         echo -e "${GREEN}Building Android APK using player/flake.nix...${NC}"
-                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter build apk --release"
+                        # build_runner is required, not optional: the *.g.dart and
+                        # *.freezed.dart files are gitignored, so a fresh checkout has
+                        # none and the build fails with hundreds of unrelated-looking
+                        # Dart errors. Idempotent, so running it every time is safe.
+                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter pub run build_runner build --delete-conflicting-outputs && flutter build apk --release"
                         if [ $? -eq 0 ]; then
                             echo -e "${GREEN}APK built successfully!${NC}"
                             echo "Output: player/build/app/outputs/flutter-apk/app-release.apk"
@@ -442,7 +446,7 @@ case "$COMMAND" in
                     run)
                         echo -e "${GREEN}Building and running on Android device...${NC}"
                         extra_args="${@:3}"
-                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter run $extra_args"
+                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter pub run build_runner build --delete-conflicting-outputs && flutter run $extra_args"
                         ;;
                     shell)
                         echo -e "${GREEN}Opening nix develop shell in player directory...${NC}"
