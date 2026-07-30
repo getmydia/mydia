@@ -49,7 +49,10 @@ end
 # The server is enabled by default. Individual tests that don't need it
 # won't be affected since they use Phoenix.ConnTest directly.
 config :mydia, MydiaWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
+  # port: 0 asks the OS for a free ephemeral port, so concurrent test runs in
+  # different worktrees can never collide. test_helper.exs resolves the real
+  # port once the endpoint is listening and hands it to Wallaby.
+  http: [ip: {127, 0, 0, 1}, port: 0],
   secret_key_base: "CuiGpJ9j+jd1Xb0aq51rBSKLxBYwqr3tvwvMyS2aXBUAlHRtSCT3/GX8fxFcV6UE",
   server: true
 
@@ -146,7 +149,6 @@ chrome_capabilities =
 
 config :wallaby,
   driver: Wallaby.Chrome,
-  base_url: "http://localhost:4002",
   screenshot_on_failure: true,
   screenshot_dir: "tmp/wallaby_screenshots",
   chromedriver: wallaby_chromedriver_opts,
