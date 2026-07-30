@@ -199,12 +199,26 @@
         version = tailwindVersion;
         src = tailwindcss_4_src;
         dontUnpack = true;
-        nativeBuildInputs = [ pkgs.autoPatchelfHook ];
+        # Tailwind v4's standalone binary is a bun single-file executable: the Bun
+        # runtime with the JS payload appended past the ELF sections. stdenv's
+        # default fixupPhase strip discards that payload, leaving a binary that
+        # runs as bare Bun and silently emits an EMPTY stylesheet — the package
+        # builds fine and the app boots with no CSS at all. Never strip it.
+        dontStrip = true;
+        nativeBuildInputs = [ pkgs.autoPatchelfHook pkgs.makeWrapper ];
         buildInputs = [ pkgs.stdenv.cc.cc.lib ];
         installPhase = ''
           mkdir -p $out/bin
           cp $src $out/bin/tailwindcss
           chmod +x $out/bin/tailwindcss
+        '';
+        # bun unpacks the bundled @parcel/watcher native addon to /$bunfs/root/
+        # at RUNTIME, so autoPatchelfHook cannot reach it — it does not exist at
+        # build time. Without libstdc++ on the loader path the addon fails with
+        # ERR_DLOPEN_FAILED. Wrap rather than patch.
+        postFixup = ''
+          wrapProgram $out/bin/tailwindcss \
+            --prefix LD_LIBRARY_PATH : ${pkgs.stdenv.cc.cc.lib}/lib
         '';
       };
 
