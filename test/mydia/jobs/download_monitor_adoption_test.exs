@@ -107,6 +107,67 @@ defmodule Mydia.Jobs.DownloadMonitorAdoptionTest do
       assert Mydia.Repo.aggregate(Mydia.Downloads.ReleaseBlacklist, :count) == 0
     end
 
+    test "tags a legacy orphan the previous release already marked" do
+      # Rows the released code marked with "Removed from download client ..."
+      # carry an error_message, and the monitor's `missing` filter requires a
+      # nil one, so they can never re-enter `handle_missing/1` to be tagged.
+      # Without a backfill the operator who upgrades with 50 falsely blamed
+      # orphans, which is who this feature is for, sees no banner at all.
+      setup_runtime_config([client_config(%{name: "kept"})])
+      media_item = media_item_fixture()
+
+      legacy_message =
+        "Removed from download client 'qbit-old' before import completed. " <>
+          "The download may have been manually deleted, or the client may have " <>
+          "encountered an error."
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: "qbit-old",
+          download_client_id: "hash-legacy",
+          error_message: legacy_message,
+          import_failure_reason: nil
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      updated = Downloads.get_download!(download.id)
+
+      assert updated.import_failure_reason == "no_client"
+      # Tag only: the message is left exactly as the old release wrote it.
+      assert updated.error_message == legacy_message
+
+      assert Downloads.removed_client_groups() == [
+               %{download_client: "qbit-old", count: 1}
+             ]
+    end
+
+    test "leaves an unrelated failure message untagged" do
+      # The backfill keys on the old release's exact copy. Any other failure
+      # message means some other subsystem owns this row, and mis-tagging it
+      # would offer the operator a bulk delete for a download whose client is
+      # not the problem.
+      setup_runtime_config([client_config(%{name: "kept"})])
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: "qbit-old",
+          download_client_id: "hash-unrelated",
+          error_message: "Grab timed out",
+          import_failure_reason: nil
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      updated = Downloads.get_download!(download.id)
+
+      assert updated.import_failure_reason == nil
+      assert Downloads.removed_client_groups() == []
+    end
+
     test "keeps the original copy when a configured client dropped the torrent" do
       # A download whose client IS configured classifies as :present, so it
       # must keep the original message. Without this guard, step 6 of the

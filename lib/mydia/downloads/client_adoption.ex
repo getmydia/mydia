@@ -21,8 +21,8 @@ defmodule Mydia.Downloads.ClientAdoption do
       scoped every client to its own files, adopting onto the wrong claimant
       means importing from the wrong `save_path`.
 
-    * **Torrent types only.** Only there is `download_client_id` a
-      content-addressed info hash, stable across clients and identical when
+    * **Torrent types only.** `download_client_id` is a content-addressed info
+      hash only for these types, stable across clients and identical when
       the same daemon is re-added under a different name. Usenet clients use
       `nzo_id` or numeric ids that are client-local and recycled; debrid ids
       are meaningful only to the provider that issued them. A cross-client
@@ -35,6 +35,11 @@ defmodule Mydia.Downloads.ClientAdoption do
   """
 
   @adoptable_types [:qbittorrent, :transmission, :rqbit, :rtorrent]
+
+  # The copy the previously released code wrote for every client-gone case,
+  # before this feature existed to tell them apart. Rows carrying it are
+  # orphans with no tag.
+  @legacy_orphan_message_prefix "Removed from download client"
 
   @typedoc "Poll results, exactly as `History.fetch_all_client_statuses/2` returns them."
   @type client_statuses :: %{String.t() => {:reachable, map()} | :unreachable}
@@ -73,4 +78,28 @@ defmodule Mydia.Downloads.ClientAdoption do
       _ambiguous_or_empty -> :none
     end
   end
+
+  @doc """
+  Whether a download's persisted failure state is orphan state this feature
+  owns, and may therefore clear when a client picks the download back up.
+
+  True for the `"no_client"` tag, and for a legacy row carrying the previously
+  released "Removed from download client ..." message with no tag at all (the
+  tag did not exist when it was written). False for every other failure: a
+  genuine import failure always sets `import_failure_reason`, and adoption
+  fixes which client owns a torrent, it does not vindicate a broken import.
+
+  Lives here, next to the adoption rule, because the read path
+  (`Mydia.Downloads.History`) and the writer (`Mydia.Jobs.DownloadMonitor`)
+  must agree on it exactly. If the read path proposed a heal the writer then
+  declined to perform, the monitor would re-propose it on every poll and
+  broadcast a download update each time.
+  """
+  @spec orphan_state?(String.t() | nil, String.t() | nil) :: boolean()
+  def orphan_state?("no_client", _error_message), do: true
+
+  def orphan_state?(nil, error_message) when is_binary(error_message),
+    do: String.starts_with?(error_message, @legacy_orphan_message_prefix)
+
+  def orphan_state?(_import_failure_reason, _error_message), do: false
 end

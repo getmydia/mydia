@@ -7,6 +7,12 @@ defmodule Mydia.Jobs.DownloadMonitorAdoptionBypassTest do
   must re-point the download at 'qbit-new' and clear the orphan error state
   written by an earlier pass, so a row parked in the Issues tab comes back to
   life when the operator re-adds their client.
+
+  The same file covers the symmetric case: the download's *own* client coming
+  back, by being re-enabled or re-added under the same name. That heals through
+  the same writer, because a row that only ever heals when some *other* client
+  claims it would keep a false error message forever on the commonest recovery
+  path there is.
   """
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
@@ -114,6 +120,45 @@ defmodule Mydia.Jobs.DownloadMonitorAdoptionBypassTest do
     assert download.id in occupying_ids()
   end
 
+  test "re-enabling a disabled client clears the orphan state it produced", %{bypass: bypass} do
+    # Two monitor passes with the client's `enabled` flag flipped between them:
+    # exactly the sequence the disabled-client error message tells the operator
+    # to perform. Orphaning must not be a one-way transition, otherwise the row
+    # keeps a false error message and the Issues tab keeps offering to delete a
+    # download that is visibly running on the Queue tab.
+    setup_runtime_config([disabled_client("qbit", bypass.port)])
+    media_item = media_item_fixture()
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: "qbit",
+        download_client_id: @hash
+      })
+
+    assert :ok = perform_job(DownloadMonitor, %{})
+
+    parked = Downloads.get_download!(download.id)
+    assert parked.import_failure_reason == "no_client"
+    assert parked.error_message =~ "is disabled in Mydia"
+    refute download.id in occupying_ids()
+
+    # The operator does what the message says.
+    setup_runtime_config([reachable_client("qbit", bypass.port)])
+
+    assert :ok = perform_job(DownloadMonitor, %{})
+
+    healed = Downloads.get_download!(download.id)
+
+    assert healed.download_client == "qbit"
+    assert healed.error_message == nil
+    assert healed.import_failure_reason == nil
+    assert download.id in occupying_ids()
+
+    # And the Issues-tab banner stops claiming this client is untracked.
+    assert Downloads.removed_client_groups() == []
+  end
+
   test "leaves an unrelated import failure intact when adopting" do
     # Adoption fixes which client owns the torrent. It does not vindicate a
     # broken import, so failure state this feature did not write must survive.
@@ -171,6 +216,11 @@ defmodule Mydia.Jobs.DownloadMonitorAdoptionBypassTest do
       password: "adminpass",
       priority: 1
     }
+  end
+
+  # Same client, switched off: still in the config list, never polled.
+  defp disabled_client(name, port) do
+    %{reachable_client(name, port) | enabled: false}
   end
 
   defp torrent_payload(hash) do

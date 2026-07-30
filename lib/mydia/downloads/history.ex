@@ -79,16 +79,23 @@ defmodule Mydia.Downloads.History do
   end
 
   @doc """
-  Counts every download assigned to `client_name`.
+  Counts the downloads still waiting on `client_name`: rows assigned to it that
+  have not been imported.
 
   Called before deleting a download client, while that client still exists, to
-  show the operator the blast radius. Deliberately not restricted to orphans:
-  a healthy in-flight download is exactly what the warning is about.
+  show the operator the blast radius. Deliberately not restricted to orphans,
+  since a healthy in-flight download is exactly what the warning is about, but
+  imported rows are excluded. Import does not delete the row (`MediaImport`
+  stamps `imported_at` and leaves it, which is why `count_completed/0` exists),
+  so on a mature instance import history dominates any count that includes it,
+  while deleting the client does nothing at all to that history: it never
+  reaches the `missing` filter, never gets an error, and never gets tagged.
   """
   @spec count_downloads_for_client(String.t()) :: non_neg_integer()
   def count_downloads_for_client(client_name) do
     Download
     |> where([d], d.download_client == ^client_name)
+    |> where([d], is_nil(d.imported_at))
     |> Repo.aggregate(:count)
   end
 
@@ -395,6 +402,7 @@ defmodule Mydia.Downloads.History do
             download
             |> enrich_download_with_torrent_status(torrent_status)
             |> with_client_state(:present)
+            |> heal_own_client()
         end
 
       :unreachable ->
@@ -442,7 +450,7 @@ defmodule Mydia.Downloads.History do
         download
         |> enrich_download_with_torrent_status(torrent_status)
         |> with_client_state(config_state)
-        |> Map.put(:adoptable_client, claimant)
+        |> with_adoptable_client(claimant)
 
       :none ->
         download
@@ -453,6 +461,31 @@ defmodule Mydia.Downloads.History do
 
   defp with_client_state(%EnrichedDownload{} = enriched, config_state) do
     %{enriched | client_config_state: config_state}
+  end
+
+  defp with_adoptable_client(%EnrichedDownload{} = enriched, claimant) do
+    %{enriched | adoptable_client: claimant}
+  end
+
+  # The download's own client answered and still holds the torrent, so whatever
+  # took the client away is over: it was re-enabled, or deleted and re-added
+  # under the same name. Both are what Mydia's own copy tells the operator to
+  # do (the disabled-client message says "re-enable the client", the admin
+  # delete modal says re-adding picks the downloads back up).
+  #
+  # Nothing else clears orphan state on that route, so without this the row
+  # keeps a false error message forever, stays out of `Download.occupying/1`,
+  # and keeps its group in the Issues-tab banner, whose "Clear them" button
+  # would delete the record of a download that is visibly running on the Queue
+  # tab. Naming the row's own client as the adoption candidate routes the heal
+  # through `DownloadMonitor.adopt_download/1`: same writer, same clearing
+  # rule, and its `download_client` write is a no-op.
+  defp heal_own_client(%EnrichedDownload{} = enriched) do
+    if ClientAdoption.orphan_state?(enriched.import_failure_reason, enriched.error_message) do
+      with_adoptable_client(enriched, enriched.download_client)
+    else
+      enriched
+    end
   end
 
   defp enrich_download_with_torrent_status(download, torrent_status) do

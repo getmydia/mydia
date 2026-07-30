@@ -1,12 +1,13 @@
 defmodule Mydia.Downloads.HistoryClientStateTest do
   @moduledoc """
   Covers the classification that `DownloadMonitor` acts on: a client that is
-  present, one that is merely disabled, and one that is gone. Also covers the
-  read path reporting an adoption candidate without writing anything.
+  present, one that is merely disabled, and one that is gone.
 
-  No client here is reachable over the network, so every configured client
-  resolves to `:unreachable`. That is deliberate: it isolates the config-state
-  classification from live torrent data.
+  No client in the first describe block is reachable over the network, so every
+  configured client resolves to `:unreachable`. That is deliberate: it isolates
+  the config-state classification from live torrent data. The second block
+  stands up a real (stubbed) client, because a candidate can only be reported
+  when a reachable claimant genuinely exists.
   """
   use Mydia.DataCase, async: false
 
@@ -14,6 +15,8 @@ defmodule Mydia.Downloads.HistoryClientStateTest do
 
   import Mydia.MediaFixtures
   import Mydia.DownloadsFixtures
+
+  @hash "1234567890abcdef1234567890abcdef12345678"
 
   describe "list_downloads_with_status/1 client config state" do
     test "marks a download whose client was removed" do
@@ -111,24 +114,78 @@ defmodule Mydia.Downloads.HistoryClientStateTest do
 
       assert enriched.client_config_state == nil
     end
+  end
 
-    test "does not write the adoption candidate to the database" do
-      setup_runtime_config([client_config(%{name: "kept", enabled: true})])
+  describe "list_downloads_with_status/1 adoption candidates" do
+    setup do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "SID=test-sid; HttpOnly")
+        |> Plug.Conn.resp(200, "Ok.")
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!([torrent_payload(@hash)]))
+      end)
+
+      {:ok, bypass: bypass}
+    end
+
+    test "reports the candidate and the claimant's live status, and writes neither", %{
+      bypass: bypass
+    } do
+      # A reachable claimant has to genuinely exist for this to prove anything:
+      # with only unreachable clients configured, `find_claimant/3` returns
+      # `:none` and the assertion below would hold even if the read path
+      # persisted every adoption it found.
+      setup_runtime_config([reachable_client("qbit-new", bypass.port)])
       media_item = media_item_fixture()
 
       download =
         download_fixture(%{
           media_item_id: media_item.id,
-          download_client: "gone",
-          download_client_id: "hash-d"
+          download_client: "qbit-old",
+          download_client_id: @hash
         })
 
-      _ = Downloads.list_downloads_with_status(filter: :all)
+      [enriched] = Downloads.list_downloads_with_status(filter: :all)
+
+      assert enriched.adoptable_client == "qbit-new"
+      # Enriched from the claimant's torrent, so the UI shows real progress.
+      assert enriched.status == "downloading"
 
       # The read path reports; it never persists. DownloadMonitor is the only
       # writer.
-      assert Downloads.get_download!(download.id).download_client == "gone"
+      persisted = Downloads.get_download!(download.id)
+      assert persisted.download_client == "qbit-old"
     end
+  end
+
+  defp torrent_payload(hash) do
+    %{
+      "hash" => hash,
+      "name" => "Test Torrent",
+      "state" => "downloading",
+      "progress" => 0.5,
+      "dlspeed" => 100_000,
+      "upspeed" => 0,
+      "downloaded" => 500,
+      "uploaded" => 0,
+      "size" => 1000,
+      "eta" => 60,
+      "ratio" => 0.0,
+      "save_path" => "/downloads",
+      "added_on" => 1_700_000_000,
+      "completion_on" => -1
+    }
+  end
+
+  defp reachable_client(name, port) do
+    client_config(%{name: name, port: port, password: "adminpass"})
   end
 
   defp client_config(overrides) do

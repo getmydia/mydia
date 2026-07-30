@@ -13,7 +13,7 @@ defmodule Mydia.Downloads.HistoryRemovedClientTest do
   import Mydia.DownloadsFixtures
 
   describe "count_downloads_for_client/1" do
-    test "counts every row for that client, not only orphaned ones" do
+    test "counts every unimported row for that client, not only orphaned ones" do
       media_item = media_item_fixture()
 
       download_fixture(%{media_item_id: media_item.id, download_client: "qbit"})
@@ -25,6 +25,27 @@ defmodule Mydia.Downloads.HistoryRemovedClientTest do
       assert Downloads.count_downloads_for_client("qbit") == 2
       assert Downloads.count_downloads_for_client("other") == 1
       assert Downloads.count_downloads_for_client("absent") == 0
+    end
+
+    test "excludes imported downloads" do
+      # Import does not delete the row: `MediaImport` stamps `imported_at` and
+      # leaves it as history, which is why `count_completed/0` exists. On a
+      # mature instance that history dwarfs the in-flight downloads, and
+      # deleting the client does nothing at all to it, so counting it would
+      # make the warning report a blast radius that is mostly fiction.
+      media_item = media_item_fixture()
+
+      download_fixture(%{media_item_id: media_item.id, download_client: "qbit"})
+
+      for _ <- 1..3 do
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: "qbit",
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+      end
+
+      assert Downloads.count_downloads_for_client("qbit") == 1
     end
   end
 
