@@ -11,28 +11,37 @@
 # .fvmrc. Installing also skips the Android SDK and JDK that image bundles and
 # this web build never touches.
 #
-# Do not reintroduce a version number in this comment. The repo asserts that
-# .fvmrc is the only file naming a Flutter version, and the check is a plain grep.
+# Do not reintroduce a version number in this comment. ci-nix.yml's "Check /
+# Flutter Pin" job scans every build and CI file for a Flutter version literal
+# and fails on any hit, so the version is always read from .fvmrc at build time.
 FROM debian:bookworm-slim AS flutter-builder
 
+# curl and unzip are Flutter's own dependencies, not ours: bin/internal/
+# update_dart_sdk.sh curls the Dart SDK zip, and the tool shells out to unzip for
+# the Dart SDK and the engine artifacts precache pulls.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       git \
       jq \
       unzip \
-      xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Layer keyed on .fvmrc alone, so the SDK is re-downloaded only when the pin
-# moves. safe.directory is required because the SDK tarball ships a git checkout
-# that Flutter shells out to, owned by root here. precache --web warms the web
-# artifacts inside this cached layer so `flutter build web` does not fetch them
-# on every build.
+# Layer keyed on .fvmrc alone, so the SDK is re-fetched only when the pin moves.
+#
+# The SDK comes from the tagged git checkout rather than the published
+# flutter_linux_*.tar.xz archive because Flutter publishes those for x64 Linux
+# only, while release.yml builds this image natively on arm64 runners too. A git
+# checkout carries no prebuilt Dart SDK, so update_dart_sdk.sh fetches the one
+# matching whichever architecture is building.
+#
+# safe.directory is required because that checkout is owned by root while Flutter
+# shells out to git against it. precache --web warms the web artifacts inside
+# this cached layer so `flutter build web` does not fetch them on every build.
 COPY player/.fvmrc /tmp/.fvmrc
 RUN FLUTTER_VERSION="$(jq -r .flutter /tmp/.fvmrc)" && \
-    curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
-      | tar -xJ -C /opt && \
+    git clone --depth 1 --branch "$FLUTTER_VERSION" \
+      https://github.com/flutter/flutter.git /opt/flutter && \
     git config --global --add safe.directory /opt/flutter && \
     /opt/flutter/bin/flutter config --no-analytics && \
     /opt/flutter/bin/flutter precache --web
