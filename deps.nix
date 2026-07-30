@@ -1245,15 +1245,15 @@ let
 
     websockex = buildMix rec {
       name = "websockex";
-      version = "0.4.3";
+      version = "0.5.1";
 
       src = fetchHex {
         pkg = "websockex";
         version = "${version}";
-        sha256 = "95f2e7072b85a3a4cc385602d42115b73ce0b74a9121d0d6dbbf557645ac53e4";
+        sha256 = "8ef39576ed56bc3804c9cd8626f8b5d6b5721848d2726c0ccd4f05385a3c9f14";
       };
 
-      beamDeps = [];
+      beamDeps = [ telemetry ];
     };
 
     yamerl = buildRebar3 rec {

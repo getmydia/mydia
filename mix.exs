@@ -201,8 +201,8 @@ defmodule Mydia.MixProject do
       # HTTP Clients
       {:finch, "~> 0.22"},
       {:req, "~> 0.6"},
-      # WebSocket client for relay connections
-      {:websockex, "~> 0.4.3"},
+      # WebSocket client for the Flutter dev-server proxy (PlayerDevSocket)
+      {:websockex, "~> 0.5"},
 
       # WASM plugin runtime (wasmtime via Rustler NIF) + pooling
       {:wasmex, "~> 0.14"},
