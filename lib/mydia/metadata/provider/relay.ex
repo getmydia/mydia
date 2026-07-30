@@ -336,8 +336,18 @@ defmodule Mydia.Metadata.Provider.Relay do
   # never fail the fetch, so every failure path degrades to an empty list.
   defp resolve_tvdb_videos(config, data, preferred_codes, language) do
     case Video.from_tvdb_trailers(data["trailers"], preferred_codes) do
-      [] -> fetch_tmdb_videos_for_tvdb(config, data, language)
-      videos -> videos
+      [] ->
+        # Degrade here, outside the cache boundary, rather than inside the
+        # memoized fetch. A relay failure has to stay an error until it is past
+        # `Cache.fetch/3`, otherwise one transient 500 is stored as a
+        # confirmed-empty result and suppresses the trailer for 24 hours.
+        case fetch_tmdb_videos_for_tvdb(config, data, language) do
+          {:ok, videos} when is_list(videos) -> videos
+          _ -> []
+        end
+
+      videos ->
+        videos
     end
   end
 
@@ -348,7 +358,7 @@ defmodule Mydia.Metadata.Provider.Relay do
           tvdb_id: data["id"]
         )
 
-        []
+        {:ok, []}
 
       tmdb_id ->
         fetch_tmdb_videos(config, tmdb_id, language)
@@ -358,25 +368,28 @@ defmodule Mydia.Metadata.Provider.Relay do
   # The spec's coverage sample found zero TVDB trailers on 4 of 4 popular shows,
   # so this fallback is the typical path rather than the exception. Memoize it so
   # a weekly `MetadataRefresh.refresh_all_media/0` doesn't cost one extra relay
-  # round-trip per TV show. The result is wrapped in `{:ok, _}` because
-  # `Cache.fetch/3` only stores `{:ok, _}` — an empty list has to be cached too,
-  # since "neither provider has a trailer" is exactly the case that would
-  # otherwise re-request forever.
+  # round-trip per TV show. `Cache.fetch/3` stores only `{:ok, _}`, which is
+  # exactly the split we want: a successful empty list is cached (since "neither
+  # provider has a trailer" is the case that would otherwise re-request
+  # forever), while an error is returned uncached and retried next time.
   defp fetch_tmdb_videos(config, tmdb_id, language) do
     cache_key = "tvdb_tmdb_videos:#{tmdb_id}:#{language}"
 
-    cache_key
-    |> Cache.fetch(fn -> {:ok, request_tmdb_videos(config, tmdb_id)} end, ttl: :timer.hours(24))
-    |> case do
-      {:ok, videos} when is_list(videos) -> videos
-      _ -> []
-    end
+    Cache.fetch(cache_key, fn -> request_tmdb_videos(config, tmdb_id) end, ttl: :timer.hours(24))
   end
 
   defp request_tmdb_videos(config, tmdb_id) do
     case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: ["videos"]) do
       {:ok, %MediaMetadata{videos: videos}} when is_list(videos) ->
-        videos
+        {:ok, videos}
+
+      {:error, _reason} = error ->
+        Logger.debug("TMDB trailer fallback failed; leaving it uncached",
+          tmdb_id: tmdb_id,
+          result: inspect(error)
+        )
+
+        error
 
       other ->
         Logger.debug("TMDB trailer fallback returned no videos",
@@ -384,7 +397,7 @@ defmodule Mydia.Metadata.Provider.Relay do
           result: inspect(other)
         )
 
-        []
+        {:ok, []}
     end
   end
 

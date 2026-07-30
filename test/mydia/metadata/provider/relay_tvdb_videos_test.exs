@@ -181,6 +181,51 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
 
       assert_receive {:relay_request, :tmdb}, 100
     end
+
+    test "does not cache a failed fallback, so the next fetch recovers the trailer", ctx do
+      stub_tvdb(ctx, %{
+        "trailers" => [],
+        "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]
+      })
+
+      test_pid = self()
+      body = tmdb_tv_show(ctx.tmdb_id, [tmdb_video("TMDBKEY1")])
+      # Flipped by the test rather than counted, because `HTTP.new_request/1`
+      # sets `retry: :transient, max_retries: 3` — one logical failed fetch
+      # arrives as several HTTP requests.
+      {:ok, relay_state} = Agent.start_link(fn -> :down end)
+
+      Bypass.stub(ctx.bypass, "GET", tmdb_path(ctx), fn conn ->
+        send(test_pid, {:relay_request, :tmdb})
+
+        case Agent.get(relay_state, & &1) do
+          :down -> Plug.Conn.resp(conn, 500, "boom")
+          :up -> json(conn, 200, body)
+        end
+      end)
+
+      # Req logs a warning per retry; swallow them so the suite stays readable.
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, metadata} =
+                 Relay.fetch_by_id(ctx.config, ctx.tvdb_id,
+                   media_type: :tv_show,
+                   provider: :tvdb
+                 )
+
+        assert metadata.videos == []
+      end)
+
+      assert_receive {:relay_request, :tmdb}, 100
+
+      Agent.update(relay_state, fn _ -> :up end)
+
+      assert {:ok, metadata} =
+               Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+
+      # Had the failure been memoized as a confirmed-empty result, this second
+      # fetch would never reach TMDB and `videos` would still be [].
+      assert [%Video{key: "TMDBKEY1"}] = metadata.videos
+    end
   end
 
   ## Fixtures
