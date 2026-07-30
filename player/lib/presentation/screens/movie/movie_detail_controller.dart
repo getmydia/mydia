@@ -1,6 +1,11 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/movie_detail.dart';
 
 part 'movie_detail_controller.g.dart';
@@ -60,42 +65,39 @@ mutation ToggleMovieFavorite($id: ID!) {
 }
 ''';
 
+MovieDetail _parseMovie(Map<String, dynamic> data) {
+  final movie = data['movie'];
+  if (movie == null) throw Exception('Movie not found');
+  return MovieDetail.fromJson(movie as Map<String, dynamic>);
+}
+
 @riverpod
 class MovieDetailController extends _$MovieDetailController {
+  late QueryWatcher<MovieDetail> _watcher;
+
   @override
-  Future<MovieDetail> build(String id) async {
-    return _fetchMovie(id);
-  }
-
-  Future<MovieDetail> _fetchMovie(String id) async {
-    // Use async provider to wait for client to be ready
-    final client = await ref.watch(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(movieDetailQuery),
-        variables: {'id': id},
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  Stream<MovieDetail> build(String id) {
+    _watcher = createWatcher<MovieDetail>(
+      ref,
+      key: QueryKeys.movieDetail(id),
+      document: gql(movieDetailQuery),
+      variables: {'id': id},
+      parse: _parseMovie,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null || result.data!['movie'] == null) {
-      throw Exception('Movie not found');
-    }
-
-    return MovieDetail.fromJson(result.data!['movie'] as Map<String, dynamic>);
+    return _watcher.stream;
   }
 
   Future<void> toggleFavorite() async {
     final currentState = state.value;
     if (currentState == null) return;
 
-    final client = ref.read(graphqlClientProvider);
-    if (client == null) return;
+    // Captured before the optimistic update, not read after the mutation
+    // awaits: this controller is auto-dispose, so if the user navigates away
+    // before the server responds, `ref` is torn down and a later
+    // `ref.read(invalidatorProvider)` would throw `UnmountedRefException`,
+    // silently dropping the invalidation into the revert-on-error catch
+    // block below. `Invalidator` itself does not depend on `ref` afterwards.
+    final invalidator = ref.read(invalidatorProvider);
 
     // Optimistically update UI
     state = AsyncValue.data(
@@ -122,6 +124,7 @@ class MovieDetailController extends _$MovieDetailController {
     );
 
     try {
+      final client = await ref.read(asyncGraphqlClientProvider.future);
       final result = await client.mutate(
         MutationOptions(
           document: gql(toggleMovieFavoriteMutation),
@@ -134,6 +137,13 @@ class MovieDetailController extends _$MovieDetailController {
         state = AsyncValue.data(currentState);
         throw result.exception!;
       }
+
+      await invalidator.invalidate(
+        InvalidationRules.favoriteToggled(
+          isMovie: true,
+          id: currentState.id,
+        ),
+      );
     } catch (e) {
       // Revert on error
       state = AsyncValue.data(currentState);
@@ -141,8 +151,5 @@ class MovieDetailController extends _$MovieDetailController {
     }
   }
 
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchMovie(id));
-  }
+  Future<void> refresh() => _watcher.refetch();
 }

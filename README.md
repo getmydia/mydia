@@ -59,7 +59,7 @@ Open http://localhost:4000 and create your admin account.
 
 - **Unified Media Management** - Movies + TV shows with TMDB/TVDB metadata
 - **Automated Downloads** - Quality profiles, smart release ranking
-- **Download Clients** - qBittorrent, Transmission, rqbit, SABnzbd, NZBGet
+- **Download Clients** - qBittorrent, Transmission, rqbit, SABnzbd, NZBGet, debrid providers
 - **Indexers** - Prowlarr, Jackett, built-in Cardigann (experimental)
 - **Multi-User** - Admin/guest roles with request workflow
 - **SSO** - Local auth + OIDC/OpenID Connect

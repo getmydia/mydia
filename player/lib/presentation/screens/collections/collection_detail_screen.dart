@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'collection_detail_controller.dart';
 import 'collections_controller.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/media_poster.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/collection_sync_providers.dart';
 import '../../../core/downloads/collection_sync_service.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
+import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/recently_added_item.dart';
@@ -74,22 +76,32 @@ class CollectionDetailScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await ref
-              .read(collectionDetailControllerProvider(id).notifier)
-              .refresh();
-        },
-        child: itemsData.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => _buildErrorView(context, error, ref),
-          data: (items) {
-            if (items.isEmpty) {
-              return _buildEmptyState(context);
-            }
-            return _buildGridView(context, items);
-          },
-        ),
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [QueryKeys.collectionItems(id)],
+            topInset: freshnessTopInset(context, appBarHeight: kToolbarHeight),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await ref
+                    .read(collectionDetailControllerProvider(id).notifier)
+                    .refresh();
+              },
+              child: itemsData.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => _buildErrorView(context, error, ref),
+                data: (items) {
+                  if (items.isEmpty) {
+                    return _buildEmptyState(context);
+                  }
+                  return _buildGridView(context, items);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

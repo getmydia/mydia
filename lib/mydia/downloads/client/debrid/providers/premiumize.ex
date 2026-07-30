@@ -24,6 +24,7 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.Premiumize do
 
   alias Mydia.Downloads.Client.Debrid.{ProviderJob, Shared}
   alias Mydia.Downloads.Client.Error
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.Structs.ClientInfo
 
   @default_base_url "https://www.premiumize.me/api"
@@ -99,7 +100,7 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.Premiumize do
   def submit_torrent(config, {:file, bin}) do
     case Req.post(base_url() <> "/transfer/create",
            form_multipart: [
-             {:src, bin, filename: "release.torrent", content_type: "application/x-bittorrent"}
+             src: {bin, filename: "release.torrent", content_type: "application/x-bittorrent"}
            ],
            headers: auth_headers(config)
          ) do
@@ -285,15 +286,20 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.Premiumize do
   ## ── Parsing helpers ─────────────────────────────────────────────────
 
   defp parse_transfer(%{} = t) do
+    state = map_status(t["status"])
+    {category, detail} = classify_failure(state, t)
+
     %ProviderJob{
       provider_id: to_string(t["id"]),
-      state: map_status(t["status"]),
+      state: state,
       progress: (t["progress"] || 0.0) * 100.0,
       name: t["name"],
       total_bytes: t["size"] || 0,
       files: [],
       hoster_links: [],
-      raw_status: t
+      raw_status: t,
+      failure_category: category,
+      failure_detail: detail
     }
   end
 
@@ -304,6 +310,17 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.Premiumize do
   defp map_status("finished"), do: :ready
   defp map_status("error"), do: :error
   defp map_status(_), do: :queued
+
+  # Premiumize exposes exactly one terminal status, so there is nothing
+  # finer to distinguish. `message` is free text from the provider, which
+  # is why it goes through the shared sanitiser.
+  defp classify_failure(:error, %{} = t) do
+    detail = t["message"] || t["status"] || "error"
+
+    {:provider_error, Helpers.sanitize_failure_detail(to_string(detail))}
+  end
+
+  defp classify_failure(_state, _t), do: {nil, nil}
 
   ## ── Envelope wrapper ────────────────────────────────────────────────
 

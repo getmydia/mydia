@@ -122,4 +122,39 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
       assert has_element?(view, "#blacklist-row-#{row_stalled.id}")
     end
   end
+
+  describe "failure reason rendering" do
+    setup %{conn: conn, token: token} do
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "renders a humanized label in the badge, keeping the slug as a tooltip",
+         %{conn: conn} do
+      Blacklists.add("prowlarr", "guid-1", "Some.Release", "missing_files")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/release-blacklist")
+
+      assert has_element?(view, "#blacklist-rows span[title='missing_files']", "missing files")
+    end
+
+    test "keeps the filter option value as the raw slug", %{conn: conn} do
+      # The option VALUE must stay the slug so the phx-change filter still
+      # matches stored rows; only the visible text is humanized.
+      Blacklists.add("prowlarr", "guid-2", "Other.Release", "client_reported_failure")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/release-blacklist")
+
+      assert has_element?(
+               view,
+               "#failure-reason-filter option[value='client_reported_failure']",
+               "client reported failure"
+             )
+    end
+  end
 end

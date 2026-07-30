@@ -4,12 +4,16 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import 'movie_detail_controller.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_job_providers.dart';
+import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/smart_play_button.dart';
 
 class MovieDetailScreen extends ConsumerWidget {
@@ -26,10 +30,20 @@ class MovieDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: movieAsync.when(
-        data: (movie) => _buildContent(context, ref, movie),
-        loading: () => _buildLoadingState(context),
-        error: (error, stack) => _buildErrorState(context, ref, error),
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [QueryKeys.movieDetail(id)],
+            topInset: freshnessTopInset(context, appBarHeight: 0),
+          ),
+          Expanded(
+            child: movieAsync.when(
+              data: (movie) => _buildContent(context, ref, movie),
+              loading: () => _buildLoadingState(context),
+              error: (error, stack) => _buildErrorState(context, ref, error),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -244,6 +258,10 @@ class MovieDetailScreen extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: CastButton(onPressed: () => pickCastDevice(context, ref)),
         ),
         const SizedBox(width: 8),
       ],

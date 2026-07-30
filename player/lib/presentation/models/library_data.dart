@@ -3,10 +3,15 @@ class LibraryData {
   final bool hasMore;
   final int? totalCount;
 
+  /// Cursor for the next page, taken from the merged `pageInfo`. Null when
+  /// there is nothing more to fetch.
+  final String? endCursor;
+
   const LibraryData({
     required this.items,
     required this.hasMore,
     this.totalCount,
+    this.endCursor,
   });
 
   bool get isEmpty => items.isEmpty;

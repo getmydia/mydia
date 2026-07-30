@@ -5,11 +5,14 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings
   alias Mydia.Collections
+  alias Mydia.Search
+  alias MydiaWeb.Live.Authorization
 
   require Logger
 
   @items_per_page 50
   @items_per_scroll 25
+  @auto_search_confirm_threshold 50
 
   @impl true
   def mount(_params, _session, socket) do
@@ -33,6 +36,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:show_delete_modal, false)
      |> assign(:delete_files, false)
      |> assign(:show_batch_edit_modal, false)
+     |> assign(:show_auto_search_confirm_modal, false)
      |> assign(:quality_profiles, [])
      |> assign(:batch_edit_form, to_form(%{}, as: :batch_edit))
      |> assign(:scanning, false)
@@ -313,10 +317,31 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
-  def handle_event("batch_download", _params, socket) do
-    # TODO: Implement download functionality
-    # For now, just show a placeholder message
-    {:noreply, put_flash(socket, :info, "Download functionality coming soon")}
+  def handle_event("batch_auto_search", _params, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      if MapSet.size(socket.assigns.selected_ids) > @auto_search_confirm_threshold do
+        {:noreply, assign(socket, :show_auto_search_confirm_modal, true)}
+      else
+        {:noreply, run_batch_auto_search(socket)}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("confirm_batch_auto_search", _params, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      {:noreply,
+       socket
+       |> assign(:show_auto_search_confirm_modal, false)
+       |> run_batch_auto_search()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("cancel_batch_auto_search", _params, socket) do
+    {:noreply, assign(socket, :show_auto_search_confirm_modal, false)}
   end
 
   def handle_event("batch_reclassify", _params, socket) do
@@ -619,6 +644,27 @@ defmodule MydiaWeb.MediaLive.Index do
     {:noreply, socket}
   end
 
+  defp run_batch_auto_search(socket) do
+    ids = MapSet.to_list(socket.assigns.selected_ids)
+    {items, skipped} = Media.partition_for_auto_search(ids)
+
+    case Search.queue_auto_searches(items) do
+      {:ok, queued} ->
+        socket
+        |> put_flash(:info, auto_search_flash(queued, skipped))
+        |> assign(:selection_mode, false)
+        |> assign(:selected_ids, MapSet.new())
+
+      {:error, reason} ->
+        Logger.error("Failed to queue bulk auto search",
+          media_item_ids: ids,
+          reason: inspect(reason)
+        )
+
+        put_flash(socket, :error, "Failed to queue searches")
+    end
+  end
+
   defp load_media_items(socket, opts) do
     reset? = Keyword.get(opts, :reset, false)
     page = if reset?, do: 0, else: socket.assigns.page
@@ -832,10 +878,10 @@ defmodule MydiaWeb.MediaLive.Index do
         Enum.sort_by(items, &(&1.year || 0), :desc)
 
       "added_asc" ->
-        Enum.sort_by(items, & &1.inserted_at, :asc)
+        Enum.sort_by(items, & &1.inserted_at, {:asc, DateTime})
 
       "added_desc" ->
-        Enum.sort_by(items, & &1.inserted_at, :desc)
+        Enum.sort_by(items, & &1.inserted_at, {:desc, DateTime})
 
       "rating_asc" ->
         Enum.sort_by(items, &get_rating(&1), :asc)
@@ -844,16 +890,16 @@ defmodule MydiaWeb.MediaLive.Index do
         Enum.sort_by(items, &get_rating(&1), :desc)
 
       "last_aired_asc" ->
-        Enum.sort_by(items, &get_last_aired_date(&1), {:asc, NaiveDateTime})
+        Enum.sort_by(items, &get_last_aired_date(&1), {:asc, Date})
 
       "last_aired_desc" ->
-        Enum.sort_by(items, &get_last_aired_date(&1), {:desc, NaiveDateTime})
+        Enum.sort_by(items, &get_last_aired_date(&1), {:desc, Date})
 
       "next_aired_asc" ->
-        Enum.sort_by(items, &get_next_aired_date(&1), {:asc, NaiveDateTime})
+        Enum.sort_by(items, &get_next_aired_date(&1), {:asc, Date})
 
       "next_aired_desc" ->
-        Enum.sort_by(items, &get_next_aired_date(&1), {:desc, NaiveDateTime})
+        Enum.sort_by(items, &get_next_aired_date(&1), {:desc, Date})
 
       "episode_count_asc" ->
         Enum.sort_by(items, &get_episode_count(&1), :asc)
@@ -874,38 +920,43 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
+  # Episode `air_date` is a Date, so these sentinels and comparisons stay in Date
+  # terms: sorting them as NaiveDateTime raises, since a Date has no time fields.
+  @never_aired ~D[1970-01-01]
+  @no_upcoming_airing ~D[2999-12-31]
+
   defp get_last_aired_date(media_item) do
     if media_item.type == "tv_show" && Ecto.assoc_loaded?(media_item.episodes) do
       media_item.episodes
       |> Enum.map(& &1.air_date)
       |> Enum.reject(&is_nil/1)
-      |> Enum.sort({:desc, NaiveDateTime})
+      |> Enum.sort({:desc, Date})
       |> List.first()
       |> case do
-        nil -> ~N[1970-01-01 00:00:00]
+        nil -> @never_aired
         date -> date
       end
     else
-      ~N[1970-01-01 00:00:00]
+      @never_aired
     end
   end
 
   defp get_next_aired_date(media_item) do
     if media_item.type == "tv_show" && Ecto.assoc_loaded?(media_item.episodes) do
-      now = NaiveDateTime.utc_now()
+      today = Date.utc_today()
 
       media_item.episodes
       |> Enum.map(& &1.air_date)
       |> Enum.reject(&is_nil/1)
-      |> Enum.filter(&(NaiveDateTime.compare(&1, now) == :gt))
-      |> Enum.sort({:asc, NaiveDateTime})
+      |> Enum.filter(&(Date.compare(&1, today) == :gt))
+      |> Enum.sort({:asc, Date})
       |> List.first()
       |> case do
-        nil -> ~N[2999-12-31 23:59:59]
+        nil -> @no_upcoming_airing
         date -> date
       end
     else
-      ~N[2999-12-31 23:59:59]
+      @no_upcoming_airing
     end
   end
 
@@ -983,6 +1034,29 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp pluralize_files(1), do: "file"
   defp pluralize_files(_), do: "files"
+
+  defp auto_search_flash(0, 0), do: "Nothing to search"
+
+  defp auto_search_flash(0, 1), do: "Nothing to search. The selected item does not need a search."
+
+  defp auto_search_flash(0, skipped) do
+    "Nothing to search. None of the #{skipped} selected items need a search."
+  end
+
+  defp auto_search_flash(queued, 0) do
+    "Queued #{queued} #{pluralize_searches(queued)}"
+  end
+
+  defp auto_search_flash(queued, 1) do
+    "Queued #{queued} #{pluralize_searches(queued)}, skipped 1 that does not need one"
+  end
+
+  defp auto_search_flash(queued, skipped) do
+    "Queued #{queued} #{pluralize_searches(queued)}, skipped #{skipped} that do not need one"
+  end
+
+  defp pluralize_searches(1), do: "search"
+  defp pluralize_searches(_), do: "searches"
 
   defp maybe_add_attr(attrs, _key, nil), do: attrs
   defp maybe_add_attr(attrs, _key, ""), do: attrs

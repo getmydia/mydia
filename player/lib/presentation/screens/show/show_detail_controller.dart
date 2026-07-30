@@ -1,6 +1,11 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/controller_watcher.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
+import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/show_detail.dart';
 
 part 'show_detail_controller.g.dart';
@@ -56,42 +61,39 @@ mutation ToggleShowFavorite($id: ID!) {
 }
 ''';
 
+ShowDetail _parseShow(Map<String, dynamic> data) {
+  final show = data['tvShow'];
+  if (show == null) throw Exception('TV show not found');
+  return ShowDetail.fromJson(show as Map<String, dynamic>);
+}
+
 @riverpod
 class ShowDetailController extends _$ShowDetailController {
+  late QueryWatcher<ShowDetail> _watcher;
+
   @override
-  Future<ShowDetail> build(String id) async {
-    return _fetchShow(id);
-  }
-
-  Future<ShowDetail> _fetchShow(String id) async {
-    // Use async provider to wait for client to be ready
-    final client = await ref.read(asyncGraphqlClientProvider.future);
-
-    final result = await client.query(
-      QueryOptions(
-        document: gql(tvShowDetailQuery),
-        variables: {'id': id},
-        fetchPolicy: FetchPolicy.cacheAndNetwork,
-      ),
+  Stream<ShowDetail> build(String id) {
+    _watcher = createWatcher<ShowDetail>(
+      ref,
+      key: QueryKeys.showDetail(id),
+      document: gql(tvShowDetailQuery),
+      variables: {'id': id},
+      parse: _parseShow,
     );
-
-    if (result.hasException) {
-      throw result.exception!;
-    }
-
-    if (result.data == null || result.data!['tvShow'] == null) {
-      throw Exception('TV show not found');
-    }
-
-    return ShowDetail.fromJson(result.data!['tvShow'] as Map<String, dynamic>);
+    return _watcher.stream;
   }
 
   Future<void> toggleFavorite() async {
     final currentState = state.value;
     if (currentState == null) return;
 
-    final client = ref.read(graphqlClientProvider);
-    if (client == null) return;
+    // Captured before the optimistic update, not read after the mutation
+    // awaits: this controller is auto-dispose, so if the user navigates away
+    // before the server responds, `ref` is torn down and a later
+    // `ref.read(invalidatorProvider)` would throw `UnmountedRefException`,
+    // silently dropping the invalidation into the revert-on-error catch
+    // block below. `Invalidator` itself does not depend on `ref` afterwards.
+    final invalidator = ref.read(invalidatorProvider);
 
     // Optimistically update UI
     state = AsyncValue.data(
@@ -120,6 +122,7 @@ class ShowDetailController extends _$ShowDetailController {
     );
 
     try {
+      final client = await ref.read(asyncGraphqlClientProvider.future);
       final result = await client.mutate(
         MutationOptions(
           document: gql(toggleShowFavoriteMutation),
@@ -132,6 +135,13 @@ class ShowDetailController extends _$ShowDetailController {
         state = AsyncValue.data(currentState);
         throw result.exception!;
       }
+
+      await invalidator.invalidate(
+        InvalidationRules.favoriteToggled(
+          isMovie: false,
+          id: currentState.id,
+        ),
+      );
     } catch (e) {
       // Revert on error
       state = AsyncValue.data(currentState);
@@ -139,10 +149,7 @@ class ShowDetailController extends _$ShowDetailController {
     }
   }
 
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchShow(id));
-  }
+  Future<void> refresh() => _watcher.refetch();
 }
 
 // Provider for selected season state

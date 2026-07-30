@@ -13,19 +13,25 @@ import 'package:http/http.dart' as http;
 import '../../../core/auth/auth_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/watch/invalidation_rules.dart';
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/duration_override.dart';
-import '../../../core/player/streaming_strategy.dart';
+import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
+import '../../../core/cast/cast_session_manager.dart';
+import '../../../core/cast/cast_target.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../widgets/resume_dialog.dart';
 import '../../widgets/subtitle_track_selector.dart';
 import '../../widgets/audio_track_selector.dart';
 import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/gesture_controls.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/up_next_overlay.dart';
@@ -72,6 +78,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Captured in [initState] rather than read from `dispose()`: by the time
+  /// `dispose()` runs the widget's element may already be defunct, and
+  /// `ref.read` on a disposed `ConsumerState` is not safe.
+  /// `invalidatorProvider` is a keepAlive root provider, so the
+  /// `Invalidator` it returns does not depend on the widget's element and
+  /// stays valid to call after disposal.
+  late final Invalidator _invalidator;
+
+  /// Set once the 90% watched threshold is first crossed, so the invalidation
+  /// fires once per playback rather than on every position tick.
+  bool _watchedInvalidationSent = false;
+
   StreamSubscription<Duration>? _positionSubscription;
   bool _isLoading = true;
   String? _error;
@@ -122,6 +141,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _invalidator = ref.read(invalidatorProvider);
     _initializePlayer();
 
     // Force landscape orientation on mobile devices
@@ -135,6 +155,80 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Register beforeunload handler for web to terminate HLS session on tab close
     if (kIsWeb) {
       web_lifecycle.registerBeforeUnload(_terminateHlsSession);
+    }
+  }
+
+  /// Start on the receiver instead of locally, when a device was chosen
+  /// before playback began.
+  ///
+  /// Returns true when a cast was started, in which case the caller must not
+  /// build a local `Player` — the point of choosing a device up front is that
+  /// the file never opens on this machine. Called from three points inside
+  /// [_initializePlayer], each immediately before it would otherwise start
+  /// local-only setup (HLS session negotiation, the P2P proxy, or opening a
+  /// downloaded file): the offline-playback branch, the "already downloaded,
+  /// still online" branch, and the network streaming branch. Checking before
+  /// that setup — rather than once at the top of [_initializePlayer], or once
+  /// right before each `Player` is constructed — means a chosen cast target
+  /// never pays for local streaming infrastructure it immediately throws
+  /// away, while still reaching the metadata fetch that populates
+  /// `_totalDuration` on the streaming path.
+  ///
+  /// `castNotifier` is read once, up front: `castTargetProvider` is a
+  /// keep-alive root provider, like `invalidatorProvider` (see
+  /// [_invalidator]), so the notifier itself stays valid to call even if this
+  /// widget is disposed while `startCast` is awaited. `ref.read` itself is
+  /// not safe to call again at that point, which is why the notifier is
+  /// captured before any `await` rather than re-read after one.
+  Future<bool> _castToTargetIfSet() async {
+    final target = ref.read(castTargetProvider);
+    if (target == null) return false;
+
+    final castNotifier = ref.read(castTargetProvider.notifier);
+
+    // Downloaded media lives only on this device; the route resolver has no
+    // server-side file to hand the receiver. Playing locally is the useful
+    // outcome, but silently ignoring the chosen device is not, so say why.
+    if (widget.fileId == 'offline') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Downloads cannot be cast — playing on this device.'),
+        ));
+      }
+      return false;
+    }
+
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.startCast(
+        device: target,
+        request: CastLaunchRequest(
+          fileId: widget.fileId,
+          mediaId: widget.mediaId,
+          mediaType: widget.mediaType,
+          title: widget.title ?? 'Untitled',
+          duration: _knownCastDuration(),
+        ),
+      );
+      // The session now owns the device; currentCastDeviceProvider reports
+      // it from here on. Leaving the target set would make every future
+      // playback cast forever with no way to opt out.
+      castNotifier.clear();
+      return true;
+    } catch (e) {
+      // A dead screen is the one outcome worse than not casting: clear the
+      // target and fall through so the user still gets their episode.
+      debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
+      castNotifier.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e is CastBackendException
+              ? castErrorMessage(e, ref: ref)
+              : 'Failed to start casting: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return false;
     }
   }
 
@@ -179,6 +273,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           return;
         }
 
+        if (await _castToTargetIfSet()) return;
+
         // Play downloaded content in offline mode
         await _initializeOfflinePlayback(offlinePath);
         return;
@@ -191,6 +287,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             await _resolveDownloadedFilePath(downloadedMedia.filePath);
         if (localPath != null) {
           debugPrint('Playing from local file: $localPath');
+
+          if (await _castToTargetIfSet()) return;
 
           // Try to initialize progress sync (optional - local playback
           // works even if server is unreachable)
@@ -291,6 +389,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               '[PlayerScreen] Total duration from candidates: $_totalDuration');
         }
       }
+
+      if (await _castToTargetIfSet()) return;
 
       String mediaSource;
       Map<String, String> httpHeaders = {};
@@ -859,6 +959,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       debugPrint('Content is considered watched (90% complete)');
       // Trigger "Up Next" overlay for episodes with a next episode available
       _maybeShowUpNext();
+
+      if (!_watchedInvalidationSent) {
+        _watchedInvalidationSent = true;
+        // Save the current position before invalidating: the server only
+        // learns position/duration from a save (the periodic sync, or this
+        // one), never a watched flag, so it derives "watched" the same way
+        // the client does — from position. Invalidating first would refetch
+        // pre-watched data and re-stamp the fetch log as freshly fetched
+        // with the wrong value.
+        _saveProgress().whenComplete(_invalidateAfterPlayback);
+      }
     }
   }
 
@@ -1077,6 +1188,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } else if (widget.mediaType == 'episode') {
       await _progressService!.saveEpisodeProgress(_player!, widget.mediaId);
     }
+  }
+
+  /// Refreshes everything that reflects watched state. Deliberately not called
+  /// from the 10-second progress sync: that would refetch Home hundreds of
+  /// times per movie over what may be a p2p relay.
+  void _invalidateAfterPlayback() {
+    _invalidator.invalidate(
+      InvalidationRules.playbackFinished(
+        mediaType: widget.mediaType,
+        mediaId: widget.mediaId,
+        showId: widget.showId,
+      ),
+    );
   }
 
   /// Terminate the HLS session on the server and clean up P2P resources.
@@ -1330,8 +1454,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ]);
     }
 
-    // Save progress before disposing (fire and forget - can't await in dispose)
-    _saveProgress();
+    // Save progress before disposing (fire and forget - can't await in
+    // dispose), then invalidate: the second of the roughly two invalidations
+    // per session. Chained, not independent fire-and-forget calls, so the
+    // refetch it triggers can't race the save and pick up pre-save data.
+    // `whenComplete` (not `then`) so a failing save still lets the
+    // invalidation run instead of it being silently dropped.
+    _saveProgress().whenComplete(_invalidateAfterPlayback);
 
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
     _terminateHlsSession();
@@ -1362,8 +1491,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Ending a cast rebinds the local proxy on a fresh ephemeral port (and
+    // drops the LAN path token), which invalidates the URL media_kit is
+    // holding. Nothing else re-initialises the local player, so without this
+    // the screen comes back from casting to a dead video surface.
+    ref.listen<bool>(isCastingProvider, (previous, next) {
+      if (previous == true && next == false) {
+        unawaited(_restartLocalPlayback());
+      }
+    });
+
     final isCasting = ref.watch(isCastingProvider);
-    Widget body = isCasting ? _buildCastRemoteControlUI() : _buildBody();
+    final castDevice = ref.watch(currentCastDeviceProvider);
+    Widget body = isCasting && castDevice != null
+        ? _buildCastPlaceholder(castDevice)
+        : _buildBody();
 
     // Wrap with keyboard listener for desktop
     if (PlatformFeatures.supportsKeyboardShortcuts && !isCasting) {
@@ -1383,37 +1525,88 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
+  /// Tear the local player down and rebuild it from scratch.
+  ///
+  /// Used when casting stops: the media source the old [Player] was opened
+  /// with no longer resolves, and media_kit gives no way to re-point it.
+  Future<void> _restartLocalPlayback() async {
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+    _progressService?.stopSync();
+
+    final player = _player;
+    _player = null;
+    if (mounted) {
+      setState(() {
+        _videoController = null;
+        _isLoading = true;
+        _error = null;
+      });
+    } else {
+      _videoController = null;
+    }
+
+    await player?.dispose();
+
+    if (!mounted) return;
+    await _initializePlayer();
+  }
+
+  /// Keep the cast affordance reachable in every state.
+  ///
+  /// Casting is the natural remedy for a file the local player cannot decode,
+  /// so hiding the button behind "local playback is ready" removes it exactly
+  /// when it is most useful.
+  Widget _withCastAffordance(Widget child) {
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: SafeArea(
+            child: CastButton(onPressed: _showCastDevicePicker),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(
-              color: Colors.red,
-            ),
-            if (_loadingMessage != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _loadingMessage!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[400],
-                    ),
+      return _withCastAffordance(
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                color: Colors.red,
               ),
+              if (_loadingMessage != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _loadingMessage!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[400],
+                      ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       );
     }
 
     if (_error != null) {
-      return _buildError();
+      return _withCastAffordance(_buildError());
     }
 
     if (_videoController == null) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.red,
+      return _withCastAffordance(
+        const Center(
+          child: CircularProgressIndicator(
+            color: Colors.red,
+          ),
         ),
       );
     }
@@ -1554,6 +1747,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           )
         else
           const Spacer(),
+        CastButton(onPressed: _showCastDevicePicker),
       ],
     );
   }
@@ -1684,312 +1878,114 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  // TODO: Re-enable cast button in top bar once casting is working
-  /// Build the cast button that opens device picker.
-  // ignore: unused_element
-  Widget _buildCastButton() {
-    final isCasting = ref.watch(isCastingProvider);
-    final castDevice = ref.watch(currentCastDeviceProvider);
-
-    return IconButton(
-      icon: Icon(
-        isCasting ? Icons.cast_connected : Icons.cast,
-        color: isCasting ? Colors.blue : Colors.white,
-      ),
-      onPressed: _showCastDevicePicker,
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.5),
-      ),
-      tooltip: isCasting && castDevice != null
-          ? 'Casting to ${castDevice.name}'
-          : 'Cast to device',
-    );
-  }
-
-  /// Show the cast device picker dialog.
+  /// Show the cast device picker dialog, then hand the selected device to
+  /// [CastSessionManager] to resolve a route and start playback.
   Future<void> _showCastDevicePicker() async {
     final device = await showCastDevicePicker(context);
-
-    if (device != null && mounted) {
-      // Device was connected, now load the media
-      await _startCasting(device);
-    }
-  }
-
-  /// Start casting the current media to the selected device.
-  Future<void> _startCasting(CastDevice device) async {
-    final castService = ref.read(castServiceProvider);
-    final serverUrlAsync = ref.read(serverUrlProvider);
-    final authTokenAsync = ref.read(authTokenProvider);
-
-    final serverUrl = serverUrlAsync.when(
-      data: (url) => url,
-      loading: () => null,
-      error: (_, __) => null,
-    );
-
-    final token = authTokenAsync.when(
-      data: (t) => t,
-      loading: () => null,
-      error: (_, __) => null,
-    );
-
-    if (serverUrl == null || token == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot start casting: server URL or token missing'),
-          ),
-        );
-      }
-      return;
-    }
+    if (device == null || !mounted) return;
 
     try {
-      // Get media token service for media access
-      final mediaTokenService =
-          await ref.read(asyncMediaTokenServiceProvider.future);
-      await mediaTokenService.ensureValidToken();
-      final mediaToken = await mediaTokenService.getToken();
+      final manager = await ref.read(castSessionManagerProvider.future);
 
-      // Determine optimal streaming strategy
-      final strategy = StreamingStrategyService.getOptimalStrategy();
-
-      final streamUrl = StreamingStrategyService.buildStreamUrl(
-        serverUrl: serverUrl,
-        fileId: widget.fileId,
-        strategy: strategy,
-        mediaToken: mediaToken,
+      await manager.startCast(
+        device: device,
+        request: CastLaunchRequest(
+          fileId: widget.fileId,
+          mediaId: widget.mediaId,
+          mediaType: widget.mediaType,
+          title: widget.title ?? 'Untitled',
+          startPosition: _player?.state.position,
+          // The receiver cannot work this out for itself: Mydia's HLS
+          // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
+          // Chromecast reports `duration: -1` for the whole session. Hand it
+          // the runtime the server already told us (`_totalDuration`, set
+          // from the candidates metadata), falling back to whatever the local
+          // player managed to work out.
+          duration: _knownCastDuration(),
+          subtitles: _subtitleTracks
+              .where((track) => track.url != null)
+              .map((track) => CastSubtitleTrack(
+                    url: track.url!,
+                    label: track.displayName,
+                    language: track.language,
+                  ))
+              .toList(),
+        ),
       );
 
-      // Get current playback position if available
-      Duration? startPosition;
-      if (_player != null) {
-        startPosition = _player!.state.position;
-      }
-
-      // Load media into cast session
-      await castService.loadMedia(
-        mediaUrl: streamUrl,
-        title: widget.title ?? 'Untitled',
-        subtitle: widget.mediaType == 'episode' ? 'Episode' : 'Movie',
-        startPosition: startPosition,
-      );
-
-      // Pause local player
-      if (_player != null && _player!.state.playing) {
-        await _player!.pause();
-      }
+      await _player?.pause();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Casting to ${device.name}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Casting to ${device.name}'),
+          duration: const Duration(seconds: 2),
+        ));
       }
+    } on CastBackendException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(castErrorMessage(e, ref: ref)),
+        backgroundColor: Colors.red,
+      ));
     } catch (e) {
-      debugPrint('Error starting cast: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to start casting: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Anything that isn't a CastBackendException: the session manager
+      // itself resolving (Hive, GraphQL client), or a non-typed failure from
+      // _setLanAccess/_store.save inside startCast. Without this, those
+      // failures would close the picker with no snackbar and no log.
+      debugPrint('[PlayerScreen] Unexpected error starting cast: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to start casting: $e'),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 
-  /// Build the remote control UI when casting.
-  Widget _buildCastRemoteControlUI() {
-    final mediaInfo = ref.watch(castMediaInfoProvider);
-    final playbackState = ref.watch(castPlaybackStateProvider);
-    final castDevice = ref.watch(currentCastDeviceProvider);
-    final castService = ref.read(castServiceProvider);
-
-    if (mediaInfo == null || castDevice == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.red),
-      );
-    }
-
-    final isPlaying = playbackState == CastPlaybackState.playing;
-    final isBuffering = playbackState == CastPlaybackState.buffering;
-    final progress = mediaInfo.duration.inSeconds > 0
-        ? mediaInfo.position.inSeconds / mediaInfo.duration.inSeconds
-        : 0.0;
-
+  /// What the player screen shows while the media is on a receiver.
+  ///
+  /// Deliberately inert: every control lives in `CastMiniController`, which is
+  /// mounted over this screen by `app.dart`. Duplicating them here is the
+  /// confusion this replaced — two surfaces showing the same title, device,
+  /// play/pause and stop, with the bar clipping the remote's stop button.
+  Widget _buildCastPlaceholder(CastDevice device) {
     return Stack(
       children: [
         Center(
           child: Padding(
-            padding: const EdgeInsets.all(32),
+            // Bottom inset keeps the text clear of the mini bar.
+            padding: const EdgeInsets.only(
+              left: 32,
+              right: 32,
+              top: 32,
+              bottom: 120,
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Cast icon
-                const Icon(
-                  Icons.cast_connected,
-                  size: 120,
-                  color: Colors.blue,
-                ),
-                const SizedBox(height: 32),
-                // Device name
+                const Icon(Icons.cast_connected, size: 96, color: Colors.blue),
+                const SizedBox(height: 24),
                 Text(
-                  'Casting to',
+                  'Playing on ${device.name}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.grey[400],
+                        color: Colors.white,
                       ),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  castDevice.name,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 48),
-                // Media title
-                Text(
-                  mediaInfo.title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
+                  widget.title ?? 'Untitled',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[400],
                       ),
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (mediaInfo.subtitle != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    mediaInfo.subtitle!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[400],
-                        ),
-                  ),
-                ],
-                const SizedBox(height: 48),
-                // Progress bar
-                Column(
-                  children: [
-                    Slider(
-                      value: progress.clamp(0.0, 1.0),
-                      onChanged: (value) async {
-                        final newPosition = Duration(
-                          seconds:
-                              (value * mediaInfo.duration.inSeconds).round(),
-                        );
-                        await castService.seek(newPosition);
-                      },
-                      activeColor: Colors.red,
-                      inactiveColor: Colors.grey[800],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _formatDuration(mediaInfo.position),
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[400],
-                                    ),
-                          ),
-                          Text(
-                            _formatDuration(mediaInfo.duration),
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[400],
-                                    ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                // Playback controls
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Rewind 10s
-                    IconButton(
-                      icon: const Icon(Icons.replay_10, color: Colors.white),
-                      iconSize: 40,
-                      onPressed: () async {
-                        final newPosition =
-                            mediaInfo.position - const Duration(seconds: 10);
-                        await castService.seek(
-                          newPosition.isNegative ? Duration.zero : newPosition,
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 24),
-                    // Play/Pause
-                    if (isBuffering)
-                      const SizedBox(
-                        width: 64,
-                        height: 64,
-                        child: CircularProgressIndicator(
-                          color: Colors.red,
-                          strokeWidth: 4,
-                        ),
-                      )
-                    else
-                      IconButton(
-                        icon: Icon(
-                          isPlaying
-                              ? Icons.pause_circle_filled
-                              : Icons.play_circle_filled,
-                          color: Colors.white,
-                        ),
-                        iconSize: 64,
-                        onPressed: () async {
-                          if (isPlaying) {
-                            await castService.pause();
-                          } else {
-                            await castService.play();
-                          }
-                        },
-                      ),
-                    const SizedBox(width: 24),
-                    // Forward 10s
-                    IconButton(
-                      icon: const Icon(Icons.forward_10, color: Colors.white),
-                      iconSize: 40,
-                      onPressed: () async {
-                        final newPosition =
-                            mediaInfo.position + const Duration(seconds: 10);
-                        final maxPosition = mediaInfo.duration;
-                        await castService.seek(
-                          newPosition > maxPosition ? maxPosition : newPosition,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                // Stop casting button
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.stop),
-                  label: const Text('Stop Casting'),
-                  onPressed: () async {
-                    await castService.disconnect();
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white),
-                  ),
-                ),
               ],
             ),
           ),
         ),
-        // Back button
         Positioned(
           top: 8,
           left: 8,
@@ -2011,16 +2007,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  /// Format duration as HH:MM:SS or MM:SS.
-  String _formatDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
+  /// The item's runtime, from the most trustworthy source available.
+  ///
+  /// Prefers `_totalDuration` (the server's own figure, from the candidates
+  /// metadata) over the local player's, because on an HLS stream media_kit is
+  /// working from the same incomplete playlist the receiver is. Returns null
+  /// when neither knows yet, which the cast UI renders as an unknown length
+  /// rather than as zero.
+  Duration? _knownCastDuration() {
+    final fromServer = _totalDuration;
+    if (fromServer != null && fromServer > Duration.zero) return fromServer;
 
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    } else {
-      return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
+    final fromPlayer = _player?.state.duration;
+    if (fromPlayer != null && fromPlayer > Duration.zero) return fromPlayer;
+
+    return null;
   }
 }

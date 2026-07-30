@@ -581,4 +581,51 @@ defmodule Mydia.Downloads.QueueTest do
       assert reloaded.media_item_id == new_movie.id
     end
   end
+
+  describe "build_download_metadata/1" do
+    test "builds the metadata map with indexer and guid" do
+      search_result = %Mydia.Indexers.SearchResult{
+        title: "Some.Movie.2020.1080p",
+        indexer: "test-indexer",
+        download_url: "magnet:?xt=urn:btih:" <> String.duplicate("a", 40),
+        size: 1_000,
+        seeders: 5,
+        leechers: 1,
+        quality: "1080p"
+      }
+
+      metadata = Queue.build_download_metadata(search_result)
+
+      assert metadata[:indexer] == "test-indexer"
+      assert is_binary(metadata[:guid])
+      assert metadata[:size] == 1_000
+    end
+  end
+
+  describe "check_for_active_download/4 with :exclude_download_id" do
+    test "excludes the given download from the duplicate query" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      # An occupying download for this movie. Its download_client is not a
+      # configured client, so client verification treats it as :active.
+      existing = download_fixture(media_item_id: movie.id)
+
+      search_result = %Mydia.Indexers.SearchResult{
+        title: "Some.Movie.2020.1080p",
+        indexer: "test-indexer",
+        download_url: "magnet:?xt=urn:btih:" <> String.duplicate("b", 40),
+        size: 0,
+        seeders: 0,
+        leechers: 0
+      }
+
+      assert {:error, :duplicate_download} =
+               Queue.check_for_active_download(search_result, movie.id, nil)
+
+      assert :ok =
+               Queue.check_for_active_download(search_result, movie.id, nil,
+                 exclude_download_id: existing.id
+               )
+    end
+  end
 end

@@ -16,7 +16,8 @@ defmodule Mydia.Accounts.UserPreference do
   @defaults %{
     "metadata_language" => "en",
     "interface_language" => "en",
-    "theme" => "system"
+    "theme" => "system",
+    "close_manual_search_after_grab" => false
   }
 
   # Valid values for each preference
@@ -66,6 +67,13 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
+  Whether the manual search modal should close immediately after a grab.
+  """
+  def close_manual_search_after_grab?(%__MODULE__{preferences: prefs}) do
+    Map.get(prefs, "close_manual_search_after_grab", @defaults["close_manual_search_after_grab"])
+  end
+
+  @doc """
   Changeset for creating or updating user preferences.
 
   The `preferences` param should be a map with string keys, e.g.:
@@ -99,6 +107,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("theme", @valid_themes)
     |> validate_preference_value("metadata_language", @valid_languages)
     |> validate_preference_value("interface_language", @valid_languages)
+    |> validate_preference_value("close_manual_search_after_grab", [true, false])
   end
 
   defp validate_preference_value(changeset, key, valid_values) do

@@ -28,6 +28,16 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebridTest do
     Jason.encode!(%{"status" => "error", "error" => %{"code" => code, "message" => message}})
   end
 
+  # A real `.torrent` is bencoded with a `pieces` field of raw SHA-1 bytes,
+  # so the multipart body must carry arbitrary (invalid-UTF8) bytes through
+  # untouched. Using an ASCII-only fixture would not catch a body that gets
+  # mangled by an encoding step on the way out.
+  defp torrent_fixture do
+    "d8:announce13:https://tr/abc4:infod6:lengthi1e4:name7:mayabee6:pieces20:" <>
+      <<0xFF, 0xFE, 0x00, 0x01, 0x80, 0x7F, 0xC3, 0x28, 0xA0, 0xA1, 0xF0, 0x9F, 0x92, 0xA9, 0x00,
+        0xDE, 0xAD, 0xBE, 0xEF, 0x00>> <> "ee"
+  end
+
   describe "validate_credentials/1" do
     test "premium user returns ok", %{bypass: bypass, config: config} do
       Bypass.expect(bypass, "GET", "/v4/user", fn conn ->
@@ -103,6 +113,31 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebridTest do
       assert {:error, %Error{type: :api_error, details: %{reason: :slot_limit}}} =
                AllDebrid.submit_torrent(config, {:magnet, "magnet:?xt=full"})
     end
+
+    test "torrent file upload uses Req-compatible multipart body", %{
+      bypass: bypass,
+      config: config
+    } do
+      test_pid = self()
+
+      Bypass.expect(bypass, "POST", "/v4/magnet/upload/file", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        send(test_pid, {:upload, Plug.Conn.get_req_header(conn, "content-type"), body})
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success_envelope(%{"files" => [%{"id" => 77}]}))
+      end)
+
+      assert {:ok, "77"} = AllDebrid.submit_torrent(config, {:file, torrent_fixture()})
+
+      assert_received {:upload, [content_type | _], body}
+      assert content_type =~ "multipart/form-data"
+      assert body =~ ~s(name="files[]")
+      assert body =~ ~s(filename="release.torrent")
+      assert body =~ "application/x-bittorrent"
+      assert body =~ torrent_fixture()
+    end
   end
 
   describe "get_job/2 status code mapping" do
@@ -136,6 +171,89 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.AllDebridTest do
         assert {:ok, %ProviderJob{state: unquote(expected_state)}} =
                  AllDebrid.get_job(config, "1")
       end
+    end
+  end
+
+  describe "failure classification" do
+    defp magnet_payload(status_code, status_text) do
+      %{
+        "id" => 99,
+        "filename" => "Some.Release.1080p",
+        "statusCode" => status_code,
+        "status" => status_text,
+        "size" => 100,
+        "downloaded" => 0,
+        "files" => []
+      }
+    end
+
+    defp fetch_magnet(bypass, config, payload) do
+      Bypass.expect(bypass, "POST", "/v4.1/magnet/status", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success_envelope(%{"magnets" => payload}))
+      end)
+
+      AllDebrid.get_job(config, "99")
+    end
+
+    # Generated one-test-per-code, mirroring the `describe "get_job/2 status
+    # code mapping"` block at line 108 — a loop inside a single test would
+    # stop at the first bad code and hide the rest.
+    for {code, category} <- [
+          {5, :provider_error},
+          {6, :provider_error},
+          {7, :no_peers},
+          {8, :rejected_content},
+          {9, :provider_error},
+          {10, :no_peers},
+          {11, :missing_files}
+        ] do
+      test "statusCode #{code} classifies as #{inspect(category)}",
+           %{bypass: bypass, config: config} do
+        assert {:ok, %ProviderJob{} = job} =
+                 fetch_magnet(bypass, config, magnet_payload(unquote(code), "Some failure"))
+
+        assert job.state == :error
+        assert job.failure_category == unquote(category)
+      end
+    end
+
+    test "prefers the payload's status text as the detail",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_magnet(bypass, config, magnet_payload(7, "Not downloaded in 20 min"))
+
+      assert job.failure_detail == "Not downloaded in 20 min"
+    end
+
+    test "falls back to the numeric code when no status text is present",
+         %{bypass: bypass, config: config} do
+      payload = magnet_payload(9, nil) |> Map.delete("status")
+
+      assert {:ok, %ProviderJob{} = job} = fetch_magnet(bypass, config, payload)
+
+      assert job.failure_detail == "statusCode 9"
+    end
+
+    test "an undocumented code stays terminal but unclassified",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_magnet(bypass, config, magnet_payload(12, "Something new"))
+
+      assert job.state == :error
+      assert job.failure_category == nil
+      assert job.failure_detail == "Something new"
+    end
+
+    test "a healthy magnet carries no failure fields",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_magnet(bypass, config, magnet_payload(1, "Downloading"))
+
+      assert job.state == :downloading
+      assert job.failure_category == nil
+      assert job.failure_detail == nil
     end
   end
 

@@ -9,6 +9,8 @@ import '../../core/graphql/graphql_provider.dart';
 import '../../core/update/update_provider.dart';
 import '../../core/update/updaters/macos_updater.dart';
 import '../widgets/ambient_backdrop_provider.dart';
+import '../widgets/cast_actions.dart';
+import '../widgets/cast_button.dart';
 import '../widgets/connection_status_indicator.dart';
 import '../widgets/update_tile.dart';
 import 'settings/settings_controller.dart';
@@ -61,6 +63,13 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: const Text('Settings'),
+        // SettingsScreen's app bar is always visible (no desktop
+        // suppression), so it carries its own cast affordance instead of
+        // the shell's overlay — see AppShell._hasOwnCastButton.
+        actions: [
+          CastButton(onPressed: () => pickCastDevice(context, ref)),
+          const SizedBox(width: 8),
+        ],
       ),
       body: settingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

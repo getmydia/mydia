@@ -26,7 +26,7 @@
             <option value="">All</option>
             <%= for reason <- @failure_reasons do %>
               <option value={reason} selected={reason == @failure_reason_filter}>
-                {reason}
+                {reason_label(reason)}
               </option>
             <% end %>
           </select>
@@ -78,7 +78,9 @@
                   {row.guid}
                 </td>
                 <td>
-                  <span class="badge badge-warning badge-sm">{row.failure_reason}</span>
+                  <span class="badge badge-warning badge-sm" title={row.failure_reason}>
+                    {reason_label(row.failure_reason)}
+                  </span>
                 </td>
                 <td class="text-xs">{format_datetime(row.inserted_at)}</td>
                 <td class="text-xs">

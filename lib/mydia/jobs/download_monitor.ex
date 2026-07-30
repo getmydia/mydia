@@ -30,6 +30,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   require Logger
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.UntrackedMatcher
   alias Mydia.Events
@@ -109,6 +110,15 @@ defmodule Mydia.Jobs.DownloadMonitor do
         d.match_status == "unmatched" and d.in_client? == false
       end)
 
+    # Self-heal: a grab task that died mid-flight (BEAM restart, deploy)
+    # before writing an outcome leaves a client-less record with a nil
+    # `error_message`. The `"failed"` status History derives for it only
+    # affects what's *displayed* — Download.occupying/1 keys off the
+    # persisted error_message, so an orphaned grab would block re-grabs of
+    # its target forever without this. Queried directly (not from
+    # `downloads`) since it's independent of client status.
+    stale_grabs = Downloads.list_stale_grabs(now)
+
     # Active downloads we should track for stall detection. Only genuinely
     # *downloading* torrents accrue stall time — paused/queued/checking/seeding
     # are not observed, so their stale clock is neutralised by the gap reset on
@@ -123,7 +133,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       end)
 
     Logger.info(
-      "Found #{length(completed)} newly completed, #{length(failed)} newly failed, #{length(missing)} missing downloads, #{length(unmatched_orphans)} unmatched orphans, #{length(active_for_stall_check)} active for stall check"
+      "Found #{length(completed)} newly completed, #{length(failed)} newly failed, #{length(missing)} missing downloads, #{length(unmatched_orphans)} unmatched orphans, #{length(stale_grabs)} stale grabs, #{length(active_for_stall_check)} active for stall check"
     )
 
     # Handle completions
@@ -137,6 +147,9 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     # Self-heal unmatched orphans (delete; never imported, never will be)
     Enum.each(unmatched_orphans, &handle_unmatched_orphan/1)
+
+    # Self-heal abandoned grabs (persist the timeout so occupancy is released)
+    Enum.each(stale_grabs, &handle_stale_grab/1)
 
     # Track progress / flag stalled downloads. Grace minutes are read from each
     # download's configured client (DB or runtime config) — cached per poll.
@@ -160,6 +173,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       failed_count: length(failed),
       missing_count: length(missing),
       unmatched_orphans_cleaned: length(unmatched_orphans),
+      stale_grabs_cleaned: length(stale_grabs),
       stalled_count: stalled_count,
       stuck_count: length(stuck),
       untracked_matched: length(untracked_downloads)
@@ -277,23 +291,38 @@ defmodule Mydia.Jobs.DownloadMonitor do
   end
 
   defp handle_failure(download_map) do
+    # `error_message` is nil by construction here — the caller's filter only
+    # selects failures we haven't handled yet. The `||` is belt-and-braces
+    # for any future caller.
+    error_msg =
+      download_map.error_message ||
+        FailureCategory.message(
+          download_map.download_client,
+          download_map.client_failure_category,
+          download_map.client_error_detail
+        )
+
     Logger.info("Handling failed download",
       download_id: download_map.id,
       title: download_map.title,
-      error: download_map.error_message
+      failure_category: download_map.client_failure_category,
+      failure_detail: download_map.client_error_detail,
+      error: error_msg
     )
 
     # Get the download struct from database (with media_item preloaded)
     download = Downloads.get_download!(download_map.id, preload: [:media_item])
 
-    error_msg = download_map.error_message || "Download failed in client"
-
-    # Track failure event before deletion
+    # Track failure event before deletion. This metadata is what the activity
+    # feed and the media-item history render, so the composed message is the
+    # operator's only lasting record — the Download row is deleted below.
     Events.download_failed(download, error_msg, media_item: download.media_item)
 
     # Blacklist the release so the next search excludes it (issue #123).
+    # The reason is the provider's own classification when we have one
+    # (issue #237), falling back to the pre-existing generic slug.
     # This MUST NOT block failure handling — wrap in try/rescue and log.
-    record_blacklist_entry(download, "client_reported_failure")
+    record_blacklist_entry(download, FailureCategory.slug(download_map.client_failure_category))
 
     # Delete the download record - downloads table is ephemeral
     case Downloads.delete_download(download) do
@@ -380,6 +409,31 @@ defmodule Mydia.Jobs.DownloadMonitor do
     end
   end
 
+  # Persists the "Grab timed out" failure on an abandoned grab (see the
+  # `stale_grabs` comment in perform/1). `list_stale_grabs/1` returns real
+  # `%Download{}` structs (not the enriched/derived-status list), so no
+  # re-fetch is needed before updating. Uses `Downloads.update_download/2`
+  # (not `mark_download_failed/2`) because it broadcasts `{:download_updated, id}`.
+  defp handle_stale_grab(download) do
+    Logger.warning("Grab timed out — persisting failure to release occupancy",
+      download_id: download.id,
+      title: download.title
+    )
+
+    case Downloads.update_download(download, %{error_message: "Grab timed out"}) do
+      {:ok, _updated} ->
+        :ok
+
+      {:error, changeset} ->
+        Logger.error("Failed to persist stale grab timeout",
+          download_id: download.id,
+          errors: inspect(changeset.errors)
+        )
+
+        :ok
+    end
+  end
+
   defp handle_missing(download_map) do
     Logger.warning("Download missing from client - preserving for user investigation",
       download_id: download_map.id,
@@ -396,14 +450,14 @@ defmodule Mydia.Jobs.DownloadMonitor do
       "Removed from download client '#{download_map.download_client}' before import completed. " <>
         "The download may have been manually deleted, or the client may have encountered an error."
 
-    case Downloads.update_download(download, %{
-           status: "missing",
-           error_message: error_msg
-         }) do
-      {:ok, updated} ->
+    # `Download` has no `:status` field — status is derived at read time from the
+    # client poll (see `Downloads.list_downloads_with_status/1`). Persisting
+    # `error_message` is what moves the row into the Issues tab.
+    case Downloads.update_download(download, %{error_message: error_msg}) do
+      {:ok, _updated} ->
         Logger.info("Download marked as missing (preserved for Issues tab)",
           download_id: download_map.id,
-          status: updated.status
+          client: download_map.download_client
         )
 
         # Track event for user visibility

@@ -10,9 +10,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias MydiaWeb.Live.Authorization
 
-  import MydiaWeb.MediaLive.Show.Loaders,
-    only: [load_media_item: 1, load_downloads_with_status: 1]
-
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Helpers, only: [parse_int: 1, maybe_add_opt: 3]
 
@@ -193,17 +190,20 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   end
 
   def close_manual_search_modal(_params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_manual_search_modal, false)
-     |> assign(:manual_search_query, "")
-     |> assign(:manual_search_context, nil)
-     |> assign(:searching, false)
-     |> assign(:results_empty?, false)
-     |> assign(:raw_search_results, [])
-     |> assign(:indexer_errors, [])
-     |> assign(:download_error, nil)
-     |> stream(:search_results, [], reset: true)}
+    {:noreply, reset_search_modal(socket)}
+  end
+
+  defp reset_search_modal(socket) do
+    socket
+    |> assign(:show_manual_search_modal, false)
+    |> assign(:manual_search_query, "")
+    |> assign(:manual_search_context, nil)
+    |> assign(:searching, false)
+    |> assign(:results_empty?, false)
+    |> assign(:raw_search_results, [])
+    |> assign(:indexer_errors, [])
+    |> assign(:download_error, nil)
+    |> stream(:search_results, [], reset: true)
   end
 
   def filter_search(params, socket) do
@@ -226,6 +226,22 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:min_seeders, min_seeders)
      |> assign(:quality_filter, quality_filter)
      |> apply_search_filters()}
+  end
+
+  def toggle_close_after_grab(_params, socket) do
+    new_value = not socket.assigns.close_after_grab
+
+    preference = Mydia.Accounts.get_user_preference!(socket.assigns.current_user)
+
+    case Mydia.Accounts.update_preference(preference, %{
+           "close_manual_search_after_grab" => new_value
+         }) do
+      {:ok, _} ->
+        {:noreply, assign(socket, :close_after_grab, new_value)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not save preference")}
+    end
   end
 
   def sort_search(%{"sort_by" => sort_by}, socket) do
@@ -286,15 +302,32 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
         |> maybe_add_opt(:media_item_id, media_item_id)
         |> maybe_add_opt(:episode_id, episode_id)
 
-      {:noreply,
-       socket
-       |> assign(:downloading_release_url, download_url)
-       |> mark_result(download_url, %{downloading: true})
-       |> start_async(:download_release, fn ->
-         result = Downloads.initiate_download(search_result, opts)
-         Process.sleep(400)
-         {result, title, media_item.id, download_url}
-       end)}
+      case Downloads.grab_async(search_result, opts) do
+        {:ok, _download} ->
+          socket =
+            socket
+            |> assign(:download_error, nil)
+            |> mark_result(download_url, %{
+              downloading: true,
+              downloaded: false,
+              grab_failed: nil,
+              duplicate: false
+            })
+
+          socket =
+            if socket.assigns.close_after_grab do
+              socket
+              |> reset_search_modal()
+              |> put_flash(:info, "Grabbing \"#{title}\" — progress will appear on this page")
+            else
+              socket
+            end
+
+          {:noreply, socket}
+
+        {:error, _changeset} ->
+          {:noreply, assign(socket, :download_error, "Could not start download for \"#{title}\"")}
+      end
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -372,47 +405,18 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> put_flash(:error, "Search failed unexpectedly")}
   end
 
-  def handle_download_release_async(
-        {:ok, {{:ok, _download}, title, media_item_id, download_url}},
-        socket
-      ) do
-    Logger.info("Download initiated: #{title}")
+  # Grab pipeline PubSub handlers (topic "downloads", broadcast by
+  # Mydia.Downloads.Grabber). Row lookup is a no-op when the modal is closed.
 
-    media_item = load_media_item(media_item_id)
-
-    {:noreply,
-     socket
-     |> assign(:downloading_release_url, nil)
-     |> assign(:download_error, nil)
-     |> assign(:media_item, media_item)
-     |> assign(:downloads_with_status, load_downloads_with_status(media_item))
-     |> mark_result(download_url, %{downloading: false, downloaded: true})}
+  def handle_grab_completed(%{download_url: download_url}, socket) do
+    {:noreply, mark_result(socket, download_url, %{downloading: false, downloaded: true})}
   end
 
-  def handle_download_release_async(
-        {:ok, {{:error, reason}, title, _media_item_id, download_url}},
-        socket
-      ) do
-    Logger.error("Failed to initiate download for #{title}: #{inspect(reason)}")
-
-    {:noreply,
-     socket
-     |> assign(:downloading_release_url, nil)
-     |> assign(:download_error, "Failed to start download: #{inspect(reason)}")
-     |> mark_result(download_url, %{downloading: false})}
+  def handle_grab_failed(%{download_url: download_url, reason: reason}, socket) do
+    {:noreply, mark_result(socket, download_url, %{downloading: false, grab_failed: reason})}
   end
 
-  def handle_download_release_async({:exit, reason}, socket) do
-    Logger.error("Download task crashed: #{inspect(reason)}")
-
-    download_url = socket.assigns[:downloading_release_url]
-
-    socket =
-      if download_url, do: mark_result(socket, download_url, %{downloading: false}), else: socket
-
-    {:noreply,
-     socket
-     |> assign(:downloading_release_url, nil)
-     |> assign(:download_error, "Download failed unexpectedly")}
+  def handle_grab_duplicate(%{download_url: download_url}, socket) do
+    {:noreply, mark_result(socket, download_url, %{downloading: false, duplicate: true})}
   end
 end

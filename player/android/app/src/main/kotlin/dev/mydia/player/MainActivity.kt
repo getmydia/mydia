@@ -3,6 +3,7 @@ package dev.mydia.player
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -11,9 +12,37 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "dev.mydia.player/notifications"
+    private val multicastChannelName = "dev.mydia.player/multicast"
+
+    /**
+     * Held only while cast discovery is running.
+     *
+     * Android's Wi-Fi stack filters out multicast/broadcast packets that are
+     * not addressed to this device unless a multicast lock is held, which
+     * silently starves both SSDP (DLNA) and mDNS (Chromecast) discovery. The
+     * lock is reference counted so nested acquires are safe, and it is
+     * released in onDestroy so a crash mid-discovery cannot pin the radio in
+     * its higher-power mode.
+     */
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, multicastChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "acquireMulticastLock" -> {
+                        acquireMulticastLock()
+                        result.success(null)
+                    }
+                    "releaseMulticastLock" -> {
+                        releaseMulticastLock()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
@@ -35,6 +64,40 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun acquireMulticastLock() {
+        val existing = multicastLock
+        if (existing != null) {
+            existing.acquire()
+            return
+        }
+
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val lock = wifi.createMulticastLock("mydia-cast-discovery").apply {
+            setReferenceCounted(true)
+            acquire()
+        }
+        multicastLock = lock
+    }
+
+    private fun releaseMulticastLock() {
+        val lock = multicastLock ?: return
+        if (lock.isHeld) {
+            lock.release()
+        }
+        if (!lock.isHeld) {
+            multicastLock = null
+        }
+    }
+
+    override fun onDestroy() {
+        val lock = multicastLock
+        while (lock != null && lock.isHeld) {
+            lock.release()
+        }
+        multicastLock = null
+        super.onDestroy()
     }
 
     private fun updateProgressNotification(

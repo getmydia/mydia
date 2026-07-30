@@ -5,12 +5,16 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import 'episode_detail_controller.dart';
 import '../../../domain/models/episode_detail.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_job_providers.dart';
+import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
 import '../../widgets/smart_play_button.dart';
 
 class EpisodeDetailScreen extends ConsumerWidget {
@@ -27,10 +31,20 @@ class EpisodeDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: episodeAsync.when(
-        data: (episode) => _buildContent(context, ref, episode),
-        loading: () => _buildLoadingState(context),
-        error: (error, stack) => _buildErrorState(context, ref, error),
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [QueryKeys.episodeDetail(id)],
+            topInset: freshnessTopInset(context, appBarHeight: 0),
+          ),
+          Expanded(
+            child: episodeAsync.when(
+              data: (episode) => _buildContent(context, ref, episode),
+              loading: () => _buildLoadingState(context),
+              error: (error, stack) => _buildErrorState(context, ref, error),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -169,7 +183,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, EpisodeDetail episode) {
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, episode),
+        _buildHeroSection(context, ref, episode),
         SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,7 +253,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, EpisodeDetail episode) {
+  Widget _buildHeroSection(
+      BuildContext context, WidgetRef ref, EpisodeDetail episode) {
     // Use episode thumbnail if available, otherwise fall back to show backdrop
     final imageUrl = episode.thumbnailUrl ?? episode.show.artwork.backdropUrl;
 
@@ -249,6 +264,13 @@ class EpisodeDetailScreen extends ConsumerWidget {
       stretch: true,
       backgroundColor: AppColors.background,
       leading: _buildBackButton(context),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: CastButton(onPressed: () => pickCastDevice(context, ref)),
+        ),
+        const SizedBox(width: 8),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         stretchModes: const [
           StretchMode.zoomBackground,

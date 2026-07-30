@@ -22,6 +22,16 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.PremiumizeTest do
   defp success(extra), do: Jason.encode!(Map.merge(%{"status" => "success"}, extra))
   defp error_body(msg), do: Jason.encode!(%{"status" => "error", "message" => msg})
 
+  # A real `.torrent` is bencoded with a `pieces` field of raw SHA-1 bytes,
+  # so the multipart body must carry arbitrary (invalid-UTF8) bytes through
+  # untouched. Using an ASCII-only fixture would not catch a body that gets
+  # mangled by an encoding step on the way out.
+  defp torrent_fixture do
+    "d8:announce13:https://tr/abc4:infod6:lengthi1e4:name7:mayabee6:pieces20:" <>
+      <<0xFF, 0xFE, 0x00, 0x01, 0x80, 0x7F, 0xC3, 0x28, 0xA0, 0xA1, 0xF0, 0x9F, 0x92, 0xA9, 0x00,
+        0xDE, 0xAD, 0xBE, 0xEF, 0x00>> <> "ee"
+  end
+
   describe "validate_credentials/1" do
     test "active subscription returns ok", %{bypass: bypass, config: config} do
       Bypass.expect(bypass, "GET", "/account/info", fn conn ->
@@ -46,6 +56,32 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.PremiumizeTest do
 
       assert {:ok, "transfer_abc"} =
                Premiumize.submit_torrent(config, {:magnet, "magnet:?xt=x"})
+    end
+
+    test "torrent file upload uses Req-compatible multipart body", %{
+      bypass: bypass,
+      config: config
+    } do
+      test_pid = self()
+
+      Bypass.expect(bypass, "POST", "/transfer/create", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        send(test_pid, {:upload, Plug.Conn.get_req_header(conn, "content-type"), body})
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success(%{"id" => "transfer_file"}))
+      end)
+
+      assert {:ok, "transfer_file"} =
+               Premiumize.submit_torrent(config, {:file, torrent_fixture()})
+
+      assert_received {:upload, [content_type | _], body}
+      assert content_type =~ "multipart/form-data"
+      assert body =~ ~s(name="src")
+      assert body =~ ~s(filename="release.torrent")
+      assert body =~ "application/x-bittorrent"
+      assert body =~ torrent_fixture()
     end
   end
 
@@ -82,6 +118,73 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.PremiumizeTest do
       end)
 
       assert {:error, %Error{type: :not_found}} = Premiumize.get_job(config, "missing")
+    end
+  end
+
+  describe "failure classification" do
+    defp fetch_transfer(bypass, config, overrides) do
+      transfer =
+        Map.merge(
+          %{
+            "id" => "t1",
+            "name" => "Some.Release.1080p",
+            "progress" => 0.0,
+            "size" => 100
+          },
+          overrides
+        )
+
+      Bypass.expect(bypass, "GET", "/transfer/list", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success(%{"transfers" => [transfer]}))
+      end)
+
+      Premiumize.get_job(config, "t1")
+    end
+
+    test "an error transfer classifies as :provider_error with its message",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{
+                 "status" => "error",
+                 "message" => "torrent not available"
+               })
+
+      assert job.state == :error
+      assert job.failure_category == :provider_error
+      assert job.failure_detail == "torrent not available"
+    end
+
+    test "falls back to the status string when there is no message",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{"status" => "error"})
+
+      assert job.failure_category == :provider_error
+      assert job.failure_detail == "error"
+    end
+
+    test "a running transfer carries no failure fields", %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{"status" => "running"})
+
+      assert job.failure_category == nil
+      assert job.failure_detail == nil
+    end
+
+    test "redacts credentials leaking through the free-text message", %{
+      bypass: bypass,
+      config: config
+    } do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{
+                 "status" => "error",
+                 "message" => "failed https://cdn.example.com/f?token=SECRET"
+               })
+
+      assert job.failure_category == :provider_error
+      refute job.failure_detail =~ "SECRET"
     end
   end
 

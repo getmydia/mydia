@@ -17,6 +17,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
+import 'cast_actions.dart';
 import 'glass_surface.dart';
 import 'offline_banner.dart';
 
@@ -165,6 +166,31 @@ class AppShell extends ConsumerStatefulWidget {
     required this.child,
     required this.location,
   });
+
+  /// Routes whose own screen already renders a [CastButton] in a real,
+  /// always-visible app bar.
+  ///
+  /// [CastOverlayButton] exists only for screens with nowhere else to put the
+  /// affordance — the desktop browse screens that suppress their app bar
+  /// entirely (Home/Unwatched/Favorites/RecentlyAdded/Collections). Library,
+  /// Downloads, Settings and Search all keep a real app bar on every
+  /// platform, with their own action buttons (sort/view-toggle, cancel-all,
+  /// clear, etc.) living in the exact top-right band this overlay paints
+  /// into. Rendering the overlay there too would sit on top of — and
+  /// intercept taps for — those existing buttons. Do not delete this check
+  /// "to simplify": it is what keeps the overlay from colliding with a
+  /// screen's own app bar the next time one grows an action.
+  ///
+  /// Public (rather than a private helper on [_AppShellState]) and annotated
+  /// `@visibleForTesting` purely so a test can assert the routing decision
+  /// directly, without reconstructing the shell's full provider graph.
+  @visibleForTesting
+  static bool hasOwnCastButton(String location) =>
+      location.startsWith('/movies') ||
+      location.startsWith('/shows') ||
+      location.startsWith('/downloads') ||
+      location.startsWith('/settings') ||
+      location.startsWith('/search');
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -375,6 +401,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // proper repaint propagation on mobile when combined with GlobalKey
     // on the Scaffold (causing the "stuck navigation" bug).
     final isDesktop = Breakpoints.isDesktop(context);
+    final showCastOverlay = !AppShell.hasOwnCastButton(location);
 
     // Shell-level ambient backdrop, fed by the active browse screen. Sits behind
     // the (now transparent) in-shell Scaffolds for all browse screens (plan U5).
@@ -415,6 +442,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
               ],
             ),
+            if (showCastOverlay)
+              CastOverlayButton(topInset: _macOSTitleBarPadding + 12),
           ],
         ),
       );
@@ -447,6 +476,8 @@ class _AppShellState extends ConsumerState<AppShell> {
               Expanded(child: widget.child),
             ],
           ),
+          if (showCastOverlay)
+            const CastOverlayButton(topInset: kToolbarHeight + 8),
         ],
       ),
       bottomNavigationBar: _ModernBottomNav(
@@ -525,8 +556,12 @@ class MydiaLogoPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Shared sidebar navigation content used by both desktop and mobile drawers.
-class _SidebarContent extends StatelessWidget {
+/// Shared sidebar navigation content used by both the desktop sidebar and the
+/// mobile drawer.
+///
+/// Public so the navigation destinations are unit-testable without mounting the
+/// full shell's provider graph, matching [GlassSidebarPanel].
+class SidebarContent extends StatelessWidget {
   final String location;
   final ValueChanged<String> onNavigate;
   final bool homeExpanded;
@@ -537,7 +572,8 @@ class _SidebarContent extends StatelessWidget {
   final double topPadding;
   final Widget? backToMydiaWidget;
 
-  const _SidebarContent({
+  const SidebarContent({
+    super.key,
     required this.location,
     required this.onNavigate,
     required this.homeExpanded,
@@ -569,12 +605,16 @@ class _SidebarContent extends StatelessWidget {
             children: [
               const MydiaLogo(size: 36),
               const SizedBox(width: 12),
-              Text(
-                'Mydia Player',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
+              Expanded(
+                child: Text(
+                  'Mydia Player',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.5,
+                      ),
+                ),
               ),
             ],
           ),
@@ -669,6 +709,15 @@ class _SidebarContent extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                _SidebarItem(
+                  icon: Icons.search_outlined,
+                  selectedIcon: Icons.search_rounded,
+                  label: 'Search',
+                  isSelected: location.startsWith('/search'),
+                  isDisabled: isOffline,
+                  onTap: () => onNavigate('/search'),
+                ),
                 if (isDownloadSupported) ...[
                   const SizedBox(height: 8),
                   _SidebarItem(
@@ -731,7 +780,7 @@ class _DesktopSidebar extends StatelessWidget {
     return GlassSidebarPanel(
       child: SafeArea(
         top: false,
-        child: _SidebarContent(
+        child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
           homeExpanded: homeExpanded,
@@ -1027,12 +1076,16 @@ class _SidebarItemState extends State<_SidebarItem> {
                 ],
               ),
               const SizedBox(width: 14),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: textColor,
+              Expanded(
+                child: Text(
+                  widget.label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: textColor,
+                  ),
                 ),
               ),
             ],
@@ -1085,67 +1138,67 @@ class _ModernBottomNav extends StatelessWidget {
               color: AppColors.border.withValues(alpha: 0.2),
             ),
             child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                if (showBackToMydia)
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  if (showBackToMydia)
+                    _NavItem(
+                      icon: Icons.arrow_back_rounded,
+                      selectedIcon: Icons.arrow_back_rounded,
+                      label: 'Mydia',
+                      isSelected: false,
+                      onTap: navigateToMydiaApp,
+                    ),
                   _NavItem(
-                    icon: Icons.arrow_back_rounded,
-                    selectedIcon: Icons.arrow_back_rounded,
-                    label: 'Mydia',
-                    isSelected: false,
-                    onTap: navigateToMydiaApp,
-                  ),
-                _NavItem(
-                  icon: Icons.home_outlined,
-                  selectedIcon: Icons.home_rounded,
-                  label: 'Home',
-                  isSelected: _AppShellState._isHomeSection(location),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/'),
-                ),
-                _NavItem(
-                  icon: Icons.movie_outlined,
-                  selectedIcon: Icons.movie_rounded,
-                  label: 'Movies',
-                  isSelected: location.startsWith('/movies'),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/movies'),
-                ),
-                _NavItem(
-                  icon: Icons.tv_outlined,
-                  selectedIcon: Icons.tv_rounded,
-                  label: 'Shows',
-                  isSelected: location.startsWith('/shows'),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/shows'),
-                ),
-                if (isDownloadSupported)
-                  _NavItem(
-                    icon: Icons.download_outlined,
-                    selectedIcon: Icons.download_rounded,
-                    label: 'Downloads',
-                    isSelected: location.startsWith('/downloads'),
-                    onTap: () => onNavigate('/downloads'),
-                  )
-                else
-                  _NavItem(
-                    icon: Icons.favorite_outline_rounded,
-                    selectedIcon: Icons.favorite_rounded,
-                    label: 'Favorites',
-                    isSelected: location.startsWith('/favorites'),
+                    icon: Icons.home_outlined,
+                    selectedIcon: Icons.home_rounded,
+                    label: 'Home',
+                    isSelected: _AppShellState._isHomeSection(location),
                     isDisabled: isOffline,
-                    onTap: () => onNavigate('/favorites'),
+                    onTap: () => onNavigate('/'),
                   ),
-                _SettingsNavItem(
-                  isSelected: location.startsWith('/settings'),
-                  isDisabled: isOffline,
-                  onTap: () => onNavigate('/settings'),
-                ),
-              ],
+                  _NavItem(
+                    icon: Icons.movie_outlined,
+                    selectedIcon: Icons.movie_rounded,
+                    label: 'Movies',
+                    isSelected: location.startsWith('/movies'),
+                    isDisabled: isOffline,
+                    onTap: () => onNavigate('/movies'),
+                  ),
+                  _NavItem(
+                    icon: Icons.tv_outlined,
+                    selectedIcon: Icons.tv_rounded,
+                    label: 'Shows',
+                    isSelected: location.startsWith('/shows'),
+                    isDisabled: isOffline,
+                    onTap: () => onNavigate('/shows'),
+                  ),
+                  if (isDownloadSupported)
+                    _NavItem(
+                      icon: Icons.download_outlined,
+                      selectedIcon: Icons.download_rounded,
+                      label: 'Downloads',
+                      isSelected: location.startsWith('/downloads'),
+                      onTap: () => onNavigate('/downloads'),
+                    )
+                  else
+                    _NavItem(
+                      icon: Icons.favorite_outline_rounded,
+                      selectedIcon: Icons.favorite_rounded,
+                      label: 'Favorites',
+                      isSelected: location.startsWith('/favorites'),
+                      isDisabled: isOffline,
+                      onTap: () => onNavigate('/favorites'),
+                    ),
+                  _SettingsNavItem(
+                    isSelected: location.startsWith('/settings'),
+                    isDisabled: isOffline,
+                    onTap: () => onNavigate('/settings'),
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         ),
       ),
@@ -1180,7 +1233,7 @@ class _MobileDrawer extends StatelessWidget {
     return Drawer(
       backgroundColor: AppColors.background,
       child: SafeArea(
-        child: _SidebarContent(
+        child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
           homeExpanded: homeExpanded,

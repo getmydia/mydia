@@ -103,6 +103,50 @@ void main() {
       });
     });
 
+    testWidgets(
+        'toggling artwork on and off faster than the crossfade does not '
+        'duplicate the fallback key', (tester) async {
+      // Hovering across a poster grid flips the source artwork <-> none on
+      // every mouse enter/leave, much faster than the 600ms crossfade. Each
+      // flip parks an outgoing layer, so several fallback layers — which all
+      // share the constant 'ambient-fallback' key — stay alive at once.
+      // AnimatedSwitcher only dedupes outgoing children against the *current*
+      // child, so without our own dedupe the layout Stack ends up with two
+      // identically keyed children and asserts, taking the whole shell subtree
+      // down with it.
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(_host(const AmbientBackdrop()));
+        await tester.pump();
+
+        await tester.pumpWidget(
+          _host(const AmbientBackdrop(
+            imageUrl: 'https://example.com/a.jpg',
+            id: 'a',
+          )),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+
+        // Back to the fallback: a second layer with the same key is created
+        // while the first one is still fading out.
+        await tester.pumpWidget(_host(const AmbientBackdrop()));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        // Switching away again leaves both fallback layers outgoing at once.
+        await tester.pumpWidget(
+          _host(const AmbientBackdrop(
+            imageUrl: 'https://example.com/b.jpg',
+            id: 'b',
+          )),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
+    });
+
     testWidgets('with reduced motion on, the crossfade duration is zero',
         (tester) async {
       await mockNetworkImages(() async {

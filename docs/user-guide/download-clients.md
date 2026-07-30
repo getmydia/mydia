@@ -52,6 +52,12 @@ DOWNLOAD_CLIENT_1_HOST=qbittorrent
 DOWNLOAD_CLIENT_1_PORT=8080
 DOWNLOAD_CLIENT_1_USERNAME=admin
 DOWNLOAD_CLIENT_1_PASSWORD=adminpass
+# Alternative to username/password on qBittorrent 5.2 and newer. Generate the
+# key in qBittorrent under Preferences, WebUI, API Key. When set, it takes
+# precedence over the username and password. qBittorrent holds exactly one
+# API key at a time, so generating a new one immediately invalidates the
+# previous one and breaks any other integration still using it.
+# DOWNLOAD_CLIENT_1_API_KEY=qbt_yourkeyhere
 
 # Transmission
 DOWNLOAD_CLIENT_2_NAME=Transmission
@@ -119,7 +125,7 @@ variable, so a block without one is silently ignored.
 | Port | Client port | `8080` |
 | Username | Auth username | `admin` |
 | Password | Auth password | `secret` |
-| API Key | API key (SABnzbd, debrid) | `abc123` |
+| API Key | API key (SABnzbd, debrid, qBittorrent 5.2+) | `abc123` |
 | Provider | Debrid provider (debrid only) | `real_debrid` |
 | Use SSL | Enable HTTPS | `true` |
 | Category | Default category | `mydia` |
@@ -149,6 +155,8 @@ Use these values when adding a debrid client:
 - Provider: one of `real_debrid`, `all_debrid`, `premiumize`, `tor_box`
 
 Debrid clients use a 24-hour stall-detection grace period by default (other clients use 60 minutes), because remote caching can take longer to resolve a download before it begins transferring. The provider's API endpoint is built in, so `Host`/`Port` are ignored.
+
+A debrid provider can accept one release and still fail to fetch another: a submission that succeeds only proves your account and the API path work, not that the chosen torrent has seeds. When a provider reports a release as stalled with no seeds, Mydia keeps it active and lets the normal stall detection decide, rather than failing it immediately. TorBox in particular has not been validated against a live subscription, so please [open an issue](https://github.com/getmydia/mydia/issues) if you see behavior that differs from the above.
 
 ## Blackhole
 

@@ -44,8 +44,8 @@ type RootQueryType {
   "Get unwatched items with files"
   unwatched(first: Int, after: String, types: [MediaType]): [RecentlyAddedItem]
 
-  "Search across movies and TV shows"
-  search(query: String!, types: [MediaType], first: Int): SearchResults
+  "Search the library across movies, TV shows, episodes, and collections"
+  search(query: String!, types: [SearchResultType], first: Int): SearchResults
 
   "List all API keys for the current user"
   apiKeys: [ApiKey]
@@ -324,6 +324,8 @@ type Movie implements Node {
 
   tmdbId: Int
 
+  tvdbId: Int
+
   imdbId: String
 
   category: MediaCategory
@@ -380,6 +382,8 @@ type TvShow implements Node {
 
   tmdbId: Int
 
+  tvdbId: Int
+
   imdbId: String
 
   category: MediaCategory
@@ -420,6 +424,9 @@ type TvShow implements Node {
 
   "Whether this item is in user favorites"
   isFavorite: Boolean!
+
+  "Metadata provider used to fetch this show's data (tvdb or tmdb)"
+  metadataSource: String
 }
 
 "A season of a TV show"
@@ -601,7 +608,7 @@ type PageInfo {
 type SearchResult {
   id: ID!
 
-  type: MediaType!
+  type: SearchResultType!
 
   title: String!
 
@@ -609,13 +616,35 @@ type SearchResult {
 
   artwork: Artwork
 
-  "Relevance score"
+  "Relevance score: 100, 75, 50 or 25"
   score: Float
+
+  "Parent show title for episodes, item count for collections"
+  subtitle: String
+
+  "Season number, episodes only"
+  seasonNumber: Int
+
+  "Episode number, episodes only"
+  episodeNumber: Int
+
+  "Owning show ID, episodes only"
+  parentId: ID
+}
+
+"One grouped section of search results"
+type SearchSection {
+  type: SearchResultType!
+
+  results: [SearchResult!]!
+
+  "True number of matches, not the length of results"
+  totalCount: Int!
 }
 
 "Search results container"
 type SearchResults {
-  results: [SearchResult!]!
+  sections: [SearchSection!]!
   totalCount: Int!
 }
 
@@ -651,6 +680,15 @@ type LibraryPath implements Node {
 
   "Whether auto-import is enabled"
   autoImport: Boolean!
+
+  "Whether NFO files are written alongside media"
+  writeNfo: Boolean!
+
+  "Whether auto-rename on import is enabled"
+  autoRename: Boolean!
+
+  "Metadata provider used for TV shows in this library (tvdb or tmdb)"
+  tvMetadataSource: String
 }
 
 "Result of toggling favorite status"
@@ -966,6 +1004,21 @@ enum MediaType {
 
   "A TV episode"
   EPISODE
+}
+
+"Library search result types"
+enum SearchResultType {
+  "A movie"
+  MOVIE
+
+  "A TV show"
+  TV_SHOW
+
+  "A TV episode"
+  EPISODE
+
+  "A user collection"
+  COLLECTION
 }
 
 "Library path type"

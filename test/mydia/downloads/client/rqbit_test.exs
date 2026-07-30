@@ -281,6 +281,43 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert {:error, error} = Rqbit.get_status(config, @hash)
       assert error.type == :not_found
     end
+
+    test "populates absolute files from torrent file list under shared output_folder", %{
+      bypass: bypass,
+      config: config
+    } do
+      Bypass.expect(bypass, "GET", "/torrents/#{@hash}", fn conn ->
+        json_resp(conn, 200, %{
+          "id" => 0,
+          "info_hash" => @hash,
+          "name" => "Silo.S03E03.mkv",
+          "output_folder" => "/mnt/storage/media/Downloads/rqbit/",
+          "files" => [
+            %{
+              "name" => "Silo.S03E03.mkv",
+              "components" => ["Silo.S03E03.mkv"],
+              "length" => 100,
+              "included" => true
+            },
+            %{
+              "name" => "skip.me.nfo",
+              "components" => ["skip.me.nfo"],
+              "length" => 10,
+              "included" => false
+            }
+          ]
+        })
+      end)
+
+      stub_stats(
+        bypass,
+        stats(state: "live", finished: true, progress_bytes: 100, total_bytes: 100)
+      )
+
+      assert {:ok, status} = Rqbit.get_status(config, @hash)
+      assert status.save_path == "/mnt/storage/media/Downloads/rqbit/"
+      assert status.files == ["/mnt/storage/media/Downloads/rqbit/Silo.S03E03.mkv"]
+    end
   end
 
   describe "list_torrents/2 (Bypass)" do

@@ -1,6 +1,7 @@
 defmodule MydiaWeb.MediaLive.IndexTest do
   use MydiaWeb.ConnCase
 
+  import Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
@@ -483,6 +484,83 @@ defmodule MydiaWeb.MediaLive.IndexTest do
     end
   end
 
+  describe "date sorting" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "Added (Newest) puts the most recently added item first across a month boundary", %{
+      conn: conn
+    } do
+      june = media_item_fixture(%{title: "Added June 30", type: "movie"})
+      july = media_item_fixture(%{title: "Added July 1", type: "movie"})
+
+      set_inserted_at(june, ~U[2026-06-30 12:00:00Z])
+      set_inserted_at(july, ~U[2026-07-01 09:00:00Z])
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert sorted_item_ids(view, "added_desc") == [july.id, june.id]
+    end
+
+    test "Added (Oldest) puts the earliest added item first across a month boundary", %{
+      conn: conn
+    } do
+      june = media_item_fixture(%{title: "Added June 30", type: "movie"})
+      july = media_item_fixture(%{title: "Added July 1", type: "movie"})
+
+      set_inserted_at(june, ~U[2026-06-30 12:00:00Z])
+      set_inserted_at(july, ~U[2026-07-01 09:00:00Z])
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert sorted_item_ids(view, "added_asc") == [june.id, july.id]
+    end
+
+    test "Last Aired (Recent) orders shows by their most recent episode air date", %{conn: conn} do
+      older = media_item_fixture(%{title: "Aired Long Ago", type: "tv_show"})
+      recent = media_item_fixture(%{title: "Aired Recently", type: "tv_show"})
+
+      episode_fixture(%{media_item_id: older.id, air_date: ~D[2020-01-15]})
+      episode_fixture(%{media_item_id: recent.id, air_date: ~D[2026-01-15]})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert sorted_item_ids(view, "last_aired_desc") == [recent.id, older.id]
+    end
+
+    test "Next Airing (Soon) orders shows by their next upcoming episode", %{conn: conn} do
+      soon = media_item_fixture(%{title: "Airing Soon", type: "tv_show"})
+      later = media_item_fixture(%{title: "Airing Later", type: "tv_show"})
+
+      episode_fixture(%{media_item_id: soon.id, air_date: Date.add(Date.utc_today(), 7)})
+      episode_fixture(%{media_item_id: later.id, air_date: Date.add(Date.utc_today(), 30)})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert sorted_item_ids(view, "next_aired_asc") == [soon.id, later.id]
+    end
+
+    defp set_inserted_at(media_item, %DateTime{} = at) do
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^media_item.id),
+        set: [inserted_at: at]
+      )
+    end
+
+    # Picks `sort_by` in the library toolbar and returns the resulting grid item
+    # ids in DOM order, stripped back to the bare media item id.
+    defp sorted_item_ids(view, sort_by) do
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"sort_by" => sort_by})
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#media-items > div")
+      |> LazyHTML.attribute("id")
+      |> Enum.map(&String.replace_prefix(&1, "media_items-", ""))
+    end
+  end
+
   describe "batch delete defaults" do
     defp stub_socket do
       %Phoenix.LiveView.Socket{
@@ -497,6 +575,151 @@ defmodule MydiaWeb.MediaLive.IndexTest do
 
       assert socket.assigns.show_delete_modal == true
       assert socket.assigns.delete_files == true
+    end
+  end
+
+  describe "bulk auto search" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "renders the auto search button disabled until something is selected", %{conn: conn} do
+      movie = insert(:media_item, type: "movie")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      refute has_element?(view, "#batch-auto-search-btn")
+
+      render_click(view, "toggle_selection_mode", %{})
+
+      assert has_element?(view, "#batch-auto-search-btn")
+      assert has_element?(view, "#batch-auto-search-btn[disabled]")
+
+      render_click(view, "toggle_select", %{"id" => movie.id})
+
+      refute has_element?(view, "#batch-auto-search-btn[disabled]")
+    end
+
+    test "queues searches for selected items and reports skipped ones", %{conn: conn} do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+      already_have = insert(:media_item, type: "movie", title: "Already Downloaded")
+      insert(:media_file, media_item: already_have, episode: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+      render_click(view, "toggle_select", %{"id" => already_have.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-info") |> render() =~
+               "Queued 1 search, skipped 1 that does not need one"
+
+      assert [job] = Mydia.Repo.all(Oban.Job)
+      assert job.worker == "Mydia.Jobs.MovieSearch"
+      assert job.args["mode"] == "specific"
+      assert job.args["media_item_id"] == needs_search.id
+    end
+
+    test "reports when nothing in the selection needs a search", %{conn: conn} do
+      already_have = insert(:media_item, type: "movie", title: "Already Downloaded")
+      insert(:media_file, media_item: already_have, episode: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => already_have.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-info") |> render() =~ "Nothing to search"
+      assert Mydia.Repo.all(Oban.Job) == []
+    end
+
+    test "selecting more than the threshold shows a confirmation modal and queues nothing until confirmed",
+         %{conn: conn} do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+
+      # Real UUIDs for rows that do not exist: `binary_id` is a plain string on
+      # SQLite but a genuine uuid column on Postgres, so a synthetic id like
+      # "fake-id-1" casts fine on one adapter and raises Ecto.Query.CastError on
+      # the other. partition_for_auto_search/1 counts absent ids in neither
+      # number, which is what keeps the assertions below stable.
+      for _ <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => Ecto.UUID.generate()})
+      end
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert has_element?(view, "#auto-search-confirm-modal[open]")
+      assert Mydia.Repo.all(Oban.Job) == []
+
+      view |> element("#confirm-batch-auto-search-btn") |> render_click()
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+
+      assert view |> element("#flash-info") |> render() =~ "Queued 1 search"
+      assert [job] = Mydia.Repo.all(Oban.Job)
+      assert job.args["media_item_id"] == needs_search.id
+    end
+
+    test "cancelling the confirmation modal queues nothing and keeps the selection", %{
+      conn: conn
+    } do
+      needs_search = insert(:media_item, type: "movie", title: "Needs A Search")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => needs_search.id})
+
+      # Real UUIDs for rows that do not exist: `binary_id` is a plain string on
+      # SQLite but a genuine uuid column on Postgres, so a synthetic id like
+      # "fake-id-1" casts fine on one adapter and raises Ecto.Query.CastError on
+      # the other. partition_for_auto_search/1 counts absent ids in neither
+      # number, which is what keeps the assertions below stable.
+      for _ <- 1..50 do
+        render_click(view, "toggle_select", %{"id" => Ecto.UUID.generate()})
+      end
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+      assert has_element?(view, "#auto-search-confirm-modal[open]")
+
+      render_click(view, "cancel_batch_auto_search", %{})
+
+      refute has_element?(view, "#auto-search-confirm-modal[open]")
+      assert Mydia.Repo.all(Oban.Job) == []
+
+      # Selection survives the cancel: the toolbar is still in selection mode
+      # with the same count shown.
+      assert has_element?(view, "#batch-auto-search-btn")
+      assert has_element?(view, ".tabular-nums", "51")
+    end
+
+    test "denies a user without download permission", %{conn: conn} do
+      readonly = user_fixture(%{role: "readonly"})
+      conn = log_in_user(conn, readonly)
+      movie = insert(:media_item, type: "movie")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => movie.id})
+
+      view |> element("#batch-auto-search-btn") |> render_click()
+
+      assert view |> element("#flash-error") |> render() =~
+               "You do not have permission to manage downloads"
+
+      assert Mydia.Repo.all(Oban.Job) == []
     end
   end
 end

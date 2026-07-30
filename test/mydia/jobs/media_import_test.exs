@@ -1413,4 +1413,240 @@ defmodule Mydia.Jobs.MediaImportTest do
              "refresh_episodes_for_tv_show should be invoked at most once per import job; got #{refresh_attempts} attempts across 5 unresolved files"
     end
   end
+
+  describe "partial import error surfacing" do
+    @tag :tmp_dir
+    test "exposes the underlying per-file error instead of only a generic hint",
+         %{tmp_dir: tmp_dir} do
+      # Regression for the production incident where season-pack imports
+      # failed with only the generic "Some files could not be imported. Check
+      # library path permissions and available disk space." while the real
+      # cause was duplicate media_files rows making Repo.one/1 raise
+      # "expected at most one result" on the reuse-existing-file path.
+      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+
+      assert {:error, _reason} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      updated = Mydia.Downloads.get_download!(download.id)
+
+      # The classification tag stays stable for Issues-tab filtering...
+      assert updated.import_failure_reason == "partial_import"
+
+      # ...but the human message must name the real underlying error, not
+      # just the generic permissions/disk-space hint.
+      assert updated.import_last_error =~ "Some files could not be imported"
+      assert updated.import_last_error =~ "First error: expected at most one result"
+      refute updated.import_last_error =~ "Check library path permissions"
+    end
+
+    @tag :tmp_dir
+    test "still goes terminal after three attempts once the reason is attached",
+         %{tmp_dir: tmp_dir} do
+      # Attaching the underlying reason turns the error from the bare atom
+      # :partial_import into {:partial_import, reason}. terminal_failure?/2
+      # must match the tuple too — otherwise an unfixable partial import falls
+      # through to the catch-all, never cancels, and re-walks the whole
+      # download for all 1000 of Oban's attempts.
+      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+
+      assert {:cancel, {:partial_import, _reason}} =
+               perform_job(
+                 MediaImport,
+                 %{"download_id" => download.id, "save_path" => download_dir},
+                 attempt: 3
+               )
+    end
+
+    # Builds the production shape: a two-episode season pack where S01E01's
+    # destination already exists and carries TWO media_files rows for the same
+    # (library_path_id, relative_path), so the reuse-existing-file path raises
+    # while S01E02 imports cleanly — i.e. a genuine partial import.
+    defp duplicate_media_file_scenario(tmp_dir) do
+      library_path = create_test_library_path(tmp_dir, :series, auto_rename: false)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+
+      File.write!(Path.join(download_dir, "Mystery.Show.S01E01.mkv"), "fake video 1")
+      File.write!(Path.join(download_dir, "Mystery.Show.S01E02.mkv"), "fake video 2")
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Mystery Show"})
+
+      ep_s1e1 =
+        episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 1})
+
+      _ep_s1e2 =
+        episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 2})
+
+      dest_dir =
+        Path.join(MediaImport.build_series_base_path(media_item, library_path), "Season 01")
+
+      File.mkdir_p!(dest_dir)
+      dest_file = Path.join(dest_dir, "Mystery.Show.S01E01.mkv")
+      File.write!(dest_file, "existing video")
+      relative_path = Path.relative_to(dest_file, library_path.path)
+
+      for _ <- 1..2 do
+        media_file_fixture(%{
+          library_path_id: library_path.id,
+          episode_id: ep_s1e1.id,
+          relative_path: relative_path
+        })
+      end
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "PartialErrorClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "PartialErrorClient",
+          download_client_id: "partial-error-1",
+          metadata: %{"season_pack" => true, "season_number" => 1}
+        })
+
+      {download, download_dir}
+    end
+  end
+
+  describe "destination filename conflicts" do
+    @tag :tmp_dir
+    test "re-running an import adopts the earlier conflict copy instead of duplicating it",
+         %{tmp_dir: tmp_dir} do
+      # Conflict names used to carry a unix timestamp, so every retry of an
+      # import minted a fresh filename and re-copied the whole file. Under
+      # max_attempts: 1000 that is how misplaced episodes became ~980 GiB of
+      # duplicates. Numbering deterministically means a retry finds what the
+      # previous attempt wrote and adopts it.
+      library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      source = Path.join(download_dir, "Conflict.Movie.2024.1080p.mkv")
+      File.write!(source, "the freshly downloaded copy")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Conflict Movie", year: 2024})
+
+      # Squat the destination with different content so the import is forced
+      # down the conflict path.
+      dest_dir = Path.join(library_path.path, "Conflict Movie (2024)")
+      File.mkdir_p!(dest_dir)
+      File.write!(Path.join(dest_dir, "Conflict Movie (2024).mkv"), "a different, older file")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "ConflictClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "ConflictClient",
+          download_client_id: "conflict-1"
+        })
+
+      args = %{"download_id" => download.id, "save_path" => download_dir}
+
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir)
+
+      # Clear imported_at so the job re-runs the import rather than
+      # short-circuiting on the already-done guard. Re-fetch first: the local
+      # struct predates the import, so changing it produces an empty changeset.
+      download.id
+      |> Mydia.Downloads.get_download!()
+      |> Ecto.Changeset.change(%{imported_at: nil})
+      |> Repo.update!()
+
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+
+      assert ["Conflict Movie (2024).1.mkv"] = conflict_copies(dest_dir),
+             "retry must reuse the existing conflict copy, not mint another one"
+    end
+
+    defp conflict_copies(dest_dir) do
+      dest_dir
+      |> File.ls!()
+      |> Enum.filter(&(&1 != "Conflict Movie (2024).mkv" and String.ends_with?(&1, ".mkv")))
+      |> Enum.sort()
+    end
+  end
+
+  describe "download client removed from configuration" do
+    # A download whose `download_client` no longer resolves to any configured
+    # client cannot self-heal: every retry re-reads the same config and gets the
+    # same answer. With max_attempts: 1000 the row retried indefinitely, and
+    # because `Download.occupying/1` treats a non-nil `import_next_retry_at` as
+    # "still working", the episode stayed occupied and was never re-searched.
+    # Observed in production after an rqbit client was retired.
+    setup do
+      media_item = media_item_fixture(%{type: "movie", title: "Retired Client Movie", year: 2024})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          completed_at: DateTime.utc_now(),
+          download_client: "RetiredClient",
+          download_client_id: "retired-client-1"
+        })
+
+      %{download: download}
+    end
+
+    test "retries the first attempts so a config reload can still recover it", %{
+      download: download
+    } do
+      assert {:error, :no_client} =
+               perform_job(MediaImport, %{"download_id" => download.id}, attempt: 1)
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert updated.import_failure_reason == "no_client"
+      assert updated.import_next_retry_at != nil
+    end
+
+    test "goes terminal after the third attempt so the episode is released", %{
+      download: download
+    } do
+      assert {:cancel, :no_client} =
+               perform_job(MediaImport, %{"download_id" => download.id}, attempt: 3)
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert updated.import_failure_reason == "no_client"
+
+      assert is_nil(updated.import_next_retry_at),
+             "a terminal failure must clear import_next_retry_at so Download.occupying/1 releases the target"
+
+      refute updated.id in occupying_download_ids()
+    end
+
+    defp occupying_download_ids do
+      Mydia.Downloads.Download.occupying()
+      |> Repo.all()
+      |> Enum.map(& &1.id)
+    end
+  end
 end

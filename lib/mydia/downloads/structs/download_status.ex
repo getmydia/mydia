@@ -28,6 +28,8 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     * `:unknown` — fallback for unrecognised values
   """
 
+  alias Mydia.Downloads.Client.FailureCategory
+
   @enforce_keys [:id, :name, :state, :progress]
 
   defstruct [
@@ -44,7 +46,18 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     :ratio,
     :save_path,
     :added_at,
-    :completed_at
+    :completed_at,
+    # Why the client reported a terminal failure, in its own words. Both are
+    # nil unless `state == :error`, and stay nil for adapters that don't yet
+    # classify their failures. See `Mydia.Downloads.Client.FailureCategory`.
+    :failure_category,
+    :failure_detail,
+    # Absolute paths of files that belong to THIS torrent/NZB only.
+    # When present and non-empty, MediaImport must import these paths
+    # instead of recursively listing `save_path` — clients like rqbit
+    # often share one output folder across many torrents, and a recursive
+    # listing would cross-contaminate series libraries.
+    files: nil
   ]
 
   @state_values [
@@ -81,8 +94,11 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
           eta: integer() | nil,
           ratio: float(),
           save_path: String.t(),
+          files: [String.t()] | nil,
           added_at: DateTime.t() | nil,
-          completed_at: DateTime.t() | nil
+          completed_at: DateTime.t() | nil,
+          failure_category: FailureCategory.t() | nil,
+          failure_detail: String.t() | nil
         }
 
   @doc """

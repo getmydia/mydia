@@ -1,3 +1,5 @@
+import '../../core/format/relative_time.dart';
+
 /// Domain model for a remote device paired to a user account.
 class RemoteDevice {
   final String id;
@@ -35,28 +37,7 @@ class RemoteDevice {
   /// Get relative time string for last seen.
   String get lastSeenRelative {
     if (lastSeenAt == null) return 'Never';
-
-    final now = DateTime.now();
-    final difference = now.difference(lastSeenAt!);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      final minutes = difference.inMinutes;
-      return '$minutes ${minutes == 1 ? 'minute' : 'minutes'} ago';
-    } else if (difference.inHours < 24) {
-      final hours = difference.inHours;
-      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
-    } else if (difference.inDays < 30) {
-      final days = difference.inDays;
-      return '$days ${days == 1 ? 'day' : 'days'} ago';
-    } else if (difference.inDays < 365) {
-      final months = (difference.inDays / 30).floor();
-      return '$months ${months == 1 ? 'month' : 'months'} ago';
-    } else {
-      final years = (difference.inDays / 365).floor();
-      return '$years ${years == 1 ? 'year' : 'years'} ago';
-    }
+    return formatRelativeTime(lastSeenAt!);
   }
 
   /// Get platform icon name.

@@ -88,4 +88,58 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ "Remove from Library"
     end
   end
+
+  describe "manual_search_modal/1 row states" do
+    defp modal_html(result_extra) do
+      result =
+        Map.merge(
+          %Mydia.Indexers.SearchResult{
+            title: "Some.Movie.2020.1080p",
+            download_url: "magnet:?xt=urn:btih:" <> String.duplicate("e", 40),
+            indexer: "test-indexer",
+            size: 1_000,
+            seeders: 12,
+            leechers: 3,
+            quality: nil
+          }
+          |> Map.put(:stream_position, 0),
+          result_extra
+        )
+
+      render_component(&Modals.manual_search_modal/1,
+        manual_search_context: %{type: :media_item},
+        media_item: %{title: "Some Movie", type: "movie", quality_profile: nil},
+        manual_search_query: "Some Movie 2020",
+        searching: false,
+        results_empty?: false,
+        indexer_errors: [],
+        streams: %{search_results: [{"search-result-00000-1", result}]},
+        quality_filter: nil,
+        min_seeders: 0,
+        sort_by: :seeders,
+        quality_profile: nil,
+        close_after_grab: false
+      )
+    end
+
+    test "grab_failed renders a retry button with the reason" do
+      html = modal_html(%{grab_failed: "No download clients are configured"})
+
+      assert html =~ "Failed — retry"
+      assert html =~ "No download clients are configured"
+      assert html =~ ~s(phx-click="download_from_search")
+    end
+
+    test "duplicate renders a disabled already-downloading button" do
+      html = modal_html(%{duplicate: true})
+
+      assert html =~ "Already downloading"
+    end
+
+    test "downloading renders the grabbing spinner state" do
+      html = modal_html(%{downloading: true})
+
+      assert html =~ "Grabbing…"
+    end
+  end
 end

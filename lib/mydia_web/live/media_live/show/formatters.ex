@@ -33,6 +33,7 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
   def format_download_status("failed"), do: "Failed"
   def format_download_status("cancelled"), do: "Cancelled"
   def format_download_status("missing"), do: "Missing"
+  def format_download_status("grabbing"), do: "Grabbing…"
   def format_download_status(_), do: "Unknown"
 
   def format_relative_time(timestamp) do

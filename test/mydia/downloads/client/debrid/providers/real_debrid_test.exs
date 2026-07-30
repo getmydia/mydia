@@ -245,6 +245,54 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.RealDebridTest do
     end
   end
 
+  describe "failure classification" do
+    defp fetch_info(bypass, config, status) do
+      Bypass.expect(bypass, "GET", "/torrents/info/RD123", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "id" => "RD123",
+            "filename" => "Some.Release.1080p",
+            "status" => status,
+            "progress" => 0.0,
+            "bytes" => 1_000_000,
+            "files" => [],
+            "links" => []
+          })
+        )
+      end)
+
+      RealDebrid.get_job(config, "RD123")
+    end
+
+    # One generated test per status, so a single bad mapping doesn't mask
+    # the others.
+    for {status, category} <- [
+          {"dead", :no_peers},
+          {"virus", :rejected_content},
+          {"magnet_error", :rejected_content},
+          {"error", :provider_error}
+        ] do
+      test "status #{status} classifies as #{inspect(category)}",
+           %{bypass: bypass, config: config} do
+        assert {:ok, %ProviderJob{} = job} = fetch_info(bypass, config, unquote(status))
+
+        assert job.state == :error
+        assert job.failure_category == unquote(category)
+        assert job.failure_detail == unquote(status)
+      end
+    end
+
+    test "a healthy torrent carries no failure fields", %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} = fetch_info(bypass, config, "downloading")
+
+      assert job.failure_category == nil
+      assert job.failure_detail == nil
+    end
+  end
+
   describe "get_download_urls/2" do
     test "issues N /unrestrict/link calls and returns URLs in order", %{
       bypass: bypass,

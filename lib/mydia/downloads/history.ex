@@ -20,7 +20,42 @@ defmodule Mydia.Downloads.History do
   alias Phoenix.PubSub
   require Logger
 
+  # A record with no client fields is a grab in flight; older than this it is
+  # considered a crashed/abandoned grab and derives to "failed".
+  @grab_timeout_minutes 10
+
   ## Public Functions
+
+  @doc """
+  The grab-timeout threshold (minutes) used both to derive a stale grab's
+  displayed status (see `grab_status/1`) and by `Mydia.Jobs.DownloadMonitor`
+  to detect abandoned grabs to persist as failed. Single-sourced so the
+  displayed and persisted thresholds never drift apart.
+  """
+  def grab_timeout_minutes, do: @grab_timeout_minutes
+
+  @doc """
+  Lists client-less grab records whose supervised task died before writing
+  an outcome (BEAM restart, deploy) — no `download_client`/`download_client_id`,
+  no `error_message`, not completed, not imported — and whose `inserted_at`
+  is older than `grab_timeout_minutes/0`.
+
+  The derived `"failed"` status from `grab_status/1` only changes what's
+  *displayed*; `Download.occupying/1` keys off the persisted `error_message`,
+  so without this these orphaned grabs would block re-grabs of their target
+  forever. Used by `Mydia.Jobs.DownloadMonitor` to persist the failure.
+  """
+  def list_stale_grabs(now \\ DateTime.utc_now()) do
+    cutoff = DateTime.add(now, -@grab_timeout_minutes, :minute)
+
+    Download
+    |> where([d], is_nil(d.download_client) and is_nil(d.download_client_id))
+    |> where([d], is_nil(d.error_message))
+    |> where([d], is_nil(d.completed_at))
+    |> where([d], is_nil(d.imported_at))
+    |> where([d], d.inserted_at < ^cutoff)
+    |> Repo.all()
+  end
 
   def list_downloads(opts \\ []) do
     Download
@@ -337,6 +372,8 @@ defmodule Mydia.Downloads.History do
       save_path: torrent_status.save_path,
       completed_at: download.completed_at || torrent_status.completed_at,
       error_message: download.error_message,
+      client_failure_category: torrent_status.failure_category,
+      client_error_detail: torrent_status.failure_detail,
       db_completed_at: download.completed_at,
       imported_at: download.imported_at,
       import_retry_count: download.import_retry_count,
@@ -414,7 +451,15 @@ defmodule Mydia.Downloads.History do
         download.imported_at -> "imported"
         download.completed_at -> "completed"
         download.error_message -> "failed"
+        pending_grab?(download) -> grab_status(download)
         true -> "missing"
+      end
+
+    # A stale grab has no persisted error_message; surface an implied reason.
+    error_message =
+      case {download.error_message, status} do
+        {nil, "failed"} -> "Grab timed out"
+        {message, _} -> message
       end
 
     # Convert metadata map to struct for type-safe access
@@ -447,7 +492,7 @@ defmodule Mydia.Downloads.History do
       leechers: nil,
       save_path: nil,
       completed_at: download.completed_at,
-      error_message: download.error_message,
+      error_message: error_message,
       # Preserve database completed_at for tracking if we've already processed it
       db_completed_at: download.completed_at,
       imported_at: download.imported_at,
@@ -463,6 +508,22 @@ defmodule Mydia.Downloads.History do
       stalled_since: download.stalled_since,
       in_client?: in_client?
     })
+  end
+
+  # No client assignment at all — the grab pipeline hasn't handed this record
+  # to a download client yet (or died before it could).
+  defp pending_grab?(download) do
+    is_nil(download.download_client) and is_nil(download.download_client_id)
+  end
+
+  defp grab_status(download) do
+    cutoff = DateTime.add(DateTime.utc_now(), -@grab_timeout_minutes, :minute)
+
+    if DateTime.compare(download.inserted_at, cutoff) == :gt do
+      "grabbing"
+    else
+      "failed"
+    end
   end
 
   defp status_from_torrent_state(state) do
@@ -488,7 +549,7 @@ defmodule Mydia.Downloads.History do
       # waiting on the swarm or Mydia's local fetcher hasn't claimed the
       # ready job yet — without this they'd vanish from the queue tab.
       is_nil(d.imported_at) and
-        d.status in ["downloading", "seeding", "checking", "paused", "queued"]
+        d.status in ["downloading", "seeding", "checking", "paused", "queued", "grabbing"]
     end)
   end
 

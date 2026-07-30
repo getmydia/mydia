@@ -2,15 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<!--
+	    Kept in sync with Release.entitlements: no app sandbox, so local debug
+	    builds use the same data directories and keychain behaviour as the
+	    shipped app. See the comment in Release.entitlements before adding
+	    com.apple.security.app-sandbox back.
+	-->
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<key>keychain-access-groups</key>
-	<array/>
 </dict>
 </plist>

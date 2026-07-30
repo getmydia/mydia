@@ -302,6 +302,12 @@ defmodule Mydia.Downloads.Client.Rtorrent do
       "d.up.total=",
       "d.ratio=",
       "d.directory=",
+      # `d.base_path` is this torrent's own data — the file itself for a
+      # single-file torrent, the torrent directory for a multi-file one.
+      # `d.directory` alone is the *containing* directory for single-file
+      # torrents, i.e. the shared download root, which MediaImport would then
+      # recursively sweep into the wrong library folder.
+      "d.base_path=",
       "d.timestamp.started=",
       "d.timestamp.finished="
     ]
@@ -336,10 +342,19 @@ defmodule Mydia.Downloads.Client.Rtorrent do
       eta: calculate_eta(size, bytes_done, field_map["down.rate"] || 0),
       ratio: parse_ratio(field_map["ratio"]),
       save_path: field_map["directory"] || "",
+      files: base_path_files(field_map["base_path"]),
       added_at: Helpers.parse_timestamp_unix(field_map["timestamp.started"]),
       completed_at: Helpers.parse_timestamp_unix(field_map["timestamp.finished"])
     })
   end
+
+  # Scope the import to this torrent's own data. Empty until rTorrent has
+  # allocated the torrent, in which case we leave `files` nil and the caller
+  # falls back to `save_path`.
+  defp base_path_files(base_path) when is_binary(base_path) and base_path != "",
+    do: [base_path]
+
+  defp base_path_files(_base_path), do: nil
 
   defp parse_state(field_map) do
     d_state = field_map["state"] || 0

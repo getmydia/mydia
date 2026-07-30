@@ -57,6 +57,7 @@ mydia-*.tar
 # In case you use Node.js/npm, you want to ignore these.
 npm-debug.log
 /assets/node_modules/
+/test/mock_services/*/node_modules/
 
 # Playwright E2E test results
 /assets/e2e-results/
@@ -146,3 +147,7 @@ devenv.local.yaml
 
 # Superpowers planning artifacts (specs/plans) — local only, never tracked
 docs/superpowers/
+
+# Subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/
+player/ios/scripts/test-ci-signing.sh

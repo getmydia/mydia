@@ -3,14 +3,25 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../../core/cache/poster_cache_manager.dart';
-import 'search_controller.dart';
-import '../../../domain/models/search_result.dart';
+
 import '../../../core/theme/colors.dart';
+import '../../../domain/models/search_result.dart';
+import '../../widgets/cast_actions.dart';
+import '../../widgets/cast_button.dart';
+import 'search_controller.dart';
+import 'widgets/episode_result_row.dart';
+import 'widgets/search_filter_chip.dart';
+import 'widgets/search_result_card.dart';
+import 'widgets/search_section_header.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key});
+  /// Seeds the text field from the `q` URL query parameter.
+  final String? initialQuery;
+
+  /// Pre-applies a section filter from the `type` URL query parameter.
+  final SearchResultType? initialType;
+
+  const SearchScreen({super.key, this.initialQuery, this.initialType});
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -24,10 +35,60 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-focus search field
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
+      // Post-frame callbacks aren't cancelled on dispose. A synchronous route
+      // redirect within the same frame can dispose this State before the
+      // callback fires, and `ref`/`_focusNode` must not be touched after that.
+      if (!mounted) return;
+      _applyRouteParameters();
+      if (widget.initialQuery == null || widget.initialQuery!.isEmpty) {
+        _focusNode.requestFocus();
+      }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant SearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The route stays mounted when only its query parameters change, which is
+    // what a section's "Show all" does, so re-seed on parameter changes.
+    if (oldWidget.initialQuery != widget.initialQuery ||
+        oldWidget.initialType != widget.initialType) {
+      // Defer to a post-frame callback: didUpdateWidget runs during the
+      // widget tree's build phase, and Riverpod forbids modifying providers
+      // (setTypes/updateQuery/search all do) until the frame is done — the
+      // same reason initState defers its call instead of running it inline.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _applyRouteParameters();
+      });
+    }
+  }
+
+  /// Seeds controller state from `q` and `type` and runs the search.
+  ///
+  /// A route with no `q` — e.g. the sidebar's "Search" link, which always
+  /// points at bare `/search` even while a filtered search is showing —
+  /// resets the screen entirely instead of only clearing filters. Clearing
+  /// filters alone left the text field and results grid still showing the
+  /// previous filtered search underneath newly-deselected chips.
+  void _applyRouteParameters() {
+    final notifier = ref.read(searchControllerProvider.notifier);
+    final query = widget.initialQuery ?? '';
+
+    if (query.isEmpty) {
+      _searchController.clear();
+      notifier.clear();
+      return;
+    }
+
+    notifier.setTypes(
+      widget.initialType == null ? const {} : {widget.initialType!},
+    );
+
+    _searchController.text = query;
+    notifier.updateQuery(query);
+    notifier.search();
   }
 
   @override
@@ -53,25 +114,40 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _focusNode.requestFocus();
   }
 
+  void _onToggleType(SearchState searchState, SearchResultType type) {
+    ref.read(searchControllerProvider.notifier).toggleType(type);
+    if (searchState.query.isNotEmpty) {
+      ref.read(searchControllerProvider.notifier).search();
+    }
+  }
+
+  void _onShowAll(SearchState searchState, SearchResultType type) {
+    final query = Uri.encodeQueryComponent(searchState.query);
+    context.go('/search?q=$query&type=${type.queryValue}');
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchState = ref.watch(searchControllerProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      // Transparent so the shell's ambient backdrop shows through, matching
+      // every other in-shell destination.
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
-        ),
+        // Navigator, not go_router's context.canPop(): inside the shell route
+        // this resolves the shell navigator, which is exactly what a pushed
+        // search screen sits on, and it does not require a GoRouter ancestor,
+        // so the screen stays pumpable in a plain widget test.
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.of(context).maybePop(),
+              )
+            : null,
+        automaticallyImplyLeading: false,
         title: _buildSearchField(searchState),
         titleSpacing: 0,
         actions: [
@@ -81,15 +157,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onPressed: _onClear,
               tooltip: 'Clear',
             ),
+          // SearchScreen's app bar is always visible (no desktop
+          // suppression), so it carries its own cast affordance instead of
+          // the shell's overlay — see AppShell._hasOwnCastButton.
+          CastButton(onPressed: () => pickCastDevice(context, ref)),
           const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
           _buildFilterChips(searchState),
-          Expanded(
-            child: _buildBody(searchState),
-          ),
+          Expanded(child: _buildBody(searchState)),
         ],
       ),
     );
@@ -106,7 +184,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       },
       style: const TextStyle(fontSize: 18),
       decoration: InputDecoration(
-        hintText: 'Search movies and shows...',
+        hintText: 'Search your library...',
         hintStyle: TextStyle(
           color: AppColors.textSecondary.withValues(alpha: 0.6),
           fontSize: 18,
@@ -118,41 +196,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
+  static const _chipIcons = {
+    SearchResultType.movie: Icons.movie_rounded,
+    SearchResultType.tvShow: Icons.tv_rounded,
+    SearchResultType.episode: Icons.playlist_play_rounded,
+    SearchResultType.collection: Icons.collections_bookmark_rounded,
+  };
+
   Widget _buildFilterChips(SearchState searchState) {
-    return Container(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _FilterChip(
-            label: 'Movies',
-            icon: Icons.movie_rounded,
-            isSelected:
-                searchState.selectedTypes.contains(SearchResultType.movie),
-            onTap: () {
-              ref
-                  .read(searchControllerProvider.notifier)
-                  .toggleType(SearchResultType.movie);
-              if (searchState.query.isNotEmpty) {
-                ref.read(searchControllerProvider.notifier).search();
-              }
-            },
-          ),
-          const SizedBox(width: 8),
-          _FilterChip(
-            label: 'TV Shows',
-            icon: Icons.tv_rounded,
-            isSelected:
-                searchState.selectedTypes.contains(SearchResultType.tvShow),
-            onTap: () {
-              ref
-                  .read(searchControllerProvider.notifier)
-                  .toggleType(SearchResultType.tvShow);
-              if (searchState.query.isNotEmpty) {
-                ref.read(searchControllerProvider.notifier).search();
-              }
-            },
-          ),
-          const Spacer(),
+          for (final type in SearchResultType.values) ...[
+            SearchFilterChip(
+              label: type.sectionTitle,
+              icon: _chipIcons[type] ?? Icons.search_rounded,
+              isSelected: searchState.selectedTypes.contains(type),
+              onTap: () => _onToggleType(searchState, type),
+            ),
+            const SizedBox(width: 8),
+          ],
           if (searchState.selectedTypes.isNotEmpty)
             TextButton(
               onPressed: () {
@@ -191,7 +256,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     // Show results
     if (searchState.hasResults) {
-      return _buildResultsGrid(searchState.results!);
+      return _buildSections(searchState, searchState.results!);
     }
 
     return _buildInitialState();
@@ -216,14 +281,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
           const SizedBox(height: 24),
           Text(
-            'Search for movies and TV shows',
+            'Search your library',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: AppColors.textSecondary,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Find your favorite content',
+            'Movies, shows, episodes, and collections',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.textSecondary.withValues(alpha: 0.7),
                 ),
@@ -345,283 +410,56 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
-  Widget _buildResultsGrid(SearchResults results) {
+  Widget _buildSections(SearchState searchState, SearchResults results) {
     return CustomScrollView(
       slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          sliver: SliverToBoxAdapter(
-            child: Text(
-              '${results.totalCount} result${results.totalCount != 1 ? 's' : ''}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+        for (final section in results.sections) ...[
+          SliverToBoxAdapter(
+            child: SearchSectionHeader(
+              title: section.type.sectionTitle,
+              count: section.totalCount,
+              onShowAll: section.totalCount > section.results.length
+                  ? () => _onShowAll(searchState, section.type)
+                  : null,
             ),
           ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 180,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.55,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final result = results.results[index];
-                return _SearchResultCard(
+          if (section.type == SearchResultType.episode)
+            SliverList.builder(
+              itemCount: section.results.length,
+              itemBuilder: (context, index) {
+                final result = section.results[index];
+                return EpisodeResultRow(
                   key: ValueKey(result.id),
                   result: result,
                   onTap: () => context.push(result.routePath),
                 );
               },
-              childCount: results.results.length,
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverGrid.builder(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 180,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.55,
+                ),
+                itemCount: section.results.length,
+                itemBuilder: (context, index) {
+                  final result = section.results[index];
+                  return SearchResultCard(
+                    key: ValueKey(result.id),
+                    result: result,
+                    onTap: () => context.push(result.routePath),
+                  );
+                },
+              ),
             ),
-          ),
-        ),
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 32),
-        ),
+        ],
+        // Clears the floating mobile bottom nav.
+        const SliverToBoxAdapter(child: SizedBox(height: 120)),
       ],
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _FilterChip({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: isSelected ? AppColors.primary : AppColors.surface,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? AppColors.primary
-                  : AppColors.divider.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isSelected ? Colors.white : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchResultCard extends StatefulWidget {
-  final SearchResult result;
-  final VoidCallback onTap;
-
-  const _SearchResultCard({
-    super.key,
-    required this.result,
-    required this.onTap,
-  });
-
-  @override
-  State<_SearchResultCard> createState() => _SearchResultCardState();
-}
-
-class _SearchResultCardState extends State<_SearchResultCard> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform: Matrix4.diagonal3Values(
-            _isHovered ? 1.03 : 1.0,
-            _isHovered ? 1.03 : 1.0,
-            1.0,
-          ),
-          transformAlignment: Alignment.center,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Poster
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      if (_isHovered)
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // Poster image
-                        if (widget.result.posterUrl != null)
-                          CachedNetworkImage(
-                            imageUrl: widget.result.posterUrl!,
-                            fit: BoxFit.cover,
-                            cacheManager: PosterCacheManager(),
-                            placeholder: (context, url) => Container(
-                              color: AppColors.surface,
-                              child: const Center(
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: AppColors.surface,
-                              child: Icon(
-                                widget.result.type == SearchResultType.movie
-                                    ? Icons.movie_rounded
-                                    : Icons.tv_rounded,
-                                size: 48,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          )
-                        else
-                          Container(
-                            color: AppColors.surface,
-                            child: Icon(
-                              widget.result.type == SearchResultType.movie
-                                  ? Icons.movie_rounded
-                                  : Icons.tv_rounded,
-                              size: 48,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-
-                        // Type badge
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.7),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  widget.result.type == SearchResultType.movie
-                                      ? Icons.movie_rounded
-                                      : Icons.tv_rounded,
-                                  size: 12,
-                                  color: Colors.white,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  widget.result.type.displayName,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // Hover overlay
-                        if (_isHovered)
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.transparent,
-                                  AppColors.primary.withValues(alpha: 0.3),
-                                ],
-                              ),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.play_circle_fill_rounded,
-                                size: 48,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // Title
-              Text(
-                widget.result.title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              // Year
-              if (widget.result.yearDisplay.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  widget.result.yearDisplay,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

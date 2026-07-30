@@ -2,10 +2,13 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
   use Mydia.DataCase, async: true
   use Oban.Testing, repo: Mydia.Repo
 
+  import Ecto.Query
+
   alias Mydia.Jobs.DownloadMonitor
   alias Mydia.Downloads
   alias Mydia.Downloads.Download
   alias Mydia.Events
+  alias Mydia.Repo
   import Mydia.MediaFixtures
   import Mydia.DownloadsFixtures
 
@@ -508,6 +511,32 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert :ok = perform_job(DownloadMonitor, %{})
 
       assert Mydia.Repo.get(Mydia.Downloads.Download, orphan.id)
+    end
+  end
+
+  describe "stale grab self-healing" do
+    test "persists 'Grab timed out' on a backdated client-less record" do
+      setup_runtime_config([])
+
+      download =
+        download_fixture(%{download_client: nil, download_client_id: nil})
+        |> backdate(Downloads.grab_timeout_minutes() + 1)
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      updated = Downloads.get_download!(download.id)
+      assert updated.error_message == "Grab timed out"
+    end
+
+    test "leaves a fresh client-less record untouched" do
+      setup_runtime_config([])
+
+      download = download_fixture(%{download_client: nil, download_client_id: nil})
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      updated = Downloads.get_download!(download.id)
+      assert is_nil(updated.error_message)
     end
   end
 
@@ -1123,6 +1152,204 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     end
   end
 
+  describe "handle_failure/1 with a classified debrid failure" do
+    setup do
+      alias Mydia.Downloads.Client.Debrid.StubProvider
+
+      StubProvider.ensure_started!()
+      StubProvider.reset()
+      on_exit(fn -> StubProvider.reset() end)
+
+      ensure_started!(
+        {Registry, [keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry]}
+      )
+
+      ensure_started!(
+        {DynamicSupervisor,
+         [name: Mydia.Downloads.Client.Debrid.FetcherSupervisor, strategy: :one_for_one]}
+      )
+
+      ensure_started!(Mydia.Downloads.Client.Debrid.RateLimiter)
+
+      prior = Application.get_env(:mydia, :debrid_provider_overrides, %{})
+
+      Application.put_env(:mydia, :debrid_provider_overrides, %{
+        "tor_box" => StubProvider
+      })
+
+      on_exit(fn -> Application.put_env(:mydia, :debrid_provider_overrides, prior) end)
+
+      :ok
+    end
+
+    test "blacklists under the category slug and records the native detail" do
+      alias Mydia.Downloads.Blacklists
+      alias Mydia.Downloads.Client.Debrid.{ProviderJob, StubProvider}
+
+      setup_runtime_config([
+        build_test_client_config(%{
+          name: "my-debrid",
+          type: :debrid,
+          api_key: "tb-key",
+          connection_settings: %{"provider" => "tor_box"}
+        })
+      ])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: "my-debrid",
+          download_client_id: "job-1",
+          indexer: "prowlarr",
+          metadata: %{"guid" => "guid-1"}
+        })
+
+      StubProvider.set(
+        :list_jobs,
+        {:ok,
+         %{
+           "job-1" => %ProviderJob{
+             provider_id: "job-1",
+             state: :error,
+             progress: 0.0,
+             name: "Some.Release.1080p",
+             total_bytes: 1000,
+             files: [],
+             hoster_links: [],
+             raw_status: %{},
+             failure_category: :missing_files,
+             failure_detail: "missingFiles"
+           }
+         }}
+      )
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      # The download row is ephemeral and deleted on failure.
+      assert_raise Ecto.NoResultsError, fn -> Downloads.get_download!(download.id) end
+
+      assert [row] = Blacklists.list(failure_reason: "missing_files")
+      assert row.guid == "guid-1"
+      assert row.indexer == "prowlarr"
+
+      # The composed operator message is what the activity feed and the
+      # media-item history render (Events.download_failed/3 stores it under
+      # metadata["error_message"] — see lib/mydia/events.ex:593). Assert on
+      # the exact composed sentence, not just substring membership, so a
+      # transposed argument at the FailureCategory.message/3 call site
+      # (e.g. swapping client and detail) would fail this test even though
+      # each individual value still appears somewhere in the string.
+      Process.sleep(100)
+
+      assert [event] = Events.list_events(type: "download.failed")
+      message = event.metadata["error_message"]
+
+      assert message == "my-debrid reported missing files: missingFiles"
+    end
+
+    test "an unclassified failure still uses the pre-existing fallback slug" do
+      alias Mydia.Downloads.Blacklists
+      alias Mydia.Downloads.Client.Debrid.{ProviderJob, StubProvider}
+
+      setup_runtime_config([
+        build_test_client_config(%{
+          name: "my-debrid",
+          type: :debrid,
+          api_key: "tb-key",
+          connection_settings: %{"provider" => "tor_box"}
+        })
+      ])
+
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: "my-debrid",
+        download_client_id: "job-2",
+        indexer: "prowlarr",
+        metadata: %{"guid" => "guid-2"}
+      })
+
+      StubProvider.set(
+        :list_jobs,
+        {:ok,
+         %{
+           "job-2" => %ProviderJob{
+             provider_id: "job-2",
+             state: :error,
+             progress: 0.0,
+             name: "Other.Release.1080p",
+             total_bytes: 1000,
+             files: [],
+             hoster_links: [],
+             raw_status: %{},
+             failure_category: nil,
+             failure_detail: nil
+           }
+         }}
+      )
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert [row] = Blacklists.list(failure_reason: "client_reported_failure")
+      assert row.guid == "guid-2"
+    end
+
+    test "client failure detail does not leak into error_message during enrichment" do
+      # Guards DownloadMonitor's unhandled-failure filter (download_monitor.ex:91).
+      # If error_message ever falls back to client detail, failed downloads look
+      # already-handled and stop being processed entirely — silently.
+      alias Mydia.Downloads.Client.Debrid.{ProviderJob, StubProvider}
+
+      setup_runtime_config([
+        build_test_client_config(%{
+          name: "my-debrid",
+          type: :debrid,
+          api_key: "tb-key",
+          connection_settings: %{"provider" => "tor_box"}
+        })
+      ])
+
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: "my-debrid",
+        download_client_id: "job-3",
+        indexer: "prowlarr",
+        metadata: %{"guid" => "guid-3"}
+      })
+
+      StubProvider.set(
+        :list_jobs,
+        {:ok,
+         %{
+           "job-3" => %ProviderJob{
+             provider_id: "job-3",
+             state: :error,
+             progress: 0.0,
+             name: "Some.Release.1080p",
+             total_bytes: 1000,
+             files: [],
+             hoster_links: [],
+             raw_status: %{},
+             failure_category: :missing_files,
+             failure_detail: "missingFiles"
+           }
+         }}
+      )
+
+      assert [enriched] = Downloads.list_downloads_with_status(filter: :all)
+
+      assert enriched.status == "failed"
+      assert enriched.error_message == nil
+      assert enriched.client_failure_category == :missing_files
+      assert enriched.client_error_detail == "missingFiles"
+    end
+  end
+
   # Acceptance examples carried from the stall-resilience plan. AE1 (outage
   # recovery) and AE3 (genuine soft-stall) are additionally exercised by the
   # "stall detection" describe block and AE7 below; here we lock the multi-poll
@@ -1368,8 +1595,28 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
   ## Helper Functions
 
+  defp ensure_started!(child_spec) do
+    case start_supervised(child_spec) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, :already_started} -> :ok
+    end
+  end
+
   defp occupying_ids do
     Download.occupying() |> Repo.all() |> Enum.map(& &1.id)
+  end
+
+  # Backdates `inserted_at` directly — the changeset doesn't cast timestamps,
+  # so this is the only way to simulate an old grab. Mirrors `backdate/2` in
+  # history_grab_status_test.exs.
+  defp backdate(download, minutes_ago) do
+    cutoff = DateTime.add(DateTime.utc_now(), -minutes_ago * 60, :second)
+
+    from(d in Download, where: d.id == ^download.id)
+    |> Repo.update_all(set: [inserted_at: cutoff])
+
+    download
   end
 
   defp start_sabnzbd_bypass(opts \\ []) do

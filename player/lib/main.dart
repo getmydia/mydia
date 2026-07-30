@@ -6,6 +6,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/downloads/download_service.dart';
+import 'core/graphql/watch/fetch_log.dart';
 
 // Only import FRB on native platforms (not web)
 // ignore: unused_import
@@ -36,18 +37,20 @@ void main() async {
           rethrow;
         }
       } else {
-        debugPrint('[RustLib] Skipping Rust bridge initialization on web platform');
+        debugPrint(
+            '[RustLib] Skipping Rust bridge initialization on web platform');
       }
 
       // Initialize media_kit for video playback
       MediaKit.ensureInitialized();
 
-      // TODO: Chromecast support temporarily disabled due to API incompatibility
-      // with flutter_chrome_cast package. See backlog task for fix.
-      // await _initializeCastSdk();
-
       // Initialize GraphQL Hive cache for offline support
       await initHiveForFlutter();
+
+      // Fetch log: when each query last reached the network. A missing entry
+      // is treated as infinitely stale, so an install upgrading from a build
+      // without this box performs a real network fetch on first launch.
+      final fetchLog = await HiveFetchLog.open();
 
       // Initialize download database (only on native platforms)
       if (isDownloadSupported) {
@@ -56,8 +59,9 @@ void main() async {
       }
 
       runApp(
-        const ProviderScope(
-          child: MyApp(),
+        ProviderScope(
+          overrides: [fetchLogProvider.overrideWithValue(fetchLog)],
+          child: const MyApp(),
         ),
       );
     },

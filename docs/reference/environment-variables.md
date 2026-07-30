@@ -103,7 +103,7 @@ Configure multiple clients using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `DOWNLOAD_CLIENT_<N>_USE_SSL` | Use SSL/TLS | `false` |
 | `DOWNLOAD_CLIENT_<N>_USERNAME` | Auth username | - |
 | `DOWNLOAD_CLIENT_<N>_PASSWORD` | Auth password | - |
-| `DOWNLOAD_CLIENT_<N>_API_KEY` | API key (SABnzbd, debrid) | - |
+| `DOWNLOAD_CLIENT_<N>_API_KEY` | API key (SABnzbd, debrid, qBittorrent 5.2+) | - |
 | `DOWNLOAD_CLIENT_<N>_CATEGORY` | Default category | - |
 | `DOWNLOAD_CLIENT_<N>_DOWNLOAD_DIRECTORY` | Download directory | - |
 | `DOWNLOAD_CLIENT_<N>_PROVIDER` | Debrid provider (debrid only) | `real_debrid` |

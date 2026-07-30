@@ -5,7 +5,9 @@ import 'unwatched_controller.dart';
 import '../../widgets/media_poster.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/app_shell.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
+import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 
@@ -33,20 +35,33 @@ class UnwatchedScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(context, isDesktop),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await ref.read(unwatchedControllerProvider.notifier).refresh();
-        },
-        child: data.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => _buildErrorView(context, error, ref),
-          data: (items) {
-            if (items.isEmpty) {
-              return _buildEmptyState(context);
-            }
-            return _buildGridView(context, items);
-          },
-        ),
+      body: Column(
+        children: [
+          FreshnessHeader(
+            queryKeys: [QueryKeys.unwatched],
+            topInset: freshnessTopInset(
+              context,
+              appBarHeight: isDesktop ? null : kToolbarHeight,
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await ref.read(unwatchedControllerProvider.notifier).refresh();
+              },
+              child: data.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => _buildErrorView(context, error, ref),
+                data: (items) {
+                  if (items.isEmpty) {
+                    return _buildEmptyState(context);
+                  }
+                  return _buildGridView(context, items);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -58,53 +73,53 @@ class UnwatchedScreen extends ConsumerWidget {
     return PreferredSize(
       preferredSize: const Size.fromHeight(kToolbarHeight),
       child: GlassSurface.appBar(
-          child: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              onPressed: () {
-                AppShell.scaffoldKey.currentState?.openDrawer();
-              },
-              tooltip: 'Menu',
-            ),
-            title: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.visibility_off_rounded,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
-                SizedBox(width: 10),
-                Text(
-                  'Unwatched',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.search_rounded, size: 20),
-                ),
-                onPressed: () {
-                  context.push('/search');
-                },
-                tooltip: 'Search',
+        child: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () {
+              AppShell.scaffoldKey.currentState?.openDrawer();
+            },
+            tooltip: 'Menu',
+          ),
+          title: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.visibility_off_rounded,
+                color: AppColors.primary,
+                size: 22,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 10),
+              Text(
+                'Unwatched',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
+                ),
+              ),
             ],
           ),
+          actions: [
+            IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.search_rounded, size: 20),
+              ),
+              onPressed: () {
+                context.push('/search');
+              },
+              tooltip: 'Search',
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
+      ),
     );
   }
 
