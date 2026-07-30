@@ -55,24 +55,38 @@ defmodule Mydia.Library.LibraryPathSync do
       |> MapSet.new()
 
     # Sync runtime paths to database
-    synced_count =
-      runtime_paths
-      |> Enum.filter(&is_runtime_path?/1)
-      |> Enum.reduce(0, fn runtime_path, count ->
-        case upsert_library_path(runtime_path) do
-          {:ok, _} ->
-            count + 1
-
-          {:error, changeset} ->
-            Logger.warning("Failed to sync runtime library path: #{inspect(changeset.errors)}")
-            count
-        end
-      end)
+    synced_count = upsert_runtime_paths(runtime_paths)
 
     # Disable env-sourced paths that are no longer in config
     disabled_count = disable_removed_env_paths(runtime_path_strings)
 
     {:ok, %{synced: synced_count, disabled: disabled_count}}
+  end
+
+  @doc """
+  Upserts the given runtime library paths into the database.
+
+  Exposed so the scan_interval layering can be tested without mutating global env.
+  `sync_from_runtime_config/0` calls this with the paths it reads from config.
+  """
+  @spec upsert_runtime_paths([LibraryPath.t()]) :: non_neg_integer()
+  def upsert_runtime_paths(runtime_paths) do
+    runtime_paths
+    |> Enum.filter(&is_runtime_path?/1)
+    |> Enum.reduce(0, fn runtime_path, count ->
+      case upsert_library_path(runtime_path) do
+        {:ok, _} ->
+          count + 1
+
+        {:error, changeset} ->
+          # A silently dropped path is how a library disappears without a trace.
+          Logger.warning("Failed to sync library path from config: #{runtime_path.path}",
+            errors: inspect(changeset.errors)
+          )
+
+          count
+      end
+    end)
   end
 
   @doc """
@@ -158,35 +172,52 @@ defmodule Mydia.Library.LibraryPathSync do
 
   # Upserts a runtime library path to the database
   defp upsert_library_path(%LibraryPath{} = runtime_path) do
-    # Check if library path already exists in database
     existing = Repo.get_by(LibraryPath, path: runtime_path.path)
 
+    attrs = %{
+      type: runtime_path.type,
+      monitored: runtime_path.monitored,
+      quality_profile_id: runtime_path.quality_profile_id,
+      from_env: true,
+      disabled: false
+    }
+
+    # Only let the config source drive scan_interval when it actually set one.
+    # LIBRARY_PATH_<N>_SCAN_INTERVAL is parsed with put_if_present, so an unset
+    # var arrives here as nil. Writing that nil would reset the admin UI's choice
+    # on every boot, so an unset interval leaves the DB overlay untouched.
+    attrs =
+      if is_nil(runtime_path.scan_interval) do
+        attrs
+      else
+        Map.put(attrs, :scan_interval, runtime_path.scan_interval)
+      end
+
     if existing do
-      # Update existing record with runtime config values
-      # Mark as from_env and re-enable if previously disabled
-      existing
-      |> LibraryPath.changeset(%{
-        type: runtime_path.type,
-        monitored: runtime_path.monitored,
-        scan_interval: runtime_path.scan_interval,
-        quality_profile_id: runtime_path.quality_profile_id,
-        from_env: true,
-        disabled: false
-      })
-      |> Repo.update()
+      existing |> LibraryPath.changeset(attrs) |> Repo.update()
     else
-      # Create new record from runtime config
-      %LibraryPath{}
-      |> LibraryPath.changeset(%{
-        path: runtime_path.path,
-        type: runtime_path.type,
-        monitored: runtime_path.monitored,
-        scan_interval: runtime_path.scan_interval,
-        quality_profile_id: runtime_path.quality_profile_id,
-        from_env: true,
-        disabled: false
-      })
-      |> Repo.insert()
+      # New row: force scan_interval into the changeset even when nil.
+      # library_paths.scan_interval still carries a leftover SQLite column
+      # DEFAULT of 3600 (only the PostgreSQL-side default was dropped, see
+      # priv/repo/migrations/20260730153426_make_scan_interval_opt_in.exs).
+      # Ecto's cast/4 leaves a field out of `changes` whenever the cast value
+      # equals the struct's current field value, which is true here (nil ==
+      # nil on a freshly built %LibraryPath{}). A field absent from `changes`
+      # is left out of the INSERT statement entirely, so the SQLite default
+      # would silently persist 3600 instead of the intended "manual only".
+      # force_change/3 guarantees NULL is actually written for new rows.
+      changeset =
+        %LibraryPath{}
+        |> LibraryPath.changeset(Map.put(attrs, :path, runtime_path.path))
+
+      changeset =
+        if is_nil(runtime_path.scan_interval) do
+          Ecto.Changeset.force_change(changeset, :scan_interval, nil)
+        else
+          changeset
+        end
+
+      Repo.insert(changeset)
     end
   end
 
