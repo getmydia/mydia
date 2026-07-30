@@ -7,8 +7,10 @@ defmodule Mydia.Library.MountRoots do
   ones that share a top-level directory with a configured library path, so
   suggestions resolve to directories the operator actually recognizes (rather
   than VM-internal binds on Docker Desktop, for example). Returns `[]` on
-  non-Linux hosts, in tests, or when `/proc/mounts` can't be read — in which case
-  auto-suggestion degrades to plain guidance.
+  non-Linux hosts, when no library paths are configured, or
+  when `/proc/mounts` can't be read — in which case auto-suggestion degrades
+  to plain guidance. Mount probes are time-boxed so an unresponsive network or
+  FUSE mount can't stall the caller.
   """
 
   alias Mydia.Settings
@@ -23,12 +25,18 @@ defmodule Mydia.Library.MountRoots do
   # System path prefixes a data mount would never legitimately live under.
   @system_prefixes ~w(/proc /sys /dev /run /etc /boot /usr /bin /sbin /lib /var)
 
+  # Wall-clock budget for probing all candidate mounts, total rather than per
+  # mount (they are probed concurrently).
+  @probe_timeout_ms 250
+
   @doc """
   Returns the detected, operator-meaningful mount roots.
 
   Options (for testing):
     - `:mounts_path` — path to read mounts from (default `/proc/mounts`)
     - `:library_paths` — list of library path strings (default: configured paths)
+    - `:probe_fun` — 1-arity directory check (default `&File.dir?/1`)
+    - `:probe_timeout_ms` — total budget for the probes (default #{@probe_timeout_ms})
   """
   @spec detect(keyword()) :: [String.t()]
   def detect(opts \\ []) do
@@ -41,8 +49,8 @@ defmodule Mydia.Library.MountRoots do
         |> Enum.filter(&data_like?/1)
         |> Enum.map(fn {mount_point, _fstype} -> mount_point end)
         |> intersect_with_libraries(library_top_levels(opts))
-        |> Enum.filter(&File.dir?/1)
         |> Enum.uniq()
+        |> reachable_dirs(opts)
 
       _ ->
         []
@@ -71,11 +79,44 @@ defmodule Mydia.Library.MountRoots do
   end
 
   # Keep mounts whose top-level segment matches a configured library path's
-  # top-level segment. With no library paths configured, keep them all.
-  defp intersect_with_libraries(mount_points, []), do: mount_points
+  # top-level segment.
+  #
+  # With no library paths configured there is no mapping worth suggesting, and
+  # keeping every mount would mean probing arbitrary filesystems. Degrade to
+  # plain guidance instead.
+  defp intersect_with_libraries(_mount_points, []), do: []
 
   defp intersect_with_libraries(mount_points, library_tops) do
     Enum.filter(mount_points, &(top_level(&1) in library_tops))
+  end
+
+  # A wedged NFS or FUSE mount makes File.dir?/1 block in the kernel with no
+  # timeout, which would stall the caller (in production, a LiveView event).
+  # Probe every candidate concurrently under one wall-clock budget and drop
+  # whatever has not answered.
+  #
+  # Caveat: killing the task unblocks this process, not the dirty IO scheduler
+  # thread the probe is stuck on, which stays blocked until the kernel gives
+  # up. With the probe-everything fallback removed the candidate set is
+  # typically one to three mounts, so this is bounded in practice.
+  defp reachable_dirs([], _opts), do: []
+
+  defp reachable_dirs(mount_points, opts) do
+    probe = Keyword.get(opts, :probe_fun, &File.dir?/1)
+    timeout = Keyword.get(opts, :probe_timeout_ms, @probe_timeout_ms)
+
+    mount_points
+    |> Task.async_stream(probe,
+      max_concurrency: length(mount_points),
+      timeout: timeout,
+      on_timeout: :kill_task,
+      ordered: true
+    )
+    |> Enum.zip(mount_points)
+    |> Enum.flat_map(fn
+      {{:ok, true}, mount_point} -> [mount_point]
+      {_result, _mount_point} -> []
+    end)
   end
 
   defp library_top_levels(opts) do
