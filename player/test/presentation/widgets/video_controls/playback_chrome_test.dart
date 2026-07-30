@@ -17,6 +17,38 @@ double _opacity(WidgetTester tester) => tester
     .opacity
     .value;
 
+/// Reproduces the realistic Task 13 shape: an ancestor that flips
+/// `isPlaying` via its own `setState` (driving [ChromeVisibility]'s
+/// `didUpdateWidget` synchronously during that rebuild), whose
+/// `onVisibilityChanged` callback itself calls `setState` in direct
+/// response — the obvious thing to do to react to visibility (cursor,
+/// system UI, wakelock). Pre-fix, that callback ran inline from
+/// `didUpdateWidget`, which is itself called during an element-update phase,
+/// so the nested `setState` would throw "setState() called during build".
+class _DidUpdateWidgetHarness extends StatefulWidget {
+  const _DidUpdateWidgetHarness();
+
+  @override
+  State<_DidUpdateWidgetHarness> createState() =>
+      _DidUpdateWidgetHarnessState();
+}
+
+class _DidUpdateWidgetHarnessState extends State<_DidUpdateWidgetHarness> {
+  bool _playing = true;
+  int visibilityEvents = 0;
+
+  void setPlaying(bool value) => setState(() => _playing = value);
+
+  @override
+  Widget build(BuildContext context) {
+    return ChromeVisibility(
+      isPlaying: _playing,
+      onVisibilityChanged: (visible) => setState(() => visibilityEvents++),
+      child: const Text('chrome'),
+    );
+  }
+}
+
 void main() {
   group('ChromeVisibility', () {
     testWidgets('starts visible', (tester) async {
@@ -40,6 +72,23 @@ void main() {
     testWidgets('never hides while paused', (tester) async {
       await tester.pumpWidget(
         _host(const ChromeVisibility(isPlaying: false, child: Text('chrome'))),
+      );
+
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 1.0);
+    });
+
+    testWidgets('never hides while seeking, even while playing',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            isSeeking: true,
+            child: Text('chrome'),
+          ),
+        ),
       );
 
       await tester.pump(const Duration(seconds: 10));
@@ -133,6 +182,43 @@ void main() {
       expect(_opacity(tester), 1.0);
     });
 
+    testWidgets(
+        'a tap on an empty region hides chrome while it is visible — the '
+        'background toggle must not be permanently swallowed by an opaque '
+        'MouseRegion over content', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            // Bounded and top-left, like the panel's real pills/controls —
+            // NOT a bare `Text` directly, which `StackFit.expand` would force
+            // to fill the whole screen. `RenderParagraph.hitTestSelf` is
+            // unconditionally true across its *entire* box, not just where
+            // glyphs are drawn, so an unbounded Text would self-hit
+            // everywhere and mask exactly the regression this test targets.
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: 100, height: 40, child: Text('chrome')),
+            ),
+          ),
+        ),
+      );
+
+      expect(_opacity(tester), 1.0);
+
+      // Tap well clear of the small, top-left content, while chrome is still
+      // fully visible (well before the 3s auto-hide would fire).
+      await tester.tapAt(const Offset(400, 300));
+      await tester.pumpAndSettle();
+
+      expect(
+        _opacity(tester),
+        0.0,
+        reason: 'tap-to-hide while visible did not fire — the background '
+            'GestureDetector is unreachable while chrome is shown',
+      );
+    });
+
     testWidgets('reports visibility changes', (tester) async {
       final events = <bool>[];
       await tester.pumpWidget(
@@ -148,6 +234,35 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
       expect(events, contains(false));
+    });
+
+    testWidgets(
+        'onVisibilityChanged does not throw "setState() called during '
+        'build" when the consumer setStates in response, even when the '
+        'visibility flip is driven synchronously from didUpdateWidget',
+        (tester) async {
+      await tester.pumpWidget(_host(const _DidUpdateWidgetHarness()));
+
+      // Auto-hide while "playing".
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 0.0);
+      expect(tester.takeException(), isNull);
+
+      // Flip to "paused": this drives ChromeVisibility.didUpdateWidget
+      // synchronously as part of the harness's own rebuild, which calls
+      // _show() synchronously — the exact path that used to call
+      // onVisibilityChanged inline.
+      final harnessState = tester.state<_DidUpdateWidgetHarnessState>(
+        find.byType(_DidUpdateWidgetHarness),
+      );
+      harnessState.setPlaying(false);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(_opacity(tester), 1.0);
+      expect(harnessState.visibilityEvents, greaterThan(0));
     });
 
     // --- Supplementary coverage below, added on top of the brief's own
