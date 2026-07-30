@@ -245,18 +245,42 @@ defmodule Mydia.Metadata.Provider.HTTP do
     put_api_key_param(req, config, api_key)
   end
 
-  # Register the key as a Req `:params` option rather than writing it straight
-  # into `req.url.query`.
+  # Append the configured API key to the query as a request step.
   #
+  # Two things this deliberately avoids.
+  #
+  # It does not write the key into `req.url.query` at construction time.
   # `Req.merge/2` treats `:url` as a request-struct field and replaces
-  # `request.url` wholesale (`put_in(acc.url, URI.parse(url))`), so any query
-  # string written at construction time is discarded by the first `get/2` or
-  # `post/2` call, which always supplies a `:url`. `:params` is a plain option
-  # and is merged with `Keyword.merge/2`, so the configured key survives and
-  # per-request params are layered on top of it.
+  # `request.url` wholesale (`put_in(acc.url, URI.parse(url))`), so a query
+  # written up front is discarded by the first `get/2` or `post/2` call, which
+  # always supplies a `:url`. That was the original bug.
+  #
+  # It also does not pass the key as the `:params` option. `Req.merge/2` merges
+  # that option with `Keyword.merge/2`, which requires atom keys, and
+  # `api_key_param` is operator-supplied configuration. Interning it with
+  # `String.to_atom/1` is unbounded atom growth, which the VM never reclaims.
+  # Keeping the name a string sidesteps that entirely, and `put_params` calls
+  # `to_string/1` on param names anyway.
+  #
+  # Appended steps run after `put_params`, so per-request params are already in
+  # the query by the time this runs. The key is only added when absent, leaving
+  # an explicit per-request value of the same name to win.
   defp put_api_key_param(req, config, api_key) do
     param_name = get_in(config, [:options, :api_key_param]) || "api_key"
-    Req.merge(req, params: [{String.to_atom(param_name), api_key}])
+
+    Req.Request.append_request_steps(req,
+      mydia_api_key: fn request ->
+        update_in(request.url.query, fn query ->
+          params = Enum.to_list(URI.query_decoder(query || ""))
+
+          if List.keymember?(params, param_name, 0) do
+            URI.encode_query(params)
+          else
+            URI.encode_query(params ++ [{param_name, api_key}])
+          end
+        end)
+      end
+    )
   end
 
   # Unused - kept for potential future use
