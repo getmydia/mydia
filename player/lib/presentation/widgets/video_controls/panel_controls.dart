@@ -25,13 +25,16 @@ class VolumeSurface extends StatelessWidget {
   static const Key muteKey = Key('volume-mute');
   static const Key sliderKey = Key('volume-slider');
 
-  /// Trimmed from 72 to close a real overflow: at the 600px tablet
-  /// breakpoint with `metrics.showVolume` true, this slot's equal-flex
-  /// `Expanded` share is only 92px (see `chrome_panel_overflow_test.dart`),
-  /// and 40 (mute button) + 72 would not fit. 52 is the widest value that
-  /// still fits at 600px (`40 + 52 == 92`); every wider viewport in the
-  /// tablet/desktop range has more room than that.
-  static const double sliderWidth = 52.0;
+  /// A previous revision trimmed this to 52 to "close" a 600px overflow —
+  /// wrong on two counts: `VolumeSurface`'s own 112px need (40 mute button +
+  /// 72 slider) was never the binding constraint at that width (
+  /// `SecondaryCluster`'s 120px floor was, and stayed broken regardless of
+  /// this value — see `chrome_panel_overflow_test.dart`), and once the panel
+  /// width/padding levers actually closed 600px (`PanelMetrics.forWidth`'s
+  /// tablet-branch factor and `horizontalPadding`), 72 fits there too
+  /// (`40 + 72 == 112 <= 122`). Restored to the original 72; trimming it
+  /// bought nothing but ~33% less slider travel.
+  static const double sliderWidth = 72.0;
 
   IconData get _glyph {
     if (volume == 0) return Icons.volume_off_rounded;
@@ -165,11 +168,14 @@ class SecondaryCluster extends StatelessWidget {
   static const Key fullscreenKey = Key('secondary-fullscreen');
 
   /// Trimmed from 4 to 0 to close real overflows in `ChromePanel`'s
-  /// equal-flex right slot, most severely at the ~600–689px tablet
-  /// breakpoint with episode-nav wired (3 buttons at 40px is already 120px;
-  /// 0 gaps is the narrowest this cluster can get without shrinking a
-  /// button below its own 40px spec — see `chrome_panel_overflow_test.dart`
-  /// for exactly which widths this does and does not close).
+  /// equal-flex right slot. Still load-bearing after `PanelMetrics`'
+  /// tablet-branch width factor and per-tier `horizontalPadding` closed the
+  /// worse 600–689px shortfall: at 4px this cluster's 3 buttons cost 128px,
+  /// which still doesn't fit the desktop breakpoint's own slot (900px was
+  /// -6px short, 920px exactly 0px, at 4px gap) — 0 gaps is the narrowest
+  /// this cluster can get without shrinking a button below its own 40px
+  /// spec. See `chrome_panel_overflow_test.dart` for the full per-width
+  /// budget with this value.
   static const double gap = 0.0;
 
   @override

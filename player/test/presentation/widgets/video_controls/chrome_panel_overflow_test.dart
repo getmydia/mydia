@@ -8,16 +8,24 @@
 // it is the CI-visible half of the regression guard for this whole class of
 // bug.
 //
-// Three widths in the matrix below (320, 600, 650) are NOT fixed by anything
-// in this file's history and are asserted as *known, currently-broken*
-// cases, not silently skipped: closing them would require either shrinking
-// `SecondaryCluster`'s buttons below their own 40px spec (already guarded
-// against by the passing-width assertions below) or a structural change to
-// `ChromePanel`'s layout (equal-flex split, padding, or panel-width formula)
-// that was escalated rather than freelanced. See this task's report for the
-// full budget table and the exact reasoning. If you close one of these,
-// *move it* from `_knownBrokenWidths` to `_passingWidths` — don't just delete
-// its assertion.
+// Only 320px remains broken, and it is broken *by construction*, not
+// pending: `SecondaryCluster`'s 3 buttons at their own 40px spec cost 120px
+// with zero gap (the floor — already guarded by the passing-width
+// assertions below), but 320px's equal-flex slot only ever offers 108px, and
+// even removing 100% of `ChromePanel`'s horizontal padding (not just
+// trimming it) only gets to 120px available — exactly matching, with zero
+// margin for the padding itself to occupy. There is no gap/slider/padding
+// lever left to pull; closing this needs either shrinking a button below
+// its spec or abandoning the equal-flex centering guarantee for this one
+// width, and neither is this file's call. If that changes, *move* 320px
+// from `_knownBrokenWidths` to `_passingWidths` — don't just delete its
+// assertion.
+//
+// 600px and 650px *were* asserted broken in an earlier revision of this
+// file — that escalation was wrong. Both close with two more one-constant
+// levers: `PanelMetrics.forWidth`'s tablet-branch width factor (0.8 -> 0.9)
+// and per-tier `horizontalPadding` on `PanelMetrics` (20 -> 12 for mobile and
+// tablet). See the constants' own dartdocs for the exact arithmetic.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,16 +80,30 @@ Widget _panel(double width) {
 }
 
 /// Widths where `ChromePanel` renders every control at its own full,
-/// specified size with no overflow. Covers: full mobile range once the
-/// transport is compact (360-599, see `TransportSurface.compact`'s dartdoc
-/// for why 320-359 is not in this list), the tablet/desktop range once it
-/// clears the transition band (690+), and the desktop breakpoint itself
-/// (900, 920 — previously broken by 6px before `SecondaryCluster.gap` was
-/// trimmed).
-const _passingWidths = <double>[360, 400, 480, 599, 690, 900, 920];
+/// specified size with no overflow. Covers: the full mobile range once the
+/// transport is compact (352-599 — 352 specifically because it's the
+/// narrowest width that was ever asserted-broken along the way, at the old
+/// 20px padding; see `PanelMetrics.horizontalPadding`'s dartdoc), the whole
+/// tablet range once `PanelMetrics`'s tablet-branch width factor and
+/// per-tier padding are both in effect (600-899, including the 650px width a
+/// previous revision of this file wrongly escalated), and the desktop
+/// breakpoint (900, 920).
+const _passingWidths = <double>[
+  352,
+  360,
+  400,
+  480,
+  599,
+  600,
+  650,
+  670,
+  690,
+  900,
+  920,
+];
 
-/// Widths that still overflow. See the file header.
-const _knownBrokenWidths = <double>[320, 600, 650];
+/// Widths that still overflow, by construction — see the file header.
+const _knownBrokenWidths = <double>[320];
 
 /// Consumes every exception `tester` recorded, rather than just the first —
 /// `TestWidgetsFlutterBinding` fails a test at teardown if *any* recorded
@@ -143,8 +165,8 @@ void main() {
 
   for (final width in _knownBrokenWidths) {
     testWidgets(
-      'ChromePanel at ${width}px: KNOWN, TRACKED overflow — still needs a '
-      'structural fix (see this file\'s header)',
+      'ChromePanel at ${width}px: out of budget by construction, not '
+      'pending — see this file\'s header',
       (tester) async {
         tester.view.physicalSize = Size(width, 600);
         tester.view.devicePixelRatio = 1.0;

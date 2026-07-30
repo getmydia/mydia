@@ -26,11 +26,25 @@ class PanelMetrics {
   /// Whether controls should use enlarged touch hit areas.
   final bool touchTargets;
 
+  /// Horizontal padding on both sides of the panel. Previously a single
+  /// global constant on [ChromePanel] itself; now tier-dependent, so it
+  /// lives here alongside the other per-tier values.
+  ///
+  /// 12px on the mobile and tablet tiers, 20px on desktop. This is a real
+  /// overflow-budget lever, not a cosmetic tweak: at the 650px tablet width
+  /// (episode-nav wired, `SecondaryCluster` at its 40px-button floor), 20px
+  /// of padding each side left `SecondaryCluster` 8px short of fitting in
+  /// its equal-flex slot — see `chrome_panel_overflow_test.dart` for the
+  /// full per-width budget. Desktop keeps 20px: it was never short of room,
+  /// and this wasn't asked to change there.
+  final double horizontalPadding;
+
   const PanelMetrics({
     required this.maxWidth,
     required this.bottomOffset,
     required this.showVolume,
     required this.touchTargets,
+    required this.horizontalPadding,
   });
 
   /// Resolve metrics for a viewport [width], using the breakpoints in
@@ -43,14 +57,22 @@ class PanelMetrics {
         bottomOffset: 48,
         showVolume: true,
         touchTargets: false,
+        horizontalPadding: 20,
       );
     }
     if (width >= Breakpoints.mobile) {
       return PanelMetrics(
-        maxWidth: math.min(640.0, width * 0.80),
+        // 0.9, not the original 0.8: at 600px (the tightest point of this
+        // branch, with episode-nav wired) 0.8 left this tier's equal-flex
+        // slot 28px short of `SecondaryCluster`'s 120px floor — closeable
+        // only by widening the panel itself, since neither the padding nor
+        // gap levers reach a shortfall that size. See
+        // `chrome_panel_overflow_test.dart`'s budget table.
+        maxWidth: math.min(640.0, width * 0.90),
         bottomOffset: 32,
         showVolume: true,
         touchTargets: false,
+        horizontalPadding: 12,
       );
     }
     return PanelMetrics(
@@ -60,6 +82,7 @@ class PanelMetrics {
       bottomOffset: 24,
       showVolume: false,
       touchTargets: true,
+      horizontalPadding: 12,
     );
   }
 }
@@ -117,9 +140,6 @@ class ChromePanel extends StatelessWidget {
   /// instead of hand-rounded literals.
   static const double verticalPadding = 16.0;
 
-  /// Horizontal padding on both sides of the panel.
-  static const double horizontalPadding = 20.0;
-
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
@@ -130,8 +150,11 @@ class ChromePanel extends StatelessWidget {
           Radius.circular(DepthTokens.radiusPlayerPanel),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: horizontalPadding,
+          // Horizontal padding is now tier-dependent (see
+          // `PanelMetrics.horizontalPadding`'s dartdoc); it used to be a
+          // single global constant here.
+          padding: EdgeInsets.symmetric(
+            horizontal: metrics.horizontalPadding,
             vertical: verticalPadding,
           ),
           child: Column(

@@ -302,7 +302,8 @@ void main() {
 
     testWidgets(
         'subtitles, audio, quality, and fullscreen stay left-to-right '
-        'ordered with uniform gaps of SecondaryCluster.gap', (tester) async {
+        'ordered with a uniform pitch of buttonWidth + SecondaryCluster.gap',
+        (tester) async {
       await tester.pumpWidget(
         _host(
           SecondaryCluster(
@@ -332,17 +333,27 @@ void main() {
       expect(audioRect.right, lessThanOrEqualTo(qualityRect.left));
       expect(qualityRect.right, lessThanOrEqualTo(fullscreenRect.left));
 
+      // Left-edge-to-left-edge pitch, not the right-to-left gap: at
+      // `SecondaryCluster.gap == 0`, `right - left` degenerates to "is this
+      // close to 0", which is also true of unrelated bugs (e.g. overlapping
+      // buttons from a totally broken layout) — it stops discriminating a
+      // real gap regression from "buttons happen to be near each other".
+      // Pitch anchored to each button's own *measured* width (not a
+      // hardcoded 40) stays meaningful at any `gap` value, including 0: a
+      // widened, narrowed, overlapping, or displaced button all move the
+      // pitch away from `buttonWidth + gap`.
+      const gap = SecondaryCluster.gap;
       expect(
-        audioRect.left - subtitlesRect.right,
-        closeTo(SecondaryCluster.gap, 0.5),
+        audioRect.left - subtitlesRect.left,
+        closeTo(subtitlesRect.width + gap, 0.5),
       );
       expect(
-        qualityRect.left - audioRect.right,
-        closeTo(SecondaryCluster.gap, 0.5),
+        qualityRect.left - audioRect.left,
+        closeTo(audioRect.width + gap, 0.5),
       );
       expect(
-        fullscreenRect.left - qualityRect.right,
-        closeTo(SecondaryCluster.gap, 0.5),
+        fullscreenRect.left - qualityRect.left,
+        closeTo(qualityRect.width + gap, 0.5),
       );
     });
   });

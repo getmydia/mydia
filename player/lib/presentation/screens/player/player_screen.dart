@@ -1442,20 +1442,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // *width*, not `PlatformFeatures.isMobile` — so a narrowed desktop or
       // web browser window loses the in-bar buttons too, with no
       // `UpNextOverlay` (autoplay-only, next-episode-only) or touch gesture
-      // to fall back on. Gated the same way the in-bar buttons already are
-      // (`_hasPreviousEpisode`/`_hasNextEpisode`) so this does nothing at
-      // the start/end of a season, matching the buttons' own disabled state.
+      // to fall back on. This actually covers web now that
+      // `PlatformFeatures.supportsKeyboardShortcuts` includes it (see that
+      // getter's own dartdoc) — previously this whole `Focus`/`onKeyEvent`
+      // wrapper was desktop-only, so a narrowed *web* window had no
+      // fallback at all, keyboard or otherwise.
       case LogicalKeyboardKey.pageUp:
-        if (_hasPreviousEpisode) {
-          _playPreviousEpisode();
-        }
-        return KeyEventResult.handled;
-
       case LogicalKeyboardKey.pageDown:
-        if (_hasNextEpisode) {
-          _playNextEpisode();
-        }
-        return KeyEventResult.handled;
+        return handleEpisodeNavKey(
+          event,
+          hasPreviousEpisode: _hasPreviousEpisode,
+          hasNextEpisode: _hasNextEpisode,
+          onPreviousEpisode: _playPreviousEpisode,
+          onNextEpisode: _playNextEpisode,
+        );
 
       default:
         return KeyEventResult.ignored;
@@ -1556,7 +1556,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         ? _buildCastPlaceholder(castDevice)
         : _buildBody();
 
-    // Wrap with keyboard listener for desktop
+    // Wrap with keyboard listener wherever a physical keyboard exists
+    // (native desktop or web — see supportsKeyboardShortcuts' own dartdoc).
     if (PlatformFeatures.supportsKeyboardShortcuts && !isCasting) {
       body = Focus(
         focusNode: _focusNode,
@@ -1928,5 +1929,54 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (fromPlayer != null && fromPlayer > Duration.zero) return fromPlayer;
 
     return null;
+  }
+}
+
+/// Pure `PageUp`/`PageDown` episode-navigation key handling, extracted from
+/// `_PlayerScreenState._handleKeyEvent` so it can be unit-tested directly.
+///
+/// `_handleKeyEvent`'s other cases (`space`, arrows, `keyF`, `keyM`,
+/// `escape`) all reach directly into a real media_kit [Player] or call
+/// `setState`/native fullscreen APIs, and `PlayerScreen` itself is a
+/// `ConsumerStatefulWidget` that creates its own real [Player] and depends on
+/// Riverpod/GraphQL providers with no existing test harness — pumping the
+/// full screen to test one `switch` case is impractical. This case is the
+/// one exception: it only needs two booleans and two callbacks, so it is
+/// pulled out as a free function that takes those as parameters instead of
+/// closing over `State` fields, making it directly testable with a
+/// synthetic [KeyEvent] and no widget tree at all.
+///
+/// Mirrors exactly what the in-bar previous/next-episode buttons do
+/// (`TransportSurface`'s `onPreviousEpisode`/`onNextEpisode`, gated the same
+/// way by [hasPreviousEpisode]/[hasNextEpisode]) — this key handler is a
+/// fallback for when those buttons aren't reachable (see the call site's own
+/// comment), not a separate, independently-gated feature.
+@visibleForTesting
+KeyEventResult handleEpisodeNavKey(
+  KeyEvent event, {
+  required bool hasPreviousEpisode,
+  required bool hasNextEpisode,
+  required VoidCallback onPreviousEpisode,
+  required VoidCallback onNextEpisode,
+}) {
+  if (event is! KeyDownEvent) {
+    return KeyEventResult.ignored;
+  }
+
+  switch (event.logicalKey) {
+    case LogicalKeyboardKey.pageUp:
+      if (hasPreviousEpisode) {
+        onPreviousEpisode();
+      }
+      return KeyEventResult.handled;
+
+    case LogicalKeyboardKey.pageDown:
+      if (hasNextEpisode) {
+        onNextEpisode();
+      }
+      return KeyEventResult.handled;
+
+    default:
+      return KeyEventResult.ignored;
   }
 }
