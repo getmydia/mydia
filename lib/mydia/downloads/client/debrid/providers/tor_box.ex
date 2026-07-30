@@ -35,6 +35,7 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBox do
 
   alias Mydia.Downloads.Client.Debrid.{ProviderJob, Shared}
   alias Mydia.Downloads.Client.Error
+  alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.Structs.ClientInfo
 
   @default_base_url "https://api.torbox.app/v1/api"
@@ -241,12 +242,16 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBox do
   ## ── Parsing ─────────────────────────────────────────────────────────
 
   defp parse_torrent(%{} = t) do
+    native_state = t["download_state"]
+
     state =
       if t["download_finished"] == true and t["download_present"] == true do
         :ready
       else
-        map_download_state(t["download_state"])
+        map_download_state(native_state)
       end
+
+    {category, detail} = classify_failure(state, native_state)
 
     %ProviderJob{
       provider_id: to_string(t["id"]),
@@ -256,7 +261,9 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBox do
       total_bytes: t["size"] || 0,
       files: t["files"] || [],
       hoster_links: [],
-      raw_status: t
+      raw_status: t,
+      failure_category: category,
+      failure_detail: detail
     }
   end
 
@@ -275,6 +282,19 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.TorBox do
   defp map_download_state("error"), do: :error
   defp map_download_state("missingFiles"), do: :error
   defp map_download_state(_), do: :queued
+
+  # Only terminal states carry a classification. The detail is the native
+  # `download_state` string itself — never the surrounding payload, whose
+  # `files` entries carry credentialed CDN URLs.
+  defp classify_failure(:error, native_state) when is_binary(native_state) do
+    {failure_category(native_state), Helpers.sanitize_failure_detail(native_state)}
+  end
+
+  defp classify_failure(_state, _native_state), do: {nil, nil}
+
+  defp failure_category("missingFiles"), do: :missing_files
+  defp failure_category("error"), do: :provider_error
+  defp failure_category(_), do: nil
 
   defp parse_int(n) when is_integer(n), do: n
 

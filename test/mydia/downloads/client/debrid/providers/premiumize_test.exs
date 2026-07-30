@@ -121,6 +121,73 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.PremiumizeTest do
     end
   end
 
+  describe "failure classification" do
+    defp fetch_transfer(bypass, config, overrides) do
+      transfer =
+        Map.merge(
+          %{
+            "id" => "t1",
+            "name" => "Some.Release.1080p",
+            "progress" => 0.0,
+            "size" => 100
+          },
+          overrides
+        )
+
+      Bypass.expect(bypass, "GET", "/transfer/list", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, success(%{"transfers" => [transfer]}))
+      end)
+
+      Premiumize.get_job(config, "t1")
+    end
+
+    test "an error transfer classifies as :provider_error with its message",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{
+                 "status" => "error",
+                 "message" => "torrent not available"
+               })
+
+      assert job.state == :error
+      assert job.failure_category == :provider_error
+      assert job.failure_detail == "torrent not available"
+    end
+
+    test "falls back to the status string when there is no message",
+         %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{"status" => "error"})
+
+      assert job.failure_category == :provider_error
+      assert job.failure_detail == "error"
+    end
+
+    test "a running transfer carries no failure fields", %{bypass: bypass, config: config} do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{"status" => "running"})
+
+      assert job.failure_category == nil
+      assert job.failure_detail == nil
+    end
+
+    test "redacts credentials leaking through the free-text message", %{
+      bypass: bypass,
+      config: config
+    } do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{
+                 "status" => "error",
+                 "message" => "failed https://cdn.example.com/f?token=SECRET"
+               })
+
+      assert job.failure_category == :provider_error
+      refute job.failure_detail =~ "SECRET"
+    end
+  end
+
   describe "list_jobs/2" do
     test "filters to requested ids", %{bypass: bypass, config: config} do
       Bypass.expect(bypass, "GET", "/transfer/list", fn conn ->

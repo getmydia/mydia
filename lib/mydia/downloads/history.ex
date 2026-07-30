@@ -372,6 +372,8 @@ defmodule Mydia.Downloads.History do
       save_path: torrent_status.save_path,
       completed_at: download.completed_at || torrent_status.completed_at,
       error_message: download.error_message,
+      client_failure_category: torrent_status.failure_category,
+      client_error_detail: torrent_status.failure_detail,
       db_completed_at: download.completed_at,
       imported_at: download.imported_at,
       import_retry_count: download.import_retry_count,

@@ -16,6 +16,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.Client.FailureCategory
 
   @page_size 25
 
@@ -141,4 +142,8 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Index do
 
   defp total_pages(0, _page_size), do: 1
   defp total_pages(total, page_size), do: max(1, ceil(total / page_size))
+
+  # Slugs are stable identifiers; the operator reads the label. Unknown
+  # slugs (rows written by a newer version) humanize rather than raise.
+  defp reason_label(slug), do: FailureCategory.label(slug)
 end
