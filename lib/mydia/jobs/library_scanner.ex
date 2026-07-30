@@ -14,7 +14,12 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   use Oban.Worker,
     queue: :media,
-    max_attempts: 3
+    max_attempts: 3,
+    unique: [
+      period: 900,
+      states: [:available, :scheduled, :executing, :retryable, :suspended],
+      keys: [:library_path_id, :library_type]
+    ]
 
   require Logger
   alias Mydia.{Library, Settings, Repo, Metadata}

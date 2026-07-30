@@ -1858,9 +1858,9 @@ defmodule Mydia.Library do
   """
   @spec trigger_library_scan(binary()) :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
   def trigger_library_scan(library_path_id) do
-    %{library_path_id: library_path_id}
+    %{library_path_id: library_path_id, skip_delay: true}
     |> Mydia.Jobs.LibraryScanner.new()
-    |> Oban.insert()
+    |> insert_scan_job()
   end
 
   @doc """
@@ -1870,9 +1870,9 @@ defmodule Mydia.Library do
   """
   @spec trigger_full_library_scan() :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
   def trigger_full_library_scan do
-    %{}
+    %{skip_delay: true}
     |> Mydia.Jobs.LibraryScanner.new()
-    |> Oban.insert()
+    |> insert_scan_job()
   end
 
   @doc """
@@ -1885,9 +1885,19 @@ defmodule Mydia.Library do
   """
   @spec trigger_adult_library_scan() :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t()}
   def trigger_adult_library_scan do
-    %{library_type: "adult"}
+    %{library_type: "adult", skip_delay: true}
     |> Mydia.Jobs.LibraryScanner.new()
-    |> Oban.insert()
+    |> insert_scan_job()
+  end
+
+  # Insert an Oban job, falling back to a direct Repo insert when Oban's
+  # engine is disabled (test mode, config/test.exs sets engine: false so no
+  # Oban instance is running). Mirrors the pattern used by
+  # Mydia.Downloads.Queue.insert_job/1 and Mydia.Jobs.DownloadMonitor.
+  defp insert_scan_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
   end
 
   @doc """
