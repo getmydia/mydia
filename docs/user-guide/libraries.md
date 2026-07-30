@@ -57,15 +57,9 @@ Scanning is manual by default. You can enable automatic scanning per library.
 ### Automatic Scanning
 
 Set **Automatic scanning** on a library to have Mydia rescan that folder on a schedule.
-
-| Option | Meaning |
-|--------|---------|
-| Off (manual only) | Default. Mydia only scans this library when you ask it to. |
-| Every 15 minutes | Shortest supported interval. |
-| Every hour | |
-| Every 6 hours | |
-| Every 12 hours | |
-| Daily | |
+Choose from six presets: Off (manual only, the default), every 15 minutes (the
+shortest supported interval), every hour, every 6 hours, every 12 hours, or daily.
+There is no free-form interval entry.
 
 Scheduled scans are spread out by a random delay of up to 30 minutes so that many
 self-hosted instances do not all contact the metadata service at once. Manual scans
@@ -83,7 +77,9 @@ work whether or not automatic scanning is enabled.
 ### Monitored
 
 **Monitored** controls whether a library is included when you trigger a scan of all
-libraries. It does not by itself enable automatic scanning.
+libraries. It does not by itself enable automatic scanning, but a library must also
+be Monitored for its automatic scanning schedule to run. Unmonitoring a library
+pauses both its inclusion in scan-all and any automatic schedule you have set for it.
 
 ## Path Management
 
