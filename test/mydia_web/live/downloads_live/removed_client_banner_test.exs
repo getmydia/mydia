@@ -27,7 +27,7 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     })
   end
 
-  test "renders one banner per removed client", %{conn: conn} do
+  test "renders one banner per removed client, counting its own orphans", %{conn: conn} do
     media_item = media_item_fixture()
     orphan(media_item, "qbit-old")
     orphan(media_item, "qbit-old")
@@ -38,6 +38,32 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
 
     assert has_element?(view, "#removed-client-qbit-old")
     assert has_element?(view, "#removed-client-sab-old")
+
+    # Each banner reports its own group's size, not the total.
+    assert has_element?(view, "#removed-client-qbit-old", "2 download(s)")
+    assert has_element?(view, "#removed-client-sab-old", "1 download(s)")
+  end
+
+  test "does not call a merely disabled client removed", %{conn: conn} do
+    # A disabled client is still sitting in the settings list, switched off.
+    # The per-row error message says so; the banner must not contradict it by
+    # telling the operator the client was removed, which would steer them
+    # toward deleting records whose fix is to flip the client back on.
+    media_item = media_item_fixture()
+
+    download_fixture(%{
+      media_item_id: media_item.id,
+      download_client: "paused",
+      error_message:
+        "Download client 'paused' is disabled in Mydia, so its downloads are no longer tracked.",
+      import_failure_reason: "no_client"
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    render_click(view, "switch_tab", %{"tab" => "issues"})
+
+    assert has_element?(view, "#removed-client-paused")
+    refute has_element?(view, "#removed-client-paused", "removed client")
   end
 
   test "clears only the selected client's orphans", %{conn: conn} do

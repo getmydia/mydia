@@ -706,7 +706,14 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
 
   @doc """
   Renders the delete-confirmation modal for a download client, warning the
-  operator how many downloads currently reference it.
+  operator how many downloads are still waiting on it.
+
+  The count comes from `Mydia.Downloads.count_downloads_for_client/1` and
+  excludes imported downloads, which keep their row as history and are
+  untouched by the delete. The copy is hedged about where the rest end up
+  because not all of them land in Issues: a row that is downloaded but not yet
+  imported, or one that was never matched, never enters the missing handler
+  that writes the Issues-tab error.
   """
   attr :client, :map, default: nil
   attr :count, :integer, default: 0
@@ -718,14 +725,14 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
         <h3 class="text-lg font-bold">Delete '{@client.name}'?</h3>
 
         <p :if={@count > 0} class="py-2">
-          {@count} {if @count == 1, do: "download is", else: "downloads are"} assigned to this
-          client. Deleting it will not stop them in the client itself. They will move to
-          Downloads then Issues, where you can clear them. If you re-add a client holding
-          these same torrents, Mydia picks them back up automatically.
+          {@count} {if @count == 1, do: "download is", else: "downloads are"} still waiting on
+          this client. Deleting it will not stop them in the client itself, and the ones still
+          in flight move to the Issues tab where you can clear them. If you re-add a client
+          holding these same torrents, Mydia picks them back up automatically.
         </p>
 
         <p :if={@count == 0} class="py-2">
-          No downloads reference this client.
+          No downloads are waiting on this client.
         </p>
 
         <div class="modal-action">

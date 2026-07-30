@@ -661,11 +661,18 @@
           >
             <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
             <div class="flex-1">
+              <%!--
+                Deliberately neutral about *why* the client is gone. The group
+                covers both a deleted client and one that is merely disabled,
+                and calling a disabled client "removed" steers the operator
+                toward clearing records whose actual fix is to switch the
+                client back on.
+              --%>
               <div class="font-semibold">
-                {group.count} download(s) reference the removed client '{group.download_client}'
+                {group.count} download(s) reference '{group.download_client}', which Mydia is no longer tracking
               </div>
               <div class="text-sm opacity-80">
-                Re-adding a client that holds these same torrents will restore them automatically.
+                Re-enabling or re-adding a client that holds these same torrents will restore them automatically.
               </div>
             </div>
             <button

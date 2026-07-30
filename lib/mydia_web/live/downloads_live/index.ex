@@ -800,7 +800,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       {:noreply,
        socket
-       |> put_flash(:info, "Cleared #{count} download(s) from removed client '#{client_name}'")
+       # Neutral wording: the group covers a deleted client and a disabled one
+       # alike, and the banner it came from says so too.
+       |> put_flash(:info, "Cleared #{count} download(s) referencing '#{client_name}'")
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
