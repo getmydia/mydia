@@ -57,7 +57,7 @@
               value=""
               selected={@toolbar_quality_profile_id == nil || @toolbar_quality_profile_id == ""}
             >
-              Any Quality
+              {default_quality_profile_label(@default_quality_profile_name)}
             </option>
             <%= for profile <- @quality_profiles do %>
               <option
@@ -311,7 +311,9 @@
                 <span class="label-text font-semibold">Quality Profile</span>
               </label>
               <select name="config[quality_profile_id]" class="select select-bordered">
-                <option value="">Any Quality</option>
+                <option value="">
+                  {default_quality_profile_label(@default_quality_profile_name)}
+                </option>
                 <%= for profile <- @quality_profiles do %>
                   <option
                     value={profile.id}

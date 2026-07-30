@@ -258,6 +258,11 @@ defmodule MydiaWeb.AddMediaLive.Index do
   ## Private Helpers
 
   defp load_toolbar_settings(socket, _media_type) do
+    configured_default = Settings.get_default_quality_profile()
+
+    socket =
+      assign(socket, :default_quality_profile_name, configured_default && configured_default.name)
+
     # Only initialize toolbar settings if not already set
     # This prevents resetting user selections when handle_params is called again
     if Map.has_key?(socket.assigns, :toolbar_library_path_id) do
