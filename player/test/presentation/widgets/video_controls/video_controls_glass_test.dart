@@ -1,7 +1,8 @@
 // The playback control chrome is a token-driven glass panel. This replaces the
-// former VideoControlsGlassBar tests: that widget wrapped a full-width bar in
-// browse-UI chrome tokens (0.80 fill over a sigma-10 blur), which rendered a
-// near-solid rectangle. ChromePanel uses the dedicated player material instead.
+// tests for the former full-width glass control bar: that widget wrapped its
+// bar in browse-UI chrome tokens (0.80 fill over a sigma-10 blur), which
+// rendered a near-solid rectangle. ChromePanel uses the dedicated player
+// material instead.
 
 import 'dart:ui';
 

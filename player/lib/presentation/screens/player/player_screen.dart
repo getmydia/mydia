@@ -128,9 +128,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Fullscreen state
   bool _isFullscreen = false;
 
-  // Controls overlay visibility (synced with video controls)
-  bool _controlsVisible = true;
-
   // Auto-play next episode state
   bool _showUpNext = false;
   int _autoPlayCountdown = 10;
@@ -1066,6 +1063,36 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _navigateToEpisode(nextEpisode.id, firstFile.id, title);
   }
 
+  /// Play the previous episode immediately.
+  void _playPreviousEpisode() {
+    _upNextTimer?.cancel();
+    _upNextTimer = null;
+
+    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
+      return;
+    }
+
+    final previousIndex = _currentEpisodeIndex! - 1;
+    if (previousIndex < 0) {
+      return;
+    }
+
+    final previousEpisode = _seasonEpisodes![previousIndex];
+    final files = previousEpisode.files;
+    if (files == null || files.isEmpty) {
+      return;
+    }
+
+    final firstFile = files.first;
+    if (firstFile == null) {
+      return;
+    }
+
+    final title =
+        'S${previousEpisode.seasonNumber}E${previousEpisode.episodeNumber}${previousEpisode.title != null ? ' - ${previousEpisode.title}' : ''}';
+    _navigateToEpisode(previousEpisode.id, firstFile.id, title);
+  }
+
   /// Get the title for the next episode (for display in Up Next overlay).
   String? _getNextEpisodeTitle() {
     if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
@@ -1617,15 +1644,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       child: Video(
         controller: _videoController!,
         controls: customVideoControlsBuilderWithCallback(
-          onVisibilityChanged: (visible) {
-            if (mounted) {
-              setState(() => _controlsVisible = visible);
+          title: widget.title,
+          onBack: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
             }
           },
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
           onQualityTap: PlatformFeatures.isWeb ? _showQualitySelector : null,
           onFullscreenTap: _toggleFullscreen,
+          onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
+          onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
           isFullscreen: _isFullscreen,
           audioTrackCount: _audioTracks.length,
           subtitleTrackCount: _subtitleTracks.length,
@@ -1657,28 +1689,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return Stack(
       children: [
         videoPlayer,
-        // Top bar + overlays - synced with video controls visibility
-        AnimatedOpacity(
-          opacity: _controlsVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 200),
-          child: IgnorePointer(
-            ignoring: !_controlsVisible,
-            child: Stack(
-              children: [
-                // Top bar
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: _buildTopBar(),
-                ),
-                // Episode navigation buttons
-                if (_seasonEpisodes != null && _currentEpisodeIndex != null)
-                  _buildEpisodeNavigation(),
-              ],
-            ),
-          ),
-        ),
         // Up Next overlay for auto-play (always interactive, not tied to controls)
         if (_showUpNext && _getNextEpisodeTitle() != null)
           UpNextOverlay(
@@ -1691,143 +1701,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  Widget _buildTopBar() {
-    return Row(
-      children: [
-        // Back button
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/');
-              }
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.chevron_left_rounded,
-                color: Colors.white,
-                size: 28,
-                shadows: [
-                  Shadow(
-                    color: Color(0x60000000),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // Title
-        if (widget.title != null)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                widget.title!,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
-        else
-          const Spacer(),
-        CastButton(onPressed: _showCastDevicePicker),
-      ],
-    );
-  }
+  /// Whether a previous episode exists in the current season's episode list.
+  bool get _hasPreviousEpisode =>
+      _seasonEpisodes != null &&
+      _currentEpisodeIndex != null &&
+      _currentEpisodeIndex! > 0;
 
-  Widget _buildEpisodeNavigation() {
-    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
-      return const SizedBox.shrink();
-    }
-
-    final hasPrevious = _currentEpisodeIndex! > 0;
-    final hasNext = _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
-
-    return Positioned(
-      bottom: 80,
-      left: 0,
-      right: 0,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (hasPrevious)
-            IconButton(
-              icon: const Icon(Icons.skip_previous,
-                  color: Colors.white,
-                  size: 32,
-                  shadows: [
-                    Shadow(
-                      color: Color(0x60000000),
-                      blurRadius: 8,
-                    ),
-                  ]),
-              onPressed: () {
-                final prevEpisode = _seasonEpisodes![_currentEpisodeIndex! - 1];
-                final files = prevEpisode.files;
-                if (files != null && files.isNotEmpty) {
-                  final firstFile = files.first;
-                  if (firstFile != null) {
-                    final title =
-                        'S${prevEpisode.seasonNumber}E${prevEpisode.episodeNumber}${prevEpisode.title != null ? ' - ${prevEpisode.title}' : ''}';
-                    _navigateToEpisode(prevEpisode.id, firstFile.id, title);
-                  }
-                }
-              },
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(12),
-              ),
-              tooltip: 'Previous Episode',
-            ),
-          if (hasPrevious && hasNext) const SizedBox(width: 32),
-          if (hasNext)
-            IconButton(
-              icon: const Icon(Icons.skip_next,
-                  color: Colors.white,
-                  size: 32,
-                  shadows: [
-                    Shadow(
-                      color: Color(0x60000000),
-                      blurRadius: 8,
-                    ),
-                  ]),
-              onPressed: () {
-                final nextEpisode = _seasonEpisodes![_currentEpisodeIndex! + 1];
-                final files = nextEpisode.files;
-                if (files != null && files.isNotEmpty) {
-                  final firstFile = files.first;
-                  if (firstFile != null) {
-                    final title =
-                        'S${nextEpisode.seasonNumber}E${nextEpisode.episodeNumber}${nextEpisode.title != null ? ' - ${nextEpisode.title}' : ''}';
-                    _navigateToEpisode(nextEpisode.id, firstFile.id, title);
-                  }
-                }
-              },
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(12),
-              ),
-              tooltip: 'Next Episode',
-            ),
-        ],
-      ),
-    );
-  }
+  /// Whether a next episode exists in the current season's episode list.
+  bool get _hasNextEpisode =>
+      _seasonEpisodes != null &&
+      _currentEpisodeIndex != null &&
+      _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
 
   Widget _buildError() {
     return Center(
