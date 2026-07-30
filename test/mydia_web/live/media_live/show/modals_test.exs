@@ -117,7 +117,6 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
         quality_filter: nil,
         min_seeders: 0,
         sort_by: :seeders,
-        quality_profile: nil,
         close_after_grab: false
       )
     end
