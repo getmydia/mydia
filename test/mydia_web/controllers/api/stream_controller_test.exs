@@ -149,6 +149,26 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       assert conn.status in [401, 302]
     end
 
+    test "streaming a fixture file runs no ffprobe analysis", %{
+      conn: conn,
+      token: token,
+      media_file: media_file
+    } do
+      conn
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> get("/api/v1/stream/#{media_file.id}")
+
+      reloaded = Mydia.Repo.get!(MediaFile, media_file.id)
+
+      # A fixture file is 10KB of random bytes. If the request analyzes it,
+      # ffprobe's reading of noise replaces the codec fields the test set up
+      # and the streaming decision stops being deterministic.
+      assert reloaded.analyzed_at == media_file.analyzed_at
+      assert reloaded.analysis_attempts == media_file.analysis_attempts
+      assert reloaded.codec == media_file.codec
+      assert reloaded.audio_codec == media_file.audio_codec
+    end
+
     test "sets correct MIME type for different file extensions", %{conn: _conn, token: token} do
       test_files = [
         {".mp4", "mp4", "h264", "aac", "video/mp4"},
