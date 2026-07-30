@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/theme/depth_tokens.dart';
 import 'control_button.dart';
 
 /// Volume control for the panel's left group: a mute toggle and an
@@ -8,7 +9,7 @@ import 'control_button.dart';
 ///
 /// The slider is not hover-revealed. Hiding a control until the pointer finds
 /// it costs discoverability for no real estate gain in a panel this size.
-class VolumeSurface extends StatelessWidget {
+class VolumeSurface extends StatefulWidget {
   /// Current volume, 0..100 (media_kit's scale).
   final double volume;
 
@@ -36,9 +37,31 @@ class VolumeSurface extends StatelessWidget {
   /// bought nothing but ~33% less slider travel.
   static const double sliderWidth = 72.0;
 
+  /// Track height at rest. Matches `ProgressBarSurface`'s own resting track
+  /// — this slider used to be a lone 3px hairline at 0.25 alpha, the exact
+  /// geometry that was the original defect on the scrubber before it was
+  /// fixed; sitting in the same row as that fixed scrubber made the
+  /// mismatch obvious.
+  static const double restTrackHeight = 6.0;
+
+  /// Track height while hovered, mirroring `ProgressBarSurface`'s own
+  /// hover growth.
+  static const double activeTrackHeight = 8.0;
+
+  /// Inactive (unfilled) track alpha, brought up from the original 0.25 to
+  /// the scrubber's own secondary-layer alpha for the same legibility gain.
+  static const double inactiveTrackAlpha = 0.40;
+
+  @override
+  State<VolumeSurface> createState() => _VolumeSurfaceState();
+}
+
+class _VolumeSurfaceState extends State<VolumeSurface> {
+  bool _hovering = false;
+
   IconData get _glyph {
-    if (volume == 0) return Icons.volume_off_rounded;
-    if (volume < 50) return Icons.volume_down_rounded;
+    if (widget.volume == 0) return Icons.volume_off_rounded;
+    if (widget.volume < 50) return Icons.volume_down_rounded;
     return Icons.volume_up_rounded;
   }
 
@@ -48,29 +71,48 @@ class VolumeSurface extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ControlButton(
-          key: muteKey,
+          key: VolumeSurface.muteKey,
           icon: _glyph,
           iconSize: 20,
           size: 40,
-          tooltip: volume == 0 ? 'Unmute' : 'Mute',
-          onTap: onToggleMute,
+          tooltip: widget.volume == 0 ? 'Unmute' : 'Mute',
+          onTap: widget.onToggleMute,
         ),
-        SizedBox(
-          key: sliderKey,
-          width: sliderWidth,
-          child: SliderTheme(
-            data: SliderThemeData(
-              trackHeight: 3,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-              activeTrackColor: Colors.white,
-              inactiveTrackColor: Colors.white.withValues(alpha: 0.25),
-              thumbColor: Colors.white,
-              overlayColor: Colors.white.withValues(alpha: 0.2),
-            ),
-            child: Slider(
-              value: (volume / 100.0).clamp(0.0, 1.0),
-              onChanged: (v) => onVolumeChanged(v * 100.0),
+        MouseRegion(
+          onEnter: (_) => setState(() => _hovering = true),
+          onExit: (_) => setState(() => _hovering = false),
+          child: SizedBox(
+            key: VolumeSurface.sliderKey,
+            width: VolumeSurface.sliderWidth,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(
+                end: _hovering
+                    ? VolumeSurface.activeTrackHeight
+                    : VolumeSurface.restTrackHeight,
+              ),
+              duration: DepthTokens.motionFast,
+              curve: DepthTokens.curveStandard,
+              builder: (context, trackHeight, _) {
+                return SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: trackHeight,
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 12),
+                    activeTrackColor: Colors.white,
+                    inactiveTrackColor: Colors.white.withValues(
+                      alpha: VolumeSurface.inactiveTrackAlpha,
+                    ),
+                    thumbColor: Colors.white,
+                    overlayColor: Colors.white.withValues(alpha: 0.2),
+                  ),
+                  child: Slider(
+                    value: (widget.volume / 100.0).clamp(0.0, 1.0),
+                    onChanged: (v) => widget.onVolumeChanged(v * 100.0),
+                  ),
+                );
+              },
             ),
           ),
         ),

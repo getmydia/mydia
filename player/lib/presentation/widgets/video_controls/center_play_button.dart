@@ -24,6 +24,22 @@ class CenterPlayButton extends StatelessWidget {
     this.iconSize = 56,
   });
 
+  /// Shadow behind the glyph.
+  ///
+  /// Every other control's "no per-glyph shadow" rule (see
+  /// `ControlButton`'s doc comment) assumes a glass panel sits behind it —
+  /// this button is the one exception: it paints directly on live video,
+  /// with no backing surface at all. Without a shadow, a bright frame (snow,
+  /// sky, a white title card) washes a plain white glyph out to 1:1
+  /// contrast, on the one control mobile relies on most. Held to WCAG SC
+  /// 1.4.11 (non-text, 3:1) against a worst-case pure-white frame — see
+  /// `glass_legibility_test.dart`'s `CenterPlayButton` case, which fails if
+  /// this shadow is removed or weakened.
+  static const Shadow glyphShadow = Shadow(
+    color: Color(0x99000000), // black @ 0.6
+    blurRadius: 8,
+  );
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<bool>(
@@ -63,6 +79,7 @@ class CenterPlayButton extends StatelessWidget {
                     key: ValueKey(isPlaying),
                     size: iconSize,
                     color: Colors.white,
+                    shadows: const [glyphShadow],
                   ),
                 ),
               ),

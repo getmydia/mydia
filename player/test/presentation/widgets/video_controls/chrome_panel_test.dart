@@ -30,23 +30,30 @@ class _InitProbeState extends State<_InitProbe> {
 
 void main() {
   group('PanelMetrics', () {
-    test('desktop: capped at 720, 60% of width, 48px offset', () {
+    test('desktop: capped at 720, 70% of width, 48px offset', () {
       final wide = PanelMetrics.forWidth(1600);
       expect(wide.maxWidth, 720);
       expect(wide.bottomOffset, 48);
       expect(wide.showVolume, isTrue);
       expect(wide.touchTargets, isFalse);
 
-      // 60% of 1000 is 600, below the 720 cap.
-      expect(PanelMetrics.forWidth(1000).maxWidth, 600);
+      // 70% of 1000 is 700, below the 720 cap.
+      expect(PanelMetrics.forWidth(1000).maxWidth, 700);
     });
 
-    test('tablet: capped at 640, 80% of width, 32px offset', () {
-      final tablet = PanelMetrics.forWidth(800);
-      expect(tablet.maxWidth, 640);
-      expect(tablet.bottomOffset, 32);
-      expect(tablet.showVolume, isTrue);
-    });
+    test(
+      'tablet: capped at 640, 90% of width, 32px offset (650px '
+      'discriminates 90% from the old 80%: 0.8*650=520, 0.9*650=585, '
+      'both under the 640 cap, unlike 800px which hits the cap either way)',
+      () {
+        final tablet = PanelMetrics.forWidth(800);
+        expect(tablet.maxWidth, 640);
+        expect(tablet.bottomOffset, 32);
+        expect(tablet.showVolume, isTrue);
+
+        expect(PanelMetrics.forWidth(650).maxWidth, 585);
+      },
+    );
 
     test('mobile: full width less margins, 24px offset, no volume', () {
       final mobile = PanelMetrics.forWidth(400);
@@ -62,6 +69,26 @@ void main() {
       expect(PanelMetrics.forWidth(600).bottomOffset, 32);
       expect(PanelMetrics.forWidth(599).bottomOffset, 24);
     });
+
+    test('horizontalPadding: 12 on mobile/tablet, 20 on desktop', () {
+      expect(PanelMetrics.forWidth(400).horizontalPadding, 12);
+      expect(PanelMetrics.forWidth(599).horizontalPadding, 12);
+      expect(PanelMetrics.forWidth(800).horizontalPadding, 12);
+      expect(PanelMetrics.forWidth(899).horizontalPadding, 12);
+      expect(PanelMetrics.forWidth(900).horizontalPadding, 20);
+      expect(PanelMetrics.forWidth(1600).horizontalPadding, 20);
+    });
+
+    test(
+      'showQuality: true only at the desktop tier (900+), never below',
+      () {
+        expect(PanelMetrics.forWidth(400).showQuality, isFalse);
+        expect(PanelMetrics.forWidth(599).showQuality, isFalse);
+        expect(PanelMetrics.forWidth(899).showQuality, isFalse);
+        expect(PanelMetrics.forWidth(900).showQuality, isTrue);
+        expect(PanelMetrics.forWidth(1600).showQuality, isTrue);
+      },
+    );
   });
 
   group('ChromePanel', () {

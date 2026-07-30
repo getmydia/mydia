@@ -238,7 +238,8 @@ abstract final class DepthTokens {
   /// flat-slab look this redesign removes. Per the human-ruled direction,
   /// that gap is closed with a small, targeted text shadow on the timecodes
   /// only (not on any icon), implemented alongside the timecodes themselves
-  /// (Task 12's `_ScrubberRow`) rather than here — `glass_legibility_test`
+  /// (`_ScrubberRow` in `playback_chrome.dart`) rather than here —
+  /// `glass_legibility_test`
   /// models that shadow's contribution analytically so the combined
   /// fill+shadow contract is locked in and verified even though the shadow
   /// paint code lives elsewhere.

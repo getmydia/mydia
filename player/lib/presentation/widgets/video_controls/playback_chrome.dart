@@ -33,15 +33,12 @@ class ChromeVisibility extends StatefulWidget {
 
   final Duration autoHide;
 
-  final ValueChanged<bool>? onVisibilityChanged;
-
   const ChromeVisibility({
     super.key,
     required this.isPlaying,
     required this.child,
     this.isSeeking = false,
     this.autoHide = const Duration(seconds: 3),
-    this.onVisibilityChanged,
   });
 
   static const Key contentKey = Key('chrome-content');
@@ -161,7 +158,6 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   void _show() {
     if (!_visible) {
       setState(() => _visible = true);
-      _notifyVisibility(true);
     }
     _controller.forward();
     _restartTimer();
@@ -171,39 +167,11 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _hideTimer?.cancel();
     if (_visible) {
       setState(() => _visible = false);
-      _notifyVisibility(false);
     }
     _controller.reverse();
   }
 
   void _toggle() => _visible ? _hide() : _show();
-
-  /// [_show]/[_hide] can run synchronously from [didUpdateWidget] (e.g.
-  /// playback pausing while hidden), itself called during an ancestor's
-  /// build/element-update phase — a consumer callback that calls `setState`
-  /// in response (the obvious Task 13 implementation: cursor, system UI,
-  /// wakelock) would throw "setState() called during build". Deferring
-  /// unconditionally, not only on that path, means callers never need to
-  /// know which call site triggered it.
-  ///
-  /// The `mounted` check has to live *inside* the deferred closure, not
-  /// guard the call to `addPostFrameCallback` itself: `mounted` is true at
-  /// scheduling time (this method only ever runs while the State is alive)
-  /// but the whole reason to defer is that the frame's remaining work — and
-  /// possibly disposal of this State and its ancestors, e.g. navigating away
-  /// from the player — happens between scheduling and firing. Without this
-  /// check, a callback into an already-disposed consumer that calls
-  /// `setState` in response throws "setState() called after dispose()" —
-  /// trading the build-phase crash this method exists to prevent for a
-  /// narrower, but equally real, post-dispose one.
-  void _notifyVisibility(bool visible) {
-    final callback = widget.onVisibilityChanged;
-    if (callback == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      callback(visible);
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -328,14 +296,20 @@ class ChromeSlide extends StatelessWidget {
 /// centre transport and glass bar in `custom_video_controls.dart` — with two
 /// objects under a single visibility timer and animation.
 ///
-/// **Forward note for Task 13:** [ChromeVisibility]'s background
-/// tap-to-toggle catcher is a full-screen, opaque `GestureDetector`, painted
-/// as this widget's topmost layer — it claims every tap chrome content
-/// doesn't, including ones meant for anything stacked *below*
-/// [PlaybackChrome], e.g. `gesture_controls.dart`'s double-tap ±10s (which
-/// the `CenterPlayButton` comment below already relies on as the reason
-/// mobile has no floating skip buttons). Compose the two so double-tap still
-/// reaches `GestureControls`; not attempted here.
+/// **Why double-tap ±10s (`gesture_controls.dart`) still works through
+/// [ChromeVisibility]'s background tap-to-toggle catcher:** that catcher is
+/// a full-screen, opaque `GestureDetector` and is the *first* child of this
+/// widget's `Stack` (see `ChromeVisibility.build`), i.e. the bottom-most
+/// layer, not the topmost — it only claims a tap that nothing painted above
+/// it wants. In production, [PlaybackChrome] is never a `Stack` sibling of
+/// `GestureControls`; it is the `controls` builder media_kit's `Video`
+/// renders via `Positioned.fill` inside `Video`'s own internal `Stack`, and
+/// `GestureControls` wraps that entire `Video` as its child, using
+/// `HitTestBehavior.translucent` so its ancestor double-tap recognizer still
+/// enters the arena underneath. `gesture_chrome_composition_test.dart`
+/// exercises exactly this nesting against a fake platform player and would
+/// fail if either the Stack order or `GestureControls`' hit-test behaviour
+/// regressed. Do not restructure this nesting without re-reading that test.
 class PlaybackChrome extends StatefulWidget {
   final Player player;
   final String? title;
@@ -356,8 +330,6 @@ class PlaybackChrome extends StatefulWidget {
   final String? selectedSubtitleLabel;
   final String? selectedQualityLabel;
 
-  final ValueChanged<bool>? onVisibilityChanged;
-
   const PlaybackChrome({
     super.key,
     required this.player,
@@ -376,7 +348,6 @@ class PlaybackChrome extends StatefulWidget {
     this.selectedAudioLabel,
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,
-    this.onVisibilityChanged,
   });
 
   @override
@@ -408,7 +379,6 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
         return ChromeVisibility(
           isPlaying: snapshot.data ?? false,
           isSeeking: _seeking,
-          onVisibilityChanged: widget.onVisibilityChanged,
           child: SafeArea(
             child: Stack(
               children: [
@@ -483,7 +453,16 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                         secondary: SecondaryCluster(
                           onSubtitleTap: widget.onSubtitleTap,
                           onAudioTap: widget.onAudioTap,
-                          onQualityTap: widget.onQualityTap,
+                          // Gated on the panel's own tier, not passed through
+                          // bare: a 4th 40px button raises SecondaryCluster's
+                          // floor from 120 to 160px each side, which only the
+                          // desktop tier's width budget can absorb (see
+                          // PanelMetrics.showQuality's dartdoc). Below that,
+                          // a narrow web window falls back to the same
+                          // 3-button layout native mobile/tablet already
+                          // show, since onQualityTap is web-only regardless.
+                          onQualityTap:
+                              metrics.showQuality ? widget.onQualityTap : null,
                           onFullscreenTap: widget.onFullscreenTap,
                           audioTrackCount: widget.audioTrackCount,
                           subtitleTrackCount: widget.subtitleTrackCount,
@@ -529,21 +508,29 @@ class _ScrubberRow extends StatelessWidget {
     required this.onSeekEnd,
   });
 
-  /// Both timecodes share this style — deliberately identical. The former
-  /// `bottom_controls_bar.dart` styled elapsed at full white and remaining at
-  /// `white @ 0.7`; that asymmetry measured as the single worst-case contrast
-  /// on the whole panel (2.32:1) in Task 10's audit.
+  /// Both timecodes share this style — deliberately identical. An earlier
+  /// version styled elapsed at full white and remaining dimmer; that
+  /// asymmetry measured as the single worst-case contrast on the whole
+  /// panel (2.32:1) in an accessibility audit of this panel.
+  ///
+  /// `color` must stay fully opaque: `glass_legibility_test.dart` models the
+  /// contrast contract assuming an opaque foreground composited with this
+  /// shadow, and a translucent color (even a small drop, e.g. white @ 0.55)
+  /// composites with the fill/shadow behind it and measures under the WCAG
+  /// SC 1.4.3 text floor of 4.5:1 despite the test passing on the wrong
+  /// (opaque) model — see that file's CenterPlayButton/timecode cases for
+  /// why the drift went uncaught before.
   ///
   /// The shadow is load-bearing, not decorative: `glass_legibility_test.dart`
-  /// measures the fill alone at this row's height as 2.78:1 — under the WCAG
-  /// SC 1.4.3 text floor of 4.5:1 — and 10.68:1 with this exact shadow
+  /// measures the fill alone at this row's height as under the WCAG SC 1.4.3
+  /// text floor of 4.5:1 — and comfortably above it with this exact shadow
   /// composited in. Never apply this treatment to an icon; row 1's icons stay
   /// unshadowed, held to the looser 3:1 non-text floor instead (see
   /// `DepthTokens.playerChromeFillTopAlpha`'s doc comment).
   static const TextStyle _timeStyle = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w500,
-    color: Color(0x8CFFFFFF), // white @ 0.55
+    color: Colors.white,
     fontFeatures: [FontFeature.tabularFigures()],
     shadows: [
       Shadow(color: Color(0x99000000), blurRadius: 4), // black @ 0.6, 4px

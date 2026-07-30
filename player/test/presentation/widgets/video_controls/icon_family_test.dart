@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 const _chromePaths = <String>[
   'lib/presentation/widgets/video_controls',
   'lib/presentation/widgets/gesture_controls.dart',
+  'lib/presentation/widgets/up_next_overlay.dart',
 ];
 
 /// `Icons.foo` / `Icons.foo_bar_10` references.

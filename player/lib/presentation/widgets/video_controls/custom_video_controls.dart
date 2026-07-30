@@ -8,7 +8,6 @@ import 'playback_chrome.dart';
 /// All chrome now lives in [PlaybackChrome]; this file is only the adapter
 /// between media_kit's builder signature and that widget.
 Widget Function(VideoState) customVideoControlsBuilderWithCallback({
-  ValueChanged<bool>? onVisibilityChanged,
   String? title,
   VoidCallback? onBack,
   Widget? castAction,
@@ -42,10 +41,5 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
         selectedAudioLabel: selectedAudioLabel,
         selectedSubtitleLabel: selectedSubtitleLabel,
         selectedQualityLabel: selectedQualityLabel,
-        onVisibilityChanged: onVisibilityChanged,
       );
 }
-
-/// Minimal builder for call sites that need no callbacks.
-Widget customVideoControlsBuilder(VideoState state) =>
-    PlaybackChrome(player: state.widget.controller.player);
