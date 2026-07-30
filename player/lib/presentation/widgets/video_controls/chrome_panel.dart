@@ -142,17 +142,40 @@ class ChromePanel extends StatelessWidget {
                   // Left and right groups are given equal flex so the
                   // transport stays optically centered regardless of how wide
                   // either side happens to be.
+                  //
+                  // Each slot's content is wrapped in a scale-down FittedBox:
+                  // at generous widths (desktop/tablet) the content already
+                  // fits and the FittedBox is a no-op (scale 1.0). Below
+                  // roughly 480px, `metrics.maxWidth` leaves each Expanded
+                  // slot narrower than a fully-populated `SecondaryCluster`'s
+                  // natural width (three 40px glyphs + gaps == 128px), which
+                  // — without this — is a real `RenderFlex` overflow: caught
+                  // by this task's mobile golden, reachable on most phones in
+                  // portrait (see PlaybackChrome's real call site, which
+                  // always wires all three SecondaryCluster callbacks on
+                  // mobile). Scaling down keeps every glyph visible and
+                  // tappable (FittedBox's Transform is hit-test-aware)
+                  // instead of silently clipping the rightmost buttons behind
+                  // GlassSurface's ClipRRect.
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: _volumeSlot(),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: _volumeSlot(),
+                      ),
                     ),
                   ),
                   transport,
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: secondary ?? const SizedBox.shrink(),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: secondary ?? const SizedBox.shrink(),
+                      ),
                     ),
                   ),
                 ],
