@@ -58,7 +58,8 @@ defmodule Mydia.Jobs.LibraryScanner do
   end
 
   @doc """
-  Random 0 to 30 minute delay, in seconds, for automatically enqueued scans.
+  Random delay for automatically enqueued scans: 1 second to 30 minutes,
+  returned in seconds.
 
   Spreads metadata-relay load across self-hosted instances whose crons and
   restarts cluster on the same moments. Applied via Oban `schedule_in` so the
