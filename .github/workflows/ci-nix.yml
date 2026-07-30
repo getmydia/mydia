@@ -38,6 +38,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The nix eval below only proves player/.fvmrc agrees with nixpkgs. It
+      # cannot see a stale `flutter-version:` literal re-added to a workflow --
+      # the exact regression this pin exists to prevent. So scan every file that
+      # can select an SDK (workflows, Dockerfiles, compose files, nix modules,
+      # scripts) for a version literal sitting in Flutter context. Dart package
+      # manifests are deliberately out of scope: their constraints pin packages,
+      # not the SDK this repo builds with. Needs only the checkout, so it runs
+      # first and fails in seconds.
+      - name: Assert no other build or CI file names a Flutter version
+        run: |
+          set -euo pipefail
+          hits="$(
+            git ls-files -z \
+                '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
+                'scripts/*' 'dev' \
+              | xargs -0 grep -HnIiE 'flutter' \
+              | grep -E '[0-9]+\.[0-9]+|[Ff]lutter[0-9]' \
+              || true
+          )"
+          if [ -n "$hits" ]; then
+            echo "::error::A Flutter version literal escaped player/.fvmrc"
+            echo "$hits"
+            echo
+            echo "player/.fvmrc is the single source of truth. Read from it instead:"
+            echo "  workflows   -> subosito/flutter-action with flutter-version-file"
+            echo "  Dockerfiles -> jq -r .flutter player/.fvmrc"
+            echo "  nix         -> import player/flutter-version.nix"
+            exit 1
+          fi
+          echo "OK: player/.fvmrc is the only file naming a Flutter version."
+
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
 
