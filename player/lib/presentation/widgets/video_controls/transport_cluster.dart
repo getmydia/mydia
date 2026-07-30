@@ -21,6 +21,20 @@ class TransportSurface extends StatelessWidget {
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
 
+  /// Renders only the play/pause button (48px) — no ±10s seek, no episode
+  /// nav — regardless of which callbacks are supplied. Used below the mobile
+  /// breakpoint (`PanelMetrics.touchTargets`): ±10s already has a gesture
+  /// equivalent there (double-tap, see `gesture_controls.dart`), and the
+  /// in-bar transport must be narrow enough to (a) let `ChromePanel`'s row-1
+  /// stay genuinely, symmetrically centered via equal-flex `Expanded` on both
+  /// sides — not the narrower "flex: 0" trick, which pinned the transport up
+  /// to 187.5px off-center at some mobile widths — and (b) leave
+  /// `SecondaryCluster` enough of its own equal-flex share to render at full
+  /// (40px) size. Episode nav specifically has no touch-reachable
+  /// replacement once dropped here; see the wiring comment in
+  /// `playback_chrome.dart` for what that means and what still needs a home.
+  final bool compact;
+
   const TransportSurface({
     super.key,
     required this.isPlaying,
@@ -29,6 +43,7 @@ class TransportSurface extends StatelessWidget {
     this.onForward10,
     this.onPreviousEpisode,
     this.onNextEpisode,
+    this.compact = false,
   });
 
   static const Key playPauseKey = Key('transport-play-pause');
@@ -40,8 +55,45 @@ class TransportSurface extends StatelessWidget {
   /// Uniform gap between transport glyphs.
   static const double gap = 8.0;
 
+  /// The play/pause glyph, cross-fading and scaling between states.
+  ///
+  /// Extracted so [compact] mode can render *only* this — no seek/episode
+  /// buttons flanking it — while sharing the exact same transition as the
+  /// full transport.
+  ///
+  /// AnimatedSwitcher is keyed on the glyph so play <-> pause cross-fades
+  /// and scales rather than snapping. Deliberately not AnimatedIcons
+  /// .play_pause: that ships its own glyph style and would break the
+  /// _rounded family coherence the icon_family_test enforces.
+  Widget _playPause() {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 120),
+      transitionBuilder: (child, animation) => ScaleTransition(
+        scale: animation,
+        child: FadeTransition(opacity: animation, child: child),
+      ),
+      // The switching key sits on the wrapper, not the button, so
+      // `find.byKey(playPauseKey)` keeps resolving to the ControlButton.
+      child: KeyedSubtree(
+        key: ValueKey<bool>(isPlaying),
+        child: ControlButton(
+          key: playPauseKey,
+          icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          size: 48,
+          iconSize: 30,
+          tooltip: isPlaying ? 'Pause' : 'Play',
+          onTap: onPlayPause,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return _playPause();
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -65,30 +117,7 @@ class TransportSurface extends StatelessWidget {
           onTap: onBack10,
         ),
         const SizedBox(width: gap),
-        // AnimatedSwitcher is keyed on the glyph so play <-> pause cross-fades
-        // and scales rather than snapping. Deliberately not AnimatedIcons
-        // .play_pause: that ships its own glyph style and would break the
-        // _rounded family coherence the icon_family_test enforces.
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 120),
-          transitionBuilder: (child, animation) => ScaleTransition(
-            scale: animation,
-            child: FadeTransition(opacity: animation, child: child),
-          ),
-          // The switching key sits on the wrapper, not the button, so
-          // `find.byKey(playPauseKey)` keeps resolving to the ControlButton.
-          child: KeyedSubtree(
-            key: ValueKey<bool>(isPlaying),
-            child: ControlButton(
-              key: playPauseKey,
-              icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              size: 48,
-              iconSize: 30,
-              tooltip: isPlaying ? 'Pause' : 'Play',
-              onTap: onPlayPause,
-            ),
-          ),
-        ),
+        _playPause(),
         const SizedBox(width: gap),
         ControlButton(
           key: forward10Key,
@@ -122,6 +151,9 @@ class TransportCluster extends StatelessWidget {
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
 
+  /// Forwarded to [TransportSurface.compact].
+  final bool compact;
+
   const TransportCluster({
     super.key,
     required this.player,
@@ -129,6 +161,7 @@ class TransportCluster extends StatelessWidget {
     required this.onForward10,
     this.onPreviousEpisode,
     this.onNextEpisode,
+    this.compact = false,
   });
 
   @override
@@ -145,6 +178,7 @@ class TransportCluster extends StatelessWidget {
           onForward10: onForward10,
           onPreviousEpisode: onPreviousEpisode,
           onNextEpisode: onNextEpisode,
+          compact: compact,
         );
       },
     );

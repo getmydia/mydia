@@ -302,7 +302,7 @@ void main() {
 
     testWidgets(
         'subtitles, audio, quality, and fullscreen stay left-to-right '
-        'ordered with uniform 4px gaps', (tester) async {
+        'ordered with uniform gaps of SecondaryCluster.gap', (tester) async {
       await tester.pumpWidget(
         _host(
           SecondaryCluster(
@@ -324,9 +324,13 @@ void main() {
       final fullscreenRect =
           tester.getRect(find.byKey(SecondaryCluster.fullscreenKey));
 
-      expect(subtitlesRect.right, lessThan(audioRect.left));
-      expect(audioRect.right, lessThan(qualityRect.left));
-      expect(qualityRect.right, lessThan(fullscreenRect.left));
+      // Not strict `lessThan`: `SecondaryCluster.gap` was trimmed to 0 to
+      // help close a real `ChromePanel` overflow (see the constant's own
+      // dartdoc and `chrome_panel_overflow_test.dart`), so adjacent buttons
+      // may legitimately share an edge rather than have a visible gap.
+      expect(subtitlesRect.right, lessThanOrEqualTo(audioRect.left));
+      expect(audioRect.right, lessThanOrEqualTo(qualityRect.left));
+      expect(qualityRect.right, lessThanOrEqualTo(fullscreenRect.left));
 
       expect(
         audioRect.left - subtitlesRect.right,

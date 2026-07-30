@@ -448,23 +448,30 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                           onBack10: () => _seekBy(const Duration(seconds: -10)),
                           onForward10: () =>
                               _seekBy(const Duration(seconds: 10)),
-                          // Dropped from the in-bar transport at the mobile
-                          // breakpoint (`metrics.touchTargets`): the panel is
-                          // already at its tightest width there, and mobile
-                          // has its own path to adjacent episodes
-                          // (`UpNextOverlay`) instead of reaching into this
-                          // bar — the same reasoning the class doc above
-                          // already gives for why mobile has no floating skip
-                          // buttons either. Wiring both prev/next AND the
-                          // full `SecondaryCluster` at a ~360px phone width
-                          // doesn't fit at natural size; see
-                          // `chrome_panel_overflow_test.dart`.
-                          onPreviousEpisode: metrics.touchTargets
-                              ? null
-                              : widget.onPreviousEpisode,
-                          onNextEpisode: metrics.touchTargets
-                              ? null
-                              : widget.onNextEpisode,
+                          onPreviousEpisode: widget.onPreviousEpisode,
+                          onNextEpisode: widget.onNextEpisode,
+                          // Below the mobile breakpoint the in-bar transport
+                          // is play/pause only (see
+                          // `TransportSurface.compact`'s dartdoc for the full
+                          // layout reasoning). `onPreviousEpisode`/
+                          // `onNextEpisode` above are still passed through
+                          // unconditionally — `compact` ignores them
+                          // regardless — rather than gated to null here, so
+                          // they reappear the moment the breakpoint is
+                          // crossed without this widget needing to know why.
+                          //
+                          // NOTE, this is a real, currently-unresolved gap:
+                          // unlike ±10s seek (which has an explicit gesture
+                          // replacement, double-tap in
+                          // `gesture_controls.dart`), episode nav has no
+                          // touch-reachable equivalent once it's dropped
+                          // from the bar. `UpNextOverlay` only offers *next*,
+                          // and only near an episode's end; there is no
+                          // touch path to the *previous* episode at all
+                          // below this breakpoint. See this task's report for
+                          // the open follow-up; do not read this comment as
+                          // "handled".
+                          compact: metrics.touchTargets,
                         ),
                         // Unconditional per ChromePanel's `volume` dartdoc:
                         // it already gates visibility internally via

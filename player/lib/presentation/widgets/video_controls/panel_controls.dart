@@ -25,7 +25,13 @@ class VolumeSurface extends StatelessWidget {
   static const Key muteKey = Key('volume-mute');
   static const Key sliderKey = Key('volume-slider');
 
-  static const double sliderWidth = 72.0;
+  /// Trimmed from 72 to close a real overflow: at the 600px tablet
+  /// breakpoint with `metrics.showVolume` true, this slot's equal-flex
+  /// `Expanded` share is only 92px (see `chrome_panel_overflow_test.dart`),
+  /// and 40 (mute button) + 72 would not fit. 52 is the widest value that
+  /// still fits at 600px (`40 + 52 == 92`); every wider viewport in the
+  /// tablet/desktop range has more room than that.
+  static const double sliderWidth = 52.0;
 
   IconData get _glyph {
     if (volume == 0) return Icons.volume_off_rounded;
@@ -158,7 +164,13 @@ class SecondaryCluster extends StatelessWidget {
   static const Key qualityKey = Key('secondary-quality');
   static const Key fullscreenKey = Key('secondary-fullscreen');
 
-  static const double gap = 4.0;
+  /// Trimmed from 4 to 0 to close real overflows in `ChromePanel`'s
+  /// equal-flex right slot, most severely at the ~600–689px tablet
+  /// breakpoint with episode-nav wired (3 buttons at 40px is already 120px;
+  /// 0 gaps is the narrowest this cluster can get without shrinking a
+  /// button below its own 40px spec — see `chrome_panel_overflow_test.dart`
+  /// for exactly which widths this does and does not close).
+  static const double gap = 0.0;
 
   @override
   Widget build(BuildContext context) {

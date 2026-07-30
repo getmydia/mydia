@@ -75,23 +75,26 @@ Widget _panel(double width) {
                 metrics: metrics,
                 // Forced so images do not vary with the host platform.
                 tier: PlayerGlassTier.full,
-                // Episode nav wired on desktop/tablet, matching real usage
-                // whenever adjacent episodes exist (`PlaybackChrome` always
-                // passes them through there) — omitting them, as an earlier
-                // version of this file did, understated real transport width
-                // by 104px and hid how close those two tiers sit to their own
-                // limits. Omitted at the mobile breakpoint
-                // (`metrics.touchTargets`) because `PlaybackChrome` itself
-                // now drops them there (see the wiring comment in
-                // `playback_chrome.dart`) — the panel never actually receives
-                // them at this width in the shipped app, so wiring them here
-                // would freeze a composition production doesn't show.
-                // `chrome_panel_overflow_test.dart` is the CI-visible guard
-                // for the mobile-width case this golden captures instead.
+                // Episode nav wired unconditionally, matching real usage
+                // whenever adjacent episodes exist (`PlaybackChrome` now
+                // always passes both callbacks through — see its wiring
+                // comment) — omitting them, as an earlier version of this
+                // file did, understated real transport width by 104px and
+                // hid how close the tablet/desktop tiers sit to their own
+                // limits. `compact` (not the callbacks) is what actually
+                // drops them below the mobile breakpoint: below that width
+                // `PlaybackChrome` passes `compact: metrics.touchTargets`
+                // to `TransportCluster`, and `TransportSurface.compact`
+                // ignores every callback except play/pause regardless of
+                // whether it was supplied — see that flag's own dartdoc for
+                // the full layout reasoning. `chrome_panel_overflow_test
+                // .dart` is the CI-visible guard for exactly which widths
+                // this composition does and does not fit at.
                 transport: TransportSurface(
                   isPlaying: true,
-                  onPreviousEpisode: metrics.touchTargets ? null : () {},
-                  onNextEpisode: metrics.touchTargets ? null : () {},
+                  onPreviousEpisode: () {},
+                  onNextEpisode: () {},
+                  compact: metrics.touchTargets,
                 ),
                 volume: metrics.showVolume
                     ? VolumeSurface(

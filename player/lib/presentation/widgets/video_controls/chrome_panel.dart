@@ -139,36 +139,37 @@ class ChromePanel extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  // Left and right groups are given equal flex so the
-                  // transport stays optically centered regardless of how wide
-                  // either side happens to be — but only when there's a real
-                  // volume slot competing for that space. Below the mobile
-                  // breakpoint (`!metrics.showVolume`) the left slot is
-                  // always offstage (see `_volumeSlot`), so reserving it an
-                  // equal `Expanded` share still costs `secondary` half the
-                  // leftover width for nothing: at a 400px viewport that's
-                  // ~88px handed to an invisible placeholder while
-                  // `SecondaryCluster`'s real, always-visible 3 buttons (128px
-                  // natural width) get squeezed into the other ~88px — a real
-                  // `RenderFlex` overflow on real phones (most are under the
-                  // ~480px this needs), not just a golden-test artifact.
+                  // Left and right groups are given equal flex — always,
+                  // regardless of `metrics.showVolume` — so the transport
+                  // stays *exactly* optically centered: two equal-flex
+                  // `Expanded`s are, by construction, always the same width,
+                  // so `transport`'s own center always lands on the panel's
+                  // center, whether or not the left side has real content.
                   //
-                  // Below the breakpoint, `flex: 0` (rather than swapping to
-                  // a differently-shaped widget, e.g. omitting `Expanded`
-                  // entirely) makes this slot inflexible — sized to its own
-                  // content, which is unconditionally offstage there, so it
-                  // measures zero width and `secondary`'s `Expanded` gets the
-                  // entire remainder. `Expanded`/`Align` stay the same widget
-                  // *types* at this position across a breakpoint crossing;
-                  // only their `flex`/`alignment` values change, which is a
-                  // parent-data update, not an element replacement — critical
-                  // because swapping types here would tear down and remount
-                  // `_volumeSlot()`'s `Visibility` subtree, defeating its
-                  // whole `maintainState: true` point (see the regression
-                  // test this broke: "keeps the volume widget mounted across
-                  // a showVolume breakpoint crossing").
+                  // An earlier version special-cased `!metrics.showVolume` to
+                  // `flex: 0` (inflexible, sized to its offstage — zero-width
+                  // — content) to stop the empty slot "wasting" half the
+                  // leftover width on nothing. That fixed one real overflow
+                  // (`SecondaryCluster` squeezed into the other, smaller
+                  // half) by introducing a worse one: giving `secondary` the
+                  // *entire* remainder pins it hard against `transport`,
+                  // dragging the whole transport group off-center by however
+                  // much of the leftover width `secondary` doesn't use — up
+                  // to ~187.5px at some mobile widths, a real, measured
+                  // regression, not a rounding error. Equal-flex `Expanded` on
+                  // both sides never does that: at worst, `secondary`
+                  // overflows its own (equal) slot and throws, which is a
+                  // loud, honest failure instead of a silent, ever-growing
+                  // miscentering.
+                  //
+                  // What actually fixes the mobile-width overflow is
+                  // upstream: `PlaybackChrome` now passes a `compact`
+                  // (play/pause-only, 48px) `transport` below the mobile
+                  // breakpoint instead of the full 152px cluster, which is
+                  // enough headroom for this equal-flex split to hold. See
+                  // `chrome_panel_overflow_test.dart` for exactly which
+                  // widths that does and does not close.
                   Expanded(
-                    flex: metrics.showVolume ? 1 : 0,
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: _volumeSlot(),

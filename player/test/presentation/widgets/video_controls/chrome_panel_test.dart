@@ -65,7 +65,13 @@ void main() {
   });
 
   group('ChromePanel', () {
-    Widget host(PanelMetrics metrics, {Widget? volume}) => MaterialApp(
+    Widget host(
+      PanelMetrics metrics, {
+      Widget? volume,
+      double transportWidth = 200,
+      double secondaryWidth = 120,
+    }) =>
+        MaterialApp(
           home: Scaffold(
             body: Stack(
               children: [
@@ -73,13 +79,19 @@ void main() {
                 ChromePanel(
                   metrics: metrics,
                   tier: PlayerGlassTier.full,
-                  transport:
-                      const SizedBox(key: Key('t'), width: 200, height: 48),
+                  transport: SizedBox(
+                    key: const Key('t'),
+                    width: transportWidth,
+                    height: 48,
+                  ),
                   scrubber:
                       const SizedBox(key: Key('s'), width: 300, height: 32),
                   volume: volume,
-                  secondary:
-                      const SizedBox(key: Key('x'), width: 120, height: 40),
+                  secondary: SizedBox(
+                    key: const Key('x'),
+                    width: secondaryWidth,
+                    height: 40,
+                  ),
                 ),
               ],
             ),
@@ -204,37 +216,67 @@ void main() {
       },
     );
 
-    testWidgets(
-      'the transport group is optically centered on the panel, '
-      'even when the side groups are empty or lopsided',
-      (tester) async {
-        // Empty sides: transport centre should equal panel centre.
-        await tester.pumpWidget(host(PanelMetrics.forWidth(1600)));
-        var panelRect = tester.getRect(find.byType(ChromePanel));
-        var transportRect = tester.getRect(find.byKey(const Key('t')));
-        expect(
-          transportRect.center.dx,
-          closeTo(panelRect.center.dx, 0.5),
-        );
+    // Parameterized across every breakpoint tier, including mobile widths —
+    // NOT just 1600px. This is a direct regression test for a real bug: an
+    // earlier `ChromePanel` gave the (empty, below-mobile-breakpoint) volume
+    // slot `flex: 0` instead of the equal `flex: 1` used everywhere else,
+    // which measurably pinned the transport up to 187.5px off-center at some
+    // mobile widths (992px, at width=599) — a defect this test, at 1600px
+    // only, could never have caught, since `showVolume` is true (and both
+    // sides get equal flex regardless) at that width. Testing only the
+    // widest tier and assuming it generalizes down to the narrowest is
+    // exactly the gap that let that regression ship.
+    //
+    // Transport/secondary/volume placeholder sizes here are deliberately
+    // small (well under any real control's natural width) so this test
+    // isolates the *geometry* question (does `ChromePanel`'s own flex layout
+    // keep two equal-width slots?) from the separate *fitting* question
+    // (does specific real content, e.g. `SecondaryCluster`, fit within its
+    // slot at a given width?) — the latter is `chrome_panel_overflow_test
+    // .dart`'s job, across a much finer-grained width matrix.
+    for (final width in <double>[320, 360, 400, 480, 599, 600, 900, 1600]) {
+      testWidgets(
+        'the transport group is optically centered on the panel at '
+        '${width}px, even when the side groups are empty or lopsided',
+        (tester) async {
+          final metrics = PanelMetrics.forWidth(width);
 
-        // Lopsided sides: a wide volume cluster against a narrow secondary
-        // cluster. Equal-flex Expanded groups should still keep the
-        // transport centred because each side gets equal width regardless of
-        // its content's intrinsic size.
-        await tester.pumpWidget(
-          host(
-            PanelMetrics.forWidth(1600),
-            volume: const SizedBox(key: Key('v'), width: 300, height: 40),
-          ),
-        );
-        panelRect = tester.getRect(find.byType(ChromePanel));
-        transportRect = tester.getRect(find.byKey(const Key('t')));
-        expect(
-          transportRect.center.dx,
-          closeTo(panelRect.center.dx, 0.5),
-        );
-      },
-    );
+          // Empty sides: transport centre should equal panel centre.
+          await tester.pumpWidget(
+            host(metrics, transportWidth: 48, secondaryWidth: 40),
+          );
+          var panelRect = tester.getRect(find.byType(ChromePanel));
+          var transportRect = tester.getRect(find.byKey(const Key('t')));
+          expect(
+            transportRect.center.dx,
+            closeTo(panelRect.center.dx, 0.5),
+            reason: 'empty sides at ${width}px',
+          );
+
+          // Lopsided sides: a wider volume cluster against a narrower
+          // secondary cluster (still small enough to fit at every tested
+          // width, including the narrowest mobile one). Equal-flex Expanded
+          // groups should still keep the transport centred because each
+          // side gets equal width regardless of its content's intrinsic
+          // size.
+          await tester.pumpWidget(
+            host(
+              metrics,
+              transportWidth: 48,
+              secondaryWidth: 40,
+              volume: const SizedBox(key: Key('v'), width: 60, height: 40),
+            ),
+          );
+          panelRect = tester.getRect(find.byType(ChromePanel));
+          transportRect = tester.getRect(find.byKey(const Key('t')));
+          expect(
+            transportRect.center.dx,
+            closeTo(panelRect.center.dx, 0.5),
+            reason: 'lopsided sides at ${width}px',
+          );
+        },
+      );
+    }
 
     testWidgets(
       'renders the 20h/16v padding and the 18px row gap as real geometry',

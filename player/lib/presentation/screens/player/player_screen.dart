@@ -1435,6 +1435,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
         return KeyEventResult.handled;
 
+      // Previous/next episode. This is the only reachable path to episode
+      // navigation on a narrow window: below `PanelMetrics.touchTargets`'s
+      // breakpoint, `ChromePanel`'s in-bar transport drops to play/pause
+      // only (see `TransportSurface.compact`), and that gate is on viewport
+      // *width*, not `PlatformFeatures.isMobile` — so a narrowed desktop or
+      // web browser window loses the in-bar buttons too, with no
+      // `UpNextOverlay` (autoplay-only, next-episode-only) or touch gesture
+      // to fall back on. Gated the same way the in-bar buttons already are
+      // (`_hasPreviousEpisode`/`_hasNextEpisode`) so this does nothing at
+      // the start/end of a season, matching the buttons' own disabled state.
+      case LogicalKeyboardKey.pageUp:
+        if (_hasPreviousEpisode) {
+          _playPreviousEpisode();
+        }
+        return KeyEventResult.handled;
+
+      case LogicalKeyboardKey.pageDown:
+        if (_hasNextEpisode) {
+          _playNextEpisode();
+        }
+        return KeyEventResult.handled;
+
       default:
         return KeyEventResult.ignored;
     }

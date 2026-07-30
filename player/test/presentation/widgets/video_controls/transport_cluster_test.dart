@@ -19,6 +19,36 @@ void main() {
       expect(find.byKey(TransportSurface.playPauseKey), findsOneWidget);
     });
 
+    testWidgets(
+        'compact renders only play/pause, ignoring seek and episode-nav '
+        'callbacks entirely — used below the mobile breakpoint (see '
+        "compact's own dartdoc)", (tester) async {
+      await tester.pumpWidget(
+        _host(
+          TransportSurface(
+            isPlaying: false,
+            onBack10: () {},
+            onForward10: () {},
+            onPreviousEpisode: () {},
+            onNextEpisode: () {},
+            compact: true,
+          ),
+        ),
+      );
+
+      expect(find.byKey(TransportSurface.playPauseKey), findsOneWidget);
+      expect(find.byKey(TransportSurface.back10Key), findsNothing);
+      expect(find.byKey(TransportSurface.forward10Key), findsNothing);
+      expect(find.byKey(TransportSurface.previousEpisodeKey), findsNothing);
+      expect(find.byKey(TransportSurface.nextEpisodeKey), findsNothing);
+
+      // Still the same 48px play/pause button, not some other size.
+      final button = tester.widget<ControlButton>(
+        find.byKey(TransportSurface.playPauseKey),
+      );
+      expect(button.size, 48);
+    });
+
     testWidgets('shows episode buttons when callbacks are given',
         (tester) async {
       await tester.pumpWidget(
