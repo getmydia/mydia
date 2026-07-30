@@ -15,7 +15,7 @@ defmodule Mydia.Settings.LibraryPath do
           path: String.t() | nil,
           type: atom() | nil,
           monitored: boolean(),
-          scan_interval: integer(),
+          scan_interval: integer() | nil,
           last_scan_at: DateTime.t() | nil,
           last_scan_status: atom() | nil,
           last_scan_error: String.t() | nil,
@@ -47,7 +47,7 @@ defmodule Mydia.Settings.LibraryPath do
     field :path, :string
     field :type, Ecto.Enum, values: @path_types
     field :monitored, :boolean, default: true
-    field :scan_interval, :integer, default: 3600
+    field :scan_interval, :integer
     field :last_scan_at, :utc_datetime
     field :last_scan_status, Ecto.Enum, values: @scan_statuses
     field :last_scan_error, :string
@@ -101,7 +101,7 @@ defmodule Mydia.Settings.LibraryPath do
     |> validate_required([:path, :type])
     |> validate_inclusion(:type, @path_types)
     |> validate_inclusion(:tv_metadata_source, @tv_metadata_sources)
-    |> validate_number(:scan_interval, greater_than: 0)
+    |> validate_number(:scan_interval, greater_than_or_equal_to: 900)
     |> validate_category_paths()
     |> unique_constraint(:path)
   end

@@ -73,7 +73,7 @@ defmodule Mydia.Factory do
       path: sequence(:library_path, &"/media/library#{&1}"),
       type: :movies,
       monitored: true,
-      scan_interval: 3600
+      scan_interval: nil
     }
   end
 end
