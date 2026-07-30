@@ -487,11 +487,6 @@ defmodule Mydia.Config.Loader do
         &parse_integer/1
       )
       |> put_if_present(
-        :quality_profile_id,
-        System.get_env("#{prefix}QUALITY_PROFILE_ID"),
-        &parse_integer/1
-      )
-      |> put_if_present(
         :auto_organize,
         System.get_env("#{prefix}AUTO_ORGANIZE"),
         &parse_boolean/1

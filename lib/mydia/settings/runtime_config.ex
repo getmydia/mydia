@@ -482,7 +482,6 @@ defmodule Mydia.Settings.RuntimeConfig do
       last_scan_at: nil,
       last_scan_status: nil,
       last_scan_error: nil,
-      quality_profile_id: Map.get(map, :quality_profile_id),
       updated_by_id: nil,
       inserted_at: nil,
       updated_at: nil
