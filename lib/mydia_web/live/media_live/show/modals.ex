@@ -574,7 +574,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :quality_filter, :string, default: nil
   attr :min_seeders, :integer, default: 0
   attr :sort_by, :atom, required: true
-  attr :quality_profile, :map, default: nil
+  attr :effective_quality_profile, :map, default: nil
 
   def manual_search_modal(assigns) do
     # Calculate media_type for profile scoring
@@ -587,16 +587,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
     # Build the same ranking options the manual list was ordered with, so the
     # per-result breakdown (including penalties) matches the unified ranker.
-    # This component receives the already-resolved profile via the
-    # `:quality_profile` attr (the LiveView resolves it once via
-    # Settings.effective_quality_profile/1 at load time); build_manual_ranking_opts/1
-    # reads it back under the `:effective_quality_profile` key it shares with the
-    # socket.assigns call sites, so bridge the attr into that key here rather
-    # than letting it re-resolve (and re-query) from the media item.
+    # The profile arrives already resolved (the LiveView resolves it once via
+    # Settings.effective_quality_profile/1 at load time) under the same key the
+    # socket.assigns call sites use, so nothing re-resolves (or re-queries) here.
     manual_ranking_opts =
-      MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(
-        Map.put(assigns, :effective_quality_profile, assigns.quality_profile)
-      )
+      MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(assigns)
 
     assigns =
       assigns
@@ -755,7 +750,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 class="list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0"
               >
                 <%!-- Score display --%>
-                <%= if @quality_profile do %>
+                <%= if @effective_quality_profile do %>
                   <%!-- Unified ranker score with breakdown dropdown --%>
                   <% score_data = profile_score_breakdown(result, @manual_ranking_opts) %>
                   <% breakdown = score_data.breakdown %>

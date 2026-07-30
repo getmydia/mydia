@@ -301,14 +301,17 @@ defmodule Mydia.Library.MetadataEnricher do
 
     # Record provenance for TV shows so provider-aware refresh can detect a
     # source/library mismatch. Movies leave metadata_source nil.
-    attrs =
-      if media_type == :tv_show do
-        Map.put(attrs, :metadata_source, provider_type)
-      else
-        attrs
-      end
-
-    maybe_add_quality_profile(attrs, match_result)
+    #
+    # quality_profile_id is deliberately left unset. A nil profile means "follow
+    # whatever default is configured", resolved at search time by
+    # Settings.effective_quality_profile/1. Stamping the current default here
+    # would freeze it onto every scanned item, so changing the default later
+    # would leave the whole library behind on the old one.
+    if media_type == :tv_show do
+      Map.put(attrs, :metadata_source, provider_type)
+    else
+      attrs
+    end
   end
 
   # Normalize any provider signal to a concrete :tvdb / :tmdb value. Search
@@ -346,14 +349,6 @@ defmodule Mydia.Library.MetadataEnricher do
   end
 
   defp extract_year_from_date(_), do: nil
-
-  defp maybe_add_quality_profile(attrs, _match_result) do
-    # Use the configured default quality profile if set
-    case Settings.get_default_quality_profile_id() do
-      nil -> attrs
-      profile_id -> Map.put(attrs, :quality_profile_id, profile_id)
-    end
-  end
 
   defp associate_media_file(media_item, media_file_id) do
     # Update the media file to associate it with this media item

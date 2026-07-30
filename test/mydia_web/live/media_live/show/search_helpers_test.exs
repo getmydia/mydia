@@ -1,5 +1,5 @@
 defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
-  use Mydia.DataCase, async: false
+  use ExUnit.Case, async: true
 
   alias MydiaWeb.MediaLive.Show.SearchHelpers
   alias Mydia.Indexers.{QualityParser, RankingOptions, ReleaseRanker, SearchResult}
@@ -405,9 +405,24 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     test "carries nil through when no profile has been resolved" do
       media_item = %{title: "The Matrix", type: "movie"}
 
-      opts = SearchHelpers.build_manual_ranking_opts(%{media_item: media_item})
+      opts =
+        SearchHelpers.build_manual_ranking_opts(%{
+          media_item: media_item,
+          effective_quality_profile: nil
+        })
 
       refute Keyword.get(opts, :quality_profile)
+    end
+
+    test "raises rather than silently degrading when the key is missing" do
+      # A caller that forgets to resolve the profile must fail loudly. Defaulting
+      # to nil here would silently mean "no profile", reinstating the bare
+      # seeders sort the default-profile fallback exists to prevent.
+      media_item = %{title: "The Matrix", type: "movie"}
+
+      assert_raise KeyError, fn ->
+        SearchHelpers.build_manual_ranking_opts(%{media_item: media_item})
+      end
     end
   end
 end

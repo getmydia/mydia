@@ -393,13 +393,25 @@ defmodule Mydia.Settings.QualityProfiles do
 
     if is_nil(existing) do
       case Repo.get_by(QualityProfile, name: @seeded_default_profile_name) do
-        %QualityProfile{id: id} -> set_default_quality_profile(id)
+        %QualityProfile{id: id} -> log_seed_result(set_default_quality_profile(id))
         nil -> :ok
       end
     end
 
     :ok
   end
+
+  defp log_seed_result({:error, reason}) do
+    Logger.warning(
+      "Failed to seed the default quality profile #{inspect(@seeded_default_profile_name)}; " <>
+        "searches for items with no profile will fall back to a plain seeders sort " <>
+        "until a default is set under Admin > Quality Profiles. Reason: #{inspect(reason)}"
+    )
+
+    :ok
+  end
+
+  defp log_seed_result(_ok), do: :ok
 
   defp apply_quality_profile_filters(query, opts) do
     query
