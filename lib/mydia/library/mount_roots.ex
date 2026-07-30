@@ -90,15 +90,21 @@ defmodule Mydia.Library.MountRoots do
     Enum.filter(mount_points, &(top_level(&1) in library_tops))
   end
 
-  # A wedged NFS or FUSE mount makes File.dir?/1 block in the kernel with no
-  # timeout, which would stall the caller (in production, a LiveView event).
+  # A wedged NFS or FUSE mount makes File.dir?/1 block indefinitely. Without
+  # `raw: true`, the underlying `:file.read_file_info/2` is a synchronous
+  # `gen_server.call` into the VM-global `file_server_2` process, so the probe
+  # blocks in a `receive`, not in a dirty NIF thread. That means one wedged
+  # probe wedges `file_server_2` for the whole VM: every later non-`raw`
+  # `File.*` call anywhere queues behind it indefinitely, not just this one.
   # Probe every candidate concurrently under one wall-clock budget and drop
   # whatever has not answered.
   #
-  # Caveat: killing the task unblocks this process, not the dirty IO scheduler
-  # thread the probe is stuck on, which stays blocked until the kernel gives
-  # up. With the probe-everything fallback removed the candidate set is
-  # typically one to three mounts, so this is bounded in practice.
+  # Invariant: the timeout only works because the probe stays non-`raw`. A
+  # `raw: true` probe would run the syscall on the task's own dirty IO
+  # scheduler, where `on_timeout: :kill_task`'s `Process.exit(pid, :kill)` is
+  # deferred until the NIF returns — silently restoring an unbounded hang
+  # that these tests cannot catch (`Process.sleep(:infinity)` is trivially
+  # killable either way).
   defp reachable_dirs([], _opts), do: []
 
   defp reachable_dirs(mount_points, opts) do
@@ -107,6 +113,10 @@ defmodule Mydia.Library.MountRoots do
 
     mount_points
     |> Task.async_stream(probe,
+      # max_concurrency == length(mount_points) so every probe starts its
+      # clock at the same time and `timeout` is a total budget, not a
+      # per-mount one. Capping concurrency below the candidate count would
+      # silently turn this into waves of `timeout` each.
       max_concurrency: length(mount_points),
       timeout: timeout,
       on_timeout: :kill_task,

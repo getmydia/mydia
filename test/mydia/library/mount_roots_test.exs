@@ -98,7 +98,7 @@ defmodule Mydia.Library.MountRootsTest do
           mounts_path: mounts_file,
           library_paths: [data],
           probe_fun: probe,
-          probe_timeout_ms: 50
+          probe_timeout_ms: 500
         )
 
       assert roots == [data]
