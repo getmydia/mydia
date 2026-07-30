@@ -46,6 +46,14 @@ jobs:
       # manifests are deliberately out of scope: their constraints pin packages,
       # not the SDK this repo builds with. Needs only the checkout, so it runs
       # first and fails in seconds.
+      #
+      # `uses:` lines are skipped because an action reference is not an SDK
+      # selection. Without that, SHA-pinning the setup action in the usual
+      # hardening idiom (a commit sha followed by a trailing version comment)
+      # would fail this check for doing the right thing.
+      #
+      # Note this file is in scope for its own scan, so do not write a version
+      # literal in these comments either -- the same rule the check enforces.
       - name: Assert no other build or CI file names a Flutter version
         run: |
           set -euo pipefail
@@ -54,6 +62,7 @@ jobs:
                 '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
                 'scripts/*' 'dev' \
               | xargs -0 grep -HnIiE 'flutter' \
+              | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \
               | grep -E '[0-9]+\.[0-9]+|[Ff]lutter[0-9]' \
               || true
           )"
