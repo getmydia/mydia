@@ -170,9 +170,13 @@ jobs:
         working-directory: player
         run: flutter pub get
 
+      # Not optional: the generated Dart files are gitignored, so without this a
+      # clean checkout fails the build with hundreds of errors pointing nowhere
+      # near codegen. No --delete-conflicting-outputs; it was removed in
+      # build_runner 2.15 and is now warned about and ignored.
       - name: Run code generation
         working-directory: player
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build
 
       # Drives cargokit, which cross-compiles player/rust_builder against the
       # NDK. This is what puts the Rust/Dart FFI boundary under PR coverage;
