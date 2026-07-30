@@ -228,8 +228,7 @@ defmodule Mydia.Metadata.Provider.HTTP do
   ## Private Functions
 
   defp add_api_key_auth(req, %{api_key: api_key, options: %{auth_method: :query}} = config) do
-    param_name = get_in(config, [:options, :api_key_param]) || "api_key"
-    maybe_add_params(req, [{String.to_atom(param_name), api_key}])
+    put_api_key_param(req, config, api_key)
   end
 
   defp add_api_key_auth(req, %{api_key: api_key, options: %{auth_method: :bearer}}) do
@@ -243,8 +242,21 @@ defmodule Mydia.Metadata.Provider.HTTP do
 
   # Default to query parameter authentication
   defp add_api_key_auth(req, %{api_key: api_key} = config) do
+    put_api_key_param(req, config, api_key)
+  end
+
+  # Register the key as a Req `:params` option rather than writing it straight
+  # into `req.url.query`.
+  #
+  # `Req.merge/2` treats `:url` as a request-struct field and replaces
+  # `request.url` wholesale (`put_in(acc.url, URI.parse(url))`), so any query
+  # string written at construction time is discarded by the first `get/2` or
+  # `post/2` call, which always supplies a `:url`. `:params` is a plain option
+  # and is merged with `Keyword.merge/2`, so the configured key survives and
+  # per-request params are layered on top of it.
+  defp put_api_key_param(req, config, api_key) do
     param_name = get_in(config, [:options, :api_key_param]) || "api_key"
-    maybe_add_params(req, [{String.to_atom(param_name), api_key}])
+    Req.merge(req, params: [{String.to_atom(param_name), api_key}])
   end
 
   # Unused - kept for potential future use
@@ -262,35 +274,6 @@ defmodule Mydia.Metadata.Provider.HTTP do
   #
   #   %{request | url: new_url}
   # end
-
-  defp maybe_add_params(req, params) when is_list(params) or is_map(params) do
-    # Get existing params and merge with new ones
-    existing_params =
-      case req.url.query do
-        nil -> []
-        query -> URI.decode_query(query) |> Enum.to_list()
-      end
-
-    # Convert params to keyword list
-    new_params =
-      params
-      |> Enum.map(fn
-        {k, v} when is_atom(k) -> {Atom.to_string(k), to_string(v)}
-        {k, v} -> {to_string(k), to_string(v)}
-      end)
-
-    # Merge params (new params override existing)
-    all_params =
-      existing_params
-      |> Keyword.new()
-      |> Keyword.merge(new_params)
-
-    # Update request URL with merged params
-    query_string = URI.encode_query(all_params)
-    new_url = %{req.url | query: query_string}
-
-    %{req | url: new_url}
-  end
 
   defp handle_response({:ok, %Req.Response{} = response}) do
     {:ok, response}
