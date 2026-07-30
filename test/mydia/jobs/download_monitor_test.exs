@@ -1208,16 +1208,16 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       # The composed operator message is what the activity feed and the
       # media-item history render (Events.download_failed/3 stores it under
       # metadata["error_message"] — see lib/mydia/events.ex:593). Assert on
-      # all three ingredients so a transposed argument or a dropped client
-      # name in the FailureCategory.message/3 call would fail this test.
+      # the exact composed sentence, not just substring membership, so a
+      # transposed argument at the FailureCategory.message/3 call site
+      # (e.g. swapping client and detail) would fail this test even though
+      # each individual value still appears somewhere in the string.
       Process.sleep(100)
 
       assert [event] = Events.list_events(type: "download.failed")
       message = event.metadata["error_message"]
 
-      assert message =~ "my-debrid"
-      assert message =~ "missing files"
-      assert message =~ "missingFiles"
+      assert message == "my-debrid reported missing files: missingFiles"
     end
 
     test "an unclassified failure still uses the pre-existing fallback slug" do

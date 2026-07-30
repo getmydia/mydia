@@ -3,17 +3,6 @@ defmodule Mydia.Downloads.Client.FailureCategoryTest do
 
   alias Mydia.Downloads.Client.FailureCategory
 
-  describe "categories/0" do
-    test "lists the four real categories, excluding the nil fallback" do
-      assert FailureCategory.categories() == [
-               :missing_files,
-               :no_peers,
-               :provider_error,
-               :rejected_content
-             ]
-    end
-  end
-
   describe "slug/1" do
     test "nil maps to the pre-existing fallback slug" do
       assert FailureCategory.slug(nil) == "client_reported_failure"
@@ -69,6 +58,20 @@ defmodule Mydia.Downloads.Client.FailureCategoryTest do
     test "treats a blank detail as absent" do
       assert FailureCategory.message("torbox", :provider_error, "   ") ==
                "torbox reported provider error"
+    end
+
+    # This is the shape AllDebrid actually produces for undocumented
+    # `statusCode >= 12` values: no category, but a native status text
+    # worth surfacing. The category label must not appear, or the
+    # sentence reads as the redundant "reported client reported failure".
+    test "drops the redundant label when there is a detail but no category" do
+      assert FailureCategory.message("my-debrid", nil, "Something new") ==
+               "my-debrid reported: Something new"
+    end
+
+    test "substitutes a generic subject when client is blank, with a detail but no category" do
+      assert FailureCategory.message(nil, nil, "Something new") ==
+               "Download client reported: Something new"
     end
   end
 end

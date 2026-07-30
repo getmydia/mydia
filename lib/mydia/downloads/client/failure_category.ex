@@ -48,13 +48,6 @@ defmodule Mydia.Downloads.Client.FailureCategory do
                |> Map.put(@fallback_slug, "client reported failure")
 
   @doc """
-  The four classifiable categories, sorted. Excludes the `nil` fallback,
-  which is an absence rather than a category.
-  """
-  @spec categories() :: [t()]
-  def categories, do: @labels |> Map.keys() |> Enum.sort()
-
-  @doc """
   The string written to `release_blacklist.failure_reason`.
   """
   @spec slug(t() | nil) :: String.t()
@@ -83,16 +76,28 @@ defmodule Mydia.Downloads.Client.FailureCategory do
 
   With neither a category nor a detail there is nothing to add, so this
   returns the constant used before #237 rather than an emptier sentence.
+
+  When there is a detail but no category — an adapter surfaced a native
+  detail string it couldn't classify — the category label is dropped
+  rather than rendered as the generic "client reported failure", which
+  would read as a redundant "reported client reported failure: ...".
   """
   @spec message(String.t() | nil, t() | nil, String.t() | nil) :: String.t()
   def message(client, category, detail) do
-    if is_nil(category) and blank?(detail) do
-      @default_message
-    else
-      subject = if blank?(client), do: "Download client", else: client
-      base = "#{subject} reported #{label(category)}"
+    subject = if blank?(client), do: "Download client", else: client
 
-      if blank?(detail), do: base, else: "#{base}: #{detail}"
+    cond do
+      is_nil(category) and blank?(detail) ->
+        @default_message
+
+      is_nil(category) ->
+        "#{subject} reported: #{detail}"
+
+      blank?(detail) ->
+        "#{subject} reported #{label(category)}"
+
+      true ->
+        "#{subject} reported #{label(category)}: #{detail}"
     end
   end
 

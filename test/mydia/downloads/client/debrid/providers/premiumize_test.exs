@@ -172,6 +172,20 @@ defmodule Mydia.Downloads.Client.Debrid.Providers.PremiumizeTest do
       assert job.failure_category == nil
       assert job.failure_detail == nil
     end
+
+    test "redacts credentials leaking through the free-text message", %{
+      bypass: bypass,
+      config: config
+    } do
+      assert {:ok, %ProviderJob{} = job} =
+               fetch_transfer(bypass, config, %{
+                 "status" => "error",
+                 "message" => "failed https://cdn.example.com/f?token=SECRET"
+               })
+
+      assert job.failure_category == :provider_error
+      refute job.failure_detail =~ "SECRET"
+    end
   end
 
   describe "list_jobs/2" do
