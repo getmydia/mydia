@@ -27,6 +27,35 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     })
   end
 
+  test "gives colliding client names distinct DOM ids", %{conn: conn} do
+    # Client names come from operator-supplied config, so two distinct names
+    # can slugify to the same string. Duplicate ids are invalid HTML and make
+    # LiveView's id-keyed patching update the wrong banner.
+    #
+    # Which name keeps the bare slug depends on collation ("Qbit Old" vs
+    # "qbit-old" sort differently under SQLite's BINARY collation than under a
+    # locale-aware PostgreSQL one), so this asserts only that the two ids are
+    # distinct, which is the property that matters.
+    media_item = media_item_fixture()
+    orphan(media_item, "Qbit Old")
+    orphan(media_item, "qbit-old")
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    render_click(view, "switch_tab", %{"tab" => "issues"})
+
+    assert has_element?(view, "#removed-client-qbit-old")
+    assert has_element?(view, "#removed-client-qbit-old-2")
+
+    # Clearing via the suffixed id removes exactly one client: the raw name
+    # rides on phx-value-client, so disambiguating the id cannot misroute the
+    # delete to its colliding sibling.
+    view |> element("#clear-removed-client-qbit-old-2") |> render_click()
+
+    assert has_element?(view, "#removed-client-qbit-old")
+    refute has_element?(view, "#removed-client-qbit-old-2")
+    assert [%{count: 1}] = Mydia.Downloads.removed_client_groups()
+  end
+
   test "renders one banner per removed client, counting its own orphans", %{conn: conn} do
     media_item = media_item_fixture()
     orphan(media_item, "qbit-old")

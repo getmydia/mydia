@@ -100,7 +100,11 @@ defmodule Mydia.Downloads.History do
   end
 
   @doc """
-  Groups orphaned downloads by the client they reference.
+  Groups orphaned downloads by the client they reference, ordered by name.
+
+  The ordering is load-bearing rather than cosmetic: the Issues tab derives a
+  DOM id per group, and an unordered result could reassign those ids between
+  renders, which is exactly what LiveView's id-keyed patching must not see.
 
   An orphan is a row tagged `import_failure_reason == "no_client"`, written
   either by `DownloadMonitor.handle_missing/1` for a download still in flight
@@ -112,6 +116,7 @@ defmodule Mydia.Downloads.History do
     Download
     |> where([d], d.import_failure_reason == "no_client" and not is_nil(d.download_client))
     |> group_by([d], d.download_client)
+    |> order_by([d], asc: d.download_client)
     |> select([d], %{download_client: d.download_client, count: count(d.id)})
     |> Repo.all()
   end

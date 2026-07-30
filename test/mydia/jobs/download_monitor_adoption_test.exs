@@ -144,10 +144,11 @@ defmodule Mydia.Jobs.DownloadMonitorAdoptionTest do
     end
 
     test "leaves an unrelated failure message untagged" do
-      # The backfill keys on the old release's exact copy. Any other failure
-      # message means some other subsystem owns this row, and mis-tagging it
-      # would offer the operator a bulk delete for a download whose client is
-      # not the problem.
+      # The backfill keys on the old release's message *prefix* ("Removed from
+      # download client"), via `ClientAdoption.orphan_state?/2`. Any other
+      # failure message means some other subsystem owns this row, and
+      # mis-tagging it would offer the operator a bulk delete for a download
+      # whose client is not the problem.
       setup_runtime_config([client_config(%{name: "kept"})])
       media_item = media_item_fixture()
 

@@ -960,7 +960,37 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # `phx-value-client` sent back to `clear_removed_client/2`.
   defp removed_client_groups do
     Downloads.removed_client_groups()
-    |> Enum.map(fn group -> Map.put(group, :slug, slugify(group.download_client)) end)
+    |> Enum.map_reduce(MapSet.new(), fn group, taken ->
+      {slug, taken} = unique_slug(slugify(group.download_client), taken)
+      {Map.put(group, :slug, slug), taken}
+    end)
+    |> elem(0)
+  end
+
+  # Distinct client names can slugify to the same string ("Qbit Old" and
+  # "qbit-old"), and anything with no alphanumerics collapses to "client".
+  # Duplicate DOM ids are invalid HTML and make LiveView's id-keyed patching
+  # apply an update to the wrong banner, so the first claimant keeps the bare
+  # slug and later ones get a numeric suffix. `removed_client_groups/0` orders
+  # by client name, so which one is "first" is stable across renders.
+  defp unique_slug(base, taken) do
+    if MapSet.member?(taken, base) do
+      next_free_slug(base, 2, taken)
+    else
+      {base, MapSet.put(taken, base)}
+    end
+  end
+
+  # Skips past a suffix a real client name already claimed, so a group named
+  # "qbit-old-2" cannot be stolen from underneath by a disambiguated sibling.
+  defp next_free_slug(base, n, taken) do
+    candidate = "#{base}-#{n}"
+
+    if MapSet.member?(taken, candidate) do
+      next_free_slug(base, n + 1, taken)
+    else
+      {candidate, MapSet.put(taken, candidate)}
+    end
   end
 
   defp slugify(name) do
