@@ -48,10 +48,16 @@
         androidSdk = androidComposition.androidsdk;
         ndkPath = "${androidSdk}/libexec/android-sdk/ndk/28.2.13676358";
 
-        # Rust pinned to 1.96.0 to match devenv.nix (languages.rust.version).
-        # This toolchain cross-compiles the same p2p crate devenv builds
-        # natively, so a floating `stable.latest` here means the Android APK and
-        # the desktop build can disagree on the compiler.
+        # Rust pinned to 1.96.0 to match devenv.nix (languages.rust.version), so
+        # this shell and the dev shell agree on the compiler a developer gets when
+        # running cargo by hand.
+        #
+        # Know the limit of this pin: it does NOT govern the .so files in the APK.
+        # cargokit builds the native library with `rustup run stable cargo build`
+        # (rust_builder/cargokit/build_tool/lib/src/builder.dart), resolving rustup
+        # from PATH, so the APK's Rust is the host rustup's default stable. Bumping
+        # or bisecting the version below will not change the shipped artifact. The
+        # targets here still matter: they are what the interactive shell offers.
         rustToolchain = pkgs.rust-bin.stable."1.96.0".default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
           targets = [
