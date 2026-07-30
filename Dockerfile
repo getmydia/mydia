@@ -3,11 +3,41 @@
 # ============================================
 # Flutter Build Stage
 # ============================================
-# KEEP IN SYNC: Flutter must match devenv.nix (flutter344 = 3.44.2) and the
-# FLUTTER_VERSION strings in ci.yml + ci-player.yml. cirruslabs publishes no
-# 3.44.2 image (the 3.44 line stops at 3.44.0), so this builder pins the nearest
-# published tag — 3.44.0, one bugfix patch behind the 3.44.2 SDK pin above.
-FROM ghcr.io/cirruslabs/flutter:3.44.0 AS flutter-builder
+# The Flutter version comes from player/.fvmrc, the single source of truth shared
+# with devenv.nix, player/flake.nix and the CI workflows. Nothing to sync here.
+#
+# This installs the SDK rather than using a cirruslabs/flutter image because
+# cirruslabs lags patch releases, so no tag of theirs can be relied on to match
+# .fvmrc. Installing also skips the Android SDK and JDK that image bundles and
+# this web build never touches.
+#
+# Do not reintroduce a version number in this comment. The repo asserts that
+# .fvmrc is the only file naming a Flutter version, and the check is a plain grep.
+FROM debian:bookworm-slim AS flutter-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      git \
+      jq \
+      unzip \
+      xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Layer keyed on .fvmrc alone, so the SDK is re-downloaded only when the pin
+# moves. safe.directory is required because the SDK tarball ships a git checkout
+# that Flutter shells out to, owned by root here. precache --web warms the web
+# artifacts inside this cached layer so `flutter build web` does not fetch them
+# on every build.
+COPY player/.fvmrc /tmp/.fvmrc
+RUN FLUTTER_VERSION="$(jq -r .flutter /tmp/.fvmrc)" && \
+    curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+      | tar -xJ -C /opt && \
+    git config --global --add safe.directory /opt/flutter && \
+    /opt/flutter/bin/flutter config --no-analytics && \
+    /opt/flutter/bin/flutter precache --web
+
+ENV PATH="/opt/flutter/bin:${PATH}"
 
 WORKDIR /app/player
 
@@ -24,7 +54,6 @@ COPY priv/graphql/schema.graphql ./lib/graphql/schema.graphql
 # Install dependencies, generate code, and build
 # Cache pub packages to avoid re-downloading 1656 dependencies each build
 RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
-    flutter config --no-analytics && \
     flutter pub get && \
     dart run build_runner build && \
     flutter build web --release --base-href /player/ --tree-shake-icons
