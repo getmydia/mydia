@@ -103,7 +103,20 @@ defmodule Mydia.MediaFixtures do
       resolution: "1080p",
       codec: "h264",
       audio_codec: "aac",
-      metadata: %{"container" => "mp4"}
+      # Default to an already-analyzed row so no test accidentally shells out
+      # to ffprobe. Candidates.ensure_codec_info/1 only short-circuits when
+      # analyzed_at is set AND metadata carries a duration: with analyzed_at
+      # alone it falls to the second clause (candidates.ex:197), which calls
+      # ThumbnailGenerator.get_duration/1 and shells out anyway. Tests that
+      # exercise analysis pass analyzed_at: nil explicitly.
+      #
+      # Merging below (Enum.into(attrs, default_attrs)) replaces :metadata
+      # wholesale rather than deep-merging it: a caller that passes its own
+      # `metadata:` overrides this entire map, including the "duration" key,
+      # not just the keys it sets. Any override MUST include "duration" (or
+      # set analyzed_at: nil) or that row will still ffprobe.
+      analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      metadata: %{"container" => "mp4", "duration" => 120.5}
     }
 
     # Merge attrs with defaults

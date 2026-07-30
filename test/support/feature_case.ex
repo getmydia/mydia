@@ -94,7 +94,8 @@ defmodule MydiaWeb.FeatureCase do
   ## Notes
 
   - Feature tests use the Ecto sandbox with allowances for browser connections
-  - The test server runs on port 4002 (configured in test.exs)
+  - The test server binds an ephemeral port; test_helper.exs resolves it and
+    sets Wallaby's base_url
   - Screenshots are automatically captured on test failure to tmp/wallaby_screenshots
   - Set `async: false` since SQLite doesn't handle concurrent writes well
   """

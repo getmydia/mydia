@@ -59,3 +59,14 @@ else
     - Or set config :wallaby, :chromedriver, path: "/path/to/chromedriver"
   """)
 end
+
+# The endpoint binds an OS-assigned ephemeral port (config/test.exs) so
+# concurrent worktree runs cannot collide. Wallaby needs the real port, which
+# is only knowable once the endpoint is listening.
+{:ok, {_ip, resolved_port}} = MydiaWeb.Endpoint.server_info(:http)
+
+if resolved_port == 0 do
+  raise "test endpoint reported port 0; Wallaby would be pointed at localhost:0"
+end
+
+Application.put_env(:wallaby, :base_url, "http://localhost:#{resolved_port}")
