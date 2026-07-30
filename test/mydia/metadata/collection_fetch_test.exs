@@ -103,4 +103,36 @@ defmodule Mydia.Metadata.CollectionFetchTest do
     assert {:error, _} = Metadata.fetch_collection_cached(config, id)
     assert {:error, :not_found} = Cache.get("collection:metadata_relay:#{id}:en-US")
   end
+
+  # Collections are a TMDB concept served by the relay. Other registered
+  # provider types (:music_relay, :open_library) have no equivalent, so a config
+  # for one of them must be rejected rather than quietly routed to the relay
+  # adapter under a cache key that claims otherwise.
+  test "a non-relay config is rejected without reaching the relay", %{bypass: bypass} do
+    id = System.unique_integer([:positive])
+
+    Bypass.down(bypass)
+
+    config = %{
+      type: :open_library,
+      base_url: "http://localhost:#{bypass.port}",
+      options: %{language: "en-US"}
+    }
+
+    assert {:error, %{type: :invalid_config}} = Metadata.fetch_collection_cached(config, id)
+  end
+
+  test "a rejected config is not cached under any key", %{bypass: bypass} do
+    id = System.unique_integer([:positive])
+
+    config = %{
+      type: :music_relay,
+      base_url: "http://localhost:#{bypass.port}",
+      options: %{language: "en-US"}
+    }
+
+    assert {:error, %{type: :invalid_config}} = Metadata.fetch_collection_cached(config, id)
+    assert {:error, :not_found} = Cache.get("collection:music_relay:#{id}:en-US")
+    assert {:error, :not_found} = Cache.get("collection:metadata_relay:#{id}:en-US")
+  end
 end
