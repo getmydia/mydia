@@ -31,7 +31,7 @@ defmodule Mydia.Jobs.MediaRematch do
     unique: [
       period: :infinity,
       keys: [:download_id],
-      states: [:available, :scheduled, :retryable, :executing]
+      states: [:suspended, :available, :scheduled, :retryable, :executing]
     ]
 
   require Logger

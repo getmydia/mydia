@@ -21,7 +21,12 @@ defmodule Mydia.Jobs.PluginScheduler do
   use Oban.Worker,
     queue: :plugins,
     max_attempts: 1,
-    unique: [period: 120, states: [:available, :scheduled, :executing]]
+    # No explicit :states — max_attempts: 1 means this job can never reach
+    # :retryable, so the states list would never actually differ from
+    # Oban's own default incomplete-state set. Inheriting it is one fewer
+    # place to keep in sync (and avoids Oban 2.23's compile-time warning for
+    # partial :states lists).
+    unique: [period: 120]
 
   import Ecto.Query
 

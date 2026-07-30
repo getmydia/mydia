@@ -20,17 +20,16 @@ defmodule Mydia.Jobs.MediaImport do
   use Oban.Worker,
     queue: :default,
     max_attempts: 1000,
+    # Full incomplete-state set: every normal caller (queue.ex, DownloadMonitor,
+    # the downloads LiveView) gets full duplicate protection, including against
+    # a MediaImport job that's already :executing for the same download_id.
+    # `schedule_snooze_retry/2` below is the one exception — it overrides
+    # `:states` at the call site to drop `:executing`, since it needs to
+    # self-reinsert while its own parent job is still running.
     unique: [
       period: 600,
       keys: [:download_id],
-      # NB: :executing is intentionally excluded. schedule_snooze_retry/2
-      # inserts a new MediaImport job from inside perform/1 while the
-      # parent is still :executing — Oban would treat that as a unique
-      # collision and discard the snooze (returning the executing parent
-      # with conflict?: true). The early-return guard on `imported_at`
-      # at the top of perform/1 handles the duplicate-already-done case
-      # so dropping :executing here doesn't reopen the dedup gap.
-      states: [:available, :scheduled, :retryable]
+      states: [:suspended, :available, :scheduled, :executing, :retryable]
     ]
 
   require Logger
@@ -2127,7 +2126,16 @@ defmodule Mydia.Jobs.MediaImport do
       original_args
       |> Map.put("snooze_count", new_snooze_count)
 
-    changeset = __MODULE__.new(new_args, scheduled_at: scheduled_at)
+    # This job is currently :executing (schedule_snooze_retry/2 only runs from
+    # inside perform/1), so the unique states are narrowed to drop :executing
+    # here — otherwise Oban would see this insert as colliding with its own
+    # still-running parent and silently discard the snooze. See the `unique`
+    # comment on `use Oban.Worker` above for the full policy this overrides.
+    changeset =
+      __MODULE__.new(new_args,
+        scheduled_at: scheduled_at,
+        unique: [states: [:suspended, :available, :scheduled, :retryable]]
+      )
 
     # Use Oban.insert if available, otherwise fall back to Repo.insert for testing
     result =

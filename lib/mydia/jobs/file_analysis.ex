@@ -27,11 +27,15 @@ defmodule Mydia.Jobs.FileAnalysis do
     # Prevent cron pileup when a batch overruns the 1-minute tick. Two ticks
     # concurrently selecting the same `analyzed_at IS NULL` rows would run
     # ffprobe twice on the same files; the apply_analysis WHERE guard
-    # protects the write but not the wasted work.
+    # protects the write but not the wasted work. :retryable is included
+    # because this worker runs up to 3 attempts — a failed analysis pass
+    # sitting in :retryable must still block a duplicate insert, otherwise a
+    # second tick starts ffprobing the same files while the first is backing
+    # off before its next attempt.
     unique: [
       period: 60,
       fields: [:worker],
-      states: [:available, :scheduled, :executing]
+      states: [:suspended, :available, :scheduled, :executing, :retryable]
     ]
 
   import Ecto.Query

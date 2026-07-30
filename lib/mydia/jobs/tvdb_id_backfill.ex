@@ -12,7 +12,10 @@ defmodule Mydia.Jobs.TvdbIdBackfill do
   use Oban.Worker,
     queue: :media,
     max_attempts: 3,
-    unique: [period: 86_400, states: [:available, :scheduled, :executing, :retryable]]
+    unique: [
+      period: 86_400,
+      states: [:suspended, :available, :scheduled, :executing, :retryable]
+    ]
 
   require Logger
 

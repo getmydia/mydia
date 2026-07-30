@@ -725,12 +725,12 @@ let
 
     oban = buildMix rec {
       name = "oban";
-      version = "2.20.1";
+      version = "2.23.0";
 
       src = fetchHex {
         pkg = "oban";
         version = "${version}";
-        sha256 = "17a45277dbeb41a455040b41dd8c467163fad685d1366f2f59207def3bcdd1d8";
+        sha256 = "8e5f0cec5abecce78dd08cb14dc5438db90ec3884987b44773ce76fe60dd3f81";
       };
 
       beamDeps = [ ecto_sql ecto_sqlite3 jason postgrex telemetry ];

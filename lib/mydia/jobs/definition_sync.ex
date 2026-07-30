@@ -21,7 +21,10 @@ defmodule Mydia.Jobs.DefinitionSync do
   use Oban.Worker,
     queue: :maintenance,
     max_attempts: 3,
-    unique: [period: :infinity, states: [:available, :scheduled, :executing, :retryable]]
+    unique: [
+      period: :infinity,
+      states: [:suspended, :available, :scheduled, :executing, :retryable]
+    ]
 
   require Logger
   alias Mydia.Indexers.DefinitionSync
