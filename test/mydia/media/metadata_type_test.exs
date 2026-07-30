@@ -143,6 +143,51 @@ defmodule Mydia.Media.MetadataTypeTest do
       assert is_nil(reloaded.metadata.cast)
       assert is_nil(reloaded.metadata.crew)
     end
+
+    test "collection pointer survives a database round trip" do
+      {:ok, media_item} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Harry Potter and the Philosopher's Stone",
+          year: 2001,
+          tmdb_id: 671,
+          metadata: %{
+            "provider_id" => "671",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "Harry Potter and the Philosopher's Stone",
+            "collection_id" => 1241,
+            "collection_name" => "Harry Potter Collection"
+          }
+        })
+
+      reloaded = Media.get_media_item!(media_item.id)
+
+      assert %MediaMetadata{} = reloaded.metadata
+      assert reloaded.metadata.collection_id == 1241
+      assert reloaded.metadata.collection_name == "Harry Potter Collection"
+    end
+
+    test "collection pointer is nil when the movie has no franchise" do
+      {:ok, media_item} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Standalone Movie",
+          year: 1999,
+          tmdb_id: 603,
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "Standalone Movie"
+          }
+        })
+
+      reloaded = Media.get_media_item!(media_item.id)
+
+      assert reloaded.metadata.collection_id == nil
+      assert reloaded.metadata.collection_name == nil
+    end
   end
 
   describe "Ecto.Type callbacks" do

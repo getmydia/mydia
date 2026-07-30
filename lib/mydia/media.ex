@@ -648,6 +648,34 @@ defmodule Mydia.Media do
     end)
   end
 
+  @doc """
+  Returns library status for a specific set of TMDB movie ids.
+
+  Same value shape as `get_library_status_map/0`, but scoped to the ids asked
+  for. Use this when checking a handful of ids (a franchise's members, say)
+  rather than loading the whole library.
+
+  Movies only. A TV row that happens to share a TMDB id with a movie is not a
+  match for a franchise member.
+
+  ## Examples
+
+      iex> library_status_for_tmdb_ids([671, 672])
+      %{671 => %{in_library: true, monitored: true, type: "movie", id: "..."}}
+  """
+  @spec library_status_for_tmdb_ids([integer()]) :: map()
+  def library_status_for_tmdb_ids([]), do: %{}
+
+  def library_status_for_tmdb_ids(tmdb_ids) when is_list(tmdb_ids) do
+    MediaItem
+    |> where([m], m.type == "movie" and m.tmdb_id in ^tmdb_ids)
+    |> select([m], {m.tmdb_id, m.monitored, m.type, m.id})
+    |> Repo.all()
+    |> Map.new(fn {tmdb_id, monitored, type, id} ->
+      {tmdb_id, %{in_library: true, monitored: monitored, type: type, id: id}}
+    end)
+  end
+
   ## Episodes
 
   @doc """

@@ -74,7 +74,8 @@ defmodule Mydia.Metadata.Provider.Relay do
     SearchResult,
     MediaMetadata,
     SeasonData,
-    ImagesResponse
+    ImagesResponse,
+    Collection
   }
 
   @default_language "en-US"
@@ -798,6 +799,42 @@ defmodule Mydia.Metadata.Provider.Relay do
 
       {:ok, %{status: status, body: body}} ->
         {:error, Error.api_error("Discover failed with status #{status}", %{body: body})}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  @doc """
+  Fetches a TMDB movie collection (franchise) and its member movies.
+
+  Not a `Mydia.Metadata.Provider` callback: TVDB has no equivalent concept, so
+  this stays specific to the relay adapter.
+
+  A relay deployment that predates this endpoint answers 404, which surfaces as
+  `{:error, %Error{type: :not_found}}` and is treated by callers as "no franchise
+  data available".
+
+  Returns `{:ok, %Collection{}}`.
+  """
+  def fetch_collection(config, collection_id, opts \\ []) do
+    language = resolve_language(config, opts)
+    endpoint = "/tmdb/collections/#{collection_id}"
+
+    req = HTTP.new_request(config)
+
+    case HTTP.get(req, endpoint, params: [language: language]) do
+      {:ok, %{status: 200, body: body}} when is_map(body) ->
+        {:ok, Collection.from_api_response(body)}
+
+      {:ok, %{status: 200, body: _}} ->
+        {:error, Error.api_error("Collection response was not an object")}
+
+      {:ok, %{status: 404}} ->
+        {:error, Error.not_found("Collection not found: #{collection_id}")}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, Error.api_error("Fetch collection failed with status #{status}", %{body: body})}
 
       {:error, error} ->
         {:error, error}

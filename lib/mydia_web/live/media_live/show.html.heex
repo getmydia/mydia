@@ -189,6 +189,13 @@
           <% end %>
           <%!-- Overview Section --%>
           <Components.overview_section media_item={@media_item} />
+          <%!-- Franchise Section (Movies in the same TMDB collection) --%>
+          <FranchiseComponents.franchise_section
+            :if={@franchise}
+            franchise={@franchise}
+            can_add={@can_create_media}
+            adding_tmdb_ids={@adding_franchise_tmdb_ids}
+          />
           <%!-- Episodes Section (TV Shows Only) --%>
           <Components.episodes_section
             media_item={@media_item}
