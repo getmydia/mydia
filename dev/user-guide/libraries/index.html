@@ -621,10 +621,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#scan-settings" class="md-nav__link">
+  <a href="#automatic-scanning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Scan Settings
+        Automatic Scanning
       
     </span>
   </a>
@@ -636,6 +636,17 @@
     <span class="md-ellipsis">
       
         Manual Scanning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monitored
       
     </span>
   </a>
@@ -1651,10 +1662,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#scan-settings" class="md-nav__link">
+  <a href="#automatic-scanning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Scan Settings
+        Automatic Scanning
       
     </span>
   </a>
@@ -1666,6 +1677,17 @@
     <span class="md-ellipsis">
       
         Manual Scanning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monitored
       
     </span>
   </a>
@@ -1810,31 +1832,29 @@
 <li>Monitoring settings</li>
 </ol>
 <h2 id="library-scanning">Library Scanning</h2>
-<p>Mydia periodically scans your libraries to discover new media and update existing entries.</p>
-<h3 id="scan-settings">Scan Settings</h3>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Description</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Scan Interval</td>
-<td>Hours between automatic scans</td>
-<td>1 hour</td>
-</tr>
-<tr>
-<td>Monitored</td>
-<td>Enable automatic scanning</td>
-<td>true</td>
-</tr>
-</tbody>
-</table>
+<p>Scanning discovers media files that Mydia did not add itself, such as files you copied
+into a library folder by hand. Files that arrive through the download and import
+pipeline are added automatically and do not need a scan.</p>
+<p>Scanning is manual by default. You can enable automatic scanning per library.</p>
+<h3 id="automatic-scanning">Automatic Scanning</h3>
+<p>Set <strong>Automatic scanning</strong> on a library to have Mydia rescan that folder on a schedule.
+Choose from six presets: Off (manual only, the default), every 15 minutes (the
+shortest supported interval), every hour, every 6 hours, every 12 hours, or daily.
+There is no free-form interval entry.</p>
+<p>Scheduled scans are spread out by a random delay of up to 30 minutes so that many
+self-hosted instances do not all contact the metadata service at once. Manual scans
+start immediately.</p>
+<p>You can also set this with the <code>LIBRARY_PATH_&lt;N&gt;_SCAN_INTERVAL</code> environment variable,
+in seconds. When that variable is set it takes precedence and the value is reapplied on
+every restart. When it is not set, your choice in the admin interface is preserved.</p>
 <h3 id="manual-scanning">Manual Scanning</h3>
-<p>Trigger a manual scan from the library page or admin interface.</p>
+<p>Trigger a scan at any time from the library page or the admin interface. Manual scans
+work whether or not automatic scanning is enabled.</p>
+<h3 id="monitored">Monitored</h3>
+<p><strong>Monitored</strong> controls whether a library is included when you trigger a scan of all
+libraries. It does not by itself enable automatic scanning, but a library must also
+be Monitored for its automatic scanning schedule to run. Unmonitoring a library
+pauses both its inclusion in scan-all and any automatic schedule you have set for it.</p>
 <h2 id="path-management">Path Management</h2>
 <p>Mydia uses <strong>relative path storage</strong> for media files:</p>
 <ul>
