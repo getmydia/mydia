@@ -65,6 +65,7 @@ defmodule Mydia.Metadata.Provider.Relay do
   @behaviour Mydia.Metadata.Provider
 
   require Logger
+  alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Provider.{Error, HTTP}
   alias Mydia.Metadata.LanguageCode
   alias Mydia.Metadata.ProviderIDRegistry
@@ -75,7 +76,8 @@ defmodule Mydia.Metadata.Provider.Relay do
     MediaMetadata,
     SeasonData,
     ImagesResponse,
-    Collection
+    Collection,
+    Video
   }
 
   @default_language "en-US"
@@ -305,8 +307,16 @@ defmodule Mydia.Metadata.Provider.Relay do
         # Transform TVDB response to TMDB-like format for parsing
         transformed = transform_tvdb_to_tmdb_format(data, media_type, language)
         metadata = parse_metadata(transformed, media_type, provider_id)
-        # Override provider to :tvdb
-        metadata = %{metadata | provider: :tvdb}
+        # Override provider to :tvdb. Trailers live outside the transformed
+        # payload, so videos are resolved separately.
+        preferred = tvdb_preferred_codes(language, data["originalLanguage"])
+
+        metadata = %{
+          metadata
+          | provider: :tvdb,
+            videos: resolve_tvdb_videos(config, data, preferred, language)
+        }
+
         {:ok, metadata}
 
       {:ok, %{status: 404}} ->
@@ -319,6 +329,91 @@ defmodule Mydia.Metadata.Provider.Relay do
         {:error, error}
     end
   end
+
+  # TVDB's own `trailers` array is sparse — popular shows such as Game of
+  # Thrones and Stranger Things carry none — so fall back to TMDB's videos via
+  # the cross-reference TVDB publishes in `remoteIds`. A missing trailer must
+  # never fail the fetch, so every failure path degrades to an empty list.
+  defp resolve_tvdb_videos(config, data, preferred_codes, language) do
+    case Video.from_tvdb_trailers(data["trailers"], preferred_codes) do
+      [] ->
+        # Degrade here, outside the cache boundary, rather than inside the
+        # memoized fetch. A relay failure has to stay an error until it is past
+        # `Cache.fetch/3`, otherwise one transient 500 is stored as a
+        # confirmed-empty result and suppresses the trailer for 24 hours.
+        case fetch_tmdb_videos_for_tvdb(config, data, language) do
+          {:ok, videos} when is_list(videos) -> videos
+          _ -> []
+        end
+
+      videos ->
+        videos
+    end
+  end
+
+  defp fetch_tmdb_videos_for_tvdb(config, data, language) do
+    case tmdb_id_from_remote_ids(data["remoteIds"]) do
+      nil ->
+        Logger.debug("No TMDB cross-reference in TVDB remoteIds; leaving videos empty",
+          tvdb_id: data["id"]
+        )
+
+        {:ok, []}
+
+      tmdb_id ->
+        fetch_tmdb_videos(config, tmdb_id, language)
+    end
+  end
+
+  # The spec's coverage sample found zero TVDB trailers on 4 of 4 popular shows,
+  # so this fallback is the typical path rather than the exception. Memoize it so
+  # a weekly `MetadataRefresh.refresh_all_media/0` doesn't cost one extra relay
+  # round-trip per TV show. `Cache.fetch/3` stores only `{:ok, _}`, which is
+  # exactly the split we want: a successful empty list is cached (since "neither
+  # provider has a trailer" is the case that would otherwise re-request
+  # forever), while an error is returned uncached and retried next time.
+  defp fetch_tmdb_videos(config, tmdb_id, language) do
+    cache_key = "tvdb_tmdb_videos:#{tmdb_id}:#{language}"
+
+    Cache.fetch(cache_key, fn -> request_tmdb_videos(config, tmdb_id) end, ttl: :timer.hours(24))
+  end
+
+  defp request_tmdb_videos(config, tmdb_id) do
+    case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: ["videos"]) do
+      {:ok, %MediaMetadata{videos: videos}} when is_list(videos) ->
+        {:ok, videos}
+
+      {:error, _reason} = error ->
+        Logger.debug("TMDB trailer fallback failed; leaving it uncached",
+          tmdb_id: tmdb_id,
+          result: inspect(error)
+        )
+
+        error
+
+      other ->
+        Logger.debug("TMDB trailer fallback returned no videos",
+          tmdb_id: tmdb_id,
+          result: inspect(other)
+        )
+
+        {:ok, []}
+    end
+  end
+
+  # The `is_binary(id)` guard is load-bearing, not defensive noise. `remoteIds`
+  # is untyped relay-forwarded JSON, and a non-string id would flow into
+  # `ProviderIDRegistry.record_id_type/3`, whose `is_binary(provider_id)` guard
+  # would raise FunctionClauseError from inside the TVDB fetch — turning a
+  # missing trailer into a failed TV show fetch.
+  defp tmdb_id_from_remote_ids(remote_ids) when is_list(remote_ids) do
+    Enum.find_value(remote_ids, fn
+      %{"sourceName" => "TheMovieDB.com", "id" => id} when is_binary(id) and id != "" -> id
+      _ -> nil
+    end)
+  end
+
+  defp tmdb_id_from_remote_ids(_), do: nil
 
   # Transform TVDB API response to match TMDB format for consistent parsing
   defp transform_tvdb_to_tmdb_format(data, _media_type, language) when is_map(data) do
