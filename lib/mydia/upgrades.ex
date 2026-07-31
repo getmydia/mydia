@@ -12,10 +12,16 @@ defmodule Mydia.Upgrades do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
+  alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Download
+  alias Mydia.Events
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Library
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
@@ -180,6 +186,223 @@ defmodule Mydia.Upgrades do
     |> where([e], e.id in ^ids)
     |> Repo.update_all(set: [last_upgrade_check_at: now])
   end
+
+  @doc """
+  Resolves the outcome of a completed automatic-upgrade import (Task 10).
+
+  Called once the just-imported file's own analysis lands — see
+  `Mydia.Library.apply_analysis/2`'s success path and
+  `Mydia.Jobs.UpgradeFinalize`, which enqueues this the moment a file with a
+  non-nil `supersedes_media_file_id` finishes analysis. That is the first
+  moment the new file can be scored, and therefore the first moment this
+  decision can be made.
+
+  Scores the file at `media_file_id` and the file it claims to supersede
+  against the *same* resolved profile — never two different profiles, which
+  would make the comparison meaningless — via
+  `Comparator.score_file_with_breakdown/3`, then picks exactly one of four
+  outcomes:
+
+    * `{:ok, :upgraded}` — the new file cleared `min_upgrade_margin`. The
+      old file is trashed (`Library.trash_media_file/1` — never a hard
+      delete, so a wrong call stays recoverable for the trash retention
+      window), `Events.file_upgraded/4` records both scores and the
+      per-dimension breakdown delta, and the pointer is cleared.
+    * `{:ok, :rejected}` — it didn't clear the margin. The release lied
+      about its contents: the *new* file is trashed instead, its
+      originating release is blacklisted (`Downloads.Blacklists`) so the
+      next sweep doesn't grab it again tomorrow, `Events.upgrade_rejected/4`
+      records the trail, and the pointer is cleared.
+    * `{:ok, :orphaned}` — the file the new one claims to supersede is gone
+      (deleted, or trashed by something else between grab and finalize).
+      The pointer is cleared and the new file is kept as an ordinary
+      import.
+    * `{:ok, :noop}` — `supersedes_media_file_id` was already nil (already
+      finalized, or the file was never an upgrade import in the first
+      place). Nothing to do.
+
+  Every terminal branch clears the pointer — that, not the worker's
+  `unique` constraint, is what makes re-running this on an already-processed
+  file safe: a second call always lands on `{:ok, :noop}`.
+  """
+  @spec finalize_upgrade(binary()) ::
+          {:ok, :upgraded | :rejected | :orphaned | :noop}
+          | {:error, :unscorable | Ecto.Changeset.t()}
+  def finalize_upgrade(media_file_id) when is_binary(media_file_id) do
+    case Repo.get(MediaFile, media_file_id) do
+      nil ->
+        {:ok, :noop}
+
+      %MediaFile{supersedes_media_file_id: nil} ->
+        {:ok, :noop}
+
+      %MediaFile{} = new_file ->
+        case superseded_file(new_file) do
+          nil ->
+            with {:ok, _} <- clear_pointer(new_file) do
+              {:ok, :orphaned}
+            end
+
+          %MediaFile{} = old_file ->
+            finalize_comparison(new_file, old_file)
+        end
+    end
+  end
+
+  # The file `new_file` claims to supersede, or nil when it is not there to
+  # be compared against anymore — hard-deleted, or trashed by something else
+  # (a manual cleanup, a re-scan) between the grab and this finalize.
+  defp superseded_file(%MediaFile{supersedes_media_file_id: id}) do
+    case Repo.get(MediaFile, id) do
+      nil -> nil
+      %MediaFile{trashed_at: nil} = old -> old
+      %MediaFile{} -> nil
+    end
+  end
+
+  defp finalize_comparison(new_file, old_file) do
+    {media_type, media_item} = resolve_media_context(new_file)
+    profile = media_item && QualityProfileResolver.resolve(media_item)
+
+    with %QualityProfile{} <- profile,
+         {:ok, %{score: old_score, breakdown: old_breakdown}} <-
+           Comparator.score_file_with_breakdown(old_file, profile, media_type),
+         {:ok, %{score: new_score, breakdown: new_breakdown}} <-
+           Comparator.score_file_with_breakdown(new_file, profile, media_type) do
+      margin = profile.min_upgrade_margin || 0
+      delta = Float.round(new_score - old_score, 1)
+
+      comparison = %{
+        old_score: old_score,
+        new_score: new_score,
+        delta: delta,
+        old_breakdown: old_breakdown,
+        new_breakdown: new_breakdown,
+        breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
+      }
+
+      if delta >= margin do
+        apply_upgrade(new_file, old_file, media_item, comparison)
+      else
+        apply_rejection(new_file, old_file, media_item, comparison)
+      end
+    else
+      _ ->
+        Logger.error(
+          "Cannot finalize upgrade: no quality profile resolved, or a file is unscorable",
+          media_file_id: new_file.id,
+          superseded_media_file_id: old_file.id
+        )
+
+        {:error, :unscorable}
+    end
+  end
+
+  defp resolve_media_context(%MediaFile{episode_id: episode_id}) when not is_nil(episode_id) do
+    case Repo.get(Episode, episode_id) do
+      nil -> {:episode, nil}
+      episode -> {:episode, Repo.preload(episode, :media_item).media_item}
+    end
+  end
+
+  defp resolve_media_context(%MediaFile{media_item_id: media_item_id})
+       when not is_nil(media_item_id) do
+    {:movie, Repo.get(MediaItem, media_item_id)}
+  end
+
+  defp resolve_media_context(%MediaFile{}), do: {nil, nil}
+
+  defp apply_upgrade(new_file, old_file, media_item, comparison) do
+    with {:ok, trashed_old} <- Library.trash_media_file(old_file),
+         {:ok, _new_file} <- clear_pointer(new_file) do
+      Events.file_upgraded(new_file, trashed_old, media_item, comparison)
+      {:ok, :upgraded}
+    end
+  end
+
+  defp apply_rejection(new_file, old_file, media_item, comparison) do
+    with {:ok, trashed_new} <- Library.trash_media_file(new_file),
+         {:ok, _new_file} <- clear_pointer(trashed_new) do
+      blacklist_release(trashed_new)
+      Events.upgrade_rejected(trashed_new, old_file, media_item, comparison)
+      {:ok, :rejected}
+    end
+  end
+
+  defp clear_pointer(%MediaFile{} = media_file) do
+    media_file
+    |> Ecto.Changeset.change(supersedes_media_file_id: nil)
+    |> Repo.update()
+  end
+
+  # Per-profile-dimension delta (new - old), rounded the same way
+  # Comparator.upgrade?/5 rounds its overall delta. Read by the activity
+  # feed to answer *why* a replacement decision was made, not just report
+  # the aggregate score change.
+  defp breakdown_delta(old_breakdown, new_breakdown) do
+    old_breakdown
+    |> Map.keys()
+    |> Kernel.++(Map.keys(new_breakdown))
+    |> Enum.uniq()
+    |> Map.new(fn dimension ->
+      old_value = Map.get(old_breakdown, dimension, 0.0) || 0.0
+      new_value = Map.get(new_breakdown, dimension, 0.0) || 0.0
+      {dimension, Float.round(new_value - old_value, 1)}
+    end)
+  end
+
+  # Blacklisting a rejected upgrade's release is not optional: without it,
+  # the next sweep grabs the exact same lying release, imports it, rejects
+  # it, and repeats forever. The (indexer, guid) pair is reached by tracing
+  # new_file's `metadata.extra["imported_from_download_id"]` (written by
+  # `Mydia.Jobs.MediaImport` on every import) back to the `Download` row,
+  # which always carries `indexer` and a `metadata["guid"]` — real, or a
+  # deterministic fallback synthesized by
+  # `Mydia.Downloads.Queue.build_download_metadata/1` when the indexer
+  # didn't supply one. A failure to resolve either is logged loudly rather
+  # than silently skipped, but does not block the rejection outcome: the
+  # file is already trashed and the pointer already cleared by the time
+  # this runs, and blocking the whole job retrying forever on a
+  # permanently-missing download record would be worse than a logged gap in
+  # the blacklist.
+  defp blacklist_release(new_file) do
+    with download_id when is_binary(download_id) <- download_id_for(new_file),
+         %Download{} = download <- Repo.get(Download, download_id),
+         guid when is_binary(guid) and guid != "" <- get_in(download.metadata || %{}, ["guid"]),
+         indexer when is_binary(indexer) and indexer != "" <- download.indexer do
+      case Blacklists.add(indexer, guid, download.title || "Unknown release", "upgrade_rejected") do
+        {:ok, _row} ->
+          :ok
+
+        {:error, changeset} ->
+          Logger.error("Failed to blacklist rejected upgrade release",
+            media_file_id: new_file.id,
+            download_id: download_id,
+            errors: inspect(changeset.errors)
+          )
+
+          :ok
+      end
+    else
+      _ ->
+        Logger.error(
+          "Could not blacklist rejected upgrade release: no traceable (indexer, guid) " <>
+            "for the originating download",
+          media_file_id: new_file.id
+        )
+
+        :ok
+    end
+  end
+
+  defp download_id_for(%MediaFile{metadata: %FileMetadata{extra: extra}}) when is_map(extra) do
+    case extra["imported_from_download_id"] do
+      id when is_binary(id) -> id
+      _ -> nil
+    end
+  end
+
+  defp download_id_for(%MediaFile{}), do: nil
 
   defp movie_candidate(%MediaItem{} = item) do
     with profile when not is_nil(profile) <- QualityProfileResolver.resolve(item),

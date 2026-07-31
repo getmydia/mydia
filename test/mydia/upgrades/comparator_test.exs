@@ -57,6 +57,32 @@ defmodule Mydia.Upgrades.ComparatorTest do
     end
   end
 
+  describe "score_file_with_breakdown/3" do
+    test "returns the same score as score_file/3, plus a per-dimension breakdown" do
+      assert {:ok, score} = Comparator.score_file(uhd_file(), profile(), :movie)
+
+      assert {:ok, %{score: ^score, breakdown: breakdown}} =
+               Comparator.score_file_with_breakdown(uhd_file(), profile(), :movie)
+
+      assert is_map(breakdown)
+      assert Map.has_key?(breakdown, :resolution)
+    end
+
+    test "refuses to score a file with no analyzed_at" do
+      file = %MediaFile{uhd_file() | analyzed_at: nil}
+      assert {:error, :unscorable} = Comparator.score_file_with_breakdown(file, profile(), :movie)
+    end
+
+    test "refuses to score against a profile with no quality standards" do
+      assert {:error, :unscorable} =
+               Comparator.score_file_with_breakdown(
+                 uhd_file(),
+                 profile(%{quality_standards: nil}),
+                 :movie
+               )
+    end
+  end
+
   describe "upgrade?/5 symmetric neutralization" do
     test "a terse title is not penalized for omitting audio" do
       # Candidate mentions only resolution/codec/source. Audio must be

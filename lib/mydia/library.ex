@@ -275,11 +275,56 @@ defmodule Mydia.Library do
         %MediaFile{} = media_file,
         {:ok, %Mydia.Library.Structs.FileAnalysisResult{} = result}
       ) do
-    apply_analysis_success(media_file, result)
+    case apply_analysis_success(media_file, result) do
+      :ok ->
+        maybe_enqueue_upgrade_finalize(media_file)
+        :ok
+
+      other ->
+        other
+    end
   end
 
   def apply_analysis(%MediaFile{} = media_file, {:error, reason}) do
     apply_analysis_failure(media_file, reason)
+  end
+
+  # Enqueues Mydia.Jobs.UpgradeFinalize the moment a file that supersedes
+  # another finishes analysis — the first point it can be scored against its
+  # profile, and therefore the first point the upgrade/reject decision in
+  # Mydia.Upgrades.finalize_upgrade/1 can be made. apply_analysis_success/2
+  # only returns :ok on the actual nil -> analyzed transition (a
+  # re-analysis returns :already_analyzed), so this fires exactly once per
+  # import, never on a re-analysis of the same file.
+  defp maybe_enqueue_upgrade_finalize(%MediaFile{supersedes_media_file_id: nil}), do: :ok
+
+  defp maybe_enqueue_upgrade_finalize(%MediaFile{
+         id: media_file_id,
+         supersedes_media_file_id: supersedes_id
+       })
+       when is_binary(supersedes_id) do
+    alias Mydia.Jobs.UpgradeFinalize
+
+    changeset = UpgradeFinalize.new(%{"media_file_id" => media_file_id})
+
+    case insert_upgrade_finalize_job(changeset) do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to enqueue UpgradeFinalize",
+          media_file_id: media_file_id,
+          reason: inspect(reason)
+        )
+
+        :ok
+    end
+  end
+
+  defp insert_upgrade_finalize_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
   end
 
   defp apply_analysis_success(%MediaFile{} = media_file, result) do

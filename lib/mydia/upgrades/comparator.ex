@@ -35,16 +35,39 @@ defmodule Mydia.Upgrades.Comparator do
   """
   @spec score_file(MediaFile.t(), QualityProfile.t(), :movie | :episode) ::
           {:ok, float()} | {:error, :unscorable}
-  def score_file(%MediaFile{analyzed_at: nil}, _profile, _media_type),
-    do: {:error, :unscorable}
-
-  def score_file(_file, %QualityProfile{quality_standards: nil}, _media_type),
-    do: {:error, :unscorable}
-
   def score_file(%MediaFile{} = file, %QualityProfile{} = profile, media_type) do
+    case score_file_with_breakdown(file, profile, media_type) do
+      {:ok, %{score: score}} -> {:ok, score}
+      {:error, :unscorable} = error -> error
+    end
+  end
+
+  @doc """
+  Like `score_file/3`, but also returns the per-dimension breakdown
+  (`QualityProfile.score_media_file/2`'s `:breakdown` map) alongside the
+  score. `score_file/3` is a thin wrapper around this function — this is the
+  single source of truth for "is this file even analyzable against this
+  profile" (the two guard clauses below).
+
+  Added for `Mydia.Upgrades.finalize_upgrade/1` (Task 10), which records the
+  per-dimension breakdown of both files in the activity trail so it can
+  answer *why* a replacement decision was made, not just that one was made.
+  """
+  @spec score_file_with_breakdown(MediaFile.t(), QualityProfile.t(), :movie | :episode) ::
+          {:ok, %{score: float(), breakdown: map()}} | {:error, :unscorable}
+  def score_file_with_breakdown(%MediaFile{analyzed_at: nil}, _profile, _media_type),
+    do: {:error, :unscorable}
+
+  def score_file_with_breakdown(_file, %QualityProfile{quality_standards: nil}, _media_type),
+    do: {:error, :unscorable}
+
+  def score_file_with_breakdown(%MediaFile{} = file, %QualityProfile{} = profile, media_type) do
     attrs = Attrs.from_media_file(file, media_type)
-    %{score: score} = QualityProfile.score_media_file(profile, compact(attrs))
-    {:ok, score}
+
+    %{score: score, breakdown: breakdown} =
+      QualityProfile.score_media_file(profile, compact(attrs))
+
+    {:ok, %{score: score, breakdown: breakdown}}
   end
 
   @doc """
