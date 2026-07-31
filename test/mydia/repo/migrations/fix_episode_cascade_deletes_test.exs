@@ -3,7 +3,35 @@ defmodule Mydia.Repo.Migrations.FixEpisodeCascadeDeletesTest do
 
   Code.require_file("priv/repo/migrations/20260322000000_fix_episode_cascade_deletes.exs")
 
-  alias Mydia.Repo.Migrations.FixEpisodeCascadeDeletes
+  # The migration also rebuilds downloads and playback_progress, which this
+  # test does not create. Drive only the media_files half through the helper,
+  # using the migration's own column and index definitions. Referenced fully
+  # qualified rather than via `alias` because usage tracking does not credit
+  # a reference from inside this nested module's body against an alias
+  # established in the enclosing test module, which would otherwise report a
+  # false-positive "unused alias" warning.
+  defmodule MediaFilesOnlyMigration do
+    use Ecto.Migration
+    import Mydia.Repo.Migrations.Helpers
+
+    def up do
+      columns =
+        Enum.map(Mydia.Repo.Migrations.FixEpisodeCascadeDeletes.__media_files_columns__(), fn
+          {:episode_id, type, _opts} ->
+            {:episode_id, type,
+             [references: {:episodes, [type: :binary_id, on_delete: :nilify_all]}]}
+
+          other ->
+            other
+        end)
+
+      recreate_table(
+        table: :media_files,
+        columns: columns,
+        indexes: Mydia.Repo.Migrations.FixEpisodeCascadeDeletes.__media_files_indexes__()
+      )
+    end
+  end
 
   defp build_schema do
     sql!("CREATE TABLE media_items (id TEXT PRIMARY KEY)")
@@ -57,32 +85,6 @@ defmodule Mydia.Repo.Migrations.FixEpisodeCascadeDeletesTest do
   end
 
   defp run_media_files_rebuild do
-    # The migration also rebuilds downloads and playback_progress, which this
-    # test does not create. Drive only the media_files half through the helper,
-    # using the migration's own column and index definitions.
-    defmodule MediaFilesOnlyMigration do
-      use Ecto.Migration
-      import Mydia.Repo.Migrations.Helpers
-
-      def up do
-        columns =
-          Enum.map(FixEpisodeCascadeDeletes.__media_files_columns__(), fn
-            {:episode_id, type, _opts} ->
-              {:episode_id, type,
-               [references: {:episodes, [type: :binary_id, on_delete: :nilify_all]}]}
-
-            other ->
-              other
-          end)
-
-        recreate_table(
-          table: :media_files,
-          columns: columns,
-          indexes: FixEpisodeCascadeDeletes.__media_files_indexes__()
-        )
-      end
-    end
-
     run_migration!(MediaFilesOnlyMigration, 20_260_101_000_020)
   end
 
