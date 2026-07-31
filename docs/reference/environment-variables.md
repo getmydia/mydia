@@ -48,7 +48,6 @@ This simplifies configuration by eliminating the need for separate port variable
 |----------|-------------|---------|
 | `MOVIES_PATH` | Movies directory path | `/media/movies` |
 | `TV_PATH` | TV shows directory path | `/media/tv` |
-| `MEDIA_SCAN_INTERVAL_HOURS` | Hours between library scans | `1` |
 
 ### Additional Library Paths
 
@@ -59,7 +58,7 @@ Configure additional libraries using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `LIBRARY_PATH_<N>_PATH` | Directory path | `/media/music` |
 | `LIBRARY_PATH_<N>_TYPE` | Library type | `music` |
 | `LIBRARY_PATH_<N>_MONITORED` | Enable monitoring | `true` |
-| `LIBRARY_PATH_<N>_SCAN_INTERVAL` | Scan interval in seconds | `3600` |
+| `LIBRARY_PATH_<N>_SCAN_INTERVAL` | Automatic scan interval in seconds. Minimum 900. Omit for manual-only scanning. | `3600` |
 
 **Library Types:** `movies`, `series`, `mixed`, `music`, `books`, `adult`
 

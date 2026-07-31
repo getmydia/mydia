@@ -9,6 +9,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.Live.Authorization
   import MydiaWeb.Formatters
 
+  require Logger
+
   @items_per_page 50
 
   @default_sort "added_desc"
@@ -91,6 +93,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:clearable_count, 0)
      # Issues tab state
      |> assign(:issues_counts, %{unmatched: 0, unresolved: 0, other: 0})
+     |> assign(:removed_client_groups, [])
      |> assign(:search_open_for, nil)
      |> assign(:library_search_value, "")
      |> assign(:library_search_results, [])
@@ -793,6 +796,21 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  def handle_event("clear_removed_client", %{"client" => client_name}, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      {count, _} = Downloads.clear_downloads_for_removed_client(client_name)
+
+      {:noreply,
+       socket
+       # Neutral wording: the group covers a deleted client and a disabled one
+       # alike, and the banner it came from says so too.
+       |> put_flash(:info, "Cleared #{count} download(s) referencing '#{client_name}'")
+       |> load_downloads()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_info({:download_updated, _download_id}, socket) do
     # Reload downloads when we receive an update
@@ -819,6 +837,19 @@ defmodule MydiaWeb.DownloadsLive.Index do
         socket
       end
 
+    {:noreply, socket}
+  end
+
+  # Grab outcomes are broadcast on the "downloads" topic and handled by
+  # MediaLive.Show, which owns the manual-search UI. Ignore them quietly here
+  # so the catch-all below keeps meaning "genuinely unexpected message".
+  def handle_info({:grab_completed, _payload}, socket), do: {:noreply, socket}
+  def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
+  def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
+
+  def handle_info(msg, socket) do
+    # Catch-all for unhandled messages to prevent crashes
+    Logger.warning("Unhandled message in DownloadsLive.Index: #{inspect(msg)}")
     {:noreply, socket}
   end
 
@@ -929,10 +960,63 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, all_empty)
     |> assign(:issues_counts, counts)
+    |> assign(:removed_client_groups, removed_client_groups())
     |> assign(:episodes_by_media_item, episodes_by_media_item)
     |> stream(:unmatched_downloads, unmatched, reset: true)
     |> stream(:unresolved_downloads, unresolved, reset: true)
     |> stream(:other_issues, other, reset: true)
+  end
+
+  # Orphan groups annotated with a DOM-safe slug. Client names come from
+  # operator-supplied config (env vars), so unlike most other ids in this
+  # LiveView they aren't guaranteed to already be DOM-id-safe — a name with
+  # spaces or punctuation would otherwise produce an invalid id/CSS selector.
+  # The raw name is preserved in `download_client` for display and for the
+  # `phx-value-client` sent back to `clear_removed_client/2`.
+  defp removed_client_groups do
+    Downloads.removed_client_groups()
+    |> Enum.map_reduce(MapSet.new(), fn group, taken ->
+      {slug, taken} = unique_slug(slugify(group.download_client), taken)
+      {Map.put(group, :slug, slug), taken}
+    end)
+    |> elem(0)
+  end
+
+  # Distinct client names can slugify to the same string ("Qbit Old" and
+  # "qbit-old"), and anything with no alphanumerics collapses to "client".
+  # Duplicate DOM ids are invalid HTML and make LiveView's id-keyed patching
+  # apply an update to the wrong banner, so the first claimant keeps the bare
+  # slug and later ones get a numeric suffix. `removed_client_groups/0` orders
+  # by client name, so which one is "first" is stable across renders.
+  defp unique_slug(base, taken) do
+    if MapSet.member?(taken, base) do
+      next_free_slug(base, 2, taken)
+    else
+      {base, MapSet.put(taken, base)}
+    end
+  end
+
+  # Skips past a suffix a real client name already claimed, so a group named
+  # "qbit-old-2" cannot be stolen from underneath by a disambiguated sibling.
+  defp next_free_slug(base, n, taken) do
+    candidate = "#{base}-#{n}"
+
+    if MapSet.member?(taken, candidate) do
+      next_free_slug(base, n + 1, taken)
+    else
+      {candidate, MapSet.put(taken, candidate)}
+    end
+  end
+
+  defp slugify(name) do
+    name
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
+    |> case do
+      "" -> "client"
+      slug -> slug
+    end
   end
 
   # Re-enqueue every failed mismatch download whose reported path is under the

@@ -374,7 +374,7 @@ case "$COMMAND" in
                 ;;
             setup)
                 echo -e "${GREEN}Setting up player project (pub get + build_runner)...${NC}"
-                in_shell_sh "cd player && flutter pub get && flutter pub run build_runner build --delete-conflicting-outputs"
+                in_shell_sh "cd player && flutter pub get && flutter pub run build_runner build"
                 echo -e "${GREEN}Player project setup complete!${NC}"
                 ;;
             shell)
@@ -433,7 +433,11 @@ case "$COMMAND" in
                 case "$2" in
                     build)
                         echo -e "${GREEN}Building Android APK using player/flake.nix...${NC}"
-                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter build apk --release"
+                        # build_runner is required, not optional: every generated
+                        # Dart file is gitignored, so a fresh checkout has none and
+                        # the build fails with hundreds of unrelated-looking Dart
+                        # errors. Idempotent, so running it every time is safe.
+                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter pub run build_runner build && flutter build apk --release"
                         if [ $? -eq 0 ]; then
                             echo -e "${GREEN}APK built successfully!${NC}"
                             echo "Output: player/build/app/outputs/flutter-apk/app-release.apk"
@@ -442,7 +446,7 @@ case "$COMMAND" in
                     run)
                         echo -e "${GREEN}Building and running on Android device...${NC}"
                         extra_args="${@:3}"
-                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter run $extra_args"
+                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter pub run build_runner build && flutter run $extra_args"
                         ;;
                     shell)
                         echo -e "${GREEN}Opening nix develop shell in player directory...${NC}"
@@ -548,7 +552,7 @@ case "$COMMAND" in
                     flutter pub get
                     if [ "$run_codegen" = true ]; then
                         echo -e "${GREEN}Running code generation...${NC}"
-                        flutter pub run build_runner build --delete-conflicting-outputs
+                        flutter pub run build_runner build
                     fi
                     case "$macos_cmd" in
                         build)

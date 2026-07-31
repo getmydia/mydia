@@ -2,6 +2,8 @@ defmodule MydiaWeb.CalendarLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Media
 
+  require Logger
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -92,6 +94,19 @@ defmodule MydiaWeb.CalendarLive.Index do
   def handle_info({:download_updated, _download_id}, socket) do
     # Just trigger a re-render to update the downloads counter in the sidebar
     # The counter will be recalculated when the layout renders
+    {:noreply, socket}
+  end
+
+  # Grab outcomes are broadcast on the "downloads" topic and handled by
+  # MediaLive.Show, which owns the manual-search UI. Ignore them quietly here
+  # so the catch-all below keeps meaning "genuinely unexpected message".
+  def handle_info({:grab_completed, _payload}, socket), do: {:noreply, socket}
+  def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
+  def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
+
+  def handle_info(msg, socket) do
+    # Catch-all for unhandled messages to prevent crashes
+    Logger.warning("Unhandled message in CalendarLive.Index: #{inspect(msg)}")
     {:noreply, socket}
   end
 

@@ -171,7 +171,7 @@ When the backend GraphQL schema changes:
 
 2. Regenerate the Dart code:
    ```bash
-   ./dev flutter pub run build_runner build --delete-conflicting-outputs
+   ./dev flutter pub run build_runner build
    ```
 
 The Flutter client uses a symlink to the server schema, so no copying is needed.

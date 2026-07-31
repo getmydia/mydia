@@ -1120,7 +1120,7 @@ defmodule MydiaWeb.CoreComponents do
   Label for the blank quality-profile choice.
 
   That choice stores `nil`, which means "follow the configured default"
-  (`Mydia.Settings.effective_quality_profile/1`). When no default is configured,
+  (`Mydia.Indexers.QualityProfileResolver`). When no default is configured,
   `nil` genuinely means no profile, and the label says so.
   """
   @spec default_quality_profile_label(String.t() | nil) :: String.t()

@@ -171,15 +171,17 @@ defmodule Mydia.Config.SchemaTest do
       assert "is invalid" in errors_on(changeset).logging.level
     end
 
-    test "validates media scan_interval_hours is positive" do
+    test "ignores a removed media scan_interval_hours key without failing to load" do
       attrs = %{
-        media: %{scan_interval_hours: 0}
+        media: %{scan_interval_hours: 2, movies_path: "/media/movies"}
       }
 
       changeset = Schema.changeset(%Schema{}, attrs)
 
-      refute changeset.valid?
-      assert "must be greater than 0" in errors_on(changeset).media.scan_interval_hours
+      assert changeset.valid?
+      media = Ecto.Changeset.get_field(changeset, :media)
+      refute Map.has_key?(media, :scan_interval_hours)
+      assert media.movies_path == "/media/movies"
     end
 
     test "validates downloads monitor_interval_minutes is positive" do
@@ -398,6 +400,31 @@ defmodule Mydia.Config.SchemaTest do
     end
   end
 
+  describe "library path scan_interval" do
+    # Config loading happens before the supervision tree starts and raises on an
+    # invalid changeset, so a too-small value must not be able to brick a boot.
+    test "clamps a sub-minimum interval instead of failing to load" do
+      changeset = Schema.changeset(%Schema{}, library_path_attrs(%{scan_interval: 300}))
+
+      assert changeset.valid?
+      assert configured_scan_interval(changeset) == 900
+    end
+
+    test "keeps an interval at or above the minimum" do
+      changeset = Schema.changeset(%Schema{}, library_path_attrs(%{scan_interval: 3600}))
+
+      assert changeset.valid?
+      assert configured_scan_interval(changeset) == 3600
+    end
+
+    test "leaves an omitted interval nil, which means manual-only scanning" do
+      changeset = Schema.changeset(%Schema{}, library_path_attrs(%{}))
+
+      assert changeset.valid?
+      assert configured_scan_interval(changeset) == nil
+    end
+  end
+
   describe "plugins override_dir (PLUGINS_OVERRIDE_DIR)" do
     test "round-trips a configured override directory" do
       changeset = Schema.changeset(%Schema{}, %{plugins: %{override_dir: "/data/plugins"}})
@@ -410,6 +437,18 @@ defmodule Mydia.Config.SchemaTest do
     test "defaults to nil when unset" do
       assert Schema.defaults().plugins.override_dir == nil
     end
+  end
+
+  defp library_path_attrs(extra) do
+    %{library_paths: [Map.merge(%{path: "/media/movies", type: :movies}, extra)]}
+  end
+
+  defp configured_scan_interval(changeset) do
+    changeset
+    |> Ecto.Changeset.apply_changes()
+    |> Map.fetch!(:library_paths)
+    |> hd()
+    |> Map.fetch!(:scan_interval)
   end
 
   # Helper function to extract errors from changeset

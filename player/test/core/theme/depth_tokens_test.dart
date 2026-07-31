@@ -89,6 +89,77 @@ void main() {
     });
   });
 
+  group('player chrome glass', () {
+    test('is more transparent and more blurred than browse chrome', () {
+      // The player panel sits over live video, so it can afford real
+      // transparency; browse chrome sits over static art and cannot.
+      expect(
+        DepthTokens.playerChromeFillOpacity,
+        lessThan(DepthTokens.chromeFillOpacity),
+      );
+      expect(
+        DepthTokens.blurPlayerChrome,
+        greaterThan(DepthTokens.blurChrome),
+      );
+    });
+
+    test('boosts backdrop saturation', () {
+      expect(DepthTokens.playerChromeSaturation, greaterThan(1.0));
+    });
+
+    test('fill gradient brackets the nominal opacity', () {
+      expect(
+        DepthTokens.playerChromeFillTopAlpha,
+        greaterThan(DepthTokens.playerChromeFillOpacity),
+      );
+      expect(
+        DepthTokens.playerChromeFillBottomAlpha,
+        lessThan(DepthTokens.playerChromeFillOpacity),
+      );
+      // Denser at the top, where the control row sits; sheer at the bottom,
+      // where only the scrubber track does.
+      expect(
+        DepthTokens.playerChromeFillTopAlpha,
+        greaterThan(DepthTokens.playerChromeFillBottomAlpha),
+      );
+    });
+
+    test(
+      'the dense end stays under the browse legibility floor — the '
+      'redesign\'s actual differentiation claim, guarded directly rather '
+      'than via playerChromeFillOpacity (which no production code reads)',
+      () {
+        expect(
+          DepthTokens.playerChromeFillTopAlpha,
+          lessThan(DepthTokens.glassLegibilityFloor),
+        );
+      },
+    );
+
+    test('rim is directional: light on top, dark on the bottom', () {
+      expect(DepthTokens.playerRimTop.a, greaterThan(0));
+      expect(DepthTokens.playerRimBottom.a, greaterThan(0));
+      // Top rim is a white highlight, bottom rim is a black shade.
+      expect(DepthTokens.playerRimTop.r, greaterThan(0.5));
+      expect(DepthTokens.playerRimBottom.r, lessThan(0.5));
+    });
+
+    test('tint is neutral, not the navy browse background', () {
+      expect(DepthTokens.playerChromeTint, isNot(AppColors.background));
+      final t = DepthTokens.playerChromeTint;
+      final bg = AppColors.background;
+      // Neutral: the tint's blue-to-red difference is smaller than the navy
+      // background's, so backdrop colour survives the fill instead of being
+      // drained to grey/blue mush.
+      expect(t.b - t.r, lessThan(bg.b - bg.r));
+    });
+
+    test('exposes panel and pill radii', () {
+      expect(DepthTokens.radiusPlayerPanel, 16.0);
+      expect(DepthTokens.radiusPlayerPill, 18.0);
+    });
+  });
+
   group('motion (R11)', () {
     test('exposes durations and curves', () {
       expect(DepthTokens.motionFast, isA<Duration>());

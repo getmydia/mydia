@@ -25,7 +25,6 @@ auth:
 media:
   movies_path: "/media/movies"
   tv_path: "/media/tv"
-  scan_interval_hours: 1
 
 # Downloads monitoring
 downloads:

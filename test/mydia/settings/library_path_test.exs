@@ -1,5 +1,5 @@
 defmodule Mydia.Settings.LibraryPathTest do
-  use ExUnit.Case, async: true
+  use Mydia.DataCase, async: true
 
   alias Mydia.Settings.LibraryPath
 
@@ -79,6 +79,45 @@ defmodule Mydia.Settings.LibraryPathTest do
 
       assert changeset.valid?
       assert Ecto.Changeset.get_field(changeset, :tv_metadata_source) == :tvdb
+    end
+  end
+
+  describe "scan_interval validation" do
+    defp base_attrs do
+      %{path: "/media/movies", type: :movies}
+    end
+
+    test "defaults to nil, meaning manual only" do
+      assert %LibraryPath{}.scan_interval == nil
+    end
+
+    test "accepts nil (automatic scanning off)" do
+      changeset =
+        LibraryPath.changeset(%LibraryPath{}, Map.put(base_attrs(), :scan_interval, nil))
+
+      assert changeset.valid?
+    end
+
+    test "accepts the 900 second minimum" do
+      changeset =
+        LibraryPath.changeset(%LibraryPath{}, Map.put(base_attrs(), :scan_interval, 900))
+
+      assert changeset.valid?
+    end
+
+    test "rejects an interval below 900 seconds" do
+      changeset =
+        LibraryPath.changeset(%LibraryPath{}, Map.put(base_attrs(), :scan_interval, 360))
+
+      refute changeset.valid?
+      assert "must be greater than or equal to 900" in errors_on(changeset).scan_interval
+    end
+
+    test "casts an empty string to nil so the Off option round-trips from the form" do
+      changeset = LibraryPath.changeset(%LibraryPath{}, Map.put(base_attrs(), :scan_interval, ""))
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_field(changeset, :scan_interval) == nil
     end
   end
 end

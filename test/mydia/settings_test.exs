@@ -151,37 +151,6 @@ defmodule Mydia.SettingsTest do
     end
   end
 
-  describe "effective_quality_profile/1" do
-    test "returns the stamped profile when the id resolves" do
-      default = quality_profile_fixture(%{name: "Default-#{System.unique_integer([:positive])}"})
-      stamped = quality_profile_fixture(%{name: "Stamped-#{System.unique_integer([:positive])}"})
-      {:ok, _} = Settings.set_default_quality_profile(default.id)
-
-      assert %QualityProfile{id: id} = Settings.effective_quality_profile(stamped.id)
-      assert id == stamped.id
-    end
-
-    test "falls back to the configured default when the id is nil" do
-      default = quality_profile_fixture(%{name: "Default-#{System.unique_integer([:positive])}"})
-      {:ok, _} = Settings.set_default_quality_profile(default.id)
-
-      assert %QualityProfile{id: id} = Settings.effective_quality_profile(nil)
-      assert id == default.id
-    end
-
-    test "falls back to the configured default when the id has no matching row" do
-      default = quality_profile_fixture(%{name: "Default-#{System.unique_integer([:positive])}"})
-      {:ok, _} = Settings.set_default_quality_profile(default.id)
-
-      assert %QualityProfile{id: id} = Settings.effective_quality_profile(Ecto.UUID.generate())
-      assert id == default.id
-    end
-
-    test "returns nil when the id is nil and no default is configured" do
-      assert Settings.effective_quality_profile(nil) == nil
-    end
-  end
-
   describe "ensure_default_quality_profiles/0 default seeding" do
     test "seeds the default to \"Any\" on a fresh install" do
       Repo.delete_all(QualityProfile)

@@ -108,7 +108,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       render_component(&Modals.manual_search_modal/1,
         manual_search_context: %{type: :media_item},
-        media_item: %{title: "Some Movie", type: "movie", quality_profile: nil},
+        media_item: %Mydia.Media.MediaItem{title: "Some Movie", type: "movie"},
         manual_search_query: "Some Movie 2020",
         searching: false,
         results_empty?: false,
@@ -117,7 +117,6 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
         quality_filter: nil,
         min_seeders: 0,
         sort_by: :seeders,
-        effective_quality_profile: nil,
         close_after_grab: false
       )
     end

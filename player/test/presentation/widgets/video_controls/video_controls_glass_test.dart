@@ -1,80 +1,107 @@
-// U5 — glass video controls (plan R4, R10).
-//
-// The bottom control chrome is a token-driven real-blur glass bar
-// ([VideoControlsGlassBar]) instead of the prior black gradient scrim. This
-// verifies it renders a BackdropFilter at the chrome blur sigma, that its fill
-// clears the R10 legibility floor (so controls stay readable over bright video
-// frames), and that arbitrary control children remain hit-testable inside it.
+// The playback control chrome is a token-driven glass panel. This replaces the
+// tests for the former full-width glass control bar: that widget wrapped its
+// bar in browse-UI chrome tokens (0.80 fill over a sigma-10 blur), which
+// rendered a near-solid rectangle. ChromePanel uses the dedicated player
+// material instead.
 
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/player/platform_features.dart';
 import 'package:player/core/theme/depth_tokens.dart';
-import 'package:player/presentation/widgets/video_controls/custom_video_controls.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 
 Widget _host(Widget child) => MaterialApp(
       home: Scaffold(
         body: Stack(
           children: [
-            // Stand-in for the playing video the glass bar samples.
             const Positioned.fill(child: ColoredBox(color: Colors.white)),
-            Align(alignment: Alignment.bottomCenter, child: child),
+            child,
           ],
         ),
       ),
     );
 
-void main() {
-  group('VideoControlsGlassBar (R4/R10)', () {
-    testWidgets('renders token glass (BackdropFilter at the chrome sigma) '
-        'instead of a gradient scrim', (tester) async {
-      await tester.pumpWidget(
-        _host(const VideoControlsGlassBar(child: SizedBox(width: 200, height: 60))),
-      );
+ChromePanel _panel(PlayerGlassTier tier) => ChromePanel(
+      metrics: PanelMetrics.forWidth(1600),
+      tier: tier,
+      transport: const SizedBox(width: 200, height: 48),
+      scrubber: const SizedBox(width: 300, height: 32),
+      secondary: const SizedBox(width: 120, height: 40),
+    );
 
-      expect(find.byType(BackdropFilter), findsOneWidget);
-      final backdrop =
-          tester.widget<BackdropFilter>(find.byType(BackdropFilter));
+void main() {
+  group('ChromePanel glass', () {
+    testWidgets('blurs at the player sigma, not the browse chrome sigma',
+        (tester) async {
+      await tester.pumpWidget(_host(_panel(PlayerGlassTier.reduced)));
+
+      final filter =
+          tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter;
       expect(
-        backdrop.filter,
+        filter,
         ImageFilter.blur(
+          sigmaX: DepthTokens.blurPlayerChrome,
+          sigmaY: DepthTokens.blurPlayerChrome,
+        ),
+      );
+      expect(
+        filter,
+        isNot(ImageFilter.blur(
           sigmaX: DepthTokens.blurChrome,
           sigmaY: DepthTokens.blurChrome,
-        ),
+        )),
       );
     });
 
-    testWidgets('control-bar fill clears the legibility floor (R10)',
+    testWidgets(
+        'stays below the browse legibility floor at both edges, by design',
         (tester) async {
-      await tester.pumpWidget(
-        _host(const VideoControlsGlassBar(child: SizedBox(width: 200, height: 60))),
-      );
+      await tester.pumpWidget(_host(_panel(PlayerGlassTier.full)));
 
       final decoration = tester
           .widget<DecoratedBox>(
-            find.descendant(
-              of: find.byType(BackdropFilter),
-              matching: find.byType(DecoratedBox),
-            ),
+            find
+                .descendant(
+                  of: find.byType(BackdropFilter),
+                  matching: find.byType(DecoratedBox),
+                )
+                .first,
           )
           .decoration as BoxDecoration;
-      final fill = decoration.color!;
-      expect(fill.a, greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor));
-      expect(fill, AppColors.background.withValues(alpha: DepthTokens.chromeFillOpacity));
+      final gradient = decoration.gradient! as LinearGradient;
+
+      // The gradient is asymmetric and dense-at-the-top: ChromePanel puts the
+      // control row (row 1) at the top of the panel, so density follows it
+      // there. Unlike an earlier iteration, the dense (top) end itself also
+      // stays under the browse-UI floor — glassLegibilityFloor guards this
+      // directly in depth_tokens_test — so *nowhere* in the panel is as
+      // dense as browse chrome. glass_legibility_test measures the actual
+      // worst-case WCAG contrast at the control-row icons (3:1, non-text)
+      // and the scrubber timecodes (4.5:1, text, with a targeted shadow).
+      expect(
+        gradient.colors.first.a,
+        lessThan(DepthTokens.glassLegibilityFloor),
+      );
+      expect(
+        gradient.colors.last.a,
+        lessThan(DepthTokens.glassLegibilityFloor),
+      );
     });
 
-    testWidgets('control children remain interactive inside the glass bar',
-        (tester) async {
+    testWidgets('controls remain interactive inside the panel', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
         _host(
-          VideoControlsGlassBar(
-            child: ElevatedButton(
+          ChromePanel(
+            metrics: PanelMetrics.forWidth(1600),
+            tier: PlayerGlassTier.full,
+            transport: ElevatedButton(
               onPressed: () => tapped = true,
               child: const Text('play'),
             ),
+            scrubber: const SizedBox(width: 300, height: 32),
           ),
         ),
       );

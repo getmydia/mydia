@@ -304,7 +304,7 @@ defmodule Mydia.Library.MetadataEnricher do
     #
     # quality_profile_id is deliberately left unset. A nil profile means "follow
     # whatever default is configured", resolved at search time by
-    # Settings.effective_quality_profile/1. Stamping the current default here
+    # Mydia.Indexers.QualityProfileResolver. Stamping the current default here
     # would freeze it onto every scanned item, so changing the default later
     # would leave the whole library behind on the old one.
     if media_type == :tv_show do

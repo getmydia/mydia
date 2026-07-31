@@ -72,6 +72,23 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     # false = client confirmed the torrent is gone
     # nil   = client unreachable; presence unknown
     :in_client?,
+    # How the download's client appears in configuration at poll time.
+    # :present  = the client is configured and enabled
+    # :disabled = the client is configured but disabled, so it is not polled
+    # :removed  = no client by that name exists at all (deleted, renamed, or
+    #             dropped from env vars)
+    # nil       = not evaluated (no clients configured at all)
+    #
+    # `:disabled` and `:removed` are kept apart because they need different
+    # error copy: telling an operator their client is "no longer configured"
+    # when it is sitting in the settings list, disabled, is its own kind of
+    # wrong.
+    :client_config_state,
+    # When the client is :disabled or :removed and exactly one reachable
+    # torrent-type client reports this download's `download_client_id`, the
+    # name of that client. `DownloadMonitor` persists it; see
+    # `Mydia.Downloads.ClientAdoption`.
+    :adoptable_client,
     # Whether a completed download is eligible for post-import re-match: exactly
     # one non-trashed imported file (packs resolve to several and can't be
     # re-matched as a unit). Computed per-tab in the LiveView; nil when not
@@ -126,6 +143,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           last_observed_at: DateTime.t() | nil,
           stalled_since: DateTime.t() | nil,
           in_client?: boolean() | nil,
+          client_config_state: :present | :disabled | :removed | nil,
+          adoptable_client: String.t() | nil,
           rematch_eligible?: boolean() | nil
         }
 

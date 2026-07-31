@@ -3,11 +3,50 @@
 # ============================================
 # Flutter Build Stage
 # ============================================
-# KEEP IN SYNC: Flutter must match devenv.nix (flutter344 = 3.44.2) and the
-# FLUTTER_VERSION strings in ci.yml + ci-player.yml. cirruslabs publishes no
-# 3.44.2 image (the 3.44 line stops at 3.44.0), so this builder pins the nearest
-# published tag — 3.44.0, one bugfix patch behind the 3.44.2 SDK pin above.
-FROM ghcr.io/cirruslabs/flutter:3.44.0 AS flutter-builder
+# The Flutter version comes from player/.fvmrc, the single source of truth shared
+# with devenv.nix, player/flake.nix and the CI workflows. Nothing to sync here.
+#
+# This installs the SDK rather than using a cirruslabs/flutter image because
+# cirruslabs lags patch releases, so no tag of theirs can be relied on to match
+# .fvmrc. Installing also skips the Android SDK and JDK that image bundles and
+# this web build never touches.
+#
+# Do not reintroduce a version number in this comment. ci-nix.yml's "Check /
+# Flutter Pin" job scans every build and CI file for a Flutter version literal
+# and fails on any hit, so the version is always read from .fvmrc at build time.
+FROM debian:bookworm-slim AS flutter-builder
+
+# curl and unzip are Flutter's own dependencies, not ours: bin/internal/
+# update_dart_sdk.sh curls the Dart SDK zip, and the tool shells out to unzip for
+# the Dart SDK and the engine artifacts precache pulls.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      git \
+      jq \
+      unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Layer keyed on .fvmrc alone, so the SDK is re-fetched only when the pin moves.
+#
+# The SDK comes from the tagged git checkout rather than the published
+# flutter_linux_*.tar.xz archive because Flutter publishes those for x64 Linux
+# only, while release.yml builds this image natively on arm64 runners too. A git
+# checkout carries no prebuilt Dart SDK, so update_dart_sdk.sh fetches the one
+# matching whichever architecture is building.
+#
+# safe.directory is required because that checkout is owned by root while Flutter
+# shells out to git against it. precache --web warms the web artifacts inside
+# this cached layer so `flutter build web` does not fetch them on every build.
+COPY player/.fvmrc /tmp/.fvmrc
+RUN FLUTTER_VERSION="$(jq -r .flutter /tmp/.fvmrc)" && \
+    git clone --depth 1 --branch "$FLUTTER_VERSION" \
+      https://github.com/flutter/flutter.git /opt/flutter && \
+    git config --global --add safe.directory /opt/flutter && \
+    /opt/flutter/bin/flutter config --no-analytics && \
+    /opt/flutter/bin/flutter precache --web
+
+ENV PATH="/opt/flutter/bin:${PATH}"
 
 WORKDIR /app/player
 
@@ -17,6 +56,11 @@ COPY player/build.yaml ./
 COPY player/lib ./lib
 COPY player/web ./web
 COPY player/rust_builder ./rust_builder
+# Everything `pubspec.yaml` declares under `flutter: assets:`/`fonts:` — the
+# bundled Inter faces and their license. `flutter build web` hard-fails
+# ("unable to locate asset entry in pubspec.yaml") if a declared asset is
+# missing from the build context, so this must track the pubspec.
+COPY player/assets ./assets
 
 # Copy the GraphQL schema (resolves symlink from priv/graphql/)
 COPY priv/graphql/schema.graphql ./lib/graphql/schema.graphql
@@ -24,9 +68,8 @@ COPY priv/graphql/schema.graphql ./lib/graphql/schema.graphql
 # Install dependencies, generate code, and build
 # Cache pub packages to avoid re-downloading 1656 dependencies each build
 RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
-    flutter config --no-analytics && \
     flutter pub get && \
-    dart run build_runner build --delete-conflicting-outputs && \
+    dart run build_runner build && \
     flutter build web --release --base-href /player/ --tree-shake-icons
 
 # ============================================

@@ -53,9 +53,10 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   import Ecto.Query, warn: false
 
-  alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search, Settings}
+  alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.RankingOptions
+  alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Media.{MediaItem, Episode}
@@ -1249,7 +1250,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     # the requested episode above wrong episodes and season packs (which match
     # the season but lack the episode).
     RankingOptions.build(%{
-      quality_profile: Settings.effective_quality_profile(episode.media_item.quality_profile_id),
+      quality_profile: QualityProfileResolver.resolve(episode.media_item),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
@@ -1268,7 +1269,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     # matches on season alone — a season pack for the requested season matches,
     # a wrong-season pack is penalized.
     RankingOptions.build(%{
-      quality_profile: Settings.effective_quality_profile(media_item.quality_profile_id),
+      quality_profile: QualityProfileResolver.resolve(media_item),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,

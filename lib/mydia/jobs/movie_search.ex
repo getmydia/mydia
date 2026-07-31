@@ -33,9 +33,10 @@ defmodule Mydia.Jobs.MovieSearch do
 
   import Ecto.Query, warn: false
 
-  alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search, Settings}
+  alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.RankingOptions
+  alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
@@ -547,7 +548,7 @@ defmodule Mydia.Jobs.MovieSearch do
     # no expected_season/expected_episode are supplied (a TV-pattern release is
     # softly penalized as an identity mismatch inside the ranker).
     RankingOptions.build(%{
-      quality_profile: Settings.effective_quality_profile(movie.quality_profile_id),
+      quality_profile: QualityProfileResolver.resolve(movie),
       media_type: :movie,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,

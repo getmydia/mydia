@@ -19,7 +19,7 @@ Mydia will automatically search for releases and download them based on your qua
 If you have existing media files, Mydia can import them during library scanning:
 
 1. Place your media files in the library directory
-2. Trigger a library scan (or wait for automatic scan)
+2. Trigger a library scan (or wait for a scheduled scan, if you have enabled one for this library)
 3. Mydia will match files to metadata and import them
 
 ### File Naming

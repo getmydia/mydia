@@ -22,7 +22,6 @@ Place a `config.yml` file in the `/config` directory:
 # /config/config.yml
 movies_path: /media/movies
 tv_path: /media/tv
-scan_interval_hours: 2
 ```
 
 ### 4. Schema Defaults (Lowest Priority)
@@ -53,12 +52,6 @@ For proper link generation:
 ```bash
 PHX_HOST=mydia.example.com
 URL_SCHEME=https
-```
-
-### Adjusting Scan Intervals
-
-```bash
-MEDIA_SCAN_INTERVAL_HOURS=4
 ```
 
 ### Enabling Debug Logging

@@ -37,7 +37,7 @@ defmodule Mydia.Indexers.RankingOptions do
   This builder takes an already-resolved `%QualityProfile{}` or `nil` and stays
   free of database access. Deciding *which* profile governs an item, including
   the fallback to the configured default when the item has none of its own, is
-  `Mydia.Settings.effective_quality_profile/1`. Call sites must resolve through
+  `Mydia.Indexers.QualityProfileResolver`. Call sites must resolve through
   that function rather than reading `media_item.quality_profile` directly,
   otherwise the fallback drifts out of one search path the way `min_ratio` did.
   """

@@ -4,6 +4,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Library.MetadataEnricher
   alias Mydia.{Library, Media, Settings}
   alias Mydia.Media.MediaItem
@@ -502,14 +503,14 @@ defmodule Mydia.Library.MetadataEnricherTest do
       # "follow whatever default is configured", resolved at search time.
       assert is_nil(media_item.quality_profile_id)
 
-      resolved = Settings.effective_quality_profile(media_item.quality_profile_id)
+      resolved = QualityProfileResolver.resolve(media_item)
       assert resolved.id == default.id
 
       # Changing the default moves the item with it, which stamping would break.
       other = quality_profile_fixture(%{name: "Enricher Default Changed"})
       {:ok, _} = Settings.set_default_quality_profile(other.id)
 
-      assert Settings.effective_quality_profile(media_item.quality_profile_id).id == other.id
+      assert QualityProfileResolver.resolve(media_item).id == other.id
     end
   end
 

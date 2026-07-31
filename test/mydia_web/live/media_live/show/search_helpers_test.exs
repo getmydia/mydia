@@ -382,47 +382,4 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
       assert first.size == large_size
     end
   end
-
-  describe "build_manual_ranking_opts/1" do
-    # The caller (the LiveView, or the manual search modal bridging its own
-    # attr) is responsible for resolving the profile via
-    # Mydia.Settings.effective_quality_profile/1 before calling in — this
-    # function must stay a pure field read with no database access, exactly
-    # like Mydia.Indexers.RankingOptions.build/1 downstream of it.
-    test "carries the pre-resolved :effective_quality_profile straight through" do
-      media_item = %{title: "The Matrix", type: "movie"}
-      profile = %QualityProfile{id: Ecto.UUID.generate(), name: "Resolved"}
-
-      opts =
-        SearchHelpers.build_manual_ranking_opts(%{
-          media_item: media_item,
-          effective_quality_profile: profile
-        })
-
-      assert Keyword.get(opts, :quality_profile) == profile
-    end
-
-    test "carries nil through when no profile has been resolved" do
-      media_item = %{title: "The Matrix", type: "movie"}
-
-      opts =
-        SearchHelpers.build_manual_ranking_opts(%{
-          media_item: media_item,
-          effective_quality_profile: nil
-        })
-
-      refute Keyword.get(opts, :quality_profile)
-    end
-
-    test "raises rather than silently degrading when the key is missing" do
-      # A caller that forgets to resolve the profile must fail loudly. Defaulting
-      # to nil here would silently mean "no profile", reinstating the bare
-      # seeders sort the default-profile fallback exists to prevent.
-      media_item = %{title: "The Matrix", type: "movie"}
-
-      assert_raise KeyError, fn ->
-        SearchHelpers.build_manual_ranking_opts(%{media_item: media_item})
-      end
-    end
-  end
 end

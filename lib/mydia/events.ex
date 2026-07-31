@@ -594,6 +594,7 @@ defmodule Mydia.Events do
         "download_id" => download.id
       }
       |> maybe_add_media_context(media_item)
+      |> maybe_add_failure_classification(opts)
 
     create_event_async(%{
       category: "downloads",
@@ -1155,6 +1156,26 @@ defmodule Mydia.Events do
       "media_type" => media_item.type
     })
   end
+
+  # The download client's own account of *why* a download failed (#237).
+  #
+  # Written only when the caller supplies it, so the DownloadMonitor paths
+  # that detect a Mydia-side failure (missing from client, stuck import,
+  # escalated stall) keep emitting exactly the metadata they always have.
+  #
+  # The caller passes an already-rendered slug rather than a category atom,
+  # so this module stays independent of `FailureCategory` and the slug is
+  # guaranteed to be the same string written to
+  # `release_blacklist.failure_reason` beside it.
+  defp maybe_add_failure_classification(metadata, opts) do
+    metadata
+    |> maybe_put_metadata("failure_category", opts[:failure_category])
+    |> maybe_put_metadata("failure_detail", opts[:failure_detail])
+  end
+
+  defp maybe_put_metadata(metadata, _key, nil), do: metadata
+  defp maybe_put_metadata(metadata, _key, ""), do: metadata
+  defp maybe_put_metadata(metadata, key, value), do: Map.put(metadata, key, value)
 
   # Helper to build search description with episode info
   defp build_search_description(prefix, metadata) do

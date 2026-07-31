@@ -1,7 +1,25 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
 import 'platform_features_stub.dart'
     if (dart.library.io) 'platform_features_native.dart' as platform;
+
+/// Rendering tier for the playback chrome's glass material.
+///
+/// `BackdropFilter` — and especially `ImageFilter.compose` with a colour matrix
+/// — is the expensive path on Flutter web. Widgets read [PlatformFeatures
+/// .playerGlassTier] rather than branching on `kIsWeb` themselves, so the
+/// policy lives in one place and tests can force a tier.
+enum PlayerGlassTier {
+  /// Blur + saturation boost. Native desktop and mobile.
+  full,
+
+  /// Blur only, no colour matrix. Web.
+  reduced,
+
+  /// No live blur at all; compensating denser fill. Contingency only — adopt
+  /// solely if web verification measures an actual frame-rate problem.
+  faux,
+}
 
 /// Service to detect platform-specific capabilities and features
 class PlatformFeatures {
@@ -53,14 +71,47 @@ class PlatformFeatures {
   /// Check if gesture controls should be enabled (mobile only)
   static bool get supportsGestureControls => isMobile;
 
-  /// Check if keyboard shortcuts should be enabled (desktop only)
-  static bool get supportsKeyboardShortcuts => isDesktop;
+  /// Check if keyboard shortcuts should be enabled: native desktop or web —
+  /// both have a physical keyboard. This was previously `isDesktop` alone,
+  /// which left a narrowed desktop *or web* browser window with no in-bar
+  /// episode-nav buttons (viewport-width-gated, not platform-gated — see
+  /// `PanelMetrics.touchTargets`/`TransportSurface.compact`), no
+  /// `UpNextOverlay` (autoplay-only, next-episode-only), and — before this
+  /// fix — no keyboard fallback either, since [supportsKeyboardShortcuts]
+  /// was false on web. `isDesktop` itself is left alone: it has two other,
+  /// unrelated call sites in `player_screen.dart` (double-click-to-fullscreen
+  /// gating) that were never asked to change and that this fix doesn't
+  /// touch.
+  static bool get supportsKeyboardShortcuts =>
+      computeSupportsKeyboardShortcuts(isDesktop: isDesktop, isWeb: isWeb);
+
+  /// Pure predicate behind [supportsKeyboardShortcuts], exposed separately so
+  /// it can be unit-tested for every platform combination without actually
+  /// running on each platform. `kIsWeb` is a compile-time constant baked in
+  /// per build target — there is no way for a single `flutter test` run
+  /// (always non-web) to observe what this evaluates to *on* web, so the
+  /// underlying boolean logic has to be testable independently of the real
+  /// [isDesktop]/[isWeb] values.
+  @visibleForTesting
+  static bool computeSupportsKeyboardShortcuts({
+    required bool isDesktop,
+    required bool isWeb,
+  }) =>
+      isDesktop || isWeb;
 
   /// Check if Picture-in-Picture is supported (mobile only)
   static bool get supportsPiP => isMobile;
 
   /// Check if background audio is supported (mobile only)
   static bool get supportsBackgroundAudio => isMobile;
+
+  /// Which glass material the playback chrome should render.
+  ///
+  /// [PlayerGlassTier.faux] is never selected automatically; it is a
+  /// contingency to be wired deliberately if web verification shows a real
+  /// performance problem.
+  static PlayerGlassTier get playerGlassTier =>
+      isWeb ? PlayerGlassTier.reduced : PlayerGlassTier.full;
 
   /// Get a human-readable platform name
   static String get platformName {
