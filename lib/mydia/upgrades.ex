@@ -14,10 +14,13 @@ defmodule Mydia.Upgrades do
 
   alias Mydia.Downloads.Download
   alias Mydia.Indexers.QualityProfileResolver
+  alias Mydia.Indexers.SearchResult
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.Quality
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
   alias Mydia.Search.SearchBackoff
+  alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades.Comparator
 
   # Over-fetch factor. Most candidate rows will already be above cutoff, so
@@ -36,7 +39,7 @@ defmodule Mydia.Upgrades do
     |> where([m], m.type == "movie" and m.monitored == true)
     |> where([m], m.id in subquery(analyzed_movie_ids()))
     |> where([m], m.id not in subquery(occupying_media_item_ids()))
-    |> where([m], m.id not in subquery(backed_off_ids("movie")))
+    |> where([m], m.id not in subquery(backed_off_ids("movie_upgrade")))
     |> order_by([m], asc_nulls_first: m.last_upgrade_check_at)
     |> limit(^(limit * @overfetch))
     |> preload(media_files: ^analyzed_files_query())
@@ -77,6 +80,36 @@ defmodule Mydia.Upgrades do
     |> preload([_e, _m], [:media_item, media_files: ^analyzed_files_query()])
     |> Repo.all()
     |> Enum.flat_map(&episode_candidate/1)
+  end
+
+  @doc """
+  Filters candidate search results down to the ones that are a genuine
+  upgrade over `file`, per `Comparator.upgrade?/5` - the sole authority on
+  that question. Shared between `MovieSearch` and the TV upgrade search path:
+  only `media_type` (`:movie` or `:episode`) differs between callers, so this
+  is called once with each rather than duplicated per media type.
+
+  A candidate whose release title never parsed into a `%Quality{}` struct
+  (e.g. `result.quality` is `nil`) is dropped defensively rather than passed
+  to `Comparator.upgrade?/5`, which requires one.
+  """
+  @spec filter_candidates(
+          [SearchResult.t()],
+          MediaFile.t(),
+          QualityProfile.t(),
+          :movie | :episode
+        ) :: [SearchResult.t()]
+  def filter_candidates(results, %MediaFile{} = file, %QualityProfile{} = profile, media_type)
+      when is_list(results) and media_type in [:movie, :episode] do
+    Enum.filter(results, fn result ->
+      case result.quality do
+        %Quality{} = quality ->
+          match?({:ok, _}, Comparator.upgrade?(file, quality, result.size, profile, media_type))
+
+        _ ->
+          false
+      end
+    end)
   end
 
   @spec stamp_checked(:movie | :episode, [binary()]) :: {non_neg_integer(), nil}

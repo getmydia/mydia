@@ -165,6 +165,38 @@ defmodule Mydia.UpgradesTest do
     end
   end
 
+  describe "eligible_movies/1 backoff namespacing" do
+    # A "movie" backoff row is written by MovieSearch's all_monitored/specific
+    # paths, which only ever search movies *without* a file. A movie's file
+    # state changes over time (manual import, external client, library
+    # rescan), so by the time this movie has a file and is upgrade-eligible,
+    # a stale "movie" backoff row from before the file existed must not
+    # suppress it - that row answers a different question ("can we search for
+    # this movie's missing file") than eligible_movies/1 is asking ("can we
+    # search for an upgrade to this movie's file"). See task-7 review finding
+    # 1: before this test existed, eligible_movies/1 excluded on the
+    # resource_type: "movie" bucket - the same one MovieSearch's other modes
+    # write to - so this row would have wrongly suppressed the movie below.
+    test "a fileless-search backoff on the same movie does not suppress its upgrade eligibility" do
+      profile = upgradeable_profile()
+      {movie, _file} = analyzed_movie_file(profile)
+
+      {:ok, _backoff} = Mydia.Search.record_failure("movie", movie.id, "no_results")
+
+      assert [%{media_item: found}] = Upgrades.eligible_movies(10)
+      assert found.id == movie.id
+    end
+
+    test "an upgrade-search backoff does suppress the movie until it expires" do
+      profile = upgradeable_profile()
+      {movie, _file} = analyzed_movie_file(profile)
+
+      {:ok, _backoff} = Mydia.Search.record_failure("movie_upgrade", movie.id, "no_upgrade_found")
+
+      assert [] = Upgrades.eligible_movies(10)
+    end
+  end
+
   describe "eligible_episodes/1" do
     test "returns a below-cutoff episode with its file, profile, and score" do
       profile = upgradeable_profile()

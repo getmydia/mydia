@@ -609,7 +609,13 @@ defmodule Mydia.Jobs.MovieSearchTest do
 
       assert Mydia.Downloads.list_downloads() == []
 
-      backoff = Search.get_backoff("movie", movie.id)
+      # Upgrade-mode backoff lives in its own "movie_upgrade" bucket, not the
+      # "movie" bucket the missing-file search paths use (see task-7 review
+      # finding 1 / Mydia.Upgrades.eligible_movies/1) - a stale "movie"
+      # backoff from before this movie had a file must never suppress an
+      # upgrade search for it, and vice versa.
+      assert Search.get_backoff("movie", movie.id) == nil
+      backoff = Search.get_backoff("movie_upgrade", movie.id)
       assert backoff.failure_count == 1
     end
   end
