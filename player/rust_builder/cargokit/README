@@ -9,3 +9,43 @@ for a tutorial on how to use Cargokit.
 
 Example plugin available at https://github.com/irondash/hello_rust_ffi_plugin.
 
+LOCAL CHANGES (mydia)
+---------------------
+
+This directory is a vendored copy of Cargokit. It has been modified. If you
+re-vendor it from upstream, reapply the following (all tagged in-file with
+`LOCAL CHANGE (mydia, #252)`):
+
+  build_tool/lib/src/rust_toolchain_file.dart
+      New file. Resolves `[toolchain] channel` from the nearest
+      rust-toolchain.toml.
+
+  build_tool/lib/src/builder.dart
+      `_toolchain` consults the repo pin between the cargokit_options.yaml
+      opt-in and upstream's 'stable' fallback. `build()` invokes `cargo` from
+      PATH with RUSTUP_TOOLCHAIN set, falling back to `rustup run` only when
+      PATH has no cargo. Adds cargoOnPath() and buildsThroughRustup().
+
+  build_tool/lib/src/artifacts_provider.dart
+      Constructs Rustup() and calls prepare() only when the build actually
+      goes through rustup.
+
+  build_tool/lib/src/rustup.dart
+      The `nonCustom` toolchain-list filter also accepts version-numbered
+      toolchains.
+
+  build_tool/test/rust_toolchain_file_test.dart
+      New file. Unit tests for the resolver. Run with `dart run`, not
+      `dart test`; see the note at the top of that file.
+
+Why: upstream builds with `rustup run stable`, which is an explicit toolchain
+name and overrides every pinning mechanism, so the Rust compiler behind every
+shipped native library was host state rather than a declared version. See
+https://github.com/getmydia/mydia/issues/252.
+
+Why RUSTUP_TOOLCHAIN rather than `rustup run <pin>`: naming the toolchain to
+`rustup run` forces rustup's own dynamically linked binaries, which fail under
+the Gradle daemon on NixOS with "libz.so.1: cannot open shared object file".
+Setting RUSTUP_TOOLCHAIN instead lets a Nix-provided cargo win locally while
+rustup's proxies still honour the pin (and auto-install it) in CI and Docker.
+
