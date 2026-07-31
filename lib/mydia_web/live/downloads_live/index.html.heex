@@ -45,6 +45,7 @@
     <div class="flex items-end justify-between gap-4 flex-wrap mb-4 border-b border-base-300">
       <div role="tablist" class="tabs tabs-border -mb-px">
         <button
+          id="downloads-tab-queue"
           role="tab"
           class={["tab", @active_tab == :queue && "tab-active"]}
           phx-click="switch_tab"
@@ -53,6 +54,7 @@
           <.icon name="hero-arrow-down-tray" class="w-4 h-4 mr-1" /> Queue
         </button>
         <button
+          id="downloads-tab-completed"
           role="tab"
           class={["tab", @active_tab == :completed && "tab-active"]}
           phx-click="switch_tab"
@@ -61,6 +63,7 @@
           <.icon name="hero-check-circle" class="w-4 h-4 mr-1" /> Completed
         </button>
         <button
+          id="downloads-tab-issues"
           role="tab"
           class={["tab", @active_tab == :issues && "tab-active"]}
           phx-click="switch_tab"
@@ -68,10 +71,19 @@
         >
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 mr-1" /> Issues
         </button>
+        <button
+          id="downloads-tab-external"
+          role="tab"
+          class={["tab", @active_tab == :external && "tab-active"]}
+          phx-click="switch_tab"
+          phx-value-tab="external"
+        >
+          <.icon name="hero-inbox-stack" class="w-4 h-4 mr-1" /> External
+        </button>
       </div>
 
       <%!-- Sort control (Queue/Completed tabs, non-empty only) --%>
-      <%= if @active_tab != :issues and not @downloads_empty? do %>
+      <%= if @active_tab not in [:issues, :external] and not @downloads_empty? do %>
         <form phx-change="sort" id="downloads-sort-form" class="pb-2">
           <label class="sr-only" for="downloads-sort">Sort downloads</label>
           <select
@@ -140,12 +152,20 @@
               <.icon name="hero-check-circle" class="w-16 h-16 text-base-content/30 mb-4" />
               <h3 class="text-xl font-semibold text-base-content/70 mb-2">No issues</h3>
               <p class="text-base-content/50">All downloads completed successfully</p>
+            <% @active_tab == :external -> %>
+              <.icon name="hero-inbox-stack" class="w-16 h-16 text-base-content/30 mb-4" />
+              <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+                Nothing unmanaged
+              </h3>
+              <p class="text-base-content/50">
+                Torrents in your clients that Mydia does not manage will appear here
+              </p>
           <% end %>
         </div>
       </div>
     <% end %>
     <%!-- Downloads list (Queue/Completed tabs) --%>
-    <%= if @active_tab != :issues do %>
+    <%= if @active_tab not in [:issues, :external] do %>
       <ul
         id="downloads-list"
         phx-update="stream"
@@ -391,7 +411,7 @@
     <%!-- Issues tab - Three sectioned layout --%>
     <%= if @active_tab == :issues do %>
       <div class="flex flex-col gap-6">
-        <%!-- Section 1: Unmatched Downloads --%>
+        <%!-- Section 1: Needs Matching (derived from the clients, not the DB) --%>
         <div>
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-lg font-semibold flex items-center gap-2">
@@ -403,120 +423,79 @@
             </h3>
           </div>
           <ul
-            id="unmatched-downloads"
+            id="needs-matching"
             phx-update="stream"
             class="list bg-base-100 rounded-box shadow-lg"
           >
             <li
-              id="no-unmatched-downloads"
+              id="no-needs-matching"
               class="hidden only:block p-6 text-center text-base-content/50"
             >
-              No unmatched downloads
+              No downloads need matching
             </li>
-            <li
-              :for={{id, download} <- @streams.unmatched_downloads}
-              id={id}
-              class="list-row py-3"
-            >
+            <li :for={{id, torrent} <- @streams.needs_matching} id={id} class="list-row py-3">
               <div class="list-col-grow">
-                <%!-- Torrent name --%>
-                <div class="font-medium text-sm truncate">{download.title}</div>
-                <%!-- Parsed info --%>
-                <% parsed = get_metadata_value(download, "parsed_info") %>
-                <%= if parsed do %>
+                <div class="font-medium text-sm truncate">{torrent.title}</div>
+                <%= if torrent.parsed do %>
                   <div class="text-xs text-base-content/50 flex flex-wrap gap-1.5 mt-0.5">
-                    <%= if parsed["title"] do %>
-                      <span>Parsed: {parsed["title"]}</span>
+                    <%= if torrent.parsed.title do %>
+                      <span>Parsed: {torrent.parsed.title}</span>
                     <% end %>
-                    <%= if parsed["season"] do %>
-                      <span>
-                        S{String.pad_leading("#{parsed["season"]}", 2, "0")}
-                        <%= if parsed["episode"] do %>
-                          E{String.pad_leading("#{parsed["episode"]}", 2, "0")}
-                        <% end %>
-                      </span>
-                    <% end %>
-                    <%= if parsed["quality"] do %>
-                      <span class="badge badge-xs badge-outline">{parsed["quality"]}</span>
+                    <%= if torrent.parsed.season do %>
+                      <span>S{String.pad_leading("#{torrent.parsed.season}", 2, "0")}</span>
                     <% end %>
                   </div>
                 <% end %>
-                <%!-- Status --%>
                 <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
-                  <% {badge_class, badge_label} = status_badge(download) %>
-                  <span class={"badge badge-xs #{badge_class}"}>
-                    {badge_label}
-                  </span>
-                  <span>{download.download_client}</span>
-                  <%= if download.status in ["downloading", "seeding"] do %>
+                  <span class="badge badge-xs badge-ghost">{torrent.status}</span>
+                  <span>{torrent.client_name}</span>
+                  <%= if torrent.status in [:downloading, :seeding] do %>
                     <span>•</span>
-                    <span>{format_progress(download.progress)}%</span>
+                    <span>{format_progress(torrent.progress)}%</span>
                   <% end %>
                 </div>
-                <%!-- Match suggestions --%>
-                <% suggestions = get_metadata_value(download, "match_suggestions") || [] %>
-                <%= if suggestions != [] do %>
+                <%= if torrent.suggestions != [] do %>
                   <div class="mt-2">
                     <span class="text-xs text-base-content/60 mb-1 block">Suggestions:</span>
                     <div class="flex flex-wrap gap-2">
-                      <%= for suggestion <- suggestions do %>
+                      <%= for suggestion <- torrent.suggestions do %>
                         <button
+                          id={"adopt-#{torrent.id}-#{suggestion.media_item_id}"}
                           type="button"
                           class="btn btn-xs btn-outline btn-primary"
-                          phx-click="accept_suggestion"
-                          phx-value-download_id={download.id}
-                          phx-value-media_item_id={suggestion["media_item_id"]}
-                          title={suggestion["match_reason"]}
+                          phx-click="adopt_suggestion"
+                          phx-value-torrent_id={torrent.id}
+                          phx-value-media_item_id={suggestion.media_item_id}
+                          title={suggestion.match_reason}
                         >
-                          {suggestion["title"]}
+                          {suggestion.title}
                           <span class="badge badge-xs ml-1">
-                            {Float.round((suggestion["confidence"] || 0) * 100, 0)}%
+                            {Float.round(suggestion.confidence * 100, 0)}%
                           </span>
                         </button>
                       <% end %>
                     </div>
                   </div>
                 <% end %>
-                <%!-- Inline search --%>
-                <%= if @search_open_for == download.id do %>
+                <%= if @search_open_for == torrent.id do %>
                   <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form
                     search_value={@library_search_value}
                     search_results={@library_search_results}
                     on_search="library_search"
-                    on_select="select_library_match"
-                    download_id={download.id}
+                    on_select="adopt_library_match"
+                    download_id={torrent.id}
                   />
                 <% end %>
               </div>
-              <%!-- Actions --%>
               <div class="flex gap-1">
                 <button
                   type="button"
                   class="btn btn-square btn-ghost btn-sm"
                   phx-click="toggle_search"
-                  phx-value-id={download.id}
+                  phx-value-id={torrent.id}
                   title="Search library to match"
                 >
                   <.icon name="hero-magnifying-glass" class="size-4" />
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm"
-                  phx-click="refresh_suggestions"
-                  phx-value-id={download.id}
-                  title="Refresh suggestions"
-                >
-                  <.icon name="hero-arrow-path" class="size-4" />
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm"
-                  phx-click="dismiss_download"
-                  phx-value-id={download.id}
-                  data-confirm="Dismiss this download?"
-                  title="Dismiss"
-                >
-                  <.icon name="hero-x-mark" class="size-4" />
                 </button>
               </div>
             </li>
@@ -803,6 +782,82 @@
             </li>
           </ul>
         </div>
+      </div>
+    <% end %>
+
+    <%!-- External tab: torrents in the clients that Mydia does not manage --%>
+    <%= if @active_tab == :external do %>
+      <div class="flex flex-col gap-4">
+        <div class="flex items-center justify-between gap-4">
+          <p class="text-sm text-base-content/60">
+            Torrents in your download clients that Mydia does not manage. They are not
+            tracked and nothing is imported from them.
+          </p>
+          <button
+            id="external-rescan"
+            type="button"
+            class="btn btn-sm btn-ghost shrink-0"
+            phx-click="rescan_external"
+          >
+            <.icon name="hero-arrow-path" class="size-4" /> Rescan
+          </button>
+        </div>
+
+        <%= if @scan.failed_clients != [] do %>
+          <div id="external-failed-clients" class="alert alert-warning">
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+            <span>
+              Could not read {Enum.join(@scan.failed_clients, ", ")}. This list may be
+              incomplete.
+            </span>
+          </div>
+        <% end %>
+
+        <ul
+          id="external-torrents"
+          phx-update="stream"
+          class="list bg-base-100 rounded-box shadow-lg"
+        >
+          <li
+            id="no-external-torrents"
+            class="hidden only:block p-6 text-center text-base-content/50"
+          >
+            Nothing unmanaged in your download clients
+          </li>
+          <li :for={{id, torrent} <- @streams.external_torrents} id={id} class="list-row py-3">
+            <div class="list-col-grow">
+              <div class="font-medium text-sm truncate">{torrent.title}</div>
+              <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
+                <span class="badge badge-xs badge-ghost">{torrent.status}</span>
+                <span>{torrent.client_name}</span>
+                <%= if torrent.status in [:downloading, :seeding] do %>
+                  <span>•</span>
+                  <span>{format_progress(torrent.progress)}%</span>
+                <% end %>
+              </div>
+              <%= if @search_open_for == torrent.id do %>
+                <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form
+                  search_value={@library_search_value}
+                  search_results={@library_search_results}
+                  on_search="library_search"
+                  on_select="adopt_library_match"
+                  download_id={torrent.id}
+                />
+              <% end %>
+            </div>
+            <div class="flex gap-1">
+              <button
+                type="button"
+                class="btn btn-square btn-ghost btn-sm"
+                phx-click="toggle_search"
+                phx-value-id={torrent.id}
+                title="Search library to match"
+              >
+                <.icon name="hero-magnifying-glass" class="size-4" />
+              </button>
+            </div>
+          </li>
+        </ul>
       </div>
     <% end %>
 
