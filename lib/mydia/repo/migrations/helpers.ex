@@ -13,8 +13,16 @@ defmodule Mydia.Repo.Migrations.Helpers do
   - Cannot change column types directly
   - Cannot modify CHECK constraints
 
-  For these operations, SQLite requires table recreation (rename -> create new -> copy -> drop old).
+  For these operations, SQLite requires table recreation: create new -> copy ->
+  drop old -> rename new. The original table is deliberately not renamed first,
+  because SQLite rewrites other tables' foreign key references to follow a
+  rename, which breaks them once the old table is dropped.
   PostgreSQL supports direct ALTER TABLE statements.
+
+  Use `recreate_table/1` rather than hand-rolling that sequence. Dropping a
+  table fires the foreign key actions of every table referencing it, which
+  deletes or nulls their rows; `recreate_table/1` goes through
+  `preserving_fk_children/2`, which prevents that.
 
   ## Usage in Migrations
 
@@ -36,6 +44,8 @@ defmodule Mydia.Repo.Migrations.Helpers do
   """
 
   import Ecto.Migration
+
+  alias Ecto.Migration.Runner
 
   @doc """
   Returns true if using PostgreSQL adapter.
@@ -83,8 +93,8 @@ defmodule Mydia.Repo.Migrations.Helpers do
   ## Note for SQLite
 
   SQLite doesn't support ALTER COLUMN. For complex schema changes on SQLite,
-  use `recreate_table_with_changes/3` instead, which handles the full
-  table recreation workflow.
+  use `recreate_table/1` instead, which handles the full table recreation
+  workflow and preserves the rebuilt table's foreign key children.
   """
   @spec modify_column_null(atom(), atom(), boolean()) :: :ok
   def modify_column_null(table_name, column_name, nullable) do
@@ -112,14 +122,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
             modify :#{column_name}, :string, null: #{nullable}
           end
 
-      2. For complex cases, manually recreate the table:
-         - Rename original table
-         - Create new table with desired schema
-         - Copy data
-         - Drop old table
-         - Recreate indexes
+      2. For complex cases, use `recreate_table/1` from this module, which
+         rebuilds the table and preserves its foreign key children.
 
-      See existing migrations for examples of table recreation pattern.
+      Do not hand-roll the rebuild. Dropping a table fires the foreign key
+      actions of every table referencing it, silently deleting or nulling
+      their rows.
       """
     end
   end
@@ -161,14 +169,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
       raise """
       SQLite does not support ALTER COLUMN TYPE.
 
-      For SQLite compatibility, you must recreate the table:
-      1. Rename original table to #{table_name}_old
-      2. Create new table with updated column type
-      3. Copy data from old table
-      4. Drop old table
-      5. Recreate indexes
+      For SQLite compatibility, use `recreate_table/1` from this module,
+      passing #{table_name}'s full column list with the updated type.
 
-      See existing migrations for examples of this pattern.
+      Do not hand-roll the rebuild. Dropping a table fires the foreign key
+      actions of every table referencing it, silently deleting or nulling
+      their rows; `recreate_table/1` preserves them.
       """
     end
   end
@@ -304,8 +310,15 @@ defmodule Mydia.Repo.Migrations.Helpers do
   @doc """
   Recreate a table with a new schema definition.
 
-  For SQLite: Performs full table recreation (rename -> create -> copy -> drop).
+  For SQLite: Performs full table recreation, in the order create new -> copy ->
+  drop old -> rename new. The original is deliberately not renamed first,
+  because SQLite rewrites other tables' foreign key references to follow a
+  rename, breaking them once the old table is dropped.
   For PostgreSQL: Executes the provided ALTER statements.
+
+  On SQLite this runs through `preserving_fk_children/2` and inherits its
+  constraints: the migration must run inside a transaction and must define
+  explicit `up/0` and `down/0` rather than `change/0`.
 
   ## Options
 
@@ -374,6 +387,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
   end
 
   defp sqlite_recreate_table(table_name, opts) do
+    preserving_fk_children(table_name, fn ->
+      sqlite_recreate_table_body(table_name, opts)
+    end)
+  end
+
+  defp sqlite_recreate_table_body(table_name, opts) do
     columns = opts[:columns] || raise ArgumentError, ":columns option is required for SQLite"
     indexes = opts[:indexes] || []
     primary_key_opt = Keyword.get(opts, :primary_key, false)
@@ -448,6 +467,10 @@ defmodule Mydia.Repo.Migrations.Helpers do
   For SQLite: Recreates the table with the new column definitions.
   For PostgreSQL: Executes ALTER COLUMN statements.
 
+  On SQLite this runs through `preserving_fk_children/2` and inherits its
+  constraints: the migration must run inside a transaction and must define
+  explicit `up/0` and `down/0` rather than `change/0`.
+
   ## Options
 
   - `:table` - Table name (atom, required)
@@ -496,6 +519,277 @@ defmodule Mydia.Repo.Migrations.Helpers do
       # SQLite requires full table recreation
       sqlite_recreate_table(table_name, opts)
     end
+  end
+
+  @doc """
+  Run a SQLite table rebuild without destroying the table's foreign key children.
+
+  SQLite cannot alter a column's type, nullability, constraints, or foreign key
+  actions, so changing any of those means rebuilding the table: create a
+  replacement, copy the rows, drop the original, rename. Under
+  `PRAGMA foreign_keys=ON`, which is how this application always runs, that
+  `DROP TABLE` performs an implicit `DELETE FROM` and fires the foreign key
+  actions of every table referencing it. Children declared `ON DELETE CASCADE`
+  lose all their rows, children declared `ON DELETE SET NULL` lose the
+  assignment, and children with no action abort the migration outright.
+
+  This wraps such a rebuild so none of that happens. It snapshots every table
+  that references `table_name`, directly or transitively, empties them, runs
+  `rebuild_fun`, then restores them. Emptying first is what lets one code path
+  cover all three foreign key actions: there is nothing left to cascade to, null
+  out, or abort on.
+
+  Everything runs inside the transaction the migrator already opened, so a
+  failure at any point rolls back the rebuild and the snapshots together.
+
+  On PostgreSQL this simply calls `rebuild_fun`, which never needs to drop the
+  parent table.
+
+  ## Constraints
+
+  The migration must run inside a transaction, so it must not set
+  `@disable_ddl_transaction true`.
+
+  The migration must define explicit `up/0` and `down/0` rather than `change/0`.
+  This helper has to flush the migration's queued commands so its own immediate
+  queries see them, and flushing is impossible while a `change/0` body is being
+  replayed backward for a rollback. A `change/0` migration that reaches this
+  helper works when rolled forward and raises with that instruction when rolled
+  back; with explicit `up/0` and `down/0`, both directions work.
+
+  ## What the restore assumes
+
+  Children are restored with `INSERT INTO child SELECT * FROM snapshot`, which
+  assumes three things about the child set:
+
+  - `rebuild_fun` alters no table in it. The snapshots carry the pre-rebuild
+    column layout, so a rebuild that also reshapes a child leaves the restore
+    inserting the wrong number of columns.
+  - No child has a `GENERATED` column. `SELECT *` supplies a value for every
+    column and SQLite rejects an explicit insert into a generated one.
+  - No child has a self-referencing foreign key. `direct_fk_children/1` drops
+    self-edges for every table rather than only for the root, so such a child is
+    emptied and restored as a single unordered batch and its own rows can
+    violate the self-reference on the way back in.
+
+  All three hold in this schema today, and all three fail loudly inside the
+  migration's transaction rather than corrupting data. Only the first is
+  something a future caller can introduce without noticing.
+
+  ## Disk usage
+
+  The snapshots temporarily double every child table on disk, inside the
+  migration's transaction. An operator upgrading a large library from a
+  pre-`20251128014213` install pulls in `media_files` with its blob columns, so a
+  disk-constrained server can hit `SQLITE_FULL`. The transaction rolls back
+  cleanly, but SQLite's error says nothing about free space, so check free disk
+  before concluding the migration itself is broken.
+
+  ## Example
+
+      def up do
+        preserving_fk_children(:library_paths, fn ->
+          execute "CREATE TABLE library_paths_new (...)"
+          execute "INSERT INTO library_paths_new SELECT ... FROM library_paths"
+          execute "DROP TABLE library_paths"
+          execute "ALTER TABLE library_paths_new RENAME TO library_paths"
+        end)
+      end
+  """
+  @spec preserving_fk_children(atom() | String.t(), (-> any())) :: any()
+  def preserving_fk_children(table_name, rebuild_fun) when is_function(rebuild_fun, 0) do
+    if postgres?() do
+      rebuild_fun.()
+    else
+      sqlite_preserving_fk_children(to_string(table_name), rebuild_fun)
+    end
+  end
+
+  defp sqlite_preserving_fk_children(table, rebuild_fun) do
+    # This empties child tables before the rebuild and relies entirely on the
+    # migration's transaction to undo that if anything below fails. Without
+    # it, a failure between the DELETE loop and the restore leaves every
+    # child table permanently empty - worse than the bug this primitive
+    # exists to fix. Ecto wraps migrations in a transaction by default; this
+    # guards against a future `@disable_ddl_transaction true` silently
+    # turning this into a data-loss primitive.
+    unless repo().in_transaction?() do
+      raise Ecto.MigrationError,
+        message:
+          "preserving_fk_children/2 requires the migration to run inside a transaction " <>
+            "(it empties child tables and relies on transaction rollback to undo that on " <>
+            "failure); this migration must not set @disable_ddl_transaction true"
+    end
+
+    # `execute/1` and the migration DSL queue their commands; `repo().query!`
+    # below runs immediately. Flush so anything queued earlier in this migration
+    # is applied before the snapshots are taken.
+    flush_migration_commands!()
+
+    children = sqlite_fk_children(repo(), table)
+
+    Enum.each(children, fn child ->
+      repo().query!(~s|CREATE TABLE "#{fk_snapshot_table(child)}" AS SELECT * FROM "#{child}"|)
+    end)
+
+    Enum.each(children, fn child -> repo().query!(~s|DELETE FROM "#{child}"|) end)
+
+    result = rebuild_fun.()
+
+    # Flush again so the caller's queued rebuild has actually run before the
+    # rows go back.
+    flush_migration_commands!()
+
+    children
+    |> Enum.reverse()
+    |> Enum.each(fn child ->
+      repo().query!(~s|INSERT INTO "#{child}" SELECT * FROM "#{fk_snapshot_table(child)}"|)
+    end)
+
+    # Scoped to the tables this rebuild actually touched, not the whole
+    # database: an unscoped `PRAGMA foreign_key_check` would abort (and
+    # roll back) on a pre-existing orphan row anywhere else in the schema,
+    # naming an unrelated table as if this rebuild caused it. Any violation
+    # the restore itself could introduce already raises at the INSERT above,
+    # since foreign keys here are enforced immediately.
+    assert_no_fk_violations!([table | children])
+
+    Enum.each(children, fn child ->
+      repo().query!(~s|DROP TABLE "#{fk_snapshot_table(child)}"|)
+    end)
+
+    result
+  end
+
+  # `Ecto.Migration.flush/0` is a macro, and the rollback guard it expands to
+  # tests `function_exported?(__MODULE__, :down, 0)` with `__MODULE__` resolved
+  # at the *expansion* site. Expanded in this module that is
+  # `Mydia.Repo.Migrations.Helpers`, which exports no `down/0`, so the guard
+  # collapses to `direction() == :down` and fires for every rollback that
+  # reaches here, including migrations that do define an explicit `down/0`.
+  # Flush through the runner directly and re-apply the guard against the
+  # migration module that is actually running.
+  defp flush_migration_commands! do
+    module = running_migration()
+
+    if rolling_back_a_change?(module) do
+      raise Ecto.MigrationError,
+        message:
+          "#{inspect(module)} rebuilds a table through preserving_fk_children/2, which has to " <>
+            "flush the migration's queued commands. Flushing is not supported while a change/0 " <>
+            "migration is replayed backward for a rollback. Replace change/0 with explicit " <>
+            "up/0 and down/0."
+    end
+
+    Runner.flush()
+  end
+
+  defp rolling_back_a_change?(nil), do: false
+
+  defp rolling_back_a_change?(module) do
+    Runner.migrator_direction() == :down and not function_exported?(module, :down, 0)
+  end
+
+  # The migration module currently running, or `nil` when the runner's state
+  # cannot be read. `nil` is only reachable if ecto_sql changes that state's
+  # shape, and it deliberately skips the guard rather than blocking every
+  # rollback the way the mis-expanded `flush/0` did.
+  defp running_migration do
+    case Process.get(:ecto_migration) do
+      %{runner: runner} -> Agent.get(runner, &Map.get(&1, :migration))
+      _ -> nil
+    end
+  end
+
+  defp fk_snapshot_table(child), do: "__mydia_fk_snap_#{child}"
+
+  defp assert_no_fk_violations!(tables) do
+    violations =
+      Enum.flat_map(tables, fn table ->
+        %{rows: rows} = repo().query!(~s|PRAGMA foreign_key_check("#{table}")|)
+        rows
+      end)
+
+    case violations do
+      [] ->
+        :ok
+
+      rows ->
+        offending = rows |> Enum.map(&List.first/1) |> Enum.uniq() |> Enum.join(", ")
+
+        raise Ecto.MigrationError,
+          message: "foreign key violations remain after rebuild, in: #{offending}"
+    end
+  end
+
+  @doc false
+  # Every table that references `table`, directly or transitively, ordered
+  # deepest first: a table always appears before the table it references.
+  #
+  # Deleting in this order never fires a cascade, because a table's own
+  # children are already empty by the time it is emptied. Restoring in the
+  # reverse order never violates a foreign key, because a row's target is
+  # always back in place before the row is.
+  #
+  # Takes the repo explicitly rather than calling `Ecto.Migration.repo/0` so it
+  # can be exercised without a migration wrapped around it.
+  @spec sqlite_fk_children(module(), atom() | String.t()) :: [String.t()]
+  def sqlite_fk_children(repo, table) do
+    {ordered, _visited} =
+      collect_fk_children(
+        to_string(table),
+        direct_fk_children(repo),
+        [to_string(table)],
+        [],
+        MapSet.new()
+      )
+
+    ordered
+  end
+
+  defp collect_fk_children(table, graph, stack, acc, visited) do
+    graph
+    |> Map.get(table, [])
+    |> Enum.reduce({acc, visited}, fn child, {acc, visited} ->
+      cond do
+        child in stack ->
+          raise Ecto.MigrationError,
+            message:
+              "foreign key cycle detected while rebuilding #{List.last(stack)}: " <>
+                Enum.join(Enum.reverse([child | stack]), " -> ")
+
+        MapSet.member?(visited, child) ->
+          {acc, visited}
+
+        true ->
+          {acc, visited} =
+            collect_fk_children(child, graph, [child | stack], acc, MapSet.put(visited, child))
+
+          {acc ++ [child], visited}
+      end
+    end)
+  end
+
+  # %{parent_table => [child_table]} for the whole database.
+  defp direct_fk_children(repo) do
+    %{rows: tables} =
+      repo.query!(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+      )
+
+    Enum.reduce(tables, %{}, fn [table], graph ->
+      %{rows: foreign_keys} = repo.query!(~s|PRAGMA foreign_key_list("#{table}")|)
+
+      Enum.reduce(foreign_keys, graph, fn [_id, _seq, parent | _rest], graph ->
+        if parent == table do
+          graph
+        else
+          Map.update(graph, parent, [table], fn children ->
+            if table in children, do: children, else: children ++ [table]
+          end)
+        end
+      end)
+    end)
   end
 
   # Map Ecto types to PostgreSQL types
