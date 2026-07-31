@@ -498,6 +498,72 @@ defmodule Mydia.Repo.Migrations.Helpers do
     end
   end
 
+  @doc false
+  # Every table that references `table`, directly or transitively, ordered
+  # deepest first: a table always appears before the table it references.
+  #
+  # Deleting in this order never fires a cascade, because a table's own
+  # children are already empty by the time it is emptied. Restoring in the
+  # reverse order never violates a foreign key, because a row's target is
+  # always back in place before the row is.
+  #
+  # Takes the repo explicitly rather than calling `Ecto.Migration.repo/0` so it
+  # can be exercised without a migration wrapped around it.
+  @spec sqlite_fk_children(module(), atom() | String.t()) :: [String.t()]
+  def sqlite_fk_children(repo, table) do
+    {ordered, _visited} =
+      collect_fk_children(
+        to_string(table),
+        direct_fk_children(repo),
+        [to_string(table)],
+        [],
+        MapSet.new()
+      )
+
+    ordered
+  end
+
+  defp collect_fk_children(table, graph, stack, acc, visited) do
+    graph
+    |> Map.get(table, [])
+    |> Enum.reduce({acc, visited}, fn child, {acc, visited} ->
+      cond do
+        child in stack ->
+          raise Ecto.MigrationError,
+            message:
+              "foreign key cycle detected while rebuilding #{List.last(stack)}: " <>
+                Enum.join(Enum.reverse([child | stack]), " -> ")
+
+        MapSet.member?(visited, child) ->
+          {acc, visited}
+
+        true ->
+          {acc, visited} =
+            collect_fk_children(child, graph, [child | stack], acc, MapSet.put(visited, child))
+
+          {acc ++ [child], visited}
+      end
+    end)
+  end
+
+  # %{parent_table => [child_table]} for the whole database.
+  defp direct_fk_children(repo) do
+    %{rows: tables} =
+      repo.query!(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+      )
+
+    Enum.reduce(tables, %{}, fn [table], graph ->
+      %{rows: foreign_keys} = repo.query!(~s|PRAGMA foreign_key_list("#{table}")|)
+
+      Enum.reduce(foreign_keys, graph, fn [_id, _seq, parent | _rest], graph ->
+        Map.update(graph, parent, [table], fn children ->
+          if table in children, do: children, else: children ++ [table]
+        end)
+      end)
+    end)
+  end
+
   # Map Ecto types to PostgreSQL types
   defp pg_type(:string), do: "VARCHAR"
   defp pg_type(:text), do: "TEXT"
