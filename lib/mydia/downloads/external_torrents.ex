@@ -127,14 +127,25 @@ defmodule Mydia.Downloads.ExternalTorrents do
   @spec subtract_known([{String.t(), [DownloadStatus.t()]}]) ::
           [{String.t(), DownloadStatus.t()}]
   def subtract_known(listings) do
-    tracked = tracked_pairs()
+    tracked = Downloads.tracked_client_pairs()
 
-    for {client_name, statuses} <- listings,
-        %DownloadStatus{} = status <- statuses,
-        not MapSet.member?(tracked, {client_name, status.id}),
-        not Library.torrent_already_imported?(client_name, status.id) do
-      {client_name, status}
-    end
+    untracked =
+      for {client_name, statuses} <- listings,
+          %DownloadStatus{} = status <- statuses,
+          not MapSet.member?(tracked, {client_name, status.id}) do
+        {client_name, status}
+      end
+
+    # One query for the whole batch rather than one per torrent: this runs on
+    # every scan, over every foreign torrent in every client.
+    imported =
+      untracked
+      |> Enum.map(fn {client_name, status} -> {client_name, status.id} end)
+      |> Library.imported_torrent_pairs()
+
+    Enum.reject(untracked, fn {client_name, status} ->
+      MapSet.member?(imported, {client_name, status.id})
+    end)
   end
 
   ## GenServer
@@ -149,12 +160,6 @@ defmodule Mydia.Downloads.ExternalTorrents do
 
   ## Private
 
-  defp tracked_pairs do
-    Downloads.list_downloads()
-    |> Enum.map(&{&1.download_client, &1.download_client_id})
-    |> MapSet.new()
-  end
-
   defp fetch_all do
     clients =
       Settings.list_download_client_configs()
@@ -163,9 +168,17 @@ defmodule Mydia.Downloads.ExternalTorrents do
     results =
       clients
       |> Task.async_stream(&fetch_one/1, timeout: :infinity, max_concurrency: 10)
+      # async_stream preserves input order, so zipping recovers which client a
+      # crashed task belonged to. Without this a crash would be reported to the
+      # operator as a client literally named "unknown".
+      |> Enum.zip(clients)
       |> Enum.map(fn
-        {:ok, result} -> result
-        {:exit, _reason} -> {:error, "unknown"}
+        {{:ok, result}, _config} ->
+          result
+
+        {{:exit, reason}, config} ->
+          Logger.warning("Listing torrents from #{config.name} crashed: #{inspect(reason)}")
+          {:error, config.name}
       end)
 
     listings = for {:ok, client_name, statuses} <- results, do: {client_name, statuses}

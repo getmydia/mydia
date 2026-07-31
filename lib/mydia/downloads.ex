@@ -83,6 +83,14 @@ defmodule Mydia.Downloads do
   defdelegate list_downloads(opts \\ []), to: Mydia.Downloads.History
 
   @doc """
+  The `{download_client, download_client_id}` pairs of every tracked download.
+
+  See `Mydia.Downloads.History.tracked_client_pairs/0`.
+  """
+  @spec tracked_client_pairs() :: MapSet.t({String.t() | nil, String.t() | nil})
+  defdelegate tracked_client_pairs(), to: Mydia.Downloads.History
+
+  @doc """
   Returns the list of downloads enriched with real-time status from clients.
 
   This queries all configured download clients and enriches download records

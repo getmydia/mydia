@@ -802,13 +802,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply, socket |> maybe_refresh_clearable_count() |> load_downloads()}
   end
 
-  # A fresh client scan landed. Only the two scan-backed tabs care, so idle tabs
-  # skip the reload entirely.
+  # A fresh client scan landed. Only the two scan-backed tabs need a full
+  # reload; the others just need the External tab count, which is an ETS read
+  # rather than the client polling a reload would trigger.
   def handle_info(:external_scan_updated, socket) do
     if socket.assigns.active_tab in [:issues, :external] do
       {:noreply, load_downloads(socket)}
     else
-      {:noreply, socket}
+      {:noreply, assign(socket, :scan, ExternalTorrents.get())}
     end
   end
 

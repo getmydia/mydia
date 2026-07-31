@@ -40,6 +40,30 @@ defmodule Mydia.Downloads.ExternalTorrentsTest do
       assert [{"qbit", _}] = ExternalTorrents.subtract_known(listings)
     end
 
+    test "the batched imported lookup agrees with the per-pair check" do
+      # subtract_known/1 batches what torrent_already_imported?/2 answers one at
+      # a time. The two must not disagree, or a foreign torrent either vanishes
+      # or reappears after import.
+      media_file_fixture(%{
+        metadata: %{"download_client" => "qbit", "download_client_id" => "hash-in"}
+      })
+
+      pairs = [{"qbit", "hash-in"}, {"qbit", "hash-out"}, {"other", "hash-in"}]
+      batched = Mydia.Library.imported_torrent_pairs(pairs)
+
+      for {client, id} <- pairs do
+        assert MapSet.member?(batched, {client, id}) ==
+                 Mydia.Library.torrent_already_imported?(client, id),
+               "batched and per-pair disagree on #{client}/#{id}"
+      end
+
+      assert MapSet.member?(batched, {"qbit", "hash-in"})
+    end
+
+    test "the batched imported lookup handles an empty candidate list" do
+      assert Mydia.Library.imported_torrent_pairs([]) == MapSet.new()
+    end
+
     test "drops a torrent whose files were imported after its download row was cleared" do
       # "Clear Completed" deletes the download row, but the imported files keep
       # the provenance pair, which is the only thing left to recognise it by.

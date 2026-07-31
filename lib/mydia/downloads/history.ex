@@ -67,6 +67,20 @@ defmodule Mydia.Downloads.History do
   end
 
   @doc """
+  The `{download_client, download_client_id}` pairs of every tracked download.
+
+  Selects only the two columns: callers want set membership, not the rows, and
+  this runs on every external-torrent scan.
+  """
+  @spec tracked_client_pairs() :: MapSet.t({String.t() | nil, String.t() | nil})
+  def tracked_client_pairs do
+    Download
+    |> select([d], {d.download_client, d.download_client_id})
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc """
   Counts imported downloads — the set `clear_all_completed/1` would remove.
 
   Used to show a scope-accurate blast radius before the user confirms a
