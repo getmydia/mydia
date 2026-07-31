@@ -342,7 +342,7 @@ defmodule Mydia.Config.Schema do
   defp upgrades_changeset(schema, attrs) do
     schema
     |> cast(attrs, [:sweep_enabled, :sweep_batch_size])
-    |> validate_required([:sweep_enabled])
+    |> validate_required([:sweep_enabled, :sweep_batch_size])
     |> validate_number(:sweep_batch_size, greater_than: 0)
   end
 

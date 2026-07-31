@@ -5,8 +5,8 @@ defmodule Mydia.Jobs.UpgradeSweep do
   The existing hourly `MovieSearch` and 30 minute `TVShowSearch` crons only
   consider items with **no** file, a small and shrinking set. Upgrade-eligible
   items can be the entire library, so this sweep is deliberately slow and
-  hard-capped: `:upgrade_sweep_batch_size` bounds how many indexer searches a
-  single run may cost.
+  hard-capped: `upgrades.sweep_batch_size` (layered runtime config) bounds how
+  many indexer searches a single run may cost.
 
   Items are stamped at enqueue time rather than on search completion, so an
   item whose searches always fail cannot monopolise the front of the queue.
@@ -56,6 +56,15 @@ defmodule Mydia.Jobs.UpgradeSweep do
 
   # One item that fails to enqueue is logged and skipped, never failing the
   # batch. Mirrors Mydia.Search.queue_auto_searches/1.
+  #
+  # NOTE for test authors: like Mydia.Search.insert_jobs/2, the {:error,
+  # reason} branch below cannot be forced through this module's public API in
+  # this test suite. Oban.Job's schema has no FK or unique DB constraint tied
+  # to the business ids carried in `args` (only fixed CHECK constraints on
+  # :attempt/:max_attempts/:priority, none of which this function's callers
+  # can influence), and this project has no mocking library wired up to stub
+  # Repo.insert/1. See test/mydia/jobs/upgrade_sweep_test.exs for the
+  # evidence trail.
   defp enqueue_movie(%{media_item: item, media_file: file}) do
     args = %{
       "mode" => "upgrade",
@@ -83,9 +92,29 @@ defmodule Mydia.Jobs.UpgradeSweep do
     RuntimeError -> Repo.insert(changeset)
   end
 
-  defp enabled?, do: Application.get_env(:mydia, :upgrade_sweep_enabled, true)
+  # Reads through the layered runtime config (env > DB/UI > YAML > schema
+  # defaults; see Mydia.Config.Loader) rather than a flat
+  # Application.get_env(:mydia, :upgrade_sweep_enabled, ...) key. Nothing in
+  # this codebase ever explodes the resolved Mydia.Config.Schema struct back
+  # out to flat top-level Application env keys — Config.Loader.reload/1 only
+  # writes Application.get_env(:mydia, :runtime_config, ...) — so a flat read
+  # here would silently ignore both the UPGRADE_SWEEP_ENABLED env var and the
+  # runtime settings UI/DB. Do not revert to a flat read: the identical
+  # mistake on oban.poll_interval/max_age_days is tracked as
+  # https://github.com/getmydia/mydia/issues/271.
+  defp enabled? do
+    case Mydia.Config.get() do
+      %{upgrades: %{sweep_enabled: enabled}} when is_boolean(enabled) -> enabled
+      _ -> true
+    end
+  end
 
+  # See enabled?/0 above for why this reads through the layered config
+  # instead of a flat Application.get_env(:mydia, :upgrade_sweep_batch_size, ...) key.
   defp batch_size do
-    Application.get_env(:mydia, :upgrade_sweep_batch_size, @default_batch_size)
+    case Mydia.Config.get() do
+      %{upgrades: %{sweep_batch_size: size}} when is_integer(size) and size > 0 -> size
+      _ -> @default_batch_size
+    end
   end
 end

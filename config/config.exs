@@ -324,11 +324,13 @@ config :mydia, :event_retention_days, 90
 # Trashed media files older than this will be permanently deleted
 config :mydia, :trash_retention_days, 30
 
-# Automatic quality upgrade sweep configuration
-# Controls the daily bounded sweep that looks for quality upgrades to
-# already-present library files (see Mydia.Jobs.UpgradeSweep)
-config :mydia, :upgrade_sweep_enabled, true
-config :mydia, :upgrade_sweep_batch_size, 50
+# Automatic quality upgrade sweep configuration (see Mydia.Jobs.UpgradeSweep)
+# lives entirely in the layered runtime config (lib/mydia/config/schema.ex,
+# the :upgrades embed) rather than here — the job reads through
+# Mydia.Config.get().upgrades so env/DB overrides actually take effect. See
+# Mydia.Config.Schema.Upgrades for the defaults (sweep_enabled: true,
+# sweep_batch_size: 50) and lib/mydia/config/loader.ex for the
+# UPGRADE_SWEEP_ENABLED / UPGRADE_SWEEP_BATCH_SIZE env vars.
 
 # HLS Streaming configuration
 config :mydia, :streaming,
