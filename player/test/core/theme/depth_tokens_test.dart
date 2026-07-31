@@ -144,14 +144,16 @@ void main() {
       expect(DepthTokens.playerRimBottom.r, lessThan(0.5));
     });
 
-    test('tint is neutral, not the navy browse background', () {
-      expect(DepthTokens.playerChromeTint, isNot(AppColors.background));
+    test('tint is neutral — no colour cast to drain backdrop colour', () {
+      // Previously this compared the tint against a navy AppColors.background.
+      // The ground is neutral now, so the invariant is stated absolutely: the
+      // tint must carry no perceptible cast in any direction, otherwise the
+      // blurred, saturated backdrop behind the playback panel gets drained
+      // toward that hue instead of showing the video's own colour.
       final t = DepthTokens.playerChromeTint;
-      final bg = AppColors.background;
-      // Neutral: the tint's blue-to-red difference is smaller than the navy
-      // background's, so backdrop colour survives the fill instead of being
-      // drained to grey/blue mush.
-      expect(t.b - t.r, lessThan(bg.b - bg.r));
+      const tolerance = 2 / 255;
+      expect((t.b - t.r).abs(), lessThanOrEqualTo(tolerance));
+      expect((t.g - t.r).abs(), lessThanOrEqualTo(tolerance));
     });
 
     test('exposes panel and pill radii', () {
