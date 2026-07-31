@@ -57,7 +57,7 @@ The Flutter player has additional workflow guidance in `player/CLAUDE.md`.
 
 ### Player Android Builds
 
-Android builds use the player's Nix flake (`player/flake.nix`) which provides Flutter, Android SDK, NDK, and Rust cross-compilation toolchains.
+Android builds use the root flake's `.#android` dev shell (`nix/devShells/flake-module.nix`) which provides Flutter, Android SDK, NDK, and Rust cross-compilation toolchains.
 
 **Commands:**
 
@@ -77,7 +77,7 @@ Android builds use the player's Nix flake (`player/flake.nix`) which provides Fl
 
 ### Player macOS Builds
 
-macOS builds use the **host** toolchain — neither devenv nor `player/flake.nix`. Xcode and CocoaPods are Apple-licensed SDKs Nix cannot provide, and cargokit shells out to `rustup` to compile the Rust p2p core into the app bundle.
+macOS builds use the **host** toolchain — neither devenv nor the `.#android` dev shell. Xcode and CocoaPods are Apple-licensed SDKs Nix cannot provide, and cargokit shells out to `rustup` to compile the Rust p2p core into the app bundle.
 
 **Commands:**
 

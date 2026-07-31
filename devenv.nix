@@ -16,7 +16,7 @@
 # Two toolchains are NOT listed above and must not be named here, because each
 # lives in exactly one file that everything else reads:
 #   - Flutter lives in player/.fvmrc, resolved by player/flutter-version.nix.
-#     devenv, the Android shell (player/flake.nix), all four workflows and the
+#     devenv, the Android shell (nix/devShells), all four workflows and the
 #     Dockerfile read that one file, and a mismatch between it and nixpkgs is an
 #     eval error rather than something a reader has to notice.
 #   - Rust lives in rust-toolchain.toml, read by this file, by cargokit, by both
@@ -125,9 +125,9 @@ in
     components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "rust-src" ];
   };
 
-  # Remaining dev toolchain. Flutter comes from nixpkgs (KTD3): player/flake.nix
-  # builds against the same package set, so the NixOS dynamic-linker/patchelf
-  # handling is proven for this codebase. wasm-tools is carried from the flake's
+  # Remaining dev toolchain. Flutter comes from nixpkgs (KTD3); the Android
+  # shell (nix/devShells) resolves it through the same player/flutter-version.nix,
+  # so the NixOS dynamic-linker/patchelf handling is proven for this codebase. wasm-tools is carried from the flake's
   # shells (used by scripts/check-plugins.sh).
   #
   # The Flutter version is NOT named here. It comes from player/.fvmrc through
