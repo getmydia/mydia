@@ -169,13 +169,22 @@ defmodule MetadataRelay.P2pAccess.Store do
   end
 
   @doc """
-  Writes accumulated ETS sightings to the database. Returns the row count.
+  Writes accumulated ETS sightings to the database.
+
+  Returns the number of rows written to the database. If the write fails, the
+  failure is logged and this returns `{:ok, 0}` — zero is the truth here,
+  since nothing was actually persisted.
   """
   def flush_now, do: GenServer.call(__MODULE__, :flush)
 
   @doc """
   Drops sightings older than the retention window from ETS and the database.
-  Returns the number of ETS rows removed.
+
+  Returns the number of ETS rows evicted. That eviction has already happened
+  by the time the database delete is attempted, so if the database delete
+  fails, the failure is logged but the count is unchanged — the stale rows
+  are left in the database to be cleaned up by a later prune, rather than
+  being subtracted from what ETS actually evicted.
   """
   def prune_now, do: GenServer.call(__MODULE__, :prune)
 
@@ -277,7 +286,7 @@ defmodule MetadataRelay.P2pAccess.Store do
           {:ok, count}
         rescue
           error ->
-            Logger.error("p2p sighting flush failed: #{inspect(error)}")
+            Logger.error("p2p sighting flush failed to write to the database: #{inspect(error)}")
             {:ok, 0}
         end
     end

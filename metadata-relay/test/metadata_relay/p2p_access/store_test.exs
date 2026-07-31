@@ -197,5 +197,59 @@ defmodule MetadataRelay.P2pAccess.StoreTest do
 
       assert MetadataRelay.Repo.get(MetadataRelay.P2pAccess.Sighting, stale) == nil
     end
+
+    test "flush degrades to {:ok, 0} and keeps the Store alive when the database write fails" do
+      id = endpoint_id(45)
+      :ok = Store.record_sighting(id)
+
+      pid = Process.whereis(Store)
+      # Take the sandbox connection away so the Store's Repo.insert_all/3
+      # call has no ownership to use and raises DBConnection.OwnershipError,
+      # exercising the rescue in do_flush/0 instead of the happy path.
+      Ecto.Adapters.SQL.Sandbox.checkin(MetadataRelay.Repo)
+
+      assert {:ok, 0} = Store.flush_now()
+
+      # The point of the rescue: a failed database write must not take the
+      # Store down with it, since it owns the ETS tables the request path
+      # depends on.
+      assert Process.whereis(Store) == pid
+      assert Process.alive?(pid)
+
+      # Leave the sandbox usable again for any later use in this test.
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(MetadataRelay.Repo)
+      Ecto.Adapters.SQL.Sandbox.mode(MetadataRelay.Repo, {:shared, self()})
+    end
+
+    test "prune degrades to a rescued {:ok, count} and keeps the Store alive when the database delete fails" do
+      stale = endpoint_id(46)
+      now = System.system_time(:second)
+
+      :ets.insert(:p2p_sightings, {stale, now - 100, now - 100, 1})
+      Application.put_env(:metadata_relay, :p2p_retention_seconds, 50)
+
+      pid = Process.whereis(Store)
+      # Take the sandbox connection away so the Store's Repo.delete_all/1
+      # call has no ownership to use and raises DBConnection.OwnershipError,
+      # exercising the rescue in do_prune/0 instead of the happy path.
+      Ecto.Adapters.SQL.Sandbox.checkin(MetadataRelay.Repo)
+
+      assert {:ok, 1} = Store.prune_now()
+
+      # ETS eviction already happened before the database delete was
+      # attempted, so the count reflects it regardless of the database
+      # outcome.
+      assert Store.lookup_sighting(stale) == :error
+
+      # The point of the rescue: a failed database delete must not take the
+      # Store down with it, since it owns the ETS tables the request path
+      # depends on.
+      assert Process.whereis(Store) == pid
+      assert Process.alive?(pid)
+
+      # Leave the sandbox usable again for any later use in this test.
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(MetadataRelay.Repo)
+      Ecto.Adapters.SQL.Sandbox.mode(MetadataRelay.Repo, {:shared, self()})
+    end
   end
 end
