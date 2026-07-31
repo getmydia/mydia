@@ -127,7 +127,13 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
       restart: :temporary
     }
 
-    DynamicSupervisor.start_child(__MODULE__, child_spec)
+    case DynamicSupervisor.start_child(__MODULE__, child_spec) do
+      # A concurrent caller won the race to register this key (see
+      # HlsSession.init/1). Its session is the one we wanted, so adopt it
+      # rather than reporting failure.
+      {:error, {:already_registered, pid}} -> {:ok, pid}
+      other -> other
+    end
   end
 
   @doc """
