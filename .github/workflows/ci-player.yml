@@ -201,10 +201,16 @@ jobs:
       - name: Assert Linux bundle has no symlinks
         if: matrix.platform == 'Linux' && steps.check_platform.outputs.enabled == 'true'
         run: |
-          LINKS=$(find ${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle -type l)
-          if [ -n "$LINKS" ]; then
+          BUNDLE="${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle"
+          # Assign first, rather than testing `if [ -n "$(find ...)" ]` directly:
+          # set -e is suppressed inside an if condition, so a find failure on a
+          # missing bundle would read as "no symlinks" and pass. A standalone
+          # assignment keeps the step fail-closed. -print -quit stops at the
+          # first hit; the full list is only worth computing when we fail.
+          FIRST_LINK=$(find "$BUNDLE" -type l -print -quit)
+          if [ -n "$FIRST_LINK" ]; then
             echo "::error::Linux bundle contains symlinks; upload-artifact flattens them into copies. Archive the bundle before uploading."
-            echo "$LINKS"
+            find "$BUNDLE" -type l
             exit 1
           fi
           echo "Linux bundle has no symlinks; direct directory upload is safe."

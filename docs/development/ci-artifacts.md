@@ -1,6 +1,6 @@
 # Using CI builds
 
-Every push to `master`, and every pull request, that touches `player/`,
+Every push to `master` or `main`, and every pull request, that touches `player/`,
 `native/`, or `.github/workflows/ci-player.yml` produces downloadable player
 builds. Pushes and pull requests that do not touch those paths do not trigger a
 build, so there is nothing to download for them. These builds are the fastest
