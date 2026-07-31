@@ -129,9 +129,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Duration? _totalDuration;
 
   // The mapping from the player's stream-local positions onto real media
-  // positions. Built from the server's echoed resume offset once an HLS
-  // session starts; stays at its zero default for direct play and offline
-  // playback, which hold the whole file and need no correction.
+  // positions. Populated in two stages for HLS: first with just the
+  // resolved duration (offset zero) as soon as it's known — so a cast
+  // chosen before the session negotiates still gets a real duration — then
+  // rebuilt with the session's echoed start offset once it starts. Stays at
+  // its zero default for direct play and offline playback, which hold the
+  // whole file and need no correction.
   StreamTimeline _timeline = StreamTimeline.zero;
 
   // Desktop feature state
@@ -395,6 +398,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // may itself have been written against a partial duration by an older
       // build.
       _totalDuration = _resolveRealDuration(candidatesResult);
+
+      // Publish the duration to the timeline as soon as we know it. Casting can
+      // short-circuit playback below, before any streaming session exists, and
+      // the receiver cannot work the runtime out for itself: a Mydia HLS
+      // playlist carries no EXT-X-ENDLIST until FFmpeg finishes. The offset is
+      // still zero here; the session result rebuilds this with the real one.
+      _timeline = StreamTimeline(totalDuration: _totalDuration);
 
       if (await _castToTargetIfSet()) return;
 
@@ -1971,17 +1981,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// A Chromecast reports `duration: -1` for a Mydia HLS session, because the
   /// playlist carries no `#EXT-X-ENDLIST` until FFmpeg finishes. Hand it the
   /// figure the server gave us instead.
-  ///
-  /// Falls back to [_totalDuration] (not just `_timeline.totalDuration`) when
-  /// there is no local player yet: casting can be chosen before the HLS
-  /// session negotiates, and [_timeline] is only built from the session's
-  /// echoed start offset once that mutation returns, so it is still at its
-  /// zero/null default at that point even though [_totalDuration] has
-  /// already been resolved from candidates metadata, saved progress, or
-  /// runtime.
   Duration? _knownCastDuration() {
     final player = _player;
-    if (player == null) return _timeline.totalDuration ?? _totalDuration;
+    if (player == null) return _timeline.totalDuration;
 
     final resolved = _timeline.resolveDuration(player.state.duration);
     return resolved > Duration.zero ? resolved : null;
