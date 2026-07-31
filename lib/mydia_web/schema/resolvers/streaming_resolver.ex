@@ -184,13 +184,47 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   # client then had nothing to compute a resume percentage against and fell back
   # to the partial HLS playlist length, which reads as 100%.
   #
-  # We are about to spawn FFmpeg against this same local file, so paying for one
-  # synchronous ffprobe here is cheap by comparison.
-  defp ensure_duration_known(%MediaFile{analyzed_at: nil} = media_file) do
-    Candidates.ensure_codec_info(media_file)
+  # Probing inline is what makes resume correct on a file's very first play.
+  # But ffprobe is itself bounded by :ffprobe_timeout_ms (30s by default)
+  # precisely because library paths can sit on slow network mounts, and
+  # blocking the play request for that long reads to a user as a hang.
+  #
+  # Cap the inline wait far below that. A fast local probe — the common case —
+  # still lands and resume is correct immediately. A slow one falls back to the
+  # old behaviour of no duration now, with the probe still running to populate
+  # metadata for the next play, instead of stalling playback.
+  @inline_probe_budget_ms 3_000
+
+  @doc false
+  # Public for unit testing, same as clamp_start_position/2: the budget_ms
+  # argument only exists so a test can force the fallback branch with a
+  # budget of 0 instead of mutating the global :ffprobe_timeout_ms env (which
+  # has previously caused SQLite/Postgres concurrency leaks in this repo).
+  def ensure_duration_known(media_file, budget_ms \\ @inline_probe_budget_ms)
+
+  def ensure_duration_known(%MediaFile{analyzed_at: nil} = media_file, budget_ms) do
+    task =
+      Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn ->
+        Candidates.ensure_codec_info(media_file)
+      end)
+
+    case Task.yield(task, budget_ms) do
+      {:ok, %MediaFile{} = probed} ->
+        probed
+
+      _ ->
+        # Deliberately not shutting the task down: it finishes in the
+        # background and writes the metadata, so the next play has a duration.
+        Logger.info(
+          "ffprobe exceeded the #{budget_ms}ms inline budget for file " <>
+            "#{media_file.id}; starting the session without a known duration"
+        )
+
+        media_file
+    end
   end
 
-  defp ensure_duration_known(media_file), do: media_file
+  def ensure_duration_known(media_file, _budget_ms), do: media_file
 
   defp load_media_file(file_id) do
     {:ok, Library.get_media_file!(file_id, preload: [:library_path])}
