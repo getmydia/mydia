@@ -20,6 +20,11 @@ defmodule Mydia.Search.SearchBackoff do
     media_item.id. Deliberately namespaced apart from `"movie"`: a movie's file-presence state
     changes over time (imported, then later trashed), so a backoff row from one search path must
     not suppress the other once a movie crosses that boundary. See `Mydia.Upgrades.eligible_movies/1`.
+  - `"episode_upgrade"` - Per-episode backoff for the quality-upgrade search path, resource_id =
+    episode.id. Namespaced apart from `"episode"` for the same reason as `"movie_upgrade"`: an
+    episode's file-presence state changes over time, so a backoff row from one search path must
+    not suppress the other once an episode crosses that boundary. See
+    `Mydia.Upgrades.eligible_episodes/1`.
   """
 
   use Ecto.Schema
@@ -70,7 +75,8 @@ defmodule Mydia.Search.SearchBackoff do
       "tv_show",
       "season",
       "episode",
-      "movie_upgrade"
+      "movie_upgrade",
+      "episode_upgrade"
     ])
   end
 end

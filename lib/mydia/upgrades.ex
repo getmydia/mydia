@@ -66,6 +66,14 @@ defmodule Mydia.Upgrades do
   (`limit * #{@overfetch}` raw episode rows scanned before below-cutoff
   filtering, generous enough that whole seasons normally stay together) —
   every below-cutoff episode found within that page is returned.
+
+  Excludes on the `"episode_upgrade"` backoff bucket, not `"episode"` - that
+  bucket is written by `TVShowSearch`'s missing-file search paths, which
+  only ever search episodes *without* a file. An episode's file-presence
+  state changes over time (imported, then later trashed), so a stale
+  `"episode"` backoff row from before this episode had a file must not
+  suppress its upgrade eligibility, and vice versa. See
+  `eligible_movies/1`'s identical namespacing for movies.
   """
   @spec eligible_episodes(pos_integer()) :: [map()]
   def eligible_episodes(limit) when is_integer(limit) and limit > 0 do
@@ -74,7 +82,7 @@ defmodule Mydia.Upgrades do
     |> where([e, m], e.monitored == true and m.monitored == true)
     |> where([e, _m], e.id in subquery(analyzed_episode_ids()))
     |> where([e, _m], e.id not in subquery(occupying_episode_ids()))
-    |> where([e, _m], e.id not in subquery(backed_off_ids("episode")))
+    |> where([e, _m], e.id not in subquery(backed_off_ids("episode_upgrade")))
     |> order_by([e, _m], asc_nulls_first: e.last_upgrade_check_at)
     |> limit(^(limit * @overfetch))
     |> preload([_e, _m], [:media_item, media_files: ^analyzed_files_query()])

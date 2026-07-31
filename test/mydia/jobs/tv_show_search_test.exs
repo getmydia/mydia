@@ -8,6 +8,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
 
   alias Mydia.Jobs.TVShowSearch
   alias Mydia.Library
+  alias Mydia.Search
   alias Mydia.Settings
   alias Mydia.IndexerMock
   alias Mydia.Downloads.Client
@@ -1202,6 +1203,439 @@ defmodule Mydia.Jobs.TVShowSearchTest do
 
       assert [download | _] = Mydia.Downloads.list_downloads()
       assert download.title =~ "1080p"
+    end
+  end
+
+  describe "Args.parse/1 upgrade modes" do
+    test "parses upgrade_episode mode with a target file" do
+      args =
+        TVShowSearch.Args.parse(%{
+          "mode" => "upgrade_episode",
+          "episode_id" => "episode-uuid",
+          "media_file_id" => "file-uuid"
+        })
+
+      assert args.mode == "upgrade_episode"
+      assert args.episode_id == "episode-uuid"
+      assert args.media_file_id == "file-uuid"
+    end
+
+    test "parses upgrade_season mode with a target file" do
+      args =
+        TVShowSearch.Args.parse(%{
+          "mode" => "upgrade_season",
+          "media_item_id" => "show-uuid",
+          "season_number" => 1,
+          "media_file_id" => "file-uuid"
+        })
+
+      assert args.mode == "upgrade_season"
+      assert args.media_item_id == "show-uuid"
+      assert args.season_number == 1
+      assert args.media_file_id == "file-uuid"
+    end
+  end
+
+  describe "perform/1 - upgrade_episode mode" do
+    defp upgrade_episode_target(library_path, opts \\ []) do
+      profile_attrs =
+        Keyword.get(opts, :profile, %{
+          name: "Episode upgrade profile #{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          min_upgrade_margin: 0
+        })
+
+      profile = quality_profile_fixture(profile_attrs)
+
+      tv_show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Breaking Bad",
+          quality_profile_id: profile.id
+        })
+
+      episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2008-01-20]
+        })
+
+      file_attrs =
+        Keyword.get(opts, :file_attrs, %{})
+        |> Enum.into(%{
+          episode_id: episode.id,
+          path: "/test/library/bb-s01e01.mkv",
+          relative_path: "bb-s01e01.mkv",
+          library_path_id: library_path.id,
+          size: 1_500_000_000,
+          resolution: "720p",
+          codec: "H.264 (High)",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, media_file} = Library.create_media_file(file_attrs)
+
+      {episode, media_file}
+    end
+
+    test "returns {:ok, :skipped} when the episode no longer exists" do
+      fake_episode_id = Ecto.UUID.generate()
+      fake_media_file_id = Ecto.UUID.generate()
+
+      assert {:ok, :skipped} =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => fake_episode_id,
+                 "media_file_id" => fake_media_file_id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "returns {:ok, :skipped} when the target media file no longer exists" do
+      tv_show = media_item_fixture(%{type: "tv_show", title: "Breaking Bad"})
+
+      episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2008-01-20]
+        })
+
+      fake_media_file_id = Ecto.UUID.generate()
+
+      assert {:ok, :skipped} =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => episode.id,
+                 "media_file_id" => fake_media_file_id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "returns {:ok, :skipped} when the target media file has been trashed", %{
+      library_path: library_path
+    } do
+      {episode, media_file} =
+        upgrade_episode_target(library_path,
+          file_attrs: %{trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)}
+        )
+
+      assert {:ok, :skipped} =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => episode.id,
+                 "media_file_id" => media_file.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "grabs a genuine upgrade candidate and tags the download with its target file", %{
+      library_path: library_path
+    } do
+      {episode, media_file} = upgrade_episode_target(library_path)
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => episode.id,
+                 "media_file_id" => media_file.id
+               })
+
+      assert [download] = Mydia.Downloads.list_downloads()
+
+      # Read back from the database rather than the in-memory struct
+      # returned by initiate_download, so this actually proves the write
+      # persisted rather than just that the in-memory pipeline built the
+      # right map.
+      reloaded = Mydia.Repo.get!(Mydia.Downloads.Download, download.id)
+      assert reloaded.metadata["upgrade_target_media_file_id"] == media_file.id
+      assert reloaded.episode_id == episode.id
+      assert reloaded.title =~ "1080p"
+    end
+
+    # Proves the Comparator genuinely gates the grab rather than merely being
+    # called for show: same episode, same file, same mocked indexer results
+    # as the "grabs a genuine upgrade candidate" test above (proven there to
+    # produce a grab) — the *only* difference is min_upgrade_margin raised to
+    # a value no real score delta could ever clear. If the filter were
+    # removed (or merely a no-op), this would grab exactly like the sibling
+    # test does; instead nothing is grabbed and the miss is recorded as a
+    # search-backoff failure like the other modes' "no results" paths.
+    test "does not grab a candidate that fails the Comparator's margin, even though ReleaseRanker would otherwise pick it",
+         %{library_path: library_path} do
+      {episode, media_file} =
+        upgrade_episode_target(library_path,
+          profile: %{
+            name: "Unreachable episode margin",
+            quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+            min_upgrade_margin: 100
+          }
+        )
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => episode.id,
+                 "media_file_id" => media_file.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      # Upgrade-mode backoff lives in its own "episode_upgrade" bucket, not
+      # the "episode" bucket the missing-file search paths use (see
+      # Mydia.Upgrades.eligible_episodes/1) - a stale "episode" backoff from
+      # before this episode had a file must never suppress an upgrade search
+      # for it, and vice versa.
+      assert Search.get_backoff("episode", episode.id) == nil
+      backoff = Search.get_backoff("episode_upgrade", episode.id)
+      assert backoff.failure_count == 1
+    end
+  end
+
+  describe "perform/1 - upgrade_season mode" do
+    defp upgrade_season_target(library_path, opts \\ []) do
+      profile_attrs =
+        Keyword.get(opts, :profile, %{
+          name: "Season upgrade profile #{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          min_upgrade_margin: 0
+        })
+
+      profile = quality_profile_fixture(profile_attrs)
+
+      tv_show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Multi Season Show",
+          quality_profile_id: profile.id
+        })
+
+      episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2015-01-01]
+        })
+
+      file_attrs =
+        Keyword.get(opts, :file_attrs, %{})
+        |> Enum.into(%{
+          episode_id: episode.id,
+          path: "/test/library/mss-s01e01.mkv",
+          relative_path: "mss-s01e01.mkv",
+          library_path_id: library_path.id,
+          size: 1_500_000_000,
+          resolution: "720p",
+          codec: "H.264 (High)",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, media_file} = Library.create_media_file(file_attrs)
+
+      {tv_show, media_file}
+    end
+
+    test "returns {:ok, :skipped} when the show no longer exists" do
+      fake_media_item_id = Ecto.UUID.generate()
+      fake_media_file_id = Ecto.UUID.generate()
+
+      assert {:ok, :skipped} =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => fake_media_item_id,
+                 "season_number" => 1,
+                 "media_file_id" => fake_media_file_id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "returns {:ok, :skipped} when the target media file no longer exists" do
+      tv_show = media_item_fixture(%{type: "tv_show", title: "Multi Season Show"})
+      fake_media_file_id = Ecto.UUID.generate()
+
+      assert {:ok, :skipped} =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => tv_show.id,
+                 "season_number" => 1,
+                 "media_file_id" => fake_media_file_id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "returns {:ok, :skipped} when the target media file has been trashed", %{
+      library_path: library_path
+    } do
+      {tv_show, media_file} =
+        upgrade_season_target(library_path,
+          file_attrs: %{trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)}
+        )
+
+      assert {:ok, :skipped} =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => tv_show.id,
+                 "season_number" => 1,
+                 "media_file_id" => media_file.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "grabs a genuine season pack upgrade and tags the download with its target file", %{
+      library_path: library_path
+    } do
+      {tv_show, media_file} = upgrade_season_target(library_path)
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => tv_show.id,
+                 "season_number" => 1,
+                 "media_file_id" => media_file.id
+               })
+
+      assert [download] = Mydia.Downloads.list_downloads()
+
+      # Read back from the database rather than the in-memory struct
+      # returned by initiate_download.
+      reloaded = Mydia.Repo.get!(Mydia.Downloads.Download, download.id)
+      assert reloaded.metadata["upgrade_target_media_file_id"] == media_file.id
+      assert reloaded.media_item_id == tv_show.id
+      assert reloaded.title =~ "1080p"
+    end
+
+    test "does not grab a season pack that fails the Comparator's margin, even though ReleaseRanker would otherwise pick it",
+         %{library_path: library_path} do
+      {tv_show, media_file} =
+        upgrade_season_target(library_path,
+          profile: %{
+            name: "Unreachable season margin",
+            quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+            min_upgrade_margin: 100
+          }
+        )
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => tv_show.id,
+                 "season_number" => 1,
+                 "media_file_id" => media_file.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      backoff = Search.get_backoff("season", tv_show.id, season_number: 1)
+      assert backoff.failure_count == 1
+    end
+
+    # This is the constraint most likely to be violated by reusing the
+    # existing "season" mode path, since that path's fallback to individual
+    # episode searches is built in. Proves it with a request count, not just
+    # an absence-of-downloads assertion: an episode search would be skipped
+    # anyway by the "already has files" gate (every episode here already has
+    # a file, that being the whole premise of an upgrade), so "no downloads"
+    # alone would pass even if the fallback wrongly fired. Only a Bypass
+    # expectation that the search endpoint is hit exactly once actually
+    # proves no per-episode fallback search happened.
+    test "does not fall back to individual episode searches when no season pack qualifies", %{
+      library_path: library_path
+    } do
+      Settings.list_indexer_configs()
+      |> Enum.filter(&(&1.name == "Test TV Indexer"))
+      |> Enum.each(&Settings.update_indexer_config(&1, %{enabled: false}))
+
+      bypass = Bypass.open()
+      IndexerMock.mock_prowlarr_status(bypass)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(
+            IndexerMock.build_search_results([
+              IndexerMock.season_pack_result(%{
+                title: "No Fallback Show",
+                season: 1,
+                seeders: 100
+              })
+            ])
+          )
+        )
+      end)
+
+      {:ok, _indexer} =
+        Settings.create_indexer_config(%{
+          name: "No Fallback Test Indexer",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}",
+          api_key: "test-key",
+          enabled: true
+        })
+
+      profile =
+        quality_profile_fixture(%{
+          name: "No fallback margin #{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          min_upgrade_margin: 100
+        })
+
+      tv_show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "No Fallback Show",
+          quality_profile_id: profile.id
+        })
+
+      episodes =
+        for ep_num <- 1..3 do
+          episode_fixture(%{
+            media_item_id: tv_show.id,
+            season_number: 1,
+            episode_number: ep_num,
+            air_date: Date.add(~D[2020-01-01], ep_num * 7)
+          })
+        end
+
+      media_files =
+        for episode <- episodes do
+          {:ok, media_file} =
+            Library.create_media_file(%{
+              episode_id: episode.id,
+              path: "/test/library/nfs-s01e0#{episode.episode_number}.mkv",
+              relative_path: "nfs-s01e0#{episode.episode_number}.mkv",
+              library_path_id: library_path.id,
+              size: 1_500_000_000,
+              resolution: "720p",
+              codec: "H.264 (High)",
+              analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+            })
+
+          media_file
+        end
+
+      target_file = hd(media_files)
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => tv_show.id,
+                 "season_number" => 1,
+                 "media_file_id" => target_file.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
     end
   end
 end

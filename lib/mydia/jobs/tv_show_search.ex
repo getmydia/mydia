@@ -59,8 +59,11 @@ defmodule Mydia.Jobs.TVShowSearch do
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.Structs.SearchResultMetadata
+  alias Mydia.Library
   alias Mydia.Media.{MediaItem, Episode}
   alias Mydia.Library.MediaFile
+  alias Mydia.Settings.QualityProfile
+  alias Mydia.Upgrades
   alias Phoenix.PubSub
 
   defmodule Args do
@@ -70,6 +73,7 @@ defmodule Mydia.Jobs.TVShowSearch do
       :episode_id,
       :media_item_id,
       :season_number,
+      :media_file_id,
       :min_seeders,
       :size_range,
       :blocked_tags,
@@ -81,6 +85,7 @@ defmodule Mydia.Jobs.TVShowSearch do
             episode_id: String.t() | nil,
             media_item_id: String.t() | nil,
             season_number: integer() | nil,
+            media_file_id: String.t() | nil,
             min_seeders: integer() | nil,
             size_range: term() | nil,
             blocked_tags: [String.t()] | nil,
@@ -130,6 +135,44 @@ defmodule Mydia.Jobs.TVShowSearch do
     def parse(%{"mode" => "all_monitored"} = raw) do
       %__MODULE__{
         mode: "all_monitored",
+        min_seeders: Map.get(raw, "min_seeders"),
+        size_range: Map.get(raw, "size_range"),
+        blocked_tags: Map.get(raw, "blocked_tags"),
+        preferred_tags: Map.get(raw, "preferred_tags")
+      }
+    end
+
+    def parse(
+          %{
+            "mode" => "upgrade_episode",
+            "episode_id" => episode_id,
+            "media_file_id" => media_file_id
+          } = raw
+        ) do
+      %__MODULE__{
+        mode: "upgrade_episode",
+        episode_id: episode_id,
+        media_file_id: media_file_id,
+        min_seeders: Map.get(raw, "min_seeders"),
+        size_range: Map.get(raw, "size_range"),
+        blocked_tags: Map.get(raw, "blocked_tags"),
+        preferred_tags: Map.get(raw, "preferred_tags")
+      }
+    end
+
+    def parse(
+          %{
+            "mode" => "upgrade_season",
+            "media_item_id" => media_item_id,
+            "season_number" => season_number,
+            "media_file_id" => media_file_id
+          } = raw
+        ) do
+      %__MODULE__{
+        mode: "upgrade_season",
+        media_item_id: media_item_id,
+        season_number: season_number,
+        media_file_id: media_file_id,
         min_seeders: Map.get(raw, "min_seeders"),
         size_range: Map.get(raw, "size_range"),
         blocked_tags: Map.get(raw, "blocked_tags"),
@@ -447,6 +490,65 @@ defmodule Mydia.Jobs.TVShowSearch do
   end
 
   @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"mode" => "upgrade_episode"} = raw_args}) do
+    args = Args.parse(raw_args)
+    episode_id = args.episode_id
+    media_file_id = args.media_file_id
+
+    Logger.info("Starting upgrade search for episode",
+      episode_id: episode_id,
+      media_file_id: media_file_id
+    )
+
+    case load_episode_upgrade_target(episode_id, media_file_id) do
+      {:ok, episode, file} ->
+        search_episode_upgrade(episode, file, args)
+        :ok
+
+      {:error, :not_found} ->
+        # The sweep that enqueued this job may be searching a stale
+        # snapshot: the episode or its file may have been trashed or
+        # deleted in the meantime. That is a normal outcome, not a failure,
+        # so it must not burn Oban retries.
+        Logger.info("Skipping upgrade search - episode or file no longer exists",
+          episode_id: episode_id,
+          media_file_id: media_file_id
+        )
+
+        {:ok, :skipped}
+    end
+  end
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"mode" => "upgrade_season"} = raw_args}) do
+    args = Args.parse(raw_args)
+    media_item_id = args.media_item_id
+    season_number = args.season_number
+    media_file_id = args.media_file_id
+
+    Logger.info("Starting upgrade search for season",
+      media_item_id: media_item_id,
+      season_number: season_number,
+      media_file_id: media_file_id
+    )
+
+    case load_season_upgrade_target(media_item_id, media_file_id) do
+      {:ok, media_item, file} ->
+        search_season_upgrade(media_item, season_number, file, args)
+        :ok
+
+      {:error, :not_found} ->
+        Logger.info("Skipping upgrade search - show or file no longer exists",
+          media_item_id: media_item_id,
+          season_number: season_number,
+          media_file_id: media_file_id
+        )
+
+        {:ok, :skipped}
+    end
+  end
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"mode" => _} = raw_args}) do
     args = Args.parse(raw_args)
     Logger.error("Unsupported mode", mode: args.mode)
@@ -460,6 +562,31 @@ defmodule Mydia.Jobs.TVShowSearch do
     |> where([e], e.id == ^episode_id)
     |> preload(:media_item)
     |> Repo.one()
+  end
+
+  # Loads the two rows an episode upgrade job needs, treating a missing or
+  # trashed media file the same as a missing episode: both mean the target
+  # this job was enqueued for is gone, a normal race with the sweep
+  # (trashed between enqueue and this job running), not an error. Mirrors
+  # Mydia.Jobs.MovieSearch.load_upgrade_target/2.
+  defp load_episode_upgrade_target(episode_id, media_file_id) do
+    episode = load_episode(episode_id)
+    file = Library.get_media_file(media_file_id)
+
+    case {episode, file} do
+      {%Episode{}, %MediaFile{trashed_at: nil}} -> {:ok, episode, file}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp load_season_upgrade_target(media_item_id, media_file_id) do
+    media_item = Repo.get(MediaItem, media_item_id)
+    file = Library.get_media_file(media_file_id)
+
+    case {media_item, file} do
+      {%MediaItem{}, %MediaFile{trashed_at: nil}} -> {:ok, media_item, file}
+      _ -> {:error, :not_found}
+    end
   end
 
   @doc false
@@ -819,7 +946,8 @@ defmodule Mydia.Jobs.TVShowSearch do
               episodes,
               season_pack_results,
               args,
-              query
+              query,
+              []
             )
 
           # If season pack processing failed, fall back to individual episodes
@@ -919,16 +1047,45 @@ defmodule Mydia.Jobs.TVShowSearch do
     }
   end
 
-  defp process_season_pack_results(media_item, season_number, episodes, results, args, query) do
+  # `opts` mirrors perform_episode_search/3's doc comment, for season packs:
+  #
+  #   * `:candidate_filter` - `(results -> results)`, applied after
+  #     blacklist rejection and before ranking. Used by the season upgrade
+  #     path to keep only candidates Comparator.upgrade?/5 confirms are a
+  #     real upgrade over the target file.
+  #   * `:grab_opts` / `:after_grab` - passed through to
+  #     initiate_season_pack_download/5.
+  #
+  # Always called with an explicit opts (possibly `[]`) from all three call
+  # sites (search_season/5, search_season_with_stats/5, and
+  # do_search_season_upgrade/5), so this has no default of its own.
+  defp process_season_pack_results(
+         media_item,
+         season_number,
+         episodes,
+         results,
+         args,
+         query,
+         opts
+       ) do
     # Filter blacklisted releases out before ranking (#123). Too-fresh NZB
     # filtering (#121) already happened upstream in `Indexers.search_all/2`
     # — see the call site in MovieSearch for the rationale.
     results = reject_blacklisted(results, media_item: media_item, season_number: season_number)
 
+    # The upgrade path's :candidate_filter runs here, after blacklist
+    # rejection and before ranking - see MovieSearch.process_search_results/5
+    # for the same convention on the movie side.
+    candidates =
+      case Keyword.get(opts, :candidate_filter) do
+        nil -> results
+        filter_fn -> filter_fn.(results)
+      end
+
     # Build ranking options from the first episode (they all share the same show)
     ranking_opts = build_ranking_options_for_season(media_item, season_number, episodes, args)
 
-    case ReleaseRanker.select_best_result(results, ranking_opts) do
+    case ReleaseRanker.select_best_result(candidates, ranking_opts) do
       nil ->
         Logger.warning(
           "No suitable season pack after ranking",
@@ -949,7 +1106,7 @@ defmodule Mydia.Jobs.TVShowSearch do
             "results_count" => length(results),
             "season_number" => season_number,
             "search_type" => "season_pack",
-            "filter_stats" => build_filter_stats(results, ranking_opts)
+            "filter_stats" => build_filter_stats(candidates, ranking_opts)
           }
         )
 
@@ -979,11 +1136,11 @@ defmodule Mydia.Jobs.TVShowSearch do
             "season_number" => season_number,
             "search_type" => "season_pack",
             "episodes_included" => length(episodes),
-            "all_results" => build_filter_stats(results, ranking_opts)
+            "all_results" => build_filter_stats(candidates, ranking_opts)
           }
         )
 
-        case initiate_season_pack_download(media_item, season_number, episodes, best_result) do
+        case initiate_season_pack_download(media_item, season_number, episodes, best_result, opts) do
           :ok ->
             # Reset season backoff on successful download initiation
             reset_season_backoff(media_item, season_number)
@@ -1096,8 +1253,23 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  defp perform_episode_search(%Episode{} = episode, args) do
+  # `opts` lets the upgrade path (search_episode_upgrade/3) thread through
+  # the things that differ from the missing-file path without forking this
+  # function, mirroring MovieSearch.search_movie/3:
+  #
+  #   * `:candidate_filter` - `(results -> results)`, applied after
+  #     blacklist rejection and before ranking. Used to keep only candidates
+  #     Comparator.upgrade?/5 confirms are a real upgrade.
+  #   * `:grab_opts` / `:after_grab` - passed through to
+  #     initiate_episode_download/3.
+  #   * `:backoff_resource_type` - the SearchBackoff resource_type to record
+  #     against (default "episode"). The upgrade path uses
+  #     "episode_upgrade" so a stale missing-file backoff can never
+  #     suppress an upgrade search, or vice versa - see
+  #     Mydia.Upgrades.eligible_episodes/1.
+  defp perform_episode_search(%Episode{} = episode, args, opts \\ []) do
     query = build_episode_query(episode)
+    resource_type = Keyword.get(opts, :backoff_resource_type, "episode")
 
     Logger.info("Searching for episode",
       episode_id: episode.id,
@@ -1118,7 +1290,7 @@ defmodule Mydia.Jobs.TVShowSearch do
         )
 
         # Record backoff for no results
-        record_episode_backoff(episode, "no_results")
+        record_episode_backoff(episode, "no_results", resource_type)
 
         # Log search event for no results
         Events.search_no_results(
@@ -1137,11 +1309,15 @@ defmodule Mydia.Jobs.TVShowSearch do
           episode: episode.episode_number
         )
 
-        process_episode_results(episode, results, args, query)
+        process_episode_results(episode, results, args, query, opts)
     end
   end
 
-  defp process_episode_results(episode, results, args, query) do
+  # See perform_episode_search/3's doc comment for what `opts` carries.
+  # Always called with an explicit opts (possibly `[]`) from both call
+  # sites (perform_episode_search/3 and the with-stats variant), so this
+  # has no default of its own.
+  defp process_episode_results(episode, results, args, query, opts) do
     # Season packs are no longer hard-rejected here. Episode/season identity is
     # judged inside ReleaseRanker via the identity penalty (R6): for an episode
     # search a season pack matches the season but lacks the episode, so it is
@@ -1156,7 +1332,16 @@ defmodule Mydia.Jobs.TVShowSearch do
     # `Indexers.search_all/2`.
     episode_results = reject_blacklisted(results, episode: episode)
 
-    process_ranked_episode_results(episode, episode_results, args, query)
+    # The upgrade path's :candidate_filter runs here, after blacklist
+    # rejection and before ranking - see MovieSearch.process_search_results/5
+    # for the same convention on the movie side.
+    candidates =
+      case Keyword.get(opts, :candidate_filter) do
+        nil -> episode_results
+        filter_fn -> filter_fn.(episode_results)
+      end
+
+    process_ranked_episode_results(episode, candidates, args, query, opts)
   end
 
   # Drops results matching an active `(indexer, guid)` row in the
@@ -1168,8 +1353,12 @@ defmodule Mydia.Jobs.TVShowSearch do
     Blacklists.reject_blacklisted(results, episode_id: episode_id, media_item_id: media_item_id)
   end
 
-  defp process_ranked_episode_results(episode, results, args, query) do
+  # See perform_episode_search/3's doc comment for what `opts` carries.
+  # Always called with an explicit opts from process_episode_results/5's
+  # single call site, so this has no default of its own.
+  defp process_ranked_episode_results(episode, results, args, query, opts) do
     ranking_opts = build_ranking_options(episode, args)
+    resource_type = Keyword.get(opts, :backoff_resource_type, "episode")
 
     case ReleaseRanker.select_best_result(results, ranking_opts) do
       nil ->
@@ -1182,7 +1371,7 @@ defmodule Mydia.Jobs.TVShowSearch do
         )
 
         # Record backoff for all results filtered out
-        record_episode_backoff(episode, "all_filtered")
+        record_episode_backoff(episode, "all_filtered", resource_type)
 
         # Log search event for all results filtered out
         Events.search_filtered_out(
@@ -1222,10 +1411,10 @@ defmodule Mydia.Jobs.TVShowSearch do
           episode: episode
         )
 
-        case initiate_episode_download(episode, best_result) do
+        case initiate_episode_download(episode, best_result, opts) do
           :ok ->
             # Reset backoff on successful download initiation
-            reset_episode_backoff(episode)
+            reset_episode_backoff(episode, resource_type)
             :ok
 
           {:error, reason} ->
@@ -1288,23 +1477,30 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   ## Private Functions - Download Initiation
 
-  defp initiate_episode_download(episode, result) do
-    case Downloads.initiate_download(result,
-           media_item_id: episode.media_item_id,
-           episode_id: episode.id
-         ) do
-      {:ok, download} ->
-        Logger.info("Successfully initiated download for episode",
-          episode_id: episode.id,
-          show: episode.media_item.title,
-          season: episode.season_number,
-          episode: episode.episode_number,
-          download_id: download.id,
-          result_title: result.title
-        )
+  # See perform_episode_search/3's doc comment for what `opts` carries.
+  # Always called with an explicit opts from process_ranked_episode_results/5's
+  # single call site, so this has no default of its own.
+  defp initiate_episode_download(episode, result, opts) do
+    grab_opts = Keyword.get(opts, :grab_opts, [])
+    after_grab = Keyword.get(opts, :after_grab, fn download -> {:ok, download} end)
 
-        :ok
+    with {:ok, download} <-
+           Downloads.initiate_download(
+             result,
+             [media_item_id: episode.media_item_id, episode_id: episode.id] ++ grab_opts
+           ),
+         {:ok, _updated} <- after_grab.(download) do
+      Logger.info("Successfully initiated download for episode",
+        episode_id: episode.id,
+        show: episode.media_item.title,
+        season: episode.season_number,
+        episode: episode.episode_number,
+        download_id: download.id,
+        result_title: result.title
+      )
 
+      :ok
+    else
       {:error, reason} ->
         Logger.error("Failed to initiate download for episode",
           episode_id: episode.id,
@@ -1318,10 +1514,16 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  defp initiate_season_pack_download(media_item, season_number, episodes, result) do
+  # `opts` mirrors initiate_episode_download/3's :grab_opts / :after_grab -
+  # used by the season upgrade path for a manual grab (bypasses the
+  # "already has files" duplicate check) plus the metadata patch linking the
+  # grab back to the file it targets.
+  defp initiate_season_pack_download(media_item, season_number, episodes, result, opts) do
     # For season packs, we create a single download associated with the media_item
     # The download will include metadata about the season pack
     # The import job will later match files to individual episodes
+    grab_opts = Keyword.get(opts, :grab_opts, [])
+    after_grab = Keyword.get(opts, :after_grab, fn download -> {:ok, download} end)
 
     # Build season pack metadata struct so dedup pattern matches in
     # Mydia.Downloads.Queue and persistence in DownloadMetadata work correctly.
@@ -1334,19 +1536,23 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     result_with_metadata = Map.put(result, :metadata, metadata)
 
-    case Downloads.initiate_download(result_with_metadata, media_item_id: media_item.id) do
-      {:ok, download} ->
-        Logger.info("Successfully initiated season pack download",
-          media_item_id: media_item.id,
-          show: media_item.title,
-          season_number: season_number,
-          episode_count: length(episodes),
-          download_id: download.id,
-          result_title: result.title
-        )
+    with {:ok, download} <-
+           Downloads.initiate_download(
+             result_with_metadata,
+             [media_item_id: media_item.id] ++ grab_opts
+           ),
+         {:ok, _updated} <- after_grab.(download) do
+      Logger.info("Successfully initiated season pack download",
+        media_item_id: media_item.id,
+        show: media_item.title,
+        season_number: season_number,
+        episode_count: length(episodes),
+        download_id: download.id,
+        result_title: result.title
+      )
 
-        :ok
-
+      :ok
+    else
       {:error, reason} ->
         Logger.error("Failed to initiate season pack download",
           media_item_id: media_item.id,
@@ -1358,6 +1564,175 @@ defmodule Mydia.Jobs.TVShowSearch do
 
         {:error, reason}
     end
+  end
+
+  ## Private Functions - Upgrade Mode
+
+  # Resolves the profile, then delegates to perform_episode_search/3 - the
+  # same function search_episode/2 uses for the missing-file path - but
+  # called directly rather than through search_episode/2, whose
+  # "already has files" / "hasn't aired yet" gates exist to skip episodes
+  # the missing-file path shouldn't touch. Neither applies to an upgrade:
+  # the episode is only here because Upgrades.eligible_episodes/1 found it
+  # with an analyzed file below cutoff, which means it necessarily has a
+  # file and has aired.
+  #
+  # Threads the three things that make this an upgrade search rather than a
+  # missing-file search: a candidate filter (Upgrades.filter_candidates/4,
+  # shared with the movie upgrade path), a manual grab that bypasses the
+  # "already has a file" duplicate check plus the metadata patch linking the
+  # grab back to the file it targets, and a backoff resource_type
+  # namespaced apart from the ordinary "episode" bucket (see
+  # Mydia.Upgrades.eligible_episodes/1 for why that namespacing matters).
+  defp search_episode_upgrade(%Episode{} = episode, %MediaFile{} = file, %Args{} = args) do
+    case QualityProfileResolver.resolve(episode.media_item) do
+      %QualityProfile{} = profile ->
+        opts = [
+          candidate_filter: fn results ->
+            Upgrades.filter_candidates(results, file, profile, :episode)
+          end,
+          grab_opts: [manual: true],
+          after_grab: fn download -> attach_upgrade_target(download, file) end,
+          backoff_resource_type: "episode_upgrade"
+        ]
+
+        perform_episode_search(episode, args, opts)
+
+      nil ->
+        # No profile to compare against - there is nothing to gate an
+        # upgrade decision on, so there is nothing to search for.
+        Logger.warning("No quality profile resolved for upgrade search, skipping",
+          episode_id: episode.id
+        )
+
+        :ok
+    end
+  end
+
+  # Searches once for a season pack the same way search_season/5 does, but
+  # with no fallback to individual episode searches when no pack qualifies:
+  # that fallback exists to fill in genuinely missing episodes, and would
+  # silently multiply the sweep's indexer cost beyond the one search it
+  # budgeted for this season. A season pack search that comes up empty
+  # (no results, no title-shaped packs, or nothing survives the Comparator
+  # filter and ranking) records backoff and returns instead - see
+  # process_season_pack_results/7 for the ranking-stage case.
+  defp search_season_upgrade(
+         %MediaItem{} = media_item,
+         season_number,
+         %MediaFile{} = file,
+         %Args{} = args
+       ) do
+    case QualityProfileResolver.resolve(media_item) do
+      %QualityProfile{} = profile ->
+        do_search_season_upgrade(media_item, season_number, file, profile, args)
+
+      nil ->
+        Logger.warning("No quality profile resolved for upgrade search, skipping",
+          media_item_id: media_item.id,
+          season_number: season_number
+        )
+
+        :ok
+    end
+  end
+
+  defp do_search_season_upgrade(media_item, season_number, file, profile, args) do
+    query = build_season_query(media_item, season_number)
+
+    Logger.info("Searching for season pack upgrade",
+      media_item_id: media_item.id,
+      title: media_item.title,
+      season_number: season_number,
+      query: query
+    )
+
+    case Indexers.search_all(query, min_seeders: get_min_seeders()) do
+      {:ok, %{results: []}} ->
+        Logger.warning(
+          "No season pack upgrade results found, not falling back to individual episodes",
+          media_item_id: media_item.id,
+          season_number: season_number
+        )
+
+        record_season_backoff(media_item, season_number, "no_results")
+
+        Events.search_no_results(media_item, %{
+          "query" => query,
+          "indexers_searched" => count_enabled_indexers(),
+          "season_number" => season_number,
+          "search_type" => "season_pack_upgrade"
+        })
+
+        :ok
+
+      {:ok, %{results: results}} ->
+        season_pack_results = filter_season_packs(results, season_number)
+
+        if season_pack_results == [] do
+          Logger.warning(
+            "No valid season packs after filtering, not falling back to individual episodes",
+            media_item_id: media_item.id,
+            season_number: season_number,
+            total_results: length(results)
+          )
+
+          record_season_backoff(media_item, season_number, "all_filtered")
+
+          Events.search_filtered_out(media_item, %{
+            "query" => query,
+            "results_count" => length(results),
+            "season_number" => season_number,
+            "search_type" => "season_pack_upgrade",
+            "filter_stats" => build_season_pack_filter_stats(results, season_number)
+          })
+
+          :ok
+        else
+          episodes = load_season_episodes(media_item.id, season_number)
+
+          opts = [
+            candidate_filter: fn candidates ->
+              Upgrades.filter_candidates(candidates, file, profile, :episode)
+            end,
+            grab_opts: [manual: true],
+            after_grab: fn download -> attach_upgrade_target(download, file) end
+          ]
+
+          # Whatever this returns (:ok, {:error, :duplicate_download},
+          # :no_results, or {:error, reason}) - never fall back to
+          # individual episode searches, per this function's doc comment.
+          process_season_pack_results(
+            media_item,
+            season_number,
+            episodes,
+            season_pack_results,
+            args,
+            query,
+            opts
+          )
+
+          :ok
+        end
+    end
+  end
+
+  # All episodes in the season, not just the ones missing files - a season
+  # upgrade replaces files for a season that (by definition, since it was
+  # selected by Upgrades.eligible_episodes/1) already has files. Used only
+  # to size the season-pack metadata (episode_count/episode_ids) the way
+  # search_season/5's `episodes` list does for the missing-file path.
+  defp load_season_episodes(media_item_id, season_number) do
+    Episode
+    |> where([e], e.media_item_id == ^media_item_id and e.season_number == ^season_number)
+    |> Repo.all()
+  end
+
+  # A later job (import time) reads this to link the imported file to the
+  # one it supersedes. Mirrors Mydia.Jobs.MovieSearch.attach_upgrade_target/2.
+  defp attach_upgrade_target(%Download{} = download, %MediaFile{} = file) do
+    metadata = Map.put(download.metadata || %{}, "upgrade_target_media_file_id", file.id)
+    Downloads.update_download(download, %{metadata: metadata})
   end
 
   ## Private Functions - Helpers
@@ -1449,8 +1824,14 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   ## Private Functions - Backoff Helpers
 
-  defp record_episode_backoff(%Episode{} = episode, reason) do
-    case Search.record_failure("episode", episode.id, reason) do
+  # `resource_type` is "episode" for the missing-file search path, or
+  # "episode_upgrade" for the upgrade path - a separate namespace so a
+  # backoff recorded by one search path can never suppress the other for an
+  # episode whose file-presence state has since changed. See
+  # Mydia.Upgrades.eligible_episodes/1. Both call sites always resolve and
+  # pass this explicitly, so it has no default of its own.
+  defp record_episode_backoff(%Episode{} = episode, reason, resource_type) do
+    case Search.record_failure(resource_type, episode.id, reason) do
       {:ok, backoff} ->
         Logger.info("Applied search backoff for episode",
           episode_id: episode.id,
@@ -1466,7 +1847,7 @@ defmodule Mydia.Jobs.TVShowSearch do
         Events.search_backoff_applied(
           episode.media_item,
           reason,
-          Search.get_backoff_info("episode", episode.id),
+          Search.get_backoff_info(resource_type, episode.id),
           episode: episode
         )
 
@@ -1478,14 +1859,14 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  defp reset_episode_backoff(%Episode{} = episode) do
-    case Search.get_backoff("episode", episode.id) do
+  defp reset_episode_backoff(%Episode{} = episode, resource_type) do
+    case Search.get_backoff(resource_type, episode.id) do
       nil ->
         :ok
 
       backoff ->
         previous_count = backoff.failure_count
-        Search.reset_backoff("episode", episode.id)
+        Search.reset_backoff(resource_type, episode.id)
 
         Logger.info("Reset search backoff for episode",
           episode_id: episode.id,
@@ -1759,7 +2140,8 @@ defmodule Mydia.Jobs.TVShowSearch do
               episodes,
               season_pack_results,
               args,
-              query
+              query,
+              []
             )
 
           # If season pack processing failed, fall back to individual episodes
@@ -1918,7 +2300,7 @@ defmodule Mydia.Jobs.TVShowSearch do
           episode: episode.episode_number
         )
 
-        case process_episode_results(episode, results, args, query) do
+        case process_episode_results(episode, results, args, query, []) do
           :ok -> {:ok, length(results)}
           {:error, _} = err -> {err, length(results)}
         end

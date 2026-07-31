@@ -268,6 +268,35 @@ defmodule Mydia.UpgradesTest do
     end
   end
 
+  describe "eligible_episodes/1 backoff namespacing" do
+    # Mirrors "eligible_movies/1 backoff namespacing" above: a "episode"
+    # backoff row is written by TVShowSearch's missing-file search paths
+    # (specific/season/show/all_monitored), which only ever search episodes
+    # *without* a file. An episode's file state changes over time (manual
+    # import, external client, library rescan), so by the time this episode
+    # has a file and is upgrade-eligible, a stale "episode" backoff row from
+    # before the file existed must not suppress it.
+    test "a fileless-search backoff on the same episode does not suppress its upgrade eligibility" do
+      profile = upgradeable_profile()
+      {episode, _file} = analyzed_episode_file(profile)
+
+      {:ok, _backoff} = Mydia.Search.record_failure("episode", episode.id, "no_results")
+
+      assert [%{episode: found}] = Upgrades.eligible_episodes(10)
+      assert found.id == episode.id
+    end
+
+    test "an upgrade-search backoff does suppress the episode until it expires" do
+      profile = upgradeable_profile()
+      {episode, _file} = analyzed_episode_file(profile)
+
+      {:ok, _backoff} =
+        Mydia.Search.record_failure("episode_upgrade", episode.id, "no_upgrade_found")
+
+      assert [] = Upgrades.eligible_episodes(10)
+    end
+  end
+
   describe "stamp_checked/2" do
     test "sets last_upgrade_check_at on the given movies" do
       profile = upgradeable_profile()
