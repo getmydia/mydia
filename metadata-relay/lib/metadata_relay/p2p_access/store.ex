@@ -29,8 +29,20 @@ defmodule MetadataRelay.P2pAccess.Store do
   Creates both ETS tables if they do not exist. Idempotent.
   """
   def init_tables do
-    ensure_table(@sightings)
-    ensure_table(@blocked)
+    # Sightings take a write (update_counter + update_element) on every relay
+    # connection, so they need write_concurrency for that many-distinct-keys
+    # counter-bump pattern (mirrors MetadataRelay.Metrics's counters table).
+    ensure_table(@sightings, [
+      :set,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+
+    # Blocked is read on every connection but written only on rare admin
+    # action, so it stays read-optimized instead.
+    ensure_table(@blocked, [:set, :public, :named_table, read_concurrency: true])
     :ok
   end
 
@@ -40,6 +52,16 @@ defmodule MetadataRelay.P2pAccess.Store do
   New endpoints are only recorded while the table is below
   `:p2p_max_sightings`. Endpoints already in the table are always updated, so
   a flood of unknown endpoint IDs costs us telemetry rather than memory.
+
+  The cap is a soft cap, not a hard ceiling: the membership check, the size
+  check, and the write are three unsynchronized ETS calls, so concurrent
+  callers racing at the boundary with different new endpoint IDs can each
+  observe the table below the cap and all proceed, overshooting it by
+  roughly the number of callers racing at that instant. This is accepted
+  deliberately, because the alternative is serializing every relay
+  connection through this GenServer, which would make it the very
+  bottleneck this ETS-only hot path exists to avoid. What this guarantees
+  is bounded growth, not an exact maximum.
   """
   def record_sighting(endpoint_id) when is_binary(endpoint_id) do
     now = System.system_time(:second)
@@ -87,9 +109,9 @@ defmodule MetadataRelay.P2pAccess.Store do
     Application.get_env(:metadata_relay, :p2p_max_sightings, @default_max_sightings)
   end
 
-  defp ensure_table(name) do
+  defp ensure_table(name, opts) do
     if :ets.whereis(name) == :undefined do
-      :ets.new(name, [:set, :public, :named_table, read_concurrency: true])
+      :ets.new(name, opts)
       Logger.info("Created ETS table #{inspect(name)} for p2p access control")
     end
 
