@@ -127,6 +127,26 @@ jobs:
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ${{ matrix.platform_dir }} --release
 
+      # upload-artifact archives a directory path as a plain zip, and its zip
+      # implementation replaces every symlink with a copy of the symlink's
+      # target. That is what broke the macOS artifact (see the packaging step
+      # below). The Linux bundle has no symlinks today: CMake's
+      # install(FILES ...) at player/linux/CMakeLists.txt:111 dereferences them,
+      # and media_kit links the system libmpv rather than bundling a versioned
+      # .so chain. Assert that rather than assume it, so the day a dependency
+      # starts shipping lib/foo.so.1 -> foo.so.1.2 this fails here instead of
+      # producing a silently broken bundle.
+      - name: Assert Linux bundle has no symlinks
+        if: matrix.platform == 'Linux' && steps.check_platform.outputs.enabled == 'true'
+        run: |
+          LINKS=$(find ${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle -type l)
+          if [ -n "$LINKS" ]; then
+            echo "::error::Linux bundle contains symlinks; upload-artifact flattens them into copies. Archive the bundle before uploading."
+            echo "$LINKS"
+            exit 1
+          fi
+          echo "Linux bundle has no symlinks; direct directory upload is safe."
+
       - name: Upload artifact
         if: steps.check_platform.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
