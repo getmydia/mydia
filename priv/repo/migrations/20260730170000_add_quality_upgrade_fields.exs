@@ -76,37 +76,22 @@ defmodule Mydia.Repo.Migrations.AddQualityUpgradeFields do
     end
   end
 
-  # Adapter-aware column drop. This mirrors `drop_dead_columns/0` in
-  # priv/repo/migrations/20260628000000_unify_quality_profiles.exs, which drops
-  # columns from this exact table. Postgres drops directly; SQLite rebuilds the
-  # table without the dropped column. `recreate_table/1` takes a keyword list
-  # and raises without `:table`, so the full column and index list is required.
+  # Adapter-aware column drop. Deliberately NOT using `recreate_table/1` here:
+  # its SQLite path is create-new / copy / DROP TABLE / rename, and this repo
+  # runs SQLite with `foreign_keys: :on` (config/dev.exs, config/runtime.exs).
+  # Under that pragma, `DROP TABLE` on a table other tables reference performs
+  # an implicit `DELETE FROM` that fires child FK actions: media_files.
+  # quality_profile_id has no ON DELETE and aborts the migration outright,
+  # while media_items/library_paths are ON DELETE SET NULL and silently lose
+  # their profile assignment. A direct column drop has none of that — the
+  # column carries no index, UNIQUE, or constraint, and SQLite has supported
+  # `ALTER TABLE ... DROP COLUMN` since 3.35. Do not reinstate recreate_table
+  # for this column.
   defp drop_upgrade_until_quality do
     if postgres?() do
       execute("ALTER TABLE quality_profiles DROP COLUMN IF EXISTS upgrade_until_quality")
     else
-      recreate_table(
-        table: :quality_profiles,
-        primary_key: false,
-        columns: [
-          {:id, :binary_id, [primary_key: true]},
-          {:name, :string, [null: false]},
-          {:upgrades_allowed, :boolean, [default: true]},
-          {:description, :text, []},
-          {:is_system, :boolean, [default: false]},
-          {:version, :integer, [default: 1]},
-          {:source_url, :string, []},
-          {:last_synced_at, :utc_datetime, []},
-          {:quality_standards, :text, []},
-          {:upgrade_until_score, :integer, [default: 85]},
-          {:min_upgrade_margin, :integer, [default: 5]}
-        ],
-        indexes: [
-          {[:name], [unique: true]},
-          [:is_system],
-          [:version]
-        ]
-      )
+      execute("ALTER TABLE quality_profiles DROP COLUMN upgrade_until_quality")
     end
   end
 end

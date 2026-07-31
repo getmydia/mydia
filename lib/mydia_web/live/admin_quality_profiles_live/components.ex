@@ -329,28 +329,6 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
         type="checkbox"
         label="Allow automatic quality upgrades"
       />
-
-      <div class="form-control">
-        <label class="label">
-          <span class="label-text">Upgrade until quality</span>
-        </label>
-        <select
-          name="quality_profile[upgrade_until_quality]"
-          class="select select-bordered w-full"
-        >
-          <option value="" selected={!Ecto.Changeset.get_field(@form.source, :upgrade_until_quality)}>
-            No cap
-          </option>
-          <%= for res <- ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"] do %>
-            <option
-              value={res}
-              selected={Ecto.Changeset.get_field(@form.source, :upgrade_until_quality) == res}
-            >
-              {res}
-            </option>
-          <% end %>
-        </select>
-      </div>
     </div>
     """
   end

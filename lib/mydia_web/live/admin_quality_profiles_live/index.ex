@@ -384,8 +384,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
     base_params = %{
       "name" => params["name"],
       "description" => params["description"],
-      "upgrades_allowed" => params["upgrades_allowed"],
-      "upgrade_until_quality" => blank_to_nil(params["upgrade_until_quality"])
+      "upgrades_allowed" => params["upgrades_allowed"]
     }
 
     if quality_standards do
@@ -394,9 +393,6 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       base_params
     end
   end
-
-  defp blank_to_nil(""), do: nil
-  defp blank_to_nil(value), do: value
 
   defp transform_quality_standards(standards) when is_map(standards) do
     standards
