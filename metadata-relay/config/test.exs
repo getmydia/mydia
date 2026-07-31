@@ -16,7 +16,8 @@ config :metadata_relay, MetadataRelay.Repo,
   pool: Ecto.Adapters.SQL.Sandbox
 
 config :metadata_relay,
-  rendezvous_master_pepper: "test-pepper-not-for-production"
+  rendezvous_master_pepper: "test-pepper-not-for-production",
+  p2p_access_bearer_tokens: ["test-relay-bearer"]
 
 config :metadata_relay, MetadataRelay.Feedback.Notifier,
   recipient: "maintainer@example.com",
