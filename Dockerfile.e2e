@@ -34,13 +34,14 @@ RUN apk add --no-cache \
 # guests built by the :plugins mix compiler. The e2e entrypoint boots the app,
 # which seeds bundled plugins, so the artifact must build here too.
 #
-# PINNED to 1.96 to match nix and CI: the wasip2 guest's WASI world tracks the
-# Rust version (1.96 -> wasi 0.2.6), and the host wasmex 0.14 / wasmtime 39 only
-# validates up to wasi 0.2.6 — a newer `stable` (wasi 0.2.9) fails to instantiate.
+# The version is NOT named here; it comes from rust-toolchain.toml, copied in
+# below, which is also where the wasi-0.2.6 / wasmex constraint is documented.
+WORKDIR /app
+COPY rust-toolchain.toml ./
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-    | sh -s -- -y --default-toolchain 1.96.0 --profile minimal --no-modify-path && \
-    rustup target add wasm32-wasip2
+    | sh -s -- -y --default-toolchain none --profile minimal --no-modify-path && \
+    rustup show
 
 # Set build environment
 ENV MIX_ENV=prod
