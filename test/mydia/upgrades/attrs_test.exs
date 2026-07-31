@@ -35,12 +35,22 @@ defmodule Mydia.Upgrades.AttrsTest do
 
     test "strips the profile suffix from an HEVC display name" do
       file = %MediaFile{codec: "HEVC (Main 10)", size: 1024 * 1024}
-      assert %{video_codec: "hevc"} = Attrs.from_media_file(file, :movie)
+      assert %{video_codec: "h265"} = Attrs.from_media_file(file, :movie)
     end
 
     test "lowercases a bare codec name" do
       file = %MediaFile{codec: "AV1", size: 1024 * 1024}
       assert %{video_codec: "av1"} = Attrs.from_media_file(file, :movie)
+    end
+
+    test "maps bare x265 to the canonical h265" do
+      file = %MediaFile{codec: "x265", size: 1024 * 1024}
+      assert %{video_codec: "h265"} = Attrs.from_media_file(file, :movie)
+    end
+
+    test "maps bare x264 to the canonical h264" do
+      file = %MediaFile{codec: "x264", size: 1024 * 1024}
+      assert %{video_codec: "h264"} = Attrs.from_media_file(file, :movie)
     end
   end
 
@@ -70,6 +80,12 @@ defmodule Mydia.Upgrades.AttrsTest do
       file = %MediaFile{audio_codec: "PCM", size: 1024 * 1024}
       attrs = Attrs.from_media_file(file, :movie)
       assert attrs.audio_channels == nil
+    end
+
+    test "prefers Atmos over TrueHD when a fused string carries both" do
+      file = %MediaFile{audio_codec: "TrueHD Atmos", size: 1024 * 1024}
+      attrs = Attrs.from_media_file(file, :movie)
+      assert attrs.audio_codec == "atmos"
     end
   end
 
@@ -108,7 +124,7 @@ defmodule Mydia.Upgrades.AttrsTest do
       attrs = Attrs.from_quality(quality, 20 * 1024 * 1024 * 1024, :movie)
 
       assert attrs.resolution == "2160p"
-      assert attrs.video_codec == "x265"
+      assert attrs.video_codec == "h265"
       assert attrs.source == "BluRay"
       assert attrs.hdr_format == "dolby_vision"
       assert attrs.file_size_mb == 20_480

@@ -36,15 +36,22 @@ defmodule Mydia.Upgrades.Attrs do
 
   @canonical_resolutions ~w(360p 480p 576p 720p 1080p 2160p 4320p)
 
+  # One canonical value per physical codec, matching the vocabulary
+  # `Mydia.Indexers.SearchScorer` and every shipped quality profile already
+  # use ("h264"/"h265"). "hevc" and "x265" are release-naming synonyms for
+  # h265, not a distinct codec QualityProfile ranks separately; keeping them
+  # as separate outputs left every HEVC file and x264/x265 release absent
+  # from `preferred_video_codecs`, scoring 25.0 on the heaviest-weighted
+  # dimension under every shipped profile.
   @video_codec_aliases %{
     "h.264" => "h264",
     "h264" => "h264",
     "avc" => "h264",
-    "x264" => "x264",
-    "h.265" => "hevc",
+    "x264" => "h264",
+    "h.265" => "h265",
     "h265" => "h265",
-    "hevc" => "hevc",
-    "x265" => "x265",
+    "hevc" => "h265",
+    "x265" => "h265",
     "av1" => "av1",
     "vc1" => "vc1",
     "vc-1" => "vc1",
@@ -98,6 +105,13 @@ defmodule Mydia.Upgrades.Attrs do
   }
 
   @canonical_sources ~w(BluRay REMUX WEB-DL WEBRip HDTV SDTV DVD DVDRip BDRip)
+
+  # Precedence for fused audio strings that carry two codec tokens, e.g.
+  # FileAnalyzer's "TrueHD Atmos" or "DTS-HD MA". Atmos is a higher-tier
+  # object-audio extension of TrueHD and must win even though "TrueHD" is
+  # the leftmost token; likewise DTS-HD outranks plain DTS. Earlier entries
+  # win ties.
+  @audio_codec_priority ~w(atmos truehd dts-hd dts eac3 ac3 flac aac opus mp3)
 
   @doc """
   Normalizes an on-disk `MediaFile` into canonical scoring attributes.
@@ -200,12 +214,23 @@ defmodule Mydia.Upgrades.Attrs do
     codec =
       tokens
       |> Enum.map(&Map.get(@audio_codec_aliases, String.downcase(&1)))
-      |> Enum.find(&(&1 != nil))
+      |> Enum.reject(&is_nil/1)
+      |> highest_priority_codec()
 
     {codec, channels}
   end
 
   defp split_audio(_), do: {nil, nil}
+
+  defp highest_priority_codec([]), do: nil
+  defp highest_priority_codec(codecs), do: Enum.min_by(codecs, &codec_rank/1)
+
+  defp codec_rank(codec) do
+    case Enum.find_index(@audio_codec_priority, &(&1 == codec)) do
+      nil -> length(@audio_codec_priority)
+      index -> index
+    end
+  end
 
   defp strip_parenthetical(value) do
     value
