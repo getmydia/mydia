@@ -1,5 +1,5 @@
 # Resolves the Flutter package pinned by ./.fvmrc, the single source of truth for
-# the Flutter version across devenv.nix, player/flake.nix, the CI workflows and
+# the Flutter version across devenv.nix, nix/devShells, the CI workflows and
 # the Dockerfile. No other build or CI file may name a Flutter version, and
 # ci-nix.yml's "Check / Flutter Pin" job enforces that on every pull request.
 #

@@ -180,8 +180,10 @@ jobs:
 
       # Drives cargokit, which cross-compiles player/rust_builder against the
       # NDK. This is what puts the Rust/Dart FFI boundary under PR coverage;
-      # before this job it was only exercised by release.yml. Relies on the
-      # runner's preinstalled rustup, same as release.yml's player-android.
+      # before this job it was only exercised by release.yml. Uses the runner's
+      # preinstalled rustup, but the toolchain it runs comes from
+      # rust-toolchain.toml, not from whatever the runner image calls stable;
+      # cargokit installs the pinned toolchain on demand.
       - name: Build APK
         working-directory: player
         run: flutter build apk --release

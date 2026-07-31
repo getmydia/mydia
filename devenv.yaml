@@ -1,14 +1,15 @@
 # devenv inputs. See https://devenv.sh/reference/options/
 #
-# Pinned to nixos-unstable for parity with flake.nix / player/flake.nix, which
-# both resolve `beam.packages.erlang_28.elixir_1_19` and `pkgs.flutter` from
-# this same channel. devenv.lock pins the exact rev.
+# Pinned to nixos-unstable for parity with flake.nix, which resolves
+# `beam.packages.erlang_28.elixir_1_19` from this same channel. devenv.lock pins
+# the exact rev. The Android shell (nix/devShells) deliberately uses its own
+# `nixpkgs-android` input instead, so its SDK/NDK set does not drift with this.
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixos-unstable
   # Backs languages.rust (channel/version/targets/components). Follows nixpkgs
   # so the Rust toolchain and the rest of the shell share one package set,
-  # mirroring flake.nix / player/flake.nix.
+  # mirroring flake.nix.
   rust-overlay:
     url: github:oxalica/rust-overlay
     inputs:

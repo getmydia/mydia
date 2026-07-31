@@ -6,23 +6,41 @@
 # `mix test`, `mix precommit`, Flutter codegen) runs natively in this shell;
 # each git worktree derives its own non-colliding ports and isolated state.
 #
-# ⚠️ KEEP IN SYNC — this file is the source of truth for the Elixir/OTP/Rust
+# ⚠️ KEEP IN SYNC — this file is the source of truth for the Elixir/OTP
 # toolchain, and the CI test jobs consume it directly (`devenv shell -- …` in
 # .github/workflows/ci.yml), so those versions are NO LONGER duplicated in CI.
-# Bump Elixir/OTP/Rust here (and the Dockerfile prod base) and CI follows.
-#   - this file    (beam.packages.erlang_28 + rust 1.96.0)
+# Bump Elixir/OTP here (and the Dockerfile prod base) and CI follows.
+#   - this file    (beam.packages.erlang_28)
 #   - Dockerfile   (FROM elixir:1.19-otp-28 prod base)
 #
-# Flutter is NOT listed above and must not be named here: it lives in
-# player/.fvmrc alone, resolved by player/flutter-version.nix. devenv, the
-# Android shell (player/flake.nix), all four workflows and the Dockerfile read
-# that one file, and a mismatch between it and nixpkgs is an eval error rather
-# than something a reader has to notice.
-#
-# One exception worth knowing: player/flake.nix also pins Rust 1.96.0 by hand,
-# because a flake cannot read above its own root and so cannot share this value.
+# Two toolchains are NOT listed above and must not be named here, because each
+# lives in exactly one file that everything else reads:
+#   - Flutter lives in player/.fvmrc, resolved by player/flutter-version.nix.
+#     devenv, the Android shell (nix/devShells), all four workflows and the
+#     Dockerfile read that one file, and a mismatch between it and nixpkgs is an
+#     eval error rather than something a reader has to notice.
+#   - Rust lives in rust-toolchain.toml, read by this file, by cargokit, by both
+#     Dockerfiles, and by every rustup proxy invocation in the tree.
+# CI fails the build if any other file names a Rust version.
 
 let
+  # Rust version comes from rust-toolchain.toml, the same file cargokit, both
+  # Dockerfiles and every rustup proxy read. Never name a Rust version here.
+  rustToolchain = (builtins.fromTOML (builtins.readFile ./rust-toolchain.toml)).toolchain;
+
+  # devenv's languages.rust.version wants a bare version string, so a floating
+  # channel ("stable") would silently become version = "stable" and fail deep
+  # inside the rust overlay. Fail here instead, naming the constraint.
+  rustVersion =
+    assert lib.assertMsg
+      (builtins.match "[0-9]+\\.[0-9]+\\.[0-9]+" rustToolchain.channel != null)
+      ''
+        rust-toolchain.toml declares channel = "${rustToolchain.channel}", but
+        devenv.nix needs an exact version (for example "1.96.0"). A floating
+        channel cannot be expressed as languages.rust.version.
+      '';
+    rustToolchain.channel;
+
   # Elixir 1.19 / OTP 28 built as a matched pair from one beam set. devenv's
   # languages.elixir only adds the elixir package — it does NOT pull a matching
   # OTP — so we pin erlang from the same erlang_28 binding to avoid the classic
@@ -94,21 +112,22 @@ in
     package = pkgs.erlang_28;
   };
 
-  # Rust pinned to 1.96.0 to match the retired Dockerfile.dev
-  # (--default-toolchain 1.96.0); only the old flake floated on stable.latest
-  # (KTD2). `components` replaces (not appends) the defaults, so rustc/cargo
-  # are restated alongside the lint/analysis tools.
+  # Rust version is NOT named here: it comes from rust-toolchain.toml via the
+  # `rustVersion` binding above. `components` replaces (not appends) the
+  # defaults, so rustc/cargo are restated alongside the lint/analysis tools.
+  # `targets` is the Nix-side list and is intentionally different from the
+  # toolchain file's: this is what the dev shell offers, not what ships.
   languages.rust = {
     enable = true;
     channel = "stable";
-    version = "1.96.0";
+    version = rustVersion;
     targets = [ "wasm32-unknown-unknown" "wasm32-wasip2" ];
     components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "rust-src" ];
   };
 
-  # Remaining dev toolchain. Flutter comes from nixpkgs (KTD3): player/flake.nix
-  # builds against the same package set, so the NixOS dynamic-linker/patchelf
-  # handling is proven for this codebase. wasm-tools is carried from the flake's
+  # Remaining dev toolchain. Flutter comes from nixpkgs (KTD3); the Android
+  # shell (nix/devShells) resolves it through the same player/flutter-version.nix,
+  # so the NixOS dynamic-linker/patchelf handling is proven for this codebase. wasm-tools is carried from the flake's
   # shells (used by scripts/check-plugins.sh).
   #
   # The Flutter version is NOT named here. It comes from player/.fvmrc through
