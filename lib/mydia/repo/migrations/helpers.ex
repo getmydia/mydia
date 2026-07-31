@@ -498,6 +498,105 @@ defmodule Mydia.Repo.Migrations.Helpers do
     end
   end
 
+  @doc """
+  Run a SQLite table rebuild without destroying the table's foreign key children.
+
+  SQLite cannot alter a column's type, nullability, constraints, or foreign key
+  actions, so changing any of those means rebuilding the table: create a
+  replacement, copy the rows, drop the original, rename. Under
+  `PRAGMA foreign_keys=ON`, which is how this application always runs, that
+  `DROP TABLE` performs an implicit `DELETE FROM` and fires the foreign key
+  actions of every table referencing it. Children declared `ON DELETE CASCADE`
+  lose all their rows, children declared `ON DELETE SET NULL` lose the
+  assignment, and children with no action abort the migration outright.
+
+  This wraps such a rebuild so none of that happens. It snapshots every table
+  that references `table_name`, directly or transitively, empties them, runs
+  `rebuild_fun`, then restores them. Emptying first is what lets one code path
+  cover all three foreign key actions: there is nothing left to cascade to, null
+  out, or abort on.
+
+  Everything runs inside the transaction the migrator already opened, so a
+  failure at any point rolls back the rebuild and the snapshots together.
+
+  On PostgreSQL this simply calls `rebuild_fun`, which never needs to drop the
+  parent table.
+
+  ## Constraint
+
+  This calls `Ecto.Migration.flush/0`, which raises when called from a `change/0`
+  migration running backward. Callers must define explicit `up/0` and `down/0`.
+
+  ## Example
+
+      def up do
+        preserving_fk_children(:library_paths, fn ->
+          execute "CREATE TABLE library_paths_new (...)"
+          execute "INSERT INTO library_paths_new SELECT ... FROM library_paths"
+          execute "DROP TABLE library_paths"
+          execute "ALTER TABLE library_paths_new RENAME TO library_paths"
+        end)
+      end
+  """
+  @spec preserving_fk_children(atom() | String.t(), (-> any())) :: any()
+  def preserving_fk_children(table_name, rebuild_fun) when is_function(rebuild_fun, 0) do
+    if postgres?() do
+      rebuild_fun.()
+    else
+      sqlite_preserving_fk_children(to_string(table_name), rebuild_fun)
+    end
+  end
+
+  defp sqlite_preserving_fk_children(table, rebuild_fun) do
+    # `execute/1` and the migration DSL queue their commands; `repo().query!`
+    # below runs immediately. Flush so anything queued earlier in this migration
+    # is applied before the snapshots are taken.
+    flush()
+
+    children = sqlite_fk_children(repo(), table)
+
+    Enum.each(children, fn child ->
+      repo().query!(~s|CREATE TABLE "#{fk_snapshot_table(child)}" AS SELECT * FROM "#{child}"|)
+    end)
+
+    Enum.each(children, fn child -> repo().query!(~s|DELETE FROM "#{child}"|) end)
+
+    result = rebuild_fun.()
+
+    # Flush again so the caller's queued rebuild has actually run before the
+    # rows go back.
+    flush()
+
+    children
+    |> Enum.reverse()
+    |> Enum.each(fn child ->
+      repo().query!(~s|INSERT INTO "#{child}" SELECT * FROM "#{fk_snapshot_table(child)}"|)
+    end)
+
+    assert_no_fk_violations!()
+
+    Enum.each(children, fn child ->
+      repo().query!(~s|DROP TABLE "#{fk_snapshot_table(child)}"|)
+    end)
+
+    result
+  end
+
+  defp fk_snapshot_table(child), do: "__mydia_fk_snap_#{child}"
+
+  defp assert_no_fk_violations! do
+    case repo().query!("PRAGMA foreign_key_check") do
+      %{rows: []} ->
+        :ok
+
+      %{rows: rows} ->
+        tables = rows |> Enum.map(&List.first/1) |> Enum.uniq() |> Enum.join(", ")
+
+        raise Ecto.MigrationError,
+          message: "foreign key violations remain after rebuild, in: #{tables}"
+    end
+  end
+
   @doc false
   # Every table that references `table`, directly or transitively, ordered
   # deepest first: a table always appears before the table it references.
