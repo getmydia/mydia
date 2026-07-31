@@ -141,33 +141,44 @@ defmodule MetadataRelay.P2pAccess.Store do
 
   @doc """
   Repopulates the ETS blocklist from the database. Called at boot.
+
+  Only the database read is fault-tolerant. If the read succeeds, any error
+  in the transform or the ETS write is a programming error and crashes.
   """
   def reload_blocks do
-    rows =
-      Block
-      |> Repo.all()
-      |> Enum.map(fn block ->
-        {block.endpoint_id, block.reason, DateTime.to_unix(block.blocked_at)}
-      end)
+    case fetch_blocks() do
+      {:ok, blocks} ->
+        rows =
+          Enum.map(blocks, fn block ->
+            {block.endpoint_id, block.reason, DateTime.to_unix(block.blocked_at)}
+          end)
 
-    :ets.delete_all_objects(@blocked)
-    :ets.insert(@blocked, rows)
+        :ets.delete_all_objects(@blocked)
+        :ets.insert(@blocked, rows)
 
-    Logger.info("Loaded #{length(rows)} blocked p2p endpoints")
-    :ok
+        Logger.info("Loaded #{length(rows)} blocked p2p endpoints")
+        :ok
+
+      {:error, error} ->
+        Logger.error("Could not load p2p blocklist from the database: #{inspect(error)}")
+        {:error, error}
+    end
+  end
+
+  # The database is not always reachable when the Store starts: under the
+  # ExUnit sandbox no connection is checked out yet, and in development the
+  # database can lag the application. An unreachable database must not stop
+  # the service from booting.
+  defp fetch_blocks do
+    {:ok, Repo.all(Block)}
+  rescue
+    error -> {:error, error}
   end
 
   @impl true
   def init(_opts) do
     init_tables()
-
-    try do
-      reload_blocks()
-    rescue
-      error ->
-        Logger.error("Could not load p2p blocklist at boot: #{inspect(error)}")
-    end
-
+    reload_blocks()
     {:ok, %{}}
   end
 
