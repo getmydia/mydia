@@ -200,7 +200,7 @@ defmodule Mydia.Upgrades do
   Scores the file at `media_file_id` and the file it claims to supersede
   against the *same* resolved profile — never two different profiles, which
   would make the comparison meaningless — via
-  `Comparator.score_file_with_breakdown/3`, then picks exactly one of four
+  `Comparator.score_file_with_breakdown/3`, then picks exactly one of five
   outcomes:
 
     * `{:ok, :upgraded}` — the new file cleared `min_upgrade_margin`. The
@@ -213,21 +213,36 @@ defmodule Mydia.Upgrades do
       originating release is blacklisted (`Downloads.Blacklists`) so the
       next sweep doesn't grab it again tomorrow, `Events.upgrade_rejected/4`
       records the trail, and the pointer is cleared.
-    * `{:ok, :orphaned}` — the file the new one claims to supersede is gone
-      (deleted, or trashed by something else between grab and finalize).
-      The pointer is cleared and the new file is kept as an ordinary
-      import.
-    * `{:ok, :noop}` — `supersedes_media_file_id` was already nil (already
-      finalized, or the file was never an upgrade import in the first
-      place). Nothing to do.
+    * `{:ok, :orphaned}` — the file the new one claims to supersede is gone:
+      trashed by something else between grab and finalize (a hard delete
+      instead nilifies the pointer at the DB level via `on_delete:
+      :nilify_all`, which lands on `:noop` before this function's logic
+      even runs — see the migration). The pointer is cleared and the new
+      file is kept as an ordinary import.
+    * `{:ok, :noop}` — nothing to do. `supersedes_media_file_id` was
+      already nil (already finalized, or the file was never an upgrade
+      import), or the new file has itself been trashed by something else in
+      the window between analysis landing and this job running (an
+      operator action, a re-scan, or a prior partially-failed run of this
+      same job) — a trashed new file can never win the comparison, and
+      scoring it as live would risk trashing the old file too, leaving zero
+      active copies. The pointer is cleared either way.
+    * `{:ok, :unscorable}` — the comparison itself could not be scored: no
+      quality profile resolves (deleted, or the file is attached to
+      neither a media item nor an episode) or one of the two files failed
+      `Comparator.score_file_with_breakdown/3`. These conditions are
+      permanent, not transient, so retrying would only strand the pointer
+      forever with both files left active. The pointer is cleared, an
+      operator-visible `Events.job_failed/3` event is recorded, and both
+      files are left as ordinary imports.
 
   Every terminal branch clears the pointer — that, not the worker's
   `unique` constraint, is what makes re-running this on an already-processed
   file safe: a second call always lands on `{:ok, :noop}`.
   """
   @spec finalize_upgrade(binary()) ::
-          {:ok, :upgraded | :rejected | :orphaned | :noop}
-          | {:error, :unscorable | Ecto.Changeset.t()}
+          {:ok, :upgraded | :rejected | :orphaned | :noop | :unscorable}
+          | {:error, Ecto.Changeset.t()}
   def finalize_upgrade(media_file_id) when is_binary(media_file_id) do
     case Repo.get(MediaFile, media_file_id) do
       nil ->
@@ -235,6 +250,21 @@ defmodule Mydia.Upgrades do
 
       %MediaFile{supersedes_media_file_id: nil} ->
         {:ok, :noop}
+
+      %MediaFile{trashed_at: trashed_at} = new_file when not is_nil(trashed_at) ->
+        # Task 10 review finding 1 (CRITICAL): the new file itself may have
+        # been trashed by something else — an operator action, a re-scan, a
+        # cleanup — in the window between analysis landing and this job
+        # running, or by a prior, partially-failed run of THIS job (trash
+        # succeeded, clear_pointer did not, Oban retries). Scoring a trashed
+        # file as a live candidate would let the upgrade branch trash the
+        # *old* file too, leaving zero active copies for this episode/movie
+        # until TrashCleanup permanently deletes both after the retention
+        # window. A trashed new file can never win this comparison — clear
+        # the pointer and stop before scoring anything.
+        with {:ok, _} <- clear_pointer(new_file) do
+          {:ok, :noop}
+        end
 
       %MediaFile{} = new_file ->
         case superseded_file(new_file) do
@@ -264,37 +294,85 @@ defmodule Mydia.Upgrades do
     {media_type, media_item} = resolve_media_context(new_file)
     profile = media_item && QualityProfileResolver.resolve(media_item)
 
-    with %QualityProfile{} <- profile,
-         {:ok, %{score: old_score, breakdown: old_breakdown}} <-
-           Comparator.score_file_with_breakdown(old_file, profile, media_type),
-         {:ok, %{score: new_score, breakdown: new_breakdown}} <-
-           Comparator.score_file_with_breakdown(new_file, profile, media_type) do
-      margin = profile.min_upgrade_margin || 0
-      delta = Float.round(new_score - old_score, 1)
+    case profile do
+      nil ->
+        # media_item itself may be nil here too — a dangling FK on
+        # media_item_id/episode_id (the referenced row was hard-deleted), or
+        # a media file attached to neither (a specialized-library file that
+        # should never have carried a supersedes pointer in the first
+        # place). Either way there is nothing to resolve a profile from.
+        handle_unscorable(new_file, old_file, media_item, :no_quality_profile)
 
-      comparison = %{
-        old_score: old_score,
-        new_score: new_score,
-        delta: delta,
-        old_breakdown: old_breakdown,
-        new_breakdown: new_breakdown,
-        breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
+      %QualityProfile{} = profile ->
+        finalize_scored_comparison(new_file, old_file, media_item, media_type, profile)
+    end
+  end
+
+  defp finalize_scored_comparison(new_file, old_file, media_item, media_type, profile) do
+    old_result = Comparator.score_file_with_breakdown(old_file, profile, media_type)
+    new_result = Comparator.score_file_with_breakdown(new_file, profile, media_type)
+
+    case {old_result, new_result} do
+      {{:ok, %{score: old_score, breakdown: old_breakdown}},
+       {:ok, %{score: new_score, breakdown: new_breakdown}}} ->
+        margin = profile.min_upgrade_margin || 0
+        delta = Float.round(new_score - old_score, 1)
+
+        comparison = %{
+          old_score: old_score,
+          new_score: new_score,
+          delta: delta,
+          old_breakdown: old_breakdown,
+          new_breakdown: new_breakdown,
+          breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
+        }
+
+        if delta >= margin do
+          apply_upgrade(new_file, old_file, media_item, comparison)
+        else
+          apply_rejection(new_file, old_file, media_item, comparison)
+        end
+
+      {{:error, :unscorable}, _} ->
+        handle_unscorable(new_file, old_file, media_item, :old_file_unscorable)
+
+      {_, {:error, :unscorable}} ->
+        handle_unscorable(new_file, old_file, media_item, :new_file_unscorable)
+    end
+  end
+
+  # Task 10 review finding 3: the triggering conditions here (a quality
+  # profile that got deleted or blanked out between grab and finalize, or a
+  # media file with neither a media_item nor an episode) are permanent, not
+  # transient — retrying the job five times and letting Oban discard it
+  # would strand `supersedes_media_file_id` forever, leaving BOTH files
+  # active and untrashed: a silent duplicate copy the library treats as two
+  # ordinary files. This is a terminal outcome like the other three: clear
+  # the pointer so the file settles as an ordinary import, and surface it as
+  # an operator-visible `job.failed` event (Mydia.Events.job_failed/3)
+  # rather than relying on someone noticing later.
+  defp handle_unscorable(new_file, old_file, media_item, reason) do
+    Logger.error(
+      "Cannot finalize upgrade: unable to score the comparison — clearing the pointer and " <>
+        "leaving both files as ordinary imports",
+      media_file_id: new_file.id,
+      superseded_media_file_id: old_file.id,
+      reason: reason
+    )
+
+    Events.job_failed(
+      "upgrade_finalize",
+      "Could not score an automatic-upgrade comparison; left both files untouched",
+      %{
+        "media_file_id" => new_file.id,
+        "superseded_media_file_id" => old_file.id,
+        "media_item_id" => media_item && media_item.id,
+        "reason" => to_string(reason)
       }
+    )
 
-      if delta >= margin do
-        apply_upgrade(new_file, old_file, media_item, comparison)
-      else
-        apply_rejection(new_file, old_file, media_item, comparison)
-      end
-    else
-      _ ->
-        Logger.error(
-          "Cannot finalize upgrade: no quality profile resolved, or a file is unscorable",
-          media_file_id: new_file.id,
-          superseded_media_file_id: old_file.id
-        )
-
-        {:error, :unscorable}
+    with {:ok, _} <- clear_pointer(new_file) do
+      {:ok, :unscorable}
     end
   end
 

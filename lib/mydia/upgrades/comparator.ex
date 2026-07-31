@@ -35,6 +35,18 @@ defmodule Mydia.Upgrades.Comparator do
   """
   @spec score_file(MediaFile.t(), QualityProfile.t(), :movie | :episode) ::
           {:ok, float()} | {:error, :unscorable}
+  # This clause is intentionally permissive on `profile`'s shape (any second
+  # argument, not just `%QualityProfile{}`), matching the pre-refactor
+  # behavior byte-for-byte: an unanalyzed file is unscorable regardless of
+  # what the profile looks like, and `upgrade?/5` below passes `profile`
+  # through to this function unguarded. Collapsing this into the general
+  # clause (requiring `%QualityProfile{} = profile`) would turn a nil profile
+  # + unanalyzed file from a graceful `{:error, :unscorable}` into a
+  # `FunctionClauseError` — a real regression caught in review (Task 10
+  # finding 4). Keep this clause standalone.
+  def score_file(%MediaFile{analyzed_at: nil}, _profile, _media_type),
+    do: {:error, :unscorable}
+
   def score_file(%MediaFile{} = file, %QualityProfile{} = profile, media_type) do
     case score_file_with_breakdown(file, profile, media_type) do
       {:ok, %{score: score}} -> {:ok, score}

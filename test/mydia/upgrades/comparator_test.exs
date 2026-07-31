@@ -55,6 +55,17 @@ defmodule Mydia.Upgrades.ComparatorTest do
       assert {:error, :unscorable} =
                Comparator.score_file(uhd_file(), profile(%{quality_standards: nil}), :movie)
     end
+
+    # Task 10 review finding 4: the score_file_with_breakdown/3 refactor
+    # briefly collapsed the analyzed_at-nil clause into the general one,
+    # requiring `%QualityProfile{}` unconditionally. That turned an
+    # unanalyzed file scored against a nil profile from a graceful
+    # {:error, :unscorable} into a FunctionClauseError — reachable because
+    # upgrade?/5 below passes `profile` through to score_file/3 unguarded.
+    test "refuses to score a file with no analyzed_at even when the profile is nil, without raising" do
+      file = %MediaFile{uhd_file() | analyzed_at: nil}
+      assert {:error, :unscorable} = Comparator.score_file(file, nil, :movie)
+    end
   end
 
   describe "score_file_with_breakdown/3" do

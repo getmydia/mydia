@@ -5,6 +5,7 @@ defmodule Mydia.Jobs.UpgradeFinalizeTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Events
   alias Mydia.Jobs.UpgradeFinalize
 
   # Builds a below-cutoff episode file (`old`) and a candidate replacement
@@ -91,6 +92,20 @@ defmodule Mydia.Jobs.UpgradeFinalizeTest do
     assert Repo.reload!(old).trashed_at
     refute Repo.reload!(new).trashed_at
     assert Repo.reload!(new).supersedes_media_file_id == nil
+
+    # The activity trail (review finding 2): create_event_async runs
+    # synchronously under the sandbox (Events.create_event_async/1), so the
+    # event is already committed by the time perform/1 returns.
+    assert [event] =
+             Events.list_events(
+               type: "media_file.upgraded",
+               resource_type: "episode",
+               resource_id: new.episode_id
+             )
+
+    assert event.metadata["old_score"]
+    assert event.metadata["new_score"]
+    assert event.metadata["breakdown_delta"] != %{}
   end
 
   test "trashes the new file and keeps the old one when the release lied" do
@@ -106,6 +121,82 @@ defmodule Mydia.Jobs.UpgradeFinalizeTest do
 
     guid = download.metadata["guid"]
     assert Blacklists.blacklisted?("test-indexer", guid)
+
+    # The activity trail (review finding 2).
+    assert [event] =
+             Events.list_events(
+               type: "media_file.upgrade_rejected",
+               resource_type: "episode",
+               resource_id: new.episode_id
+             )
+
+    assert event.metadata["old_score"]
+    assert event.metadata["new_score"]
+    assert event.metadata["breakdown_delta"] != %{}
+  end
+
+  # Task 10 review finding 1 (CRITICAL): the new file can be trashed by
+  # something else — an operator action, a re-scan, a cleanup — in the
+  # window between analysis landing and this job running on the :media
+  # queue, or by a prior partially-failed run of THIS job (trash succeeded,
+  # clear_pointer did not, Oban retries). Without a guard, the job would
+  # still score the trashed file as a live candidate, potentially take the
+  # upgrade branch, and trash the old file too — leaving zero active copies
+  # until TrashCleanup permanently deletes both after the retention window.
+  test "never trashes the old file when the new file was already trashed by something else" do
+    {old, new, _download} = upgrade_pair(old_resolution: "720p", new_resolution: "4K")
+
+    {:ok, _} =
+      new
+      |> Ecto.Changeset.change(trashed_at: DateTime.utc_now() |> DateTime.truncate(:second))
+      |> Repo.update()
+
+    assert {:ok, :noop} = UpgradeFinalize.perform(%Oban.Job{args: %{"media_file_id" => new.id}})
+
+    # The critical assertion: a trashed new file must never cause the old
+    # file to be trashed too.
+    refute Repo.reload!(old).trashed_at
+    assert Repo.reload!(new).trashed_at
+    assert Repo.reload!(new).supersedes_media_file_id == nil
+  end
+
+  # Task 10 review finding 3: a permanently unscorable comparison (deleted
+  # quality profile, or one blanked to no quality standards, or a file
+  # attached to neither an episode nor a media item) used to strand the
+  # pointer forever and leave both files silently active. It must now clear
+  # the pointer, return a terminal outcome, and record an operator-visible
+  # event rather than relying on Oban exhausting retries.
+  test "clears the pointer and returns :unscorable when no quality profile can be resolved, leaving both files untouched" do
+    {old, new, _download} = upgrade_pair(old_resolution: "720p", new_resolution: "4K")
+
+    # Strip the profile from the show so QualityProfileResolver.resolve/1
+    # falls through to Settings.get_default_quality_profile/0, which is nil
+    # in a fresh test DB with no default configured — simulating a deleted
+    # quality profile.
+    episode = Repo.get!(Mydia.Media.Episode, new.episode_id) |> Repo.preload(:media_item)
+
+    {:ok, _} =
+      episode.media_item
+      |> Ecto.Changeset.change(quality_profile_id: nil)
+      |> Repo.update()
+
+    assert {:ok, :unscorable} =
+             UpgradeFinalize.perform(%Oban.Job{args: %{"media_file_id" => new.id}})
+
+    # Neither file is touched — the whole point of the fix: without it, the
+    # pointer would strand forever with both files silently active.
+    refute Repo.reload!(old).trashed_at
+    refute Repo.reload!(new).trashed_at
+    assert Repo.reload!(new).supersedes_media_file_id == nil
+
+    assert [event] =
+             Events.list_events(
+               type: "job.failed",
+               actor_type: :job,
+               actor_id: "upgrade_finalize"
+             )
+
+    assert event.metadata["media_file_id"] == new.id
   end
 
   test "is a no-op when the superseded file was hard-deleted, because the FK cascade already cleared the pointer" do
