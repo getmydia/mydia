@@ -88,7 +88,11 @@ defmodule Mydia.Playback.Progress do
     duration = get_field(changeset, :duration_seconds)
 
     if position && duration && duration > 0 do
-      percentage = position / duration * 100.0
+      # Capped at 100: a client that posts a position beyond the duration it
+      # knew at the time (which an HLS stream reporting a partial playlist
+      # length will do) must not produce a percentage above 100, which would
+      # render as an overflowing progress bar.
+      percentage = min(position / duration * 100.0, 100.0)
       put_change(changeset, :completion_percentage, percentage)
     else
       changeset

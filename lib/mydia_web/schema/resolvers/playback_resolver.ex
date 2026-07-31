@@ -15,10 +15,12 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        attrs = %{
-          position_seconds: position,
-          duration_seconds: duration
-        }
+        # The GraphQL arg is optional but the changeset requires it, so an
+        # omitted duration used to fail validation and drop the write silently.
+        # Reuse whatever we already stored rather than rejecting the position.
+        attrs =
+          %{position_seconds: position}
+          |> put_duration(duration, Playback.get_progress(user.id, media_item_id: movie_id))
 
         case Playback.save_progress(user.id, [media_item_id: movie_id], attrs) do
           {:ok, progress} ->
@@ -48,10 +50,12 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        attrs = %{
-          position_seconds: position,
-          duration_seconds: duration
-        }
+        # The GraphQL arg is optional but the changeset requires it, so an
+        # omitted duration used to fail validation and drop the write silently.
+        # Reuse whatever we already stored rather than rejecting the position.
+        attrs =
+          %{position_seconds: position}
+          |> put_duration(duration, Playback.get_progress(user.id, episode_id: episode_id))
 
         case Playback.save_progress(user.id, [episode_id: episode_id], attrs) do
           {:ok, progress} ->
@@ -260,4 +264,12 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
     end)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
+
+  defp put_duration(attrs, duration, _existing) when is_integer(duration) and duration > 0,
+    do: Map.put(attrs, :duration_seconds, duration)
+
+  defp put_duration(attrs, _duration, %{duration_seconds: stored}) when is_integer(stored),
+    do: Map.put(attrs, :duration_seconds, stored)
+
+  defp put_duration(attrs, _duration, _existing), do: attrs
 end
