@@ -557,9 +557,13 @@ defmodule Mydia.Repo.Migrations.Helpers do
       %{rows: foreign_keys} = repo.query!(~s|PRAGMA foreign_key_list("#{table}")|)
 
       Enum.reduce(foreign_keys, graph, fn [_id, _seq, parent | _rest], graph ->
-        Map.update(graph, parent, [table], fn children ->
-          if table in children, do: children, else: children ++ [table]
-        end)
+        if parent == table do
+          graph
+        else
+          Map.update(graph, parent, [table], fn children ->
+            if table in children, do: children, else: children ++ [table]
+          end)
+        end
       end)
     end)
   end
