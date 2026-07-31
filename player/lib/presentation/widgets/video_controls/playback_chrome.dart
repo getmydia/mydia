@@ -24,6 +24,15 @@ import 'video_progress_bar.dart';
 /// not scrubbing, and the pointer is not resting over the chrome. That last
 /// condition fixes a real defect — previously the chrome would fade out from
 /// under a stationary cursor that was aiming at a button.
+///
+/// The pointer-left-the-window hide (below, in [build]) is gated on
+/// `!PlatformFeatures.isMobile`, i.e. it is live on Flutter web as well as
+/// native desktop, not desktop-only. That is deliberate: on web, moving the
+/// cursor to the browser's tab strip or URL bar also collapses the auto-hide
+/// timer to zero and hides the chrome mid-playback. A pointer that has left
+/// the content area is nobody aiming at a control regardless of which chrome
+/// (OS window or browser tab) it left into, and the same `MouseRegion`
+/// already hides the mouse cursor itself on web for the same reason.
 class ChromeVisibility extends StatefulWidget {
   /// Whether playback is running. Chrome never auto-hides while paused.
   final bool isPlaying;

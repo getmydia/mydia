@@ -3,9 +3,34 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
+
+/// A [PlatformPlayer] that never touches native mpv/web bindings — safe to
+/// construct inside `flutter test`. Same shape as
+/// `playback_chrome_episode_nav_test.dart`'s fake (kept separate, not shared,
+/// since neither file exports it and duplicating ~15 lines is cheaper than
+/// introducing a new shared test-only import).
+class _FakePlatformPlayer extends PlatformPlayer {
+  _FakePlatformPlayer() : super(configuration: const PlayerConfiguration());
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> playOrPause() async {}
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> seek(Duration duration) async {}
+}
 
 double _opacity(WidgetTester tester) => tester
     .widget<FadeTransition>(
@@ -496,6 +521,67 @@ void main() {
       );
 
       expect(find.byKey(markerKey), findsOneWidget);
+    });
+  });
+
+  group('PlaybackChrome gating', () {
+    late Player player;
+
+    setUp(() {
+      player = Player(platformPlayer: _FakePlatformPlayer());
+    });
+
+    tearDown(() => player.dispose());
+
+    Widget host({required bool isFullscreen}) => _host(
+          PlaybackChrome(
+            player: player,
+            onFullscreenTap: () {},
+            isFullscreen: isFullscreen,
+          ),
+        );
+
+    testWidgets(
+        'not fullscreen: both the window drag and the double-tap '
+        'fullscreen-exit callbacks reach ChromeVisibility', (tester) async {
+      await tester.pumpWidget(host(isFullscreen: false));
+      await tester.pumpAndSettle();
+
+      final chromeVisibility =
+          tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+
+      expect(
+        chromeVisibility.onWindowDrag,
+        isNotNull,
+        reason: 'a normal window should be draggable from the background',
+      );
+      expect(
+        chromeVisibility.onDoubleTap,
+        isNotNull,
+        reason: 'double-tap should still toggle fullscreen',
+      );
+    });
+
+    testWidgets(
+        'fullscreen: the window drag callback is gone (no window to move) '
+        'but double-tap survives (it is how fullscreen is exited)',
+        (tester) async {
+      await tester.pumpWidget(host(isFullscreen: true));
+      await tester.pumpAndSettle();
+
+      final chromeVisibility =
+          tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+
+      expect(
+        chromeVisibility.onWindowDrag,
+        isNull,
+        reason: 'there is no window to drag while fullscreen',
+      );
+      expect(
+        chromeVisibility.onDoubleTap,
+        isNotNull,
+        reason: 'double-tap is the only way to exit fullscreen',
+      );
     });
   });
 }
