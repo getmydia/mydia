@@ -361,6 +361,12 @@ defmodule Mydia.Library do
         |> maybe_put_struct_field(:container, result.container)
         |> maybe_put_struct_field(:width, result.width)
         |> maybe_put_struct_field(:height, result.height)
+        # The `audio_codec` column below is normalized for streaming
+        # compatibility, which collapses "DD+ 5.1" to "ac3" and "TrueHD Atmos"
+        # to "truehd" — losing the channel layout and the Atmos/E-AC3
+        # distinction that quality scoring needs. Keep the analyzer's own
+        # string so `Mydia.Upgrades.Attrs` has something lossless to read.
+        |> maybe_put_struct_field(:audio_codec_raw, result.audio_codec)
 
       write_analysis_success(
         media_file,

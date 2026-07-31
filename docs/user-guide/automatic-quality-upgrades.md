@@ -47,7 +47,9 @@ Two more fields on that same tab control how aggressive the upgrades are:
 - **Minimum upgrade margin** - how much higher a candidate release's score
   must be than the current file's score before it counts as a real upgrade.
   This keeps the sweep from replacing a file for a one-point difference that
-  is not a meaningful improvement.
+  is not a meaningful improvement. Setting it to 0 means "take any genuine
+  improvement, however small"; a release that scores exactly the same as
+  what you already have is never an upgrade, at any margin.
 
 Only movies and episodes that use a profile with automatic upgrades enabled
 are ever considered by the sweep.

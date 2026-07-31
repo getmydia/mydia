@@ -61,6 +61,77 @@ defmodule Mydia.Settings.QualityProfilesTest do
       assert profile.upgrade_until_score == 95
     end
 
+    # Whole-branch review finding 4: `min_upgrade_margin: data["..."]` cast
+    # nil straight over the schema default of 5 whenever an older export
+    # omitted the key - nil is not in Ecto's @empty_values, which is only
+    # [""]. A nil margin then reads as 0 in the gate, and a delta of exactly
+    # 0.0 counted as an upgrade: identical-quality churn, arriving silently
+    # rather than because an operator chose it.
+    test "keeps the schema default margin when a legacy export omits min_upgrade_margin" do
+      legacy = legacy_json(name: "Legacy no margin", upgrade_until_quality: "1080p")
+
+      assert {:ok, profile} = QualityProfiles.import_profile(legacy)
+      assert profile.min_upgrade_margin == 5
+    end
+
+    test "honours an explicit min_upgrade_margin, including a deliberate 0" do
+      json = """
+      {
+        "schema_version": 1,
+        "name": "Explicit zero margin",
+        "upgrade_until_score": 85,
+        "min_upgrade_margin": 0,
+        "quality_standards": {"preferred_resolutions": ["1080p"]}
+      }
+      """
+
+      assert {:ok, profile} = QualityProfiles.import_profile(json)
+      assert profile.min_upgrade_margin == 0
+    end
+
+    test "keeps the schema default when min_upgrade_margin is the wrong type" do
+      json = """
+      {
+        "schema_version": 1,
+        "name": "String margin",
+        "upgrade_until_score": 85,
+        "min_upgrade_margin": "5",
+        "quality_standards": {"preferred_resolutions": ["1080p"]}
+      }
+      """
+
+      assert {:ok, profile} = QualityProfiles.import_profile(json)
+      assert profile.min_upgrade_margin == 5
+    end
+
+    test "keeps the schema default when upgrade_until_score is the wrong type" do
+      json = """
+      {
+        "schema_version": 1,
+        "name": "String score",
+        "upgrade_until_score": "95",
+        "quality_standards": {"preferred_resolutions": ["1080p"]}
+      }
+      """
+
+      assert {:ok, profile} = QualityProfiles.import_profile(json)
+      assert profile.upgrade_until_score == 85
+    end
+
+    test "keeps the schema default when upgrades_allowed is omitted" do
+      json = """
+      {
+        "schema_version": 1,
+        "name": "No upgrades key",
+        "upgrade_until_score": 85,
+        "quality_standards": {"preferred_resolutions": ["1080p"]}
+      }
+      """
+
+      assert {:ok, profile} = QualityProfiles.import_profile(json)
+      assert profile.upgrades_allowed == true
+    end
+
     test "logs the translation at info level so it is visible rather than silent" do
       previous_level = Logger.level()
       Logger.configure(level: :info)

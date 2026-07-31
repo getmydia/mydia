@@ -554,9 +554,10 @@ defmodule Mydia.Settings.QualityProfiles do
     attrs = %{
       name: Keyword.get(opts, :name, data["name"]),
       description: data["description"],
-      upgrades_allowed: data["upgrades_allowed"],
+      upgrades_allowed: resolve_typed(data, "upgrades_allowed", :upgrades_allowed, &is_boolean/1),
       upgrade_until_score: resolve_upgrade_until_score(data),
-      min_upgrade_margin: data["min_upgrade_margin"],
+      min_upgrade_margin:
+        resolve_typed(data, "min_upgrade_margin", :min_upgrade_margin, &is_integer/1),
       quality_standards: atomize_keys(data["quality_standards"]),
       version: data["version"] || 1,
       is_system: false,
@@ -572,12 +573,27 @@ defmodule Mydia.Settings.QualityProfiles do
   # explicit `upgrade_until_score` when present; otherwise translates the
   # retired `upgrade_until_quality` resolution ceiling using the same mapping
   # the Task 3 migration backfilled existing rows with (see
-  # @legacy_upgrade_quality_scores above).
-  defp resolve_upgrade_until_score(%{"upgrade_until_score" => score}) when is_integer(score) do
-    score
+  # @legacy_upgrade_quality_scores above), and failing that falls back to the
+  # schema default rather than nil (see resolve_typed/4).
+  defp resolve_upgrade_until_score(data) do
+    case Map.fetch(data, "upgrade_until_score") do
+      {:ok, score} when is_integer(score) ->
+        score
+
+      {:ok, other} ->
+        Logger.warning(
+          "Ignoring upgrade_until_score #{inspect(other)} while importing a quality profile: " <>
+            "expected an integer"
+        )
+
+        resolve_legacy_upgrade_until_score(data)
+
+      :error ->
+        resolve_legacy_upgrade_until_score(data)
+    end
   end
 
-  defp resolve_upgrade_until_score(%{"upgrade_until_quality" => legacy_quality})
+  defp resolve_legacy_upgrade_until_score(%{"upgrade_until_quality" => legacy_quality})
        when is_binary(legacy_quality) do
     score =
       Map.get(
@@ -594,7 +610,39 @@ defmodule Mydia.Settings.QualityProfiles do
     score
   end
 
-  defp resolve_upgrade_until_score(_data), do: nil
+  defp resolve_legacy_upgrade_until_score(_data), do: schema_default(:upgrade_until_score)
+
+  # An imported profile is not a partial update: every key it omits still
+  # produces a value in the attrs map, and `nil` is *not* in Ecto's
+  # `@empty_values` (which is only `[""]`), so passing it through casts nil
+  # straight over the schema default. That is how a profile exported before
+  # `min_upgrade_margin` existed silently arrived with a nil margin, which the
+  # upgrade gate then read as 0 - accepting an exact score tie as an upgrade
+  # and putting the item into a permanent daily replacement loop. A value of
+  # the wrong type (a JSON string where an integer belongs) has exactly the
+  # same effect once the changeset drops it, so both cases resolve to the
+  # schema default and say so in the log.
+  defp resolve_typed(data, key, field, type_check) do
+    case Map.fetch(data, key) do
+      {:ok, value} ->
+        if type_check.(value) do
+          value
+        else
+          Logger.warning(
+            "Ignoring #{key} #{inspect(value)} while importing a quality profile: wrong type"
+          )
+
+          schema_default(field)
+        end
+
+      :error ->
+        schema_default(field)
+    end
+  end
+
+  # Read straight off the struct so the import fallback can never drift from
+  # what a freshly created profile would get.
+  defp schema_default(field), do: Map.fetch!(%QualityProfile{}, field)
 
   defp determine_source_url(source, opts) do
     case Keyword.get(opts, :source_url) do

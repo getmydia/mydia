@@ -5,6 +5,8 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Jobs.UpgradeSweep
+  alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Streaming.Codec
 
   setup do
     original = Application.get_env(:mydia, :runtime_config)
@@ -48,7 +50,7 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
       media_item: movie,
       episode: nil,
       resolution: "720p",
-      codec: "H.264 (High)",
+      codec: "h264",
       size: 2 * 1024 * 1024 * 1024,
       analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
       quality_profile: profile
@@ -109,12 +111,18 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
   # Resolution "720p" against preferred_resolutions ["2160p"] and audio
   # channels "2.0" ("AAC Stereo") against preferred_audio_channels ["5.1"]
   # score 75.5 overall by default — below the fixture's
-  # upgrade_until_score: 90, so this file is eligible for upgrade. `opts`
-  # overrides the media_file attrs, e.g. `audio_codec: "AAC 5.1"` to make one
-  # fixture distinctly higher-scoring (84.5, still below cutoff) than its
-  # siblings, for tests that need a discriminating "best in the season"
-  # target. See the task report for the full score derivation.
+  # upgrade_until_score: 90, so this file is eligible for upgrade. Pass
+  # `audio: "AAC 5.1"` to make one fixture distinctly higher-scoring (84.5,
+  # still below cutoff) than its siblings, for tests that need a
+  # discriminating "best in the season" target. See the task report for the
+  # full score derivation. Any other `opts` override the media_file attrs.
+  #
+  # `audio:` sets both halves of what apply_analysis/2 writes: the
+  # streaming-normalized column *and* metadata.audio_codec_raw, which is
+  # where the channel layout survives and where Attrs reads it from.
   defp below_cutoff_episode(show, profile, season_number, episode_number, opts \\ []) do
+    {audio, opts} = Keyword.pop(opts, :audio, "AAC Stereo")
+
     episode =
       insert(:episode,
         media_item: show,
@@ -130,8 +138,9 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
           [
             episode: episode,
             resolution: "720p",
-            codec: "H.264 (High)",
-            audio_codec: "AAC Stereo",
+            codec: "h264",
+            audio_codec: Codec.normalize_audio_codec(audio),
+            metadata: %FileMetadata{audio_codec_raw: audio},
             size: 2 * 1024 * 1024 * 1024,
             analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
             quality_profile: profile
@@ -162,8 +171,9 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
     insert(:media_file,
       episode: episode,
       resolution: "4K",
-      codec: "H.264 (High)",
-      audio_codec: "AAC 5.1",
+      codec: "h264",
+      audio_codec: Codec.normalize_audio_codec("AAC 5.1"),
+      metadata: %FileMetadata{audio_codec_raw: "AAC 5.1"},
       hdr_format: "Dolby Vision",
       size: 2 * 1024 * 1024 * 1024,
       analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
@@ -226,7 +236,7 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
       # first or last, so neither hd/1 nor List.last/1 could coincidentally
       # satisfy the max_by assertion below via insertion/DB row order.
       for n <- 1..3, do: below_cutoff_episode(show, profile, 1, n)
-      {_episode, best_file} = below_cutoff_episode(show, profile, 1, 4, audio_codec: "AAC 5.1")
+      {_episode, best_file} = below_cutoff_episode(show, profile, 1, 4, audio: "AAC 5.1")
       for n <- 5..8, do: below_cutoff_episode(show, profile, 1, n)
       for n <- 9..10, do: above_cutoff_episode(show, profile, 1, n)
 
@@ -243,7 +253,7 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
     test "routes individual searches with each episode's own file" do
       {show, profile} = show_with_profile()
       {ep1, file1} = below_cutoff_episode(show, profile, 1, 1)
-      {ep2, file2} = below_cutoff_episode(show, profile, 1, 2, audio_codec: "AAC 5.1")
+      {ep2, file2} = below_cutoff_episode(show, profile, 1, 2, audio: "AAC 5.1")
       for n <- 3..10, do: above_cutoff_episode(show, profile, 1, n)
 
       assert {:ok, %{searches: 2}} =

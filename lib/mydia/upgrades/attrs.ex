@@ -10,6 +10,30 @@ defmodule Mydia.Upgrades.Attrs do
   HDR remux at 25.0 on its heaviest-weighted dimension, below a mediocre 1080p
   file, which would make automatic upgrades actively destructive.
 
+  ## Two vocabularies, one column
+
+  `Mydia.Library.apply_analysis/2` does not store the analyzer's strings
+  verbatim in every column. `resolution` and `hdr_format` land raw ("4K",
+  "Dolby Vision"), but `codec` and `audio_codec` are written through
+  `Mydia.Streaming.Codec`, which normalizes them for streaming-compatibility
+  checks: "H.264 (High)" becomes "h264", "HEVC (Main 10)" becomes "hevc", and
+  - lossily for our purposes - "DD+ 5.1" becomes "ac3" and "TrueHD Atmos"
+  becomes "truehd", discarding the channel layout entirely.
+
+  Since eligibility requires `analyzed_at IS NOT NULL`, *every* file this
+  feature scores holds the post-`Codec` form. This module therefore maps that
+  vocabulary, not just the analyzer's display strings: "hevc", "mpeg4" and the
+  rest are handled below alongside "HEVC (Main 10)" and "Xvid", because the
+  release-title side (`from_quality/3`) still speaks the display vocabulary.
+
+  For audio the mapping alone is not enough, because the channel token is gone
+  by the time it reaches the column. `apply_analysis/2` also records the
+  analyzer's untouched string in `metadata.audio_codec_raw`, and
+  `from_media_file/2` prefers it: that is what makes `audio_channels` (weight
+  0.12) and the Atmos-over-TrueHD tie-break contribute anything at all. Files
+  analyzed before that field existed fall back to the column and simply score
+  with a neutral `audio_channels`, which errs toward not upgrading.
+
   Unmappable values become `nil` rather than a guess. `nil` is neutralized
   symmetrically by `Mydia.Upgrades.Comparator`, so an unknown dimension never
   favours either side.
@@ -58,7 +82,17 @@ defmodule Mydia.Upgrades.Attrs do
     "mpeg2" => "mpeg2",
     "mpeg-2" => "mpeg2",
     "xvid" => "xvid",
-    "divx" => "divx"
+    "divx" => "divx",
+    # Mydia.Streaming.Codec collapses Xvid and DivX (and any other MPEG-4
+    # Part 2 spelling) onto "mpeg4" before the column is written, so that is
+    # the form every analyzed file actually holds. The two are
+    # indistinguishable by then; "xvid" is the more common of the pair and
+    # both score identically under every shipped profile, neither being in
+    # any preferred_video_codecs list. Mapping it is still worth doing:
+    # leaving it unmapped neutralizes an ancient Xvid rip to the 50.0
+    # missing-key default instead of scoring it as the poor codec it is,
+    # which suppresses exactly the upgrades this feature exists to find.
+    "mpeg4" => "xvid"
   }
 
   @audio_codec_aliases %{
@@ -118,7 +152,7 @@ defmodule Mydia.Upgrades.Attrs do
   """
   @spec from_media_file(MediaFile.t(), :movie | :episode) :: map()
   def from_media_file(%MediaFile{} = file, media_type) do
-    {audio_codec, audio_channels} = split_audio(file.audio_codec)
+    {audio_codec, audio_channels} = split_audio(audio_description(file))
 
     %{
       resolution: canonical_resolution(file.resolution),
@@ -156,6 +190,17 @@ defmodule Mydia.Upgrades.Attrs do
 
   defp metadata_source(%MediaFile{metadata: %{source: source}}), do: source
   defp metadata_source(_file), do: nil
+
+  # Prefer the analyzer's untouched audio string over the streaming-normalized
+  # column: the column has already lost the channel layout ("DD+ 5.1" -> "ac3")
+  # and the Atmos distinction ("TrueHD Atmos" -> "truehd"). Files analyzed
+  # before metadata.audio_codec_raw existed fall back to the column, which
+  # still yields a codec, just no channels.
+  defp audio_description(%MediaFile{metadata: %{audio_codec_raw: raw}})
+       when is_binary(raw) and raw != "",
+       do: raw
+
+  defp audio_description(%MediaFile{audio_codec: audio_codec}), do: audio_codec
 
   defp canonical_resolution(nil), do: nil
 

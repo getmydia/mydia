@@ -480,7 +480,13 @@ defmodule Mydia.Jobs.MovieSearchTest do
       profile_attrs =
         Keyword.get(opts, :profile, %{
           name: "Upgrade profile #{System.unique_integer([:positive])}",
-          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          # Single-entry preferred_resolutions on purpose: with both "1080p"
+          # and "720p" preferred, the file and the candidate both score 100
+          # on resolution and the delta is exactly 0.0 - which used to pass a
+          # margin of 0 and made this test certify a tie as an upgrade
+          # (whole-branch review finding 4). One entry makes the 720p -> 1080p
+          # swap a genuine improvement.
+          quality_standards: %{preferred_resolutions: ["1080p"]},
           min_upgrade_margin: 0
         })
 
@@ -503,7 +509,7 @@ defmodule Mydia.Jobs.MovieSearchTest do
           library_path_id: library_path.id,
           size: 2_000_000_000,
           resolution: "720p",
-          codec: "H.264 (High)",
+          codec: "h264",
           analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
@@ -590,7 +596,7 @@ defmodule Mydia.Jobs.MovieSearchTest do
         upgrade_target(library_path,
           profile: %{
             name: "Unreachable margin",
-            quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+            quality_standards: %{preferred_resolutions: ["1080p"]},
             # 100 is the maximum a QualityProfile changeset allows, and a
             # single-dimension (resolution-only) improvement never scores a
             # full 0->100 swing across every weighted quality dimension, so

@@ -1241,7 +1241,13 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       profile_attrs =
         Keyword.get(opts, :profile, %{
           name: "Episode upgrade profile #{System.unique_integer([:positive])}",
-          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          # Single-entry preferred_resolutions on purpose: with both "1080p"
+          # and "720p" preferred, the file and the candidate both score 100
+          # on resolution and the delta is exactly 0.0 - which used to pass a
+          # margin of 0 and made this test certify a tie as an upgrade
+          # (whole-branch review finding 4). One entry makes the 720p -> 1080p
+          # swap a genuine improvement.
+          quality_standards: %{preferred_resolutions: ["1080p"]},
           min_upgrade_margin: 0
         })
 
@@ -1271,7 +1277,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           library_path_id: library_path.id,
           size: 1_500_000_000,
           resolution: "720p",
-          codec: "H.264 (High)",
+          codec: "h264",
           analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
@@ -1373,7 +1379,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         upgrade_episode_target(library_path,
           profile: %{
             name: "Unreachable episode margin",
-            quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+            quality_standards: %{preferred_resolutions: ["1080p"]},
             min_upgrade_margin: 100
           }
         )
@@ -1403,7 +1409,13 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       profile_attrs =
         Keyword.get(opts, :profile, %{
           name: "Season upgrade profile #{System.unique_integer([:positive])}",
-          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          # Single-entry preferred_resolutions on purpose: with both "1080p"
+          # and "720p" preferred, the file and the candidate both score 100
+          # on resolution and the delta is exactly 0.0 - which used to pass a
+          # margin of 0 and made this test certify a tie as an upgrade
+          # (whole-branch review finding 4). One entry makes the 720p -> 1080p
+          # swap a genuine improvement.
+          quality_standards: %{preferred_resolutions: ["1080p"]},
           min_upgrade_margin: 0
         })
 
@@ -1433,7 +1445,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           library_path_id: library_path.id,
           size: 1_500_000_000,
           resolution: "720p",
-          codec: "H.264 (High)",
+          codec: "h264",
           analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
@@ -1531,7 +1543,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         quality_profile_fixture(%{
           name: "Size-bounded season profile #{System.unique_integer([:positive])}",
           quality_standards: %{
-            preferred_resolutions: ["1080p", "720p"],
+            preferred_resolutions: ["1080p"],
             episode_max_size_mb: 4096
           },
           min_upgrade_margin: 0
@@ -1564,7 +1576,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           library_path_id: library_path.id,
           size: 1_500_000_000,
           resolution: "720p",
-          codec: "H.264 (High)",
+          codec: "h264",
           analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
@@ -1587,7 +1599,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
         upgrade_season_target(library_path,
           profile: %{
             name: "Unreachable season margin",
-            quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+            quality_standards: %{preferred_resolutions: ["1080p"]},
             min_upgrade_margin: 100
           }
         )
@@ -1666,7 +1678,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       profile =
         quality_profile_fixture(%{
           name: "No fallback margin #{System.unique_integer([:positive])}",
-          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          quality_standards: %{preferred_resolutions: ["1080p"]},
           min_upgrade_margin: 100
         })
 
@@ -1697,7 +1709,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
               library_path_id: library_path.id,
               size: 1_500_000_000,
               resolution: "720p",
-              codec: "H.264 (High)",
+              codec: "h264",
               analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
             })
 

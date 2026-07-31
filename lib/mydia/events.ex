@@ -488,13 +488,24 @@ defmodule Mydia.Events do
   Takes the same shape as `file_upgraded/4`, except `new_file` is the file
   that got trashed here and `old_file` is the one that survived.
 
+  `blacklisted?` distinguishes the two very different things a rejection can
+  mean. A single-release rejection means the release lied and was blacklisted.
+  A season-pack rejection usually means only that *this* episode was already
+  good enough, so the pack is left grabbable - recording that here keeps the
+  activity feed from labelling an honest release a liar.
+
   ## Examples
 
-      iex> upgrade_rejected(new_file, old_file, media_item, comparison)
+      iex> upgrade_rejected(new_file, old_file, media_item, comparison, true)
       :ok
   """
-  def upgrade_rejected(new_file, old_file, media_item, comparison) do
+  def upgrade_rejected(new_file, old_file, media_item, comparison, blacklisted? \\ true) do
     {resource_type, resource_id} = upgrade_resource(new_file, media_item)
+
+    metadata =
+      new_file
+      |> upgrade_metadata(old_file, media_item, comparison)
+      |> Map.put("blacklisted", blacklisted?)
 
     create_event_async(%{
       category: "media",
@@ -504,7 +515,7 @@ defmodule Mydia.Events do
       resource_type: resource_type,
       resource_id: resource_id,
       severity: :warning,
-      metadata: upgrade_metadata(new_file, old_file, media_item, comparison)
+      metadata: metadata
     })
   end
 

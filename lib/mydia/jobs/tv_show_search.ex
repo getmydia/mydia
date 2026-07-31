@@ -54,7 +54,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   import Ecto.Query, warn: false
 
   alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
-  alias Mydia.Downloads.{Blacklists, Download}
+  alias Mydia.Downloads.{Blacklists, Download, Queue}
   alias Mydia.Indexers.RankingOptions
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
@@ -608,7 +608,7 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     # Filter out special episodes (S00) unless configured to monitor them
     episodes
-    |> reject_episodes_in_active_season_packs()
+    |> Queue.reject_episodes_in_active_season_packs()
     |> filter_special_episodes()
     |> filter_episodes_in_backoff()
   end
@@ -622,37 +622,6 @@ defmodule Mydia.Jobs.TVShowSearch do
     |> where([d], not is_nil(d.episode_id))
     |> select([d], d.episode_id)
     |> distinct(true)
-  end
-
-  # Drop episodes covered by an active season-pack download. Mirrors the
-  # season-pack arm of Mydia.Downloads.Queue.check_for_active_download/3:
-  # matched by (media_item_id, season_number) on downloads whose metadata
-  # has season_pack=true.
-  defp reject_episodes_in_active_season_packs([]), do: []
-
-  defp reject_episodes_in_active_season_packs(episodes) do
-    media_item_ids =
-      episodes
-      |> Enum.map(& &1.media_item_id)
-      |> Enum.uniq()
-
-    covered =
-      Download.occupying()
-      |> where([d], d.media_item_id in ^media_item_ids)
-      |> where(^Mydia.DB.json_is_true(:metadata, "$.season_pack"))
-      |> select([d], %{media_item_id: d.media_item_id, metadata: d.metadata})
-      |> Repo.all()
-      |> Enum.reduce(MapSet.new(), fn
-        %{media_item_id: mid, metadata: %{"season_number" => sn}}, acc when is_integer(sn) ->
-          MapSet.put(acc, {mid, sn})
-
-        _, acc ->
-          acc
-      end)
-
-    Enum.reject(episodes, fn e ->
-      MapSet.member?(covered, {e.media_item_id, e.season_number})
-    end)
   end
 
   defp load_episodes_for_show(media_item_id) do

@@ -118,15 +118,36 @@ defmodule Mydia.Upgrades.Comparator do
 
       %{score: candidate} = QualityProfile.score_media_file(profile, compact(merged))
       delta = Float.round(candidate - current, 1)
-      margin = profile.min_upgrade_margin || 0
 
-      if delta >= margin do
+      if clears_margin?(delta, profile) do
         {:ok, %{current: current, candidate: candidate, delta: delta}}
       else
         {:error, :below_margin}
       end
     end
   end
+
+  @doc """
+  Whether a score delta counts as a genuine upgrade under `profile`'s margin.
+
+  The sole authority on that question, shared with
+  `Mydia.Upgrades.finalize_upgrade/1` so the gate that picks a candidate and
+  the gate that accepts the imported file cannot disagree.
+
+  A margin of 0 - or nil, which an older profile export can still leave behind
+  - means "any genuine improvement", **not** "no improvement at all". A plain
+  `delta >= margin` accepts a delta of exactly 0.0: an identical-quality
+  release is grabbed and the current file trashed, the replacement scores the
+  same, and the item is eligible again tomorrow. That is a permanent daily
+  churn loop the blacklist cannot break, because the gate passes rather than
+  rejecting.
+  """
+  @spec clears_margin?(float(), QualityProfile.t()) :: boolean()
+  def clears_margin?(delta, %QualityProfile{min_upgrade_margin: margin})
+      when is_integer(margin) and margin > 0,
+      do: delta >= margin
+
+  def clears_margin?(delta, %QualityProfile{}), do: delta > 0
 
   # Symmetric neutralization. For each comparable dimension:
   #

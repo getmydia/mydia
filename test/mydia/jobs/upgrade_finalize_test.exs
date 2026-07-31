@@ -26,13 +26,15 @@ defmodule Mydia.Jobs.UpgradeFinalizeTest do
   defp upgrade_pair(opts) do
     old_resolution = Keyword.fetch!(opts, :old_resolution)
     new_resolution = Keyword.fetch!(opts, :new_resolution)
+    margin = Keyword.get(opts, :margin, 5)
+    extra_download_metadata = Keyword.get(opts, :download_metadata, %{})
 
     profile =
       quality_profile_fixture(%{
         name: "Upgrade Finalize #{System.unique_integer([:positive])}",
         upgrades_allowed: true,
         upgrade_until_score: 100,
-        min_upgrade_margin: 5,
+        min_upgrade_margin: margin,
         quality_standards: %{
           preferred_resolutions: ["2160p", "1080p"],
           preferred_video_codecs: ["h265", "h264"],
@@ -50,8 +52,8 @@ defmodule Mydia.Jobs.UpgradeFinalizeTest do
       insert(:media_file,
         episode: episode,
         resolution: old_resolution,
-        codec: "H.264 (High)",
-        audio_codec: "DD+ 5.1",
+        codec: "h264",
+        audio_codec: "ac3",
         size: 4 * 1024 * 1024 * 1024,
         analyzed_at: now,
         trashed_at: nil
@@ -63,15 +65,19 @@ defmodule Mydia.Jobs.UpgradeFinalizeTest do
         episode: episode,
         title: "Episode.Release.#{System.unique_integer([:positive])}",
         indexer: "test-indexer",
-        metadata: %{"guid" => "guid-#{System.unique_integer([:positive])}"}
+        metadata:
+          Map.merge(
+            %{"guid" => "guid-#{System.unique_integer([:positive])}"},
+            extra_download_metadata
+          )
       )
 
     new =
       insert(:media_file,
         episode: episode,
         resolution: new_resolution,
-        codec: "H.264 (High)",
-        audio_codec: "DD+ 5.1",
+        codec: "h264",
+        audio_codec: "ac3",
         size: 4 * 1024 * 1024 * 1024,
         analyzed_at: now,
         supersedes_media_file_id: old.id,
@@ -133,6 +139,43 @@ defmodule Mydia.Jobs.UpgradeFinalizeTest do
     assert event.metadata["old_score"]
     assert event.metadata["new_score"]
     assert event.metadata["breakdown_delta"] != %{}
+  end
+
+  # Whole-branch review finding 4: with min_upgrade_margin at 0, `delta >=
+  # margin` accepted a delta of exactly 0.0, so an identical-quality
+  # replacement won, the old file was trashed, and the item was eligible
+  # again tomorrow because the replacement scores the same. The blacklist
+  # cannot break that loop, because the gate passes rather than rejecting.
+  test "rejects an identical-scoring replacement when the margin is 0" do
+    {old, new, _download} =
+      upgrade_pair(old_resolution: "1080p", new_resolution: "1080p", margin: 0)
+
+    assert {:ok, :rejected} =
+             UpgradeFinalize.perform(%Oban.Job{args: %{"media_file_id" => new.id}})
+
+    refute Repo.reload!(old).trashed_at
+    assert Repo.reload!(new).trashed_at
+  end
+
+  # Whole-branch review finding 5: an above-cutoff episode inside a grabbed
+  # season pack is *supposed* to fail the gate and have the pack's copy
+  # discarded, per the spec's own design. Blacklisting the pack's (indexer,
+  # guid) for that would make a release that legitimately upgraded the rest
+  # of the season permanently unavailable - including to the ordinary
+  # missing-episode season search, which consults the same blacklist.
+  test "does not blacklist the release when the rejected file came from a season pack" do
+    {_old, new, download} =
+      upgrade_pair(
+        old_resolution: "4K",
+        new_resolution: "720p",
+        download_metadata: %{"season_pack" => true, "season_number" => 1}
+      )
+
+    assert {:ok, :rejected} =
+             UpgradeFinalize.perform(%Oban.Job{args: %{"media_file_id" => new.id}})
+
+    assert Repo.reload!(new).trashed_at
+    refute Blacklists.blacklisted?("test-indexer", download.metadata["guid"])
   end
 
   # Task 10 review finding 1 (CRITICAL): the new file can be trashed by

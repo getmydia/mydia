@@ -16,6 +16,7 @@ defmodule Mydia.Upgrades do
 
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.Queue
   alias Mydia.Events
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.SearchResult
@@ -80,6 +81,16 @@ defmodule Mydia.Upgrades do
   `"episode"` backoff row from before this episode had a file must not
   suppress its upgrade eligibility, and vice versa. See
   `eligible_movies/1`'s identical namespacing for movies.
+
+  `occupying_episode_ids/0` cannot see a season-pack download - it carries
+  `media_item_id` plus `metadata.season_pack` and no `episode_id` - so the
+  result is additionally filtered through
+  `Mydia.Downloads.Queue.reject_episodes_in_active_season_packs/1`, the same
+  helper the missing-file path uses. Without it, an episode inside an
+  in-flight pack upgrade keeps generating searches every day, and once the
+  season drops below the 70% pack threshold it generates individual grabs
+  that succeed, because `check_for_active_download/4`'s `episode_id` arm
+  cannot see the pack either.
   """
   @spec eligible_episodes(pos_integer()) :: [map()]
   def eligible_episodes(limit) when is_integer(limit) and limit > 0 do
@@ -93,6 +104,7 @@ defmodule Mydia.Upgrades do
     |> limit(^(limit * @overfetch))
     |> preload([_e, _m], [:media_item, media_files: ^analyzed_files_query()])
     |> Repo.all()
+    |> Queue.reject_episodes_in_active_season_packs()
     |> Enum.flat_map(&episode_candidate/1)
   end
 
@@ -203,16 +215,24 @@ defmodule Mydia.Upgrades do
   `Comparator.score_file_with_breakdown/3`, then picks exactly one of five
   outcomes:
 
-    * `{:ok, :upgraded}` — the new file cleared `min_upgrade_margin`. The
-      old file is trashed (`Library.trash_media_file/1` — never a hard
-      delete, so a wrong call stays recoverable for the trash retention
-      window), `Events.file_upgraded/4` records both scores and the
-      per-dimension breakdown delta, and the pointer is cleared.
-    * `{:ok, :rejected}` — it didn't clear the margin. The release lied
-      about its contents: the *new* file is trashed instead, its
-      originating release is blacklisted (`Downloads.Blacklists`) so the
-      next sweep doesn't grab it again tomorrow, `Events.upgrade_rejected/4`
-      records the trail, and the pointer is cleared.
+    * `{:ok, :upgraded}` — the new file cleared `min_upgrade_margin` (via
+      `Comparator.clears_margin?/2`, which treats an exact tie as *not* an
+      upgrade even at margin 0). The old file is trashed
+      (`Library.trash_media_file/1` — never a hard delete, so a wrong call
+      stays recoverable for the trash retention window; the file itself
+      moves off the library path into the trash directory, see
+      `Mydia.Library.TrashStore`), `Events.file_upgraded/4` records both
+      scores and the per-dimension breakdown delta, and the pointer is
+      cleared.
+    * `{:ok, :rejected}` — it didn't clear the margin. The *new* file is
+      trashed instead. Unless it came from a season pack, its originating
+      release is also blacklisted (`Downloads.Blacklists`) so the next sweep
+      doesn't grab the same lying release tomorrow; a season pack is left
+      grabbable, because an above-cutoff episode inside a pack is *designed*
+      to fail this gate and blacklisting would burn a release that
+      legitimately upgraded the rest of the season.
+      `Events.upgrade_rejected/5` records the trail (including whether the
+      release was blacklisted), and the pointer is cleared.
     * `{:ok, :orphaned}` — the file the new one claims to supersede is gone:
       trashed by something else between grab and finalize (a hard delete
       instead nilifies the pointer at the DB level via `on_delete:
@@ -239,10 +259,16 @@ defmodule Mydia.Upgrades do
   Every terminal branch clears the pointer — that, not the worker's
   `unique` constraint, is what makes re-running this on an already-processed
   file safe: a second call always lands on `{:ok, :noop}`.
+
+  Every terminal branch that trashes a file can also fail: the file has to
+  physically leave the library path, and a move that fails must not leave a
+  row marked trashed. `{:error, reason}` propagates to
+  `Mydia.Jobs.UpgradeFinalize`, which lets Oban retry - correct, since a
+  failed move is usually transient (full disk, a permissions blip).
   """
   @spec finalize_upgrade(binary()) ::
           {:ok, :upgraded | :rejected | :orphaned | :noop | :unscorable}
-          | {:error, Ecto.Changeset.t()}
+          | {:error, Ecto.Changeset.t() | term()}
   def finalize_upgrade(media_file_id) when is_binary(media_file_id) do
     case Repo.get(MediaFile, media_file_id) do
       nil ->
@@ -315,7 +341,6 @@ defmodule Mydia.Upgrades do
     case {old_result, new_result} do
       {{:ok, %{score: old_score, breakdown: old_breakdown}},
        {:ok, %{score: new_score, breakdown: new_breakdown}}} ->
-        margin = profile.min_upgrade_margin || 0
         delta = Float.round(new_score - old_score, 1)
 
         comparison = %{
@@ -327,7 +352,11 @@ defmodule Mydia.Upgrades do
           breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
         }
 
-        if delta >= margin do
+        # Comparator.clears_margin?/2 is the single authority on the margin,
+        # shared with upgrade?/5 so the gate that picks a candidate and the
+        # gate that accepts the imported file cannot disagree - in particular
+        # about whether an exact tie counts (it does not).
+        if Comparator.clears_margin?(delta, profile) do
           apply_upgrade(new_file, old_file, media_item, comparison)
         else
           apply_rejection(new_file, old_file, media_item, comparison)
@@ -398,12 +427,22 @@ defmodule Mydia.Upgrades do
     end
   end
 
+  # Blacklist *before* clearing the pointer, not after (whole-branch review
+  # finding 3). With the old order, a failed clear_pointer left the file
+  # trashed with its pointer intact, and Oban's retry hit the trashed-new-file
+  # guard in finalize_upgrade/1, returning {:ok, :noop} before blacklisting
+  # ever ran. The lying release stayed grabbable and the whole
+  # grab/import/reject cycle - a full download's bandwidth and disk - repeated
+  # daily. Blacklists.add/5 upserts on (indexer, guid), so it is idempotent
+  # and the reorder cannot make the data-safety story worse.
   defp apply_rejection(new_file, old_file, media_item, comparison) do
-    with {:ok, trashed_new} <- Library.trash_media_file(new_file),
-         {:ok, _new_file} <- clear_pointer(trashed_new) do
-      blacklist_release(trashed_new)
-      Events.upgrade_rejected(trashed_new, old_file, media_item, comparison)
-      {:ok, :rejected}
+    with {:ok, trashed_new} <- Library.trash_media_file(new_file) do
+      blacklisted? = blacklist_release(trashed_new)
+
+      with {:ok, _new_file} <- clear_pointer(trashed_new) do
+        Events.upgrade_rejected(trashed_new, old_file, media_item, comparison, blacklisted?)
+        {:ok, :rejected}
+      end
     end
   end
 
@@ -429,37 +468,90 @@ defmodule Mydia.Upgrades do
     end)
   end
 
-  # Blacklisting a rejected upgrade's release is not optional: without it,
-  # the next sweep grabs the exact same lying release, imports it, rejects
-  # it, and repeats forever. The (indexer, guid) pair is reached by tracing
-  # new_file's `metadata.extra["imported_from_download_id"]` (written by
+  # Blacklisting a rejected upgrade's release is not optional for a single
+  # release: without it, the next sweep grabs the exact same lying release,
+  # imports it, rejects it, and repeats forever. The (indexer, guid) pair is
+  # reached by tracing new_file's
+  # `metadata.extra["imported_from_download_id"]` (written by
   # `Mydia.Jobs.MediaImport` on every import) back to the `Download` row,
   # which always carries `indexer` and a `metadata["guid"]` — real, or a
   # deterministic fallback synthesized by
   # `Mydia.Downloads.Queue.build_download_metadata/1` when the indexer
   # didn't supply one. A failure to resolve either is logged loudly rather
-  # than silently skipped, but does not block the rejection outcome: the
-  # file is already trashed and the pointer already cleared by the time
-  # this runs, and blocking the whole job retrying forever on a
-  # permanently-missing download record would be worse than a logged gap in
-  # the blacklist.
+  # than silently skipped, but does not block the rejection outcome:
+  # blocking the whole job retrying forever on a permanently-missing
+  # download record would be worse than a logged gap in the blacklist.
+  #
+  # Returns whether the release was actually blacklisted, so the activity
+  # trail can say which of the two rejections this was.
   defp blacklist_release(new_file) do
     with download_id when is_binary(download_id) <- download_id_for(new_file),
-         %Download{} = download <- Repo.get(Download, download_id),
-         guid when is_binary(guid) and guid != "" <- get_in(download.metadata || %{}, ["guid"]),
+         %Download{} = download <- Repo.get(Download, download_id) do
+      maybe_blacklist_download(new_file, download)
+    else
+      _ ->
+        Logger.error(
+          "Could not blacklist rejected upgrade release: no traceable (indexer, guid) " <>
+            "for the originating download",
+          media_file_id: new_file.id
+        )
+
+        false
+    end
+  end
+
+  # Whole-branch review finding 5: a rejection means one of two very
+  # different things.
+  #
+  # For a single-episode or movie grab it means the release lied about its
+  # contents, and blacklisting is the only thing that stops the sweep
+  # re-grabbing it tomorrow.
+  #
+  # For a season pack it very often means nothing of the sort. By this
+  # feature's own design an already-above-cutoff episode inside a grabbed
+  # pack is *supposed* to fail the gate and have the pack's copy discarded,
+  # so a pack that legitimately upgraded eight of ten episodes would be
+  # blacklisted because the other two were already good enough. And
+  # `reject_blacklisted/2` consults that blacklist on every search path, so
+  # the release would also become permanently unavailable to the ordinary
+  # missing-episode season search. Skip it: a pack that really is bad
+  # simply fails the gate again, which costs a re-download rather than
+  # permanently burning a good release.
+  defp maybe_blacklist_download(new_file, %Download{} = download) do
+    if season_pack?(download) do
+      Logger.info(
+        "Not blacklisting a season pack whose per-episode copy lost the upgrade comparison: " <>
+          "a pack can legitimately upgrade some episodes and not others",
+        media_file_id: new_file.id,
+        download_id: download.id
+      )
+
+      false
+    else
+      do_blacklist(new_file, download)
+    end
+  end
+
+  defp season_pack?(%Download{metadata: metadata}) when is_map(metadata),
+    do: metadata["season_pack"] == true
+
+  defp season_pack?(%Download{}), do: false
+
+  defp do_blacklist(new_file, %Download{} = download) do
+    with guid when is_binary(guid) and guid != "" <- get_in(download.metadata || %{}, ["guid"]),
          indexer when is_binary(indexer) and indexer != "" <- download.indexer do
       case Blacklists.add(indexer, guid, download.title || "Unknown release", "upgrade_rejected") do
         {:ok, _row} ->
-          :ok
+          true
 
         {:error, changeset} ->
           Logger.error("Failed to blacklist rejected upgrade release",
             media_file_id: new_file.id,
-            download_id: download_id,
+            download_id: download.id,
             errors: inspect(changeset.errors)
           )
 
-          :ok
+          false
       end
     else
       _ ->
@@ -469,7 +561,7 @@ defmodule Mydia.Upgrades do
           media_file_id: new_file.id
         )
 
-        :ok
+        false
     end
   end
 

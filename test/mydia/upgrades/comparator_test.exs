@@ -2,6 +2,7 @@ defmodule Mydia.Upgrades.ComparatorTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades.Comparator
@@ -28,12 +29,18 @@ defmodule Mydia.Upgrades.ComparatorTest do
     struct!(base, overrides)
   end
 
-  # A real 4K HDR file as FileAnalyzer would actually write it.
+  # A real 4K HDR file exactly as Mydia.Library.apply_analysis/2 stores one:
+  # resolution and hdr_format land raw from the analyzer, while codec and
+  # audio_codec go through Mydia.Streaming.Codec first ("HEVC (Main 10)" ->
+  # "hevc", "DD+ 5.1" -> "ac3", channels dropped). The analyzer's own audio
+  # string survives only in metadata.audio_codec_raw, which is where Attrs
+  # reads channels and the E-AC3/Atmos distinction from.
   defp uhd_file do
     %MediaFile{
       resolution: "4K",
-      codec: "HEVC (Main 10)",
-      audio_codec: "DD+ 5.1",
+      codec: "hevc",
+      audio_codec: "ac3",
+      metadata: %FileMetadata{audio_codec_raw: "DD+ 5.1"},
       hdr_format: "Dolby Vision",
       size: 20 * 1024 * 1024 * 1024,
       analyzed_at: ~U[2026-07-01 00:00:00Z]
@@ -41,7 +48,7 @@ defmodule Mydia.Upgrades.ComparatorTest do
   end
 
   describe "score_file/3" do
-    test "scores a real 4K HDR file highly despite analyzer display strings" do
+    test "scores a real 4K HDR file highly despite the stored codec vocabulary" do
       assert {:ok, score} = Comparator.score_file(uhd_file(), profile(), :movie)
       assert score > 70.0
     end
@@ -102,8 +109,9 @@ defmodule Mydia.Upgrades.ComparatorTest do
 
       file = %MediaFile{
         resolution: "1080p",
-        codec: "H.264 (High)",
-        audio_codec: "DD+ 5.1",
+        codec: "h264",
+        audio_codec: "ac3",
+        metadata: %FileMetadata{audio_codec_raw: "DD+ 5.1"},
         size: 8 * 1024 * 1024 * 1024,
         analyzed_at: ~U[2026-07-01 00:00:00Z]
       }
@@ -119,39 +127,109 @@ defmodule Mydia.Upgrades.ComparatorTest do
       # neutralized on both sides, so it contributes nothing to the delta.
       file = %MediaFile{
         resolution: "1080p",
-        codec: "HEVC (Main 10)",
-        audio_codec: "DD+ 5.1",
+        codec: "h264",
+        audio_codec: "eac3",
         size: 8 * 1024 * 1024 * 1024,
         analyzed_at: ~U[2026-07-01 00:00:00Z]
       }
 
+      # Both candidates carry the same genuine h264 -> h265 improvement, so
+      # both clear the gate and expose their score; the *only* difference
+      # between them is the source the file cannot match. If source were not
+      # neutralized symmetrically, `sourced` would score higher purely for
+      # mentioning BluRay.
       bare = %Quality{resolution: "1080p", codec: "x265"}
       sourced = %Quality{resolution: "1080p", codec: "x265", source: "BluRay"}
       size = 8 * 1024 * 1024 * 1024
 
-      # Margin forced to 0: this fixture is identical between file and
-      # candidate on every dimension except source (same resolution, codec,
-      # size), by design, so the genuine delta is exactly 0 once source is
-      # neutralized. The default margin of 5 would reject that zero delta
-      # before the equality below ever runs; zeroing it here isolates the
-      # thing under test (symmetric neutralization) from the unrelated
-      # margin gate, which has its own dedicated tests below.
       {:ok, %{candidate: bare_score}} =
-        Comparator.upgrade?(file, bare, size, profile(%{min_upgrade_margin: 0}), :movie)
+        Comparator.upgrade?(file, bare, size, profile(), :movie)
 
       {:ok, %{candidate: sourced_score}} =
-        Comparator.upgrade?(file, sourced, size, profile(%{min_upgrade_margin: 0}), :movie)
+        Comparator.upgrade?(file, sourced, size, profile(), :movie)
 
       assert bare_score == sourced_score
     end
   end
 
   describe "upgrade?/5 margin" do
+    # Whole-branch review finding 4: `delta >= margin` with a margin of 0
+    # accepts a delta of exactly 0.0, so an identical-quality release is
+    # grabbed and the current file trashed. The replacement then scores the
+    # same, making the item eligible again tomorrow - a churn loop the
+    # blacklist cannot stop, because the gate *passes*. A margin of 0 must
+    # mean "any genuine improvement", not "no improvement at all".
+    test "an exact tie is not an upgrade even when the margin is 0" do
+      file = %MediaFile{
+        resolution: "1080p",
+        codec: "hevc",
+        audio_codec: "eac3",
+        size: 8 * 1024 * 1024 * 1024,
+        analyzed_at: ~U[2026-07-01 00:00:00Z]
+      }
+
+      identical = %Quality{resolution: "1080p", codec: "x265"}
+
+      assert {:error, :below_margin} =
+               Comparator.upgrade?(
+                 file,
+                 identical,
+                 8 * 1024 * 1024 * 1024,
+                 profile(%{min_upgrade_margin: 0}),
+                 :movie
+               )
+    end
+
+    test "an exact tie is not an upgrade when the margin is nil" do
+      file = %MediaFile{
+        resolution: "1080p",
+        codec: "hevc",
+        audio_codec: "eac3",
+        size: 8 * 1024 * 1024 * 1024,
+        analyzed_at: ~U[2026-07-01 00:00:00Z]
+      }
+
+      identical = %Quality{resolution: "1080p", codec: "x265"}
+
+      assert {:error, :below_margin} =
+               Comparator.upgrade?(
+                 file,
+                 identical,
+                 8 * 1024 * 1024 * 1024,
+                 profile(%{min_upgrade_margin: nil}),
+                 :movie
+               )
+    end
+
+    test "a genuine improvement still passes a margin of 0" do
+      file = %MediaFile{
+        resolution: "720p",
+        codec: "hevc",
+        audio_codec: "eac3",
+        size: 8 * 1024 * 1024 * 1024,
+        analyzed_at: ~U[2026-07-01 00:00:00Z]
+      }
+
+      better = %Quality{resolution: "2160p", codec: "x265"}
+
+      assert {:ok, %{delta: delta}} =
+               Comparator.upgrade?(
+                 file,
+                 better,
+                 8 * 1024 * 1024 * 1024,
+                 profile(%{min_upgrade_margin: 0}),
+                 :movie
+               )
+
+      assert delta > 0
+    end
+
     test "rejects a candidate that does not clear the margin" do
       file = %MediaFile{
         resolution: "1080p",
-        codec: "HEVC (Main 10)",
-        audio_codec: "DD+ 5.1",
+        codec: "hevc",
+        audio_codec: "ac3",
+        metadata: %FileMetadata{audio_codec_raw: "DD+ 5.1"},
         size: 8 * 1024 * 1024 * 1024,
         analyzed_at: ~U[2026-07-01 00:00:00Z]
       }

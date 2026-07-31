@@ -4,6 +4,7 @@ defmodule Mydia.UpgradesTest do
   import Mydia.Factory
   import Mydia.SettingsFixtures
 
+  alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Upgrades
 
   defp upgradeable_profile do
@@ -24,8 +25,9 @@ defmodule Mydia.UpgradesTest do
         media_item: movie,
         episode: nil,
         resolution: "720p",
-        codec: "H.264 (High)",
-        audio_codec: "AAC Stereo",
+        codec: "h264",
+        audio_codec: "aac",
+        metadata: %FileMetadata{audio_codec_raw: "AAC Stereo"},
         size: 2 * 1024 * 1024 * 1024,
         analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
         quality_profile: profile
@@ -42,8 +44,9 @@ defmodule Mydia.UpgradesTest do
       insert(:media_file,
         episode: episode,
         resolution: "720p",
-        codec: "H.264 (High)",
-        audio_codec: "AAC Stereo",
+        codec: "h264",
+        audio_codec: "aac",
+        metadata: %FileMetadata{audio_codec_raw: "AAC Stereo"},
         size: 2 * 1024 * 1024 * 1024,
         analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
         quality_profile: profile
@@ -128,8 +131,9 @@ defmodule Mydia.UpgradesTest do
         media_item: already_good,
         episode: nil,
         resolution: "2160p",
-        codec: "HEVC",
-        audio_codec: "TrueHD 7.1",
+        codec: "hevc",
+        audio_codec: "truehd",
+        metadata: %FileMetadata{audio_codec_raw: "TrueHD 7.1"},
         size: 2 * 1024 * 1024 * 1024,
         analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
         quality_profile: profile
@@ -145,8 +149,9 @@ defmodule Mydia.UpgradesTest do
         media_item: needs_upgrade,
         episode: nil,
         resolution: "480p",
-        codec: "H.264",
-        audio_codec: "AAC Stereo",
+        codec: "h264",
+        audio_codec: "aac",
+        metadata: %FileMetadata{audio_codec_raw: "AAC Stereo"},
         size: 2 * 1024 * 1024 * 1024,
         analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
         quality_profile: profile
@@ -228,6 +233,39 @@ defmodule Mydia.UpgradesTest do
       insert(:download, media_item: episode.media_item, episode: episode)
 
       assert [] = Upgrades.eligible_episodes(10)
+    end
+
+    # Whole-branch review finding 2: a season-pack download carries
+    # media_item_id plus metadata.season_pack and *no* episode_id, so the
+    # occupying_episode_ids/0 subquery cannot see it. Without this filter the
+    # sweep keeps re-searching (and, once the season drops under the 70% pack
+    # threshold, individually re-grabbing) episodes the in-flight pack already
+    # covers. The missing-file path has handled this since it was written.
+    test "excludes an episode covered by an active season-pack download" do
+      profile = upgradeable_profile()
+      {episode, _file} = analyzed_episode_file(profile)
+
+      insert(:download,
+        media_item: episode.media_item,
+        episode: nil,
+        metadata: %{"season_pack" => true, "season_number" => episode.season_number}
+      )
+
+      assert [] = Upgrades.eligible_episodes(10)
+    end
+
+    test "keeps an episode when the active season pack is for a different season" do
+      profile = upgradeable_profile()
+      {episode, _file} = analyzed_episode_file(profile)
+
+      insert(:download,
+        media_item: episode.media_item,
+        episode: nil,
+        metadata: %{"season_pack" => true, "season_number" => episode.season_number + 1}
+      )
+
+      assert [%{episode: found}] = Upgrades.eligible_episodes(10)
+      assert found.id == episode.id
     end
 
     test "orders never-checked items before previously-checked ones" do
@@ -377,7 +415,7 @@ defmodule Mydia.UpgradesTest do
         media_item: movie,
         episode: nil,
         resolution: "480p",
-        codec: "H.264",
+        codec: "h264",
         analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
         quality_profile: profile
       )
@@ -387,7 +425,7 @@ defmodule Mydia.UpgradesTest do
           media_item: movie,
           episode: nil,
           resolution: "2160p",
-          codec: "HEVC",
+          codec: "hevc",
           analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
           quality_profile: profile
         )
