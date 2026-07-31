@@ -10,6 +10,7 @@ import 'center_play_button.dart';
 import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
 import 'panel_controls.dart';
+import 'playback_surface.dart';
 import 'transport_cluster.dart';
 import 'video_progress_bar.dart';
 
@@ -33,12 +34,26 @@ class ChromeVisibility extends StatefulWidget {
 
   final Duration autoHide;
 
+  /// Toggles fullscreen on a background double-click. Null by default.
+  ///
+  /// The platform gate lives in [PlaybackChrome], not here. Registering a
+  /// double-tap handler makes Flutter defer the single tap by
+  /// `kDoubleTapTimeout`, and `flutter test` runs on Linux where
+  /// `PlatformFeatures.isDesktop` is true, so gating here would silently add
+  /// that deferral to every widget test that constructs this class directly.
+  final VoidCallback? onDoubleTap;
+
+  /// Starts an OS window drag from the background. Null by default.
+  final VoidCallback? onWindowDrag;
+
   const ChromeVisibility({
     super.key,
     required this.isPlaying,
     required this.child,
     this.isSeeking = false,
     this.autoHide = const Duration(seconds: 3),
+    this.onDoubleTap,
+    this.onWindowDrag,
   });
 
   static const Key contentKey = Key('chrome-content');
@@ -94,6 +109,16 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   /// this itself, only [_mayHide] does. Route through `setState` if that
   /// changes.
   bool _pointerOverChrome = false;
+
+  /// Whether the player's own route is still the top one, sampled in [build].
+  ///
+  /// Read in [build] rather than in the exit handler on purpose:
+  /// `ModalRoute.of` registers an inherited-widget dependency, and
+  /// `_ModalScopeStatus.updateShouldNotify` compares `isCurrent`, so sampling
+  /// it here means this widget rebuilds when a selector opens or closes and
+  /// the flag stays accurate without calling into the element tree from a
+  /// pointer callback.
+  bool _routeIsCurrent = true;
 
   /// Authoritative shown/hidden intent. Deliberately **not** derived from
   /// `_controller.value > 0` (the brief's original approach): that value is
@@ -175,6 +200,8 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
 
   @override
   Widget build(BuildContext context) {
+    _routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+
     final content = ChromeAnimation(
       animation: _curved,
       child: FadeTransition(
@@ -206,10 +233,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     Widget stack = Stack(
       fit: StackFit.expand,
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        PlaybackSurface(
           onTap: _toggle,
-          child: const SizedBox.expand(),
+          onDoubleTap: widget.onDoubleTap,
+          onWindowDrag: widget.onWindowDrag,
         ),
         content,
       ],
@@ -225,6 +252,22 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
           // every hover event, up to ~120/sec.
           if (_visible && _hideTimer != null) return;
           _show();
+        },
+        onExit: (_) {
+          // A pointer outside the window is nobody aiming at a control, so
+          // collapse the auto-hide timer to zero. `_mayHide` still governs,
+          // which is what preserves the paused, seeking and
+          // pointer-over-chrome invariants. The 250ms reverse fade still
+          // runs; "immediately" refers to the timer, not the animation.
+          //
+          // `_routeIsCurrent` keeps an open selector from hiding the chrome
+          // underneath itself, which would leave it gone after dismissal
+          // until the mouse moved again.
+          //
+          // `mounted` is checked because a test's `gesture.removePointer`
+          // teardown, and a real window close, both synthesise an exit that
+          // can arrive while this State is being torn down.
+          if (mounted && _routeIsCurrent && _mayHide) _hide();
         },
         child: stack,
       );

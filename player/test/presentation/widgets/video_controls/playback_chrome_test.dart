@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -263,6 +265,127 @@ void main() {
       expect(_opacity(tester), 1.0,
           reason: 'a tap mid-fade should bring chrome back, not finish '
               'hiding it');
+    });
+
+    testWidgets('hides immediately when the mouse leaves the window',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(width: 200, height: 60, child: Text('chrome')),
+            ),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      // Enter over the content itself, not bare background. Leaving the
+      // window from over a control fires the inner content MouseRegion's
+      // onExit (clearing _pointerOverChrome) and the outer one's. Flutter
+      // dispatches exits innermost first, so _pointerOverChrome is already
+      // false when the outer handler evaluates _mayHide. If that ever
+      // inverted, exiting over a control would silently stop hiding, and
+      // this test is what would catch it.
+      await gesture.addPointer(location: tester.getCenter(find.text('chrome')));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      expect(_opacity(tester), 1.0);
+
+      // Move the pointer outside the 800x600 test window.
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(
+        _opacity(tester),
+        0.0,
+        reason: 'chrome should not wait out the 3s timer once the pointer '
+            'has left the window',
+      );
+    });
+
+    testWidgets('does not hide on mouse exit while paused', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: false,
+            child: SizedBox(width: 200, height: 100, child: Text('chrome')),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(400, 300));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(_opacity(tester), 1.0,
+          reason: 'the paused invariant must survive mouse exit');
+    });
+
+    testWidgets('does not hide on mouse exit while seeking', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            isSeeking: true,
+            child: SizedBox(width: 200, height: 100, child: Text('chrome')),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(400, 300));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(_opacity(tester), 1.0,
+          reason: 'dragging the scrubber past the window edge must not '
+              'yank the chrome away mid-seek');
+    });
+
+    testWidgets('does not hide on mouse exit while a modal route is on top',
+        (tester) async {
+      // Opening the quality, audio, subtitle or cast picker pushes a route
+      // over the player and moves the pointer off it. Hiding underneath would
+      // leave the chrome gone after dismissal until the mouse moved again,
+      // because only onHover calls _show().
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            child: SizedBox(width: 200, height: 100, child: Text('chrome')),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(400, 300));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+
+      final context = tester.element(find.byType(ChromeVisibility));
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (_) => const AlertDialog(content: Text('picker')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(_opacity(tester), 1.0,
+          reason: 'chrome hid underneath an open selector');
     });
   });
 
