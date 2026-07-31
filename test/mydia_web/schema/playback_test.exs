@@ -277,6 +277,21 @@ defmodule MydiaWeb.Schema.PlaybackTest do
       assert progress.position_seconds == 20
       assert progress.duration_seconds == 1800
     end
+
+    test "still rejects the write when no duration exists anywhere", ctx do
+      episode = hd(ctx.episodes)
+
+      result =
+        run_query(
+          @update_episode_progress_mutation,
+          %{"episodeId" => episode.id, "positionSeconds" => 50},
+          ctx.user
+        )
+
+      assert {:ok, %{errors: [%{message: message}]}} = result
+      assert message =~ "duration_seconds"
+      assert Playback.get_progress(ctx.user.id, episode_id: episode.id) == nil
+    end
   end
 
   defp run_query(query, variables, user \\ nil) do
