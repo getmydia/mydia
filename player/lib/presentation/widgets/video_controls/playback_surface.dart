@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 /// Owns every pointer semantic for the region that is *not* a control: tap to
 /// toggle chrome, double-click to toggle fullscreen, and press-and-move to
 /// drag the OS window. Consolidating them here is the point. Before this
-/// widget, three separate gesture layers competed over the same region and
+/// widget, three separate gesture layers competed over the same region, with
 /// the outermost one (desktop double-click-to-fullscreen in
-/// `player_screen.dart`) lost every arena to the innermost one and never
-/// fired.
+/// `player_screen.dart`) expected to lose every arena to the innermost one
+/// and so never fire in practice.
 ///
 /// **Why the drag lives in a `Listener` and not `GestureDetector.onPanStart`.**
 /// For a mouse, Flutter's drag recognizers accept after

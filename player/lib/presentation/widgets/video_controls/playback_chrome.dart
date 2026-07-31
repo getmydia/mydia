@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/duration_override.dart';
 import '../../../core/player/platform_features.dart';
+import '../../../core/player/window_drag_service.dart';
 import '../../../core/theme/depth_tokens.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
@@ -341,10 +342,11 @@ class ChromeSlide extends StatelessWidget {
 ///
 /// **Why double-tap ±10s (`gesture_controls.dart`) still works through
 /// [ChromeVisibility]'s background tap-to-toggle catcher:** that catcher is
-/// a full-screen, opaque `GestureDetector` and is the *first* child of this
-/// widget's `Stack` (see `ChromeVisibility.build`), i.e. the bottom-most
-/// layer, not the topmost — it only claims a tap that nothing painted above
-/// it wants. In production, [PlaybackChrome] is never a `Stack` sibling of
+/// [PlaybackSurface] (a `Listener` wrapping an opaque `GestureDetector`) and
+/// is the *first* child of this widget's `Stack` (see
+/// `ChromeVisibility.build`), i.e. the bottom-most layer, not the topmost —
+/// it only claims a tap that nothing painted above it wants. In production,
+/// [PlaybackChrome] is never a `Stack` sibling of
 /// `GestureControls`; it is the `controls` builder media_kit's `Video`
 /// renders via `Positioned.fill` inside `Video`'s own internal `Stack`, and
 /// `GestureControls` wraps that entire `Video` as its child, using
@@ -422,6 +424,18 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
         return ChromeVisibility(
           isPlaying: snapshot.data ?? false,
           isSeeking: _seeking,
+          // Both gates live here, not inside ChromeVisibility, so widget
+          // tests can construct that class with plain callbacks and get
+          // deterministic behaviour regardless of the host platform.
+          //
+          // Double-click stays available in fullscreen, since that is how
+          // you get back out. The window drag does not: there is no window
+          // to move.
+          onDoubleTap:
+              PlatformFeatures.isDesktop ? widget.onFullscreenTap : null,
+          onWindowDrag: PlatformFeatures.isDesktop && !widget.isFullscreen
+              ? startWindowDrag
+              : null,
           child: SafeArea(
             child: Stack(
               children: [
