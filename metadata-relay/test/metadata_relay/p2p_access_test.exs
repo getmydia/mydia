@@ -38,6 +38,14 @@ defmodule MetadataRelay.P2pAccessTest do
       assert :error = P2pAccess.normalize_endpoint_id("abc")
     end
 
+    test "rejects 63 hex characters, one short of the boundary" do
+      assert :error = P2pAccess.normalize_endpoint_id(String.duplicate("a", 63))
+    end
+
+    test "rejects 65 hex characters, one over the boundary" do
+      assert :error = P2pAccess.normalize_endpoint_id(String.duplicate("a", 65))
+    end
+
     test "rejects non-hex characters" do
       assert :error = P2pAccess.normalize_endpoint_id(String.duplicate("z", 64))
     end
@@ -64,6 +72,13 @@ defmodule MetadataRelay.P2pAccessTest do
       :ok = P2pAccess.block(id, "bandwidth abuse")
 
       assert :deny = P2pAccess.authorize(id)
+    end
+
+    test "denies a blocked endpoint even when the caller sends a different case" do
+      id = endpoint_id(10)
+      :ok = P2pAccess.block(id, "bandwidth abuse")
+
+      assert :deny = P2pAccess.authorize(String.upcase(id))
     end
 
     test "still records a sighting for a blocked endpoint" do

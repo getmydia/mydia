@@ -14,16 +14,24 @@ defmodule MetadataRelay.P2pAccess do
   Phase 1 policy: allow everyone except explicitly blocked endpoints.
   """
 
-  require Logger
-
   alias MetadataRelay.P2pAccess.Store
 
   @endpoint_id_length 64
 
   @doc """
   The authorization decision for an endpoint. ETS only.
+
+  Case-normalizes the endpoint ID before recording the sighting and checking
+  the blocklist, since `block/2` and `unblock/1` store and match on the
+  downcased form and a block must not be bypassable by changing case. This
+  does **not** validate the ID: malformed input is still recorded and
+  checked (and will simply never match a block). Callers handling untrusted
+  input who need to distinguish a malformed ID from a denied one should call
+  `normalize_endpoint_id/1` first.
   """
   def authorize(endpoint_id) when is_binary(endpoint_id) do
+    endpoint_id = String.downcase(endpoint_id)
+
     Store.record_sighting(endpoint_id)
 
     if Store.blocked?(endpoint_id) do
