@@ -15,6 +15,16 @@ defmodule MetadataRelay.Router do
   alias MetadataRelay.Trakt.Handler, as: TraktHandler
   alias MetadataRelay.P2pAccess
 
+  # The header the relay actually sends the endpoint ID in is `X-Iroh-NodeId`.
+  # Upstream names the constant `X_IROH_ENDPOINT_ID` and its doc comment
+  # advertises `X-Iroh-Endpoint-Id`, but the value it puts on the wire is
+  # `X-Iroh-NodeId` (iroh-relay v1.0.0, src/main.rs:36 and src/main.rs:319).
+  # The code is authoritative; upstream's own docs contradict it. The
+  # `x-iroh-endpoint-id` fallback is deliberate forward-compatibility for the
+  # day upstream corrects the constant to match its documentation — do not
+  # remove it as dead code. Plug downcases header names, so both are lowercase.
+  @endpoint_id_headers ["x-iroh-nodeid", "x-iroh-endpoint-id"]
+
   @feedback_param_atoms %{
     "type" => :type,
     "message" => :message,
@@ -669,10 +679,12 @@ defmodule MetadataRelay.Router do
 
   defp read_endpoint_id(conn) do
     raw =
-      case get_req_header(conn, "x-iroh-endpoint-id") do
-        [value | _] -> value
-        [] -> nil
-      end
+      Enum.find_value(@endpoint_id_headers, fn header ->
+        case get_req_header(conn, header) do
+          [value | _] -> value
+          [] -> nil
+        end
+      end)
 
     case P2pAccess.normalize_endpoint_id(raw) do
       {:ok, endpoint_id} ->

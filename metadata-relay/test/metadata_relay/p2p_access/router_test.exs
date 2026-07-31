@@ -40,7 +40,7 @@ defmodule MetadataRelay.P2pAccess.RouterTest do
     conn =
       case Keyword.get(opts, :endpoint_id, endpoint_id(1)) do
         nil -> conn
-        id -> Plug.Conn.put_req_header(conn, "x-iroh-endpoint-id", id)
+        id -> Plug.Conn.put_req_header(conn, Keyword.get(opts, :header, "x-iroh-nodeid"), id)
       end
 
     Router.call(conn, [])
@@ -90,6 +90,29 @@ defmodule MetadataRelay.P2pAccess.RouterTest do
     refute conn.resp_body == "true"
   end
 
+  # The relay sends the endpoint ID as `X-Iroh-NodeId`, whatever upstream's
+  # doc comment claims. Reading the wrong header denies every client, so both
+  # the real header and the documented-but-unused one are covered here.
+  test "reads the endpoint id from x-iroh-nodeid, the header the relay sends" do
+    id = endpoint_id(5)
+
+    conn = request(header: "x-iroh-nodeid", endpoint_id: id)
+
+    assert conn.status == 200
+    assert conn.resp_body == "true"
+    assert {:ok, _} = Store.lookup_sighting(id)
+  end
+
+  test "still reads the endpoint id from the x-iroh-endpoint-id fallback" do
+    id = endpoint_id(6)
+
+    conn = request(header: "x-iroh-endpoint-id", endpoint_id: id)
+
+    assert conn.status == 200
+    assert conn.resp_body == "true"
+    assert {:ok, _} = Store.lookup_sighting(id)
+  end
+
   test "rejects a missing endpoint id header" do
     conn = request(endpoint_id: nil)
 
@@ -102,6 +125,12 @@ defmodule MetadataRelay.P2pAccess.RouterTest do
 
     assert conn.status == 400
     refute conn.resp_body == "true"
+  end
+
+  test "does not record a sighting when the endpoint id is malformed" do
+    request(endpoint_id: "not-a-valid-endpoint-id")
+
+    assert Store.sighting_count() == 0
   end
 
   test "accepts an uppercase endpoint id and records it downcased" do
