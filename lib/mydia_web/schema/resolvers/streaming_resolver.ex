@@ -9,6 +9,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   require Logger
 
   alias Mydia.Library
+  alias Mydia.Library.MediaFile
   alias Mydia.Streaming.Candidates
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
@@ -97,7 +98,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
               args[:max_bitrate]
           end
 
-        start_session_for_user(file_id, user.id, strategy, max_bitrate)
+        start_session_for_user(file_id, user.id, strategy, max_bitrate, args[:start_position])
     end
   end
 
@@ -120,32 +121,41 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
   # Private functions
 
-  defp start_session_for_user(file_id, user_id, strategy, max_bitrate) do
-    # Convert strategy to mode
+  @doc false
+  # Public for unit testing. Keeps the requested offset inside the media so a
+  # corrupted client-side progress value cannot start FFmpeg past the end,
+  # which would yield an empty playlist and look identical to the resume bug
+  # this whole change exists to fix.
+  def clamp_start_position(nil, _duration), do: 0
+
+  def clamp_start_position(position, _duration) when position <= 0, do: 0
+
+  def clamp_start_position(position, duration) when is_number(duration) and duration > 0 do
+    min(position, trunc(duration) - 1)
+  end
+
+  def clamp_start_position(position, _duration), do: position
+
+  defp start_session_for_user(file_id, user_id, strategy, max_bitrate, requested_position) do
     mode = strategy_to_mode(strategy)
 
-    # Build session opts
-    session_opts = if max_bitrate, do: [max_bitrate: max_bitrate], else: []
-
     with {:ok, media_file} <- load_media_file(file_id),
-         :ok <- Candidates.ensure_codec_info_async(media_file),
+         media_file <- ensure_duration_known(media_file),
+         duration <- get_duration_from_metadata(media_file),
+         start_position <- clamp_start_position(requested_position, duration),
+         session_opts <- build_session_opts(max_bitrate, start_position),
          {:ok, pid} <-
            HlsSessionSupervisor.start_session(media_file.id, user_id, mode, session_opts),
          {:ok, info} <- HlsSession.get_info(pid) do
-      # Extract duration from media file metadata
-      duration = get_duration_from_metadata(media_file)
-
       Logger.info(
         "Started streaming session #{info.session_id} for file #{file_id}, user #{user_id}" <>
-          if(max_bitrate, do: " (max_bitrate: #{max_bitrate}kbps)", else: "")
+          if(max_bitrate, do: " (max_bitrate: #{max_bitrate}kbps)", else: "") <>
+          if(start_position > 0, do: " (start_position: #{start_position}s)", else: "")
       )
 
-      # Fire Trakt scrobble start
       content_id = resolve_content_id(media_file)
       Mydia.Integrations.Trakt.Scrobbler.scrobble_start(user_id, content_id)
 
-      # Emit a playback.started lifecycle event for subscribed plugins (U1).
-      # A real client write is always player-origin.
       if content_id != [] do
         Mydia.Events.playback_event("started", user_id, content_id, %{"origin" => "player"})
       end
@@ -153,7 +163,8 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       {:ok,
        %{
          session_id: info.session_id,
-         duration: duration
+         duration: duration,
+         start_position: start_position
        }}
     else
       {:error, reason} ->
@@ -161,6 +172,25 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         {:error, "Failed to start streaming session"}
     end
   end
+
+  defp build_session_opts(max_bitrate, start_position) do
+    opts = if max_bitrate, do: [max_bitrate: max_bitrate], else: []
+    if start_position > 0, do: [{:start_position, start_position} | opts], else: opts
+  end
+
+  # A never-probed file has no duration in its metadata, and the old
+  # fire-and-forget `ensure_codec_info_async/1` returned before the probe wrote
+  # anything, so the resolver reported `duration: nil` on every cold start. The
+  # client then had nothing to compute a resume percentage against and fell back
+  # to the partial HLS playlist length, which reads as 100%.
+  #
+  # We are about to spawn FFmpeg against this same local file, so paying for one
+  # synchronous ffprobe here is cheap by comparison.
+  defp ensure_duration_known(%MediaFile{analyzed_at: nil} = media_file) do
+    Candidates.ensure_codec_info(media_file)
+  end
+
+  defp ensure_duration_known(media_file), do: media_file
 
   defp load_media_file(file_id) do
     {:ok, Library.get_media_file!(file_id, preload: [:library_path])}

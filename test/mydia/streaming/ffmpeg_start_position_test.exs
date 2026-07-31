@@ -2,6 +2,7 @@ defmodule Mydia.Streaming.FfmpegStartPositionTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Streaming.FfmpegHlsTranscoder
+  alias MydiaWeb.Schema.Resolvers.StreamingResolver
 
   defp args(opts) do
     FfmpegHlsTranscoder.build_ffmpeg_args("/tmp/in.mkv", "/tmp/out", opts)
@@ -42,6 +43,32 @@ defmodule Mydia.Streaming.FfmpegStartPositionTest do
 
     test "still ends with the playlist path" do
       assert List.last(args(start_position: 60)) == "/tmp/out/index.m3u8"
+    end
+  end
+
+  describe "clamp_start_position/2" do
+    test "passes a valid offset through unchanged" do
+      assert StreamingResolver.clamp_start_position(4200, 5400.0) == 4200
+    end
+
+    test "treats nil as no offset" do
+      assert StreamingResolver.clamp_start_position(nil, 5400.0) == 0
+    end
+
+    test "floors a negative offset at zero" do
+      assert StreamingResolver.clamp_start_position(-30, 5400.0) == 0
+    end
+
+    test "clamps an offset past the end back inside the media" do
+      # A client with a corrupted progress row could ask to resume beyond the
+      # end. Starting FFmpeg there would produce an empty playlist.
+      assert StreamingResolver.clamp_start_position(9999, 5400.0) == 5399
+    end
+
+    test "accepts any non-negative offset when the duration is unknown" do
+      # Nothing to clamp against; the transcoder simply produces an empty
+      # playlist if the client was wrong, which is no worse than today.
+      assert StreamingResolver.clamp_start_position(4200, nil) == 4200
     end
   end
 end
