@@ -21,7 +21,7 @@ defmodule Mydia.Repo.Migrations.UnifyQualityProfiles do
     # A replayed migration (schema_migrations reset, or a database restored from
     # a point after `qualities` was already dropped) has nothing left to
     # backfill from, and selecting a missing column would abort the migration.
-    if column_exists?("quality_profiles", "qualities") do
+    if postgres?() or sqlite_column?("quality_profiles", "qualities") do
       %{rows: rows} =
         repo().query!("SELECT id, qualities, quality_standards FROM quality_profiles")
 
@@ -36,20 +36,6 @@ defmodule Mydia.Repo.Migrations.UnifyQualityProfiles do
           repo().query!(sql, params)
         end
       end)
-    end
-  end
-
-  defp column_exists?(table, column) do
-    if postgres?() do
-      %{rows: rows} =
-        repo().query!(
-          "SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2",
-          [table, column]
-        )
-
-      rows != []
-    else
-      sqlite_column?(table, column)
     end
   end
 
