@@ -720,16 +720,10 @@ defmodule Mydia.Downloads.History do
 
   defp apply_status_filters(downloads, :failed) do
     Enum.filter(downloads, fn d ->
-      # Show downloads that failed in the client OR have import failures
-      # Exclude unmatched and unresolved_files which have their own sections
+      # Show downloads that failed in the client OR have import failures.
+      # Exclude unresolved_files, which has its own section.
       (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at)) and
-        d.match_status not in ["unmatched", "unresolved_files"]
-    end)
-  end
-
-  defp apply_status_filters(downloads, :unmatched) do
-    Enum.filter(downloads, fn d ->
-      d.match_status == "unmatched"
+        d.match_status != "unresolved_files"
     end)
   end
 

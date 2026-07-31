@@ -389,11 +389,6 @@ defmodule Mydia.Downloads do
     to: Mydia.Downloads.Queue
 
   @doc """
-  Refreshes match suggestions for an unmatched download by re-running TorrentMatcher.
-  """
-  defdelegate refresh_match_suggestions(download), to: Mydia.Downloads.Queue
-
-  @doc """
   Resolves file-to-episode mappings for an unresolved download and triggers re-import.
 
   Accepts a list of `%{path: string, episode_id: binary_id}` mappings.

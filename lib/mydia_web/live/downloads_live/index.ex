@@ -712,25 +712,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     submit_match(socket, media_item_id, episode_id)
   end
 
-  def handle_event("refresh_suggestions", %{"id" => download_id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(download_id)
-
-      case Downloads.refresh_match_suggestions(download) do
-        {:ok, _updated} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Suggestions refreshed")
-           |> load_downloads()}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to refresh suggestions")}
-      end
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
-  end
-
   def handle_event("resolve_files", %{"download_id" => download_id} = params, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       download = Downloads.get_download!(download_id, preload: [:media_item])

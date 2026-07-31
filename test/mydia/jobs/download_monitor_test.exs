@@ -396,88 +396,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     end
   end
 
-  describe "unmatched orphan self-healing" do
-    test "deletes an unmatched download when client confirms torrent is gone" do
-      # The client must be reachable and return an empty torrent list to confirm
-      # the torrent is absent (in_client?: false). Only then is the orphan deleted.
-      bypass = Bypass.open()
-      stub_qbit_login(bypass)
-
-      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
-        json_resp(conn, 200, [])
-      end)
-
-      setup_runtime_config([build_test_client_config(%{port: bypass.port})])
-
-      orphan =
-        download_fixture(%{
-          match_status: "unmatched",
-          download_client: "TestClient",
-          download_client_id: "gone-1"
-        })
-
-      {:ok, _} =
-        orphan
-        |> Ecto.Changeset.change(media_item_id: nil)
-        |> Mydia.Repo.update()
-
-      assert :ok = perform_job(DownloadMonitor, %{})
-
-      refute Mydia.Repo.get(Mydia.Downloads.Download, orphan.id)
-    end
-
-    test "deletes an unmatched + completed download when client confirms torrent is gone" do
-      # The actual production bug: completed_at set, no media_item, no
-      # library_path, sitting in DB forever while MediaImport retries.
-      bypass = Bypass.open()
-      stub_qbit_login(bypass)
-
-      Bypass.stub(bypass, "GET", "/api/v2/torrents/info", fn conn ->
-        json_resp(conn, 200, [])
-      end)
-
-      setup_runtime_config([build_test_client_config(%{port: bypass.port})])
-
-      orphan =
-        download_fixture(%{
-          match_status: "unmatched",
-          completed_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          download_client: "TestClient",
-          download_client_id: "gone-completed-1"
-        })
-
-      {:ok, _} =
-        orphan
-        |> Ecto.Changeset.change(media_item_id: nil, library_path_id: nil)
-        |> Mydia.Repo.update()
-
-      assert :ok = perform_job(DownloadMonitor, %{})
-
-      refute Mydia.Repo.get(Mydia.Downloads.Download, orphan.id)
-    end
-
-    test "does not delete unmatched download when no clients are configured" do
-      # No clients means presence is indeterminate (in_client?: nil).
-      # The orphan must survive so the user can still manually handle it.
-      setup_runtime_config([])
-
-      orphan =
-        download_fixture(%{
-          match_status: "unmatched",
-          download_client: "test-client",
-          download_client_id: "gone-1"
-        })
-
-      {:ok, _} =
-        orphan
-        |> Ecto.Changeset.change(media_item_id: nil)
-        |> Mydia.Repo.update()
-
-      assert :ok = perform_job(DownloadMonitor, %{})
-
-      assert Mydia.Repo.get(Mydia.Downloads.Download, orphan.id)
-    end
-
+  describe "missing download preservation" do
     test "preserves a matched download that goes missing (regression guard)" do
       # Matched downloads still go through the `missing` handler — the user
       # may want to investigate why their tracked torrent disappeared.
@@ -485,7 +404,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       media_item = media_item_fixture()
 
       # match_status is nil for normally-matched downloads (the enum is
-      # ["unmatched", "unresolved_files", "partial_pack"]).
+      # ["unresolved_files", "partial_pack"]).
       tracked =
         download_fixture(%{
           media_item_id: media_item.id,
@@ -500,29 +419,21 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert preserved.error_message =~ "no longer configured in Mydia"
     end
 
-    test "does not delete unmatched downloads while their client is unreachable" do
-      # When client.list_torrents/2 errors out, presence is unknown and we
-      # MUST NOT treat the row as orphaned. The runtime config below points
-      # at a non-running client, which yields a connection error (not "not
-      # found"), and `enrich_download_with_unknown_status` produces
-      # in_client?=nil.
-      setup_runtime_config([build_test_client_config()])
-
-      orphan =
-        download_fixture(%{
-          match_status: "unmatched",
-          download_client: "TestClient",
-          download_client_id: "unreachable-1"
+    test "the downloads schema rejects the retired unmatched status" do
+      # Foreign torrents are derived by Mydia.Downloads.ExternalTorrents and
+      # never written, so nothing may reintroduce the value the self-healing
+      # above used to clean up.
+      changeset =
+        Mydia.Downloads.Download.changeset(%Mydia.Downloads.Download{}, %{
+          title: "x",
+          indexer: "manual",
+          download_client: "qbit",
+          download_client_id: "hash-a",
+          match_status: "unmatched"
         })
 
-      {:ok, _} =
-        orphan
-        |> Ecto.Changeset.change(media_item_id: nil)
-        |> Mydia.Repo.update()
-
-      assert :ok = perform_job(DownloadMonitor, %{})
-
-      assert Mydia.Repo.get(Mydia.Downloads.Download, orphan.id)
+      refute changeset.valid?
+      assert %{match_status: _} = errors_on(changeset)
     end
   end
 

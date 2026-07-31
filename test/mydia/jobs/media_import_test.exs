@@ -237,35 +237,12 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     test "self-heals when the download row has been deleted" do
-      # If DownloadMonitor cleans up an unmatched orphan between when the
-      # MediaImport job was enqueued and when it runs, the row is gone.
-      # Returning :ok lets Oban mark the job done so it stops retrying.
+      # If the download row is deleted between when the MediaImport job was
+      # enqueued and when it runs, the row is gone. Returning :ok lets Oban
+      # mark the job done so it stops retrying.
       fake_id = Ecto.UUID.generate()
 
       assert :ok = perform_job(MediaImport, %{"download_id" => fake_id})
-    end
-
-    test "cancels (no retry) when the download is unmatched with no destination" do
-      # Unmatched downloads with no media_item_id AND no library_path_id cannot
-      # ever be imported — there's no destination. The job must return
-      # {:cancel, _} so Oban doesn't burn ~1000 retries waiting forever.
-      download =
-        download_fixture(%{
-          match_status: "unmatched",
-          completed_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          download_client: "TestClient",
-          download_client_id: "orphan-1"
-        })
-
-      # download_fixture creates a media_item by default; null it out so
-      # this row is a true orphan.
-      {:ok, download} =
-        download
-        |> Ecto.Changeset.change(media_item_id: nil, library_path_id: nil)
-        |> Repo.update()
-
-      assert {:cancel, :unmatched_no_destination} =
-               perform_job(MediaImport, %{"download_id" => download.id})
     end
 
     @tag :tmp_dir

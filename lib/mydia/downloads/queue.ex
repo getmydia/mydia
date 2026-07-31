@@ -535,36 +535,6 @@ defmodule Mydia.Downloads.Queue do
     |> insert_job()
   end
 
-  def refresh_match_suggestions(%Download{} = download) do
-    alias Mydia.Downloads.{ReleaseIntake, TorrentMatcher}
-
-    suggestions =
-      case ReleaseIntake.parse_release(download.title) do
-        {:ok, parsed_info} ->
-          try do
-            TorrentMatcher.find_top_candidates(parsed_info,
-              max_results: 3,
-              monitored_only: false
-            )
-          rescue
-            e ->
-              Logger.warning("Failed to find match candidates: #{inspect(e)}",
-                download_id: download.id
-              )
-
-              []
-          end
-
-        _ ->
-          []
-      end
-
-    current_metadata = download.metadata || %{}
-    updated_metadata = Map.put(current_metadata, "match_suggestions", suggestions)
-
-    History.update_download(download, %{metadata: updated_metadata})
-  end
-
   def resolve_file_mappings(%Download{} = download, mappings) when is_list(mappings) do
     # Build target_files for the MediaImport job (mappings always use string keys)
     target_files =
