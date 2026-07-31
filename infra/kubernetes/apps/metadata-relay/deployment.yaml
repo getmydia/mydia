@@ -25,9 +25,20 @@ spec:
         app.kubernetes.io/name: metadata-relay
         app.kubernetes.io/component: relay-service
         app.kubernetes.io/part-of: mydia
+      annotations:
+        # Picked up by the monitoring stack's `kubernetes-pods` scrape job.
+        # Without these the relay's counters are only visible by curling the
+        # pod directly, and they reset to zero on every restart.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4000"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: metadata-relay
+          # NOTE: Keel owns this tag at runtime (see keel.sh/* annotations above)
+          # and the live deployment is normally ahead of what is pinned here.
+          # `kubectl apply -k .` will roll production BACK to this tag, so
+          # prefer `kubectl patch` for targeted changes.
           image: ghcr.io/getmydia/mydia/metadata-relay:0.9.0
           imagePullPolicy: IfNotPresent
           ports:
