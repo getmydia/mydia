@@ -53,30 +53,49 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   """
   def start_session(media_file_id, user_id, mode \\ :transcode, opts \\ []) do
     session_key = session_key(media_file_id, user_id)
+    start_position = Keyword.get(opts, :start_position, 0)
 
     case Registry.lookup(@registry_name, session_key) do
-      [{pid, _}] ->
-        # Session already exists
-        {:ok, pid}
+      [{pid, metadata}] ->
+        if session_matches_offset?(metadata, start_position) do
+          {:ok, pid}
+        else
+          # A session transcoding from a different offset cannot serve this
+          # request: its playlist simply does not contain the wanted range.
+          # Replace it rather than keying sessions by offset, so a user
+          # scrubbing around does not accumulate concurrent FFmpeg processes.
+          DynamicSupervisor.terminate_child(__MODULE__, pid)
+          start_new_session(media_file_id, user_id, mode, opts, session_key)
+        end
 
       [] ->
-        # Start new session
-        session_opts =
-          [
-            media_file_id: media_file_id,
-            user_id: user_id,
-            registry_key: session_key,
-            mode: mode
-          ] ++ opts
-
-        child_spec = %{
-          id: HlsSession,
-          start: {HlsSession, :start_link, [session_opts]},
-          restart: :temporary
-        }
-
-        DynamicSupervisor.start_child(__MODULE__, child_spec)
+        start_new_session(media_file_id, user_id, mode, opts, session_key)
     end
+  end
+
+  @doc false
+  # Public for unit testing. Metadata registered before :start_position existed
+  # is treated as offset zero rather than as a wildcard match.
+  def session_matches_offset?(metadata, start_position) do
+    Map.get(metadata, :start_position, 0) == start_position
+  end
+
+  defp start_new_session(media_file_id, user_id, mode, opts, session_key) do
+    session_opts =
+      [
+        media_file_id: media_file_id,
+        user_id: user_id,
+        registry_key: session_key,
+        mode: mode
+      ] ++ opts
+
+    child_spec = %{
+      id: HlsSession,
+      start: {HlsSession, :start_link, [session_opts]},
+      restart: :temporary
+    }
+
+    DynamicSupervisor.start_child(__MODULE__, child_spec)
   end
 
   @doc """

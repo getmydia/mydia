@@ -53,6 +53,7 @@ defmodule Mydia.Streaming.HlsSession do
       :media_file_id,
       :user_id,
       :mode,
+      :start_position,
       :max_bitrate,
       :backend,
       :backend_pid,
@@ -71,6 +72,7 @@ defmodule Mydia.Streaming.HlsSession do
             media_file_id: integer(),
             user_id: integer(),
             mode: :copy | :transcode,
+            start_position: non_neg_integer(),
             backend: :ffmpeg,
             backend_pid: pid() | nil,
             temp_dir: String.t(),
@@ -179,6 +181,7 @@ defmodule Mydia.Streaming.HlsSession do
     registry_key = Keyword.fetch!(opts, :registry_key)
     mode = Keyword.get(opts, :mode, :transcode)
     max_bitrate = Keyword.get(opts, :max_bitrate)
+    start_position = Keyword.get(opts, :start_position, 0)
 
     # Load media file with metadata
     try do
@@ -193,6 +196,7 @@ defmodule Mydia.Streaming.HlsSession do
           media_file_id: media_file_id,
           user_id: user_id,
           mode: mode,
+          start_position: start_position,
           started_at: DateTime.utc_now()
         }
       )
@@ -243,7 +247,10 @@ defmodule Mydia.Streaming.HlsSession do
           Logger.info("Starting HLS transcoding with FFmpeg backend")
 
           # Start FFmpeg backend
-          case start_backend(:ffmpeg, media_file, temp_dir, job.id, max_bitrate: max_bitrate) do
+          case start_backend(:ffmpeg, media_file, temp_dir, job.id,
+                 max_bitrate: max_bitrate,
+                 start_position: start_position
+               ) do
             {:ok, backend_pid} ->
               # Link to backend process so we terminate if it crashes
               Process.link(backend_pid)
@@ -254,6 +261,7 @@ defmodule Mydia.Streaming.HlsSession do
                 media_file_id: media_file_id,
                 user_id: user_id,
                 mode: mode,
+                start_position: start_position,
                 max_bitrate: max_bitrate,
                 backend: :ffmpeg,
                 backend_pid: backend_pid,
@@ -431,7 +439,8 @@ defmodule Mydia.Streaming.HlsSession do
       [
         input_path: absolute_path,
         output_dir: temp_dir,
-        media_file: media_file
+        media_file: media_file,
+        start_position: Keyword.get(opts, :start_position, 0)
       ] ++ if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: [])
 
     transcoder_opts =
