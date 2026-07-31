@@ -14,8 +14,7 @@ class AppColors {
 
   // Primary - Warm gold (main actions, selected items, links). The only
   // accent hue in the palette: chrome is neutral so poster art carries the
-  // colour, and the accent itself is reserved for actions and state rather
-  // than spent on decoration.
+  // colour.
   static const Color primary = Color(0xFFE9A23B);
   static const Color primaryFocus = Color(0xFFD08C24);
 
