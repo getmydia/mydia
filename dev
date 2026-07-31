@@ -377,10 +377,10 @@ case "$COMMAND" in
                 ;;
             icons)
                 shift
-                if [ "${1:-}" = "--check" ]; then
-                    # --check needs only coreutils, so skip the devenv shell and
-                    # the ~2min startup that every in-shell command pays.
-                    exec player/tool/gen-web-icons.sh --check
+                if [ $# -gt 0 ]; then
+                    # Every argument path needs only coreutils, so skip the
+                    # ~2min devenv startup and let the script validate.
+                    exec player/tool/gen-web-icons.sh "$@"
                 fi
                 in_shell_sh "player/tool/gen-web-icons.sh"
                 ;;
