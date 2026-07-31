@@ -386,6 +386,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           _totalDuration = Duration(
             milliseconds: (duration * 1000).round(),
           );
+          _timeline = StreamTimeline(totalDuration: _totalDuration);
           debugPrint(
               '[PlayerScreen] Total duration from candidates: $_totalDuration');
         }
@@ -461,6 +462,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           _totalDuration = Duration(
             milliseconds: (sessionResult.duration! * 1000).round(),
           );
+          _timeline = StreamTimeline(totalDuration: _totalDuration);
           debugPrint(
               '[PlayerScreen] Total duration from session: $_totalDuration');
         }
@@ -1796,6 +1798,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
+      final player = _player;
+      final startPosition =
+          player == null ? null : _timeline.toReal(player.state.position);
 
       await manager.startCast(
         device: device,
@@ -1804,9 +1809,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           mediaId: widget.mediaId,
           mediaType: widget.mediaType,
           title: widget.title ?? 'Untitled',
-          startPosition: _player == null
-              ? null
-              : _timeline.toReal(_player!.state.position),
+          startPosition: startPosition,
           // The receiver cannot work this out for itself: Mydia's HLS
           // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
           // Chromecast reports `duration: -1` for the whole session. Hand it

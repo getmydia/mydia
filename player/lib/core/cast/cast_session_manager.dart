@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/models/cast_device.dart';
 import '../player/progress_service.dart';
+import '../player/stream_timeline.dart';
 import 'cast_backend.dart';
 import 'cast_route_resolver.dart';
 import 'cast_session_store.dart';
@@ -480,6 +481,15 @@ class CastSessionManager {
     // false "watched" verdict) to the user's history.
     _lastDuration = request.duration ?? Duration.zero;
     _lastProgressSync = null;
+
+    // `_progressService` is a single long-lived instance (this manager is a
+    // keep-alive provider, reused across every cast target for the life of
+    // the app), so its `timeline` must be re-pointed at whatever item is
+    // cast now — the same duration authority `request.duration` already
+    // gives the receiver's own scrub bar (see `CastLaunchRequest.duration`'s
+    // dartdoc). `startOffset` stays zero: casting a resume offset is Task 8's
+    // job, not this one.
+    _progressService.timeline = StreamTimeline(totalDuration: request.duration);
 
     _durationSub = _backend.durationStream.listen((duration) {
       // Non-positive is the receiver saying "I don't know" (Chromecast sends
