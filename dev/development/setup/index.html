@@ -1922,7 +1922,8 @@ Elixir/Dart formatting — no <code>nix develop</code> needed. devenv owns the g
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>./dev<span class="w"> </span>flutter<span class="w"> </span>&lt;args&gt;<span class="w">   </span><span class="c1"># Run a flutter command in player/</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>./dev<span class="w"> </span>player<span class="w"> </span>setup<span class="w">     </span><span class="c1"># Install deps + run code generation</span>
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>./dev<span class="w"> </span>player<span class="w"> </span>build<span class="w">     </span><span class="c1"># Build + deploy web assets to priv/static/player</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>./dev<span class="w"> </span>player<span class="w"> </span>logs<span class="w">      </span><span class="c1"># Show recent build_runner (codegen) process logs</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>./dev<span class="w"> </span>player<span class="w"> </span>icons<span class="w">     </span><span class="c1"># Regenerate web icons from assets/*.svg (--check verifies)</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>./dev<span class="w"> </span>player<span class="w"> </span>logs<span class="w">      </span><span class="c1"># Show recent build_runner (codegen) process logs</span>
 </code></pre></div>
 <p>Access the player at the Phoenix URL under <code>/player</code> (e.g.
 <code>http://localhost:4740/player</code>). <code>MydiaWeb.FlutterWatcher</code> rebuilds the web app
