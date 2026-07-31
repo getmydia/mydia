@@ -21,7 +21,8 @@ defmodule MetadataRelay.P2pAccessTest do
     :ok
   end
 
-  defp endpoint_id(n), do: String.pad_leading(Integer.to_string(n, 16), 64, "0") |> String.downcase()
+  defp endpoint_id(n),
+    do: String.pad_leading(Integer.to_string(n, 16), 64, "0") |> String.downcase()
 
   describe "normalize_endpoint_id/1" do
     test "accepts 64 hex characters" do
@@ -154,6 +155,28 @@ defmodule MetadataRelay.P2pAccessTest do
       :ok = P2pAccess.block(id, "bandwidth abuse")
 
       assert [%{endpoint_id: ^id, blocked: true}] = P2pAccess.list_recent(10)
+    end
+
+    test "includes endpoints seeded from the database at boot" do
+      id = endpoint_id(11)
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      MetadataRelay.Repo.delete_all(MetadataRelay.P2pAccess.Sighting)
+
+      MetadataRelay.Repo.insert!(%MetadataRelay.P2pAccess.Sighting{
+        endpoint_id: id,
+        first_seen: now,
+        last_seen: now,
+        conn_count: 7
+      })
+
+      # Simulate a restart: ETS starts empty, the rows survive on disk.
+      # Without the boot seed an operator investigating an incident would
+      # only see endpoints seen since the last deploy.
+      :ets.delete_all_objects(:p2p_sightings)
+      assert :ok = Store.seed_sightings()
+
+      assert [%{endpoint_id: ^id, conn_count: 7}] = P2pAccess.list_recent(10)
     end
 
     test "honours the limit" do

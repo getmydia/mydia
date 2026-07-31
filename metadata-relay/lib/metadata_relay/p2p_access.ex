@@ -101,6 +101,11 @@ defmodule MetadataRelay.P2pAccess do
 
   @doc """
   The most recently active endpoints, newest first. Callable over rpc.
+
+  ETS only, deliberately: this is what an operator reaches for mid-incident,
+  and it must not depend on the database being responsive. It still survives a
+  restart, because `Store.seed_sightings/0` repopulates ETS from the durable
+  table at boot.
   """
   def list_recent(limit \\ 50) when is_integer(limit) and limit > 0 do
     :p2p_sightings

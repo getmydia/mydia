@@ -17,7 +17,14 @@ config :metadata_relay, MetadataRelay.Repo,
 
 config :metadata_relay,
   rendezvous_master_pepper: "test-pepper-not-for-production",
-  p2p_access_bearer_tokens: ["test-relay-bearer"]
+  p2p_access_bearer_tokens: ["test-relay-bearer"],
+  # The P2pAccess.Store's timers would otherwise fire mid-suite and write to
+  # the database from a process that does not own the sandbox connection.
+  # Pin them well beyond any plausible suite runtime; tests drive the work
+  # explicitly through flush_now/0, prune_now/0 and a direct :reload_blocks.
+  p2p_flush_interval_ms: 3_600_000,
+  p2p_prune_interval_ms: 3_600_000,
+  p2p_reload_retry_interval_ms: 3_600_000
 
 config :metadata_relay, MetadataRelay.Feedback.Notifier,
   recipient: "maintainer@example.com",

@@ -143,6 +143,7 @@ The service is configured entirely via environment variables for maximum flexibi
 | `SMTP_PORT`       | No       | `587`              | SMTP relay port                                                                                                         |
 | `SMTP_USERNAME`   | No       | -                  | SMTP username. SMTP auth is enabled when both username and password are present                                          |
 | `SMTP_PASSWORD`   | No       | -                  | SMTP password. SMTP auth is enabled when both username and password are present                                          |
+| `P2P_ACCESS_BEARER_TOKENS` | No | -                | Comma-separated list of bearer tokens the self-hosted iroh relay may present to `POST /p2p/access`. Multiple values are accepted so a token can be rotated by deploying the new one alongside the old and removing the old afterwards. Unset means the endpoint denies every relay client |
 
 ### Cache Configuration
 
