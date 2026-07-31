@@ -19,14 +19,6 @@ class AppColors {
   static const Color primary = Color(0xFFE9A23B);
   static const Color primaryFocus = Color(0xFFD08C24);
 
-  // Secondary - Violet (premium features, secondary actions)
-  static const Color secondary = Color(0xFF9168F8);
-  static const Color secondaryFocus = Color(0xFF8050EF);
-
-  // Accent - Cyan (quality badges, highlights)
-  static const Color accent = Color(0xFF0EC5E0);
-  static const Color accentFocus = Color(0xFF06A8C4);
-
   // Neutral - Gray (subtle elements)
   static const Color neutral = Color(0xFF141416);
   static const Color neutralFocus = Color(0xFF0E0E10);
@@ -64,8 +56,6 @@ class AppColors {
 
   // Content colors (text on colored backgrounds)
   static const Color onPrimary = Color(0xFF1A1205);
-  static const Color onSecondary = Color(0xFFFFFFFF);
-  static const Color onAccent = Color(0xFFFFFFFF);
   static const Color onError = Color(0xFFFFFFFF);
   static const Color onWarning = Color(0xFF1A1200);
   static const Color onSuccess = Color(0xFFFFFFFF);

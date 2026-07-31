@@ -176,12 +176,15 @@ void main() {
   });
 
   group('theme wiring (R3)', () {
-    test('stays dark with the cinematic primary/secondary/accent hues', () {
+    test('stays dark, with one accent mapped across every accent slot', () {
       final scheme = AppTheme.darkTheme.colorScheme;
       expect(scheme.brightness, Brightness.dark);
+      // The palette collapsed from three accents to one. Material 3 still
+      // requires secondary and tertiary slots, so they carry the same hue
+      // rather than reintroducing the violet and cyan this removed.
       expect(scheme.primary, AppColors.primary);
-      expect(scheme.secondary, AppColors.secondary);
-      expect(scheme.tertiary, AppColors.accent);
+      expect(scheme.secondary, AppColors.primary);
+      expect(scheme.tertiary, AppColors.primary);
     });
 
     test('surface hierarchy is driven by the depth tokens', () {

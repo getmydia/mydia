@@ -496,8 +496,8 @@ class ShowDetailScreen extends ConsumerWidget {
     }
 
     if (show.contentRating != null) {
-      items.add(
-          _buildMetadataChip(context, show.contentRating!, AppColors.accent));
+      items.add(_buildMetadataChip(
+          context, show.contentRating!, AppColors.textSecondary));
     }
 
     if (items.isEmpty) return const SizedBox.shrink();
