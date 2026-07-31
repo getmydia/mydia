@@ -213,11 +213,26 @@ defmodule Mydia.UpgradesTest do
       assert first.id == fresh.id
     end
 
-    test "respects the limit" do
+    # Unlike eligible_movies/1, `limit` is not a cap on the result count: a
+    # season pack can turn many episodes into one search, so truncating the
+    # result list to `limit` risks splitting a season's below-cutoff
+    # episodes across the boundary and corrupting the pack-threshold
+    # percentage (see the moduledoc on eligible_episodes/1). Every
+    # below-cutoff episode within the SQL-layer over-fetch page is returned.
+    test "does not truncate to the limit, so a whole season can stay together" do
       profile = upgradeable_profile()
       for _ <- 1..3, do: analyzed_episode_file(profile)
 
-      assert length(Upgrades.eligible_episodes(2)) == 2
+      assert length(Upgrades.eligible_episodes(2)) == 3
+    end
+
+    test "still bounds results to the SQL-layer over-fetch page" do
+      profile = upgradeable_profile()
+      for _ <- 1..12, do: analyzed_episode_file(profile)
+
+      # limit: 2 sizes an over-fetch page of 2 * 5 = 10 raw rows; every one
+      # of them is below cutoff here, so exactly 10 (not all 12) come back.
+      assert length(Upgrades.eligible_episodes(2)) == 10
     end
   end
 

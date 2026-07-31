@@ -21,6 +21,12 @@ defmodule Mydia.Upgrades do
   # fetching exactly `limit` rows would routinely return a near-empty batch.
   @overfetch 5
 
+  @doc """
+  Returns up to `limit` below-cutoff movies, ordered by staleness.
+
+  One movie costs exactly one search, so `limit` doubles as a search-cost
+  ceiling here: the result is truncated to `limit` after scoring.
+  """
   @spec eligible_movies(pos_integer()) :: [map()]
   def eligible_movies(limit) when is_integer(limit) and limit > 0 do
     MediaItem
@@ -36,6 +42,25 @@ defmodule Mydia.Upgrades do
     |> Enum.take(limit)
   end
 
+  @doc """
+  Returns below-cutoff episodes, ordered by staleness.
+
+  Unlike `eligible_movies/1`, `limit` is **not** a cap on the number of
+  results — it is not the same kind of budget. A season pack can turn many
+  episodes into a single search, so item count and search count diverge;
+  callers that need to cap actual search cost must do so themselves after
+  grouping episodes by season (see `Mydia.Jobs.UpgradeSweep`).
+
+  Truncating the result list to `limit` would risk cutting a season's
+  below-cutoff episodes off mid-group, corrupting the percentage
+  `Mydia.Jobs.TVShowSearch.should_prefer_season_pack?/3` computes: a season
+  that would clear the 70% pack threshold in full could fall short of it
+  when only a partial, arbitrarily-truncated slice of its episodes is
+  visible. So `limit` only sizes the SQL-layer over-fetch page
+  (`limit * #{@overfetch}` raw episode rows scanned before below-cutoff
+  filtering, generous enough that whole seasons normally stay together) —
+  every below-cutoff episode found within that page is returned.
+  """
   @spec eligible_episodes(pos_integer()) :: [map()]
   def eligible_episodes(limit) when is_integer(limit) and limit > 0 do
     Episode
@@ -49,7 +74,6 @@ defmodule Mydia.Upgrades do
     |> preload([_e, _m], [:media_item, media_files: ^analyzed_files_query()])
     |> Repo.all()
     |> Enum.flat_map(&episode_candidate/1)
-    |> Enum.take(limit)
   end
 
   @spec stamp_checked(:movie | :episode, [binary()]) :: {non_neg_integer(), nil}
