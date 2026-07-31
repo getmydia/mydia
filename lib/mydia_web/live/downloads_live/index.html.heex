@@ -79,6 +79,10 @@
           phx-value-tab="external"
         >
           <.icon name="hero-inbox-stack" class="w-4 h-4 mr-1" /> External
+          <%!-- Neutral styling on purpose: these are not problems. --%>
+          <%= if @scan.external != [] do %>
+            <span class="badge badge-ghost badge-sm ml-1">{length(@scan.external)}</span>
+          <% end %>
         </button>
       </div>
 

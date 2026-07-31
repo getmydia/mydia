@@ -97,7 +97,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
      # Derived view of client torrents Mydia does not manage. Read from the
      # ExternalTorrents cache, never from the database.
      |> assign(:scan, ExternalTorrents.get())
-     |> assign(:external_count, 0)
      |> assign(:removed_client_groups, [])
      |> assign(:search_open_for, nil)
      |> assign(:library_search_value, "")
@@ -911,6 +910,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp delete_files?(params), do: Map.get(params, "delete_files") == "true"
 
   defp load_downloads(socket) do
+    # The External tab count is shown from every tab, so refresh the cached scan
+    # on every load. This is an ETS read, not I/O.
+    socket = assign(socket, :scan, ExternalTorrents.get())
+
     case socket.assigns.active_tab do
       :issues ->
         load_issues_downloads(socket)
@@ -1006,7 +1009,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     socket
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, scan.external == [])
-    |> assign(:external_count, length(scan.external))
     |> assign(:scan, scan)
     |> stream(:external_torrents, scan.external, reset: true)
   end
