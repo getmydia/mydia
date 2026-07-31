@@ -326,7 +326,19 @@ defmodule Mydia.Settings.QualityProfiles do
            "media.default_quality_profile_id"
          ) do
       nil ->
-        {:ok, nil}
+        # Persist the clear as a row holding an empty value rather than
+        # returning without writing. `maybe_seed_default_quality_profile/0`
+        # keys off the row's absence to mean "never configured", so leaving no
+        # row would let the next boot re-seed "Any" and silently override an
+        # operator who explicitly chose no default. Readers are unaffected:
+        # `get_default_quality_profile_id/0` returns nil for an empty value
+        # either way.
+        Mydia.Settings.RuntimeConfig.create_config_setting(%{
+          key: "media.default_quality_profile_id",
+          value: "",
+          category: :media,
+          description: "Default quality profile for adding media"
+        })
 
       existing ->
         Mydia.Settings.RuntimeConfig.update_config_setting(existing, %{value: ""})

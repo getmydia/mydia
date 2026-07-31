@@ -181,6 +181,21 @@ defmodule Mydia.SettingsTest do
 
       assert Settings.get_default_quality_profile_id() == nil
     end
+
+    test "respects a clear made while no config row existed yet" do
+      # Reachable when "Any" was deleted, so boot seeding wrote no row at all,
+      # and the operator then picked "None". Clearing has to leave a row behind
+      # or the next boot reads the absence as "never configured" and seeds over
+      # the operator's explicit choice.
+      Repo.delete_all(QualityProfile)
+      assert Settings.get_default_quality_profile_id() == nil
+
+      {:ok, _} = Settings.set_default_quality_profile(nil)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      assert Settings.get_default_quality_profile_id() == nil
+    end
   end
 
   describe "default_quality_profiles module" do
