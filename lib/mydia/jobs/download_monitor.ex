@@ -56,6 +56,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.StallDetector
+  alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.UntrackedMatcher
   alias Mydia.Events
   alias Mydia.Settings
@@ -203,6 +204,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
     untracked_downloads = UntrackedMatcher.find_and_match_untracked()
     Logger.info("Matched #{length(untracked_downloads)} untracked torrent(s) to library items")
 
+    # Refresh the derived view of torrents Mydia does not manage. Runs after
+    # adoption so anything just adopted is already tracked and drops out of the
+    # scan on this pass rather than the next one.
+    external_scan = ExternalTorrents.refresh()
+
     # Detect stuck downloads (completed but never imported for >1 hour)
     stuck = Downloads.list_stuck_downloads(preload: [:media_item])
     Logger.info("Found #{length(stuck)} stuck downloads")
@@ -219,7 +225,9 @@ defmodule Mydia.Jobs.DownloadMonitor do
       stale_grabs_cleaned: length(stale_grabs),
       stalled_count: stalled_count,
       stuck_count: length(stuck),
-      untracked_matched: length(untracked_downloads)
+      untracked_matched: length(untracked_downloads),
+      external_needs_matching: length(external_scan.needs_matching),
+      external_other: length(external_scan.external)
     )
 
     maybe_schedule_fast_followup(active_for_stall_check, args)

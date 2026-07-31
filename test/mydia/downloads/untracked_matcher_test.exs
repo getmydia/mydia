@@ -42,31 +42,28 @@ defmodule Mydia.Downloads.UntrackedMatcherTest do
     end
   end
 
+  # A torrent with no library match is not Mydia's problem to record. It is
+  # surfaced by Mydia.Downloads.ExternalTorrents, which derives it from the
+  # client on every scan, so nothing is written here.
   describe "no library match" do
-    test "creates an unmatched download with parsed info" do
-      assert {:ok, download} =
+    test "reports no match instead of creating an unmatched download" do
+      assert {:error, :no_library_match} =
                UntrackedMatcher.process_untracked_torrent(
                  torrent("Some.Unknown.Movie.2021.1080p.BluRay.x264-GROUP")
                )
 
-      assert download.match_status == "unmatched"
-      assert download.media_item_id == nil
+      assert Repo.aggregate(Mydia.Downloads.Download, :count) == 0
     end
   end
 
   describe "validator-rejected torrent (AE1)" do
-    test "creates an unmatched download with no parsed info" do
-      assert {:ok, download} =
+    test "reports no match and writes nothing" do
+      assert {:error, :no_library_match} =
                UntrackedMatcher.process_untracked_torrent(
                  torrent("From.S04E05.1080p.WEB.h264-ETHEL.exe")
                )
 
-      download = Repo.reload(download)
-      assert download.match_status == "unmatched"
-      assert download.media_item_id == nil
-      # No parsed info stored for a rejected release.
-      parsed = download.metadata["parsed_info"] || download.metadata[:parsed_info]
-      assert is_nil(parsed)
+      assert Repo.aggregate(Mydia.Downloads.Download, :count) == 0
     end
   end
 end

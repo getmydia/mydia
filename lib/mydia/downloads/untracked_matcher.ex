@@ -20,7 +20,6 @@ defmodule Mydia.Downloads.UntrackedMatcher do
   alias Mydia.Downloads
   alias Mydia.Downloads.{ReleaseIntake, TorrentMatcher}
   alias Mydia.Library
-  alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Library.Structs.Quality
   alias Mydia.Settings
 
@@ -141,52 +140,36 @@ defmodule Mydia.Downloads.UntrackedMatcher do
   def process_untracked_torrent(torrent) do
     Logger.debug("Processing untracked torrent: #{torrent.name}")
 
-    # Validate + parse once upfront to avoid re-parsing in error branches
-    parsed_result = ReleaseIntake.parse_release(torrent.name)
+    with {:ok, parsed_info} <- ReleaseIntake.parse_release(torrent.name),
+         {:ok, match} <- TorrentMatcher.find_match(parsed_info, monitored_only: false) do
+      case create_download_record(torrent, match, parsed_info) do
+        {:ok, download} ->
+          Logger.info(
+            "Successfully matched and tracked torrent: #{torrent.name} -> #{match.media_item.title}",
+            torrent_id: torrent.id,
+            client: torrent.client_name,
+            media_item_id: match.media_item.id,
+            confidence: match.confidence
+          )
 
-    case parsed_result do
-      {:ok, parsed_info} ->
-        case TorrentMatcher.find_match(parsed_info, monitored_only: false) do
-          {:ok, match} ->
-            case create_download_record(torrent, match, parsed_info) do
-              {:ok, download} ->
-                Logger.info(
-                  "Successfully matched and tracked torrent: #{torrent.name} -> #{match.media_item.title}",
-                  torrent_id: torrent.id,
-                  client: torrent.client_name,
-                  media_item_id: match.media_item.id,
-                  confidence: match.confidence
-                )
+          {:ok, download}
 
-                {:ok, download}
+        {:error, reason} ->
+          Logger.warning("Failed to create download record: #{inspect(reason)}",
+            torrent_name: torrent.name
+          )
 
-              {:error, reason} ->
-                Logger.warning("Failed to create download record: #{inspect(reason)}",
-                  torrent_name: torrent.name
-                )
-
-                {:error, reason}
-            end
-
-          {:error, reason} when reason in [:no_match_found, :episode_not_found] ->
-            Logger.debug("No library match for torrent (#{reason}): #{torrent.name}")
-            create_unmatched_download(torrent, parsed_info)
-
-          {:error, reason} ->
-            Logger.warning("Failed to match torrent: #{inspect(reason)}",
-              torrent_name: torrent.name
-            )
-
-            {:error, reason}
-        end
-
-      # Validator rejection (malicious / fake / password / etc.) or an
-      # unparseable name: surface the torrent as an unmatched download with no
-      # parsed info so the user can still see and manually match it. No grab is
-      # ever triggered — the torrent already lives in the client.
+          {:error, reason}
+      end
+    else
+      # No library match, an unparseable name, or a validator rejection
+      # (malicious / fake / password / etc.). Nothing is written: the torrent is
+      # surfaced by Mydia.Downloads.ExternalTorrents, which derives it from the
+      # client on every scan. No grab is ever triggered either — the torrent
+      # already lives in the client.
       {:error, reason} ->
-        Logger.debug("Could not parse torrent name (#{inspect(reason)}): #{torrent.name}")
-        create_unmatched_download(torrent, nil)
+        Logger.debug("No library match for torrent (#{inspect(reason)}): #{torrent.name}")
+        {:error, :no_library_match}
     end
   end
 
@@ -218,80 +201,6 @@ defmodule Mydia.Downloads.UntrackedMatcher do
     }
 
     Downloads.create_download(attrs)
-  end
-
-  defp create_unmatched_download(torrent, parsed_info) do
-    # Compute match suggestions if we have parsed info
-    suggestions =
-      if parsed_info do
-        try do
-          TorrentMatcher.find_top_candidates(parsed_info, max_results: 3, monitored_only: false)
-        rescue
-          e ->
-            Logger.warning("Failed to find match candidates: #{inspect(e)}")
-            []
-        end
-      else
-        []
-      end
-
-    # Build parsed_info map for metadata storage
-    parsed_info_map =
-      if parsed_info do
-        %{
-          type: to_string(parsed_info.type),
-          title: parsed_info.title,
-          year: parsed_info.year,
-          season: parsed_info.season,
-          episode: ParsedFileInfo.primary_episode(parsed_info),
-          quality: quality_field(parsed_info, :resolution),
-          source: quality_field(parsed_info, :source),
-          codec: quality_field(parsed_info, :codec)
-        }
-      end
-
-    attrs = %{
-      indexer: "manual",
-      title: torrent.name,
-      download_url: nil,
-      download_client: torrent.client_name,
-      download_client_id: torrent.id,
-      match_status: "unmatched",
-      metadata: %{
-        size: torrent.size,
-        seeders: Map.get(torrent, :seeders),
-        leechers: Map.get(torrent, :leechers),
-        matched_from_client: true,
-        save_path: Map.get(torrent, :save_path),
-        parsed_info: parsed_info_map,
-        match_suggestions: suggestions
-      }
-    }
-
-    case Downloads.create_download(attrs) do
-      {:ok, download} ->
-        Logger.info("Created unmatched download record for torrent: #{torrent.name}",
-          torrent_id: torrent.id,
-          client: torrent.client_name,
-          suggestions_count: length(suggestions)
-        )
-
-        Downloads.broadcast_download_update(download.id)
-        {:ok, download}
-
-      {:error, %Ecto.Changeset{errors: errors}} = error ->
-        # Unique constraint violation means we already have this torrent tracked
-        if Keyword.has_key?(errors, :download_client) do
-          Logger.debug("Unmatched download already exists for torrent: #{torrent.name}")
-          {:error, :already_tracked}
-        else
-          Logger.warning("Failed to create unmatched download: #{inspect(errors)}",
-            torrent_name: torrent.name
-          )
-
-          error
-        end
-    end
   end
 
   ## Private Helpers
