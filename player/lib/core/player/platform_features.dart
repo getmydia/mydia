@@ -78,10 +78,12 @@ class PlatformFeatures {
   /// `PanelMetrics.touchTargets`/`TransportSurface.compact`), no
   /// `UpNextOverlay` (autoplay-only, next-episode-only), and — before this
   /// fix — no keyboard fallback either, since [supportsKeyboardShortcuts]
-  /// was false on web. `isDesktop` itself is left alone: it has two other,
-  /// unrelated call sites in `player_screen.dart` (double-click-to-fullscreen
-  /// gating) that were never asked to change and that this fix doesn't
-  /// touch.
+  /// was false on web. `isDesktop` itself is left alone: its live consumers
+  /// are now `window_drag_service_native.dart` (gating OS window dragging)
+  /// and `playback_chrome.dart` (gating the window-drag and double-click
+  /// fullscreen callbacks) — the double-click-to-fullscreen gating that used
+  /// to live in `player_screen.dart` was removed from there by a later
+  /// commit on this branch.
   static bool get supportsKeyboardShortcuts =>
       computeSupportsKeyboardShortcuts(isDesktop: isDesktop, isWeb: isWeb);
 

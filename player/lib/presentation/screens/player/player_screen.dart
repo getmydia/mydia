@@ -123,7 +123,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   // Desktop feature state
   final FocusNode _focusNode = FocusNode();
-  DateTime? _lastClickTime;
 
   // Fullscreen state
   bool _isFullscreen = false;
@@ -1472,20 +1471,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  /// Handle double-click for fullscreen toggle (desktop only)
-  void _handleTap() {
-    if (!PlatformFeatures.isDesktop) return;
-
-    final now = DateTime.now();
-    if (_lastClickTime != null &&
-        now.difference(_lastClickTime!) < const Duration(milliseconds: 300)) {
-      _lastClickTime = null;
-      _toggleFullscreen();
-    } else {
-      _lastClickTime = now;
-    }
-  }
-
   @override
   void dispose() {
     // Exit fullscreen if active
@@ -1697,14 +1682,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (PlatformFeatures.supportsGestureControls && player != null) {
       videoPlayer = GestureControls(
         player: player,
-        child: videoPlayer,
-      );
-    }
-
-    // Add double-click handler for desktop
-    if (PlatformFeatures.isDesktop) {
-      videoPlayer = GestureDetector(
-        onTap: _handleTap,
         child: videoPlayer,
       );
     }

@@ -1,9 +1,36 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
+
+/// A [PlatformPlayer] that never touches native mpv/web bindings — safe to
+/// construct inside `flutter test`. Same shape as
+/// `playback_chrome_episode_nav_test.dart`'s fake (kept separate, not shared,
+/// since neither file exports it and duplicating ~15 lines is cheaper than
+/// introducing a new shared test-only import).
+class _FakePlatformPlayer extends PlatformPlayer {
+  _FakePlatformPlayer() : super(configuration: const PlayerConfiguration());
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> playOrPause() async {}
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> seek(Duration duration) async {}
+}
 
 double _opacity(WidgetTester tester) => tester
     .widget<FadeTransition>(
@@ -264,6 +291,127 @@ void main() {
           reason: 'a tap mid-fade should bring chrome back, not finish '
               'hiding it');
     });
+
+    testWidgets('hides immediately when the mouse leaves the window',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(width: 200, height: 60, child: Text('chrome')),
+            ),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      // Enter over the content itself, not bare background. Leaving the
+      // window from over a control fires the inner content MouseRegion's
+      // onExit (clearing _pointerOverChrome) and the outer one's. Flutter
+      // dispatches exits innermost first, so _pointerOverChrome is already
+      // false when the outer handler evaluates _mayHide. If that ever
+      // inverted, exiting over a control would silently stop hiding, and
+      // this test is what would catch it.
+      await gesture.addPointer(location: tester.getCenter(find.text('chrome')));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      expect(_opacity(tester), 1.0);
+
+      // Move the pointer outside the 800x600 test window.
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(
+        _opacity(tester),
+        0.0,
+        reason: 'chrome should not wait out the 3s timer once the pointer '
+            'has left the window',
+      );
+    });
+
+    testWidgets('does not hide on mouse exit while paused', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: false,
+            child: SizedBox(width: 200, height: 100, child: Text('chrome')),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(400, 300));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(_opacity(tester), 1.0,
+          reason: 'the paused invariant must survive mouse exit');
+    });
+
+    testWidgets('does not hide on mouse exit while seeking', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            isSeeking: true,
+            child: SizedBox(width: 200, height: 100, child: Text('chrome')),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(400, 300));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(_opacity(tester), 1.0,
+          reason: 'dragging the scrubber past the window edge must not '
+              'yank the chrome away mid-seek');
+    });
+
+    testWidgets('does not hide on mouse exit while a modal route is on top',
+        (tester) async {
+      // Opening the quality, audio, subtitle or cast picker pushes a route
+      // over the player and moves the pointer off it. Hiding underneath would
+      // leave the chrome gone after dismissal until the mouse moved again,
+      // because only onHover calls _show().
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            child: SizedBox(width: 200, height: 100, child: Text('chrome')),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(400, 300));
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+
+      final context = tester.element(find.byType(ChromeVisibility));
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (_) => const AlertDialog(content: Text('picker')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await gesture.moveTo(const Offset(-50, -50));
+      await tester.pumpAndSettle();
+
+      expect(_opacity(tester), 1.0,
+          reason: 'chrome hid underneath an open selector');
+    });
   });
 
   group('ChromeSlide', () {
@@ -373,6 +521,67 @@ void main() {
       );
 
       expect(find.byKey(markerKey), findsOneWidget);
+    });
+  });
+
+  group('PlaybackChrome gating', () {
+    late Player player;
+
+    setUp(() {
+      player = Player(platformPlayer: _FakePlatformPlayer());
+    });
+
+    tearDown(() => player.dispose());
+
+    Widget host({required bool isFullscreen}) => _host(
+          PlaybackChrome(
+            player: player,
+            onFullscreenTap: () {},
+            isFullscreen: isFullscreen,
+          ),
+        );
+
+    testWidgets(
+        'not fullscreen: both the window drag and the double-tap '
+        'fullscreen-exit callbacks reach ChromeVisibility', (tester) async {
+      await tester.pumpWidget(host(isFullscreen: false));
+      await tester.pumpAndSettle();
+
+      final chromeVisibility =
+          tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+
+      expect(
+        chromeVisibility.onWindowDrag,
+        isNotNull,
+        reason: 'a normal window should be draggable from the background',
+      );
+      expect(
+        chromeVisibility.onDoubleTap,
+        isNotNull,
+        reason: 'double-tap should still toggle fullscreen',
+      );
+    });
+
+    testWidgets(
+        'fullscreen: the window drag callback is gone (no window to move) '
+        'but double-tap survives (it is how fullscreen is exited)',
+        (tester) async {
+      await tester.pumpWidget(host(isFullscreen: true));
+      await tester.pumpAndSettle();
+
+      final chromeVisibility =
+          tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+
+      expect(
+        chromeVisibility.onWindowDrag,
+        isNull,
+        reason: 'there is no window to drag while fullscreen',
+      );
+      expect(
+        chromeVisibility.onDoubleTap,
+        isNotNull,
+        reason: 'double-tap is the only way to exit fullscreen',
+      );
     });
   });
 }
