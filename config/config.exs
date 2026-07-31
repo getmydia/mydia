@@ -309,7 +309,10 @@ config :mydia, Oban,
        # Check installed plugins for newer versions daily at 7 AM
        {"0 7 * * *", Mydia.Jobs.PluginUpdateCheck},
        # Prune per-invocation plugin debug logs daily at 4:30 AM (U5)
-       {"30 4 * * *", Mydia.Jobs.PluginLogCleanup}
+       {"30 4 * * *", Mydia.Jobs.PluginLogCleanup},
+       # Look for quality upgrades to existing files daily at 1 AM. Deliberately
+       # slower than the missing-file searches: this can touch the whole library.
+       {"0 1 * * *", Mydia.Jobs.UpgradeSweep}
      ]}
   ]
 
@@ -320,6 +323,12 @@ config :mydia, :event_retention_days, 90
 # Trash retention configuration
 # Trashed media files older than this will be permanently deleted
 config :mydia, :trash_retention_days, 30
+
+# Automatic quality upgrade sweep configuration
+# Controls the daily bounded sweep that looks for quality upgrades to
+# already-present library files (see Mydia.Jobs.UpgradeSweep)
+config :mydia, :upgrade_sweep_enabled, true
+config :mydia, :upgrade_sweep_batch_size, 50
 
 # HLS Streaming configuration
 config :mydia, :streaming,

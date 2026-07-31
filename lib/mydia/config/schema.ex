@@ -26,6 +26,7 @@ defmodule Mydia.Config.Schema do
           media: __MODULE__.Media.t() | nil,
           metadata: __MODULE__.Metadata.t() | nil,
           downloads: __MODULE__.Downloads.t() | nil,
+          upgrades: __MODULE__.Upgrades.t() | nil,
           logging: __MODULE__.Logging.t() | nil,
           oban: __MODULE__.Oban.t() | nil,
           plugins: __MODULE__.Plugins.t() | nil,
@@ -95,6 +96,15 @@ defmodule Mydia.Config.Schema do
       # inserted without an explicit `expires_at`. See `Mydia.Downloads.Blacklists`
       # (#123).
       field :release_blacklist_default_ttl_days, :integer, default: 30
+    end
+
+    embeds_one :upgrades, Upgrades, on_replace: :update, primary_key: false do
+      # Master switch for Mydia.Jobs.UpgradeSweep, the daily bounded sweep
+      # that looks for quality upgrades to already-present library files.
+      field :sweep_enabled, :boolean, default: true
+      # Caps indexer searches (not items) a single sweep run may cost, since
+      # upgrade-eligible items can be the whole library.
+      field :sweep_batch_size, :integer, default: 50
     end
 
     embeds_one :logging, Logging, on_replace: :update, primary_key: false do
@@ -230,6 +240,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:media, with: &media_changeset/2)
     |> cast_embed(:metadata, with: &metadata_changeset/2)
     |> cast_embed(:downloads, with: &downloads_changeset/2)
+    |> cast_embed(:upgrades, with: &upgrades_changeset/2)
     |> cast_embed(:logging, with: &logging_changeset/2)
     |> cast_embed(:oban, with: &oban_changeset/2)
     |> cast_embed(:plugins, with: &plugins_changeset/2)
@@ -326,6 +337,13 @@ defmodule Mydia.Config.Schema do
     |> cast(attrs, [:monitor_interval_minutes, :release_blacklist_default_ttl_days])
     |> validate_number(:monitor_interval_minutes, greater_than: 0)
     |> validate_number(:release_blacklist_default_ttl_days, greater_than: 0)
+  end
+
+  defp upgrades_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [:sweep_enabled, :sweep_batch_size])
+    |> validate_required([:sweep_enabled])
+    |> validate_number(:sweep_batch_size, greater_than: 0)
   end
 
   defp logging_changeset(schema, attrs) do
@@ -696,6 +714,7 @@ defmodule Mydia.Config.Schema do
       media: %__MODULE__.Media{},
       metadata: %__MODULE__.Metadata{},
       downloads: %__MODULE__.Downloads{},
+      upgrades: %__MODULE__.Upgrades{},
       logging: %__MODULE__.Logging{},
       oban: %__MODULE__.Oban{},
       plugins: %__MODULE__.Plugins{},
