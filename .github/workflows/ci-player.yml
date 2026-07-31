@@ -44,7 +44,7 @@ jobs:
             os: macos-latest
             platform_dir: macos
             artifact_name: mydia-player-macos-app
-            artifact_path: player/build/macos/Build/Products/Release/Mydia Player.app
+            artifact_path: player/build/macos/Build/Products/Release/mydia-player-macos.zip
             shell: bash
           - platform: Linux
             os: ubuntu-latest
@@ -126,6 +126,23 @@ jobs:
         if: steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ${{ matrix.platform_dir }} --release
+
+      # Do NOT point artifact_path at the .app directory and let upload-artifact
+      # zip it. Its zip implementation replaces every symlink with a full copy of
+      # the target, which flattens all 25 frameworks in the bundle:
+      # Versions/Current stops being a link to Versions/A, and the top-level
+      # Foo.framework/Foo and Foo.framework/Resources aliases become duplicates.
+      # That invalidates the code signature, so codesign reports "bundle format
+      # is ambiguous (could be app or framework)" and Gatekeeper refuses to
+      # launch the app. ditto preserves symlinks, and --keepParent keeps
+      # "Mydia Player.app" as the archive root so the download does not unpack as
+      # a bare Contents/. Same invocation release.yml:626 uses for notarization.
+      # Uploading a single file also means GitHub's own re-zip of the artifact
+      # has no symlinks left to flatten. See issue #275.
+      - name: Package macOS app
+        if: matrix.platform == 'macOS' && steps.check_platform.outputs.enabled == 'true'
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: ditto -c -k --keepParent "Mydia Player.app" "mydia-player-macos.zip"
 
       # upload-artifact archives a directory path as a plain zip, and its zip
       # implementation replaces every symlink with a copy of the symlink's
