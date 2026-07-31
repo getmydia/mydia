@@ -35,13 +35,14 @@ RUN apk add --no-cache \
 # which seeds bundled plugins, so the artifact must build here too.
 #
 # The version is NOT named here; it comes from rust-toolchain.toml, copied in
-# below, which is also where the wasi-0.2.6 / wasmex constraint is documented.
+# below and installed by `rustup toolchain install` (no argument), which is
+# also where the wasi-0.2.6 / wasmex constraint is documented.
 WORKDIR /app
 COPY rust-toolchain.toml ./
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain none --profile minimal --no-modify-path && \
-    rustup show
+    rustup toolchain install
 
 # Set build environment
 ENV MIX_ENV=prod

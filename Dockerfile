@@ -95,15 +95,16 @@ RUN apk add --no-cache \
 # mounts on the compile steps below still apply.
 #
 # The version is NOT named here. rust-toolchain.toml is copied in first and
-# `rustup show` resolves both the channel and the wasm32-wasip2 target from it,
-# which is also where the wasi-0.2.6 / wasmex constraint is documented. CI fails
-# the build if this file names a Rust version again.
+# `rustup toolchain install` (no argument) reads both the channel and the
+# wasm32-wasip2 target from it, which is also where the wasi-0.2.6 / wasmex
+# constraint is documented. CI fails the build if this file names a Rust
+# version again.
 WORKDIR /app
 COPY rust-toolchain.toml ./
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain none --profile minimal --no-modify-path && \
-    rustup show
+    rustup toolchain install
 
 # Increase hex timeout for slow networks/CI
 ENV HEX_HTTP_TIMEOUT=300000

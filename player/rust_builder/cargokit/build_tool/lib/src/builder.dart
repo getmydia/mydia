@@ -216,11 +216,16 @@ class RustBuilder {
     final buildEnvironment = await _buildEnvironment();
     if (cargo != null) {
       // LOCAL CHANGE (mydia, #252): invoke cargo directly and express the pin
-      // through RUSTUP_TOOLCHAIN, which rustup's proxies honour (and which
-      // auto-installs a missing toolchain) while a standalone cargo simply
-      // ignores it. Upstream's `rustup run <toolchain> cargo` instead forces
-      // rustup's own dynamically linked binaries, which fail under the Gradle
-      // daemon on NixOS with "libz.so.1: cannot open shared object file".
+      // through RUSTUP_TOOLCHAIN, which rustup's proxies honour while a
+      // standalone cargo simply ignores it. Upstream's
+      // `rustup run <toolchain> cargo` instead forces rustup's own dynamically
+      // linked binaries, which fail under the Gradle daemon on NixOS with
+      // "libz.so.1: cannot open shared object file".
+      //
+      // On the rustup path this variable auto-installs a missing *toolchain*
+      // (measured: RUSTUP_TOOLCHAIN=<uninstalled> rustc syncs the channel
+      // before running). It does NOT install *targets*, which is why
+      // prepare() still runs whenever buildsThroughRustup() is true.
       runCommand(
         cargo,
         cargoArgs,

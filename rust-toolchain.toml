@@ -1,10 +1,16 @@
 # The single source of truth for this repo's Rust version.
 #
-# Read by: cargokit (player/rust_builder/cargokit/build_tool, which passes the
-# channel to `rustup run`), devenv.nix (builtins.fromTOML), Dockerfile and
+# Read by: cargokit (player/rust_builder/cargokit/build_tool, which sets
+# RUSTUP_TOOLCHAIN from the channel below and invokes cargo from PATH, falling
+# back to `rustup run` only when PATH has no cargo), devenv.nix
+# (builtins.fromTOML), nix/devShells (the Android shell), Dockerfile and
 # Dockerfile.e2e (rustup resolves it directly), and every rustup proxy
-# invocation anywhere in the tree. Nothing else may name a Rust version; CI
-# fails the build if anything does.
+# invocation anywhere in the tree.
+#
+# No other build or CI config may pin a Rust toolchain version; the "Guard the
+# Rust toolchain pin" step in ci.yml fails the build if one does. That guard
+# targets pinning mechanisms, not every occurrence of a version string, so
+# version literals used as test data are fine.
 #
 # Bumping `channel` is not just a newer compiler. The bundled plugin guests are
 # wasip2 components whose WASI world tracks the Rust version (1.96 emits wasi
