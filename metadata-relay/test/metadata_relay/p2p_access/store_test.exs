@@ -130,4 +130,72 @@ defmodule MetadataRelay.P2pAccess.StoreTest do
                MetadataRelay.Repo.get(MetadataRelay.P2pAccess.Block, id)
     end
   end
+
+  describe "flush and prune" do
+    setup do
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(MetadataRelay.Repo)
+      Ecto.Adapters.SQL.Sandbox.mode(MetadataRelay.Repo, {:shared, self()})
+      MetadataRelay.Repo.delete_all(MetadataRelay.P2pAccess.Sighting)
+
+      original = Application.get_env(:metadata_relay, :p2p_retention_seconds)
+      on_exit(fn -> Application.put_env(:metadata_relay, :p2p_retention_seconds, original) end)
+
+      :ok
+    end
+
+    test "flush writes ETS sightings to the database" do
+      id = endpoint_id(40)
+      :ok = Store.record_sighting(id)
+      :ok = Store.record_sighting(id)
+
+      assert {:ok, 1} = Store.flush_now()
+
+      assert %MetadataRelay.P2pAccess.Sighting{conn_count: 2} =
+               MetadataRelay.Repo.get(MetadataRelay.P2pAccess.Sighting, id)
+    end
+
+    test "flush updates an existing row rather than failing on conflict" do
+      id = endpoint_id(41)
+      :ok = Store.record_sighting(id)
+      {:ok, 1} = Store.flush_now()
+
+      :ok = Store.record_sighting(id)
+      assert {:ok, 1} = Store.flush_now()
+
+      assert %MetadataRelay.P2pAccess.Sighting{conn_count: 2} =
+               MetadataRelay.Repo.get(MetadataRelay.P2pAccess.Sighting, id)
+    end
+
+    test "flush with no sightings writes nothing" do
+      assert {:ok, 0} = Store.flush_now()
+    end
+
+    test "prune removes sightings older than the retention window" do
+      stale = endpoint_id(42)
+      fresh = endpoint_id(43)
+      now = System.system_time(:second)
+
+      :ets.insert(:p2p_sightings, {stale, now - 100, now - 100, 1})
+      :ets.insert(:p2p_sightings, {fresh, now, now, 1})
+
+      Application.put_env(:metadata_relay, :p2p_retention_seconds, 50)
+
+      assert {:ok, 1} = Store.prune_now()
+      assert Store.lookup_sighting(stale) == :error
+      assert {:ok, _} = Store.lookup_sighting(fresh)
+    end
+
+    test "prune also removes the database rows" do
+      stale = endpoint_id(44)
+      now = System.system_time(:second)
+
+      :ets.insert(:p2p_sightings, {stale, now - 100, now - 100, 1})
+      {:ok, 1} = Store.flush_now()
+
+      Application.put_env(:metadata_relay, :p2p_retention_seconds, 50)
+      {:ok, 1} = Store.prune_now()
+
+      assert MetadataRelay.Repo.get(MetadataRelay.P2pAccess.Sighting, stale) == nil
+    end
+  end
 end

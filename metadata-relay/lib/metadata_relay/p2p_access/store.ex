@@ -18,13 +18,16 @@ defmodule MetadataRelay.P2pAccess.Store do
 
   require Logger
 
-  alias MetadataRelay.P2pAccess.Block
+  alias MetadataRelay.P2pAccess.{Block, Sighting}
   alias MetadataRelay.Repo
 
   @sightings :p2p_sightings
   @blocked :p2p_blocked
 
   @default_max_sightings 200_000
+  @default_flush_interval_ms 30_000
+  @default_prune_interval_ms 86_400_000
+  @default_retention_seconds 2_592_000
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -165,6 +168,17 @@ defmodule MetadataRelay.P2pAccess.Store do
     end
   end
 
+  @doc """
+  Writes accumulated ETS sightings to the database. Returns the row count.
+  """
+  def flush_now, do: GenServer.call(__MODULE__, :flush)
+
+  @doc """
+  Drops sightings older than the retention window from ETS and the database.
+  Returns the number of ETS rows removed.
+  """
+  def prune_now, do: GenServer.call(__MODULE__, :prune)
+
   # The database is not always reachable when the Store starts: under the
   # ExUnit sandbox no connection is checked out yet, and in development the
   # database can lag the application. An unreachable database must not stop
@@ -179,6 +193,10 @@ defmodule MetadataRelay.P2pAccess.Store do
   def init(_opts) do
     init_tables()
     reload_blocks()
+
+    schedule(:flush, flush_interval_ms())
+    schedule(:prune, prune_interval_ms())
+
     {:ok, %{}}
   end
 
@@ -201,5 +219,114 @@ defmodule MetadataRelay.P2pAccess.Store do
     end
 
     :ok
+  end
+
+  @impl true
+  def handle_call(:flush, _from, state), do: {:reply, do_flush(), state}
+
+  @impl true
+  def handle_call(:prune, _from, state), do: {:reply, do_prune(), state}
+
+  @impl true
+  def handle_info(:flush, state) do
+    do_flush()
+    schedule(:flush, flush_interval_ms())
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(:prune, state) do
+    do_prune()
+    schedule(:prune, prune_interval_ms())
+    {:noreply, state}
+  end
+
+  defp do_flush do
+    rows =
+      @sightings
+      |> :ets.tab2list()
+      |> Enum.map(fn {endpoint_id, first_seen, last_seen, conn_count} ->
+        %{
+          endpoint_id: endpoint_id,
+          first_seen: DateTime.from_unix!(first_seen),
+          last_seen: DateTime.from_unix!(last_seen),
+          conn_count: conn_count
+        }
+      end)
+
+    case rows do
+      [] ->
+        {:ok, 0}
+
+      rows ->
+        # Only the database write below is fault-tolerant. It can fail for
+        # environmental reasons (connection drop, lock timeout) and must not
+        # take down the Store, which owns the ETS tables the request path
+        # depends on: crashing it would discard every sighting and the
+        # in-memory blocklist. The transform above, including
+        # DateTime.from_unix!/1, is deliberately left outside this rescue —
+        # a bad value there is a programming error and must crash loudly
+        # rather than be reported as a silent "flush failed".
+        try do
+          {count, _} =
+            Repo.insert_all(Sighting, rows,
+              on_conflict: {:replace, [:last_seen, :conn_count]},
+              conflict_target: :endpoint_id
+            )
+
+          {:ok, count}
+        rescue
+          error ->
+            Logger.error("p2p sighting flush failed: #{inspect(error)}")
+            {:ok, 0}
+        end
+    end
+  end
+
+  defp do_prune do
+    cutoff = System.system_time(:second) - retention_seconds()
+
+    stale =
+      :ets.select(@sightings, [
+        {{:"$1", :_, :"$2", :_}, [{:<, :"$2", cutoff}], [:"$1"]}
+      ])
+
+    Enum.each(stale, &:ets.delete(@sightings, &1))
+
+    cutoff_dt = DateTime.from_unix!(cutoff)
+
+    # As with do_flush/0, only the database delete below is fault-tolerant:
+    # it can fail for environmental reasons and must not take down the
+    # Store. The ETS work above has already removed the stale rows the
+    # request path relies on, regardless of whether the mirrored database
+    # cleanup completes.
+    try do
+      Repo.delete_all(from(s in Sighting, where: s.last_seen < ^cutoff_dt))
+    rescue
+      error ->
+        Logger.error("p2p sighting prune failed to delete database rows: #{inspect(error)}")
+    end
+
+    if stale != [] do
+      Logger.info("Pruned #{length(stale)} stale p2p endpoint sightings")
+    end
+
+    {:ok, length(stale)}
+  end
+
+  defp schedule(message, interval_ms) do
+    Process.send_after(self(), message, interval_ms)
+  end
+
+  defp flush_interval_ms do
+    Application.get_env(:metadata_relay, :p2p_flush_interval_ms, @default_flush_interval_ms)
+  end
+
+  defp prune_interval_ms do
+    Application.get_env(:metadata_relay, :p2p_prune_interval_ms, @default_prune_interval_ms)
+  end
+
+  defp retention_seconds do
+    Application.get_env(:metadata_relay, :p2p_retention_seconds, @default_retention_seconds)
   end
 end
