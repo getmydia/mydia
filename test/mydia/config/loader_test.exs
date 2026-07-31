@@ -20,6 +20,11 @@ defmodule Mydia.Config.LoaderTest do
       |> Enum.filter(fn {key, _} -> String.starts_with?(key, "DOWNLOAD_CLIENT_") end)
       |> Enum.map(fn {key, _} -> key end)
 
+    library_path_vars =
+      System.get_env()
+      |> Enum.filter(fn {key, _} -> String.starts_with?(key, "LIBRARY_PATH_") end)
+      |> Enum.map(fn {key, _} -> key end)
+
     env_vars =
       [
         "PORT",
@@ -38,7 +43,7 @@ defmodule Mydia.Config.LoaderTest do
         "METADATA_LANGUAGE",
         "LOG_LEVEL",
         "OBAN_POLL_INTERVAL"
-      ] ++ download_client_vars
+      ] ++ download_client_vars ++ library_path_vars
 
     # Store original values
     original_env =
@@ -60,6 +65,11 @@ defmodule Mydia.Config.LoaderTest do
       # runtime config.
       System.get_env()
       |> Enum.filter(fn {key, _} -> String.starts_with?(key, "DOWNLOAD_CLIENT_") end)
+      |> Enum.each(fn {key, _} -> System.delete_env(key) end)
+
+      # Same reasoning for LIBRARY_PATH_* vars the test itself set.
+      System.get_env()
+      |> Enum.filter(fn {key, _} -> String.starts_with?(key, "LIBRARY_PATH_") end)
       |> Enum.each(fn {key, _} -> System.delete_env(key) end)
 
       # Restore original environment
@@ -232,6 +242,19 @@ defmodule Mydia.Config.LoaderTest do
       System.put_env("METADATA_LANGUAGE", "pt-BR")
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
       assert config.metadata.language == "pt-BR"
+    end
+
+    test "ignores the removed LIBRARY_PATH_<N>_QUALITY_PROFILE_ID variable" do
+      # Never worked: profile ids are UUIDs and this parsed as an integer.
+      System.put_env("LIBRARY_PATH_1_PATH", "/movies")
+      System.put_env("LIBRARY_PATH_1_TYPE", "movies")
+      System.put_env("LIBRARY_PATH_1_QUALITY_PROFILE_ID", Ecto.UUID.generate())
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert [path] = config.library_paths
+      assert path.path == "/movies"
+      refute Map.has_key?(path, :quality_profile_id)
     end
 
     test "returns error for invalid configuration" do

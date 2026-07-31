@@ -151,6 +151,53 @@ defmodule Mydia.SettingsTest do
     end
   end
 
+  describe "ensure_default_quality_profiles/0 default seeding" do
+    test "seeds the default to \"Any\" on a fresh install" do
+      Repo.delete_all(QualityProfile)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      any = Repo.get_by!(QualityProfile, name: "Any")
+      assert Settings.get_default_quality_profile_id() == any.id
+    end
+
+    test "does not overwrite a default the operator already chose" do
+      Repo.delete_all(QualityProfile)
+      chosen = quality_profile_fixture(%{name: "Chosen"})
+      {:ok, _} = Settings.set_default_quality_profile(chosen.id)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      assert Settings.get_default_quality_profile_id() == chosen.id
+    end
+
+    test "does not re-seed after the operator explicitly cleared the default" do
+      Repo.delete_all(QualityProfile)
+      chosen = quality_profile_fixture(%{name: "Chosen"})
+      {:ok, _} = Settings.set_default_quality_profile(chosen.id)
+      {:ok, _} = Settings.set_default_quality_profile(nil)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      assert Settings.get_default_quality_profile_id() == nil
+    end
+
+    test "respects a clear made while no config row existed yet" do
+      # Reachable when "Any" was deleted, so boot seeding wrote no row at all,
+      # and the operator then picked "None". Clearing has to leave a row behind
+      # or the next boot reads the absence as "never configured" and seeds over
+      # the operator's explicit choice.
+      Repo.delete_all(QualityProfile)
+      assert Settings.get_default_quality_profile_id() == nil
+
+      {:ok, _} = Settings.set_default_quality_profile(nil)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      assert Settings.get_default_quality_profile_id() == nil
+    end
+  end
+
   describe "default_quality_profiles module" do
     test "returns list of profile definitions" do
       profiles = Settings.DefaultQualityProfiles.defaults()

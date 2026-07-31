@@ -287,6 +287,18 @@ defmodule Mydia.Settings.QualityProfile do
 
   def preferred_resolutions(_profile), do: []
 
+  @doc """
+  The canonical resolution vocabulary, ordered ascending from lowest to highest
+  quality.
+
+  This is the single source of truth for resolution ordering. Anything that
+  needs to rank resolutions against each other (validation, the ranker's
+  preference ordering) must derive from this list rather than keeping its own
+  copy, so the two can never drift apart.
+  """
+  @spec valid_resolutions() :: [String.t()]
+  def valid_resolutions, do: @valid_resolutions
+
   # A profile must specify at least one preferred resolution. With the
   # standalone `qualities` list gone, the allow-list lives entirely in
   # quality_standards.preferred_resolutions.

@@ -1106,4 +1106,102 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert episode.id in ids
     end
   end
+
+  describe "default quality profile fallback" do
+    setup do
+      default =
+        quality_profile_fixture(%{
+          name: "Default-1080p-#{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      {:ok, _} = Settings.set_default_quality_profile(default.id)
+
+      %{default_profile: default}
+    end
+
+    test "an unstamped show's episode search ranks with the default", %{bypass: bypass} do
+      # The 720p release has 50x the seeders. A bare seeders sort picks it;
+      # the default profile's preferred resolution picks the 1080p one.
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.tv_episode_result(%{
+            title: "Breaking Bad",
+            season: 1,
+            episode: 1,
+            quality: "720p",
+            seeders: 500
+          }),
+          IndexerMock.tv_episode_result(%{
+            title: "Breaking Bad",
+            season: 1,
+            episode: 1,
+            quality: "1080p",
+            seeders: 10
+          })
+        ]
+      )
+
+      tv_show = media_item_fixture(%{type: "tv_show", title: "Breaking Bad"})
+      assert tv_show.quality_profile_id == nil
+
+      episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2008-01-20]
+        })
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "specific",
+                 "episode_id" => episode.id
+               })
+
+      assert [download | _] = Mydia.Downloads.list_downloads()
+      assert download.title =~ "1080p"
+    end
+
+    test "an unstamped show's season search ranks with the default", %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.season_pack_result(%{
+            title: "Breaking Bad",
+            season: 1,
+            quality: "720p",
+            seeders: 500
+          }),
+          IndexerMock.season_pack_result(%{
+            title: "Breaking Bad",
+            season: 1,
+            quality: "1080p",
+            seeders: 10
+          })
+        ]
+      )
+
+      tv_show = media_item_fixture(%{type: "tv_show", title: "Breaking Bad"})
+      assert tv_show.quality_profile_id == nil
+
+      for ep <- 1..2 do
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: ep,
+          air_date: ~D[2008-01-20]
+        })
+      end
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "season",
+                 "media_item_id" => tv_show.id,
+                 "season_number" => 1
+               })
+
+      assert [download | _] = Mydia.Downloads.list_downloads()
+      assert download.title =~ "1080p"
+    end
+  end
 end

@@ -1117,6 +1117,17 @@ defmodule MydiaWeb.CoreComponents do
   def format_duration(_, _), do: nil
 
   @doc """
+  Label for the blank quality-profile choice.
+
+  That choice stores `nil`, which means "follow the configured default"
+  (`Mydia.Indexers.QualityProfileResolver`). When no default is configured,
+  `nil` genuinely means no profile, and the label says so.
+  """
+  @spec default_quality_profile_label(String.t() | nil) :: String.t()
+  def default_quality_profile_label(nil), do: "No profile"
+  def default_quality_profile_label(name) when is_binary(name), do: "Use default (#{name})"
+
+  @doc """
   Renders a category badge for media items.
 
   Displays the media category (movie, anime, cartoon, etc.) with appropriate styling.

@@ -16,7 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :auto_searching, :boolean, required: true
   attr :downloads_with_status, :list, required: true
   attr :quality_profiles, :list, required: true
-  attr :default_quality_profile_id, :string, default: nil
+  attr :default_quality_profile_name, :string, default: nil
   attr :applying_monitoring_preset, :boolean, default: false
   attr :is_favorite, :boolean, default: false
   attr :item_collections, :list, default: []
@@ -304,11 +304,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     is_nil(@media_item.quality_profile_id) && "active"
                   ]}
                 >
-                  <%= if @default_quality_profile_id do %>
-                    Use instance default
-                  <% else %>
-                    No Profile
-                  <% end %>
+                  {default_quality_profile_label(@default_quality_profile_name)}
                   <%= if is_nil(@media_item.quality_profile_id) do %>
                     <.icon name="hero-check" class="w-4 h-4" />
                   <% end %>

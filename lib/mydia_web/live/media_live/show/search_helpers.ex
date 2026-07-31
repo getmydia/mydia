@@ -215,6 +215,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   Build the shared ranking options for the manual search dialog from the socket
   assigns, deriving the expected title and (for episode/season searches) the
   expected season/episode from the `manual_search_context`.
+
+  The profile is resolved through `Mydia.Indexers.QualityProfileResolver`, so
+  the item's own profile, the instance default, and `nil` are decided in one
+  place for every search path.
   """
   def build_manual_ranking_opts(assigns) do
     media_item = assigns.media_item

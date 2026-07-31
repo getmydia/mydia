@@ -27,7 +27,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
               name="profile_id"
             >
               <option value="" selected={is_nil(@default_quality_profile_id)}>
-                Any Quality (first available)
+                None (no default)
               </option>
               <%= for profile <- @quality_profiles do %>
                 <option value={profile.id} selected={@default_quality_profile_id == profile.id}>
