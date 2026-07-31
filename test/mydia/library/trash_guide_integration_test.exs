@@ -40,7 +40,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
   describe "2160p/4K quality detection - real releases" do
     # V3 gap: the tokenizer splits `Dolby.Vision` into two tokens and
     # the resolver doesn't yet recompose the compound. Tracked in
-    # docs/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures.md.
+    # test/mydia/library/release_parser/CORPUS_FAILURES.md.
     @tag :skip
     test "Game of Thrones 4K BluRay REMUX - season pack without episode" do
       result =
@@ -87,7 +87,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
     # V3 gap: when both `DV` and `HDR10` appear, V3's HDR conflict
     # resolution prefers HDR10 (confidence 0.95 vs DV's 0.8). V2
     # normalized DV to DolbyVision. Tracked in
-    # docs/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures.md.
+    # test/mydia/library/release_parser/CORPUS_FAILURES.md.
     @tag :skip
     test "Spider-Man Across the Spider-Verse with Dolby Vision and HDR10" do
       result =
