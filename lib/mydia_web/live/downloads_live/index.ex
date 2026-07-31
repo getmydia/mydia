@@ -890,6 +890,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp reload_stream(socket) do
+    socket = assign(socket, :scan, ExternalTorrents.get())
+
     case socket.assigns.active_tab do
       :issues ->
         load_issues_downloads(socket)
@@ -960,7 +962,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     # Needs Matching is derived from the clients, not from the database: these
     # torrents have no download row and never will unless the user matches one.
-    scan = ExternalTorrents.get()
+    # `:scan` was refreshed by the caller (load_downloads/1 or reload_stream/1).
+    scan = socket.assigns.scan
     needs_matching = scan.needs_matching
 
     unresolved = Enum.filter(all_downloads, fn d -> d.match_status == "unresolved_files" end)
@@ -1004,7 +1007,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp load_external(socket) do
-    scan = ExternalTorrents.get()
+    scan = socket.assigns.scan
 
     socket
     |> assign(:has_more, false)
