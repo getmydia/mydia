@@ -44,6 +44,8 @@ jobs:
             os: macos-latest
             platform_dir: macos
             artifact_name: mydia-player-macos-app
+            # Must stay the ditto archive, not the .app directory. "Package
+            # macOS app" and "Verify packaged macOS app" below both enforce this.
             artifact_path: player/build/macos/Build/Products/Release/mydia-player-macos.zip
             shell: bash
           - platform: Linux
@@ -153,6 +155,16 @@ jobs:
         if: matrix.platform == 'macOS' && steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
         run: |
+          # The guards below validate the archive. This asserts the archive is
+          # what actually gets uploaded: without it, repointing artifact_path
+          # back at the .app directory would still leave both guards green while
+          # shipping the flattened bundle that issue #275 is about.
+          EXPECTED="${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/mydia-player-macos.zip"
+          if [ "${{ matrix.artifact_path }}" != "$EXPECTED" ]; then
+            echo "::error::artifact_path is '${{ matrix.artifact_path }}' but must be '$EXPECTED'. The uploaded artifact is not the verified archive."
+            exit 1
+          fi
+
           rm -rf verify && mkdir verify
           ditto -x -k "mydia-player-macos.zip" verify
 
@@ -180,7 +192,7 @@ jobs:
       # upload-artifact archives a directory path as a plain zip, and its zip
       # implementation replaces every symlink with a copy of the symlink's
       # target. That is what broke the macOS artifact (see the packaging step
-      # below). The Linux bundle has no symlinks today: CMake's
+      # above). The Linux bundle has no symlinks today: CMake's
       # install(FILES ...) at player/linux/CMakeLists.txt:111 dereferences them,
       # and media_kit links the system libmpv rather than bundling a versioned
       # .so chain. Assert that rather than assume it, so the day a dependency
