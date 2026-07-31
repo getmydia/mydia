@@ -194,3 +194,19 @@ jobs:
           name: mydia-player-android-apk
           path: player/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
+
+  icons:
+    name: Check / Web icons
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Guards the failure mode from 2026-01: a source SVG changes but the
+      # generated web icon set is not regenerated, so the app ships a stale or
+      # stock icon. --check needs only coreutils, hence no Flutter, no nix and
+      # no matrix here.
+      - name: Check web icons are current
+        working-directory: player
+        run: tool/gen-web-icons.sh --check
