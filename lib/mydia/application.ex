@@ -33,6 +33,10 @@ defmodule Mydia.Application do
         {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Mydia.PubSub},
         Mydia.Downloads.Client.Registry,
+        # Owns the ETS table holding the derived set of client torrents Mydia
+        # does not manage. init/1 only creates the table (no I/O), so unlike
+        # ClientHealth this is safe to start in every environment.
+        Mydia.Downloads.ExternalTorrents,
         Mydia.Indexers.Adapter.Registry,
         Mydia.Indexers.RateLimiter,
         Mydia.Metadata.Provider.Registry,
