@@ -42,4 +42,15 @@ defmodule Mydia.MigrationCase do
   def run_migration!(module, version) do
     Ecto.Migrator.up(Mydia.MigrationTestRepo, version, module, log: false)
   end
+
+  @doc """
+  Roll a migration module back against the migration test repo.
+
+  Runs `down/0` for a migration defining one, and replays `change/0` backward
+  otherwise. `version` must already have been applied with `run_migration!/2`,
+  otherwise `Ecto.Migrator` reports `:already_down` without running anything.
+  """
+  def rollback_migration!(module, version) do
+    Ecto.Migrator.down(Mydia.MigrationTestRepo, version, module, log: false)
+  end
 end

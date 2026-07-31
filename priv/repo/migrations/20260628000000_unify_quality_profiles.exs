@@ -18,9 +18,11 @@ defmodule Mydia.Repo.Migrations.UnifyQualityProfiles do
   # --- Backfill ---
 
   defp backfill_preferred_resolutions do
-    # A replayed migration (schema_migrations reset, or a database restored from
-    # a point after `qualities` was already dropped) has nothing left to
-    # backfill from, and selecting a missing column would abort the migration.
+    # A migration replayed after a schema_migrations reset finds `qualities`
+    # already dropped, with nothing left to backfill from, and selecting a
+    # missing column would abort it. The guard is SQLite-only: on PostgreSQL it
+    # always falls through, so a Postgres replay still aborts exactly as it did
+    # before, which keeps the Postgres path byte-identical.
     if postgres?() or sqlite_column?("quality_profiles", "qualities") do
       %{rows: rows} =
         repo().query!("SELECT id, qualities, quality_standards FROM quality_profiles")

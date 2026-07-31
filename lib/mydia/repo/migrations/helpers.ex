@@ -37,6 +37,8 @@ defmodule Mydia.Repo.Migrations.Helpers do
 
   import Ecto.Migration
 
+  alias Ecto.Migration.Runner
+
   @doc """
   Returns true if using PostgreSQL adapter.
 
@@ -307,6 +309,10 @@ defmodule Mydia.Repo.Migrations.Helpers do
   For SQLite: Performs full table recreation (rename -> create -> copy -> drop).
   For PostgreSQL: Executes the provided ALTER statements.
 
+  On SQLite this runs through `preserving_fk_children/2` and inherits its
+  constraints: the migration must run inside a transaction and must define
+  explicit `up/0` and `down/0` rather than `change/0`.
+
   ## Options
 
   - `:table` - Table name (atom, required)
@@ -454,6 +460,10 @@ defmodule Mydia.Repo.Migrations.Helpers do
   For SQLite: Recreates the table with the new column definitions.
   For PostgreSQL: Executes ALTER COLUMN statements.
 
+  On SQLite this runs through `preserving_fk_children/2` and inherits its
+  constraints: the migration must run inside a transaction and must define
+  explicit `up/0` and `down/0` rather than `change/0`.
+
   ## Options
 
   - `:table` - Table name (atom, required)
@@ -528,10 +538,45 @@ defmodule Mydia.Repo.Migrations.Helpers do
   On PostgreSQL this simply calls `rebuild_fun`, which never needs to drop the
   parent table.
 
-  ## Constraint
+  ## Constraints
 
-  This calls `Ecto.Migration.flush/0`, which raises when called from a `change/0`
-  migration running backward. Callers must define explicit `up/0` and `down/0`.
+  The migration must run inside a transaction, so it must not set
+  `@disable_ddl_transaction true`.
+
+  The migration must define explicit `up/0` and `down/0` rather than `change/0`.
+  This helper has to flush the migration's queued commands so its own immediate
+  queries see them, and flushing is impossible while a `change/0` body is being
+  replayed backward for a rollback. A `change/0` migration that reaches this
+  helper works when rolled forward and raises with that instruction when rolled
+  back; with explicit `up/0` and `down/0`, both directions work.
+
+  ## What the restore assumes
+
+  Children are restored with `INSERT INTO child SELECT * FROM snapshot`, which
+  assumes three things about the child set:
+
+  - `rebuild_fun` alters no table in it. The snapshots carry the pre-rebuild
+    column layout, so a rebuild that also reshapes a child leaves the restore
+    inserting the wrong number of columns.
+  - No child has a `GENERATED` column. `SELECT *` supplies a value for every
+    column and SQLite rejects an explicit insert into a generated one.
+  - No child has a self-referencing foreign key. `direct_fk_children/1` drops
+    self-edges for every table rather than only for the root, so such a child is
+    emptied and restored as a single unordered batch and its own rows can
+    violate the self-reference on the way back in.
+
+  All three hold in this schema today, and all three fail loudly inside the
+  migration's transaction rather than corrupting data. Only the first is
+  something a future caller can introduce without noticing.
+
+  ## Disk usage
+
+  The snapshots temporarily double every child table on disk, inside the
+  migration's transaction. An operator upgrading a large library from a
+  pre-`20251128014213` install pulls in `media_files` with its blob columns, so a
+  disk-constrained server can hit `SQLITE_FULL`. The transaction rolls back
+  cleanly, but SQLite's error says nothing about free space, so check free disk
+  before concluding the migration itself is broken.
 
   ## Example
 
@@ -572,7 +617,7 @@ defmodule Mydia.Repo.Migrations.Helpers do
     # `execute/1` and the migration DSL queue their commands; `repo().query!`
     # below runs immediately. Flush so anything queued earlier in this migration
     # is applied before the snapshots are taken.
-    flush()
+    flush_migration_commands!()
 
     children = sqlite_fk_children(repo(), table)
 
@@ -586,7 +631,7 @@ defmodule Mydia.Repo.Migrations.Helpers do
 
     # Flush again so the caller's queued rebuild has actually run before the
     # rows go back.
-    flush()
+    flush_migration_commands!()
 
     children
     |> Enum.reverse()
@@ -607,6 +652,46 @@ defmodule Mydia.Repo.Migrations.Helpers do
     end)
 
     result
+  end
+
+  # `Ecto.Migration.flush/0` is a macro, and the rollback guard it expands to
+  # tests `function_exported?(__MODULE__, :down, 0)` with `__MODULE__` resolved
+  # at the *expansion* site. Expanded in this module that is
+  # `Mydia.Repo.Migrations.Helpers`, which exports no `down/0`, so the guard
+  # collapses to `direction() == :down` and fires for every rollback that
+  # reaches here, including migrations that do define an explicit `down/0`.
+  # Flush through the runner directly and re-apply the guard against the
+  # migration module that is actually running.
+  defp flush_migration_commands! do
+    module = running_migration()
+
+    if rolling_back_a_change?(module) do
+      raise Ecto.MigrationError,
+        message:
+          "#{inspect(module)} rebuilds a table through preserving_fk_children/2, which has to " <>
+            "flush the migration's queued commands. Flushing is not supported while a change/0 " <>
+            "migration is replayed backward for a rollback. Replace change/0 with explicit " <>
+            "up/0 and down/0."
+    end
+
+    Runner.flush()
+  end
+
+  defp rolling_back_a_change?(nil), do: false
+
+  defp rolling_back_a_change?(module) do
+    Runner.migrator_direction() == :down and not function_exported?(module, :down, 0)
+  end
+
+  # The migration module currently running, or `nil` when the runner's state
+  # cannot be read. `nil` is only reachable if ecto_sql changes that state's
+  # shape, and it deliberately skips the guard rather than blocking every
+  # rollback the way the mis-expanded `flush/0` did.
+  defp running_migration do
+    case Process.get(:ecto_migration) do
+      %{runner: runner} -> Agent.get(runner, &Map.get(&1, :migration))
+      _ -> nil
+    end
   end
 
   defp fk_snapshot_table(child), do: "__mydia_fk_snap_#{child}"
