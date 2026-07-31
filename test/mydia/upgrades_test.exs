@@ -34,6 +34,24 @@ defmodule Mydia.UpgradesTest do
     {movie, file}
   end
 
+  defp analyzed_episode_file(profile) do
+    show = insert(:tv_show, monitored: true, quality_profile: profile)
+    episode = insert(:episode, media_item: show, monitored: true)
+
+    file =
+      insert(:media_file,
+        episode: episode,
+        resolution: "720p",
+        codec: "H.264 (High)",
+        audio_codec: "AAC Stereo",
+        size: 2 * 1024 * 1024 * 1024,
+        analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        quality_profile: profile
+      )
+
+    {episode, file}
+  end
+
   describe "eligible_movies/1" do
     test "returns a below-cutoff movie with its file and profile" do
       profile = upgradeable_profile()
@@ -144,6 +162,62 @@ defmodule Mydia.UpgradesTest do
       # must pull `needs_upgrade` into the candidate pool too.
       assert [%{media_item: found}] = Upgrades.eligible_movies(1)
       assert found.id == needs_upgrade.id
+    end
+  end
+
+  describe "eligible_episodes/1" do
+    test "returns a below-cutoff episode with its file, profile, and score" do
+      profile = upgradeable_profile()
+      {episode, _file} = analyzed_episode_file(profile)
+
+      assert [%{episode: found, score: score}] = Upgrades.eligible_episodes(10)
+      assert found.id == episode.id
+      assert is_float(score)
+    end
+
+    test "excludes an episode whose only file was never analyzed" do
+      profile = upgradeable_profile()
+      show = insert(:tv_show, monitored: true)
+      episode = insert(:episode, media_item: show, monitored: true)
+
+      insert(:media_file,
+        episode: episode,
+        resolution: "720p",
+        analyzed_at: nil,
+        quality_profile: profile
+      )
+
+      assert [] = Upgrades.eligible_episodes(10)
+    end
+
+    test "excludes an episode with an occupying download" do
+      profile = upgradeable_profile()
+      {episode, _file} = analyzed_episode_file(profile)
+      insert(:download, media_item: episode.media_item, episode: episode)
+
+      assert [] = Upgrades.eligible_episodes(10)
+    end
+
+    test "orders never-checked items before previously-checked ones" do
+      profile = upgradeable_profile()
+      {old, _} = analyzed_episode_file(profile)
+
+      {:ok, _} =
+        old
+        |> Ecto.Changeset.change(last_upgrade_check_at: ~U[2026-01-01 00:00:00Z])
+        |> Repo.update()
+
+      {fresh, _} = analyzed_episode_file(profile)
+
+      assert [%{episode: first} | _] = Upgrades.eligible_episodes(10)
+      assert first.id == fresh.id
+    end
+
+    test "respects the limit" do
+      profile = upgradeable_profile()
+      for _ <- 1..3, do: analyzed_episode_file(profile)
+
+      assert length(Upgrades.eligible_episodes(2)) == 2
     end
   end
 

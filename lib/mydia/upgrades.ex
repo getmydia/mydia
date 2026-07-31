@@ -9,8 +9,6 @@ defmodule Mydia.Upgrades do
 
   import Ecto.Query, warn: false
 
-  require Logger
-
   alias Mydia.Downloads.Download
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Library.MediaFile
@@ -27,6 +25,7 @@ defmodule Mydia.Upgrades do
   def eligible_movies(limit) when is_integer(limit) and limit > 0 do
     MediaItem
     |> where([m], m.type == "movie" and m.monitored == true)
+    |> where([m], m.id in subquery(analyzed_movie_ids()))
     |> where([m], m.id not in subquery(occupying_media_item_ids()))
     |> where([m], m.id not in subquery(backed_off_ids("movie")))
     |> order_by([m], asc_nulls_first: m.last_upgrade_check_at)
@@ -42,6 +41,8 @@ defmodule Mydia.Upgrades do
     Episode
     |> join(:inner, [e], m in assoc(e, :media_item))
     |> where([e, m], e.monitored == true and m.monitored == true)
+    |> where([e, _m], e.id in subquery(analyzed_episode_ids()))
+    |> where([e, _m], e.id not in subquery(occupying_episode_ids()))
     |> where([e, _m], e.id not in subquery(backed_off_ids("episode")))
     |> order_by([e, _m], asc_nulls_first: e.last_upgrade_check_at)
     |> limit(^(limit * @overfetch))
@@ -116,10 +117,37 @@ defmodule Mydia.Upgrades do
       where: is_nil(f.trashed_at) and not is_nil(f.analyzed_at)
   end
 
+  # SQL-level narrowing to items that even have a scorable file, so an
+  # unanalyzed item (fresh off a large import, before background analysis
+  # catches up) never consumes a slot in the `@overfetch` page.
+  defp analyzed_movie_ids do
+    MediaFile
+    |> where(
+      [f],
+      is_nil(f.trashed_at) and not is_nil(f.analyzed_at) and not is_nil(f.media_item_id)
+    )
+    |> select([f], f.media_item_id)
+    |> distinct(true)
+  end
+
+  defp analyzed_episode_ids do
+    MediaFile
+    |> where([f], is_nil(f.trashed_at) and not is_nil(f.analyzed_at) and not is_nil(f.episode_id))
+    |> select([f], f.episode_id)
+    |> distinct(true)
+  end
+
   defp occupying_media_item_ids do
     Download.occupying()
     |> where([d], not is_nil(d.media_item_id))
     |> select([d], d.media_item_id)
+    |> distinct(true)
+  end
+
+  defp occupying_episode_ids do
+    Download.occupying()
+    |> where([d], not is_nil(d.episode_id))
+    |> select([d], d.episode_id)
     |> distinct(true)
   end
 
