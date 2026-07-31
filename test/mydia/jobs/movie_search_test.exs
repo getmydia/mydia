@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.MovieSearchTest do
 
   alias Mydia.Jobs.MovieSearch
   alias Mydia.Library
+  alias Mydia.Search
   alias Mydia.Settings
   alias Mydia.IndexerMock
   alias Mydia.Downloads.Client
@@ -456,6 +457,160 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert [download] = Mydia.Downloads.list_downloads()
       assert download.title =~ "1080p"
       refute download.title =~ "480p"
+    end
+  end
+
+  describe "Args.parse/1 upgrade mode" do
+    test "parses upgrade mode with a target file" do
+      args =
+        MovieSearch.Args.parse(%{
+          "mode" => "upgrade",
+          "media_item_id" => "item-uuid",
+          "media_file_id" => "file-uuid"
+        })
+
+      assert args.mode == "upgrade"
+      assert args.media_item_id == "item-uuid"
+      assert args.media_file_id == "file-uuid"
+    end
+  end
+
+  describe "perform/1 - upgrade mode" do
+    defp upgrade_target(library_path, opts \\ []) do
+      profile_attrs =
+        Keyword.get(opts, :profile, %{
+          name: "Upgrade profile #{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+          min_upgrade_margin: 0
+        })
+
+      profile = quality_profile_fixture(profile_attrs)
+
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "The Matrix",
+          year: 1999,
+          quality_profile_id: profile.id
+        })
+
+      file_attrs =
+        Keyword.get(opts, :file_attrs, %{})
+        |> Enum.into(%{
+          media_item_id: movie.id,
+          path: "/test/library/matrix.mkv",
+          relative_path: "matrix.mkv",
+          library_path_id: library_path.id,
+          size: 2_000_000_000,
+          resolution: "720p",
+          codec: "H.264 (High)",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, media_file} = Library.create_media_file(file_attrs)
+
+      {movie, media_file}
+    end
+
+    test "returns {:ok, :skipped} when the media item no longer exists" do
+      fake_media_item_id = Ecto.UUID.generate()
+      fake_media_file_id = Ecto.UUID.generate()
+
+      assert {:ok, :skipped} =
+               perform_job(MovieSearch, %{
+                 "mode" => "upgrade",
+                 "media_item_id" => fake_media_item_id,
+                 "media_file_id" => fake_media_file_id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "returns {:ok, :skipped} when the target media file no longer exists" do
+      movie = media_item_fixture(%{type: "movie", title: "The Matrix", year: 1999})
+      fake_media_file_id = Ecto.UUID.generate()
+
+      assert {:ok, :skipped} =
+               perform_job(MovieSearch, %{
+                 "mode" => "upgrade",
+                 "media_item_id" => movie.id,
+                 "media_file_id" => fake_media_file_id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "returns {:ok, :skipped} when the target media file has been trashed", %{
+      library_path: library_path
+    } do
+      {movie, media_file} =
+        upgrade_target(library_path,
+          file_attrs: %{trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)}
+        )
+
+      assert {:ok, :skipped} =
+               perform_job(MovieSearch, %{
+                 "mode" => "upgrade",
+                 "media_item_id" => movie.id,
+                 "media_file_id" => media_file.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "grabs a genuine upgrade candidate and tags the download with its target file", %{
+      library_path: library_path
+    } do
+      {movie, media_file} = upgrade_target(library_path)
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "upgrade",
+                 "media_item_id" => movie.id,
+                 "media_file_id" => media_file.id
+               })
+
+      assert [download] = Mydia.Downloads.list_downloads()
+      assert download.title =~ "1080p"
+      assert download.metadata["upgrade_target_media_file_id"] == media_file.id
+      assert download.media_item_id == movie.id
+    end
+
+    # Proves the Comparator genuinely gates the grab rather than merely being
+    # called for show: same movie, same file, same mocked indexer results as
+    # the "grabs a genuine upgrade candidate" test above (proven there to
+    # produce a grab) — the *only* difference is min_upgrade_margin raised to
+    # a value no real score delta could ever clear. If the filter were
+    # removed (or merely a no-op), this would grab exactly like the sibling
+    # test does; instead nothing is grabbed and the miss is recorded as a
+    # search-backoff failure like the other modes' "no results" paths.
+    test "does not grab a candidate that fails the Comparator's margin, even though ReleaseRanker would otherwise pick it",
+         %{library_path: library_path} do
+      {movie, media_file} =
+        upgrade_target(library_path,
+          profile: %{
+            name: "Unreachable margin",
+            quality_standards: %{preferred_resolutions: ["1080p", "720p"]},
+            # 100 is the maximum a QualityProfile changeset allows, and a
+            # single-dimension (resolution-only) improvement never scores a
+            # full 0->100 swing across every weighted quality dimension, so
+            # this margin is unreachable without changing anything else about
+            # the fixture — see the module doc comment above this test.
+            min_upgrade_margin: 100
+          }
+        )
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "upgrade",
+                 "media_item_id" => movie.id,
+                 "media_file_id" => media_file.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      backoff = Search.get_backoff("movie", movie.id)
+      assert backoff.failure_count == 1
     end
   end
 end

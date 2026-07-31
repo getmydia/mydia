@@ -38,8 +38,12 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Indexers.RankingOptions
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
+  alias Mydia.Library
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.Quality
   alias Mydia.Media.MediaItem
+  alias Mydia.Settings.QualityProfile
+  alias Mydia.Upgrades.Comparator
   alias Phoenix.PubSub
 
   defmodule Args do
@@ -47,6 +51,7 @@ defmodule Mydia.Jobs.MovieSearch do
     defstruct [
       :mode,
       :media_item_id,
+      :media_file_id,
       :min_seeders,
       :size_range,
       :blocked_tags,
@@ -56,6 +61,7 @@ defmodule Mydia.Jobs.MovieSearch do
     @type t :: %__MODULE__{
             mode: String.t() | nil,
             media_item_id: String.t() | nil,
+            media_file_id: String.t() | nil,
             min_seeders: integer() | nil,
             size_range: term() | nil,
             blocked_tags: [String.t()] | nil,
@@ -76,6 +82,24 @@ defmodule Mydia.Jobs.MovieSearch do
       %__MODULE__{
         mode: "specific",
         media_item_id: media_item_id,
+        min_seeders: Map.get(raw, "min_seeders"),
+        size_range: Map.get(raw, "size_range"),
+        blocked_tags: Map.get(raw, "blocked_tags"),
+        preferred_tags: Map.get(raw, "preferred_tags")
+      }
+    end
+
+    def parse(
+          %{
+            "mode" => "upgrade",
+            "media_item_id" => media_item_id,
+            "media_file_id" => media_file_id
+          } = raw
+        ) do
+      %__MODULE__{
+        mode: "upgrade",
+        media_item_id: media_item_id,
+        media_file_id: media_file_id,
         min_seeders: Map.get(raw, "min_seeders"),
         size_range: Map.get(raw, "size_range"),
         blocked_tags: Map.get(raw, "blocked_tags"),
@@ -216,6 +240,36 @@ defmodule Mydia.Jobs.MovieSearch do
         })
 
         {:error, reason}
+    end
+  end
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"mode" => "upgrade"} = raw_args}) do
+    args = Args.parse(raw_args)
+    media_item_id = args.media_item_id
+    media_file_id = args.media_file_id
+
+    Logger.info("Starting upgrade search for movie",
+      media_item_id: media_item_id,
+      media_file_id: media_file_id
+    )
+
+    case load_upgrade_target(media_item_id, media_file_id) do
+      {:ok, movie, file} ->
+        search_movie_upgrade(movie, file, args)
+        :ok
+
+      {:error, :not_found} ->
+        # The sweep that enqueued this job may be searching a stale
+        # snapshot: the item or its file may have been trashed or deleted
+        # in the meantime. That is a normal outcome, not a failure, so it
+        # must not burn Oban retries.
+        Logger.info("Skipping upgrade search - media item or file no longer exists",
+          media_item_id: media_item_id,
+          media_file_id: media_file_id
+        )
+
+        {:ok, :skipped}
     end
   end
 
@@ -580,6 +634,206 @@ defmodule Mydia.Jobs.MovieSearch do
 
         {:error, reason}
     end
+  end
+
+  ## Private Functions - Upgrade Mode
+
+  # Loads the two rows an upgrade job needs, treating a missing or trashed
+  # media file the same as a missing media item: both mean the target this
+  # job was enqueued for is gone, which is a normal race with the sweep
+  # (trashed between enqueue and this job running), not an error.
+  defp load_upgrade_target(media_item_id, media_file_id) do
+    movie = Repo.get(MediaItem, media_item_id)
+    file = Library.get_media_file(media_file_id)
+
+    case {movie, file} do
+      {%MediaItem{}, %MediaFile{trashed_at: nil}} -> {:ok, movie, file}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp search_movie_upgrade(%MediaItem{} = movie, %MediaFile{} = file, %Args{} = args) do
+    case QualityProfileResolver.resolve(movie) do
+      %QualityProfile{} = profile ->
+        run_upgrade_search(movie, file, profile, args)
+
+      nil ->
+        # No profile to compare against - there is nothing to gate an
+        # upgrade decision on, so there is nothing to search for.
+        Logger.warning("No quality profile resolved for upgrade search, skipping",
+          media_item_id: movie.id
+        )
+
+        :ok
+    end
+  end
+
+  defp run_upgrade_search(movie, file, profile, args) do
+    query = build_search_query(movie)
+
+    Logger.info("Searching for movie upgrade",
+      media_item_id: movie.id,
+      title: movie.title,
+      media_file_id: file.id,
+      query: query
+    )
+
+    min_seeders = args.min_seeders || get_min_seeders()
+
+    case Indexers.search_all(query, min_seeders: min_seeders) do
+      {:ok, %{results: [], indexer_errors: indexer_errors}} ->
+        if indexer_errors != [] do
+          Logger.warning("Upgrade search failed due to indexer errors",
+            media_item_id: movie.id,
+            title: movie.title,
+            query: query,
+            errors: inspect(indexer_errors)
+          )
+        end
+
+        Logger.warning("No results found for movie upgrade search",
+          media_item_id: movie.id,
+          title: movie.title,
+          query: query
+        )
+
+        record_movie_backoff(movie, "no_results")
+
+        Events.search_no_results(movie, %{
+          "query" => query,
+          "indexers_searched" => count_enabled_indexers()
+        })
+
+        :no_results
+
+      {:ok, %{results: results}} ->
+        Logger.info("Found #{length(results)} results for movie upgrade search",
+          media_item_id: movie.id,
+          title: movie.title
+        )
+
+        process_upgrade_results(movie, file, profile, results, args, query)
+    end
+  end
+
+  # Same shape as process_search_results/4, with one extra step: candidates
+  # are filtered through Comparator.upgrade?/5 *before* ReleaseRanker sees
+  # them. ReleaseRanker answers "which is best" (mixing seeders, indexer
+  # priority, tags); Comparator answers "is this actually better than what
+  # is on disk" - the sole authority for that question. Ranking survivors
+  # only, rather than ranking everything and checking the winner, keeps a
+  # release ReleaseRanker would have preferred but that isn't a real upgrade
+  # from ever being grabbed.
+  defp process_upgrade_results(movie, file, profile, results, args, query) do
+    results = reject_blacklisted(results, movie: movie)
+    candidates = filter_upgrade_candidates(results, file, profile)
+    ranking_opts = build_ranking_options(movie, args)
+
+    case ReleaseRanker.select_best_result(candidates, ranking_opts) do
+      nil ->
+        Logger.warning("No suitable upgrade found for movie",
+          media_item_id: movie.id,
+          title: movie.title,
+          total_results: length(results),
+          upgrade_candidates: length(candidates)
+        )
+
+        record_movie_backoff(movie, "no_upgrade_found")
+
+        Events.search_filtered_out(movie, %{
+          "query" => query,
+          "results_count" => length(results),
+          "filter_stats" => build_filter_stats(candidates, ranking_opts)
+        })
+
+        :no_results
+
+      %{result: best_result, score: score, breakdown: breakdown} ->
+        Logger.info("Selected best upgrade result for movie",
+          media_item_id: movie.id,
+          title: movie.title,
+          result_title: best_result.title,
+          score: score,
+          breakdown: breakdown
+        )
+
+        Events.search_completed(movie, %{
+          "query" => query,
+          "results_count" => length(results),
+          "selected_release" => best_result.title,
+          "score" => score,
+          "breakdown" => stringify_keys(breakdown)
+        })
+
+        case initiate_upgrade_download(movie, file, best_result) do
+          :ok ->
+            reset_movie_backoff(movie)
+            :ok
+
+          {:error, reason} ->
+            Events.download_initiation_failed(movie, reason, %{
+              "query" => query,
+              "results_count" => length(results),
+              "selected_release" => best_result.title,
+              "score" => score
+            })
+
+            :no_results
+        end
+    end
+  end
+
+  defp filter_upgrade_candidates(results, %MediaFile{} = file, %QualityProfile{} = profile) do
+    Enum.filter(results, fn result ->
+      case result.quality do
+        %Quality{} = quality ->
+          match?({:ok, _}, Comparator.upgrade?(file, quality, result.size, profile, :movie))
+
+        _ ->
+          false
+      end
+    end)
+  end
+
+  # Grabs through the same Downloads.Queue path the other modes use, with
+  # `manual: true` so check_for_existing_media_files/3 is bypassed - by
+  # definition an upgrade target already has a file, so that guard would
+  # reject every upgrade. check_for_active_download/3 still runs
+  # unconditionally: grabbing a second copy of something already
+  # downloading is still wrong even when upgrading.
+  defp initiate_upgrade_download(movie, file, result) do
+    with {:ok, download} <-
+           Downloads.initiate_download(result, media_item_id: movie.id, manual: true),
+         {:ok, _updated} <- attach_upgrade_target(download, file) do
+      Logger.info("Successfully initiated upgrade download for movie",
+        media_item_id: movie.id,
+        title: movie.title,
+        download_id: download.id,
+        result_title: result.title,
+        media_file_id: file.id
+      )
+
+      :ok
+    else
+      {:error, reason} ->
+        Logger.error("Failed to initiate upgrade download for movie",
+          media_item_id: movie.id,
+          title: movie.title,
+          reason: inspect(reason)
+        )
+
+        {:error, reason}
+    end
+  end
+
+  # A later job (import time) reads this to link the imported file to the
+  # one it supersedes. There is no generic metadata passthrough on
+  # initiate_download/2, so this is stamped on afterward - the same pattern
+  # Queue.refresh_match_suggestions/1 uses to patch match_suggestions onto
+  # an existing download.
+  defp attach_upgrade_target(%Download{} = download, %MediaFile{} = file) do
+    metadata = Map.put(download.metadata || %{}, "upgrade_target_media_file_id", file.id)
+    Downloads.update_download(download, %{metadata: metadata})
   end
 
   ## Private Functions - Search Delay
