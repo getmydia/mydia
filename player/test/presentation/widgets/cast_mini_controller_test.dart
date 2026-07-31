@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -144,8 +145,14 @@ Future<ProviderContainer> _pumpWithManager(
   return container;
 }
 
-/// Pumps [CastBarLayer] the way `app.dart` does: over a route, with no
-/// Navigator or Overlay of its own above the bar.
+/// Pumps [CastBarLayer] the way `app.dart` does: through a `MaterialApp.router`
+/// builder, so the bar starts with no Navigator or Overlay above it.
+///
+/// `MaterialApp(home: ...)` would not do — its own Navigator's Overlay sits
+/// above everything under `home`, so `Tooltip` would find one whether or not
+/// the layer supplies its own, and the tooltip test would pass with the fix
+/// reverted. The router's Overlay lives *inside* the builder's child, which is
+/// exactly the position that broke.
 Future<bool Function()> _pumpLayer(
   WidgetTester tester, {
   required CastDevice target,
@@ -162,20 +169,28 @@ Future<bool Function()> _pumpLayer(
   ]);
   addTearDown(container.dispose);
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      home: CastBarLayer(
-        child: Scaffold(
-          body: Center(
-            child: ElevatedButton(
-              key: const Key('below-the-bar'),
-              onPressed: () => tappedBelow = true,
-              child: const Text('Underneath'),
-            ),
+  final router = GoRouter(routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => Scaffold(
+        body: Center(
+          child: ElevatedButton(
+            key: const Key('below-the-bar'),
+            onPressed: () => tappedBelow = true,
+            child: const Text('Underneath'),
           ),
         ),
       ),
+    ),
+  ]);
+  addTearDown(router.dispose);
+
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp.router(
+      routerConfig: router,
+      builder: (context, child) =>
+          CastBarLayer(child: child ?? const SizedBox.shrink()),
     ),
   ));
   container.read(castTargetProvider.notifier).set(target);
