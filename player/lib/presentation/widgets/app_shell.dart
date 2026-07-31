@@ -508,12 +508,21 @@ class MydiaLogo extends StatelessWidget {
 class MydiaLogoPainter extends CustomPainter {
   const MydiaLogoPainter();
 
+  /// The mark's fill. Deliberately neutral rather than [AppColors.primary]:
+  /// the app icon and the Phoenix logo this mirrors are a fixed blue that the
+  /// player's palette does not own, so a mark that tracked the accent would
+  /// drift away from them on every repalette.
+  static const Color markColor = AppColors.textPrimary;
+
+  /// The inner cut-out, which reads as a hole through to the shell behind it.
+  static const Color cutoutColor = AppColors.background;
+
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width; // square
     final scale = s / 48.0; // SVG viewBox is 48x48
 
-    // Outer squircle – primary fill
+    // Outer squircle – mark fill
     final outerRect = RRect.fromLTRBR(
       1 * scale,
       1 * scale,
@@ -521,7 +530,7 @@ class MydiaLogoPainter extends CustomPainter {
       47 * scale,
       Radius.circular(10 * scale),
     );
-    canvas.drawRRect(outerRect, Paint()..color = AppColors.primary);
+    canvas.drawRRect(outerRect, Paint()..color = markColor);
 
     // Inner squircle – background fill
     final innerRect = RRect.fromLTRBR(
@@ -531,7 +540,7 @@ class MydiaLogoPainter extends CustomPainter {
       43 * scale,
       Radius.circular(7 * scale),
     );
-    canvas.drawRRect(innerRect, Paint()..color = AppColors.background);
+    canvas.drawRRect(innerRect, Paint()..color = cutoutColor);
 
     // M letterform
     final mPath = Path()
@@ -549,7 +558,7 @@ class MydiaLogoPainter extends CustomPainter {
       ..lineTo(17 * scale, 22 * scale)
       ..lineTo(17 * scale, 34 * scale)
       ..close();
-    canvas.drawPath(mPath, Paint()..color = AppColors.primary);
+    canvas.drawPath(mPath, Paint()..color = markColor);
   }
 
   @override
