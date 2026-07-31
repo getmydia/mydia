@@ -21,14 +21,6 @@
          <lastmod>2026-07-31</lastmod>
     </url>
     <url>
-         <loc>https://docs.mydia.dev/dev/brainstorms/2026-03-25-auto-file-renaming-brainstorm/</loc>
-         <lastmod>2026-07-31</lastmod>
-    </url>
-    <url>
-         <loc>https://docs.mydia.dev/dev/brainstorms/2026-06-16-debrid-download-client-env-examples-requirements/</loc>
-         <lastmod>2026-07-31</lastmod>
-    </url>
-    <url>
          <loc>https://docs.mydia.dev/dev/development/architecture/</loc>
          <lastmod>2026-07-31</lastmod>
     </url>
@@ -58,18 +50,6 @@
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/getting-started/quick-start/</loc>
-         <lastmod>2026-07-31</lastmod>
-    </url>
-    <url>
-         <loc>https://docs.mydia.dev/dev/plans/2026-03-25-feat-auto-file-renaming-on-import-plan/</loc>
-         <lastmod>2026-07-31</lastmod>
-    </url>
-    <url>
-         <loc>https://docs.mydia.dev/dev/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures/</loc>
-         <lastmod>2026-07-31</lastmod>
-    </url>
-    <url>
-         <loc>https://docs.mydia.dev/dev/plans/2026-05-14-usenet-improvements-rollout-plan/</loc>
          <lastmod>2026-07-31</lastmod>
     </url>
     <url>
@@ -106,10 +86,6 @@
     </url>
     <url>
          <loc>https://docs.mydia.dev/dev/reference/remote-access/</loc>
-         <lastmod>2026-07-31</lastmod>
-    </url>
-    <url>
-         <loc>https://docs.mydia.dev/dev/solutions/logic-errors/playback-progress-partial-hls-duration/</loc>
          <lastmod>2026-07-31</lastmod>
     </url>
     <url>
