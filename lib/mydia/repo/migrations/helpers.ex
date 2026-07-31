@@ -374,6 +374,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
   end
 
   defp sqlite_recreate_table(table_name, opts) do
+    preserving_fk_children(table_name, fn ->
+      sqlite_recreate_table_body(table_name, opts)
+    end)
+  end
+
+  defp sqlite_recreate_table_body(table_name, opts) do
     columns = opts[:columns] || raise ArgumentError, ":columns option is required for SQLite"
     indexes = opts[:indexes] || []
     primary_key_opt = Keyword.get(opts, :primary_key, false)

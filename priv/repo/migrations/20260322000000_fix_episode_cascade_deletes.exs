@@ -105,6 +105,12 @@ defmodule Mydia.Repo.Migrations.FixEpisodeCascadeDeletes do
     [:last_watched_at]
   ]
 
+  @doc false
+  def __media_files_columns__, do: @media_files_columns
+
+  @doc false
+  def __media_files_indexes__, do: @media_files_indexes
+
   def up do
     fix_table_up(:media_files, @media_files_columns, @media_files_indexes, :nilify_all)
     fix_table_up(:downloads, @downloads_columns, @downloads_indexes, :nilify_all)
