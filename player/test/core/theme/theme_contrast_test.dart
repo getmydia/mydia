@@ -5,8 +5,9 @@
 //   - onPrimary (#FFFFFF) on primary (#4B8DF7) measured 3.25:1. Filled button
 //     labels ship at 14px semibold, which is not "large text" under SC 1.4.3
 //     (that needs 18.66px bold or 24px), so the 4.5:1 floor applies.
-//   - textDisabled (#546580) measured 3.19:1 on background, while its own
-//     comment in colors.dart claimed "~4.5:1 contrast".
+//   - textDisabled (#546580) measured 3.19:1 against the original #0A1120
+//     ground and 3.33:1 against the neutral #0B0B0C ground that replaced it,
+//     while its own comment in colors.dart claimed "~4.5:1 contrast".
 //
 // Everything here is computed from the tokens rather than hardcoded, so the
 // floors keep holding as the palette moves.
