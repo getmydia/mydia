@@ -548,6 +548,21 @@ defmodule Mydia.Repo.Migrations.Helpers do
   end
 
   defp sqlite_preserving_fk_children(table, rebuild_fun) do
+    # This empties child tables before the rebuild and relies entirely on the
+    # migration's transaction to undo that if anything below fails. Without
+    # it, a failure between the DELETE loop and the restore leaves every
+    # child table permanently empty - worse than the bug this primitive
+    # exists to fix. Ecto wraps migrations in a transaction by default; this
+    # guards against a future `@disable_ddl_transaction true` silently
+    # turning this into a data-loss primitive.
+    unless repo().in_transaction?() do
+      raise Ecto.MigrationError,
+        message:
+          "preserving_fk_children/2 requires the migration to run inside a transaction " <>
+            "(it empties child tables and relies on transaction rollback to undo that on " <>
+            "failure); this migration must not set @disable_ddl_transaction true"
+    end
+
     # `execute/1` and the migration DSL queue their commands; `repo().query!`
     # below runs immediately. Flush so anything queued earlier in this migration
     # is applied before the snapshots are taken.
@@ -573,7 +588,13 @@ defmodule Mydia.Repo.Migrations.Helpers do
       repo().query!(~s|INSERT INTO "#{child}" SELECT * FROM "#{fk_snapshot_table(child)}"|)
     end)
 
-    assert_no_fk_violations!()
+    # Scoped to the tables this rebuild actually touched, not the whole
+    # database: an unscoped `PRAGMA foreign_key_check` would abort (and
+    # roll back) on a pre-existing orphan row anywhere else in the schema,
+    # naming an unrelated table as if this rebuild caused it. Any violation
+    # the restore itself could introduce already raises at the INSERT above,
+    # since foreign keys here are enforced immediately.
+    assert_no_fk_violations!([table | children])
 
     Enum.each(children, fn child ->
       repo().query!(~s|DROP TABLE "#{fk_snapshot_table(child)}"|)
@@ -584,16 +605,22 @@ defmodule Mydia.Repo.Migrations.Helpers do
 
   defp fk_snapshot_table(child), do: "__mydia_fk_snap_#{child}"
 
-  defp assert_no_fk_violations! do
-    case repo().query!("PRAGMA foreign_key_check") do
-      %{rows: []} ->
+  defp assert_no_fk_violations!(tables) do
+    violations =
+      Enum.flat_map(tables, fn table ->
+        %{rows: rows} = repo().query!(~s|PRAGMA foreign_key_check("#{table}")|)
+        rows
+      end)
+
+    case violations do
+      [] ->
         :ok
 
-      %{rows: rows} ->
-        tables = rows |> Enum.map(&List.first/1) |> Enum.uniq() |> Enum.join(", ")
+      rows ->
+        offending = rows |> Enum.map(&List.first/1) |> Enum.uniq() |> Enum.join(", ")
 
         raise Ecto.MigrationError,
-          message: "foreign key violations remain after rebuild, in: #{tables}"
+          message: "foreign key violations remain after rebuild, in: #{offending}"
     end
   end
 
