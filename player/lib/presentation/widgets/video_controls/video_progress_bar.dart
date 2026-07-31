@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../../../core/player/duration_override.dart';
+import '../../../core/player/stream_timeline.dart';
 import '../../../core/theme/depth_tokens.dart';
 
 /// The scrubber's painting and gesture surface, free of any [Player]
@@ -245,6 +245,11 @@ class VideoProgressBar extends StatelessWidget {
   /// The media_kit player instance.
   final Player player;
 
+  /// The mapping from the player's stream-local positions onto real media
+  /// positions. [StreamTimeline.zero] is correct for direct play and offline
+  /// files.
+  final StreamTimeline timeline;
+
   /// Called when seeking starts.
   final VoidCallback? onSeekStart;
 
@@ -260,6 +265,7 @@ class VideoProgressBar extends StatelessWidget {
   const VideoProgressBar({
     super.key,
     required this.player,
+    required this.timeline,
     this.onSeekStart,
     this.onSeekEnd,
     this.onSeekUpdate,
@@ -286,11 +292,15 @@ class VideoProgressBar extends StatelessWidget {
               stream: player.stream.buffer,
               initialData: player.state.buffer,
               builder: (context, bufferSnapshot) {
-                final position = positionSnapshot.data ?? Duration.zero;
-                final duration = DurationOverride.getDuration(
+                final position = timeline.toReal(
+                  positionSnapshot.data ?? Duration.zero,
+                );
+                final duration = timeline.resolveDuration(
                   durationSnapshot.data ?? Duration.zero,
                 );
-                final buffer = bufferSnapshot.data ?? Duration.zero;
+                final buffer = timeline.toReal(
+                  bufferSnapshot.data ?? Duration.zero,
+                );
                 final totalMs = duration.inMilliseconds.toDouble();
 
                 double fraction(Duration d) => totalMs > 0
@@ -307,7 +317,7 @@ class VideoProgressBar extends StatelessWidget {
                   onSeekStart: onSeekStart,
                   onSeekEnd: onSeekEnd,
                   onSeekUpdate: (f) => onSeekUpdate?.call(at(f)),
-                  onSeekTo: (f) => player.seek(at(f)),
+                  onSeekTo: (f) => player.seek(timeline.toPlayer(at(f))),
                 );
               },
             );

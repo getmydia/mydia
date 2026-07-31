@@ -19,7 +19,7 @@ import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
-import '../../../core/player/duration_override.dart';
+import '../../../core/player/stream_timeline.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
@@ -120,6 +120,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   // Total duration from server (for HLS streams where playlist duration is incomplete)
   Duration? _totalDuration;
+
+  // The mapping from the player's stream-local positions onto real media
+  // positions. Stays at its zero default until Task 7 builds a real one from
+  // the server's echoed resume offset.
+  StreamTimeline _timeline = StreamTimeline.zero;
 
   // Desktop feature state
   final FocusNode _focusNode = FocusNode();
@@ -381,7 +386,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           _totalDuration = Duration(
             milliseconds: (duration * 1000).round(),
           );
-          DurationOverride.value = _totalDuration;
           debugPrint(
               '[PlayerScreen] Total duration from candidates: $_totalDuration');
         }
@@ -457,7 +461,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           _totalDuration = Duration(
             milliseconds: (sessionResult.duration! * 1000).round(),
           );
-          DurationOverride.value = _totalDuration;
           debugPrint(
               '[PlayerScreen] Total duration from session: $_totalDuration');
         }
@@ -557,6 +560,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // Start progress tracking
     if (_progressService != null) {
+      _progressService!.timeline = _timeline;
       if (widget.mediaType == 'movie') {
         _progressService!.startMovieSync(_player!, widget.mediaId);
       } else if (widget.mediaType == 'episode') {
@@ -1514,9 +1518,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
     _terminateHlsSession();
 
-    // Clear duration override
-    DurationOverride.clear();
-
     // Unregister beforeunload handler on web
     if (kIsWeb) {
       web_lifecycle.unregisterBeforeUnload();
@@ -1667,6 +1668,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       child: Video(
         controller: _videoController!,
         controls: customVideoControlsBuilderWithCallback(
+          timeline: _timeline,
           title: widget.title,
           onBack: () {
             if (context.canPop()) {
@@ -1697,6 +1699,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (PlatformFeatures.supportsGestureControls && player != null) {
       videoPlayer = GestureControls(
         player: player,
+        timeline: _timeline,
         child: videoPlayer,
       );
     }
@@ -1801,7 +1804,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           mediaId: widget.mediaId,
           mediaType: widget.mediaType,
           title: widget.title ?? 'Untitled',
-          startPosition: _player?.state.position,
+          startPosition: _player == null
+              ? null
+              : _timeline.toReal(_player!.state.position),
           // The receiver cannot work this out for itself: Mydia's HLS
           // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
           // Chromecast reports `duration: -1` for the whole session. Hand it
@@ -1916,19 +1921,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   /// The item's runtime, from the most trustworthy source available.
   ///
-  /// Prefers `_totalDuration` (the server's own figure, from the candidates
-  /// metadata) over the local player's, because on an HLS stream media_kit is
-  /// working from the same incomplete playlist the receiver is. Returns null
-  /// when neither knows yet, which the cast UI renders as an unknown length
-  /// rather than as zero.
+  /// A Chromecast reports `duration: -1` for a Mydia HLS session, because the
+  /// playlist carries no `#EXT-X-ENDLIST` until FFmpeg finishes. Hand it the
+  /// figure the server gave us instead.
   Duration? _knownCastDuration() {
-    final fromServer = _totalDuration;
-    if (fromServer != null && fromServer > Duration.zero) return fromServer;
+    final player = _player;
+    if (player == null) return _timeline.totalDuration;
 
-    final fromPlayer = _player?.state.duration;
-    if (fromPlayer != null && fromPlayer > Duration.zero) return fromPlayer;
-
-    return null;
+    final resolved = _timeline.resolveDuration(player.state.duration);
+    return resolved > Duration.zero ? resolved : null;
   }
 }
 

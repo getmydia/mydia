@@ -6,7 +6,7 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../graphql/mutations/update_movie_progress.graphql.dart';
 import '../../graphql/mutations/update_episode_progress.graphql.dart';
-import 'duration_override.dart';
+import 'stream_timeline.dart';
 
 /// Service for syncing playback progress to the server.
 ///
@@ -19,6 +19,11 @@ class ProgressService {
 
   static const _syncInterval = Duration(seconds: 10);
   static const _watchedThreshold = 0.90; // 90% completion
+
+  /// The mapping from media_kit's stream-local positions onto real media
+  /// positions. Set by the player screen once the streaming session is known;
+  /// [StreamTimeline.zero] is correct for direct play and offline files.
+  StreamTimeline timeline = StreamTimeline.zero;
 
   ProgressService(this._client);
 
@@ -71,13 +76,14 @@ class ProgressService {
   }
 
   /// Resolves the position/duration to sync, preferring the authoritative
-  /// [DurationOverride] over the player's live duration.
+  /// [StreamTimeline] over the player's live duration.
   ///
   /// During HLS transcode the player reports a partial, still-growing
   /// duration (the playlist is built incrementally and the transcoder runs
   /// faster than realtime). Computing progress against it inflates the
   /// completion percentage — a few seconds of playback can read as ~30%.
-  /// The override carries the true full media duration.
+  /// [timeline] carries the true full media duration, plus any resume start
+  /// offset needed to translate [position] into real media time.
   ///
   /// Returns null when the data isn't valid to sync yet: duration unknown
   /// (still loading, failed load, error state — the server requires
@@ -85,9 +91,10 @@ class ProgressService {
   static ({int positionSeconds, int durationSeconds})? resolveSync(
     Duration position,
     Duration playerDuration,
+    StreamTimeline timeline,
   ) {
-    final duration = DurationOverride.getDuration(playerDuration).inSeconds;
-    final pos = position.inSeconds;
+    final duration = timeline.resolveDuration(playerDuration).inSeconds;
+    final pos = timeline.toReal(position).inSeconds;
 
     if (duration <= 0) return null;
     if (pos < 0 || pos > duration) return null;
@@ -99,13 +106,17 @@ class ProgressService {
     Player player,
     String movieId,
   ) async {
-    final progress = resolveSync(player.state.position, player.state.duration);
+    final progress = resolveSync(
+      player.state.position,
+      player.state.duration,
+      timeline,
+    );
     if (progress == null) {
       debugPrint(
         '[ProgressService] Skipping movie sync: invalid position/duration '
         '(position=${player.state.position.inSeconds}s, '
         'playerDuration=${player.state.duration.inSeconds}s, '
-        'resolvedDuration=${DurationOverride.getDuration(player.state.duration).inSeconds}s)',
+        'resolvedDuration=${timeline.resolveDuration(player.state.duration).inSeconds}s)',
       );
       return;
     }
@@ -125,13 +136,17 @@ class ProgressService {
     Player player,
     String episodeId,
   ) async {
-    final progress = resolveSync(player.state.position, player.state.duration);
+    final progress = resolveSync(
+      player.state.position,
+      player.state.duration,
+      timeline,
+    );
     if (progress == null) {
       debugPrint(
         '[ProgressService] Skipping episode sync: invalid position/duration '
         '(position=${player.state.position.inSeconds}s, '
         'playerDuration=${player.state.duration.inSeconds}s, '
-        'resolvedDuration=${DurationOverride.getDuration(player.state.duration).inSeconds}s)',
+        'resolvedDuration=${timeline.resolveDuration(player.state.duration).inSeconds}s)',
       );
       return;
     }
@@ -154,7 +169,7 @@ class ProgressService {
     Duration position,
     Duration duration,
   ) async {
-    final progress = resolveSync(position, duration);
+    final progress = resolveSync(position, duration, timeline);
     if (progress == null) {
       debugPrint(
         '[ProgressService] Skipping movie sync: invalid position/duration '
@@ -172,7 +187,7 @@ class ProgressService {
     Duration position,
     Duration duration,
   ) async {
-    final progress = resolveSync(position, duration);
+    final progress = resolveSync(position, duration, timeline);
     if (progress == null) {
       debugPrint(
         '[ProgressService] Skipping episode sync: invalid position/duration '
@@ -204,7 +219,8 @@ class ProgressService {
       ));
 
       if (result.hasException) {
-        debugPrint('[ProgressService] Error syncing movie progress: ${result.exception}');
+        debugPrint(
+            '[ProgressService] Error syncing movie progress: ${result.exception}');
       }
     } catch (e) {
       debugPrint('[ProgressService] Exception syncing movie progress: $e');
@@ -231,7 +247,8 @@ class ProgressService {
       ));
 
       if (result.hasException) {
-        debugPrint('[ProgressService] Error syncing episode progress: ${result.exception}');
+        debugPrint(
+            '[ProgressService] Error syncing episode progress: ${result.exception}');
       }
     } catch (e) {
       debugPrint('[ProgressService] Exception syncing episode progress: $e');
@@ -241,22 +258,19 @@ class ProgressService {
   /// Checks if the current playback position indicates the content is watched.
   ///
   /// Returns true if position is >= 90% of duration.
-  bool isWatched(Player player) {
-    final position = player.state.position.inSeconds;
-    final duration =
-        DurationOverride.getDuration(player.state.duration).inSeconds;
-
-    if (duration <= 0) return false;
-
-    return (position / duration) >= _watchedThreshold;
-  }
+  bool isWatched(Player player) =>
+      isWatchedAt(player.state.position, player.state.duration, timeline);
 
   /// Whether a position counts as watched, without needing a `Player`.
-  static bool isWatchedAt(Duration position, Duration duration) {
-    final seconds = DurationOverride.getDuration(duration).inSeconds;
+  static bool isWatchedAt(
+    Duration position,
+    Duration playerDuration,
+    StreamTimeline timeline,
+  ) {
+    final seconds = timeline.resolveDuration(playerDuration).inSeconds;
     if (seconds <= 0) return false;
 
-    return (position.inSeconds / seconds) >= _watchedThreshold;
+    return (timeline.toReal(position).inSeconds / seconds) >= _watchedThreshold;
   }
 
   /// Disposes the service and cancels any active timers.

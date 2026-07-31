@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/presentation/widgets/gesture_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
@@ -63,6 +64,7 @@ void main() {
             body: SizedBox.expand(
               child: GestureControls(
                 player: player,
+                timeline: StreamTimeline.zero,
                 child: SizedBox.expand(
                   child: Stack(
                     fit: StackFit.expand,
@@ -70,7 +72,12 @@ void main() {
                       // Stand-in for the video texture: it never registers a
                       // gesture/mouse hit, exactly like media_kit's Texture.
                       const SizedBox.shrink(),
-                      Positioned.fill(child: PlaybackChrome(player: player)),
+                      Positioned.fill(
+                        child: PlaybackChrome(
+                          player: player,
+                          timeline: StreamTimeline.zero,
+                        ),
+                      ),
                     ],
                   ),
                 ),
