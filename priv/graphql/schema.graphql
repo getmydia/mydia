@@ -129,6 +129,9 @@ type RootMutationType {
 
     "Total kbps cap (video + audio), e.g. 2000"
     maxBitrate: Int
+
+    "Real media position, in seconds, at which to begin transcoding. Optional; omitted or 0 starts at the beginning."
+    startPosition: Int
   ): StreamingSessionResult
 
   "End an HLS streaming session"
@@ -851,6 +854,9 @@ type StreamingSessionResult {
 
   "Media duration in seconds (if known)"
   duration: Float
+
+  "Real media position, in seconds, at which the stream begins. Clients must map stream-local positions by this offset. Absent or 0 means the stream starts at the beginning."
+  startPosition: Int
 }
 
 "A download quality option"

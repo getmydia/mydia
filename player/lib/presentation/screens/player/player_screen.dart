@@ -48,6 +48,15 @@ import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/local_proxy_service.dart';
 
+/// Below this, resuming is not worth offering; start from the beginning.
+const int kMinResumeThresholdSeconds = 30;
+
+/// Within this distance of the end, the user has effectively finished.
+const int kEndOfMediaThresholdSeconds = 60;
+
+/// Matches ProgressService's server-side watched threshold.
+const double kWatchedThreshold = 0.90;
+
 class PlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
   final String mediaType;
@@ -71,10 +80,6 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
-  /// Minimum position (in seconds) to show the resume dialog.
-  /// If playback position is less than this, start from beginning.
-  static const _minResumeThresholdSeconds = 30;
-
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
@@ -96,6 +101,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _error;
   String? _loadingMessage;
   int? _savedPositionSeconds;
+  int? _savedDurationSeconds;
+  int? _runtimeMinutes;
   List<Query$SeasonEpisodes$seasonEpisodes>? _seasonEpisodes;
   int? _currentEpisodeIndex;
 
@@ -122,8 +129,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Duration? _totalDuration;
 
   // The mapping from the player's stream-local positions onto real media
-  // positions. Stays at its zero default until Task 7 builds a real one from
-  // the server's echoed resume offset.
+  // positions. Built from the server's echoed resume offset once an HLS
+  // session starts; stays at its zero default for direct play and offline
+  // playback, which hold the whole file and need no correction.
   StreamTimeline _timeline = StreamTimeline.zero;
 
   // Desktop feature state
@@ -379,18 +387,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       _isDirectPlay = canDirect;
 
-      // Set total duration from candidates metadata
-      if (candidatesResult != null) {
-        final duration = candidatesResult.metadata.duration;
-        if (duration != null) {
-          _totalDuration = Duration(
-            milliseconds: (duration * 1000).round(),
-          );
-          _timeline = StreamTimeline(totalDuration: _totalDuration);
-          debugPrint(
-              '[PlayerScreen] Total duration from candidates: $_totalDuration');
-        }
-      }
+      // Resolve the real runtime before anything asks the player for it. On a
+      // cold HLS stream media_kit only sees a partial, still-growing playlist,
+      // so its own duration is useless here.
+      //
+      // The saved progress record ranks below server metadata deliberately: it
+      // may itself have been written against a partial duration by an older
+      // build.
+      _totalDuration = _resolveRealDuration(candidatesResult);
 
       if (await _castToTargetIfSet()) return;
 
@@ -431,6 +435,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // Determine HLS strategy from candidates
         final hlsStrategy = _pickHlsStrategy(candidatesResult?.candidates);
 
+        // The resume decision must be made before the session starts: the
+        // offset is an input to FFmpeg, not something that can be seeked to
+        // once a live-style playlist is already running.
+        var startPositionSeconds = 0;
+        if (mounted &&
+            shouldOfferResume(
+              savedPositionSeconds: _savedPositionSeconds,
+              realDuration: _totalDuration,
+            )) {
+          final shouldResume = await showResumeDialog(
+            context,
+            _savedPositionSeconds!,
+            _totalDuration!.inSeconds,
+          );
+          if (shouldResume == true) {
+            startPositionSeconds = _savedPositionSeconds!;
+          }
+        }
+
         // Start HLS session via GraphQL mutation (works for both modes)
         final result = await graphqlClient.mutate(
           MutationOptions(
@@ -438,6 +461,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             variables: Variables$Mutation$StartStreamingSession(
               fileId: widget.fileId,
               strategy: hlsStrategy,
+              startPosition:
+                  startPositionSeconds > 0 ? startPositionSeconds : null,
             ).toJson(),
           ),
         );
@@ -457,15 +482,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _hlsSessionId = sessionResult.sessionId;
         debugPrint('[PlayerScreen] HLS session started: $_hlsSessionId');
 
-        // Set total duration from session if not already set from candidates
+        // Use the echoed offset, not the requested one. The server clamps the
+        // value, and `-ss` lands on the nearest keyframe, so the stream can
+        // legitimately start earlier than asked. An older server omits the
+        // field entirely, which correctly yields offset zero.
+        final serverOffset = sessionResult.startPosition ?? 0;
+
         if (_totalDuration == null && sessionResult.duration != null) {
           _totalDuration = Duration(
             milliseconds: (sessionResult.duration! * 1000).round(),
           );
-          _timeline = StreamTimeline(totalDuration: _totalDuration);
-          debugPrint(
-              '[PlayerScreen] Total duration from session: $_totalDuration');
         }
+
+        _timeline = StreamTimeline(
+          startOffset: Duration(seconds: serverOffset),
+          totalDuration: _totalDuration,
+        );
+        debugPrint('[PlayerScreen] Stream timeline: $_timeline');
 
         // Build HLS URL based on mode
         if (isP2PMode) {
@@ -496,6 +529,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// The real runtime, from the most trustworthy source available.
+  Duration? _resolveRealDuration(
+    Query$StreamingCandidates$streamingCandidates? candidatesResult,
+  ) {
+    final fromCandidates = candidatesResult?.metadata.duration;
+    if (fromCandidates != null && fromCandidates > 0) {
+      return Duration(milliseconds: (fromCandidates * 1000).round());
+    }
+
+    final fromProgress = _savedDurationSeconds;
+    if (fromProgress != null && fromProgress > 0) {
+      return Duration(seconds: fromProgress);
+    }
+
+    final fromRuntime = _runtimeMinutes;
+    if (fromRuntime != null && fromRuntime > 0) {
+      return Duration(minutes: fromRuntime);
+    }
+
+    return null;
+  }
+
   /// Pick the best HLS strategy from streaming candidates.
   ///
   /// Prefers HLS_COPY (no transcoding) if available, falls back to TRANSCODE.
@@ -512,7 +567,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return Enum$StreamingStrategy.TRANSCODE;
   }
 
-  /// Shared tail of _initializePlayer: create player, resume dialog, start playback.
+  /// Shared tail of _initializePlayer: create player, open the media, start
+  /// playback. The resume decision (HLS only) has already been made and
+  /// baked into the session's start offset before this runs; direct play and
+  /// offline playback hold the whole file and just start it.
   Future<void> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders,
@@ -538,24 +596,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // Detect available tracks from media_kit
     _detectTracks();
-
-    // Check if we should show resume dialog
-    final duration = _player!.state.duration.inSeconds;
-    final savedPosition = _savedPositionSeconds;
-    if (mounted &&
-        savedPosition != null &&
-        savedPosition > _minResumeThresholdSeconds &&
-        duration > 0) {
-      final shouldResume = await showResumeDialog(
-        context,
-        savedPosition,
-        duration,
-      );
-
-      if (shouldResume == true) {
-        await _player!.seek(Duration(seconds: savedPosition));
-      }
-    }
 
     // Start playback
     await _player!.play();
@@ -731,6 +771,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (result.data != null) {
           final movie = Query$MovieDetail.fromJson(result.data!).movie;
           _savedPositionSeconds = movie?.progress?.positionSeconds;
+          _savedDurationSeconds = movie?.progress?.durationSeconds;
+          _runtimeMinutes = movie?.runtime;
 
           // Extract subtitle tracks from files
           _extractSubtitlesFromFiles(movie?.files);
@@ -748,6 +790,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (result.data != null) {
           final episode = Query$EpisodeDetail.fromJson(result.data!).episode;
           _savedPositionSeconds = episode?.progress?.positionSeconds;
+          _savedDurationSeconds = episode?.progress?.durationSeconds;
+          _runtimeMinutes = episode?.runtime;
 
           // Extract subtitle tracks from files
           _extractSubtitlesFromFiles(episode?.files);
@@ -1927,9 +1971,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// A Chromecast reports `duration: -1` for a Mydia HLS session, because the
   /// playlist carries no `#EXT-X-ENDLIST` until FFmpeg finishes. Hand it the
   /// figure the server gave us instead.
+  ///
+  /// Falls back to [_totalDuration] (not just `_timeline.totalDuration`) when
+  /// there is no local player yet: casting can be chosen before the HLS
+  /// session negotiates, and [_timeline] is only built from the session's
+  /// echoed start offset once that mutation returns, so it is still at its
+  /// zero/null default at that point even though [_totalDuration] has
+  /// already been resolved from candidates metadata, saved progress, or
+  /// runtime.
   Duration? _knownCastDuration() {
     final player = _player;
-    if (player == null) return _timeline.totalDuration;
+    if (player == null) return _timeline.totalDuration ?? _totalDuration;
 
     final resolved = _timeline.resolveDuration(player.state.duration);
     return resolved > Duration.zero ? resolved : null;
@@ -1983,4 +2035,27 @@ KeyEventResult handleEpisodeNavKey(
     default:
       return KeyEventResult.ignored;
   }
+}
+
+/// Whether to offer resuming, given a saved position and the real runtime.
+///
+/// Extracted as a free function so it can be unit-tested without a widget tree,
+/// following the same pattern as [handleEpisodeNavKey].
+///
+/// A null [realDuration] declines deliberately. The alternative is computing a
+/// percentage against media_kit's partial HLS playlist length, which is exactly
+/// the bug that made every resume read as 100%.
+bool shouldOfferResume({
+  required int? savedPositionSeconds,
+  required Duration? realDuration,
+}) {
+  if (savedPositionSeconds == null) return false;
+  if (realDuration == null || realDuration <= Duration.zero) return false;
+  if (savedPositionSeconds <= kMinResumeThresholdSeconds) return false;
+
+  final total = realDuration.inSeconds;
+  if (savedPositionSeconds >= total - kEndOfMediaThresholdSeconds) return false;
+  if (savedPositionSeconds / total >= kWatchedThreshold) return false;
+
+  return true;
 }
