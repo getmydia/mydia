@@ -13,8 +13,16 @@ defmodule Mydia.Repo.Migrations.Helpers do
   - Cannot change column types directly
   - Cannot modify CHECK constraints
 
-  For these operations, SQLite requires table recreation (rename -> create new -> copy -> drop old).
+  For these operations, SQLite requires table recreation: create new -> copy ->
+  drop old -> rename new. The original table is deliberately not renamed first,
+  because SQLite rewrites other tables' foreign key references to follow a
+  rename, which breaks them once the old table is dropped.
   PostgreSQL supports direct ALTER TABLE statements.
+
+  Use `recreate_table/1` rather than hand-rolling that sequence. Dropping a
+  table fires the foreign key actions of every table referencing it, which
+  deletes or nulls their rows; `recreate_table/1` goes through
+  `preserving_fk_children/2`, which prevents that.
 
   ## Usage in Migrations
 
@@ -85,8 +93,8 @@ defmodule Mydia.Repo.Migrations.Helpers do
   ## Note for SQLite
 
   SQLite doesn't support ALTER COLUMN. For complex schema changes on SQLite,
-  use `recreate_table_with_changes/3` instead, which handles the full
-  table recreation workflow.
+  use `recreate_table/1` instead, which handles the full table recreation
+  workflow and preserves the rebuilt table's foreign key children.
   """
   @spec modify_column_null(atom(), atom(), boolean()) :: :ok
   def modify_column_null(table_name, column_name, nullable) do
@@ -114,14 +122,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
             modify :#{column_name}, :string, null: #{nullable}
           end
 
-      2. For complex cases, manually recreate the table:
-         - Rename original table
-         - Create new table with desired schema
-         - Copy data
-         - Drop old table
-         - Recreate indexes
+      2. For complex cases, use `recreate_table/1` from this module, which
+         rebuilds the table and preserves its foreign key children.
 
-      See existing migrations for examples of table recreation pattern.
+      Do not hand-roll the rebuild. Dropping a table fires the foreign key
+      actions of every table referencing it, silently deleting or nulling
+      their rows.
       """
     end
   end
@@ -163,14 +169,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
       raise """
       SQLite does not support ALTER COLUMN TYPE.
 
-      For SQLite compatibility, you must recreate the table:
-      1. Rename original table to #{table_name}_old
-      2. Create new table with updated column type
-      3. Copy data from old table
-      4. Drop old table
-      5. Recreate indexes
+      For SQLite compatibility, use `recreate_table/1` from this module,
+      passing #{table_name}'s full column list with the updated type.
 
-      See existing migrations for examples of this pattern.
+      Do not hand-roll the rebuild. Dropping a table fires the foreign key
+      actions of every table referencing it, silently deleting or nulling
+      their rows; `recreate_table/1` preserves them.
       """
     end
   end
@@ -306,7 +310,10 @@ defmodule Mydia.Repo.Migrations.Helpers do
   @doc """
   Recreate a table with a new schema definition.
 
-  For SQLite: Performs full table recreation (rename -> create -> copy -> drop).
+  For SQLite: Performs full table recreation, in the order create new -> copy ->
+  drop old -> rename new. The original is deliberately not renamed first,
+  because SQLite rewrites other tables' foreign key references to follow a
+  rename, breaking them once the old table is dropped.
   For PostgreSQL: Executes the provided ALTER statements.
 
   On SQLite this runs through `preserving_fk_children/2` and inherits its
