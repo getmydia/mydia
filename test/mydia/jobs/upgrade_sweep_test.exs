@@ -258,6 +258,31 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
       assert pairs[ep2.id] == file2.id
     end
 
+    # A season pack search that keeps finding no qualifying pack backs off
+    # in TVShowSearch's "season_upgrade" bucket. Without this suppression,
+    # the sweep would re-enqueue the same season-pack search on every run
+    # that reaches it - the same unbounded indexer cost the "never fall
+    # back" rule inside TVShowSearch.search_season_upgrade/4 exists to
+    # prevent, just moved one layer up to the sweep's own routing decision.
+    # The group still costs a search - each below-cutoff episode is
+    # individually eligible via its own, unrelated "episode_upgrade"
+    # bucket - it is only the pack shape that is suppressed.
+    test "routes to individual searches when the season pack is in season_upgrade backoff" do
+      {show, profile} = show_with_profile()
+      for n <- 1..8, do: below_cutoff_episode(show, profile, 1, n)
+      for n <- 9..10, do: above_cutoff_episode(show, profile, 1, n)
+
+      {:ok, _backoff} =
+        Mydia.Search.record_failure("season_upgrade", show.id, "all_filtered", season_number: 1)
+
+      assert {:ok, %{searches: 8}} =
+               UpgradeSweep.perform(%Oban.Job{args: %{"lead" => "episodes"}})
+
+      jobs = tv_show_search_jobs()
+      assert length(jobs) == 8
+      assert Enum.all?(jobs, &(&1.args["mode"] == "upgrade_episode"))
+    end
+
     # Proves the search-cost budget genuinely halts mid-iteration and skips
     # a fetched-but-unaffordable group entirely, rather than merely being
     # unreachable dead code — and specifically that it previews each group's

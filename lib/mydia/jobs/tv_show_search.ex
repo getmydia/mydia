@@ -859,52 +859,107 @@ defmodule Mydia.Jobs.TVShowSearch do
   ## Private Functions - Season Search Logic
 
   defp search_season(media_item, season_number, episodes, search_count, args) do
-    Logger.info("Searching for season pack",
-      media_item_id: media_item.id,
-      title: media_item.title,
-      season_number: season_number,
-      missing_episodes: length(episodes)
-    )
+    # Increment counter for the season pack search
+    new_count = search_count + 1
 
-    # For "season" mode, always prefer season pack
-    # Try season pack first, fall back to individual episodes
+    case run_season_pack_search(media_item, season_number, search_type: "season_pack") do
+      {:no_results, _query} ->
+        Logger.warning("Falling back to individual episodes after no season pack results",
+          media_item_id: media_item.id,
+          title: media_item.title,
+          season_number: season_number
+        )
+
+        record_season_backoff(media_item, season_number, "no_results", "season")
+        search_individual_episodes(episodes, new_count, args)
+
+      {:no_packs, _query} ->
+        Logger.warning("Falling back to individual episodes after no valid season packs",
+          media_item_id: media_item.id,
+          title: media_item.title,
+          season_number: season_number
+        )
+
+        search_individual_episodes(episodes, new_count, args)
+
+      {:packs, season_pack_results, query} ->
+        result =
+          process_season_pack_results(
+            media_item,
+            season_number,
+            episodes,
+            season_pack_results,
+            args,
+            query,
+            []
+          )
+
+        # If season pack processing failed, fall back to individual episodes
+        # But if it's a duplicate (already downloading), skip entirely
+        case result do
+          :ok ->
+            new_count
+
+          {:error, :duplicate_download} ->
+            Logger.info(
+              "Season pack already downloading, skipping individual episode search",
+              media_item_id: media_item.id,
+              title: media_item.title,
+              season_number: season_number
+            )
+
+            new_count
+
+          :no_results ->
+            search_individual_episodes(episodes, new_count, args)
+
+          {:error, _reason} ->
+            search_individual_episodes(episodes, new_count, args)
+        end
+    end
+  end
+
+  # Shared skeleton behind search_season/5 and do_search_season_upgrade/5:
+  # builds the query, searches indexers, and filters to season-shaped
+  # results, logging and emitting the no-result / no-packs events along the
+  # way. Deliberately does not record backoff or decide what happens next -
+  # the two callers differ on both. search_season/5 falls back to
+  # individual episode searches and records backoff only on the
+  # no-indexer-results outcome (a pre-existing asymmetry, not something
+  # this refactor changes). do_search_season_upgrade/5 never falls back and
+  # always records backoff, in its own "season_upgrade" bucket, on both
+  # empty outcomes.
+  #
+  # opts:
+  #   * `:search_type` - "season_pack" (default) or "season_pack_upgrade",
+  #     stamped into the emitted event payloads.
+  defp run_season_pack_search(media_item, season_number, opts) do
+    search_type = Keyword.get(opts, :search_type, "season_pack")
     query = build_season_query(media_item, season_number)
 
     Logger.info("Searching for season pack",
       media_item_id: media_item.id,
       title: media_item.title,
       season_number: season_number,
-      query: query,
-      search_count: search_count
+      query: query
     )
-
-    # Increment counter for the season pack search
-    new_count = search_count + 1
 
     case Indexers.search_all(query, min_seeders: get_min_seeders()) do
       {:ok, %{results: []}} ->
-        Logger.warning("No season pack results found, falling back to individual episodes",
+        Logger.warning("No season pack results found",
           media_item_id: media_item.id,
           title: media_item.title,
           season_number: season_number
         )
 
-        # Record backoff for season pack no results
-        record_season_backoff(media_item, season_number, "no_results")
+        Events.search_no_results(media_item, %{
+          "query" => query,
+          "indexers_searched" => count_enabled_indexers(),
+          "season_number" => season_number,
+          "search_type" => search_type
+        })
 
-        # Log no results event for season pack search
-        Events.search_no_results(
-          media_item,
-          %{
-            "query" => query,
-            "indexers_searched" => count_enabled_indexers(),
-            "season_number" => season_number,
-            "search_type" => "season_pack"
-          }
-        )
-
-        # Fall back to searching individual episodes
-        search_individual_episodes(episodes, new_count, args)
+        {:no_results, query}
 
       {:ok, %{results: results}} ->
         Logger.info("Found #{length(results)} season pack results",
@@ -913,65 +968,27 @@ defmodule Mydia.Jobs.TVShowSearch do
           season_number: season_number
         )
 
-        # Filter for actual season packs (no episode markers)
         season_pack_results = filter_season_packs(results, season_number)
 
         if season_pack_results == [] do
-          Logger.warning(
-            "No valid season packs after filtering, falling back to individual episodes",
+          Logger.warning("No valid season packs after filtering",
             media_item_id: media_item.id,
             title: media_item.title,
             season_number: season_number,
             total_results: length(results)
           )
 
-          # Log filtered out event with detailed results
-          Events.search_filtered_out(
-            media_item,
-            %{
-              "query" => query,
-              "results_count" => length(results),
-              "season_number" => season_number,
-              "search_type" => "season_pack",
-              "filter_stats" => build_season_pack_filter_stats(results, season_number)
-            }
-          )
+          Events.search_filtered_out(media_item, %{
+            "query" => query,
+            "results_count" => length(results),
+            "season_number" => season_number,
+            "search_type" => search_type,
+            "filter_stats" => build_season_pack_filter_stats(results, season_number)
+          })
 
-          search_individual_episodes(episodes, new_count, args)
+          {:no_packs, query}
         else
-          result =
-            process_season_pack_results(
-              media_item,
-              season_number,
-              episodes,
-              season_pack_results,
-              args,
-              query,
-              []
-            )
-
-          # If season pack processing failed, fall back to individual episodes
-          # But if it's a duplicate (already downloading), skip entirely
-          case result do
-            :ok ->
-              new_count
-
-            {:error, :duplicate_download} ->
-              Logger.info(
-                "Season pack already downloading, skipping individual episode search",
-                media_item_id: media_item.id,
-                title: media_item.title,
-                season_number: season_number
-              )
-
-              new_count
-
-            :no_results ->
-              search_individual_episodes(episodes, new_count, args)
-
-            {:error, _reason} ->
-              search_individual_episodes(episodes, new_count, args)
-          end
+          {:packs, season_pack_results, query}
         end
     end
   end
@@ -1047,7 +1064,8 @@ defmodule Mydia.Jobs.TVShowSearch do
     }
   end
 
-  # `opts` mirrors perform_episode_search/3's doc comment, for season packs:
+  # `opts` mirrors perform_episode_search/3's doc comment (see there for the
+  # "no default of its own" convention this follows too), for season packs:
   #
   #   * `:candidate_filter` - `(results -> results)`, applied after
   #     blacklist rejection and before ranking. Used by the season upgrade
@@ -1055,10 +1073,11 @@ defmodule Mydia.Jobs.TVShowSearch do
   #     real upgrade over the target file.
   #   * `:grab_opts` / `:after_grab` - passed through to
   #     initiate_season_pack_download/5.
-  #
-  # Always called with an explicit opts (possibly `[]`) from all three call
-  # sites (search_season/5, search_season_with_stats/5, and
-  # do_search_season_upgrade/5), so this has no default of its own.
+  #   * `:backoff_resource_type` - the SearchBackoff resource_type to record
+  #     against (default "season"). The season upgrade path uses
+  #     "season_upgrade", namespaced apart so Mydia.Jobs.UpgradeSweep can
+  #     suppress repeat season-pack upgrade searches without touching the
+  #     ordinary missing-episode "season" bucket.
   defp process_season_pack_results(
          media_item,
          season_number,
@@ -1084,6 +1103,7 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     # Build ranking options from the first episode (they all share the same show)
     ranking_opts = build_ranking_options_for_season(media_item, season_number, episodes, args)
+    resource_type = Keyword.get(opts, :backoff_resource_type, "season")
 
     case ReleaseRanker.select_best_result(candidates, ranking_opts) do
       nil ->
@@ -1096,7 +1116,7 @@ defmodule Mydia.Jobs.TVShowSearch do
         )
 
         # Record backoff for season pack filtered out
-        record_season_backoff(media_item, season_number, "all_filtered")
+        record_season_backoff(media_item, season_number, "all_filtered", resource_type)
 
         # Log filtered out event
         Events.search_filtered_out(
@@ -1143,7 +1163,7 @@ defmodule Mydia.Jobs.TVShowSearch do
         case initiate_season_pack_download(media_item, season_number, episodes, best_result, opts) do
           :ok ->
             # Reset season backoff on successful download initiation
-            reset_season_backoff(media_item, season_number)
+            reset_season_backoff(media_item, season_number, resource_type)
             :ok
 
           {:error, reason} ->
@@ -1267,6 +1287,12 @@ defmodule Mydia.Jobs.TVShowSearch do
   #     "episode_upgrade" so a stale missing-file backoff can never
   #     suppress an upgrade search, or vice versa - see
   #     Mydia.Upgrades.eligible_episodes/1.
+  #
+  # Every function this threads opts through below (process_episode_results/5,
+  # process_ranked_episode_results/5, initiate_episode_download/3, and
+  # process_season_pack_results/7's identical pattern for season packs) is
+  # always called with an explicit opts from its one caller in that chain,
+  # so none of them default `opts` on their own - only this entry point does.
   defp perform_episode_search(%Episode{} = episode, args, opts \\ []) do
     query = build_episode_query(episode)
     resource_type = Keyword.get(opts, :backoff_resource_type, "episode")
@@ -1314,9 +1340,6 @@ defmodule Mydia.Jobs.TVShowSearch do
   end
 
   # See perform_episode_search/3's doc comment for what `opts` carries.
-  # Always called with an explicit opts (possibly `[]`) from both call
-  # sites (perform_episode_search/3 and the with-stats variant), so this
-  # has no default of its own.
   defp process_episode_results(episode, results, args, query, opts) do
     # Season packs are no longer hard-rejected here. Episode/season identity is
     # judged inside ReleaseRanker via the identity penalty (R6): for an episode
@@ -1354,8 +1377,6 @@ defmodule Mydia.Jobs.TVShowSearch do
   end
 
   # See perform_episode_search/3's doc comment for what `opts` carries.
-  # Always called with an explicit opts from process_episode_results/5's
-  # single call site, so this has no default of its own.
   defp process_ranked_episode_results(episode, results, args, query, opts) do
     ranking_opts = build_ranking_options(episode, args)
     resource_type = Keyword.get(opts, :backoff_resource_type, "episode")
@@ -1478,8 +1499,6 @@ defmodule Mydia.Jobs.TVShowSearch do
   ## Private Functions - Download Initiation
 
   # See perform_episode_search/3's doc comment for what `opts` carries.
-  # Always called with an explicit opts from process_ranked_episode_results/5's
-  # single call site, so this has no default of its own.
   defp initiate_episode_download(episode, result, opts) do
     grab_opts = Keyword.get(opts, :grab_opts, [])
     after_grab = Keyword.get(opts, :after_grab, fn download -> {:ok, download} end)
@@ -1609,14 +1628,17 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  # Searches once for a season pack the same way search_season/5 does, but
-  # with no fallback to individual episode searches when no pack qualifies:
-  # that fallback exists to fill in genuinely missing episodes, and would
-  # silently multiply the sweep's indexer cost beyond the one search it
-  # budgeted for this season. A season pack search that comes up empty
-  # (no results, no title-shaped packs, or nothing survives the Comparator
-  # filter and ranking) records backoff and returns instead - see
-  # process_season_pack_results/7 for the ranking-stage case.
+  # Searches once for a season pack via the same run_season_pack_search/3
+  # skeleton search_season/5 uses, but with no fallback to individual
+  # episode searches when no pack qualifies: that fallback exists to fill
+  # in genuinely missing episodes, and would silently multiply the sweep's
+  # indexer cost beyond the one search it budgeted for this season. A
+  # season pack search that comes up empty - no results, no title-shaped
+  # packs, or nothing survives the Comparator filter and ranking - always
+  # records backoff (in the "season_upgrade" bucket, so
+  # Mydia.Jobs.UpgradeSweep can suppress repeat searches for a season stuck
+  # in this state without touching the missing-episode "season" bucket) and
+  # returns instead.
   defp search_season_upgrade(
          %MediaItem{} = media_item,
          season_number,
@@ -1638,90 +1660,81 @@ defmodule Mydia.Jobs.TVShowSearch do
   end
 
   defp do_search_season_upgrade(media_item, season_number, file, profile, args) do
-    query = build_season_query(media_item, season_number)
-
-    Logger.info("Searching for season pack upgrade",
-      media_item_id: media_item.id,
-      title: media_item.title,
-      season_number: season_number,
-      query: query
-    )
-
-    case Indexers.search_all(query, min_seeders: get_min_seeders()) do
-      {:ok, %{results: []}} ->
-        Logger.warning(
-          "No season pack upgrade results found, not falling back to individual episodes",
-          media_item_id: media_item.id,
-          season_number: season_number
-        )
-
-        record_season_backoff(media_item, season_number, "no_results")
-
-        Events.search_no_results(media_item, %{
-          "query" => query,
-          "indexers_searched" => count_enabled_indexers(),
-          "season_number" => season_number,
-          "search_type" => "season_pack_upgrade"
-        })
-
+    case run_season_pack_search(media_item, season_number, search_type: "season_pack_upgrade") do
+      {:no_results, _query} ->
+        record_season_backoff(media_item, season_number, "no_results", "season_upgrade")
         :ok
 
-      {:ok, %{results: results}} ->
-        season_pack_results = filter_season_packs(results, season_number)
+      {:no_packs, _query} ->
+        record_season_backoff(media_item, season_number, "all_filtered", "season_upgrade")
+        :ok
 
-        if season_pack_results == [] do
-          Logger.warning(
-            "No valid season packs after filtering, not falling back to individual episodes",
-            media_item_id: media_item.id,
-            season_number: season_number,
-            total_results: length(results)
-          )
+      {:packs, season_pack_results, query} ->
+        episodes = load_season_episodes(media_item.id, season_number)
+        episode_count = max(length(episodes), 1)
 
-          record_season_backoff(media_item, season_number, "all_filtered")
+        opts = [
+          candidate_filter: season_pack_candidate_filter(file, profile, episode_count),
+          grab_opts: [manual: true],
+          after_grab: fn download -> attach_upgrade_target(download, file) end,
+          backoff_resource_type: "season_upgrade"
+        ]
 
-          Events.search_filtered_out(media_item, %{
-            "query" => query,
-            "results_count" => length(results),
-            "season_number" => season_number,
-            "search_type" => "season_pack_upgrade",
-            "filter_stats" => build_season_pack_filter_stats(results, season_number)
-          })
+        # Whatever this returns (:ok, {:error, :duplicate_download},
+        # :no_results, or {:error, reason}) - never fall back to
+        # individual episode searches, per search_season_upgrade/4's doc
+        # comment.
+        process_season_pack_results(
+          media_item,
+          season_number,
+          episodes,
+          season_pack_results,
+          args,
+          query,
+          opts
+        )
 
-          :ok
-        else
-          episodes = load_season_episodes(media_item.id, season_number)
-
-          opts = [
-            candidate_filter: fn candidates ->
-              Upgrades.filter_candidates(candidates, file, profile, :episode)
-            end,
-            grab_opts: [manual: true],
-            after_grab: fn download -> attach_upgrade_target(download, file) end
-          ]
-
-          # Whatever this returns (:ok, {:error, :duplicate_download},
-          # :no_results, or {:error, reason}) - never fall back to
-          # individual episode searches, per this function's doc comment.
-          process_season_pack_results(
-            media_item,
-            season_number,
-            episodes,
-            season_pack_results,
-            args,
-            query,
-            opts
-          )
-
-          :ok
-        end
+        :ok
     end
   end
 
+  # Comparator.upgrade?/5 (via Upgrades.filter_candidates/4) scores a
+  # candidate's `.size` against the profile's `episode_min_size_mb` /
+  # `episode_max_size_mb` (see Mydia.Upgrades.Attrs.from_quality/3) - correct
+  # for a single-episode candidate, wrong for a season pack: `result.size`
+  # there is the sum of every episode in the pack, not one episode's size.
+  # Left unnormalized, any real pack with an `episode_max_size_mb` bound
+  # configured always scores as oversized (a flat, large penalty regardless
+  # of how far over), suppressing the pack-upgrade mode outright; with only
+  # `episode_min_size_mb` set, a pack trivially clears it for an unearned
+  # bonus. Dividing by the season's episode count before handing candidates
+  # to the shared filter estimates a per-episode size for comparison
+  # purposes only - the un-normalized `results` list that reaches ranking
+  # and the grab (which need the real pack size) is untouched.
+  defp season_pack_candidate_filter(file, profile, episode_count) do
+    fn candidates ->
+      candidates
+      |> Enum.map(&{&1, normalize_pack_size(&1, episode_count)})
+      |> Enum.filter(fn {_original, normalized} ->
+        Upgrades.filter_candidates([normalized], file, profile, :episode) != []
+      end)
+      |> Enum.map(fn {original, _normalized} -> original end)
+    end
+  end
+
+  defp normalize_pack_size(%{size: size} = result, episode_count)
+       when is_integer(size) and is_integer(episode_count) and episode_count > 0 do
+    %{result | size: div(size, episode_count)}
+  end
+
+  defp normalize_pack_size(result, _episode_count), do: result
+
   # All episodes in the season, not just the ones missing files - a season
   # upgrade replaces files for a season that (by definition, since it was
-  # selected by Upgrades.eligible_episodes/1) already has files. Used only
+  # selected by Upgrades.eligible_episodes/1) already has files. Used both
   # to size the season-pack metadata (episode_count/episode_ids) the way
-  # search_season/5's `episodes` list does for the missing-file path.
+  # search_season/5's `episodes` list does for the missing-file path, and
+  # as the divisor season_pack_candidate_filter/3 normalizes pack size by.
   defp load_season_episodes(media_item_id, season_number) do
     Episode
     |> where([e], e.media_item_id == ^media_item_id and e.season_number == ^season_number)
@@ -1885,8 +1898,15 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  defp record_season_backoff(%MediaItem{} = media_item, season_number, reason) do
-    case Search.record_failure("season", media_item.id, reason, season_number: season_number) do
+  # `resource_type` is "season" for the missing-file search path, or
+  # "season_upgrade" for the season-pack upgrade path - a separate
+  # namespace so Mydia.Jobs.UpgradeSweep can suppress repeat season-pack
+  # upgrade searches for a season that keeps finding no qualifying pack
+  # without also touching the missing-episode "season" bucket. Every call
+  # site resolves and passes this explicitly, so it has no default of its
+  # own.
+  defp record_season_backoff(%MediaItem{} = media_item, season_number, reason, resource_type) do
+    case Search.record_failure(resource_type, media_item.id, reason, season_number: season_number) do
       {:ok, backoff} ->
         Logger.info("Applied search backoff for season",
           media_item_id: media_item.id,
@@ -1901,7 +1921,7 @@ defmodule Mydia.Jobs.TVShowSearch do
         Events.search_backoff_applied(
           media_item,
           reason,
-          Search.get_backoff_info("season", media_item.id, season_number: season_number),
+          Search.get_backoff_info(resource_type, media_item.id, season_number: season_number),
           season_number: season_number
         )
 
@@ -1914,14 +1934,14 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  defp reset_season_backoff(%MediaItem{} = media_item, season_number) do
-    case Search.get_backoff("season", media_item.id, season_number: season_number) do
+  defp reset_season_backoff(%MediaItem{} = media_item, season_number, resource_type) do
+    case Search.get_backoff(resource_type, media_item.id, season_number: season_number) do
       nil ->
         :ok
 
       backoff ->
         previous_count = backoff.failure_count
-        Search.reset_backoff("season", media_item.id, season_number: season_number)
+        Search.reset_backoff(resource_type, media_item.id, season_number: season_number)
 
         Logger.info("Reset search backoff for season",
           media_item_id: media_item.id,

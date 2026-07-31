@@ -38,6 +38,7 @@ defmodule Mydia.Jobs.UpgradeSweep do
   alias Mydia.Jobs.MovieSearch
   alias Mydia.Jobs.TVShowSearch
   alias Mydia.Repo
+  alias Mydia.Search
   alias Mydia.Upgrades
 
   @default_batch_size 50
@@ -173,23 +174,36 @@ defmodule Mydia.Jobs.UpgradeSweep do
     searches
   end
 
-  # Pure: decides pack-vs-individual and returns the list of TVShowSearch
-  # args this group would need, without enqueuing anything. The list's
-  # length is the group's search cost — always 1 for a pack regardless of
-  # how many episodes it covers, or one entry per episode otherwise —
-  # letting the caller check whether it fits the remaining budget before
-  # committing to it.
+  # Decides pack-vs-individual and returns the list of TVShowSearch args
+  # this group would need, without enqueuing anything. The list's length is
+  # the group's search cost — always 1 for a pack regardless of how many
+  # episodes it covers, or one entry per episode otherwise — letting the
+  # caller check whether it fits the remaining budget before committing to
+  # it. Not pure (it reads season_pack_upgrade_eligible?/2's backoff row),
+  # but idempotent and side-effect-free otherwise.
   #
   # Reuses TVShowSearch's existing 70% missing-episode threshold unchanged;
   # only the input set changes, from "episodes missing" to "episodes below
   # cutoff". The comparison target for a pack search is the best-scoring
   # below-cutoff file in the season: beating the best means beating all of
   # them, the conservative reading.
+  #
+  # A season whose pack search keeps finding no qualifying pack backs off
+  # in TVShowSearch's "season_upgrade" SearchBackoff bucket (see
+  # Mydia.Jobs.TVShowSearch.search_season_upgrade/4) - re-searching it here
+  # on every sweep that reaches it would be the same unbounded indexer cost
+  # the no-fallback rule inside that job exists to prevent. A season in
+  # that backoff window falls through to the individual-episode branch
+  # instead of being skipped outright: each episode's own "episode_upgrade"
+  # backoff (a different, per-episode bucket) still gates it independently,
+  # so this is a genuinely different, still-useful search, not a retry of
+  # the suppressed one.
   defp plan_group(item_id, season, group) do
     media_item = hd(group).episode.media_item
     episodes = Enum.map(group, & &1.episode)
 
-    if TVShowSearch.should_prefer_season_pack?(episodes, media_item, season) do
+    if TVShowSearch.should_prefer_season_pack?(episodes, media_item, season) and
+         season_pack_upgrade_eligible?(item_id, season) do
       target = Enum.max_by(group, & &1.score)
 
       [
@@ -209,6 +223,10 @@ defmodule Mydia.Jobs.UpgradeSweep do
         }
       end)
     end
+  end
+
+  defp season_pack_upgrade_eligible?(item_id, season) do
+    Search.eligible?("season_upgrade", item_id, season_number: season)
   end
 
   # Returns the search cost incurred: 1 on a successful enqueue, 0 on

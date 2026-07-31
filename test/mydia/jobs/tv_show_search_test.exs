@@ -1514,6 +1514,73 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert reloaded.title =~ "1080p"
     end
 
+    # Comparator.upgrade?/5 scores a candidate's `.size` against
+    # episode_min_size_mb/episode_max_size_mb - correct for a single
+    # episode, wrong for a season pack whose `.size` is the sum of every
+    # episode in it. Without normalizing to a per-episode estimate before
+    # that comparison, this profile's episode_max_size_mb: 4096 bound
+    # would score the mock's ~14305 MB whole-pack size as oversized (a
+    # fixed penalty regardless of degree) while the on-disk file's 1430 MB
+    # scores in-range, tipping the margin-0 delta negative and rejecting a
+    # pack that is otherwise an even match. Normalized per episode
+    # (~2861 MB, five episodes in the season), it scores in-range too and
+    # the pack is grabbed.
+    test "does not reject a legitimately fitting season pack scored against whole-pack size instead of per-episode size",
+         %{library_path: library_path} do
+      profile =
+        quality_profile_fixture(%{
+          name: "Size-bounded season profile #{System.unique_integer([:positive])}",
+          quality_standards: %{
+            preferred_resolutions: ["1080p", "720p"],
+            episode_max_size_mb: 4096
+          },
+          min_upgrade_margin: 0
+        })
+
+      tv_show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Multi Season Show",
+          quality_profile_id: profile.id
+        })
+
+      episodes =
+        for ep_num <- 1..5 do
+          episode_fixture(%{
+            media_item_id: tv_show.id,
+            season_number: 1,
+            episode_number: ep_num,
+            air_date: Date.add(~D[2015-01-01], ep_num * 7)
+          })
+        end
+
+      [target_episode | _] = episodes
+
+      {:ok, media_file} =
+        Library.create_media_file(%{
+          episode_id: target_episode.id,
+          path: "/test/library/mss-size-s01e01.mkv",
+          relative_path: "mss-size-s01e01.mkv",
+          library_path_id: library_path.id,
+          size: 1_500_000_000,
+          resolution: "720p",
+          codec: "H.264 (High)",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => tv_show.id,
+                 "season_number" => 1,
+                 "media_file_id" => media_file.id
+               })
+
+      assert [download] = Mydia.Downloads.list_downloads()
+      reloaded = Mydia.Repo.get!(Mydia.Downloads.Download, download.id)
+      assert reloaded.metadata["upgrade_target_media_file_id"] == media_file.id
+    end
+
     test "does not grab a season pack that fails the Comparator's margin, even though ReleaseRanker would otherwise pick it",
          %{library_path: library_path} do
       {tv_show, media_file} =
@@ -1535,19 +1602,31 @@ defmodule Mydia.Jobs.TVShowSearchTest do
 
       assert Mydia.Downloads.list_downloads() == []
 
-      backoff = Search.get_backoff("season", tv_show.id, season_number: 1)
+      # Season-pack upgrade backoff lives in its own "season_upgrade"
+      # bucket, not the "season" bucket the missing-episode search path
+      # uses, so Mydia.Jobs.UpgradeSweep can suppress repeat season-pack
+      # upgrade searches without also touching ordinary missing-episode
+      # season searches.
+      assert Search.get_backoff("season", tv_show.id, season_number: 1) == nil
+      backoff = Search.get_backoff("season_upgrade", tv_show.id, season_number: 1)
       assert backoff.failure_count == 1
     end
 
     # This is the constraint most likely to be violated by reusing the
     # existing "season" mode path, since that path's fallback to individual
     # episode searches is built in. Proves it with a request count, not just
-    # an absence-of-downloads assertion: an episode search would be skipped
-    # anyway by the "already has files" gate (every episode here already has
-    # a file, that being the whole premise of an upgrade), so "no downloads"
-    # alone would pass even if the fallback wrongly fired. Only a Bypass
-    # expectation that the search endpoint is hit exactly once actually
-    # proves no per-episode fallback search happened.
+    # an absence-of-downloads assertion, and deliberately includes one
+    # episode with a past air_date and NO media file alongside three that
+    # already have files: search_individual_episodes/3 routes each episode
+    # through search_episode/2, whose "already has files" gate would
+    # silently swallow a reintroduced fallback for the three upgrade-target
+    # episodes (every one of them has a file - that's the premise of an
+    # upgrade) without ever reaching Indexers.search_all, so "no downloads"
+    # or even a naive request count over only those three would pass
+    # whether or not the fallback fired. The fourth, fileless episode clears
+    # both of search_episode/2's gates, so a reintroduced fallback issues a
+    # second, observable request to the same indexer and Bypass.expect_once
+    # below genuinely fails.
     test "does not fall back to individual episode searches when no season pack qualifies", %{
       library_path: library_path
     } do
@@ -1624,6 +1703,17 @@ defmodule Mydia.Jobs.TVShowSearchTest do
 
           media_file
         end
+
+      # No media file, past air_date: clears both of search_episode/2's
+      # gates. See the test's doc comment above for why this is required to
+      # make a reintroduced fallback actually observable.
+      _fileless_episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 4,
+          air_date: Date.add(~D[2020-01-01], 4 * 7)
+        })
 
       target_file = hd(media_files)
 

@@ -25,6 +25,12 @@ defmodule Mydia.Search.SearchBackoff do
     episode's file-presence state changes over time, so a backoff row from one search path must
     not suppress the other once an episode crosses that boundary. See
     `Mydia.Upgrades.eligible_episodes/1`.
+  - `"season_upgrade"` - Per-season backoff for the quality-upgrade season-pack search path,
+    resource_id = media_item.id, season_number set. Namespaced apart from `"season"` (which
+    nothing currently reads for eligibility - unlike the other `_upgrade` buckets above, this
+    split isn't about file-presence races) so `Mydia.Jobs.UpgradeSweep` can suppress repeat
+    season-pack upgrade searches for a season that keeps finding no qualifying pack, without
+    also touching the ordinary missing-episode `"season"` bucket.
   """
 
   use Ecto.Schema
@@ -76,7 +82,8 @@ defmodule Mydia.Search.SearchBackoff do
       "season",
       "episode",
       "movie_upgrade",
-      "episode_upgrade"
+      "episode_upgrade",
+      "season_upgrade"
     ])
   end
 end
