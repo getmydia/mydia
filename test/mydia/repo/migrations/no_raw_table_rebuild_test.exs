@@ -59,12 +59,12 @@ defmodule Mydia.Repo.Migrations.NoRawTableRebuildTest do
   defp hand_rolled_rebuild?(path) do
     source = File.read!(path)
 
-    ~r/DROP TABLE\s+"?(\w+)"?|drop table\(:(\w+)\)/i
+    ~r/DROP\s+TABLE\s+"?(\w+)"?|drop table\(:(\w+)\)/i
     |> Regex.scan(source)
     |> Enum.map(fn match -> Enum.find(tl(match), &(&1 != "")) end)
     |> Enum.filter(& &1)
     |> Enum.any?(fn table ->
-      Regex.match?(~r/RENAME TO\s+"?#{table}"?/i, source) or
+      Regex.match?(~r/RENAME\s+TO\s+"?#{table}\b"?/i, source) or
         Regex.match?(~r/to:\s*table\(:#{table}\)/, source)
     end)
   end
