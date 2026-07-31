@@ -25,11 +25,11 @@ import '../../domain/models/search_result.dart';
 import '../../presentation/widgets/app_shell.dart';
 import '../auth/auth_status.dart';
 import '../graphql/graphql_provider.dart';
+import 'navigator_keys.dart';
 
 part 'app_router.g.dart';
 
 /// Global key for the navigator used by the app shell
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Simple ChangeNotifier to trigger GoRouter refreshes.
@@ -66,7 +66,7 @@ GoRouter appRouter(Ref ref) {
   debugPrint('[AppRouter] Initial location: $initialLocation');
 
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: initialLocation,
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
@@ -120,7 +120,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/login',
         name: 'login',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const LoginScreen(),
       ),
 
@@ -198,13 +198,13 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/settings/devices',
         name: 'devices',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const DevicesScreen(),
       ),
       GoRoute(
         path: '/collection/:id',
         name: 'collection_detail',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return CollectionDetailScreen(id: id);
@@ -213,7 +213,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/movie/:id',
         name: 'movie_detail',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return MovieDetailScreen(id: id);
@@ -222,7 +222,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/show/:id',
         name: 'show_detail',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return ShowDetailScreen(id: id);
@@ -231,7 +231,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/episode/:id',
         name: 'episode_detail',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return EpisodeDetailScreen(id: id);
@@ -241,7 +241,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/player/queue',
         name: 'queue_player',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final itemsParam = state.uri.queryParameters['items'];
 
@@ -279,7 +279,7 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/player/:type/:id',
         name: 'player',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final type = state.pathParameters['type']!;
           final id = state.pathParameters['id']!;

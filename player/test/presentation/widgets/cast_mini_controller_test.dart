@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -144,7 +145,102 @@ Future<ProviderContainer> _pumpWithManager(
   return container;
 }
 
+/// Pumps [CastBarLayer] the way `app.dart` does: through a `MaterialApp.router`
+/// builder, so the bar starts with no Navigator or Overlay above it.
+///
+/// `MaterialApp(home: ...)` would not do — its own Navigator's Overlay sits
+/// above everything under `home`, so `Tooltip` would find one whether or not
+/// the layer supplies its own, and the tooltip test would pass with the fix
+/// reverted. The router's Overlay lives *inside* the builder's child, which is
+/// exactly the position that broke.
+Future<bool Function()> _pumpLayer(
+  WidgetTester tester, {
+  required CastDevice target,
+}) async {
+  var tappedBelow = false;
+
+  final container = ProviderContainer(overrides: [
+    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+    authStateProvider.overrideWith(() =>
+        _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+    asyncGraphqlClientProvider
+        .overrideWith((ref) => Completer<GraphQLClient>().future),
+    castSessionProvider.overrideWith((ref) => Stream.value(null)),
+  ]);
+  addTearDown(container.dispose);
+
+  final router = GoRouter(routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => Scaffold(
+        body: Center(
+          child: ElevatedButton(
+            key: const Key('below-the-bar'),
+            onPressed: () => tappedBelow = true,
+            child: const Text('Underneath'),
+          ),
+        ),
+      ),
+    ),
+  ]);
+  addTearDown(router.dispose);
+
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp.router(
+      routerConfig: router,
+      builder: (context, child) =>
+          CastBarLayer(child: child ?? const SizedBox.shrink()),
+    ),
+  ));
+  container.read(castTargetProvider.notifier).set(target);
+  await tester.pump();
+
+  return () => tappedBelow;
+}
+
 void main() {
+  group('CastBarLayer', () {
+    testWidgets('gives the bar an Overlay, so its tooltips render',
+        (tester) async {
+      await _pumpLayer(tester, target: _device);
+
+      final clear = find.byKey(const Key('cast-bar-idle-clear'));
+      expect(clear, findsOneWidget);
+
+      await tester.longPress(clear);
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Cancel casting to Cottage Chromecast'), findsOneWidget,
+          reason: 'without an Overlay in the layer the tooltip asserts and '
+              'renders as an error box instead');
+    });
+
+    testWidgets('keeps the bar full-width against the bottom edge',
+        (tester) async {
+      await _pumpLayer(tester, target: _device);
+
+      final bar = tester.getRect(find.byType(CastMiniController));
+      final layer = tester.getRect(find.byType(CastBarLayer));
+
+      expect(bar.width, layer.width);
+      expect(bar.bottom, layer.bottom);
+    });
+
+    testWidgets('does not swallow taps meant for the screen below',
+        (tester) async {
+      final tappedBelow = await _pumpLayer(tester, target: _device);
+
+      await tester.tap(find.byKey(const Key('below-the-bar')));
+      await tester.pump();
+
+      expect(tappedBelow(), isTrue,
+          reason: 'the bar is a full-screen layer; only the bar itself may '
+              'take pointer events');
+    });
+  });
+
   testWidgets('shows title and device while casting', (tester) async {
     await _pump(tester,
         session: _session(duration: const Duration(minutes: 44)));
