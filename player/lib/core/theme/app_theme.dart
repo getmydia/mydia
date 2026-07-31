@@ -256,7 +256,7 @@ class AppTheme {
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        hintStyle: const TextStyle(color: AppColors.textDisabled),
+        hintStyle: const TextStyle(color: AppColors.textSecondary),
       ),
 
       // Chip (for badges)

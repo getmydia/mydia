@@ -1,3 +1,25 @@
+// ****************************************************************************
+// * STALE GOLDENS as of the neutral-ground repalette (Projection Booth).     *
+// *                                                                          *
+// * `DepthTokens.playerChromeTint` moved from `#0B0E14` (navy-tinted) to     *
+// * `#0B0B0C` (neutral) — see colors.dart / depth_tokens.dart. That token is *
+// * the entire fill gradient this panel paints (glass_surface.dart, alpha    *
+// * 0.56 to 0.38), so every pixel in the three committed PNGs below          *
+// * (goldens/chrome_panel_{mobile,tablet,desktop}.png) is now stale: they    *
+// * were rendered against the old navy tint, not the current neutral one.   *
+// *                                                                          *
+// * This file is `@TestOn('mac-os')`, so it SKIPS on Linux CI and on any     *
+// * Linux dev machine — nobody there will see it fail. The first macOS      *
+// * developer to run the full suite on this branch WILL see all three tests *
+// * fail on an exact pixel mismatch. That failure is expected and is NOT a  *
+// * regression: it means these goldens have not been regenerated yet.       *
+// *                                                                          *
+// * To fix, on macOS:                                                       *
+// *   cd player && flutter test --update-goldens \                          *
+// *     test/presentation/widgets/video_controls/chrome_panel_golden_test.dart *
+// * Then review the three PNG diffs before committing them.                 *
+// ****************************************************************************
+//
 // Panel goldens, narrow by design: the panel over a fixed synthetic backdrop
 // at three widths, not full screenshots.
 //
@@ -160,7 +182,7 @@ Widget _panel(double width) {
 ///     image is the fill color alone, at the documented top/bottom alphas,
 ///     over full transparency: confirmed by sampling the very first
 ///     `--update-goldens` attempt with `magick`, which showed the tint's raw
-///     RGB (`(11,14,20)`, `DepthTokens.playerChromeTint`) at exactly
+///     RGB (`(11,11,12)`, `DepthTokens.playerChromeTint`) at exactly
 ///     alpha 142/255 (≈0.56) fading to 98/255 (≈0.38) top-to-bottom, with
 ///     *zero* trace of the tan/navy backdrop underneath it — no live blur,
 ///     no saturation boost visible, because there was nothing behind the

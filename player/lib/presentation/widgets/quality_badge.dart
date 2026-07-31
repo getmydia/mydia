@@ -161,8 +161,9 @@ int _getResolutionPriority(String? resolution) {
   if (res.contains('8k') || res.contains('4320')) return 800;
 
   // 4K/UHD variants
-  if (res.contains('4k') || res.contains('2160') || res.contains('uhd'))
+  if (res.contains('4k') || res.contains('2160') || res.contains('uhd')) {
     return 400;
+  }
 
   // 1440p/QHD variants
   if (res.contains('1440') || res.contains('qhd')) return 300;

@@ -3,7 +3,8 @@
 // Verifies the token groups expose the documented constants with the expected
 // types, that the surface-tone hierarchy is monotonic (real layered depth, not
 // near-identical greys), and that wiring the tones into the theme keeps it
-// dark-only with the cinematic palette unchanged (R3).
+// dark-only, with a monotonic neutral surface ramp and a single accent hue
+// mapped across every Material 3 accent slot (R3).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

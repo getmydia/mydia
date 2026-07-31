@@ -522,7 +522,7 @@ class MydiaLogoPainter extends CustomPainter {
     final s = size.width; // square
     final scale = s / 48.0; // SVG viewBox is 48x48
 
-    // Outer squircle – primary fill
+    // Outer squircle – mark fill
     final outerRect = RRect.fromLTRBR(
       1 * scale,
       1 * scale,

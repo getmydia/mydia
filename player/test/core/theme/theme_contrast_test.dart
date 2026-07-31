@@ -74,5 +74,25 @@ void main() {
             'Booth palette fixed; it must not come back.',
       );
     });
+
+    test('input placeholder text clears $_textFloor:1 on the field fill', () {
+      final ratio =
+          _contrast(AppColors.textSecondary, AppColors.surfaceVariant);
+      expect(
+        ratio,
+        greaterThanOrEqualTo(_textFloor),
+        reason: 'InputDecorationTheme.hintStyle renders on a surfaceVariant '
+            'fill. Placeholder text is not a disabled control, so SC 1.4.3 '
+            'applies at ${ratio.toStringAsFixed(2)}:1. hintStyle used to sit '
+            'on AppColors.textDisabled, which only measured 3.82:1 there.',
+      );
+    });
+
+    // Known gap this suite deliberately does not close: AppColors.onError
+    // (#FFFFFF) on AppColors.error (#F04D4D) measures 3.58:1, under the
+    // 4.5:1 floor, and is live via the Material 3 ColorScheme (every error
+    // button and snackbar). It predates the Projection Booth repalette, and
+    // fixing it changes how those surfaces look everywhere, so it is left as
+    // a palette decision for the maintainer rather than asserted here.
   });
 }
