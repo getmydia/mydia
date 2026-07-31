@@ -63,6 +63,7 @@ defmodule Mydia.Downloads.TorrentMatcher do
   - Similar-sounding movies from different years
   """
 
+  alias Mydia.Downloads.Structs.CandidatePool
   alias Mydia.Downloads.Structs.TorrentMatchResult
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.ReleaseParser.TargetContext
@@ -155,22 +156,35 @@ defmodule Mydia.Downloads.TorrentMatcher do
     - `:monitored_only` - Only match against monitored items (default: false)
   """
   def find_top_candidates(torrent_info, opts \\ []) do
-    max_results = Keyword.get(opts, :max_results, 3)
     monitored_only = Keyword.get(opts, :monitored_only, false)
+
+    CandidatePool.load(monitored_only: monitored_only)
+    |> find_top_candidates_in(torrent_info, opts)
+  end
+
+  @doc """
+  Same ranking as `find_top_candidates/2`, scored against a pre-loaded pool.
+
+  Scores only what the pool contains, so a caller holding a stale pool gets
+  stale results rather than a silent database read. `:monitored_only` is
+  honoured at `CandidatePool.load/1` time and is ignored here.
+  """
+  @spec find_top_candidates_in(CandidatePool.t(), map(), keyword()) :: [map()]
+  def find_top_candidates_in(%CandidatePool{} = pool, torrent_info, opts \\ []) do
+    max_results = Keyword.get(opts, :max_results, 3)
 
     {items, calculate_fn} =
       case info_kind(torrent_info) do
         :movie ->
-          {list_movies(monitored_only), &calculate_movie_confidence(&1, torrent_info)}
+          {pool.movies, &calculate_movie_confidence(&1, torrent_info)}
 
         kind when kind in [:tv, :tv_season] ->
-          {list_tv_shows(monitored_only), &calculate_tv_show_confidence(&1, torrent_info)}
+          {pool.tv_shows, &calculate_tv_show_confidence(&1, torrent_info)}
 
         # Unclassifiable: suggest from both pools using title similarity only, so a
         # usable-title :unknown release still surfaces candidates.
         :unknown ->
-          {list_movies(monitored_only) ++ list_tv_shows(monitored_only),
-           &calculate_tv_show_confidence(&1, torrent_info)}
+          {pool.movies ++ pool.tv_shows, &calculate_tv_show_confidence(&1, torrent_info)}
       end
 
     items

@@ -156,7 +156,7 @@ defmodule Mydia.Downloads.Download do
       :bytes_pulled
     ])
     |> validate_required([:title])
-    |> validate_inclusion(:match_status, ["unmatched", "unresolved_files", "partial_pack"])
+    |> validate_inclusion(:match_status, ["unresolved_files", "partial_pack"])
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:library_path_id)

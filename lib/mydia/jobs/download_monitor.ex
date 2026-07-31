@@ -56,6 +56,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.StallDetector
+  alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.UntrackedMatcher
   alias Mydia.Events
   alias Mydia.Settings
@@ -139,18 +140,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Status is "missing" when download exists in DB but not in any client
     missing =
       Enum.filter(downloads, fn d ->
-        d.status == "missing" and is_nil(d.db_completed_at) and is_nil(d.error_message) and
-          d.match_status != "unmatched"
-      end)
-
-    # Self-heal: unmatched downloads whose torrent is no longer in any client
-    # have no recovery path — they were never paired to a media_item and have
-    # no destination library_path. Delete them so MediaImport stops retrying
-    # forever. (Matched downloads keep going through `missing` / `failed`
-    # handlers so the user can investigate them in the Issues tab.)
-    unmatched_orphans =
-      Enum.filter(downloads, fn d ->
-        d.match_status == "unmatched" and d.in_client? == false
+        d.status == "missing" and is_nil(d.db_completed_at) and is_nil(d.error_message)
       end)
 
     # Self-heal: a grab task that died mid-flight (BEAM restart, deploy)
@@ -176,7 +166,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       end)
 
     Logger.info(
-      "Found #{length(completed)} newly completed, #{length(failed)} newly failed, #{length(missing)} missing downloads, #{length(unmatched_orphans)} unmatched orphans, #{length(stale_grabs)} stale grabs, #{length(active_for_stall_check)} active for stall check"
+      "Found #{length(completed)} newly completed, #{length(failed)} newly failed, #{length(missing)} missing downloads, #{length(stale_grabs)} stale grabs, #{length(active_for_stall_check)} active for stall check"
     )
 
     # Handle completions
@@ -187,9 +177,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     # Handle missing downloads
     Enum.each(missing, &handle_missing/1)
-
-    # Self-heal unmatched orphans (delete; never imported, never will be)
-    Enum.each(unmatched_orphans, &handle_unmatched_orphan/1)
 
     # Self-heal abandoned grabs (persist the timeout so occupancy is released)
     Enum.each(stale_grabs, &handle_stale_grab/1)
@@ -203,6 +190,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
     untracked_downloads = UntrackedMatcher.find_and_match_untracked()
     Logger.info("Matched #{length(untracked_downloads)} untracked torrent(s) to library items")
 
+    # Refresh the derived view of torrents Mydia does not manage. Runs after
+    # adoption so anything just adopted is already tracked and drops out of the
+    # scan on this pass rather than the next one.
+    external_scan = ExternalTorrents.refresh()
+
     # Detect stuck downloads (completed but never imported for >1 hour)
     stuck = Downloads.list_stuck_downloads(preload: [:media_item])
     Logger.info("Found #{length(stuck)} stuck downloads")
@@ -215,11 +207,12 @@ defmodule Mydia.Jobs.DownloadMonitor do
       completed_count: length(completed),
       failed_count: length(failed),
       missing_count: length(missing),
-      unmatched_orphans_cleaned: length(unmatched_orphans),
       stale_grabs_cleaned: length(stale_grabs),
       stalled_count: stalled_count,
       stuck_count: length(stuck),
-      untracked_matched: length(untracked_downloads)
+      untracked_matched: length(untracked_downloads),
+      external_needs_matching: length(external_scan.needs_matching),
+      external_other: length(external_scan.external)
     )
 
     maybe_schedule_fast_followup(active_for_stall_check, args)
@@ -273,60 +266,19 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Track completion event
     Events.download_completed(download, media_item: download.media_item)
 
-    if download.match_status == "unmatched" do
-      # Unmatched downloads have no destination library_path and no media_item
-      # to associate files with, so MediaImport can't do anything with them.
-      # Leave the row in place: the user may still match it via the Issues tab
-      # while the torrent is in the client. Once the torrent leaves the client,
-      # handle_unmatched_orphan/1 will delete the row.
-      Logger.info("Completed download is unmatched — skipping MediaImport enqueue",
-        download_id: download.id
-      )
+    # Enqueue import job - it will delete the download record after successful import
+    case enqueue_import_job(download, download_map) do
+      {:ok, _job} ->
+        Logger.info("Import job enqueued for completed download",
+          download_id: download.id
+        )
 
-      :ok
-    else
-      # Enqueue import job - it will delete the download record after successful import
-      case enqueue_import_job(download, download_map) do
-        {:ok, _job} ->
-          Logger.info("Import job enqueued for completed download",
-            download_id: download.id
-          )
-
-          :ok
-
-        {:error, reason} ->
-          Logger.error("Failed to enqueue import job",
-            download_id: download.id,
-            reason: inspect(reason)
-          )
-
-          :ok
-      end
-    end
-  end
-
-  # Self-heal: an unmatched download whose torrent is no longer in any client
-  # is unrecoverable — nothing in the system can pair it with a media_item.
-  # Delete the row so MediaImport stops retrying and the queue dedup stops
-  # treating it as "active".
-  defp handle_unmatched_orphan(download_map) do
-    Logger.info(
-      "Self-healing unmatched download — torrent gone from client, no recovery path",
-      download_id: download_map.id,
-      title: download_map.title,
-      client: download_map.download_client
-    )
-
-    download = Downloads.get_download!(download_map.id)
-
-    case Downloads.delete_download(download) do
-      {:ok, _deleted} ->
         :ok
 
-      {:error, changeset} ->
-        Logger.warning("Failed to delete unmatched orphan",
+      {:error, reason} ->
+        Logger.error("Failed to enqueue import job",
           download_id: download.id,
-          errors: inspect(changeset.errors)
+          reason: inspect(reason)
         )
 
         :ok
