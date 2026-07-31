@@ -8,8 +8,9 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
   files remain untouched; this file is their mirror with `FileParser`
   rebound to V3.
 
-  See: docs/plans/2026-05-13-001-feat-release-name-parser-v3-plan.md
-  (Unit 6 — parity gate).
+  This parity gate — not the corpus run — is the hard gate for V3. See
+  `test/mydia/library/release_parser/CORPUS_FAILURES.md` for the corpus
+  clusters excluded from that softer target.
   """
 
   use ExUnit.Case, async: true
@@ -1792,7 +1793,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
   describe "2160p/4K quality detection - real releases" do
     # V3 gap: the tokenizer splits `Dolby.Vision` into two tokens and
     # the resolver doesn't yet recompose the compound. Tracked in
-    # docs/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures.md.
+    # test/mydia/library/release_parser/CORPUS_FAILURES.md.
     @tag :skip
     test "Game of Thrones 4K BluRay REMUX - season pack without episode" do
       result =
@@ -1839,7 +1840,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     # V3 gap: when both `DV` and `HDR10` appear, V3's HDR conflict
     # resolution prefers HDR10 (confidence 0.95 vs DV's 0.8). V2
     # normalized DV to DolbyVision. Tracked in
-    # docs/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures.md.
+    # test/mydia/library/release_parser/CORPUS_FAILURES.md.
     @tag :skip
     test "Spider-Man Across the Spider-Verse with Dolby Vision and HDR10" do
       result =
