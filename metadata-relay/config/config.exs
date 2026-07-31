@@ -6,7 +6,15 @@ config :metadata_relay,
   port: 4000,
   # Ecto repository
   ecto_repos: [MetadataRelay.Repo],
-  dashboard_auth: [username: "admin", password: "admin"]
+  dashboard_auth: [username: "admin", password: "admin"],
+  # Bearer tokens the iroh relay may present to POST /p2p/access.
+  # Populated from P2P_ACCESS_BEARER_TOKENS at runtime. A list, so a token can
+  # be rotated by deploying both values before removing the old one.
+  p2p_access_bearer_tokens: [],
+  # Hard cap on distinct endpoint IDs held in ETS, sized against the pod's
+  # 512Mi memory limit. Above this we keep allowing traffic but stop recording
+  # new identities.
+  p2p_max_sightings: 200_000
 
 config :metadata_relay, MetadataRelay.Feedback.Notifier,
   recipient: nil,
