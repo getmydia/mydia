@@ -7,8 +7,9 @@ defmodule Mydia.Library do
   import Mydia.DB
   import Mydia.QueryHelpers
   alias Mydia.Repo
-  alias Mydia.Library.{MediaFile, FileAnalyzer, PhashGenerator, Text}
+  alias Mydia.Library.{MediaFile, FileAnalyzer, PhashGenerator, Text, TrashStore}
   alias Mydia.Library.ReleaseParser, as: FileParser
+  alias Mydia.Library.Structs.FileMetadata
 
   require Logger
 
@@ -610,45 +611,150 @@ defmodule Mydia.Library do
   end
 
   @doc """
-  Moves a media file to trash by setting `trashed_at` to now.
+  Moves a media file to trash: the file leaves the library path for the trash
+  directory, and `trashed_at` is stamped on the row.
 
-  Trashed files are excluded from all queries by default and will be
-  permanently deleted after the configured retention period (default 30 days).
+  Trashed files are excluded from all queries by default and are permanently
+  deleted after the configured retention period (default 30 days).
+
+  The file has to physically move, not just get a timestamp. Trashed rows are
+  invisible to `list_media_files/1`, so a file left sitting on the library path
+  is seen by the next scan as a *new* file, matched back to the trashed row by
+  relative path, and restored - which silently reverted every automatic quality
+  upgrade and resurrected every release rejected for lying about its contents.
+  See `Mydia.Library.TrashStore` for where the trash lives and why.
+
+  A file that is already gone from disk stays a normal outcome: that is the
+  original reason this function exists (marking what a scan found missing).
+
+  Returns `{:error, reason}` without touching the row when a file that *is*
+  present could not be moved. A row marked trashed while its file sits in the
+  library is precisely the inconsistency this move exists to remove, so the two
+  are kept in step or neither changes.
   """
-  @spec trash_media_file(MediaFile.t()) :: {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()}
+  @spec trash_media_file(MediaFile.t()) ::
+          {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
   def trash_media_file(%MediaFile{} = media_file) do
-    media_file
-    |> Ecto.Changeset.change(trashed_at: DateTime.utc_now() |> DateTime.truncate(:second))
-    |> Repo.update()
+    media_file = Repo.preload(media_file, :library_path)
+
+    case TrashStore.store(media_file) do
+      {:ok, trash_path} ->
+        media_file
+        |> Ecto.Changeset.change(
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          metadata: put_trashed_path(media_file.metadata, trash_path)
+        )
+        |> Repo.update()
+        |> case do
+          {:ok, trashed} ->
+            {:ok, trashed}
+
+          {:error, changeset} ->
+            # The bytes already moved but the row did not. Put them back
+            # rather than leave an active row pointing at an empty path.
+            _ = TrashStore.restore(media_file, trash_path)
+            {:error, changeset}
+        end
+
+      {:error, reason} ->
+        {:error, {:trash_move_failed, reason}}
+    end
   end
 
   @doc """
-  Restores a trashed media file by clearing `trashed_at`.
+  Restores a trashed media file: the file moves back to its library path and
+  `trashed_at` is cleared.
+
+  A trashed copy that is missing from the trash directory is not an error - the
+  row is restored anyway, exactly as it was before trashing moved files at all.
   """
-  @spec restore_media_file(MediaFile.t()) :: {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()}
+  @spec restore_media_file(MediaFile.t()) ::
+          {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
   def restore_media_file(%MediaFile{} = media_file) do
-    media_file
-    |> Ecto.Changeset.change(trashed_at: nil)
-    |> Repo.update()
+    media_file = Repo.preload(media_file, :library_path)
+
+    case TrashStore.restore(media_file, trashed_path(media_file)) do
+      :ok ->
+        media_file
+        |> Ecto.Changeset.change(
+          trashed_at: nil,
+          metadata: drop_trashed_path(media_file.metadata)
+        )
+        |> Repo.update()
+
+      {:error, reason} ->
+        Logger.error("Could not restore a trashed media file",
+          media_file_id: media_file.id,
+          reason: inspect(reason)
+        )
+
+        {:error, {:trash_restore_failed, reason}}
+    end
   end
 
   @doc """
-  Permanently deletes all media files that have been trashed for longer than `days`.
+  Permanently deletes all media files that have been trashed for longer than `days`,
+  including the bytes behind them.
 
   Returns `{:ok, count}` with the number of permanently deleted files.
+
+  Deleting from disk is the other half of
+  [#295](https://github.com/getmydia/mydia/issues/295): the purge used to drop
+  the row and leave the file forever, so trash retention never reclaimed any
+  space.
   """
   @spec purge_old_trashed_media_files(integer()) :: {:ok, non_neg_integer()}
   def purge_old_trashed_media_files(days \\ 30) do
     cutoff = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-days, :day)
 
+    expired =
+      from(f in MediaFile,
+        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff,
+        preload: :library_path
+      )
+      |> Repo.all()
+
+    Enum.each(expired, fn media_file ->
+      TrashStore.discard(media_file, trashed_path(media_file))
+    end)
+
+    ids = Enum.map(expired, & &1.id)
+
     {count, _} =
       from(f in MediaFile,
-        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff
+        where:
+          f.id in ^ids and not is_nil(f.trashed_at) and
+            f.trashed_at < ^cutoff
       )
       |> Repo.delete_all()
 
     {:ok, count}
   end
+
+  # Where the bytes went, recorded on the row so restore and purge do not
+  # depend on the trash directory configuration still resolving the same way
+  # later. Rows trashed before TrashStore existed carry no such key - their
+  # files are still at the library path.
+  defp trashed_path(%MediaFile{metadata: %FileMetadata{extra: extra}}) when is_map(extra) do
+    case extra["trashed_path"] do
+      path when is_binary(path) and path != "" -> path
+      _ -> nil
+    end
+  end
+
+  defp trashed_path(%MediaFile{}), do: nil
+
+  defp put_trashed_path(metadata, nil), do: drop_trashed_path(metadata)
+
+  defp put_trashed_path(metadata, path) when is_binary(path) do
+    metadata = metadata || FileMetadata.empty()
+    %{metadata | extra: Map.put(metadata.extra || %{}, "trashed_path", path)}
+  end
+
+  defp drop_trashed_path(nil), do: FileMetadata.empty()
+
+  defp drop_trashed_path(%FileMetadata{} = metadata),
+    do: %{metadata | extra: Map.delete(metadata.extra || %{}, "trashed_path")}
 
   @doc """
   Deletes the physical file from disk for a media file record.

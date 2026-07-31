@@ -88,27 +88,44 @@ so for a while your library (and your disk) is holding the original and its
 replacement simultaneously.
 
 Once Mydia decides the new file wins, the old one is not deleted right
-away. It is moved to trash, which takes it out of your library listings,
-for the retention window configured by `trash_retention_days` (30 days by
-default). Be aware that today, the file itself stays on disk through and
-past that window: the trash cleanup job clears the record after the
-retention period, but does not currently free the underlying disk space
-([tracked in #295](https://github.com/getmydia/mydia/issues/295)). In
-practice, every automatic upgrade you accept adds to your disk usage, and
-that space is not reclaimed automatically. If you have a lot of files
-sitting below your cutoff score when you first turn this on, expect disk
-usage to grow steadily and stay grown until you clean up the superseded
-files yourself.
+away. It is moved to trash: the file leaves your library folder for a trash
+directory, and stays there for the retention window configured by
+`trash_retention_days` (30 days by default). When that window expires, the
+daily trash cleanup job deletes it for real and the space comes back.
 
-Since none of that space comes back on its own, `upgrade_sweep_batch_size`
-is your main lever: lowering it spreads the upgrades (and the disk growth
-that comes with them) out over more days instead of letting one large first
-sweep replace everything at once.
+So an upgrade costs you the size of the replaced file for the length of the
+retention window, and nothing after that. If you have a lot of files sitting
+below your cutoff score when you first turn this on, expect disk usage to
+rise for about a month and then level off. Shortening
+`trash_retention_days` shortens that overlap; lowering
+`upgrade_sweep_batch_size` spreads the upgrades out over more days instead
+of letting one large first sweep replace everything at once.
 
-The one upside is that a replaced file is not gone the moment it is
-replaced. For the full retention window, the original file is sitting in
-trash, out of your library listings but not deleted, so a mistaken upgrade
-can still be recovered during that period.
+Nothing is deleted the moment it is replaced. For the full retention window
+the original is sitting in the trash directory, out of your library listings
+but intact, so a mistaken upgrade can still be undone during that period.
+Restoring a file moves it back where it came from.
+
+### Where the trash directory is
+
+By default, Mydia trashes into a `.mydia-trash` folder **beside** each
+library folder. A library at `/media/movies` trashes into
+`/media/.mydia-trash`.
+
+Two things make that the default. It is outside your library, so a library
+scan never finds the trashed file and re-adds it, which is what would undo
+the upgrade you just accepted. And it is on the same disk as your media, so
+trashing a 60 GB file is an instant rename rather than a slow copy.
+
+You can point all of it somewhere else with the `MYDIA_TRASH_DIR`
+environment variable. Two rules if you do:
+
+- Pick a directory **outside every one of your library folders**. A trash
+  directory inside a library is a directory Mydia will scan.
+- Pick one on the **same filesystem** as your media. If it is on a different
+  mount, Mydia still trashes the file, but it has to copy the whole thing
+  and then delete the original, which is slow for large media and briefly
+  needs room for both copies. It logs a warning when this happens.
 
 ## Next Steps
 

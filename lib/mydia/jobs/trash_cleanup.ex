@@ -6,11 +6,21 @@ defmodule Mydia.Jobs.TrashCleanup do
   Runs daily to purge trashed files older than the retention period.
   Default retention is 30 days.
 
+  Purging deletes the row **and the bytes behind it**. Trashed files live in
+  the trash directory (see `Mydia.Library.TrashStore`); files trashed before
+  that directory existed are still sitting at their library path, and are
+  deleted from there. Leaving them was
+  [#295](https://github.com/getmydia/mydia/issues/295): trash retention
+  expired without ever reclaiming any disk space.
+
   ## Configuration
 
   Set the retention period in your config:
 
       config :mydia, :trash_retention_days, 30
+
+  The trash directory itself defaults to a `.mydia-trash` directory beside
+  each library path and can be overridden with `MYDIA_TRASH_DIR`.
   """
 
   use Oban.Worker,
