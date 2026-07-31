@@ -11,6 +11,7 @@ defmodule Mydia.Downloads.Queue do
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Priority
   alias Mydia.Downloads.Structs.DownloadMetadata
+  alias Mydia.Downloads.Structs.ExternalTorrent
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Settings
@@ -470,6 +471,68 @@ defmodule Mydia.Downloads.Queue do
       {:error, _changeset} = error ->
         error
     end
+  end
+
+  @doc """
+  Creates a tracked download for a foreign client torrent and queues its import.
+
+  Foreign torrents are derived and have no database row, so matching one is a
+  create rather than an update. The row is written with `match_status: nil`,
+  which is exactly what a normally-grabbed download looks like, so everything
+  downstream treats it as ordinary work instead of a special case.
+
+  Returns `{:error, :already_tracked}` when the unique
+  `(download_client, download_client_id)` pair is taken, which is what a second
+  browser tab adopting the same torrent hits.
+  """
+  @spec adopt_external_torrent(ExternalTorrent.t(), binary(), binary() | nil) ::
+          {:ok, Download.t()} | {:error, :already_tracked} | {:error, Ecto.Changeset.t()}
+  def adopt_external_torrent(%ExternalTorrent{} = torrent, media_item_id, episode_id \\ nil) do
+    attrs = %{
+      indexer: "manual",
+      title: torrent.title,
+      download_url: nil,
+      download_client: torrent.client_name,
+      download_client_id: torrent.client_id,
+      media_item_id: media_item_id,
+      episode_id: episode_id,
+      metadata: %{
+        size: torrent.size,
+        save_path: torrent.save_path,
+        matched_from_client: true
+      }
+    }
+
+    with {:ok, download} <- create_adopted_download(attrs),
+         {:ok, _job} <- enqueue_adopted_import(download, torrent.save_path) do
+      {:ok, download}
+    end
+  end
+
+  defp create_adopted_download(attrs) do
+    case History.create_download(attrs) do
+      {:ok, download} ->
+        {:ok, download}
+
+      {:error, %Ecto.Changeset{errors: errors}} = error ->
+        if Keyword.has_key?(errors, :download_client) do
+          {:error, :already_tracked}
+        else
+          error
+        end
+    end
+  end
+
+  defp enqueue_adopted_import(download, save_path) do
+    %{
+      "download_id" => download.id,
+      "save_path" => save_path,
+      "cleanup_client" => true,
+      "use_hardlinks" => true,
+      "move_files" => false
+    }
+    |> Mydia.Jobs.MediaImport.new()
+    |> insert_job()
   end
 
   def refresh_match_suggestions(%Download{} = download) do

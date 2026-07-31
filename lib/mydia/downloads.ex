@@ -374,6 +374,21 @@ defmodule Mydia.Downloads do
     to: Mydia.Downloads.Queue
 
   @doc """
+  Creates a tracked download for a foreign client torrent and queues its import.
+
+  Foreign torrents are derived from the download clients and have no database
+  row, so matching one creates the row at that moment. See
+  `Mydia.Downloads.Queue.adopt_external_torrent/3`.
+  """
+  @spec adopt_external_torrent(
+          Mydia.Downloads.Structs.ExternalTorrent.t(),
+          binary(),
+          binary() | nil
+        ) :: {:ok, Download.t()} | {:error, :already_tracked} | {:error, Ecto.Changeset.t()}
+  defdelegate adopt_external_torrent(torrent, media_item_id, episode_id \\ nil),
+    to: Mydia.Downloads.Queue
+
+  @doc """
   Refreshes match suggestions for an unmatched download by re-running TorrentMatcher.
   """
   defdelegate refresh_match_suggestions(download), to: Mydia.Downloads.Queue
