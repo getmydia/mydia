@@ -13,7 +13,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
   - `name` - Unique name for the profile
   - `quality_standards.preferred_resolutions` - List of preferred resolution strings
   - `upgrades_allowed` - Whether automatic quality upgrades are allowed
-  - `upgrade_until_quality` - Maximum quality to upgrade to (if upgrades enabled)
+  - `upgrade_until_score` - Score cutoff to upgrade to (if upgrades enabled)
   - `description` - Human-readable description of the profile
 
   ## Profile Descriptions
@@ -33,7 +33,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "Any",
         upgrades_allowed: true,
-        upgrade_until_quality: "2160p",
+        upgrade_until_score: 95,
         description: "Any quality, no size limits. Maximizes availability.",
         quality_standards: %{
           preferred_resolutions: ["360p", "480p", "576p", "720p", "1080p", "2160p"]
@@ -42,7 +42,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "SD",
         upgrades_allowed: true,
-        upgrade_until_quality: "576p",
+        upgrade_until_score: 45,
         description: "Standard Definition up to 480p/DVD quality. Limited to 2GB.",
         quality_standards: %{
           max_resolution: "576p",
@@ -55,7 +55,6 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "HD-720p",
         upgrades_allowed: false,
-        upgrade_until_quality: nil,
         description: "720p HD content. Balanced quality and file size (1-5GB).",
         quality_standards: %{
           min_resolution: "720p",
@@ -72,7 +71,6 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "HD-1080p",
         upgrades_allowed: false,
-        upgrade_until_quality: nil,
         description: "1080p Full HD content. Standard high quality (2-15GB).",
         quality_standards: %{
           min_resolution: "1080p",
@@ -89,7 +87,6 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "Full HD",
         upgrades_allowed: false,
-        upgrade_until_quality: nil,
         description: "Strict 1080p with high-quality sources only (4-20GB).",
         quality_standards: %{
           min_resolution: "1080p",
@@ -106,7 +103,6 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "Remux-1080p",
         upgrades_allowed: false,
-        upgrade_until_quality: nil,
         description: "Lossless 1080p REMUX releases. Premium quality (20-40GB).",
         quality_standards: %{
           min_resolution: "1080p",
@@ -124,7 +120,6 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "4K/UHD",
         upgrades_allowed: false,
-        upgrade_until_quality: nil,
         description: "Ultra HD 2160p/4K content. Maximum quality (15-80GB).",
         quality_standards: %{
           min_resolution: "2160p",
@@ -143,7 +138,6 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
       %{
         name: "Remux-2160p",
         upgrades_allowed: false,
-        upgrade_until_quality: nil,
         description: "Lossless 4K REMUX releases. Ultimate quality (40-100GB).",
         quality_standards: %{
           min_resolution: "2160p",

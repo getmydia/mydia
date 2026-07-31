@@ -50,7 +50,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
         Settings.create_quality_profile(%{
           name: "HD",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           quality_standards: %{
             preferred_resolutions: ["720p", "1080p"],
             movie_min_size_mb: 1000,

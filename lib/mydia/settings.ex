@@ -209,7 +209,7 @@ defmodule Mydia.Settings do
 
       iex> compare_quality_profile_versions(profile1, profile2)
       %{
-        changed: %{upgrade_until_quality: {"720p", "1080p"}, version: {1, 2}},
+        changed: %{upgrade_until_score: {80, 85}, version: {1, 2}},
         added: %{quality_standards: %{...}},
         removed: %{}
       }

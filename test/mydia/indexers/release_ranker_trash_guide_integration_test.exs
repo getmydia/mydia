@@ -54,7 +54,6 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
     %QualityProfile{
       name: "TRaSH HD Bluray + WEB",
       upgrades_allowed: true,
-      upgrade_until_quality: "1080p",
       quality_standards: %{
         min_resolution: "720p",
         max_resolution: "1080p",
@@ -82,7 +81,6 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
     %QualityProfile{
       name: "TRaSH UHD Bluray + WEB",
       upgrades_allowed: true,
-      upgrade_until_quality: "2160p",
       quality_standards: %{
         min_resolution: "2160p",
         max_resolution: "2160p",
@@ -111,7 +109,6 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
     %QualityProfile{
       name: "TRaSH Remux + WEB 1080p",
       upgrades_allowed: true,
-      upgrade_until_quality: "1080p",
       quality_standards: %{
         min_resolution: "1080p",
         max_resolution: "1080p",
