@@ -65,7 +65,8 @@ class _PlaybackSurfaceState extends State<PlaybackSurface> {
   /// runs after `onPointerUp`, and clearing there would defeat the whole
   /// mechanism. It is cleared on the next pointer down instead, which also
   /// covers the case where the OS takes the pointer for a window drag and
-  /// Flutter never sees a matching up event at all.
+  /// Flutter never sees a matching up event at all. [_handleTap] also clears
+  /// it whenever the arena does resolve a tap after a drag was flagged.
   bool _draggedThisGesture = false;
 
   void _onPointerDown(PointerDownEvent event) {

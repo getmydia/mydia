@@ -44,7 +44,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(drags, 1, reason: 'the OS drag must be handed off exactly once');
-      expect(taps, 0, reason: 'a drag is not a click');
+      // `taps == 0` here is NOT evidence that the suppression flag works.
+      // Flutter's own TapGestureRecognizer uses kPrecisePointerHitSlop (1.0)
+      // for a mouse, so a 60px move has already rejected the tap before
+      // _handleTap could run, and this assertion would still pass with the
+      // suppression check deleted. The flag is falsifiable only on a touch
+      // pointer, which the next test covers.
+      expect(taps, 0, reason: 'a 60px mouse move is not a click');
     });
 
     testWidgets('a mouse move under the slop starts no window drag',
