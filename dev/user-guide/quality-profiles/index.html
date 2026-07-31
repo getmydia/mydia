@@ -1966,11 +1966,13 @@
 <li>Save profile</li>
 </ol>
 <h2 id="assigning-profiles">Assigning Profiles</h2>
-<p>Profiles can be assigned:</p>
-<ul>
-<li>Per library (default profile)</li>
-<li>Per media item (override)</li>
-</ul>
+<p>Every search resolves a profile through two tiers:</p>
+<ol>
+<li><strong>The media item's own profile</strong>, if one is set. This always wins.</li>
+<li><strong>The global default profile</strong>, chosen at the top of <strong>Admin &gt; Quality Profiles</strong>. It governs every item that has no profile of its own.</li>
+</ol>
+<p>Wherever you pick a profile for a media item, the blank choice reads <strong>Use default (name)</strong>. Picking it clears the item's own profile so the item follows the global default, including any later change to that default. Setting a profile on the item instead pins it, and it stops tracking the default.</p>
+<p>A fresh install seeds the <strong>Any</strong> profile as the global default, so searches are ranked from the start rather than falling back to raw seeder counts. Changing the default afterwards is never overwritten on restart, and clearing it is respected too.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="../download-clients/">Download Clients</a> - Configure download automation</li>
