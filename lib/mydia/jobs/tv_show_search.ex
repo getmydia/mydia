@@ -658,7 +658,12 @@ defmodule Mydia.Jobs.TVShowSearch do
   end
 
   @doc false
-  # Public for unit testing — internal helper.
+  # Public: shared by this module's missing-episode search path and
+  # Mydia.Jobs.UpgradeSweep's below-cutoff episode routing. The threshold
+  # this compares against 70% is agnostic to *why* an episode qualified
+  # (missing vs. below cutoff) — only the count passed in and the season's
+  # total episode count (from metadata or the DB, always a true total,
+  # never derived from `missing_episodes`) matter.
   def should_prefer_season_pack?(missing_episodes, media_item, season_number) do
     missing_count = length(missing_episodes)
 

@@ -89,4 +89,108 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
 
     assert {:ok, %{searches: 2}} = UpgradeSweep.perform(%Oban.Job{args: %{}})
   end
+
+  defp show_with_profile do
+    profile =
+      quality_profile_fixture(%{
+        name: "Sweep #{System.unique_integer([:positive])}",
+        upgrades_allowed: true,
+        upgrade_until_score: 90,
+        quality_standards: %{preferred_resolutions: ["2160p"]}
+      })
+
+    show = insert(:tv_show, monitored: true, quality_profile: profile)
+    {show, profile}
+  end
+
+  # Resolution "720p" against preferred_resolutions ["2160p"] scores 84.5
+  # overall (see below_cutoff/above_cutoff score derivation in the task
+  # report) — below the fixture's upgrade_until_score: 90, so this file is
+  # eligible for upgrade.
+  defp below_cutoff_episode(show, profile, season_number, episode_number) do
+    episode =
+      insert(:episode,
+        media_item: show,
+        season_number: season_number,
+        episode_number: episode_number,
+        monitored: true
+      )
+
+    insert(:media_file,
+      episode: episode,
+      resolution: "720p",
+      codec: "H.264 (High)",
+      audio_codec: "AAC Stereo",
+      size: 2 * 1024 * 1024 * 1024,
+      analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      quality_profile: profile
+    )
+
+    episode
+  end
+
+  # Resolution "4K" (canonicalizes to "2160p", the preferred resolution) plus
+  # hdr_format "Dolby Vision" scores 94.0 overall — above the fixture's
+  # upgrade_until_score: 90, so Upgrades.eligible_episodes/1 never returns
+  # this candidate. It exists purely so the season's total episode count
+  # (read from the DB by TVShowSearch.should_prefer_season_pack?/3, not from
+  # the below-cutoff candidate set) reflects a realistic full season.
+  defp above_cutoff_episode(show, profile, season_number, episode_number) do
+    episode =
+      insert(:episode,
+        media_item: show,
+        season_number: season_number,
+        episode_number: episode_number,
+        monitored: true
+      )
+
+    insert(:media_file,
+      episode: episode,
+      resolution: "4K",
+      codec: "H.264 (High)",
+      audio_codec: "AAC Stereo",
+      hdr_format: "Dolby Vision",
+      size: 2 * 1024 * 1024 * 1024,
+      analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      quality_profile: profile
+    )
+
+    episode
+  end
+
+  describe "episode routing" do
+    test "a season with most episodes below cutoff costs one pack search" do
+      {show, profile} = show_with_profile()
+      for n <- 1..8, do: below_cutoff_episode(show, profile, 1, n)
+      for n <- 9..10, do: above_cutoff_episode(show, profile, 1, n)
+
+      assert {:ok, %{searches: 1}} = UpgradeSweep.perform(%Oban.Job{args: %{}})
+    end
+
+    test "a season with few episodes below cutoff costs one search each" do
+      {show, profile} = show_with_profile()
+      for n <- 1..2, do: below_cutoff_episode(show, profile, 1, n)
+      for n <- 3..10, do: above_cutoff_episode(show, profile, 1, n)
+
+      assert {:ok, %{searches: 2}} = UpgradeSweep.perform(%Oban.Job{args: %{}})
+    end
+
+    # Proves the budget genuinely governs episode search cost, not just
+    # counts candidates: with an unconstrained budget this season would
+    # qualify for a single pack search (8/10 below cutoff = 80% >= 70%).
+    # Capped at batch_size: 5, Upgrades.eligible_episodes/1 can only surface
+    # 5 of the 8 below-cutoff episodes, so should_prefer_season_pack?/3 sees
+    # 5/10 = 50% (< 70%) and correctly routes to individual searches —
+    # capped at exactly the batch size, not the full 8.
+    test "caps episode searches at the batch size even when the full season would pack" do
+      {show, profile} = show_with_profile()
+      for n <- 1..8, do: below_cutoff_episode(show, profile, 1, n)
+      for n <- 9..10, do: above_cutoff_episode(show, profile, 1, n)
+
+      put_upgrades_config(sweep_enabled: true, sweep_batch_size: 5)
+
+      assert {:ok, %{searches: 5}} = UpgradeSweep.perform(%Oban.Job{args: %{}})
+      assert Repo.aggregate(Oban.Job, :count) == 5
+    end
+  end
 end

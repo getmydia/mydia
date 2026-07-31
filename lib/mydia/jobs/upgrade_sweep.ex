@@ -10,6 +10,14 @@ defmodule Mydia.Jobs.UpgradeSweep do
 
   Items are stamped at enqueue time rather than on search completion, so an
   item whose searches always fail cannot monopolise the front of the queue.
+
+  Movies are swept first; episodes get whatever budget remains. Episodes are
+  not searched one-by-one: they are grouped by `{show, season}` and routed
+  through `TVShowSearch.should_prefer_season_pack?/3` (the same 70% threshold
+  the missing-episode search path uses), so a season where most episodes are
+  below cutoff costs one season-pack search instead of one search per
+  episode. The budget tracked here counts indexer searches, not items — a
+  season pack costs 1 regardless of how many episodes it covers.
   """
 
   use Oban.Worker,
@@ -20,6 +28,7 @@ defmodule Mydia.Jobs.UpgradeSweep do
   require Logger
 
   alias Mydia.Jobs.MovieSearch
+  alias Mydia.Jobs.TVShowSearch
   alias Mydia.Repo
   alias Mydia.Upgrades
 
@@ -36,22 +45,112 @@ defmodule Mydia.Jobs.UpgradeSweep do
   end
 
   defp run(budget) do
-    candidates = Upgrades.eligible_movies(budget)
+    movies = Upgrades.eligible_movies(budget)
 
-    searches =
-      candidates
+    movie_searches =
+      movies
       |> Enum.map(&enqueue_movie/1)
       |> Enum.count(& &1)
 
-    Upgrades.stamp_checked(:movie, Enum.map(candidates, & &1.media_item.id))
+    Upgrades.stamp_checked(:movie, Enum.map(movies, & &1.media_item.id))
+
+    remaining = max(budget - movie_searches, 0)
+    episode_searches = sweep_episodes(remaining)
+
+    searches = movie_searches + episode_searches
 
     Logger.info("Upgrade sweep complete",
-      candidates: length(candidates),
+      candidates: length(movies),
       searches: searches,
       budget: budget
     )
 
-    {:ok, %{searches: searches, candidates: length(candidates)}}
+    {:ok, %{searches: searches, candidates: length(movies)}}
+  end
+
+  # Episodes are not swept one at a time. A season where most episodes are
+  # below cutoff is better served by one season-pack search than by N
+  # individual ones, so candidates are grouped by {show, season} and routed
+  # through TVShowSearch.should_prefer_season_pack?/3 before anything is
+  # enqueued.
+  #
+  # `budget` is both the item-fetch limit passed to Upgrades.eligible_episodes/1
+  # and the search-cost ceiling this function enforces. Since a group's search
+  # cost never exceeds its item count (1 for a pack regardless of size, 1 per
+  # episode otherwise), and eligible_episodes/1 never returns more than
+  # `budget` items, total cost can never exceed `budget` — the check below is
+  # a defensive stop, not the sole guarantee. It does mean a below-cutoff
+  # season can be truncated by the fetch limit before grouping ever sees it:
+  # a season that would clear the 70% pack threshold in full may fall short
+  # of it when only a budget-limited slice of its episodes is visible, and
+  # route to (budget-many) individual searches instead of one pack search.
+  defp sweep_episodes(0), do: 0
+
+  defp sweep_episodes(budget) do
+    candidates = Upgrades.eligible_episodes(budget)
+
+    searches =
+      candidates
+      |> Enum.group_by(fn c -> {c.episode.media_item_id, c.episode.season_number} end)
+      |> Enum.reduce_while(0, fn {{item_id, season}, group}, spent ->
+        if spent >= budget do
+          {:halt, spent}
+        else
+          {:cont, spent + enqueue_season_group(item_id, season, group)}
+        end
+      end)
+
+    Upgrades.stamp_checked(:episode, Enum.map(candidates, & &1.episode.id))
+    searches
+  end
+
+  # Reuses TVShowSearch's existing 70% missing-episode threshold unchanged;
+  # only the input set changes, from "episodes missing" to "episodes below
+  # cutoff". The comparison target for a pack search is the best-scoring
+  # below-cutoff file in the season: beating the best means beating all of
+  # them, the conservative reading.
+  defp enqueue_season_group(item_id, season, group) do
+    media_item = hd(group).episode.media_item
+    episodes = Enum.map(group, & &1.episode)
+
+    if TVShowSearch.should_prefer_season_pack?(episodes, media_item, season) do
+      target = Enum.max_by(group, & &1.score)
+
+      enqueue(%{
+        "mode" => "upgrade_season",
+        "media_item_id" => item_id,
+        "season_number" => season,
+        "media_file_id" => target.media_file.id
+      })
+    else
+      group
+      |> Enum.map(fn c ->
+        enqueue(%{
+          "mode" => "upgrade_episode",
+          "episode_id" => c.episode.id,
+          "media_file_id" => c.media_file.id
+        })
+      end)
+      |> Enum.sum()
+    end
+  end
+
+  # Returns the search cost incurred: 1 on a successful enqueue, 0 on
+  # failure. Mirrors enqueue_movie/1's fail-open behaviour — one job that
+  # fails to enqueue is logged and skipped, never failing the batch.
+  defp enqueue(args) do
+    case args |> TVShowSearch.new() |> insert_job() do
+      {:ok, _job} ->
+        1
+
+      {:error, reason} ->
+        Logger.warning("Failed to enqueue upgrade search",
+          args: args,
+          reason: inspect(reason)
+        )
+
+        0
+    end
   end
 
   # One item that fails to enqueue is logged and skipped, never failing the
