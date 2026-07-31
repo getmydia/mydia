@@ -115,6 +115,9 @@ ${YELLOW}Player (Flutter):${NC}
   flutter <args>       Run any flutter command (in player/)
   player setup         Install deps and run code generation
   player build         Build + deploy web assets to priv/static/player
+  player icons [--check]
+                       Regenerate web icons from assets/*.svg (--check verifies
+                       the committed set is still current)
   player shell         Open a shell in the player directory
   player logs          Show recent build_runner (codegen) process logs
   player restart       Restart the flutter-codegen process
@@ -371,6 +374,15 @@ case "$COMMAND" in
                 in_shell_sh "rm -rf priv/static/player && cp -r player/build/web priv/static/player"
                 in_shell_sh "[ -f player/web/manifest.json ] && cp player/web/manifest.json priv/static/player/ || true"
                 echo -e "${GREEN}Build deployed successfully!${NC}"
+                ;;
+            icons)
+                shift
+                if [ $# -gt 0 ]; then
+                    # Every argument path needs only coreutils, so skip the
+                    # ~2min devenv startup and let the script validate.
+                    exec player/tool/gen-web-icons.sh "$@"
+                fi
+                in_shell_sh "player/tool/gen-web-icons.sh"
                 ;;
             setup)
                 echo -e "${GREEN}Setting up player project (pub get + build_runner)...${NC}"

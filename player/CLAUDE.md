@@ -20,6 +20,7 @@ This is the Flutter web client for Mydia, built for streaming media playback.
 ./dev player restart      # Restart Flutter dev server
 ./dev player setup        # Install deps and run code generation
 ./dev player build        # Build AND deploy to Phoenix (for production)
+./dev player icons        # Regenerate web icons from assets/*.svg (--check verifies)
 ./dev flutter pub get     # Install dependencies
 ./dev flutter analyze     # Run static analysis
 ./dev flutter test        # Run tests

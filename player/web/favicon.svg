@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Mydia Logo: Apple-style squircle with M -->
+
+  <!-- Outer squircle -->
+  <rect x="1" y="1" width="46" height="46" rx="10" fill="#3b82f6"/>
+
+  <!-- Inner squircle (dark) -->
+  <rect x="5" y="5" width="38" height="38" rx="7" fill="#0f172a"/>
+
+  <!-- Stylized M letterform -->
+  <path
+    d="M12 34 L12 14 L18 14 L24 24 L30 14 L36 14 L36 34 L31 34 L31 22 L25.5 31 L22.5 31 L17 22 L17 34 Z"
+    fill="#3b82f6"
+  />
+</svg>

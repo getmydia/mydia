@@ -146,6 +146,7 @@ Elixir/Dart formatting — no `nix develop` needed. devenv owns the generated
 ./dev flutter <args>   # Run a flutter command in player/
 ./dev player setup     # Install deps + run code generation
 ./dev player build     # Build + deploy web assets to priv/static/player
+./dev player icons     # Regenerate web icons from assets/*.svg (--check verifies)
 ./dev player logs      # Show recent build_runner (codegen) process logs
 ```
 
