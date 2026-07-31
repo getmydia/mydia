@@ -131,7 +131,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   def clamp_start_position(position, _duration) when position <= 0, do: 0
 
   def clamp_start_position(position, duration) when is_number(duration) and duration > 0 do
-    min(position, trunc(duration) - 1)
+    max(0, min(position, trunc(duration) - 1))
   end
 
   def clamp_start_position(position, _duration), do: position

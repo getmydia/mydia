@@ -70,5 +70,11 @@ defmodule Mydia.Streaming.FfmpegStartPositionTest do
       # playlist if the client was wrong, which is no worse than today.
       assert StreamingResolver.clamp_start_position(4200, nil) == 4200
     end
+
+    test "never returns a negative offset, even for a sub-second duration" do
+      # trunc(0.5) - 1 is -1. A negative offset would be echoed to the client
+      # and shift every position it derives from the stream timeline.
+      assert StreamingResolver.clamp_start_position(10, 0.5) == 0
+    end
   end
 end
