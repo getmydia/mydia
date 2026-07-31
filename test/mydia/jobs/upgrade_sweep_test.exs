@@ -222,8 +222,12 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
 
     test "routes the pack search to the best-scoring below-cutoff file in the season" do
       {show, profile} = show_with_profile()
-      for n <- 1..7, do: below_cutoff_episode(show, profile, 1, n)
-      {_episode, best_file} = below_cutoff_episode(show, profile, 1, 8, audio_codec: "AAC 5.1")
+      # The boosted fixture sits at a middle episode number (4 of 8), not
+      # first or last, so neither hd/1 nor List.last/1 could coincidentally
+      # satisfy the max_by assertion below via insertion/DB row order.
+      for n <- 1..3, do: below_cutoff_episode(show, profile, 1, n)
+      {_episode, best_file} = below_cutoff_episode(show, profile, 1, 4, audio_codec: "AAC 5.1")
+      for n <- 5..8, do: below_cutoff_episode(show, profile, 1, n)
       for n <- 9..10, do: above_cutoff_episode(show, profile, 1, n)
 
       assert {:ok, %{searches: 1}} =
@@ -280,6 +284,61 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
                UpgradeSweep.perform(%Oban.Job{args: %{"lead" => "episodes"}})
 
       assert length(tv_show_search_jobs()) == 8
+    end
+
+    # An over-budget group must be skipped, not abort the whole run: smaller,
+    # affordable groups behind it in iteration order still need their turn.
+    # Enum.group_by/2 returns a map, and Erlang's small-map representation
+    # iterates keys in term order, so {media_item_id, season_number} keys
+    # sort primarily by media_item_id — this test assigns the oversized
+    # season to whichever show has the lexicographically smaller id, forcing
+    # it to be scanned first regardless of random UUID generation, so the
+    # scenario this guards against is reliably exercised rather than
+    # depending on luck.
+    test "an oversized group ordered first is skipped, not a whole-run abort, and stays unstamped" do
+      {show_a, profile_a} = show_with_profile()
+      {show_b, profile_b} = show_with_profile()
+
+      {oversized_show, oversized_profile, affordable_show, affordable_profile} =
+        if show_a.id < show_b.id do
+          {show_a, profile_a, show_b, profile_b}
+        else
+          {show_b, profile_b, show_a, profile_a}
+        end
+
+      # 13 of 20 below cutoff = 65% < 70% -> individual mode, cost 13 --
+      # more than the whole budget below.
+      oversized_episodes =
+        for n <- 1..13 do
+          {episode, _file} = below_cutoff_episode(oversized_show, oversized_profile, 1, n)
+          episode
+        end
+
+      for n <- 14..20, do: above_cutoff_episode(oversized_show, oversized_profile, 1, n)
+
+      # 2 of 10 below cutoff = 20% < 70% -> individual mode, cost 2 -- fits
+      # comfortably in what's left after the oversized group is skipped.
+      {ep1, _file1} = below_cutoff_episode(affordable_show, affordable_profile, 1, 1)
+      {ep2, _file2} = below_cutoff_episode(affordable_show, affordable_profile, 1, 2)
+      for n <- 3..10, do: above_cutoff_episode(affordable_show, affordable_profile, 1, n)
+
+      put_upgrades_config(sweep_enabled: true, sweep_batch_size: 10)
+
+      assert {:ok, %{searches: 2}} =
+               UpgradeSweep.perform(%Oban.Job{args: %{"lead" => "episodes"}})
+
+      assert length(tv_show_search_jobs()) == 2
+
+      # The affordable season was searched and stamped...
+      assert Repo.reload!(ep1).last_upgrade_check_at
+      assert Repo.reload!(ep2).last_upgrade_check_at
+
+      # ...but the oversized season was skipped for budget, never searched,
+      # and must stay unstamped so a later run can still pick it up. A run
+      # that halted the whole fold instead of skipping would leave this
+      # season permanently starved (unaffordable at any budget below its
+      # cost, yet marked checked every time).
+      refute Enum.any?(oversized_episodes, fn ep -> Repo.reload!(ep).last_upgrade_check_at end)
     end
   end
 

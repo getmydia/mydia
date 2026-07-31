@@ -116,31 +116,60 @@ defmodule Mydia.Jobs.UpgradeSweep do
   # count diverge — truncating there could split a season's below-cutoff
   # episodes across the boundary and corrupt the pack-threshold percentage).
   # So the search-cost budget is enforced here instead: each group's cost is
-  # computed by `plan_group/3` *before* anything is enqueued, and a group is
-  # skipped in full — never partially enqueued — once its cost would push
-  # spending past `budget`. This guarantees the searches actually emitted
-  # this run never exceed `budget`, even though the candidate pool fetched
-  # can be much larger.
+  # computed by `plan_group/3` *before* anything is enqueued.
+  #
+  # A group whose cost exceeds the *remaining* budget is skipped, not the
+  # whole run aborted — smaller, affordable groups later in iteration order
+  # must still get their turn. `Enum.group_by/2` returns a map, and Erlang's
+  # small-map representation iterates keys in term order, so an early-sorting
+  # oversized `{media_item_id, season_number}` would otherwise deterministically
+  # zero out every affordable group behind it, on every single run — the
+  # same permanent-starvation shape as the movies-first bug fixed elsewhere
+  # in this module. Only once the remaining budget hits 0 (nothing left that
+  # any group, minimum cost 1, could ever fit into) does the fold stop
+  # scanning further groups.
+  #
+  # Stamping mirrors this: only episodes whose group's plan was actually
+  # attempted (enqueued, whether that enqueue succeeded or failed) get
+  # stamped. A skipped group is left unstamped, so a later run — with more
+  # budget, or once other work clears — can still pick it up. This is
+  # narrower than the anti-starvation rule elsewhere (stamp candidates
+  # regardless of enqueue *failure*, so a search that always errors can't
+  # camp at the front of the staleness order forever) — that rule is about
+  # not letting failed attempts dodge the stamp, not about stamping work
+  # that was never attempted at all.
   defp sweep_episodes(0), do: 0
 
   defp sweep_episodes(budget) do
     candidates = Upgrades.eligible_episodes(budget)
 
-    searches =
+    groups =
       candidates
       |> Enum.group_by(fn c -> {c.episode.media_item_id, c.episode.season_number} end)
-      |> Enum.map(fn {{item_id, season}, group} -> plan_group(item_id, season, group) end)
-      |> Enum.reduce_while(0, fn plan, spent ->
+      |> Enum.map(fn {{item_id, season}, group} ->
+        {group, plan_group(item_id, season, group)}
+      end)
+
+    {searches, attempted_episode_ids} =
+      Enum.reduce_while(groups, {0, []}, fn {group, plan}, {spent, attempted} ->
+        remaining = budget - spent
         cost = length(plan)
 
-        if spent + cost > budget do
-          {:halt, spent}
-        else
-          {:cont, spent + Enum.count(plan, &(enqueue(&1) == 1))}
+        cond do
+          remaining <= 0 ->
+            {:halt, {spent, attempted}}
+
+          cost > remaining ->
+            {:cont, {spent, attempted}}
+
+          true ->
+            enqueued = Enum.count(plan, &(enqueue(&1) == 1))
+            ids = Enum.map(group, & &1.episode.id)
+            {:cont, {spent + enqueued, [ids | attempted]}}
         end
       end)
 
-    Upgrades.stamp_checked(:episode, Enum.map(candidates, & &1.episode.id))
+    Upgrades.stamp_checked(:episode, List.flatten(attempted_episode_ids))
     searches
   end
 

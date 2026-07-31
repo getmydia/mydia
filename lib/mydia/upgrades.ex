@@ -4,7 +4,10 @@ defmodule Mydia.Upgrades do
 
   Scoring cannot be expressed in SQL, so selection is two-phase: a query
   narrows to plausible rows ordered by staleness, then `Comparator` filters
-  by score in Elixir and the result is truncated to the caller's limit.
+  by score in Elixir. `eligible_movies/1` truncates that filtered result to
+  the caller's `limit` — one movie is exactly one search, so item count and
+  search-cost budget are the same number. `eligible_episodes/1` does not:
+  see its own doc for why.
   """
 
   import Ecto.Query, warn: false
