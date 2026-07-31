@@ -20,8 +20,14 @@ class _RecordingCanvas implements Canvas {
   @override
   void drawPath(Path path, Paint paint) => colors.add(paint.color);
 
+  /// Any draw call this fake does not record must fail loudly rather than
+  /// pass silently. `implements Canvas` leaves no inherited implementation,
+  /// so this reaches `Object.noSuchMethod`, which throws. Returning null
+  /// instead would let a painter that switched to `drawRect`/`drawCircle`
+  /// with an accent paint go unrecorded, and every assertion below would
+  /// still pass on a real regression.
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
@@ -67,6 +73,20 @@ void main() {
         },
         reason: 'paint() must draw only the declared mark and cutout colours',
       );
+    });
+
+    test('the recording canvas refuses draw calls it does not record', () {
+      // Guards the guard. The test above can only prove the painter avoids
+      // the accent for calls this fake actually records, so the fake has to
+      // reject everything else rather than swallow it. Without this, a
+      // painter that moved to drawRect with an accent paint would record
+      // nothing and still satisfy every assertion above.
+      final canvas = _RecordingCanvas();
+      expect(
+        () => canvas.drawRect(Rect.zero, Paint()),
+        throwsNoSuchMethodError,
+      );
+      expect(canvas.colors, isEmpty);
     });
   });
 }
