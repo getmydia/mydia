@@ -353,13 +353,11 @@ defmodule MetadataRelay.P2pAccess.StoreTest do
       # depends on.
       assert Process.whereis(Store) == pid
       assert Process.alive?(pid)
-
-      # Leave the sandbox usable again for any later use in this test.
-      :ok = Ecto.Adapters.SQL.Sandbox.checkout(MetadataRelay.Repo)
-      Ecto.Adapters.SQL.Sandbox.mode(MetadataRelay.Repo, {:shared, self()})
     end
 
     test "prune degrades to a rescued {:ok, count} and keeps the Store alive when the database delete fails" do
+      restore_sandbox_on_exit()
+
       stale = endpoint_id(46)
       now = System.system_time(:second)
 
@@ -384,10 +382,6 @@ defmodule MetadataRelay.P2pAccess.StoreTest do
       # depends on.
       assert Process.whereis(Store) == pid
       assert Process.alive?(pid)
-
-      # Leave the sandbox usable again for any later use in this test.
-      :ok = Ecto.Adapters.SQL.Sandbox.checkout(MetadataRelay.Repo)
-      Ecto.Adapters.SQL.Sandbox.mode(MetadataRelay.Repo, {:shared, self()})
     end
   end
 end

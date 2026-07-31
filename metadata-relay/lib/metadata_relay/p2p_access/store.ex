@@ -7,9 +7,14 @@ defmodule MetadataRelay.P2pAccess.Store do
     * `:p2p_sightings` - `{endpoint_id, first_seen_unix, last_seen_unix, conn_count}`
     * `:p2p_blocked`   - `{endpoint_id, reason, blocked_at_unix}`
 
-  Reads and writes here are on the relay authorization hot path, so every
-  public function in this module must be ETS-only. Database work happens at
-  boot and on timers inside the GenServer, never inline with a request.
+  Two functions here sit on the relay authorization hot path and must stay
+  ETS-only: `record_sighting/1` and `blocked?/1`. The access callback is
+  fail-closed, so if either becomes slow or raises, the relay refuses real
+  users.
+
+  The rest do touch the database, but never inline with a request. Seeding runs
+  at boot, flush and prune run on timers inside the GenServer, and blocking runs
+  on an operator's admin action.
 
   Both tables are seeded from the database at boot, so a restart does not
   silently unblock revoked endpoints or reset sighting history.
