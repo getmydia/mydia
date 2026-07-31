@@ -26,6 +26,10 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
 
   @registry_name Mydia.Streaming.HlsSessionRegistry
 
+  # See await_deregistration/2 for why this polling wait exists.
+  @deregistration_attempts 50
+  @deregistration_interval_ms 2
+
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
@@ -65,6 +69,7 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
           # Replace it rather than keying sessions by offset, so a user
           # scrubbing around does not accumulate concurrent FFmpeg processes.
           DynamicSupervisor.terminate_child(__MODULE__, pid)
+          await_deregistration(session_key)
           start_new_session(media_file_id, user_id, mode, opts, session_key)
         end
 
@@ -78,6 +83,33 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # is treated as offset zero rather than as a wildcard match.
   def session_matches_offset?(metadata, start_position) do
     Map.get(metadata, :start_position, 0) == start_position
+  end
+
+  # Registry cleans up a dead process's entry asynchronously, through the
+  # monitor it holds. `terminate_child/2` returns as soon as the process is
+  # down, which can be before that cleanup lands. On this `:unique` registry an
+  # immediate re-register would then come back `{:error, {:already_registered,
+  # _}}` — and because `HlsSession.init/1` discards that return value, the new
+  # session would run unregistered and be invisible to `get_session/2`, so the
+  # HLS controller would fail to serve its playlist while FFmpeg ran happily.
+  #
+  # Bounded so a wedged entry degrades to the old behaviour instead of hanging
+  # the caller.
+  @doc false
+  # Public for unit testing, same as session_matches_offset?/2.
+  def await_deregistration(session_key, attempts \\ @deregistration_attempts)
+
+  def await_deregistration(_session_key, 0), do: :ok
+
+  def await_deregistration(session_key, attempts) do
+    case Registry.lookup(@registry_name, session_key) do
+      [] ->
+        :ok
+
+      _ ->
+        Process.sleep(@deregistration_interval_ms)
+        await_deregistration(session_key, attempts - 1)
+    end
   end
 
   defp start_new_session(media_file_id, user_id, mode, opts, session_key) do

@@ -19,4 +19,28 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
       refute HlsSessionSupervisor.session_matches_offset?(%{mode: :transcode}, 4200)
     end
   end
+
+  describe "await_deregistration/1" do
+    test "waits for a terminated process's registry entry to clear" do
+      session_key = {:test_await_deregistration, make_ref()}
+      test_pid = self()
+
+      spawned_pid =
+        spawn(fn ->
+          Registry.register(Mydia.Streaming.HlsSessionRegistry, session_key, %{})
+          send(test_pid, :registered)
+
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      assert_receive :registered
+
+      Process.exit(spawned_pid, :kill)
+
+      assert HlsSessionSupervisor.await_deregistration(session_key) == :ok
+      assert Registry.lookup(Mydia.Streaming.HlsSessionRegistry, session_key) == []
+    end
+  end
 end
