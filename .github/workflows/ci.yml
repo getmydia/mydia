@@ -97,6 +97,31 @@ jobs:
           echo "::error::devenv environment failed to materialize after 3 attempts"
           exit 1
 
+      # Guard the single source: the Rust version lives in rust-toolchain.toml
+      # alone. Each pattern matches one mechanism that used to hold a hand-copied
+      # pin. Keep them narrow; these files are full of unrelated Elixir, NDK and
+      # build-tools versions. See issue #252.
+      - name: Guard the Rust toolchain pin
+        run: |
+          set -euo pipefail
+          FAIL=0
+          if grep -nE -- '--default-toolchain[[:space:]]+[0-9]' Dockerfile Dockerfile.e2e; then
+            echo "::error::Dockerfile pins a Rust version; it must come from rust-toolchain.toml"
+            FAIL=1
+          fi
+          # Matches a quoted literal (rust-bin.stable."1.96.0") but not an
+          # interpolated channel (rust-bin.stable.${rustChannel}), which is how
+          # the Android shell reads the pin.
+          if grep -nE 'rust-bin\.[a-z]+\."' nix/devShells/flake-module.nix; then
+            echo "::error::the Android shell names a Rust version; read it from rust-toolchain.toml"
+            FAIL=1
+          fi
+          if grep -nE '^[[:space:]]*version[[:space:]]*=[[:space:]]*"[0-9]' devenv.nix; then
+            echo "::error::devenv.nix names a version literal; read it from rust-toolchain.toml"
+            FAIL=1
+          fi
+          exit "$FAIL"
+
       - name: Test (SQLite) under devenv
         run: |
           devenv shell -- bash <<'DEVENV'
