@@ -144,7 +144,88 @@ Future<ProviderContainer> _pumpWithManager(
   return container;
 }
 
+/// Pumps [CastBarLayer] the way `app.dart` does: over a route, with no
+/// Navigator or Overlay of its own above the bar.
+Future<bool Function()> _pumpLayer(
+  WidgetTester tester, {
+  required CastDevice target,
+}) async {
+  var tappedBelow = false;
+
+  final container = ProviderContainer(overrides: [
+    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+    authStateProvider.overrideWith(() =>
+        _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+    asyncGraphqlClientProvider
+        .overrideWith((ref) => Completer<GraphQLClient>().future),
+    castSessionProvider.overrideWith((ref) => Stream.value(null)),
+  ]);
+  addTearDown(container.dispose);
+
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      home: CastBarLayer(
+        child: Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              key: const Key('below-the-bar'),
+              onPressed: () => tappedBelow = true,
+              child: const Text('Underneath'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ));
+  container.read(castTargetProvider.notifier).set(target);
+  await tester.pump();
+
+  return () => tappedBelow;
+}
+
 void main() {
+  group('CastBarLayer', () {
+    testWidgets('gives the bar an Overlay, so its tooltips render',
+        (tester) async {
+      await _pumpLayer(tester, target: _device);
+
+      final clear = find.byKey(const Key('cast-bar-idle-clear'));
+      expect(clear, findsOneWidget);
+
+      await tester.longPress(clear);
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Cancel casting to Cottage Chromecast'), findsOneWidget,
+          reason: 'without an Overlay in the layer the tooltip asserts and '
+              'renders as an error box instead');
+    });
+
+    testWidgets('keeps the bar full-width against the bottom edge',
+        (tester) async {
+      await _pumpLayer(tester, target: _device);
+
+      final bar = tester.getRect(find.byType(CastMiniController));
+      final layer = tester.getRect(find.byType(CastBarLayer));
+
+      expect(bar.width, layer.width);
+      expect(bar.bottom, layer.bottom);
+    });
+
+    testWidgets('does not swallow taps meant for the screen below',
+        (tester) async {
+      final tappedBelow = await _pumpLayer(tester, target: _device);
+
+      await tester.tap(find.byKey(const Key('below-the-bar')));
+      await tester.pump();
+
+      expect(tappedBelow(), isTrue,
+          reason: 'the bar is a full-screen layer; only the bar itself may '
+              'take pointer events');
+    });
+  });
+
   testWidgets('shows title and device while casting', (tester) async {
     await _pump(tester,
         session: _session(duration: const Duration(minutes: 44)));
