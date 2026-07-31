@@ -384,7 +384,9 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
     base_params = %{
       "name" => params["name"],
       "description" => params["description"],
-      "upgrades_allowed" => params["upgrades_allowed"]
+      "upgrades_allowed" => params["upgrades_allowed"],
+      "upgrade_until_score" => params["upgrade_until_score"],
+      "min_upgrade_margin" => params["min_upgrade_margin"]
     }
 
     if quality_standards do

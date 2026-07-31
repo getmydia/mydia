@@ -18,6 +18,21 @@ defmodule Mydia.Settings.QualityProfiles do
   # through ReleaseRanker instead of the bare seeders sort a nil profile hits.
   @seeded_default_profile_name "Any"
 
+  # Mirrors the resolution -> score backfill run by the
+  # 20260730170000_add_quality_upgrade_fields migration when the retired
+  # `upgrade_until_quality` column was dropped. Kept here (rather than shared
+  # with the migration) because migrations are not meant to be called from
+  # runtime code. If this mapping ever changes, update the migration's SQL
+  # CASE statement to match, and vice versa.
+  @legacy_upgrade_quality_scores %{
+    "480p" => 40,
+    "576p" => 45,
+    "720p" => 60,
+    "1080p" => 85,
+    "2160p" => 95
+  }
+  @legacy_upgrade_quality_default_score 85
+
   ## Quality Profile CRUD
 
   def list_quality_profiles(opts \\ []) do
@@ -540,7 +555,7 @@ defmodule Mydia.Settings.QualityProfiles do
       name: Keyword.get(opts, :name, data["name"]),
       description: data["description"],
       upgrades_allowed: data["upgrades_allowed"],
-      upgrade_until_score: data["upgrade_until_score"],
+      upgrade_until_score: resolve_upgrade_until_score(data),
       min_upgrade_margin: data["min_upgrade_margin"],
       quality_standards: atomize_keys(data["quality_standards"]),
       version: data["version"] || 1,
@@ -551,6 +566,35 @@ defmodule Mydia.Settings.QualityProfiles do
 
     {:ok, attrs}
   end
+
+  # Self-hosted installs have no coordinated upgrade order, so an operator can
+  # import a profile exported by an older version at any time. Prefers an
+  # explicit `upgrade_until_score` when present; otherwise translates the
+  # retired `upgrade_until_quality` resolution ceiling using the same mapping
+  # the Task 3 migration backfilled existing rows with (see
+  # @legacy_upgrade_quality_scores above).
+  defp resolve_upgrade_until_score(%{"upgrade_until_score" => score}) when is_integer(score) do
+    score
+  end
+
+  defp resolve_upgrade_until_score(%{"upgrade_until_quality" => legacy_quality})
+       when is_binary(legacy_quality) do
+    score =
+      Map.get(
+        @legacy_upgrade_quality_scores,
+        legacy_quality,
+        @legacy_upgrade_quality_default_score
+      )
+
+    Logger.info(
+      "Translated legacy upgrade_until_quality #{inspect(legacy_quality)} to " <>
+        "upgrade_until_score #{score} while importing a quality profile"
+    )
+
+    score
+  end
+
+  defp resolve_upgrade_until_score(_data), do: nil
 
   defp determine_source_url(source, opts) do
     case Keyword.get(opts, :source_url) do

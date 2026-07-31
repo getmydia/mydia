@@ -34,6 +34,12 @@ defmodule Mydia.Repo.Migrations.AddQualityUpgradeFields do
     # Translate the retired resolution ceiling into an equivalent score so
     # existing profiles keep behaving sensibly. A profile that previously
     # capped upgrades at a low resolution gets a correspondingly low cutoff.
+    #
+    # This mapping is duplicated (not shared) in
+    # Mydia.Settings.QualityProfiles.resolve_upgrade_until_score/1, which
+    # applies the same translation to legacy profile JSON on import. Update
+    # both if this table ever changes; migrations cannot be called from
+    # runtime code, so a shared constant isn't reachable from here.
     execute """
     UPDATE quality_profiles
     SET upgrade_until_score = CASE upgrade_until_quality

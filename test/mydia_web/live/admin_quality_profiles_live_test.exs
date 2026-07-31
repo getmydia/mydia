@@ -92,6 +92,36 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       refute has_element?(view, ~s{div[class*="modal-open"]})
     end
 
+    test "renders the upgrade cutoff and margin inputs with stable ids", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_quality_profile"]})
+      |> render_click()
+
+      assert has_element?(view, "#quality-profile-upgrade-score")
+      assert has_element?(view, "#quality-profile-upgrade-margin")
+    end
+
+    test "persists a custom upgrade cutoff score and margin through the form", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_quality_profile"]})
+      |> render_click()
+
+      view
+      |> form("#quality-profile-form",
+        quality_profile: %{
+          "name" => "Custom Upgrade Cutoff",
+          "upgrade_until_score" => "70",
+          "min_upgrade_margin" => "8",
+          "quality_standards" => %{"preferred_resolutions" => ["1080p"]}
+        }
+      )
+      |> render_submit()
+
+      profile = Settings.get_quality_profile_by_name("Custom Upgrade Cutoff")
+      assert profile.upgrade_until_score == 70
+      assert profile.min_upgrade_margin == 8
+    end
+
     test "validates quality profile form", %{view: view} do
       view
       |> element(~s{button[phx-click="new_quality_profile"]})
