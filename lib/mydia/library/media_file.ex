@@ -143,7 +143,8 @@ defmodule Mydia.Library.MediaFile do
       :preview_blob,
       :phash,
       :generated_at,
-      :trashed_at
+      :trashed_at,
+      :supersedes_media_file_id
     ])
     |> validate_required([:relative_path, :library_path_id])
     |> validate_one_parent()
@@ -158,6 +159,7 @@ defmodule Mydia.Library.MediaFile do
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
+    |> foreign_key_constraint(:supersedes_media_file_id)
   end
 
   @doc """

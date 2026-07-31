@@ -307,4 +307,109 @@ defmodule Mydia.UpgradesTest do
       assert Repo.reload!(movie).last_upgrade_check_at
     end
   end
+
+  # Task 9 introduces this lookup so `Mydia.Jobs.MediaImport` can resolve
+  # what a newly imported upgrade file supersedes: the "current file" this
+  # module already scores everywhere else, for one specific media item or
+  # episode instead of the whole eligibility sweep.
+  describe "current_best_file_id/2" do
+    test "returns the current file's id for a movie" do
+      profile = upgradeable_profile()
+      {movie, file} = analyzed_movie_file(profile)
+
+      assert Upgrades.current_best_file_id(movie.id, nil) == file.id
+    end
+
+    test "returns the current file's id for an episode" do
+      profile = upgradeable_profile()
+      {episode, file} = analyzed_episode_file(profile)
+
+      assert Upgrades.current_best_file_id(nil, episode.id) == file.id
+    end
+
+    test "returns nil when the movie has no files at all" do
+      profile = upgradeable_profile()
+      movie = insert(:media_item, type: "movie", monitored: true, quality_profile: profile)
+
+      assert Upgrades.current_best_file_id(movie.id, nil) == nil
+    end
+
+    test "returns nil when the episode has no files at all" do
+      profile = upgradeable_profile()
+      show = insert(:tv_show, monitored: true, quality_profile: profile)
+      episode = insert(:episode, media_item: show, monitored: true)
+
+      assert Upgrades.current_best_file_id(nil, episode.id) == nil
+    end
+
+    test "excludes a trashed file, even when it's the only one" do
+      profile = upgradeable_profile()
+      {movie, file} = analyzed_movie_file(profile)
+
+      {:ok, _} =
+        file
+        |> Ecto.Changeset.change(trashed_at: DateTime.utc_now() |> DateTime.truncate(:second))
+        |> Repo.update()
+
+      assert Upgrades.current_best_file_id(movie.id, nil) == nil
+    end
+
+    test "excludes an unanalyzed file, even when it's the only one" do
+      profile = upgradeable_profile()
+      movie = insert(:media_item, type: "movie", monitored: true, quality_profile: profile)
+
+      insert(:media_file,
+        media_item: movie,
+        episode: nil,
+        resolution: "720p",
+        analyzed_at: nil,
+        quality_profile: profile
+      )
+
+      assert Upgrades.current_best_file_id(movie.id, nil) == nil
+    end
+
+    test "picks the highest-scoring file when several exist for the same movie" do
+      profile = upgradeable_profile()
+      movie = insert(:media_item, type: "movie", monitored: true, quality_profile: profile)
+
+      insert(:media_file,
+        media_item: movie,
+        episode: nil,
+        resolution: "480p",
+        codec: "H.264",
+        analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        quality_profile: profile
+      )
+
+      better =
+        insert(:media_file,
+          media_item: movie,
+          episode: nil,
+          resolution: "2160p",
+          codec: "HEVC",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          quality_profile: profile
+        )
+
+      assert Upgrades.current_best_file_id(movie.id, nil) == better.id
+    end
+
+    test "returns nil when the media item has no quality profile and no instance default" do
+      movie = insert(:media_item, type: "movie", monitored: true)
+
+      insert(:media_file,
+        media_item: movie,
+        episode: nil,
+        resolution: "1080p",
+        analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+      assert Upgrades.current_best_file_id(movie.id, nil) == nil
+    end
+
+    test "returns nil when neither a media_item_id nor an episode_id is given" do
+      assert Upgrades.current_best_file_id(nil, nil) == nil
+    end
+  end
 end

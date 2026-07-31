@@ -120,6 +120,48 @@ defmodule Mydia.Upgrades do
     end)
   end
 
+  @doc """
+  Returns the id of the current best analyzed, untrashed file for a movie
+  (`media_item_id`) or an episode (`episode_id`) — the same "current file"
+  definition `eligible_movies/1` and `eligible_episodes/1` use everywhere
+  else, scored against the parent show's resolved quality profile.
+
+  Exactly one of the two arguments is expected to be non-nil; the id-less
+  side is ignored. Returns `nil` when there is nothing scorable: no file at
+  all, no file that survives the analyzed/untrashed filter, or no quality
+  profile resolves for the parent media item.
+
+  Used by `Mydia.Jobs.MediaImport` to resolve what a newly imported upgrade
+  file supersedes — a season pack carries only one
+  `"upgrade_target_media_file_id"` on the download, but each episode it
+  delivers must supersede its own prior file, not that single shared id.
+  """
+  @spec current_best_file_id(binary() | nil, binary() | nil) :: binary() | nil
+  def current_best_file_id(media_item_id, nil) when is_binary(media_item_id) do
+    with %MediaItem{} = media_item <- Repo.get(MediaItem, media_item_id),
+         profile when not is_nil(profile) <- QualityProfileResolver.resolve(media_item),
+         {file, _score} <-
+           media_item_id |> files_for_media_item() |> best_file(profile, :movie) do
+      file.id
+    else
+      _ -> nil
+    end
+  end
+
+  def current_best_file_id(nil, episode_id) when is_binary(episode_id) do
+    with %Episode{} = episode <- Repo.get(Episode, episode_id),
+         episode <- Repo.preload(episode, :media_item),
+         profile when not is_nil(profile) <- QualityProfileResolver.resolve(episode.media_item),
+         {file, _score} <-
+           episode_id |> files_for_episode() |> best_file(profile, :episode) do
+      file.id
+    else
+      _ -> nil
+    end
+  end
+
+  def current_best_file_id(_media_item_id, _episode_id), do: nil
+
   @spec stamp_checked(:movie | :episode, [binary()]) :: {non_neg_integer(), nil}
   def stamp_checked(_type, []), do: {0, nil}
 
@@ -183,6 +225,18 @@ defmodule Mydia.Upgrades do
   defp analyzed_files_query do
     from f in MediaFile,
       where: is_nil(f.trashed_at) and not is_nil(f.analyzed_at)
+  end
+
+  defp files_for_media_item(media_item_id) do
+    analyzed_files_query()
+    |> where([f], f.media_item_id == ^media_item_id)
+    |> Repo.all()
+  end
+
+  defp files_for_episode(episode_id) do
+    analyzed_files_query()
+    |> where([f], f.episode_id == ^episode_id)
+    |> Repo.all()
   end
 
   # SQL-level narrowing to items that even have a scorable file, so an

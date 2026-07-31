@@ -42,6 +42,7 @@ defmodule Mydia.Jobs.MediaImport do
   alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
   alias Mydia.Metadata.NfoWriter
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Upgrades
 
   defmodule Args do
     @moduledoc false
@@ -1702,6 +1703,19 @@ defmodule Mydia.Jobs.MediaImport do
           attrs
       end
 
+    # A season pack carries one target id but delivers many episodes. Each
+    # episode supersedes its OWN current best file, not the download's
+    # single target, which is what lets an above-cutoff episode keep its
+    # file when the gate in Task 10 (UpgradeFinalize) rejects the pack's
+    # version for it. A movie import is the degenerate single-file case of
+    # the same rule.
+    attrs =
+      Map.put(
+        attrs,
+        :supersedes_media_file_id,
+        supersede_target(download, Map.get(attrs, :media_item_id), Map.get(attrs, :episode_id))
+      )
+
     case Library.create_media_file(attrs) do
       {:ok, media_file} ->
         Logger.info("Created media file record",
@@ -1737,6 +1751,30 @@ defmodule Mydia.Jobs.MediaImport do
 
           {:error, :database_error}
         end
+    end
+  end
+
+  # Only an upgrade-triggered download carries "upgrade_target_media_file_id"
+  # in its metadata; every ordinary import falls through the `_ -> nil` clause
+  # without running the lookup below, so the hot path for the common case
+  # (no upgrade in play) stays a single map pattern match.
+  #
+  # For an upgrade import, `Upgrades.current_best_file_id/2` resolves what
+  # THIS specific file (identified by its own media_item_id/episode_id, not
+  # the download's) currently supersedes. Deliberately NOT falling back to
+  # the download's single target_id when that lookup returns nil: a season
+  # pack shares one target across many episodes, and an episode with no
+  # existing file of its own would otherwise inherit some OTHER episode's
+  # target id — exactly the cross-episode mistake this whole per-file
+  # resolution exists to avoid. `nil` here correctly means "nothing to
+  # supersede for this file" and must stay nil.
+  defp supersede_target(download, media_item_id, episode_id) do
+    case download.metadata do
+      %{"upgrade_target_media_file_id" => target_id} when is_binary(target_id) ->
+        Upgrades.current_best_file_id(media_item_id, episode_id)
+
+      _ ->
+        nil
     end
   end
 
