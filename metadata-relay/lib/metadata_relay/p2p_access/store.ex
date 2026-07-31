@@ -14,7 +14,12 @@ defmodule MetadataRelay.P2pAccess.Store do
 
   use GenServer
 
+  import Ecto.Query, only: [from: 2]
+
   require Logger
+
+  alias MetadataRelay.P2pAccess.Block
+  alias MetadataRelay.Repo
 
   @sightings :p2p_sightings
   @blocked :p2p_blocked
@@ -91,9 +96,78 @@ defmodule MetadataRelay.P2pAccess.Store do
     end
   end
 
+  @doc """
+  Whether this endpoint is denied relay access. ETS only, hot path.
+  """
+  def blocked?(endpoint_id) when is_binary(endpoint_id) do
+    :ets.member(@blocked, endpoint_id)
+  end
+
+  @doc """
+  Blocks an endpoint. Writes the database first so a crash between the two
+  writes fails safe: the block survives and is restored by `reload_blocks/0`.
+  """
+  def put_block(endpoint_id, reason) when is_binary(endpoint_id) and is_binary(reason) do
+    blocked_at = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    result =
+      Repo.insert(
+        %Block{endpoint_id: endpoint_id, reason: reason, blocked_at: blocked_at},
+        on_conflict: {:replace, [:reason, :blocked_at]},
+        conflict_target: :endpoint_id
+      )
+
+    case result do
+      {:ok, _} ->
+        :ets.insert(@blocked, {endpoint_id, reason, DateTime.to_unix(blocked_at)})
+        Logger.warning("Blocked p2p endpoint #{String.slice(endpoint_id, 0, 8)}: #{reason}")
+        :ok
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  @doc """
+  Unblocks an endpoint. Removes it from ETS first so access is restored even
+  if the database delete fails.
+  """
+  def delete_block(endpoint_id) when is_binary(endpoint_id) do
+    :ets.delete(@blocked, endpoint_id)
+    Repo.delete_all(from(b in Block, where: b.endpoint_id == ^endpoint_id))
+    Logger.info("Unblocked p2p endpoint #{String.slice(endpoint_id, 0, 8)}")
+    :ok
+  end
+
+  @doc """
+  Repopulates the ETS blocklist from the database. Called at boot.
+  """
+  def reload_blocks do
+    rows =
+      Block
+      |> Repo.all()
+      |> Enum.map(fn block ->
+        {block.endpoint_id, block.reason, DateTime.to_unix(block.blocked_at)}
+      end)
+
+    :ets.delete_all_objects(@blocked)
+    :ets.insert(@blocked, rows)
+
+    Logger.info("Loaded #{length(rows)} blocked p2p endpoints")
+    :ok
+  end
+
   @impl true
   def init(_opts) do
     init_tables()
+
+    try do
+      reload_blocks()
+    rescue
+      error ->
+        Logger.error("Could not load p2p blocklist at boot: #{inspect(error)}")
+    end
+
     {:ok, %{}}
   end
 
