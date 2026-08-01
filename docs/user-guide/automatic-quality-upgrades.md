@@ -119,11 +119,28 @@ scan never finds the trashed file and re-adds it, which is what would undo
 the upgrade you just accepted. And it is on the same disk as your media, so
 trashing a 60 GB file is an instant rename rather than a slow copy.
 
-You can point all of it somewhere else with the `MYDIA_TRASH_DIR`
-environment variable. Two rules if you do:
+Being on the same disk matters more than being outside the folder, because
+Mydia's scanner already ignores any folder named `.mydia-trash`. So when the
+folder beside your library would land on a **different** disk, Mydia puts the
+trash *inside* the library instead, at `<library>/.mydia-trash`. That happens
+in two common setups:
 
-- Pick a directory **outside every one of your library folders**. A trash
-  directory inside a library is a directory Mydia will scan.
+- Your library is a mount point itself, such as `/media` or `/data` in
+  Docker. The folder beside it would be `/` inside the container, which is
+  usually a different filesystem and is often read-only.
+- Your library is a network share mounted below a local folder, such as
+  `/mnt/media` where `/mnt` is on the system disk.
+
+You do not need to do anything for either case. If you see a `.mydia-trash`
+folder appear inside a library, that is why.
+
+You can point all of it somewhere else with the `MYDIA_TRASH_DIR`
+environment variable. Two rules if you do, because the automatic handling
+above does not apply to a path you chose yourself:
+
+- Pick a directory **outside every one of your library folders**, unless you
+  name it `.mydia-trash`. Any other folder inside a library is a folder Mydia
+  will scan.
 - Pick one on the **same filesystem** as your media. If it is on a different
   mount, Mydia still trashes the file, but it has to copy the whole thing
   and then delete the original, which is slow for large media and briefly

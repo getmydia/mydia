@@ -1531,19 +1531,36 @@ defmodule Mydia.Jobs.TVShowSearchTest do
     # episode, wrong for a season pack whose `.size` is the sum of every
     # episode in it. Without normalizing to a per-episode estimate before
     # that comparison, this profile's episode_max_size_mb: 4096 bound
-    # would score the mock's ~14305 MB whole-pack size as oversized (a
-    # fixed penalty regardless of degree) while the on-disk file's 1430 MB
-    # scores in-range, tipping the margin-0 delta negative and rejecting a
-    # pack that is otherwise an even match. Normalized per episode
-    # (~2861 MB, five episodes in the season), it scores in-range too and
-    # the pack is grabbed.
+    # would score the mock's ~14305 MB whole-pack size as oversized (25.0)
+    # while the on-disk file's 1430 MB scores in-range (75.0), tipping the
+    # margin-0 delta negative and rejecting a pack that is otherwise a fine
+    # match. Normalized per episode (~2861 MB, five episodes in the season),
+    # it scores in-range too and the pack is grabbed.
+    #
+    # The arithmetic has to be arranged so the size term is *decisive*, or
+    # this test proves nothing (re-review finding B: a single-entry
+    # preferred_resolutions list made resolution contribute +6.0 at weight
+    # 0.24, which swamped the -3.5 size penalty, so the delta stayed positive
+    # with or without normalization). So:
+    #
+    #   * preferred_resolutions lists both 1080p and 720p, so file and
+    #     candidate both score 100 and resolution contributes exactly 0
+    #   * codec is h264 on both sides, audio and HDR are absent from the file
+    #     and therefore neutralized, so those contribute 0 too
+    #   * the only positive term is source: the file is HDTV (index 2, 60.0)
+    #     and the mock pack is WEB-DL (index 1, 80.0), worth 0.12 * 20 = +2.4
+    #   * the whole-pack size penalty is 0.07 * (25.0 - 75.0) = -3.5
+    #
+    # +2.4 clears a margin of 0; +2.4 - 3.5 = -1.1 does not. Delete
+    # normalize_pack_size/2 and this test goes red, which is the point.
     test "does not reject a legitimately fitting season pack scored against whole-pack size instead of per-episode size",
          %{library_path: library_path} do
       profile =
         quality_profile_fixture(%{
           name: "Size-bounded season profile #{System.unique_integer([:positive])}",
           quality_standards: %{
-            preferred_resolutions: ["1080p"],
+            preferred_resolutions: ["1080p", "720p"],
+            preferred_sources: ["BluRay", "WEB-DL", "HDTV"],
             episode_max_size_mb: 4096
           },
           min_upgrade_margin: 0
@@ -1577,6 +1594,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
           size: 1_500_000_000,
           resolution: "720p",
           codec: "h264",
+          metadata: %Mydia.Library.Structs.FileMetadata{source: "HDTV"},
           analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 

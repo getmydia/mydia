@@ -632,6 +632,10 @@ defmodule Mydia.Library do
 
   A file that is already gone from disk stays a normal outcome: that is the
   original reason this function exists (marking what a scan found missing).
+  That case is recorded on the row as `"trashed_missing"`, which is what stops
+  `TrashCleanup` from later deleting a file that has since come back at the
+  library path - an unmounted share that a scan read as a deleted library, for
+  instance. See `Mydia.Library.TrashStore.discard/2`.
 
   Returns `{:error, reason}` without touching the row when a file that *is*
   present could not be moved. A row marked trashed while its file sits in the
@@ -644,11 +648,11 @@ defmodule Mydia.Library do
     media_file = Repo.preload(media_file, :library_path)
 
     case TrashStore.store(media_file) do
-      {:ok, trash_path} ->
+      {:ok, outcome} ->
         media_file
         |> Ecto.Changeset.change(
           trashed_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          metadata: put_trashed_path(media_file.metadata, trash_path)
+          metadata: put_trash_state(media_file.metadata, outcome)
         )
         |> Repo.update()
         |> case do
@@ -658,7 +662,7 @@ defmodule Mydia.Library do
           {:error, changeset} ->
             # The bytes already moved but the row did not. Put them back
             # rather than leave an active row pointing at an empty path.
-            _ = TrashStore.restore(media_file, trash_path)
+            _ = TrashStore.restore(media_file, moved_path(outcome))
             {:error, changeset}
         end
 
@@ -673,6 +677,11 @@ defmodule Mydia.Library do
 
   A trashed copy that is missing from the trash directory is not an error - the
   row is restored anyway, exactly as it was before trashing moved files at all.
+
+  When the library path is already occupied the trashed copy is deliberately
+  left where it is rather than clobbering what is there, and the row keeps
+  pointing at it so those bytes stay reclaimable instead of becoming an
+  untracked file under `.mydia-trash/`.
   """
   @spec restore_media_file(MediaFile.t()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
@@ -684,8 +693,13 @@ defmodule Mydia.Library do
         media_file
         |> Ecto.Changeset.change(
           trashed_at: nil,
-          metadata: drop_trashed_path(media_file.metadata)
+          metadata: drop_trash_state(media_file.metadata)
         )
+        |> Repo.update()
+
+      {:ok, :trash_copy_retained} ->
+        media_file
+        |> Ecto.Changeset.change(trashed_at: nil)
         |> Repo.update()
 
       {:error, reason} ->
@@ -721,7 +735,7 @@ defmodule Mydia.Library do
       |> Repo.all()
 
     Enum.each(expired, fn media_file ->
-      TrashStore.discard(media_file, trashed_path(media_file))
+      TrashStore.discard(media_file, trash_state(media_file))
     end)
 
     ids = Enum.map(expired, & &1.id)
@@ -737,10 +751,27 @@ defmodule Mydia.Library do
     {:ok, count}
   end
 
-  # Where the bytes went, recorded on the row so restore and purge do not
-  # depend on the trash directory configuration still resolving the same way
-  # later. Rows trashed before TrashStore existed carry no such key - their
-  # files are still at the library path.
+  # How a row came to be trashed, recorded on the row itself. Three states,
+  # and `TrashStore.discard/2` treats all three differently:
+  #
+  #   * "trashed_path" - the bytes were moved there. Recorded rather than
+  #     recomputed so restore and purge do not depend on the trash directory
+  #     configuration still resolving the same way later.
+  #   * "trashed_missing" - there was nothing on disk to move. Critically,
+  #     this is *not* the same as a legacy row even though both leave
+  #     "trashed_path" unset: the file may well be present at the library
+  #     path now (an unmounted share that came back), and deleting it there
+  #     would be silent data loss. See TrashStore.discard/2.
+  #   * neither key - a row trashed before TrashStore existed. Its file is
+  #     still at the library path and the purge deletes it there (#295).
+  defp trash_state(%MediaFile{} = media_file) do
+    cond do
+      path = trashed_path(media_file) -> {:moved, path}
+      trashed_missing?(media_file) -> :missing
+      true -> :legacy
+    end
+  end
+
   defp trashed_path(%MediaFile{metadata: %FileMetadata{extra: extra}}) when is_map(extra) do
     case extra["trashed_path"] do
       path when is_binary(path) and path != "" -> path
@@ -750,17 +781,36 @@ defmodule Mydia.Library do
 
   defp trashed_path(%MediaFile{}), do: nil
 
-  defp put_trashed_path(metadata, nil), do: drop_trashed_path(metadata)
+  defp trashed_missing?(%MediaFile{metadata: %FileMetadata{extra: extra}}) when is_map(extra),
+    do: extra["trashed_missing"] == true
 
-  defp put_trashed_path(metadata, path) when is_binary(path) do
-    metadata = metadata || FileMetadata.empty()
-    %{metadata | extra: Map.put(metadata.extra || %{}, "trashed_path", path)}
+  defp trashed_missing?(%MediaFile{}), do: false
+
+  defp moved_path({:moved, path}), do: path
+  defp moved_path(:missing), do: nil
+
+  defp put_trash_state(metadata, {:moved, path}) when is_binary(path) do
+    metadata
+    |> drop_trash_state()
+    |> then(&%{&1 | extra: Map.put(&1.extra, "trashed_path", path)})
   end
 
-  defp drop_trashed_path(nil), do: FileMetadata.empty()
+  defp put_trash_state(metadata, :missing) do
+    metadata
+    |> drop_trash_state()
+    |> then(&%{&1 | extra: Map.put(&1.extra, "trashed_missing", true)})
+  end
 
-  defp drop_trashed_path(%FileMetadata{} = metadata),
-    do: %{metadata | extra: Map.delete(metadata.extra || %{}, "trashed_path")}
+  defp drop_trash_state(nil), do: FileMetadata.empty()
+
+  defp drop_trash_state(%FileMetadata{} = metadata) do
+    extra =
+      (metadata.extra || %{})
+      |> Map.delete("trashed_path")
+      |> Map.delete("trashed_missing")
+
+    %{metadata | extra: extra}
+  end
 
   @doc """
   Deletes the physical file from disk for a media file record.

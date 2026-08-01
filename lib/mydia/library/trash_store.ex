@@ -23,8 +23,16 @@ defmodule Mydia.Library.TrashStore do
       it. (As a second line of defence the scanner also skips any directory
       named `.mydia-trash`, which covers nested layouts where one library path
       happens to contain another library's parent directory.)
-    * It is almost always on the same filesystem as the media, so the move is
-      an atomic `rename(2)` rather than a byte-for-byte copy of a 60 GB remux.
+    * It is on the same filesystem as the media, so the move is an atomic
+      `rename(2)` rather than a byte-for-byte copy of a 60 GB remux.
+
+  When the sibling cannot deliver the second property the trash goes *inside*
+  the library path instead, at `<library>/.mydia-trash`, where the scanner's
+  skip is what keeps it invisible. `default_root/1` covers the two cases: a
+  library path that is a mount root (`/media`, `/data` - routine in Docker,
+  where the parent is the container's writable layer and may be read-only),
+  and a library path that is a mount below a directory on another filesystem
+  (a NAS share at `/mnt/media`, with `/mnt` on the system disk).
 
   Set `MYDIA_TRASH_DIR` (or `config :mydia, :trash_dir, "/path"`) to collect
   every library's trash in one directory instead. If you do, pick a directory
@@ -37,12 +45,22 @@ defmodule Mydia.Library.TrashStore do
   never collide and the original filename stays readable to an operator looking
   through the trash.
 
-  The absolute path a file was moved to is recorded on the row itself, under
-  `metadata.extra["trashed_path"]`, so restore and purge do not depend on the
-  configuration still resolving to the same directory later. Rows trashed
-  before this module existed carry no such key: those files are still sitting
-  at their library path, which is where `restore/2` and `discard/2` look when
-  the key is missing.
+  ## What the row records
+
+  Trashing writes one of two markers into `metadata.extra`, and `discard/2`
+  needs the distinction to avoid deleting live media:
+
+    * `"trashed_path"` - the absolute path the bytes were moved to, so restore
+      and purge do not depend on the configuration still resolving to the same
+      directory later.
+    * `"trashed_missing"` - there was nothing on disk to move. That is a
+      normal outcome (it is what a scan does when it finds a file gone), but
+      it must not be confused with a row trashed before this module existed:
+      those still have their file at the library path and the purge deletes it
+      there, whereas a trashed-missing row may well have a live file at that
+      path again. See `discard/2`.
+
+  Rows trashed before this module existed carry neither key.
   """
 
   require Logger
@@ -63,26 +81,31 @@ defmodule Mydia.Library.TrashStore do
   @doc """
   Moves `media_file`'s file out of the library and into the trash directory.
 
-  Returns `{:ok, absolute_trash_path}` on success, or `{:ok, nil}` when there
-  was nothing to move: the path could not be resolved (no library path) or the
-  file is already gone from disk. A missing file is the *original* reason
-  `trash_media_file/1` exists (marking what a scan found missing), so it stays
-  a normal outcome rather than an error.
+  Returns `{:ok, {:moved, absolute_trash_path}}` on success, or
+  `{:ok, :missing}` when there was nothing to move: the path could not be
+  resolved (no library path) or the file is already gone from disk. A missing
+  file is the *original* reason `trash_media_file/1` exists (marking what a
+  scan found missing), so it stays a normal outcome rather than an error.
+
+  The caller must persist the difference between those two outcomes. A row
+  trashed while its file was missing looks identical on disk to a row trashed
+  before this module existed, and `discard/2` treats those two very
+  differently - see its doc.
 
   Returns `{:error, reason}` when a file that is present could not be moved.
   The caller must not mark the row trashed in that case.
   """
-  @spec store(MediaFile.t()) :: {:ok, String.t() | nil} | {:error, term()}
+  @spec store(MediaFile.t()) :: {:ok, {:moved, String.t()} | :missing} | {:error, term()}
   def store(%MediaFile{} = media_file) do
     case MediaFile.absolute_path(media_file) do
       nil ->
-        {:ok, nil}
+        {:ok, :missing}
 
       source ->
         if File.exists?(source) do
           do_store(media_file, source)
         else
-          {:ok, nil}
+          {:ok, :missing}
         end
     end
   end
@@ -98,9 +121,13 @@ defmodule Mydia.Library.TrashStore do
   still be restored, it simply has no bytes behind it, exactly as before this
   module existed. Neither is a destination that is already occupied - that
   means something has since put a file back at the original path, and
-  clobbering it would be worse than leaving a copy in the trash.
+  clobbering it would be worse than leaving a copy in the trash. That case
+  returns `{:ok, :trash_copy_retained}`, and the caller must keep the recorded
+  trash path on the row: an untracked file under `.mydia-trash/<id>/` is one
+  nothing can ever restore or purge.
   """
-  @spec restore(MediaFile.t(), String.t() | nil) :: :ok | {:error, term()}
+  @spec restore(MediaFile.t(), String.t() | nil) ::
+          :ok | {:ok, :trash_copy_retained} | {:error, term()}
   def restore(%MediaFile{}, nil), do: :ok
 
   def restore(%MediaFile{} = media_file, trash_path) when is_binary(trash_path) do
@@ -124,15 +151,17 @@ defmodule Mydia.Library.TrashStore do
         {:error, :path_not_resolved}
 
       File.exists?(destination) ->
-        Logger.warning(
+        Logger.error(
           "Restoring a media file whose library path is already occupied; leaving the trashed " <>
-            "copy in place rather than overwriting what is there",
+            "copy in place rather than overwriting what is there. The trashed copy stays " <>
+            "referenced by the row so it remains recoverable, but nothing will delete it " <>
+            "automatically - remove it by hand once you have decided which copy you want.",
           media_file_id: media_file.id,
           trashed_path: trash_path,
           path: destination
         )
 
-        :ok
+        {:ok, :trash_copy_retained}
 
       true ->
         move_back(media_file, trash_path, destination)
@@ -142,31 +171,63 @@ defmodule Mydia.Library.TrashStore do
   @doc """
   Permanently deletes the bytes behind a trashed row.
 
-  Deletes the trashed copy when `trash_path` is set, and otherwise the file at
-  the library path - which is where rows trashed before this module existed
-  still have theirs. That second case is the other half of
-  [#295](https://github.com/getmydia/mydia/issues/295): the purge used to drop
-  the row and leave the file on disk forever.
-  """
-  @spec discard(MediaFile.t(), String.t() | nil) :: :ok
-  def discard(%MediaFile{} = media_file, trash_path) do
-    library_path = MediaFile.absolute_path(media_file)
+  Which bytes those are depends on how the row came to be trashed, and getting
+  this wrong destroys libraries:
 
-    if is_binary(trash_path) do
-      delete_file(media_file, trash_path)
-      prune_container(trash_path)
-    end
+    * `{:moved, trash_path}` - the file is in the trash directory. Delete it,
+      and the NFO sidecar left behind at the library path with it.
+    * `:missing` - the row was trashed while its file was already gone from
+      disk. **Nothing at the library path may be touched.** The dominant
+      producer of these is `Mydia.Jobs.LibraryScanner`'s `deleted_files`
+      batch, which marks every row in a library deleted when a network share
+      is unmounted mid-scan. If the share comes back and no rescan runs - and
+      the rescan that would restore those rows is opt-in per library path -
+      deleting at the library path here would silently erase the entire
+      library thirty days later.
+    * `:legacy` - the row was trashed before this module existed, so its file
+      is still sitting at the library path. Delete it there. That case is the
+      other half of [#295](https://github.com/getmydia/mydia/issues/295): the
+      purge used to drop the row and leave the file on disk forever.
+
+  The caller distinguishes `:missing` from `:legacy` by the marker
+  `trash_media_file/1` records; they are indistinguishable from disk alone.
+  """
+  @spec discard(MediaFile.t(), {:moved, String.t()} | :missing | :legacy) :: :ok
+  def discard(%MediaFile{} = media_file, {:moved, trash_path}) when is_binary(trash_path) do
+    delete_file(media_file, trash_path)
+    prune_container(trash_path)
 
     # The NFO sidecar is never moved into the trash (the scanner does not index
     # it, so it cannot resurrect anything), but it must not outlive the media
-    # file it describes. For a legacy row this also deletes the media file
-    # itself, still sitting where it always was.
-    if is_binary(library_path) do
-      if is_nil(trash_path), do: delete_file(media_file, library_path)
-      Mydia.Metadata.NfoWriter.delete_nfo_for_file(library_path)
+    # file it describes.
+    case MediaFile.absolute_path(media_file) do
+      nil -> :ok
+      library_path -> Mydia.Metadata.NfoWriter.delete_nfo_for_file(library_path)
     end
 
     :ok
+  end
+
+  def discard(%MediaFile{} = media_file, :missing) do
+    Logger.debug(
+      "Purging a media file that was already missing from disk when it was trashed; " <>
+        "leaving the library path untouched",
+      media_file_id: media_file.id
+    )
+
+    :ok
+  end
+
+  def discard(%MediaFile{} = media_file, :legacy) do
+    case MediaFile.absolute_path(media_file) do
+      nil ->
+        :ok
+
+      library_path ->
+        delete_file(media_file, library_path)
+        Mydia.Metadata.NfoWriter.delete_nfo_for_file(library_path)
+        :ok
+    end
   end
 
   @doc """
@@ -181,14 +242,53 @@ defmodule Mydia.Library.TrashStore do
         configured
 
       _ ->
-        path
-        |> Path.expand()
-        |> Path.dirname()
-        |> Path.join(@dir_name)
+        default_root(path)
     end
   end
 
   def root_for(%MediaFile{}), do: nil
+
+  # Sibling of the library path when that is actually usable, otherwise inside
+  # the library path.
+  #
+  # The sibling is preferred because it is outside the library, so the scanner
+  # never walks it even without the `.mydia-trash` skip. But it is only better
+  # when it is on the same filesystem, which is what makes the move an atomic
+  # rename instead of a copy of a 60 GB remux. Two cases where it is not:
+  #
+  #   * the library path is a mount root - `/media` or `/data`, both routine
+  #     in Docker - so the parent is `/`, i.e. the container's writable layer.
+  #     Different filesystem at best; on a read-only rootfs every trash fails
+  #     outright and `finalize_upgrade/1` retries until Oban discards it.
+  #   * the library path is a mount below a directory on another filesystem,
+  #     e.g. a NAS share at `/mnt/media` with `/mnt` on the system disk.
+  #
+  # Falling inside the library keeps the same-filesystem guarantee, and the
+  # scanner's `.mydia-trash` skip is what keeps it from being rescanned.
+  defp default_root(path) do
+    expanded = Path.expand(path)
+    parent = Path.dirname(expanded)
+
+    if usable_sibling?(expanded, parent) do
+      Path.join(parent, @dir_name)
+    else
+      Path.join(expanded, @dir_name)
+    end
+  end
+
+  defp usable_sibling?(expanded, parent) do
+    parent != expanded and parent != "/" and same_filesystem?(expanded, parent)
+  end
+
+  # `File.Stat.major_device` is st_dev on Unix, so two paths sharing it share a
+  # filesystem. An unreadable path answers "no", which lands on the safe
+  # inside-the-library branch.
+  defp same_filesystem?(a, b) do
+    match?(
+      {{:ok, %File.Stat{major_device: device}}, {:ok, %File.Stat{major_device: device}}},
+      {File.stat(a), File.stat(b)}
+    )
+  end
 
   defp do_store(media_file, source) do
     destination = Path.join([root_for(media_file), media_file.id, Path.basename(source)])
@@ -201,7 +301,7 @@ defmodule Mydia.Library.TrashStore do
           to: destination
         )
 
-        {:ok, destination}
+        {:ok, {:moved, destination}}
 
       {:error, reason} = error ->
         Logger.error(
@@ -265,14 +365,34 @@ defmodule Mydia.Library.TrashStore do
       to: destination
     )
 
-    with :ok <- File.cp(source, destination),
-         :ok <- File.rm(source) do
-      :ok
-    else
+    case File.cp(source, destination) do
+      :ok ->
+        remove_source_after_copy(source, destination)
+
       {:error, reason} ->
-        # Either the copy failed part-way or the original could not be removed.
-        # Both leave the original in place, so drop whatever reached the other
-        # side and report the move as failed rather than leaving two copies.
+        # The copy failed part-way. The original is still in place, so drop
+        # whatever reached the other side and report the move as failed rather
+        # than leaving a truncated file in the trash.
+        _ = File.rm(destination)
+        {:error, {:cross_filesystem_move_failed, reason}}
+    end
+  end
+
+  defp remove_source_after_copy(source, destination) do
+    case File.rm(source) do
+      :ok ->
+        :ok
+
+      # Something else removed the source while we were copying. The goal
+      # state - bytes at the destination, nothing at the library path - has
+      # been reached, so removing the destination here would destroy the only
+      # copy left.
+      {:error, :enoent} ->
+        :ok
+
+      {:error, reason} ->
+        # The original is still there, so we would otherwise be leaving two
+        # copies and reporting success.
         _ = File.rm(destination)
         {:error, {:cross_filesystem_move_failed, reason}}
     end

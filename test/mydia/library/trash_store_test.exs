@@ -11,6 +11,7 @@ defmodule Mydia.Library.TrashStoreTest do
 
   alias Mydia.Library
   alias Mydia.Library.Scanner
+  alias Mydia.Library.TrashStore
   alias Mydia.Repo
 
   setup do
@@ -96,6 +97,29 @@ defmodule Mydia.Library.TrashStoreTest do
     end
   end
 
+  describe "root_for/1" do
+    test "falls back inside the library when the library path is a mount root" do
+      # A library at /media or /data (both common in Docker) has "/" as its
+      # parent, so the sibling default would put the trash on the container's
+      # writable layer - a different filesystem at best, an unwritable
+      # read-only rootfs at worst, in which case every trash fails. Staying
+      # inside the library keeps the move an atomic rename; the scanner's
+      # .mydia-trash skip is what makes that safe.
+      library_path = library_path_fixture(%{path: "/mydia_mount_root", type: "movies"})
+
+      {:ok, media_file} =
+        Library.create_scanned_media_file(%{
+          relative_path: "movie.mkv",
+          library_path_id: library_path.id,
+          size: 1
+        })
+
+      media_file = Repo.preload(media_file, :library_path)
+
+      assert TrashStore.root_for(media_file) == "/mydia_mount_root/.mydia-trash"
+    end
+  end
+
   describe "restore_media_file/1 on disk" do
     @tag :tmp_dir
     test "moves the file back to the library path", %{tmp_dir: tmp_dir} do
@@ -122,6 +146,28 @@ defmodule Mydia.Library.TrashStoreTest do
       assert {:ok, restored} = Library.restore_media_file(trashed)
       assert is_nil(restored.trashed_at)
     end
+
+    # Re-review: restore into an occupied destination deliberately does not
+    # clobber what is there, but it used to drop trashed_path anyway, leaving
+    # the copy under .mydia-trash/<id>/ with nothing referencing it - never
+    # restorable, never purged. The pointer has to survive so the bytes stay
+    # reclaimable.
+    @tag :tmp_dir
+    test "keeps the trash pointer when the library path is already occupied", %{tmp_dir: tmp_dir} do
+      {_root, media_file, path} = library_with_file(tmp_dir)
+
+      {:ok, trashed} = Library.trash_media_file(media_file)
+      trashed_path = trashed.metadata.extra["trashed_path"]
+
+      File.write!(path, "something else")
+
+      assert {:ok, restored} = Library.restore_media_file(trashed)
+
+      assert is_nil(restored.trashed_at)
+      assert File.read!(path) == "something else"
+      assert File.exists?(trashed_path)
+      assert restored.metadata.extra["trashed_path"] == trashed_path
+    end
   end
 
   describe "purge_old_trashed_media_files/1 on disk" do
@@ -137,6 +183,50 @@ defmodule Mydia.Library.TrashStoreTest do
 
       refute File.exists?(trashed_path)
       assert is_nil(Library.get_media_file(media_file.id))
+    end
+
+    # Re-review finding A (CRITICAL). trash_media_file/1 records nothing for a
+    # row whose file was already missing, which is exactly what
+    # LibraryScanner's deleted_files batch produces when a network share is
+    # unmounted mid-scan and the whole library reads as deleted. If the share
+    # comes back and no rescan runs - and the rescan that would restore those
+    # rows is opt-in per library path, so it is not guaranteed - the daily
+    # TrashCleanup must not treat those rows like pre-TrashStore rows and
+    # delete the entire library from the library path 30 days later.
+    @tag :tmp_dir
+    test "leaves the file alone when the row was trashed while it was missing", %{
+      tmp_dir: tmp_dir
+    } do
+      {_root, media_file, path} = library_with_file(tmp_dir)
+
+      # The share goes away, a scan trashes the row.
+      File.rm!(path)
+      {:ok, trashed} = Library.trash_media_file(media_file)
+
+      # The share comes back, but nothing rescans.
+      File.write!(path, "video bytes")
+      backdate(trashed)
+
+      assert {:ok, 1} = Library.purge_old_trashed_media_files(30)
+
+      assert File.read!(path) == "video bytes"
+    end
+
+    @tag :tmp_dir
+    test "leaves the NFO alone when the row was trashed while the file was missing", %{
+      tmp_dir: tmp_dir
+    } do
+      {_root, media_file, path} = library_with_file(tmp_dir)
+      nfo = Path.rootname(path) <> ".nfo"
+      File.write!(nfo, "<movie/>")
+
+      File.rm!(path)
+      {:ok, trashed} = Library.trash_media_file(media_file)
+      backdate(trashed)
+
+      assert {:ok, 1} = Library.purge_old_trashed_media_files(30)
+
+      assert File.exists?(nfo)
     end
 
     @tag :tmp_dir
