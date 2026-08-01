@@ -46,18 +46,32 @@ defmodule Mydia.Repo.Migrations.MarkExistingTrashedFilesAsMissing do
 
   ## Reversibility
 
-  `down/0` removes the key. Note that it removes it from *all* trashed rows, not
-  only the ones `up/0` added it to, because the two are indistinguishable
-  afterwards. Roll this back only together with the code that reads the marker:
-  rolling back the migration while keeping the new code would re-arm exactly the
-  deletion this migration exists to prevent.
+  `down/0` deliberately does nothing. See the comment on it.
   """
 
   @marker "trashed_missing"
 
   def up, do: backfill(repo(), :mark)
 
-  def down, do: backfill(repo(), :unmark)
+  # Intentionally a no-op.
+  #
+  # `mix ecto.rollback` is the standard "undo the last migration" command, and
+  # nothing about it implies "also roll the code back". Removing the marker
+  # while a deployment is still running this branch turns every trashed row -
+  # the backlog this migration exists to protect *and* the rows the new code
+  # wrote as `:missing` - back into `:legacy`, and the next daily
+  # `Mydia.Jobs.TrashCleanup` deletes them at the library path. That is the
+  # exact data loss this migration was written to prevent, triggered by a
+  # routine command. A moduledoc warning is not a guard.
+  #
+  # Leaving the key costs nothing. It is inert to every version that predates
+  # this branch: `FileMetadata.from_map/1` files unknown keys into `extra`,
+  # `to_map/1` round-trips them back out, and the pre-branch purge deleted no
+  # bytes at all. So rolling the code back never required removing it.
+  #
+  # `unmark/1` and `backfill/2`'s `:unmark` direction are kept for an operator
+  # who explicitly wants the key gone, and are still covered by tests.
+  def down, do: :ok
 
   # Walks every trashed row and rewrites its metadata.
   #

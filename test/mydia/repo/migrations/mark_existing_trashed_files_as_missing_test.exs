@@ -126,14 +126,35 @@ defmodule Mydia.Repo.Migrations.MarkExistingTrashedFilesAsMissingTest do
     end
 
     @tag :tmp_dir
-    test "down removes the marker again", %{tmp_dir: tmp_dir} do
-      {media_file, _path} = legacy_trashed_row(tmp_dir, "down.mkv")
+    test "the unmark direction removes the marker again", %{tmp_dir: tmp_dir} do
+      {media_file, _path} = legacy_trashed_row(tmp_dir, "unmark.mkv")
 
       assert :ok = Migration.backfill(Repo, :mark)
       assert Repo.reload!(media_file).metadata.extra["trashed_missing"] == true
 
       assert :ok = Migration.backfill(Repo, :unmark)
       assert Repo.reload!(media_file).metadata.extra["trashed_missing"] == nil
+    end
+  end
+
+  describe "down/0" do
+    # mix ecto.rollback does not imply rolling the code back. If down/0 stripped
+    # the marker while a deployment was still running this branch, every trashed
+    # row would become :legacy again and the next daily TrashCleanup would delete
+    # it at the library path - the exact loss this migration prevents, triggered
+    # by a routine command. Leaving the key is inert to every pre-branch version.
+    @tag :tmp_dir
+    test "does not strip the marker it added", %{tmp_dir: tmp_dir} do
+      {media_file, path} = legacy_trashed_row(tmp_dir, "rollback.mkv")
+
+      assert :ok = Migration.backfill(Repo, :mark)
+      assert :ok = Migration.down()
+
+      assert Repo.reload!(media_file).metadata.extra["trashed_missing"] == true
+
+      # And the protection still holds afterwards.
+      assert {:ok, 1} = Library.purge_old_trashed_media_files(30)
+      assert File.read!(path) == "video bytes"
     end
   end
 
