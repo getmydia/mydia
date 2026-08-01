@@ -250,6 +250,10 @@ class VideoProgressBar extends StatelessWidget {
   /// files.
   final StreamTimeline timeline;
 
+  /// Seeks to a real media position, restarting the HLS session when the
+  /// target is beyond what has been transcoded so far.
+  final Future<void> Function(Duration realTarget) onSeekToReal;
+
   /// Called when seeking starts.
   final VoidCallback? onSeekStart;
 
@@ -266,6 +270,7 @@ class VideoProgressBar extends StatelessWidget {
     super.key,
     required this.player,
     required this.timeline,
+    required this.onSeekToReal,
     this.onSeekStart,
     this.onSeekEnd,
     this.onSeekUpdate,
@@ -317,7 +322,7 @@ class VideoProgressBar extends StatelessWidget {
                   onSeekStart: onSeekStart,
                   onSeekEnd: onSeekEnd,
                   onSeekUpdate: (f) => onSeekUpdate?.call(at(f)),
-                  onSeekTo: (f) => player.seek(timeline.toPlayer(at(f))),
+                  onSeekTo: (f) => onSeekToReal(at(f)),
                 );
               },
             );

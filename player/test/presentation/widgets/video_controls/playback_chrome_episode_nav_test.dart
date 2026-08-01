@@ -57,6 +57,7 @@ void main() {
               child: PlaybackChrome(
                 player: player,
                 timeline: StreamTimeline.zero,
+                onSeekToReal: (_) async {},
                 onPreviousEpisode: () => previousCalls++,
                 onNextEpisode: () => nextCalls++,
               ),

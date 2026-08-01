@@ -22,12 +22,17 @@ class GestureControls extends StatefulWidget {
   /// files.
   final StreamTimeline timeline;
 
+  /// Seeks to a real media position, restarting the HLS session when the
+  /// target is beyond what has been transcoded so far.
+  final Future<void> Function(Duration realTarget) onSeekToReal;
+
   final Widget child;
 
   const GestureControls({
     super.key,
     required this.player,
     required this.timeline,
+    required this.onSeekToReal,
     required this.child,
   });
 
@@ -71,7 +76,7 @@ class _GestureControlsState extends State<GestureControls> {
     final targetPosition =
         newPosition < Duration.zero ? Duration.zero : newPosition;
 
-    widget.player.seek(timeline.toPlayer(targetPosition));
+    widget.onSeekToReal(targetPosition);
     _showSeekFeedback(forward: false);
   }
 
@@ -82,7 +87,7 @@ class _GestureControlsState extends State<GestureControls> {
     final newPosition = currentPosition + const Duration(seconds: 10);
     final targetPosition = newPosition > duration ? duration : newPosition;
 
-    widget.player.seek(timeline.toPlayer(targetPosition));
+    widget.onSeekToReal(targetPosition);
     _showSeekFeedback(forward: true);
   }
 

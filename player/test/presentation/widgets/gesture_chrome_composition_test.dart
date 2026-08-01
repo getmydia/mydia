@@ -65,6 +65,11 @@ void main() {
               child: GestureControls(
                 player: player,
                 timeline: StreamTimeline.zero,
+                // `StreamTimeline.zero` has a zero `startOffset`, so
+                // `toPlayer`/`toReal` are both no-ops here — seeking straight
+                // to the real target reproduces the direct `player.seek`
+                // this test asserted on before `onSeekToReal` existed.
+                onSeekToReal: (target) async => player.seek(target),
                 child: SizedBox.expand(
                   child: Stack(
                     fit: StackFit.expand,
@@ -76,6 +81,7 @@ void main() {
                         child: PlaybackChrome(
                           player: player,
                           timeline: StreamTimeline.zero,
+                          onSeekToReal: (target) async => player.seek(target),
                         ),
                       ),
                     ],

@@ -10,6 +10,7 @@ import 'playback_chrome.dart';
 /// between media_kit's builder signature and that widget.
 Widget Function(VideoState) customVideoControlsBuilderWithCallback({
   required StreamTimeline timeline,
+  required Future<void> Function(Duration realTarget) onSeekToReal,
   String? title,
   VoidCallback? onBack,
   Widget? castAction,
@@ -29,6 +30,7 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
   return (VideoState state) => PlaybackChrome(
         player: state.widget.controller.player,
         timeline: timeline,
+        onSeekToReal: onSeekToReal,
         title: title,
         onBack: onBack,
         castAction: castAction,
