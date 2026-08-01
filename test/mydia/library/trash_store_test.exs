@@ -97,6 +97,36 @@ defmodule Mydia.Library.TrashStoreTest do
     end
   end
 
+  # The end-to-end cross-filesystem move needs a second filesystem, but the
+  # contract that matters is in this one two-argument function: it is the only
+  # place in the trash path that can delete the copy that just succeeded.
+  describe "remove_source_after_copy/2" do
+    @tag :tmp_dir
+    test "keeps the copy when the source vanished mid-move", %{tmp_dir: tmp_dir} do
+      # File.cp/2 succeeded, then something else removed the source before we
+      # got to it. The goal state - bytes at the destination, nothing at the
+      # library path - has been reached, so the copy must survive.
+      source = Path.join(tmp_dir, "gone.mkv")
+      destination = Path.join(tmp_dir, "copy.mkv")
+      File.write!(destination, "video bytes")
+
+      assert TrashStore.remove_source_after_copy(source, destination) == :ok
+      assert File.read!(destination) == "video bytes"
+    end
+
+    @tag :tmp_dir
+    test "removes the source and keeps the copy in the ordinary case", %{tmp_dir: tmp_dir} do
+      source = Path.join(tmp_dir, "orig.mkv")
+      destination = Path.join(tmp_dir, "moved.mkv")
+      File.write!(source, "video bytes")
+      File.write!(destination, "video bytes")
+
+      assert TrashStore.remove_source_after_copy(source, destination) == :ok
+      refute File.exists?(source)
+      assert File.read!(destination) == "video bytes"
+    end
+  end
+
   describe "root_for/1" do
     test "falls back inside the library when the library path is a mount root" do
       # A library at /media or /data (both common in Docker) has "/" as its

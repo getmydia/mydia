@@ -184,10 +184,22 @@ defmodule Mydia.Library.TrashStore do
       the rescan that would restore those rows is opt-in per library path -
       deleting at the library path here would silently erase the entire
       library thirty days later.
-    * `:legacy` - the row was trashed before this module existed, so its file
-      is still sitting at the library path. Delete it there. That case is the
-      other half of [#295](https://github.com/getmydia/mydia/issues/295): the
-      purge used to drop the row and leave the file on disk forever.
+    * `:legacy` - the row carries neither marker. Delete at the library path.
+      This is the other half of
+      [#295](https://github.com/getmydia/mydia/issues/295): the purge used to
+      drop the row and leave the file on disk forever.
+
+      It does **not** follow that the file is still there, and this clause
+      must not be read as asserting it. Rows written before the markers
+      existed are exactly the ones the `:missing` case above describes -
+      predominantly unmount-shaped scan trashes, not deliberate deletes - and
+      nothing at rest distinguishes them. That is why
+      `20260731120000_mark_existing_trashed_files_as_missing.exs` stamps every
+      pre-existing trashed row as `:missing` on upgrade, which leaves this
+      clause reachable only for a row written by something that bypassed
+      `Mydia.Library.trash_media_file/1` entirely. Nothing in this codebase
+      does. Space reclamation therefore applies to files trashed after the
+      upgrade, not to the backlog.
 
   The caller distinguishes `:missing` from `:legacy` by the marker
   `trash_media_file/1` records; they are indistinguishable from disk alone.
@@ -378,7 +390,15 @@ defmodule Mydia.Library.TrashStore do
     end
   end
 
-  defp remove_source_after_copy(source, destination) do
+  # Completes a cross-filesystem move by removing the source now that the copy
+  # landed.
+  #
+  # Public only so the `:enoent` branch can be tested directly: forcing a real
+  # cross-filesystem move needs a second mount, but this is the one function in
+  # the trash path that can delete the copy that just succeeded.
+  @doc false
+  @spec remove_source_after_copy(String.t(), String.t()) :: :ok | {:error, term()}
+  def remove_source_after_copy(source, destination) do
     case File.rm(source) do
       :ok ->
         :ok
