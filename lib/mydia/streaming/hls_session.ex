@@ -341,6 +341,14 @@ defmodule Mydia.Streaming.HlsSession do
       session_id: state.session_id,
       media_file_id: state.media_file_id,
       mode: state.mode,
+      # The offset this session is actually transcoding from. Reported here
+      # rather than left to the caller's own bookkeeping because a caller can
+      # end up holding a session it did not start — HlsSessionSupervisor
+      # adopts a concurrent winner, and that winner may have been started from
+      # a different offset. Echoing the requested value instead of this one
+      # would hand the client a timeline shifted against the stream it is
+      # actually playing, and every position it persisted would be wrong.
+      start_position: state.start_position,
       backend: state.backend,
       temp_dir: state.temp_dir,
       last_activity: state.last_activity,

@@ -4,10 +4,11 @@ defmodule MydiaWeb.Schema.StreamingTest do
 
   Before this fix, a never-probed media file (`analyzed_at: nil`) always
   echoed `duration: nil` from `startStreamingSession`, because the old
-  fire-and-forget `Candidates.ensure_codec_info_async/1` returned before the
-  probe wrote anything back, and the resolver read duration off the struct
-  loaded before the probe was even scheduled. The client then had no real
-  runtime to compute a resume percentage against.
+  fire-and-forget `Candidates.ensure_codec_info_async/1` (since deleted — it
+  had no callers left) returned before the probe wrote anything back, and the
+  resolver read duration off the struct loaded before the probe was even
+  scheduled. The client then had no real runtime to compute a resume
+  percentage against.
 
   This drives a real cold file through the actual `startStreamingSession`
   mutation (real ffprobe, real FFmpeg HLS session, real DB) rather than
@@ -34,6 +35,16 @@ defmodule MydiaWeb.Schema.StreamingTest do
   }
   """
 
+  @start_at_offset_mutation """
+  mutation StartStreamingSession($fileId: ID!, $strategy: StreamingStrategy!, $startPosition: Int) {
+    startStreamingSession(fileId: $fileId, strategy: $strategy, startPosition: $startPosition) {
+      sessionId
+      duration
+      startPosition
+    }
+  }
+  """
+
   @end_streaming_session_mutation """
   mutation EndStreamingSession($sessionId: String!) {
     endStreamingSession(sessionId: $sessionId)
@@ -44,47 +55,7 @@ defmodule MydiaWeb.Schema.StreamingTest do
     @tag :tmp_dir
     test "a cold file (analyzed_at: nil) returns a non-nil duration", %{tmp_dir: tmp_dir} do
       user = AccountsFixtures.user_fixture()
-      library_path = SettingsFixtures.library_path_fixture(%{path: tmp_dir, type: "movies"})
-
-      video_path = Path.join(tmp_dir, "tiny.mp4")
-
-      # A real, tiny (2s) H.264+AAC file so the cold-file path runs an actual
-      # ffprobe and an actual FFmpeg HLS transcode, not a stub. Video+audio
-      # lavfi sources mirror ffmpeg_remuxer_test.exs in this same directory,
-      # since the HLS transcoder always emits an audio encode step and a
-      # video-only source risks an ffmpeg error on that stream mapping.
-      {_, 0} =
-        System.cmd(
-          "ffmpeg",
-          [
-            "-f",
-            "lavfi",
-            "-i",
-            "testsrc=duration=2:size=320x240:rate=10",
-            "-f",
-            "lavfi",
-            "-i",
-            "sine=frequency=1000:duration=2",
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            "-y",
-            video_path
-          ],
-          stderr_to_stdout: true
-        )
-
-      media_file =
-        MediaFixtures.media_file_fixture(%{
-          library_path_id: library_path.id,
-          relative_path: "tiny.mp4",
-          size: File.stat!(video_path).size,
-          # The whole point: never probed yet. media_file_fixture defaults to
-          # an already-analyzed row specifically so tests don't accidentally
-          # shell out to ffprobe; this test overrides that on purpose.
-          analyzed_at: nil
-        })
+      media_file = cold_media_file(tmp_dir)
 
       result =
         Absinthe.run(
@@ -103,6 +74,83 @@ defmodule MydiaWeb.Schema.StreamingTest do
         stop_session(session["sessionId"], user)
       end
     end
+
+    @tag :tmp_dir
+    test "echoes the offset the running session is transcoding from", %{tmp_dir: tmp_dir} do
+      # The echoed value is read off the session itself (HlsSession's
+      # `:get_info` reply), not off whatever this request happened to clamp,
+      # so that a caller which reused or adopted an already-running session
+      # cannot be handed an offset the stream does not actually start at. The
+      # player builds its whole StreamTimeline — and therefore every progress
+      # row it writes — from this number.
+      #
+      # Requesting 10s on a 2s file exercises the clamp too: 10 pins to
+      # `trunc(2) - 1`, and the session starts (and must report) 1s.
+      user = AccountsFixtures.user_fixture()
+      media_file = cold_media_file(tmp_dir)
+
+      result =
+        Absinthe.run(
+          @start_at_offset_mutation,
+          MydiaWeb.Schema,
+          variables: %{
+            "fileId" => media_file.id,
+            "strategy" => "TRANSCODE",
+            "startPosition" => 10
+          },
+          context: %{current_user: user}
+        )
+
+      assert {:ok, %{data: %{"startStreamingSession" => session}}} = result
+
+      try do
+        assert session["startPosition"] == 1
+      after
+        stop_session(session["sessionId"], user)
+      end
+    end
+  end
+
+  # A real, tiny (2s) H.264+AAC file so the cold-file path runs an actual
+  # ffprobe and an actual FFmpeg HLS transcode, not a stub. Video+audio
+  # lavfi sources mirror ffmpeg_remuxer_test.exs in test/mydia/streaming,
+  # since the HLS transcoder always emits an audio encode step and a
+  # video-only source risks an ffmpeg error on that stream mapping.
+  defp cold_media_file(tmp_dir) do
+    library_path = SettingsFixtures.library_path_fixture(%{path: tmp_dir, type: "movies"})
+    video_path = Path.join(tmp_dir, "tiny.mp4")
+
+    {_, 0} =
+      System.cmd(
+        "ffmpeg",
+        [
+          "-f",
+          "lavfi",
+          "-i",
+          "testsrc=duration=2:size=320x240:rate=10",
+          "-f",
+          "lavfi",
+          "-i",
+          "sine=frequency=1000:duration=2",
+          "-c:v",
+          "libx264",
+          "-c:a",
+          "aac",
+          "-y",
+          video_path
+        ],
+        stderr_to_stdout: true
+      )
+
+    MediaFixtures.media_file_fixture(%{
+      library_path_id: library_path.id,
+      relative_path: "tiny.mp4",
+      size: File.stat!(video_path).size,
+      # Never probed yet. media_file_fixture defaults to an already-analyzed
+      # row specifically so tests don't accidentally shell out to ffprobe;
+      # these tests override that on purpose.
+      analyzed_at: nil
+    })
   end
 
   defp stop_session(session_id, user) do

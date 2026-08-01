@@ -26,10 +26,6 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
 
   @registry_name Mydia.Streaming.HlsSessionRegistry
 
-  # See await_deregistration/2 for why this polling wait exists.
-  @deregistration_attempts 50
-  @deregistration_interval_ms 2
-
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
@@ -68,8 +64,7 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
           # request: its playlist simply does not contain the wanted range.
           # Replace it rather than keying sessions by offset, so a user
           # scrubbing around does not accumulate concurrent FFmpeg processes.
-          DynamicSupervisor.terminate_child(__MODULE__, pid)
-          await_deregistration(session_key)
+          stop_gracefully(pid)
           start_new_session(media_file_id, user_id, mode, opts, session_key)
         end
 
@@ -85,31 +80,26 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     Map.get(metadata, :start_position, 0) == start_position
   end
 
-  # Registry cleans up a dead process's entry asynchronously, through the
-  # monitor it holds. `terminate_child/2` returns as soon as the process is
-  # down, which can be before that cleanup lands. On this `:unique` registry an
-  # immediate re-register would then come back `{:error, {:already_registered,
-  # _}}` — and because `HlsSession.init/1` discards that return value, the new
-  # session would run unregistered and be invisible to `get_session/2`, so the
-  # HLS controller would fail to serve its playlist while FFmpeg ran happily.
+  # Stops a session the way `endStreamingSession` does, rather than through
+  # `DynamicSupervisor.terminate_child/2`. `HlsSession` does not trap exits,
+  # so a `:shutdown` signal kills it outright and its `terminate/2` never
+  # runs — leaving the `TranscodeJob` row stuck at `status: "transcoding"` in
+  # the queue UI forever, the temp directory of `.ts` segments on disk, and no
+  # `:session_ended` broadcast. `GenServer.stop/2` is equally synchronous and
+  # does run `terminate/2`.
   #
-  # Bounded so a wedged entry degrades to the old behaviour instead of hanging
-  # the caller.
-  @doc false
-  # Public for unit testing, same as session_matches_offset?/2.
-  def await_deregistration(session_key, attempts \\ @deregistration_attempts)
-
-  def await_deregistration(_session_key, 0), do: :ok
-
-  def await_deregistration(session_key, attempts) do
-    case Registry.lookup(@registry_name, session_key) do
-      [] ->
-        :ok
-
-      _ ->
-        Process.sleep(@deregistration_interval_ms)
-        await_deregistration(session_key, attempts - 1)
-    end
+  # Registry cleanup is still asynchronous after this returns, but no wait is
+  # needed: `Registry.register/3` on a `:unique` key that collides with a dead
+  # owner deletes the stale entry and retries (see `register_key/4` in
+  # Elixir's `registry.ex`), and the owner is always dead by the time a
+  # synchronous stop returns.
+  defp stop_gracefully(pid) do
+    HlsSession.stop(pid)
+  catch
+    # The session died on its own between the registry lookup and this call
+    # (inactivity timeout, or its FFmpeg backend exiting). Its `terminate/2`
+    # has already run; there is nothing left to stop.
+    :exit, _reason -> :ok
   end
 
   defp start_new_session(media_file_id, user_id, mode, opts, session_key) do
@@ -224,6 +214,14 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   def stop_session(media_file_id, user_id) do
     case get_session(media_file_id, user_id) do
       {:ok, pid} ->
+        # Deliberately NOT stop_gracefully/1, despite the same terminate/2-is-
+        # skipped problem described there. Its only caller is
+        # Downloads.Transcoding.cancel_transcode_job/1, which stops the
+        # session and then does its own `Repo.delete(job)` — running
+        # HlsSession.terminate/2 here would delete that row first and turn
+        # that delete into an Ecto.StaleEntryError. Switching this over means
+        # making that delete tolerant of an already-deleted row, which is a
+        # separate change from the offset-replacement path above.
         DynamicSupervisor.terminate_child(__MODULE__, pid)
 
       {:error, :not_found} ->

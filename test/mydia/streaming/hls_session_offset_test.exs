@@ -20,9 +20,16 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
     end
   end
 
-  describe "await_deregistration/1" do
-    test "waits for a terminated process's registry entry to clear" do
-      session_key = {:test_await_deregistration, make_ref()}
+  describe "replacing a session's registry entry" do
+    test "a key can be re-registered immediately after its owner dies" do
+      # This is why start_session/4 needs no wait between stopping a session
+      # on an offset mismatch and starting its replacement. Registry's own
+      # cleanup (through the monitor it holds) is asynchronous and usually has
+      # NOT landed at this point — the assertion below deliberately does not
+      # wait for it — but Registry.register/3 on a :unique key whose entry
+      # points at a dead pid deletes that entry and retries, so the
+      # replacement registers on the spot.
+      session_key = {:test_stale_registration, make_ref()}
       test_pid = self()
 
       spawned_pid =
@@ -37,10 +44,19 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
 
       assert_receive :registered
 
+      ref = Process.monitor(spawned_pid)
       Process.exit(spawned_pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^spawned_pid, _reason}
 
-      assert HlsSessionSupervisor.await_deregistration(session_key) == :ok
-      assert Registry.lookup(Mydia.Streaming.HlsSessionRegistry, session_key) == []
+      assert {:ok, _owner} =
+               Registry.register(Mydia.Streaming.HlsSessionRegistry, session_key, %{
+                 start_position: 4200
+               })
+
+      assert [{pid, %{start_position: 4200}}] =
+               Registry.lookup(Mydia.Streaming.HlsSessionRegistry, session_key)
+
+      assert pid == self()
     end
   end
 

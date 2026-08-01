@@ -147,10 +147,19 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
          {:ok, pid} <-
            HlsSessionSupervisor.start_session(media_file.id, user_id, mode, session_opts),
          {:ok, info} <- HlsSession.get_info(pid) do
+      # Report the offset the session is actually transcoding from, not the
+      # one this request clamped: start_session/4 may have reused a running
+      # session or adopted a concurrent winner, either of which can be running
+      # from a different offset than this caller asked for.
+      session_start_position = info.start_position
+
       Logger.info(
         "Started streaming session #{info.session_id} for file #{file_id}, user #{user_id}" <>
           if(max_bitrate, do: " (max_bitrate: #{max_bitrate}kbps)", else: "") <>
-          if(start_position > 0, do: " (start_position: #{start_position}s)", else: "")
+          if(session_start_position > 0,
+            do: " (start_position: #{session_start_position}s)",
+            else: ""
+          )
       )
 
       content_id = resolve_content_id(media_file)
@@ -164,7 +173,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
        %{
          session_id: info.session_id,
          duration: duration,
-         start_position: start_position
+         start_position: session_start_position
        }}
     else
       {:error, reason} ->
@@ -179,10 +188,11 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   end
 
   # A never-probed file has no duration in its metadata, and the old
-  # fire-and-forget `ensure_codec_info_async/1` returned before the probe wrote
-  # anything, so the resolver reported `duration: nil` on every cold start. The
-  # client then had nothing to compute a resume percentage against and fell back
-  # to the partial HLS playlist length, which reads as 100%.
+  # fire-and-forget `Candidates.ensure_codec_info_async/1` (since deleted —
+  # this was its last caller) returned before the probe wrote anything, so the
+  # resolver reported `duration: nil` on every cold start. The client then had
+  # nothing to compute a resume percentage against and fell back to the
+  # partial HLS playlist length, which reads as 100%.
   #
   # Probing inline is what makes resume correct on a file's very first play.
   # But ffprobe is itself bounded by :ffprobe_timeout_ms (30s by default)
@@ -208,7 +218,13 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         Candidates.ensure_codec_info(media_file)
       end)
 
-    case Task.yield(task, budget_ms) do
+    # `Task.ignore/1` on timeout, rather than a bare `Task.yield/2`: the reply
+    # and the monitor stay live otherwise, so `{ref, result}` and
+    # `{:DOWN, ...}` land in this process's mailbox minutes later. A GraphQL
+    # resolver over an Absinthe/Phoenix channel runs in a long-lived process,
+    # so those would accumulate. `Task.ignore/1` discards the reply without
+    # stopping the task, which is exactly the intent below.
+    case Task.yield(task, budget_ms) || Task.ignore(task) do
       {:ok, %MediaFile{} = probed} ->
         probed
 
