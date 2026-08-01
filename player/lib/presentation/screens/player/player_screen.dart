@@ -139,6 +139,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Set when a seek forced a session restart, so re-initialization starts at
   /// this position instead of re-asking about the saved progress position.
   int? _resumeOverrideSeconds;
+
+  /// True for the entire duration of [_restartSessionAt], including while it
+  /// awaits — `_player` is not set to null until partway through that method,
+  /// so [seekToReal] cannot rely on the null check alone to reject a seek
+  /// that arrives mid-restart. Nothing disables the keyboard/gesture
+  /// callbacks that reach `seekToReal` while the loading spinner is showing,
+  /// so without this flag a second seek near the transcoded boundary would
+  /// independently reach the same restart decision on the still-live old
+  /// player and start a second, concurrent `_initializePlayer()` — leaking
+  /// an HLS session and its FFmpeg process. Always cleared, including on the
+  /// error paths, by [trackRestartInFlight].
+  bool _isRestartingSession = false;
   int? _runtimeMinutes;
   List<Query$SeasonEpisodes$seasonEpisodes>? _seasonEpisodes;
   int? _currentEpisodeIndex;
@@ -517,12 +529,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // boundary, only across a direct `!= null` check in the same
         // condition, so these null checks are what let the rest of this
         // block use non-nullable locals instead of the bang operator.
-        var startPositionSeconds = _resumeOverrideSeconds ?? 0;
+        //
+        // `resumeOverride` (not `startPositionSeconds == 0`) is what gates
+        // the dialog below: a seek-driven restart targeting real position 0
+        // (dragging the scrubber back to the start, holding arrow-left to
+        // the beginning, or any sub-second target — `Duration.inSeconds`
+        // truncates) sets `_resumeOverrideSeconds` to exactly 0, which is
+        // indistinguishable from "no override was set" if the check were on
+        // the value instead of on presence. Gating on the nullable local
+        // instead means a restart to position 0 never falls into the
+        // dialog branch, never overwrites 0 with the stale
+        // `_savedPositionSeconds`, and never sends the wrong `startPosition`
+        // to the new session.
+        final resumeOverride = _resumeOverrideSeconds;
         _resumeOverrideSeconds = null;
+        var startPositionSeconds = resumeOverride ?? 0;
         final savedPosition = _savedPositionSeconds;
         final totalDuration = _totalDuration;
-        if (startPositionSeconds == 0 &&
-            mounted &&
+        // The literal `mounted &&` here (not just the one passed into
+        // `shouldShowResumeDialog` below) is load-bearing for the analyzer:
+        // `use_build_context_synchronously` only recognizes a `mounted`
+        // check spelled directly in the guarding condition, not one hidden
+        // behind a function call, before `context` is used past the earlier
+        // `await`s in this method.
+        if (mounted &&
+            shouldShowResumeDialog(
+              resumeOverride: resumeOverride,
+              mounted: mounted,
+            ) &&
             savedPosition != null &&
             totalDuration != null &&
             shouldOfferResume(
@@ -1362,6 +1396,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = _player;
     if (player == null) return;
 
+    // A restart already in flight is dropped outright, not queued: the
+    // player this call would act on is on its way out (see
+    // `_isRestartingSession`'s dartdoc), and by the time the in-flight
+    // restart finishes, this target is stale anyway — the next seek the
+    // user makes will land in real coordinates against whatever the new
+    // session actually starts at.
+    if (_isRestartingSession) return;
+
     final clamped = target.isNegative ? Duration.zero : target;
     final local = _timeline.toPlayer(clamped);
 
@@ -1386,32 +1428,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   /// Tears down the current HLS session and starts a new one at [target].
+  ///
+  /// The whole body runs under [trackRestartInFlight], which flips
+  /// [_isRestartingSession] on before anything else and guarantees it is
+  /// cleared afterward — including if any step throws — so [seekToReal]'s
+  /// re-entrancy guard can never wedge shut for the rest of the session.
   Future<void> _restartSessionAt(Duration target) async {
-    if (mounted) {
-      setState(() {
-        _loadingMessage = 'Seeking...';
-        _isLoading = true;
-      });
-    }
+    await trackRestartInFlight(
+      (inFlight) => _isRestartingSession = inFlight,
+      () async {
+        if (mounted) {
+          setState(() {
+            _loadingMessage = 'Seeking...';
+            _isLoading = true;
+          });
+        }
 
-    // Persist where the user actually is before the old session goes away,
-    // so an interrupted restart does not lose their place.
-    await _saveProgress();
+        // Persist where the user actually is before the old session goes
+        // away, so an interrupted restart does not lose their place.
+        await _saveProgress();
 
-    final sessionId = _hlsSessionId;
-    if (sessionId != null) {
-      await _endStreamingSession(sessionId);
-    }
+        final sessionId = _hlsSessionId;
+        if (sessionId != null) {
+          await _endStreamingSession(sessionId);
+        }
 
-    await _positionSubscription?.cancel();
-    _positionSubscription = null;
-    _progressService?.stopSync();
-    await _player?.dispose();
-    _player = null;
-    _videoController = null;
+        await _positionSubscription?.cancel();
+        _positionSubscription = null;
+        _progressService?.stopSync();
+        await _player?.dispose();
+        _player = null;
+        _videoController = null;
 
-    _resumeOverrideSeconds = target.inSeconds;
-    await _initializePlayer();
+        _resumeOverrideSeconds = target.inSeconds;
+        await _initializePlayer();
+      },
+    );
   }
 
   /// Terminates the server-side HLS session. Safe to call more than once.
@@ -2246,6 +2298,32 @@ bool shouldOfferResume({
   return true;
 }
 
+/// Whether `_initializePlayer` may even consider showing the resume dialog,
+/// given a possible seek-driven-restart override.
+///
+/// Deliberately gates on [resumeOverride]'s **presence** (`!= null`), not its
+/// value (`!= 0`): a restart targeting real position 0 — dragging the
+/// scrubber back to the start, holding arrow-left to the beginning, or any
+/// sub-second target, since `Duration.inSeconds` truncates — sets
+/// `_resumeOverrideSeconds` to exactly `0`, which a value-based check
+/// (`resumeOverride != 0`) cannot tell apart from "no override was set at
+/// all". Getting this wrong lets a restart to position 0 fall through to the
+/// dialog, which then prompts about the unrelated, never-refreshed
+/// `_savedPositionSeconds` from mount time and, if accepted, silently
+/// overwrites the user's explicit seek-to-start with that stale saved
+/// position.
+///
+/// Extracted as a free function, following the same pattern as
+/// [shouldOfferResume] and [shouldRestartForSeek], so this exact presence-
+/// vs-value distinction has its own name and test, independent of
+/// `_initializePlayer`'s own network/session machinery.
+@visibleForTesting
+bool shouldShowResumeDialog({
+  required int? resumeOverride,
+  required bool mounted,
+}) =>
+    resumeOverride == null && mounted;
+
 /// Whether [_PlayerScreenState.seekToReal] must restart the HLS session
 /// rather than seek the live player in place.
 ///
@@ -2277,4 +2355,30 @@ bool shouldRestartForSeek({
   if (isDirectPlay) return false;
 
   return localTarget > seekableEnd || realTarget < startOffset;
+}
+
+/// Runs [restart], reporting in-flight state through [setInFlight] for the
+/// restart's entire duration — set `true` before anything else, guaranteed
+/// to be set back to `false` afterward even if [restart] throws.
+///
+/// Extracted from [_PlayerScreenState._restartSessionAt] so this exact
+/// set-before-any-await / always-cleared bookkeeping — the property
+/// [_PlayerScreenState.seekToReal]'s re-entrancy guard depends on — can be
+/// exercised with a controllable fake body (including one that throws),
+/// independent of `_restartSessionAt`'s own player/GraphQL machinery, which
+/// cannot be constructed in this test suite (see [shouldRestartForSeek]'s
+/// dartdoc). A restart that throws without clearing the flag would wedge
+/// [seekToReal] shut for the rest of the session — this is what guards
+/// against that.
+@visibleForTesting
+Future<void> trackRestartInFlight(
+  void Function(bool inFlight) setInFlight,
+  Future<void> Function() restart,
+) async {
+  setInFlight(true);
+  try {
+    await restart();
+  } finally {
+    setInFlight(false);
+  }
 }

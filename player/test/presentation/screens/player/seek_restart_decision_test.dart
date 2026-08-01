@@ -15,6 +15,8 @@
 // pins down the actual restart/no-restart boundary — the part of the logic
 // most likely to regress — directly and deterministically.
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
@@ -139,6 +141,97 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test(
+        'a seek to the very start of the media restarts when the session '
+        'does not cover real position 0', () {
+      // The scenario Finding 1 was about: dragging the scrubber all the way
+      // back to the start of a resumed session. The target itself (real 0)
+      // must still correctly decide to restart — the bug was in how
+      // `_initializePlayer` reacted afterward, covered by
+      // `shouldShowResumeDialog` below, not in this decision.
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          realTarget: Duration.zero,
+          localTarget: Duration.zero,
+          seekableEnd: const Duration(seconds: 300),
+          startOffset: const Duration(seconds: 600),
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  group('shouldShowResumeDialog', () {
+    test(
+        'suppresses the dialog for a seek-driven restart targeting real '
+        'position 0 — the exact collision a value-based check would miss', () {
+      // `resumeOverride: 0` is what `_restartSessionAt` sets when the user
+      // sought back to the very start. A regression that checked
+      // `resumeOverride != 0` instead of `resumeOverride != null` would
+      // return true here, and this test would fail against it.
+      expect(
+        shouldShowResumeDialog(resumeOverride: 0, mounted: true),
+        isFalse,
+      );
+    });
+
+    test('suppresses the dialog for a restart targeting any other position',
+        () {
+      expect(
+        shouldShowResumeDialog(resumeOverride: 45, mounted: true),
+        isFalse,
+      );
+    });
+
+    test('allows the dialog on a fresh mount with no override', () {
+      expect(
+        shouldShowResumeDialog(resumeOverride: null, mounted: true),
+        isTrue,
+      );
+    });
+
+    test('suppresses the dialog when not mounted, even with no override', () {
+      expect(
+        shouldShowResumeDialog(resumeOverride: null, mounted: false),
+        isFalse,
+      );
+    });
+  });
+
+  group('trackRestartInFlight', () {
+    test('sets in-flight before the body runs, clears it once it completes',
+        () async {
+      final states = <bool>[];
+      final completer = Completer<void>();
+
+      final future = trackRestartInFlight(states.add, () => completer.future);
+
+      // The flag must already be true synchronously, before the body has
+      // had any chance to run — `seekToReal`'s guard depends on this being
+      // visible to a re-entrant call arriving before the first `await`.
+      expect(states, [true]);
+
+      completer.complete();
+      await future;
+
+      expect(states, [true, false]);
+    });
+
+    test('clears in-flight even when the body throws', () async {
+      final states = <bool>[];
+
+      await expectLater(
+        trackRestartInFlight(states.add, () async => throw Exception('boom')),
+        throwsException,
+      );
+
+      // A restart that throws without clearing the flag would wedge
+      // `seekToReal` shut for the rest of the session — this is the
+      // property that guards against that.
+      expect(states, [true, false]);
     });
   });
 }
