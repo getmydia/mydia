@@ -92,6 +92,39 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// stays valid to call after disposal.
   late final Invalidator _invalidator;
 
+  /// `localProxyServiceProvider` is a plain (non-autoDispose) provider, so it
+  /// is effectively keep-alive for this container's lifetime — the same
+  /// instance `ref.read` would return at any later point. Safe to capture
+  /// once here, exactly like [_invalidator], and used by
+  /// [_terminateHlsSession] instead of a `dispose()`-time `ref.read`.
+  late final LocalProxyService _localProxyService;
+
+  /// The current P2P connection mode, kept in sync via `ref.listenManual`
+  /// (set up in [initState]) rather than read in `dispose()`:
+  /// `ref.read`/`ref.watch` are unsafe there — `BuildContext.mounted` is
+  /// already `false` throughout `State.dispose()`, a core Flutter
+  /// invariant, not a Riverpod-specific one. [_terminateHlsSession] needs
+  /// the *current* mode at termination time, and the user can switch modes
+  /// mid-session, so a one-time capture (at [initState] or anywhere else)
+  /// would risk going stale; the listener keeps it live for the whole
+  /// widget lifetime instead, matching what a fresh `ref.read` would have
+  /// returned at any given moment.
+  ///
+  /// The `ref.listenManual` subscription itself is set up in [initState] but
+  /// not stored: `ConsumerStatefulElement` already keeps its own reference
+  /// (to close automatically at unmount) whether or not the caller keeps
+  /// one too, and this widget never needs to cancel it early.
+  bool _isP2PMode = false;
+
+  /// The most recently resolved GraphQL client, kept in sync via
+  /// `ref.listenManual` for the same reason as [_isP2PMode]: a long
+  /// playback session can outlive a token refresh or reconnect that
+  /// produces a new client, so this is refreshed continuously rather than
+  /// captured once. Null until the first resolution completes;
+  /// [_terminateHlsSession] treats a still-null client the same as any
+  /// other best-effort failure (already caught and logged there).
+  GraphQLClient? _graphqlClient;
+
   /// Set once the 90% watched threshold is first crossed, so the invalidation
   /// fires once per playback rather than on every position tick.
   bool _watchedInvalidationSent = false;
@@ -155,6 +188,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void initState() {
     super.initState();
     _invalidator = ref.read(invalidatorProvider);
+    _localProxyService = ref.read(localProxyServiceProvider);
+
+    // Set up before `_initializePlayer` so both are live for the whole
+    // widget lifetime, regardless of which playback branch runs (offline,
+    // already-downloaded, or streaming) — `_terminateHlsSession` is called
+    // unconditionally from `dispose()` no matter which branch was taken.
+    ref.listenManual<conn.ConnectionState>(
+      conn.connectionProvider,
+      (previous, next) => _isP2PMode = next.isP2PMode,
+      fireImmediately: true,
+    );
+    ref.listenManual<AsyncValue<GraphQLClient>>(
+      asyncGraphqlClientProvider,
+      (previous, next) => next.whenData((client) => _graphqlClient = client),
+      fireImmediately: true,
+    );
+
     _initializePlayer();
 
     // Force landscape orientation on mobile devices
@@ -448,19 +498,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // The resume decision must be made before the session starts: the
         // offset is an input to FFmpeg, not something that can be seeked to
         // once a live-style playlist is already running.
+        //
+        // Captured into locals rather than using `_savedPositionSeconds!`/
+        // `_totalDuration!` below: Dart's flow analysis cannot promote a
+        // field's nullability across the `shouldOfferResume(...)` call
+        // boundary, only across a direct `!= null` check in the same
+        // condition, so these null checks are what let the rest of this
+        // block use non-nullable locals instead of the bang operator.
         var startPositionSeconds = 0;
+        final savedPosition = _savedPositionSeconds;
+        final totalDuration = _totalDuration;
         if (mounted &&
+            savedPosition != null &&
+            totalDuration != null &&
             shouldOfferResume(
-              savedPositionSeconds: _savedPositionSeconds,
-              realDuration: _totalDuration,
+              savedPositionSeconds: savedPosition,
+              realDuration: totalDuration,
             )) {
           final shouldResume = await showResumeDialog(
             context,
-            _savedPositionSeconds!,
-            _totalDuration!.inSeconds,
+            savedPosition,
+            totalDuration.inSeconds,
           );
           if (shouldResume == true) {
-            startPositionSeconds = _savedPositionSeconds!;
+            startPositionSeconds = savedPosition;
           }
         }
 
@@ -1292,13 +1353,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   /// Terminate the HLS session on the server and clean up P2P resources.
   /// This stops FFmpeg and cleans up server-side resources.
+  ///
+  /// Reads only the fields captured in [initState] ([_isP2PMode],
+  /// [_localProxyService], [_graphqlClient]) — never `ref` directly. This
+  /// runs from `dispose()` (as well as the web beforeunload handler), and
+  /// `ref.read`/`ref.watch` unconditionally throw once `dispose()` has
+  /// started: `BuildContext.mounted` is already `false` throughout it, a
+  /// core Flutter invariant. Before this, every call from `dispose()` threw
+  /// on its very first line, before doing any of the cleanup below.
   Future<void> _terminateHlsSession() async {
     // Stop local proxy if P2P mode
-    final connectionState = ref.read(conn.connectionProvider);
-    if (connectionState.isP2PMode) {
+    if (_isP2PMode) {
       try {
-        final localProxyService = ref.read(localProxyServiceProvider);
-        await localProxyService.stop();
+        await _localProxyService.stop();
         debugPrint('[PlayerScreen] Local proxy stopped');
       } catch (e) {
         debugPrint('[PlayerScreen] Error stopping local proxy: $e');
@@ -1307,10 +1374,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // End HLS session via GraphQL (works for both modes)
     final sessionId = _hlsSessionId;
-    if (sessionId != null) {
+    final graphqlClient = _graphqlClient;
+    if (sessionId != null && graphqlClient != null) {
       debugPrint('[PlayerScreen] Terminating HLS session: $sessionId');
       try {
-        final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
         final result = await graphqlClient.mutate(
           MutationOptions(
             document: documentNodeMutationEndStreamingSession,
@@ -1329,6 +1396,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       } catch (e) {
         debugPrint('[PlayerScreen] Error terminating HLS session: $e');
       }
+    } else if (sessionId != null) {
+      // Extremely narrow window: disposed before `asyncGraphqlClientProvider`
+      // ever resolved once. The old code awaited it fresh every time (from
+      // inside `dispose()`, which is what made it unsafe); this only has
+      // whatever `ref.listenManual` had captured by now.
+      debugPrint(
+          '[PlayerScreen] Cannot terminate HLS session $sessionId: no GraphQL client resolved yet');
     }
   }
 
