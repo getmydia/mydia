@@ -84,6 +84,14 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
   }
 
   @override
+  String buildHlsUrl(String sessionId) =>
+      'http://127.0.0.1:$port/hls/$sessionId/index.m3u8';
+
+  @override
+  String buildDirectStreamUrl(String fileId) =>
+      'http://127.0.0.1:$port/direct/$fileId/stream';
+
+  @override
   Future<void> stop() async {
     stopped = true;
   }
@@ -126,16 +134,32 @@ Map<String, dynamic> movieDetailResponse({
   };
 }
 
-/// A well-formed `StreamingCandidates` response. Empty `candidates` forces
-/// the HLS/TRANSCODE path (`_canDirectPlay` declines an empty list), which is
-/// what every test in this suite wants: none of them are testing direct play.
-Map<String, dynamic> streamingCandidatesResponse({double? duration}) {
+/// A well-formed `StreamingCandidates` response.
+///
+/// Empty `candidates` (the default) forces the HLS/TRANSCODE path, because
+/// `_canDirectPlay` declines an empty list. Pass [directPlay] to put a
+/// `DIRECT_PLAY` candidate first instead, which is what makes
+/// `_initializePlayer` take its native direct-play branch.
+Map<String, dynamic> streamingCandidatesResponse({
+  double? duration,
+  bool directPlay = false,
+}) {
   return {
     '__typename': 'Query',
     'streamingCandidates': {
       '__typename': 'StreamingCandidatesResult',
       'fileId': 'file-1',
-      'candidates': <dynamic>[],
+      'candidates': <dynamic>[
+        if (directPlay)
+          {
+            '__typename': 'StreamingCandidate',
+            'strategy': 'DIRECT_PLAY',
+            'mime': 'video/mp4; codecs="avc1.640028, mp4a.40.2"',
+            'container': 'mp4',
+            'videoCodec': 'avc1.640028',
+            'audioCodec': 'mp4a.40.2',
+          },
+      ],
       'metadata': {
         '__typename': 'StreamingMetadata',
         'duration': duration,

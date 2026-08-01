@@ -143,6 +143,69 @@ void main() {
       );
     });
 
+    test('a small skip past the transcoded end stays local', () {
+      // The cold-stream case: a session that has only transcoded 8s so far,
+      // which is exactly the state playback is in right after every resume
+      // and every restart. A 10-second arrow-key skip lands at local 10s —
+      // past the seekable end, but only just. Restarting for that would tear
+      // down the session, dispose the player, run two GraphQL round trips
+      // and show a spinner, and pressing the key again would do it all over.
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          realTarget: const Duration(seconds: 10),
+          localTarget: const Duration(seconds: 10),
+          seekableEnd: const Duration(seconds: 8),
+          startOffset: Duration.zero,
+        ),
+        isFalse,
+      );
+    });
+
+    test('an overshoot exactly at the tolerance stays local', () {
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          realTarget: const Duration(seconds: 38),
+          localTarget: const Duration(seconds: 38),
+          seekableEnd: const Duration(seconds: 8),
+          startOffset: Duration.zero,
+        ),
+        isFalse,
+        reason: '38s is exactly seekableEnd + kSeekRestartTolerance',
+      );
+    });
+
+    test('an overshoot one second past the tolerance restarts', () {
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          realTarget: const Duration(seconds: 39),
+          localTarget: const Duration(seconds: 39),
+          seekableEnd: const Duration(seconds: 8),
+          startOffset: Duration.zero,
+        ),
+        isTrue,
+        reason: 'past the tolerance a restart is the only way to reach the '
+            'target, and the user asked for a deliberate jump',
+      );
+    });
+
+    test('the tolerance applies on top of a resumed session offset', () {
+      // Resumed at 600s with 20s transcoded. A 10s skip from the start of
+      // that window is local 30s — 10s past the end, inside the tolerance.
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          realTarget: const Duration(seconds: 630),
+          localTarget: const Duration(seconds: 30),
+          seekableEnd: const Duration(seconds: 20),
+          startOffset: const Duration(seconds: 600),
+        ),
+        isFalse,
+      );
+    });
+
     test(
         'a seek to the very start of the media restarts when the session '
         'does not cover real position 0', () {
