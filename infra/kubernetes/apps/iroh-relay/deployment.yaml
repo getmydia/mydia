@@ -16,6 +16,13 @@ spec:
       labels:
         app.kubernetes.io/name: iroh-relay
         app.kubernetes.io/part-of: mydia
+      annotations:
+        # Picked up by the monitoring stack's `kubernetes-pods` scrape job.
+        # relayserver_* counters are process-local and reset on restart, so
+        # without scraping there is no history of relay usage at all.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: iroh-relay

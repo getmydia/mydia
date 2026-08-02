@@ -136,6 +136,13 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:file_id, non_null(:id))
       arg(:strategy, non_null(:streaming_strategy))
       arg(:max_bitrate, :integer, description: "Total kbps cap (video + audio), e.g. 2000")
+
+      arg(:start_position, :integer,
+        description:
+          "Real media position, in seconds, at which to begin transcoding. " <>
+            "Optional; omitted or 0 starts at the beginning."
+      )
+
       resolve(&StreamingResolver.start_streaming_session/3)
     end
 

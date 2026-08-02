@@ -397,7 +397,10 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   @audio_bitrate_kbps 128
 
   # Build FFmpeg command arguments for HLS transcoding
-  defp build_ffmpeg_args(input_path, output_dir, opts) do
+  @doc false
+  # Public only so the argument construction can be unit-tested directly;
+  # nothing outside this module should call it.
+  def build_ffmpeg_args(input_path, output_dir, opts) do
     media_file = Keyword.get(opts, :media_file)
     max_bitrate = Keyword.get(opts, :max_bitrate)
 
@@ -478,11 +481,25 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     playlist_path = Path.join(output_dir, "index.m3u8")
     segment_pattern = Path.join(output_dir, "segment_%03d.ts")
 
-    # Build base args
-    base_args = [
-      "-i",
-      input_path
-    ]
+    # `-ss` before `-i` is input seeking: FFmpeg jumps to the nearest keyframe
+    # without decoding everything before it. Placed after `-i` it would decode
+    # and discard the whole preceding hour, which is unusable for resume.
+    #
+    # The consequence is that playlist timestamps start at ~0 rather than at the
+    # offset, which is why the client has to carry a StreamTimeline to map
+    # stream-local positions back onto real media positions.
+    seek_args =
+      case Keyword.get(opts, :start_position, 0) do
+        pos when is_integer(pos) and pos > 0 -> ["-ss", to_string(pos)]
+        _ -> []
+      end
+
+    base_args =
+      seek_args ++
+        [
+          "-i",
+          input_path
+        ]
 
     # Build video encoding args
     video_args =

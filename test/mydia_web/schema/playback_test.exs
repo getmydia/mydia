@@ -32,6 +32,32 @@ defmodule MydiaWeb.Schema.PlaybackTest do
   }
   """
 
+  @update_movie_progress_mutation """
+  mutation UpdateMovieProgress($movieId: ID!, $positionSeconds: Int!, $durationSeconds: Int) {
+    updateMovieProgress(
+      movieId: $movieId
+      positionSeconds: $positionSeconds
+      durationSeconds: $durationSeconds
+    ) {
+      positionSeconds
+      durationSeconds
+    }
+  }
+  """
+
+  @update_episode_progress_mutation """
+  mutation UpdateEpisodeProgress($episodeId: ID!, $positionSeconds: Int!, $durationSeconds: Int) {
+    updateEpisodeProgress(
+      episodeId: $episodeId
+      positionSeconds: $positionSeconds
+      durationSeconds: $durationSeconds
+    ) {
+      positionSeconds
+      durationSeconds
+    }
+  }
+  """
+
   setup do
     user = AccountsFixtures.user_fixture()
     show = MediaFixtures.media_item_fixture(%{type: "tv_show"})
@@ -158,6 +184,113 @@ defmodule MydiaWeb.Schema.PlaybackTest do
         run_query(@mark_season_watched_mutation, %{"showId" => ctx.show.id, "seasonNumber" => 1})
 
       assert {:ok, %{errors: [%{message: "Authentication required"}]}} = result
+    end
+  end
+
+  describe "updateMovieProgress mutation duration fallback (Task 5)" do
+    setup do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      %{movie: movie}
+    end
+
+    test "reuses the stored duration when a later write omits it", ctx do
+      # First write establishes a stored duration, as a normal player call does.
+      {:ok, %{data: %{"updateMovieProgress" => first}}} =
+        run_query(
+          @update_movie_progress_mutation,
+          %{"movieId" => ctx.movie.id, "positionSeconds" => 100, "durationSeconds" => 3600},
+          ctx.user
+        )
+
+      assert first["durationSeconds"] == 3600
+
+      # An older player (or a cold HLS resume tick before the real duration is
+      # known) omits durationSeconds entirely. This used to fail changeset
+      # validation and silently drop the position write.
+      result =
+        run_query(
+          @update_movie_progress_mutation,
+          %{"movieId" => ctx.movie.id, "positionSeconds" => 200},
+          ctx.user
+        )
+
+      assert {:ok,
+              %{
+                data: %{
+                  "updateMovieProgress" => %{
+                    "positionSeconds" => 200,
+                    "durationSeconds" => 3600
+                  }
+                }
+              }} = result
+
+      progress = Playback.get_progress(ctx.user.id, media_item_id: ctx.movie.id)
+      assert progress.position_seconds == 200
+      assert progress.duration_seconds == 3600
+    end
+
+    test "still rejects the write when no duration exists anywhere", ctx do
+      result =
+        run_query(
+          @update_movie_progress_mutation,
+          %{"movieId" => ctx.movie.id, "positionSeconds" => 50},
+          ctx.user
+        )
+
+      assert {:ok, %{errors: [%{message: message}]}} = result
+      assert message =~ "duration_seconds"
+      assert Playback.get_progress(ctx.user.id, media_item_id: ctx.movie.id) == nil
+    end
+  end
+
+  describe "updateEpisodeProgress mutation duration fallback (Task 5)" do
+    test "reuses the stored duration when a later write omits it", ctx do
+      episode = hd(ctx.episodes)
+
+      {:ok, %{data: %{"updateEpisodeProgress" => first}}} =
+        run_query(
+          @update_episode_progress_mutation,
+          %{"episodeId" => episode.id, "positionSeconds" => 10, "durationSeconds" => 1800},
+          ctx.user
+        )
+
+      assert first["durationSeconds"] == 1800
+
+      result =
+        run_query(
+          @update_episode_progress_mutation,
+          %{"episodeId" => episode.id, "positionSeconds" => 20},
+          ctx.user
+        )
+
+      assert {:ok,
+              %{
+                data: %{
+                  "updateEpisodeProgress" => %{
+                    "positionSeconds" => 20,
+                    "durationSeconds" => 1800
+                  }
+                }
+              }} = result
+
+      progress = Playback.get_progress(ctx.user.id, episode_id: episode.id)
+      assert progress.position_seconds == 20
+      assert progress.duration_seconds == 1800
+    end
+
+    test "still rejects the write when no duration exists anywhere", ctx do
+      episode = hd(ctx.episodes)
+
+      result =
+        run_query(
+          @update_episode_progress_mutation,
+          %{"episodeId" => episode.id, "positionSeconds" => 50},
+          ctx.user
+        )
+
+      assert {:ok, %{errors: [%{message: message}]}} = result
+      assert message =~ "duration_seconds"
+      assert Playback.get_progress(ctx.user.id, episode_id: episode.id) == nil
     end
   end
 

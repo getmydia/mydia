@@ -2323,6 +2323,58 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Batched `torrent_already_imported?/2`: which of `pairs` are already imported.
+
+  `pairs` are `{client_name, client_id}` tuples. Returns the subset found in
+  `media_files` provenance, as a MapSet for membership testing.
+
+  Checking one pair at a time costs a query each, which the external-torrent
+  scan pays on every pass over every foreign torrent in every client. This
+  filters server-side by the exact pairs asked about, so the rows it loads are
+  bounded by the candidates rather than by library size.
+
+  Chunked because the filter is an OR-chain of pair conditions and SQLite caps
+  expression depth; the chunk size keeps the generated SQL well inside it.
+  """
+  @spec imported_torrent_pairs([{String.t(), String.t()}]) :: MapSet.t({String.t(), String.t()})
+  def imported_torrent_pairs([]), do: MapSet.new()
+
+  def imported_torrent_pairs(pairs) do
+    pairs
+    |> Enum.uniq()
+    |> Enum.chunk_every(100)
+    |> Enum.reduce(MapSet.new(), fn chunk, acc ->
+      chunk
+      |> imported_pairs_chunk()
+      |> MapSet.union(acc)
+    end)
+  end
+
+  defp imported_pairs_chunk(chunk) do
+    condition =
+      Enum.reduce(chunk, dynamic(false), fn {client_name, client_id}, acc ->
+        dynamic(
+          ^acc or
+            (^Mydia.DB.json_equals(:metadata, "$.download_client", client_name) and
+               ^Mydia.DB.json_equals(:metadata, "$.download_client_id", client_id))
+        )
+      end)
+
+    wanted = MapSet.new(chunk)
+
+    from(f in MediaFile, where: ^condition, select: f.metadata)
+    |> Repo.all()
+    |> Enum.reduce(MapSet.new(), fn metadata, acc ->
+      # download_client / download_client_id are not declared FileMetadata
+      # fields, so they live in the `extra` catch-all.
+      extra = (metadata && metadata.extra) || %{}
+      pair = {extra["download_client"], extra["download_client_id"]}
+
+      if MapSet.member?(wanted, pair), do: MapSet.put(acc, pair), else: acc
+    end)
+  end
+
+  @doc """
   Lists the media files imported from a given download.
 
   Located by the collision-free `imported_from_download_id` provenance key — the

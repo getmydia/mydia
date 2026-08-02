@@ -9,6 +9,7 @@ import 'core/downloads/download_service.dart';
 import 'package:flutter/services.dart';
 
 import 'core/graphql/watch/fetch_log.dart';
+import 'core/player/window_drag_service.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
 
@@ -93,6 +94,12 @@ Future<void> _startApp() async {
     debugPrint('[MediaKit] Failed to initialize: $e');
     debugPrint('Stack trace: $st');
   }
+
+  // Prepare the OS window for hold-anywhere dragging on native desktop.
+  // Best-effort and self-guarding: `initWindowDrag` never throws and is a
+  // no-op off desktop, so this cannot violate this function's invariant that
+  // `runApp` is called exactly once on every path.
+  await initWindowDrag();
 
   // Everything below persists to Hive boxes under the same per-user data
   // directory. A second instance of the app fails to open every one of them

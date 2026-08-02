@@ -53,6 +53,7 @@ defmodule Mydia.Streaming.HlsSession do
       :media_file_id,
       :user_id,
       :mode,
+      :start_position,
       :max_bitrate,
       :backend,
       :backend_pid,
@@ -71,6 +72,7 @@ defmodule Mydia.Streaming.HlsSession do
             media_file_id: integer(),
             user_id: integer(),
             mode: :copy | :transcode,
+            start_position: non_neg_integer(),
             backend: :ffmpeg,
             backend_pid: pid() | nil,
             temp_dir: String.t(),
@@ -179,113 +181,154 @@ defmodule Mydia.Streaming.HlsSession do
     registry_key = Keyword.fetch!(opts, :registry_key)
     mode = Keyword.get(opts, :mode, :transcode)
     max_bitrate = Keyword.get(opts, :max_bitrate)
+    start_position = Keyword.get(opts, :start_position, 0)
 
     # Load media file with metadata
     try do
       media_file =
         Library.get_media_file!(media_file_id, preload: [:media_item, :episode, :library_path])
 
-      # Register this session in the Registry
-      Registry.register(
-        Mydia.Streaming.HlsSessionRegistry,
-        registry_key,
-        %{
-          media_file_id: media_file_id,
-          user_id: user_id,
-          mode: mode,
-          started_at: DateTime.utc_now()
-        }
-      )
-
-      # Generate session ID and create temp directory
-      session_id = generate_session_id()
-      temp_dir = Path.join(@temp_base_dir, session_id)
-
-      # Register session by session_id for O(1) lookup
-      Registry.register(
-        Mydia.Streaming.HlsSessionRegistry,
-        {:session, session_id},
-        %{
-          media_file_id: media_file_id,
-          user_id: user_id,
-          temp_dir: temp_dir
-        }
-      )
-
-      case File.mkdir_p(temp_dir) do
-        :ok ->
-          Logger.info(
-            "Starting HLS session #{session_id} for media file #{media_file_id}, user #{user_id}"
+      # Register this session in the Registry. This is a `:unique` key, so two
+      # concurrent callers can race here (e.g. HlsSessionSupervisor replacing a
+      # session on an offset mismatch from two overlapping requests for the
+      # same media_file_id/user_id). Only one registration wins; the loser
+      # must stop rather than run an invisible, unregistered FFmpeg process
+      # that get_session/2 could never find. See
+      # HlsSessionSupervisor.start_new_session/5, which adopts the winner's
+      # pid instead of treating this as a failure. Registration happens
+      # before the temp directory is created and before start_backend/5
+      # spawns FFmpeg, so the losing branch below spawns no process and
+      # leaks nothing.
+      case Registry.register(
+             Mydia.Streaming.HlsSessionRegistry,
+             registry_key,
+             %{
+               media_file_id: media_file_id,
+               user_id: user_id,
+               mode: mode,
+               start_position: start_position,
+               started_at: DateTime.utc_now()
+             }
+           ) do
+        {:ok, _owner} ->
+          start_registered_session(
+            media_file_id,
+            user_id,
+            mode,
+            max_bitrate,
+            start_position,
+            media_file
           )
 
-          # Create DB record for the unified queue
-          {:ok, job} =
-            %TranscodeJob{}
-            |> TranscodeJob.changeset(%{
-              media_file_id: media_file_id,
-              user_id: user_id,
-              type: "stream",
-              status: "transcoding",
-              # Informational only
-              resolution:
-                if(media_file.resolution in ["1080p", "720p", "480p"],
-                  do: media_file.resolution,
-                  else: "original"
-                ),
-              progress: 0.0,
-              started_at: DateTime.utc_now()
-            })
-            |> Repo.insert()
-
-          Mydia.Downloads.broadcast_job_update(job.id)
-
-          Logger.info("Temp directory: #{temp_dir}")
-          Logger.info("Starting HLS transcoding with FFmpeg backend")
-
-          # Start FFmpeg backend
-          case start_backend(:ffmpeg, media_file, temp_dir, job.id, max_bitrate: max_bitrate) do
-            {:ok, backend_pid} ->
-              # Link to backend process so we terminate if it crashes
-              Process.link(backend_pid)
-
-              state = %State{
-                session_id: session_id,
-                media_file: media_file,
-                media_file_id: media_file_id,
-                user_id: user_id,
-                mode: mode,
-                max_bitrate: max_bitrate,
-                backend: :ffmpeg,
-                backend_pid: backend_pid,
-                temp_dir: temp_dir,
-                last_activity: DateTime.utc_now(),
-                db_job_id: job.id
-              }
-
-              # Schedule initial timeout check
-              state = schedule_timeout_check(state)
-
-              Phoenix.PubSub.broadcast(Mydia.PubSub, "hls_sessions", :session_started)
-
-              {:ok, state}
-
-            {:error, reason} ->
-              Logger.error(
-                "Failed to start FFmpeg backend for session #{session_id}: #{inspect(reason)}"
-              )
-
-              File.rm_rf!(temp_dir)
-              {:stop, {:backend_start_failed, reason}}
-          end
-
-        {:error, reason} ->
-          Logger.error("Failed to create temp directory #{temp_dir}: #{inspect(reason)}")
-          {:stop, {:temp_dir_creation_failed, reason}}
+        {:error, {:already_registered, pid}} ->
+          {:stop, {:already_registered, pid}}
       end
     rescue
       Ecto.NoResultsError ->
         Logger.error("Media file #{media_file_id} not found")
         {:stop, :media_file_not_found}
+    end
+  end
+
+  # Continues session setup once this process has won the registration race
+  # for its (media_file_id, user_id) key. Creates the temp dir, the DB job
+  # record, and starts the FFmpeg backend.
+  defp start_registered_session(
+         media_file_id,
+         user_id,
+         mode,
+         max_bitrate,
+         start_position,
+         media_file
+       ) do
+    # Generate session ID and create temp directory
+    session_id = generate_session_id()
+    temp_dir = Path.join(@temp_base_dir, session_id)
+
+    # Register session by session_id for O(1) lookup
+    Registry.register(
+      Mydia.Streaming.HlsSessionRegistry,
+      {:session, session_id},
+      %{
+        media_file_id: media_file_id,
+        user_id: user_id,
+        temp_dir: temp_dir
+      }
+    )
+
+    case File.mkdir_p(temp_dir) do
+      :ok ->
+        Logger.info(
+          "Starting HLS session #{session_id} for media file #{media_file_id}, user #{user_id}"
+        )
+
+        # Create DB record for the unified queue
+        {:ok, job} =
+          %TranscodeJob{}
+          |> TranscodeJob.changeset(%{
+            media_file_id: media_file_id,
+            user_id: user_id,
+            type: "stream",
+            status: "transcoding",
+            # Informational only
+            resolution:
+              if(media_file.resolution in ["1080p", "720p", "480p"],
+                do: media_file.resolution,
+                else: "original"
+              ),
+            progress: 0.0,
+            started_at: DateTime.utc_now()
+          })
+          |> Repo.insert()
+
+        Mydia.Downloads.broadcast_job_update(job.id)
+
+        Logger.info("Temp directory: #{temp_dir}")
+        Logger.info("Starting HLS transcoding with FFmpeg backend")
+
+        # Start FFmpeg backend
+        case start_backend(:ffmpeg, media_file, temp_dir, job.id,
+               max_bitrate: max_bitrate,
+               start_position: start_position
+             ) do
+          {:ok, backend_pid} ->
+            # Link to backend process so we terminate if it crashes
+            Process.link(backend_pid)
+
+            state = %State{
+              session_id: session_id,
+              media_file: media_file,
+              media_file_id: media_file_id,
+              user_id: user_id,
+              mode: mode,
+              start_position: start_position,
+              max_bitrate: max_bitrate,
+              backend: :ffmpeg,
+              backend_pid: backend_pid,
+              temp_dir: temp_dir,
+              last_activity: DateTime.utc_now(),
+              db_job_id: job.id
+            }
+
+            # Schedule initial timeout check
+            state = schedule_timeout_check(state)
+
+            Phoenix.PubSub.broadcast(Mydia.PubSub, "hls_sessions", :session_started)
+
+            {:ok, state}
+
+          {:error, reason} ->
+            Logger.error(
+              "Failed to start FFmpeg backend for session #{session_id}: #{inspect(reason)}"
+            )
+
+            File.rm_rf!(temp_dir)
+            {:stop, {:backend_start_failed, reason}}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to create temp directory #{temp_dir}: #{inspect(reason)}")
+        {:stop, {:temp_dir_creation_failed, reason}}
     end
   end
 
@@ -298,6 +341,14 @@ defmodule Mydia.Streaming.HlsSession do
       session_id: state.session_id,
       media_file_id: state.media_file_id,
       mode: state.mode,
+      # The offset this session is actually transcoding from. Reported here
+      # rather than left to the caller's own bookkeeping because a caller can
+      # end up holding a session it did not start — HlsSessionSupervisor
+      # adopts a concurrent winner, and that winner may have been started from
+      # a different offset. Echoing the requested value instead of this one
+      # would hand the client a timeline shifted against the stream it is
+      # actually playing, and every position it persisted would be wrong.
+      start_position: state.start_position,
       backend: state.backend,
       temp_dir: state.temp_dir,
       last_activity: state.last_activity,
@@ -431,7 +482,8 @@ defmodule Mydia.Streaming.HlsSession do
       [
         input_path: absolute_path,
         output_dir: temp_dir,
-        media_file: media_file
+        media_file: media_file,
+        start_position: Keyword.get(opts, :start_position, 0)
       ] ++ if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: [])
 
     transcoder_opts =

@@ -254,7 +254,7 @@ defmodule MydiaWeb.AdminSystemLive.Components do
         <div class="avatar placeholder">
           <div class="bg-neutral text-neutral-content rounded-full w-10">
             <span class="text-sm uppercase">
-              {String.slice(@session.user.username, 0, 2)}
+              {String.slice(user_label(@session.user), 0, 2)}
             </span>
           </div>
         </div>
@@ -291,7 +291,7 @@ defmodule MydiaWeb.AdminSystemLive.Components do
             <%= if @job.user_id && @job.user do %>
               <div class="text-xs opacity-60 flex items-center gap-1">
                 <.icon name="hero-user" class="w-3 h-3" />
-                {@job.user.username}
+                {user_label(@job.user)}
               </div>
             <% end %>
           </div>
@@ -435,7 +435,7 @@ defmodule MydiaWeb.AdminSystemLive.Components do
       assigns
       |> assign(:poster_path, poster_path)
       |> assign(:title, title)
-      |> assign(:username, (user && user.username) || "Unknown")
+      |> assign(:username, user_label(user))
       |> assign(:avatar_url, user && user.avatar_url)
 
     ~H"""
@@ -495,6 +495,13 @@ defmodule MydiaWeb.AdminSystemLive.Components do
   # ============================================================================
   # Helper Functions
   # ============================================================================
+
+  # Users created through OIDC have no username (see `Mydia.Accounts.User.role_changeset/2`),
+  # so fall back to the email before giving up entirely.
+  defp user_label(nil), do: "Unknown"
+  defp user_label(%{username: username}) when is_binary(username) and username != "", do: username
+  defp user_label(%{email: email}) when is_binary(email) and email != "", do: email
+  defp user_label(_), do: "Unknown"
 
   # Helper for image URLs
   defp build_image_url(nil), do: nil

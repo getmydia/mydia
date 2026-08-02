@@ -160,7 +160,7 @@ Widget _panel(double width) {
 ///     image is the fill color alone, at the documented top/bottom alphas,
 ///     over full transparency: confirmed by sampling the very first
 ///     `--update-goldens` attempt with `magick`, which showed the tint's raw
-///     RGB (`(11,14,20)`, `DepthTokens.playerChromeTint`) at exactly
+///     RGB (`(11,11,12)`, `DepthTokens.playerChromeTint`) at exactly
 ///     alpha 142/255 (≈0.56) fading to 98/255 (≈0.38) top-to-bottom, with
 ///     *zero* trace of the tan/navy backdrop underneath it — no live blur,
 ///     no saturation boost visible, because there was nothing behind the

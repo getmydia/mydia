@@ -44,7 +44,9 @@ jobs:
             os: macos-latest
             platform_dir: macos
             artifact_name: mydia-player-macos-app
-            artifact_path: player/build/macos/Build/Products/Release/Mydia Player.app
+            # Must stay the ditto archive, not the .app directory. "Package
+            # macOS app" and "Verify packaged macOS app" below both enforce this.
+            artifact_path: player/build/macos/Build/Products/Release/mydia-player-macos.zip
             shell: bash
           - platform: Linux
             os: ubuntu-latest
@@ -127,6 +129,92 @@ jobs:
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ${{ matrix.platform_dir }} --release
 
+      # Do NOT point artifact_path at the .app directory and let upload-artifact
+      # zip it. Its zip implementation replaces every symlink with a full copy of
+      # the target, which flattens all 25 frameworks in the bundle:
+      # Versions/Current stops being a link to Versions/A, and the top-level
+      # Foo.framework/Foo and Foo.framework/Resources aliases become duplicates.
+      # That invalidates the code signature, so codesign reports "bundle format
+      # is ambiguous (could be app or framework)" and Gatekeeper refuses to
+      # launch the app. ditto preserves symlinks, and --keepParent keeps
+      # "Mydia Player.app" as the archive root so the download does not unpack as
+      # a bare Contents/. Same invocation release.yml:626 uses for notarization.
+      # Uploading a single file also means GitHub's own re-zip of the artifact
+      # has no symlinks left to flatten. See issue #275.
+      - name: Package macOS app
+        if: matrix.platform == 'macOS' && steps.check_platform.outputs.enabled == 'true'
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: ditto -c -k --keepParent "Mydia Player.app" "mydia-player-macos.zip"
+
+      # Verify the archive we are about to upload, not the build output. The
+      # build was never broken; the packaging was, so a guard on the pre-upload
+      # bundle would pass while still shipping a dead artifact. This defect went
+      # unnoticed for every run that ever produced this artifact, which is why
+      # it fails the job rather than warning.
+      - name: Verify packaged macOS app
+        if: matrix.platform == 'macOS' && steps.check_platform.outputs.enabled == 'true'
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: |
+          # The guards below validate the archive. This asserts the archive is
+          # what actually gets uploaded: without it, repointing artifact_path
+          # back at the .app directory would still leave both guards green while
+          # shipping the flattened bundle that issue #275 is about.
+          EXPECTED="${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/mydia-player-macos.zip"
+          if [ "${{ matrix.artifact_path }}" != "$EXPECTED" ]; then
+            echo "::error::artifact_path is '${{ matrix.artifact_path }}' but must be '$EXPECTED'. The uploaded artifact is not the verified archive."
+            exit 1
+          fi
+
+          rm -rf verify && mkdir verify
+          ditto -x -k "mydia-player-macos.zip" verify
+
+          APP="verify/Mydia Player.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::Archive has no 'Mydia Player.app' root; --keepParent was lost."
+            ls -la verify
+            exit 1
+          fi
+
+          LINKS=$(find "$APP" -type l | wc -l | tr -d ' ')
+          if [ "$LINKS" -eq 0 ]; then
+            echo "::error::Packaged bundle has 0 symlinks; framework symlinks were flattened."
+            exit 1
+          fi
+
+          # Authoritative check. A flattened bundle fails here with
+          # "bundle format is ambiguous (could be app or framework)", which is
+          # exactly what issue #275 reported.
+          codesign --verify --verbose=2 "$APP"
+
+          echo "Packaged bundle OK ($LINKS symlinks, signature valid)"
+          rm -rf verify
+
+      # upload-artifact archives a directory path as a plain zip, and its zip
+      # implementation replaces every symlink with a copy of the symlink's
+      # target. That is what broke the macOS artifact (see the packaging step
+      # above). The Linux bundle has no symlinks today: CMake's
+      # install(FILES ...) at player/linux/CMakeLists.txt:111 dereferences them,
+      # and media_kit links the system libmpv rather than bundling a versioned
+      # .so chain. Assert that rather than assume it, so the day a dependency
+      # starts shipping lib/foo.so.1 -> foo.so.1.2 this fails here instead of
+      # producing a silently broken bundle.
+      - name: Assert Linux bundle has no symlinks
+        if: matrix.platform == 'Linux' && steps.check_platform.outputs.enabled == 'true'
+        run: |
+          BUNDLE="${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle"
+          # Assign first, rather than testing `if [ -n "$(find ...)" ]` directly:
+          # set -e is suppressed inside an if condition, so a find failure on a
+          # missing bundle would read as "no symlinks" and pass. A standalone
+          # assignment keeps the step fail-closed. -print -quit stops at the
+          # first hit; the full list is only worth computing when we fail.
+          FIRST_LINK=$(find "$BUNDLE" -type l -print -quit)
+          if [ -n "$FIRST_LINK" ]; then
+            echo "::error::Linux bundle contains symlinks; upload-artifact flattens them into copies. Archive the bundle before uploading."
+            find "$BUNDLE" -type l
+            exit 1
+          fi
+          echo "Linux bundle has no symlinks; direct directory upload is safe."
+
       - name: Upload artifact
         if: steps.check_platform.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
@@ -180,8 +268,10 @@ jobs:
 
       # Drives cargokit, which cross-compiles player/rust_builder against the
       # NDK. This is what puts the Rust/Dart FFI boundary under PR coverage;
-      # before this job it was only exercised by release.yml. Relies on the
-      # runner's preinstalled rustup, same as release.yml's player-android.
+      # before this job it was only exercised by release.yml. Uses the runner's
+      # preinstalled rustup, but the toolchain it runs comes from
+      # rust-toolchain.toml, not from whatever the runner image calls stable;
+      # cargokit installs the pinned toolchain on demand.
       - name: Build APK
         working-directory: player
         run: flutter build apk --release
@@ -192,3 +282,19 @@ jobs:
           name: mydia-player-android-apk
           path: player/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
+
+  icons:
+    name: Check / Web icons
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Guards against the web icon set drifting from its SVG sources: a
+      # source SVG changed without regenerating, a generated file was
+      # hand-edited, or a generated file was deleted. --check needs only
+      # coreutils, hence no Flutter, no nix and no matrix here.
+      - name: Check web icons are current
+        working-directory: player
+        run: tool/gen-web-icons.sh --check

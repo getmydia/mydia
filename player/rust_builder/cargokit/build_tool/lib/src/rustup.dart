@@ -66,7 +66,14 @@ class Rustup {
 
     // To list all non-custom toolchains, we need to filter out lines that
     // don't start with "stable", "beta", or "nightly".
-    Pattern nonCustom = RegExp(r"^(stable|beta|nightly)");
+    //
+    // LOCAL CHANGE (mydia, #252): also accept version-numbered toolchains such
+    // as `1.96.0-x86_64-unknown-linux-gnu`. Upstream matched only the three
+    // channel names, so a pinned toolchain never appeared installed:
+    // installedTargets() returned null forever, prepare() reran
+    // `rustup toolchain install` on every build, and it never observed which
+    // targets were already present.
+    Pattern nonCustom = RegExp(r"^(stable|beta|nightly|\d+\.\d+(\.\d+)?)");
     final lines = res.stdout
         .toString()
         .split('\n')

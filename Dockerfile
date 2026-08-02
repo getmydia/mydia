@@ -94,15 +94,17 @@ RUN apk add --no-cache \
 # Keep the default CARGO_HOME (/root/.cargo) so the existing registry/git cache
 # mounts on the compile steps below still apply.
 #
-# PINNED to 1.96 to match devenv.nix (languages.rust) and CI. The guest
-# is a wasip2 component whose WASI world tracks the Rust version (1.96 -> wasi
-# 0.2.6); the runtime host is wasmex 0.14 / wasmtime 39, which only validates up
-# to wasi 0.2.6. A bleeding-edge `stable` emits wasi 0.2.9 and the bundled plugin
-# would fail to instantiate at runtime. Bump together with the nix toolchain.
+# The version is NOT named here. rust-toolchain.toml is copied in first and
+# `rustup toolchain install` (no argument) reads both the channel and the
+# wasm32-wasip2 target from it, which is also where the wasi-0.2.6 / wasmex
+# constraint is documented. CI fails the build if this file names a Rust
+# version again.
+WORKDIR /app
+COPY rust-toolchain.toml ./
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-    | sh -s -- -y --default-toolchain 1.96.0 --profile minimal --no-modify-path && \
-    rustup target add wasm32-wasip2
+    | sh -s -- -y --default-toolchain none --profile minimal --no-modify-path && \
+    rustup toolchain install
 
 # Increase hex timeout for slow networks/CI
 ENV HEX_HTTP_TIMEOUT=300000
