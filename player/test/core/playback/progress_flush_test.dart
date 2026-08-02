@@ -180,6 +180,101 @@ void main() {
     expect(store.unsynced().map((p) => p.mediaId), ['movie-1']);
     expect(rejecting.movieCalls, 2);
   });
+
+  group('saveDownloadedProgress', () {
+    // The downloaded-while-online path writes locally AND to the server in one
+    // step. Doing those as two independent writes left every such record
+    // permanently `syncedAt: null`, so the first flush after offline detection
+    // is reinstated would replay a queue of stale positions over newer server
+    // progress.
+    test('marks the record synced when the server takes it', () async {
+      final store = InMemoryPlaybackProgressStore();
+      final service = RecordingProgressService();
+
+      await saveDownloadedProgress(
+        store: store,
+        progressService: service,
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        position: const Duration(seconds: 900),
+        duration: const Duration(seconds: 5400),
+        now: DateTime.utc(2026, 8, 2, 12),
+      );
+
+      final saved = store.get('movie-1')!;
+      expect(saved.positionSeconds, 900);
+      expect(saved.syncedAt, DateTime.utc(2026, 8, 2, 12));
+      expect(store.unsynced(), isEmpty);
+      expect(
+          service.movies,
+          [
+            (
+              'movie-1',
+              const Duration(seconds: 900),
+              const Duration(seconds: 5400)
+            )
+          ],
+          reason: 'the server gets the same position that was stored locally');
+    });
+
+    test('leaves the record unsynced when the server declines', () async {
+      final store = InMemoryPlaybackProgressStore();
+      final service = RecordingProgressService()..failNext = true;
+
+      await saveDownloadedProgress(
+        store: store,
+        progressService: service,
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        position: const Duration(seconds: 900),
+        duration: const Duration(seconds: 5400),
+        now: DateTime.utc(2026, 8, 2, 12),
+      );
+
+      expect(store.get('movie-1')!.positionSeconds, 900,
+          reason: 'the local write still happened; only the marking did not');
+      expect(store.get('movie-1')!.syncedAt, isNull);
+      expect(store.unsynced().map((p) => p.mediaId), ['movie-1']);
+    });
+
+    test('leaves the record unsynced when the server throws', () async {
+      final store = InMemoryPlaybackProgressStore();
+
+      await saveDownloadedProgress(
+        store: store,
+        progressService: _ThrowingProgressService(),
+        mediaId: 'ep-1',
+        mediaType: 'episode',
+        position: const Duration(seconds: 900),
+        duration: const Duration(seconds: 5400),
+        now: DateTime.utc(2026, 8, 2, 12),
+      );
+
+      expect(store.get('ep-1')!.syncedAt, isNull);
+      expect(store.unsynced().map((p) => p.mediaId), ['ep-1'],
+          reason:
+              'a throwing server must never cost the user the local record');
+    });
+
+    test('routes an episode to the episode mutation', () async {
+      final store = InMemoryPlaybackProgressStore();
+      final service = RecordingProgressService();
+
+      await saveDownloadedProgress(
+        store: store,
+        progressService: service,
+        mediaId: 'ep-1',
+        mediaType: 'episode',
+        position: const Duration(seconds: 900),
+        duration: const Duration(seconds: 5400),
+        now: DateTime.utc(2026, 8, 2, 12),
+      );
+
+      expect(service.episodes, hasLength(1));
+      expect(service.movies, isEmpty);
+      expect(store.get('ep-1')!.syncedAt, isNotNull);
+    });
+  });
 }
 
 class _FlakyProgressService extends Fake implements ProgressService {

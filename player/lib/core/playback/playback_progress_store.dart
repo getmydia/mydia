@@ -158,6 +158,71 @@ Future<void> recordLocalProgress({
   }
 }
 
+/// Records a downloaded item's position locally *and* pushes it to the
+/// server, marking the local record synced only if the server took it.
+///
+/// This is the online half of the downloaded-media path. [recordLocalProgress]
+/// always writes `syncedAt: null`, meaning "the server does not have this
+/// yet" — true while offline, but wrong the moment the very same save also
+/// reaches the server. Left unmarked, those records pile up as permanently
+/// unsynced, and the first [flushUnsyncedProgress] after offline detection is
+/// reinstated would replay a queue of stale positions over newer server
+/// progress.
+///
+/// The same [position] and [duration] go to both sides, so "synced" means the
+/// two genuinely agree. `sync*Position` is used rather than
+/// `save*Progress` for two reasons: it reports whether the server actually
+/// accepted the write, and it is not subject to the periodic sync's 10 second
+/// throttle, which would otherwise make a save-on-exit report failure simply
+/// because the timer had fired recently.
+///
+/// Marking is never optimistic: a `false` return (nothing sent, or sent and
+/// rejected) and a throw both leave `syncedAt` null for a later flush to
+/// retry.
+Future<void> saveDownloadedProgress({
+  required PlaybackProgressStore store,
+  required ProgressService progressService,
+  required String mediaId,
+  required String mediaType,
+  required Duration position,
+  required Duration duration,
+  required DateTime now,
+}) async {
+  await recordLocalProgress(
+    store: store,
+    mediaId: mediaId,
+    mediaType: mediaType,
+    position: position,
+    duration: duration,
+    now: now,
+  );
+
+  final bool accepted;
+  try {
+    accepted = mediaType == 'episode'
+        ? await progressService.syncEpisodePosition(mediaId, position, duration)
+        : await progressService.syncMoviePosition(mediaId, position, duration);
+  } catch (e) {
+    debugPrint(
+        '[PlaybackProgressStore] Server save for $mediaId failed, leaving it unsynced: $e');
+    return;
+  }
+
+  if (!accepted) {
+    debugPrint(
+        '[PlaybackProgressStore] Server did not accept $mediaId, leaving it unsynced');
+    return;
+  }
+
+  try {
+    await store.markSynced(mediaId, now);
+  } catch (e) {
+    // Same policy as `recordLocalProgress`: a store write must never cost the
+    // user their playback. The record simply stays queued for a later flush.
+    debugPrint('[PlaybackProgressStore] Ignoring failed synced-marking: $e');
+  }
+}
+
 /// Pushes every locally-recorded position the server does not have yet.
 ///
 /// Records are attempted independently: one unreachable item must not strand

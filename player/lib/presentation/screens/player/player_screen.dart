@@ -1470,23 +1470,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // one that can be played with no server in reach. Streaming playback
     // writes straight to the server, which is reachable by definition.
     final store = _progressStore;
+    final progressService = _progressService;
     if (_isDownloadedSource && store != null) {
+      final position = player.state.position;
+      final duration = _totalDuration ?? player.state.duration;
+
+      // With a server in reach, both writes happen together so the local
+      // record can be marked synced only if the server actually took it.
+      // Writing locally and saving to the server as two independent steps is
+      // what left every downloaded-while-online record permanently unsynced,
+      // queued behind a flush that would one day replay them over newer
+      // server progress.
+      if (progressService != null) {
+        await saveDownloadedProgress(
+          store: store,
+          progressService: progressService,
+          mediaId: widget.mediaId,
+          mediaType: widget.mediaType,
+          position: position,
+          duration: duration,
+          now: DateTime.now(),
+        );
+        return;
+      }
+
       await recordLocalProgress(
         store: store,
         mediaId: widget.mediaId,
         mediaType: widget.mediaType,
-        position: player.state.position,
-        duration: _totalDuration ?? player.state.duration,
+        position: position,
+        duration: duration,
         now: DateTime.now(),
       );
     }
 
-    if (_progressService == null) return;
+    if (progressService == null) return;
 
     if (widget.mediaType == 'movie') {
-      await _progressService!.saveMovieProgress(player, widget.mediaId);
+      await progressService.saveMovieProgress(player, widget.mediaId);
     } else if (widget.mediaType == 'episode') {
-      await _progressService!.saveEpisodeProgress(player, widget.mediaId);
+      await progressService.saveEpisodeProgress(player, widget.mediaId);
     }
   }
 
