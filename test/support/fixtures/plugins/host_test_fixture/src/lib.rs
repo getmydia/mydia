@@ -1,7 +1,7 @@
 //! Host-runtime test fixture (U3) — see Cargo.toml for the behavior table.
 //!
 //! One component, many behaviors, selected by the event type. Authored on the
-//! published SDK + `#[mydia::plugin]` macro, so it also smoke-tests that the
+//! published SDK + `#[mydia_plugin_sdk::plugin]` macro, so it also smoke-tests that the
 //! macro expands to a valid component export.
 
 use std::sync::atomic::{AtomicBool, Ordering};

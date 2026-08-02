@@ -8,7 +8,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Ident, ItemFn, Path, Token};
 
-/// Optional macro arguments. `#[mydia::plugin]` takes no args (event-only); a
+/// Optional macro arguments. `#[mydia_plugin_sdk::plugin]` takes no args (event-only); a
 /// scheduled plugin passes `#[mydia::plugin(on_schedule = handle_tick)]` naming
 /// a second handler `fn(ScheduleTick) -> Result<String, String>`.
 struct PluginArgs {

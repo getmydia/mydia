@@ -48,6 +48,16 @@ multi-gigabyte database on every upgrade costs time and disk, and if you already
 snapshot the volume out of band you may not want a second copy. Mydia logs that
 it is skipping the backup and migrates without one.
 
+!!! warning "A volume snapshot is not automatically an equivalent"
+    Mydia's backup reads through the write-ahead log, so it always captures
+    committed transactions that have not yet reached `mydia.db`. A volume
+    snapshot only matches that guarantee if it is atomic across `mydia.db`,
+    `mydia.db-wal`, and `mydia.db-shm` together. A snapshot that copies those
+    files one at a time, or copies only `mydia.db`, can miss recent writes in
+    exactly the way described above. If you are turning the automatic backup off
+    in favour of volume snapshots, check that yours is atomic across the whole
+    set.
+
 ## Before you upgrade
 
 Upgrades are the moment a backup matters, because a migration rewrites your
