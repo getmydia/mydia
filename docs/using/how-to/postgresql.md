@@ -66,41 +66,9 @@ volumes:
 
 Every PostgreSQL variable is listed in [Environment variables](../reference/environment-variables.md#postgresql-configuration).
 
-## Connection Pooling
-
-Adjust pool size based on your workload:
-
-```bash
-POOL_SIZE=20
-```
-
-For high-traffic deployments, consider using PgBouncer.
-
 ## Backup & Restore
 
-### Backup
-
-```bash
-pg_dump -h localhost -U mydia mydia > backup.sql
-```
-
-Or using Docker:
-
-```bash
-docker compose exec postgres pg_dump -U mydia mydia > backup.sql
-```
-
-### Restore
-
-```bash
-psql -h localhost -U mydia mydia < backup.sql
-```
-
-Or using Docker:
-
-```bash
-docker compose exec -T postgres psql -U mydia mydia < backup.sql
-```
+See [Backing Up and Restoring Mydia](backup-restore.md#postgresql) for the PostgreSQL backup and restore procedure.
 
 ## Performance Tuning
 
@@ -117,12 +85,15 @@ maintenance_work_mem = 64MB
 wal_buffers = 8MB
 ```
 
-### Connection Settings
+### Connection Pooling
+
+Adjust `POOL_SIZE` based on your workload:
 
 ```bash
-# Increase pool for high concurrency
-POOL_SIZE=30
+POOL_SIZE=20
 ```
+
+For very high concurrency, consider using PgBouncer in front of PostgreSQL.
 
 ## External PostgreSQL
 
@@ -184,6 +155,8 @@ GRANT ALL PRIVILEGES ON DATABASE mydia TO mydia;
 2. Verify database file permissions
 3. Try [restoring from a backup](backup-restore.md)
 
+<!-- MOVES TO explanation/how-mydia-runs.md IN TASK 11
+
 ## When to Use PostgreSQL
 
 **Use PostgreSQL for:**
@@ -199,3 +172,5 @@ GRANT ALL PRIVILEGES ON DATABASE mydia TO mydia;
 - Simple deployments
 - Single-user scenarios
 - Minimal resource usage
+
+-->

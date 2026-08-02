@@ -8,20 +8,6 @@ The Mydia player is in open beta on TestFlight. Install the [TestFlight app](htt
 
 [Join the iOS Beta](https://testflight.apple.com/join/KFSYxaQP){ .md-button .md-button--primary }
 
-## How It Works
-
-Mydia uses **p2p** for decentralized peer-to-peer connectivity:
-
-1. **Discovery**: Nodes find each other via mDNS (local network) and Kademlia DHT (internet)
-2. **Transport**: Connections are established over TCP or QUIC, secured with Noise encryption
-3. **Media**: Media streams (HLS) are served over the p2p connection via a local proxy in the client
-
-This approach provides:
-- **Decentralized**: No central relay dependency for connectivity
-- **NAT Traversal**: Built-in hole punching and relay capabilities
-- **Performance**: Direct peer-to-peer connections when possible
-- **Reliability**: Multiple transport options and automatic fallback
-
 ## Configuration
 
 ### Enable Remote Access
@@ -36,6 +22,46 @@ Direct URLs are automatically detected from your instance's network configuratio
 - Local IP addresses (e.g., `https://192.168.1.100:4443`)
 - Public hostname (if configured)
 - Custom domain (if configured)
+
+## Troubleshooting
+
+### App won't connect
+
+1. **Check remote access is enabled** on your Mydia instance
+2. **Verify p2p server is running** - check logs for startup messages
+3. **Check claim code** - codes expire after 5 minutes
+
+### Slow performance
+
+1. **Check connection type** - DHT discovery may take longer than mDNS
+2. **Network issues** - try from different network to isolate
+3. **Firewall rules** - ensure UDP ports are open for QUIC
+
+### Connection drops
+
+The p2p stack handles reconnection automatically:
+
+1. **Transient failures** - automatic retry with backoff
+2. **Network change** - reconnection after network switch
+3. **Long disconnects** - may require re-pairing
+
+See [API Reference](../reference/api.md#connection-manager-api) for Connection Manager API details.
+
+<!-- MOVES TO explanation/remote-access.md IN TASK 11
+
+## How It Works
+
+Mydia uses **p2p** for decentralized peer-to-peer connectivity:
+
+1. **Discovery**: Nodes find each other via mDNS (local network) and Kademlia DHT (internet)
+2. **Transport**: Connections are established over TCP or QUIC, secured with Noise encryption
+3. **Media**: Media streams (HLS) are served over the p2p connection via a local proxy in the client
+
+This approach provides:
+- **Decentralized**: No central relay dependency for connectivity
+- **NAT Traversal**: Built-in hole punching and relay capabilities
+- **Performance**: Direct peer-to-peer connections when possible
+- **Reliability**: Multiple transport options and automatic fallback
 
 ## Security
 
@@ -92,26 +118,4 @@ When the app connects:
 3. Completes Noise handshake for authentication
 4. Routes API and media requests over the secure connection
 
-## Troubleshooting
-
-### App won't connect
-
-1. **Check remote access is enabled** on your Mydia instance
-2. **Verify p2p server is running** - check logs for startup messages
-3. **Check claim code** - codes expire after 5 minutes
-
-### Slow performance
-
-1. **Check connection type** - DHT discovery may take longer than mDNS
-2. **Network issues** - try from different network to isolate
-3. **Firewall rules** - ensure UDP ports are open for QUIC
-
-### Connection drops
-
-The p2p stack handles reconnection automatically:
-
-1. **Transient failures** - automatic retry with backoff
-2. **Network change** - reconnection after network switch
-3. **Long disconnects** - may require re-pairing
-
-See [API Reference](../reference/api.md#connection-manager-api) for Connection Manager API details.
+-->

@@ -62,13 +62,21 @@ docker compose start mydia
 
 ```bash
 # Backup
-pg_dump -U mydia mydia > backup.sql
+pg_dump -h localhost -U mydia mydia > backup.sql
 
 # Restore
-psql -U mydia mydia < backup.sql
+psql -h localhost -U mydia mydia < backup.sql
 ```
 
-Running Postgres inside the same Docker Compose stack as Mydia? See [PostgreSQL Support](postgresql.md) for the `docker compose exec` variants of these commands.
+Running PostgreSQL inside the same Docker Compose stack as Mydia? Run the commands through the `postgres` service instead:
+
+```bash
+# Backup
+docker compose exec postgres pg_dump -U mydia mydia > backup.sql
+
+# Restore
+docker compose exec -T postgres psql -U mydia mydia < backup.sql
+```
 
 ## Configuration Backup
 
