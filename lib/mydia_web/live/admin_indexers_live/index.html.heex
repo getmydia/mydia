@@ -1,28 +1,15 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
-        </p>
-      </div>
-    </div>
-
-    <MydiaWeb.AdminComponents.tab_nav active_tab={@active_tab} />
-
-    <div class="bg-base-100">
-      <MydiaWeb.AdminIndexersLive.Components.indexers_tab
-        indexers={@indexers}
-        indexer_health={@indexer_health}
-        library_indexers={@library_indexers}
-        library_indexer_stats={@library_indexer_stats}
-        cardigann_enabled={@cardigann_enabled}
-        recently_disabled_indexer={@recently_disabled_indexer}
-        flaresolverr={@flaresolverr}
-        flaresolverr_status={@flaresolverr_status}
-      />
-    </div>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminIndexersLive.Components.indexers_tab
+      indexers={@indexers}
+      indexer_health={@indexer_health}
+      library_indexers={@library_indexers}
+      library_indexer_stats={@library_indexer_stats}
+      cardigann_enabled={@cardigann_enabled}
+      recently_disabled_indexer={@recently_disabled_indexer}
+      flaresolverr={@flaresolverr}
+      flaresolverr_status={@flaresolverr_status}
+    />
 
     <%!-- FlareSolverr Edit Modal --%>
     <%= if @flaresolverr_modal_open do %>
@@ -70,5 +57,5 @@
         test_result={assigns[:library_config_test_result]}
       />
     <% end %>
-  </div>
+  </.admin_page>
 </Layouts.app>

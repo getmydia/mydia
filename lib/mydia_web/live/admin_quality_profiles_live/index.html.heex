@@ -1,22 +1,9 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
-        </p>
-      </div>
-    </div>
-
-    <MydiaWeb.AdminComponents.tab_nav active_tab={@active_tab} />
-
-    <div class="bg-base-100">
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profiles_tab
-        quality_profiles={@quality_profiles}
-        default_quality_profile_id={@default_quality_profile_id}
-      />
-    </div>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminQualityProfilesLive.Components.quality_profiles_tab
+      quality_profiles={@quality_profiles}
+      default_quality_profile_id={@default_quality_profile_id}
+    />
 
     <%!-- Quality Profile Modal --%>
     <%= if assigns[:show_quality_profile_modal] do %>
@@ -49,5 +36,5 @@
         selected_category={assigns[:browse_presets_category] || :all}
       />
     <% end %>
-  </div>
+  </.admin_page>
 </Layouts.app>
