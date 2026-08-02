@@ -155,22 +155,8 @@ GRANT ALL PRIVILEGES ON DATABASE mydia TO mydia;
 2. Verify database file permissions
 3. Try [restoring from a backup](backup-restore.md)
 
-<!-- MOVES TO explanation/how-mydia-runs.md IN TASK 11
+## Next Steps
 
-## When to Use PostgreSQL
-
-**Use PostgreSQL for:**
-
-- High-concurrency environments
-- Existing PostgreSQL infrastructure
-- Advanced querying needs
-- Horizontal scaling requirements
-
-**Use SQLite for:**
-
-- Personal/home use
-- Simple deployments
-- Single-user scenarios
-- Minimal resource usage
-
--->
+- [How Mydia Runs](../explanation/how-mydia-runs.md#when-postgresql-earns-its-keep) - When PostgreSQL is worth the extra service, and when SQLite is the better default
+- [Database Reference](../reference/database.md) - Locations, versions, and schema
+- [Backing Up and Restoring Mydia](backup-restore.md) - Backup procedures for both databases

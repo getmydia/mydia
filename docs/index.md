@@ -86,27 +86,9 @@ For detailed setup instructions, see the [Getting Started Guide](using/tutorials
 
 ## Comparison with Radarr & Sonarr
 
-| Feature | Mydia | Radarr | Sonarr |
-|---------|-------|--------|--------|
-| **Media Types** | Movies + TV Shows | Movies only | TV Shows only |
-| **Built-in Indexers** | Cardigann (experimental) | Requires Prowlarr/Jackett | Requires Prowlarr/Jackett |
-| **Multi-User & Requests** | Built-in (admin/guest roles) | Requires Ombi/Overseerr | Requires Ombi/Overseerr |
-| **Authentication** | Local + OIDC/SSO built-in | Local only | Local only |
-| **Library Management** | Yes | Yes | Yes |
-| **Download Automation** | Yes | Yes | Yes |
-| **Quality Profiles** | Yes | Advanced | Advanced |
-| **Custom Formats** | Planned | Yes | Yes |
-| **Automatic Upgrades** | Planned | Yes | Yes |
-| **Media Server Integration** | Planned | Plex/Kodi/Jellyfin | Plex/Kodi/Jellyfin |
-| **List Import** | Experimental | Yes | Yes |
-| **Native Playback** | Experimental | No | No |
-| **Remote Access (P2P)** | Experimental | No | No |
-| **Technology** | Elixir/Phoenix LiveView | .NET/React | .NET/React |
-| **Maturity** | Early development | Production-ready | Production-ready |
+Mydia collapses several services into one and is much younger; Radarr and Sonarr are two specialised, deeply refined tools that expect to be surrounded by other tools.
 
-**Choose Mydia for:** Unified movies+TV management, built-in multi-user support, modern real-time UI, native SSO
-
-**Choose Radarr/Sonarr for:** Mature ecosystem, advanced custom formats, comprehensive automation, wider integrations
+[Mydia Compared to Radarr and Sonarr](using/explanation/vs-radarr-sonarr.md) sets out the full argument, including a feature table and an honest account of where the *arr stack is still better.
 
 ## Getting Help
 

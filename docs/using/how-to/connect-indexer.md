@@ -67,17 +67,9 @@ See [Indexers Reference](../reference/indexers.md#configuration-fields) for the 
 
 ## Indexer Priority
 
-Set the **Priority** field when adding or editing an indexer in **Admin > Indexers**; a higher number is searched before a lower one.
+Every enabled indexer is searched concurrently on every query, and the results are aggregated and deduplicated into one pool. The **Priority** field on an indexer orders the indexer list; it does not make an indexer's results rank higher or arrive sooner.
 
-<!-- MOVES TO explanation/media-pipeline.md IN TASK 11
-
-When multiple indexers are configured:
-
-- Higher priority indexers are searched first
-- Results are aggregated from all enabled indexers
-- Duplicate results are deduplicated
-
--->
+To stop an indexer influencing results, disable it. To change which release wins, adjust the [quality profile](quality-profiles.md). See [How a Title Becomes a File](../explanation/media-pipeline.md#indexer-priority-does-not-do-what-its-name-suggests) for the details.
 
 ## Categories
 

@@ -23,19 +23,33 @@ Direct URLs are automatically detected from your instance's network configuratio
 - Public hostname (if configured)
 - Custom domain (if configured)
 
+## Pairing a Device
+
+Pairing uses a **claim code**: a short, single-use code (shown as a QR code or as
+eight characters) that you generate on your instance and enter in the player. It
+stands in for your instance's cryptographic node identity, which is far too long
+to type, and it is valid for **five minutes** and one use only. After pairing,
+the device holds a long-lived device token and the code is no longer involved.
+
+See [How Remote Access Works](../explanation/remote-access.md#claim-codes) for
+why the window is so short.
+
 ## Troubleshooting
 
 ### App won't connect
 
 1. **Check remote access is enabled** on your Mydia instance
 2. **Verify p2p server is running** - check logs for startup messages
-3. **Check claim code** - codes expire after 5 minutes
+3. **Generate a fresh claim code** - codes expire five minutes after you create
+   them and cannot be reused, so a code left on screen while you fetched your
+   phone is likely already expired
 
 ### Slow performance
 
-1. **Check connection type** - DHT discovery may take longer than mDNS
+1. **Check connection type** - a connection that stayed on the relay is slower
+   than one that hole-punched through to a direct path
 2. **Network issues** - try from different network to isolate
-3. **Firewall rules** - ensure UDP ports are open for QUIC
+3. **Firewall rules** - ensure outbound UDP is allowed for QUIC
 
 ### Connection drops
 
@@ -47,75 +61,6 @@ The p2p stack handles reconnection automatically:
 
 See [API Reference](../reference/api.md#connection-manager-api) for Connection Manager API details.
 
-<!-- MOVES TO explanation/remote-access.md IN TASK 11
+## Next Steps
 
-## How It Works
-
-Mydia uses **p2p** for decentralized peer-to-peer connectivity:
-
-1. **Discovery**: Nodes find each other via mDNS (local network) and Kademlia DHT (internet)
-2. **Transport**: Connections are established over TCP or QUIC, secured with Noise encryption
-3. **Media**: Media streams (HLS) are served over the p2p connection via a local proxy in the client
-
-This approach provides:
-- **Decentralized**: No central relay dependency for connectivity
-- **NAT Traversal**: Built-in hole punching and relay capabilities
-- **Performance**: Direct peer-to-peer connections when possible
-- **Reliability**: Multiple transport options and automatic fallback
-
-## Security
-
-### Encryption
-
-All communication is encrypted end-to-end using the Noise protocol:
-
-- **Transport**: All p2p connections use Noise encryption
-- **Authentication**: Peers authenticate via Ed25519 keys
-- **Forward Secrecy**: Fresh ephemeral keys for each connection
-
-### Authentication
-
-- Initial pairing uses claim codes (QR code or 6-digit code)
-- Subsequent connections use device tokens with key exchange
-- Each session establishes fresh encryption keys
-
-### Certificate Verification
-
-For direct HTTPS connections, the app verifies the server's TLS certificate fingerprint against the fingerprint stored during pairing, preventing man-in-the-middle attacks.
-
-## Architecture Details
-
-### P2P Components
-
-The p2p implementation is shared between backend and frontend:
-
-- **Core (Rust)**: `native/mydia_p2p_core` - shared networking logic
-- **Backend (Elixir)**: Wrapped via Rustler NIF (`Mydia.P2p`)
-- **Frontend (Flutter)**: Wrapped via `flutter_rust_bridge`
-
-### Protocols Used
-
-| Protocol | Purpose |
-|----------|---------|
-| mDNS | Local network discovery |
-| Kademlia DHT | Internet-wide peer discovery |
-| TCP/QUIC | Transport layer |
-| Noise | Encryption and authentication |
-
-### Instance Registration
-
-When remote access is enabled, your Mydia instance:
-1. Starts the p2p server
-2. Announces itself via mDNS and DHT
-3. Listens for incoming peer connections
-4. Handles connection requests from paired devices
-
-### Client Connection
-
-When the app connects:
-1. Discovers the instance via mDNS or DHT lookup
-2. Establishes p2p connection (TCP or QUIC)
-3. Completes Noise handshake for authentication
-4. Routes API and media requests over the secure connection
-
--->
+- [How Remote Access Works](../explanation/remote-access.md) - The peer-to-peer design, what infrastructure it depends on, and why claim codes expire so quickly

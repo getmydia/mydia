@@ -127,10 +127,7 @@ When reporting Cardigann issues:
 3. Include relevant log entries
 4. Specify if it works with Prowlarr/Jackett
 
-<!-- MOVES TO explanation/media-pipeline.md IN TASK 11
+## Next Steps
 
-## Architecture
-
-For technical details about the Cardigann implementation, see the [Cardigann Architecture](https://github.com/getmydia/mydia/blob/master/docs/CARDIGANN_ARCHITECTURE.md) documentation.
-
--->
+- [Indexers](connect-indexer.md) - Prowlarr, Jackett, and NZBHydra2 setup
+- [How a Title Becomes a File](../explanation/media-pipeline.md#why-mydia-ships-its-own-indexer-implementation) - Why Mydia has a native Cardigann engine at all, and what it trades away

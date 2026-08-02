@@ -37,28 +37,15 @@ Configuration is loaded in this order (highest to lowest priority):
 3. **YAML File** - From `config/config.yml`
 4. **Schema Defaults** - Built-in defaults
 
-<!-- MOVES TO explanation/configuration-model.md IN TASK 11
+Configuration is validated when the application starts, before the rest of the
+system comes up, so an invalid value is reported at boot rather than at first
+use.
 
-## Configuration Validation
+Most settings take effect as soon as they are saved. Settings that are read once
+during startup, notably the HTTP port and bind address, are stored immediately
+but do not move the running listener until the application restarts. The database
+adapter is fixed at build time and cannot change at runtime at all; see
+[PostgreSQL Support](../how-to/postgresql.md).
 
-Mydia validates configuration at startup:
-
-- Required variables must be set
-- Paths must be accessible
-- Connections are tested when possible
-
-Invalid configuration is logged with helpful error messages.
-
-## Runtime Configuration Changes
-
-Some settings require a restart:
-
-| Setting | Requires Restart |
-|---------|------------------|
-| Library paths | No |
-| Hostname/Port | Yes |
-| Authentication settings | Yes |
-| Feature flags | Yes |
-| Log level | No |
-
--->
+For why the layers exist and what the database layer buys you, see
+[Why Configuration Is Layered](../explanation/configuration-model.md).

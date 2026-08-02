@@ -77,17 +77,6 @@ Mydia uses **relative path storage** for media files:
 - **Path Independence** - Database records are portable
 - **Automatic Migration** - Paths convert automatically on upgrade
 
-<!-- MOVES TO explanation/configuration-model.md IN TASK 11
-
-### Configuration Priority
-
-1. Environment variables (highest)
-2. Admin UI (database settings)
-3. YAML configuration file
-4. Schema defaults (lowest)
-
--->
-
 ## Changing Library Paths
 
 **Via Environment Variables:**
@@ -102,6 +91,12 @@ TV_PATH=/new/path/tv
 1. Navigate to **Admin > Settings**
 2. Update library paths
 3. Mydia validates files are accessible before saving
+
+When a path is set by an environment variable, the environment wins and the
+value is reapplied on every restart. See
+[Configuration Reference](../reference/configuration.md) for the precedence
+order, and [Why Configuration Is Layered](../explanation/configuration-model.md)
+for the reasoning behind it.
 
 ## Next Steps
 

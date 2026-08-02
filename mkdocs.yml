@@ -110,6 +110,13 @@ nav:
           - using/reference/quality-profiles.md
           - using/reference/database.md
           - using/reference/api.md
+      - Explanation:
+          - using/explanation/configuration-model.md
+          - using/explanation/media-pipeline.md
+          - using/explanation/quality-decisions.md
+          - using/explanation/remote-access.md
+          - using/explanation/how-mydia-runs.md
+          - using/explanation/vs-radarr-sonarr.md
   - Building Plugins:
       - plugins/index.md
       - Tutorial:

@@ -82,18 +82,15 @@ PHX_CHECK_ORIGIN=https://mydia.example.com,http://192.168.1.100:4000
 2. Check firewall rules
 3. Test with `curl http://localhost:4000`
 
-<!-- MOVES TO explanation/how-mydia-runs.md IN TASK 11
+## A Note on Load Balancing
 
-## High Availability
+Put a reverse proxy in front of *one* Mydia instance. Running several instances
+behind a load balancer is not supported: background work would be duplicated,
+in-memory rate limiting would be split across processes, and real-time updates
+would not reach pages served by a different instance. See
+[How Mydia Runs](../explanation/how-mydia-runs.md#one-instance-on-purpose).
 
-!!! note
-    High availability configurations are not officially supported but may work with PostgreSQL.
+## Next Steps
 
-For HA deployments:
-
-1. Use PostgreSQL (external database)
-2. Deploy multiple Mydia instances behind a load balancer
-3. Ensure shared storage for `/config` (excluding database)
-4. Configure sticky sessions for LiveView
-
--->
+- [Backing Up and Restoring Mydia](backup-restore.md) - Mydia's actual availability story
+- [How Mydia Runs](../explanation/how-mydia-runs.md) - The single-instance design and how to size it
