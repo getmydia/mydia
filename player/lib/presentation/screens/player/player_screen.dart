@@ -422,6 +422,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // Online mode - initialize network services
       final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
 
+      // Capture it directly rather than relying on the `ref.listenManual` in
+      // `initState` to have fired by now. That listener is the right mechanism
+      // for keeping the field fresh across a reconnect, but it only populates
+      // it once the provider resolves, and this await resolves on the same
+      // transition — the ordering between the two is a Riverpod internal. If
+      // the screen were disposed inside that window we would have started a
+      // session with a client `_terminateHlsSession()` could not see, and the
+      // HLS session would leak until its inactivity timeout.
+      _graphqlClient = graphqlClient;
+
       // Get server URL and token
       final serverUrl = await ref.read(serverUrlProvider.future);
       final token = await ref.read(authTokenProvider.future);
