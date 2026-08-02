@@ -167,6 +167,12 @@ defmodule MydiaWeb.Schema.CommonTypes do
       description: "List of granted permissions"
   end
 
+  @desc "Access token for authenticating GraphQL and API requests"
+  object :access_token do
+    field :token, non_null(:string), description: "JWT access token"
+    field :expires_at, non_null(:datetime), description: "Token expiration timestamp"
+  end
+
   @desc "API key for programmatic access"
   object :api_key do
     field :id, non_null(:id), description: "API key ID"

@@ -2,6 +2,7 @@ defmodule MydiaWeb.Schema.RemoteAccessTest do
   use MydiaWeb.ConnCase
 
   alias Mydia.Accounts
+  alias Mydia.Auth.Guardian
   alias Mydia.RemoteAccess.MediaToken
   alias Mydia.RemoteAccess.RemoteDevice
   alias Mydia.Repo
@@ -87,9 +88,127 @@ defmodule MydiaWeb.Schema.RemoteAccessTest do
     end
   end
 
+  @refresh_access_token_mutation """
+  mutation RefreshAccessToken($deviceToken: String!) {
+    refreshAccessToken(deviceToken: $deviceToken) {
+      token
+      expiresAt
+    }
+  }
+  """
+
+  describe "refreshAccessToken mutation" do
+    setup do
+      user = create_user()
+      device_token = "device-token-#{System.unique_integer([:positive])}"
+      device = create_device(user, %{token: device_token})
+      %{user: user, device: device, device_token: device_token}
+    end
+
+    test "exchanges a valid device token for a usable access token", %{
+      user: user,
+      device_token: device_token
+    } do
+      result = run_query(@refresh_access_token_mutation, %{"deviceToken" => device_token})
+
+      assert {:ok, %{data: %{"refreshAccessToken" => response}}} = result
+      assert is_binary(response["token"])
+      assert response["expiresAt"] != nil
+
+      # The whole point: the minted token must authenticate as the device's user,
+      # which is what the P2P GraphQL context builder does with it.
+      assert {:ok, verified} = Guardian.verify_token(response["token"])
+      assert verified.id == user.id
+    end
+
+    test "returns error for an unknown device token" do
+      result =
+        run_query(@refresh_access_token_mutation, %{"deviceToken" => "no-such-device-token"})
+
+      assert {:ok, %{errors: [%{message: message}]}} = result
+      assert message =~ "Invalid"
+    end
+
+    test "returns error for a revoked device", %{device: device, device_token: device_token} do
+      device
+      |> RemoteDevice.revoke_changeset()
+      |> Repo.update!()
+
+      result = run_query(@refresh_access_token_mutation, %{"deviceToken" => device_token})
+
+      assert {:ok, %{errors: [%{message: message}]}} = result
+      assert message =~ "Invalid"
+    end
+
+    test "rate limits a caller that keeps guessing device tokens" do
+      caller = unique_caller()
+
+      # Each miss costs one Argon2 pass per paired device, so the ceiling is what
+      # stops this unauthenticated mutation being a CPU amplifier.
+      for _ <- 1..10 do
+        assert {:ok, %{errors: [%{message: message}]}} =
+                 run_query(@refresh_access_token_mutation, %{"deviceToken" => "bad"}, caller)
+
+        assert message =~ "Invalid"
+      end
+
+      assert {:ok, %{errors: [%{message: message}]}} =
+               run_query(@refresh_access_token_mutation, %{"deviceToken" => "bad"}, caller)
+
+      assert message =~ "Too many"
+    end
+
+    test "does not rate limit a different caller", %{device_token: device_token} do
+      noisy = unique_caller()
+
+      for _ <- 1..10 do
+        run_query(@refresh_access_token_mutation, %{"deviceToken" => "bad"}, noisy)
+      end
+
+      assert {:ok, %{data: %{"refreshAccessToken" => response}}} =
+               run_query(
+                 @refresh_access_token_mutation,
+                 %{"deviceToken" => device_token},
+                 unique_caller()
+               )
+
+      assert is_binary(response["token"])
+    end
+
+    test "successful refreshes never consume the rate limit budget", %{
+      device_token: device_token
+    } do
+      caller = unique_caller()
+
+      for _ <- 1..12 do
+        assert {:ok, %{data: %{"refreshAccessToken" => _}}} =
+                 run_query(
+                   @refresh_access_token_mutation,
+                   %{"deviceToken" => device_token},
+                   caller
+                 )
+      end
+    end
+
+    test "records that the device was seen", %{device: device, device_token: device_token} do
+      assert is_nil(device.last_seen_at)
+
+      assert {:ok, %{data: %{"refreshAccessToken" => _}}} =
+               run_query(@refresh_access_token_mutation, %{"deviceToken" => device_token})
+
+      assert Repo.reload!(device).last_seen_at != nil
+    end
+  end
+
   # Helper function to run GraphQL queries (no auth needed for token refresh)
-  defp run_query(query, variables) do
-    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: %{})
+  defp run_query(query, variables, context \\ %{}) do
+    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
+  end
+
+  # The rate limiter is backed by a process-wide ETS table rather than the Ecto
+  # sandbox, so each test needs its own bucket to stay isolated.
+  defp unique_caller do
+    %{remote_ip: "203.0.113.#{System.unique_integer([:positive])}"}
   end
 
   # Test Helpers
