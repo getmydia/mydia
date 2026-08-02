@@ -108,7 +108,6 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
     await store.save(record(mediaId: 'movie-1'));
     await store.save(record(mediaId: 'movie-2'));
-    final service = RecordingProgressService();
 
     // Fail only the first call, by returning false rather than throwing —
     // the ordinary "server declined the sync" path.
@@ -121,9 +120,13 @@ void main() {
       now: DateTime.utc(2026, 8, 2, 15),
     );
 
+    expect(calls, 2, reason: 'both records were attempted');
     expect(synced, 1);
-    expect(store.unsynced().length, 1);
-    expect(service.movies, isEmpty);
+    // The point of the test: the record AFTER the failure still went through.
+    // Asserting only on counts would pass just as well if the flush had
+    // aborted on the first failure and never reached movie-2.
+    expect(store.get('movie-2')!.syncedAt, DateTime.utc(2026, 8, 2, 15));
+    expect(store.unsynced().map((p) => p.mediaId), ['movie-1']);
   });
 
   test('a sync that throws also leaves the record unsynced', () async {
