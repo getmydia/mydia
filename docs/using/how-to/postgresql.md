@@ -64,15 +64,7 @@ volumes:
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_TYPE` | Set to `postgres` | `sqlite` |
-| `DATABASE_HOST` | PostgreSQL hostname | `localhost` |
-| `DATABASE_PORT` | PostgreSQL port | `5432` |
-| `DATABASE_NAME` | Database name | `mydia` |
-| `DATABASE_USER` | Database username | `postgres` |
-| `DATABASE_PASSWORD` | Database password | - |
-| `POOL_SIZE` | Connection pool size | `10` |
+Every PostgreSQL variable is listed in [Environment variables](../reference/environment-variables.md#postgresql-configuration).
 
 ## Connection Pooling
 
@@ -151,10 +143,15 @@ Ensure:
 - Database and user exist
 - User has appropriate permissions
 
-## Version Requirements
+## Migration from SQLite to PostgreSQL
 
-- PostgreSQL 12 or later recommended
-- PostgreSQL 16 tested
+!!! warning
+    No automated migration tool is provided. Manual data migration is required.
+
+1. Export data from SQLite
+2. Deploy PostgreSQL instance
+3. Import data to PostgreSQL
+4. Switch to `latest-pg` image
 
 ## Troubleshooting
 

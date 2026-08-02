@@ -98,6 +98,10 @@ nav:
       - Reference:
           - using/reference/environment-variables.md
           - using/reference/configuration.md
+          - using/reference/library-types.md
+          - using/reference/download-clients.md
+          - using/reference/indexers.md
+          - using/reference/quality-profiles.md
           - using/reference/database.md
           - using/reference/api.md
   - Building Plugins:

@@ -113,16 +113,60 @@ Configure multiple clients using numbered variables (`<N>` = 1, 2, 3, etc.):
 
 **Client Types:** `qbittorrent`, `transmission`, `rqbit`, `rtorrent`, `blackhole`, `sabnzbd`, `nzbget`, `debrid`
 
-Example rqbit client:
-
 ```bash
-DOWNLOAD_CLIENT_1_NAME=rqbit
-DOWNLOAD_CLIENT_1_TYPE=rqbit
-DOWNLOAD_CLIENT_1_HOST=rqbit
-DOWNLOAD_CLIENT_1_PORT=3030
-# Optional, when rqbit HTTP basic auth is enabled
+# qBittorrent
+DOWNLOAD_CLIENT_1_NAME=qBittorrent
+DOWNLOAD_CLIENT_1_TYPE=qbittorrent
+DOWNLOAD_CLIENT_1_HOST=qbittorrent
+DOWNLOAD_CLIENT_1_PORT=8080
 DOWNLOAD_CLIENT_1_USERNAME=admin
 DOWNLOAD_CLIENT_1_PASSWORD=adminpass
+# Alternative to username/password on qBittorrent 5.2 and newer. Generate the
+# key in qBittorrent under Preferences, WebUI, API Key. When set, it takes
+# precedence over the username and password. qBittorrent holds exactly one
+# API key at a time, so generating a new one immediately invalidates the
+# previous one and breaks any other integration still using it.
+# DOWNLOAD_CLIENT_1_API_KEY=qbt_yourkeyhere
+
+# Transmission
+DOWNLOAD_CLIENT_2_NAME=Transmission
+DOWNLOAD_CLIENT_2_TYPE=transmission
+DOWNLOAD_CLIENT_2_HOST=transmission
+DOWNLOAD_CLIENT_2_PORT=9091
+DOWNLOAD_CLIENT_2_USERNAME=admin
+DOWNLOAD_CLIENT_2_PASSWORD=adminpass
+
+# rqbit
+DOWNLOAD_CLIENT_3_NAME=rqbit
+DOWNLOAD_CLIENT_3_TYPE=rqbit
+DOWNLOAD_CLIENT_3_HOST=rqbit
+DOWNLOAD_CLIENT_3_PORT=3030
+# Optional, when rqbit HTTP basic auth is enabled
+DOWNLOAD_CLIENT_3_USERNAME=admin
+DOWNLOAD_CLIENT_3_PASSWORD=adminpass
+
+# SABnzbd
+DOWNLOAD_CLIENT_4_NAME=SABnzbd
+DOWNLOAD_CLIENT_4_TYPE=sabnzbd
+DOWNLOAD_CLIENT_4_HOST=sabnzbd
+DOWNLOAD_CLIENT_4_PORT=8080
+DOWNLOAD_CLIENT_4_API_KEY=your-sabnzbd-api-key
+
+# NZBGet
+DOWNLOAD_CLIENT_5_NAME=NZBGet
+DOWNLOAD_CLIENT_5_TYPE=nzbget
+DOWNLOAD_CLIENT_5_HOST=nzbget
+DOWNLOAD_CLIENT_5_PORT=6789
+DOWNLOAD_CLIENT_5_USERNAME=nzbget
+DOWNLOAD_CLIENT_5_PASSWORD=tegbzn6789
+
+# rTorrent (uses the XML-RPC path /RPC2 by default)
+DOWNLOAD_CLIENT_6_NAME=rTorrent
+DOWNLOAD_CLIENT_6_TYPE=rtorrent
+DOWNLOAD_CLIENT_6_HOST=rtorrent
+DOWNLOAD_CLIENT_6_PORT=8080
+DOWNLOAD_CLIENT_6_USERNAME=admin
+DOWNLOAD_CLIENT_6_PASSWORD=adminpass
 ```
 
 ### Debrid Clients
@@ -135,10 +179,10 @@ provider's API endpoint is built in.
 **Providers:** `real_debrid`, `all_debrid`, `premiumize`, `tor_box`
 
 ```bash
-DOWNLOAD_CLIENT_2_NAME=Real-Debrid
-DOWNLOAD_CLIENT_2_TYPE=debrid
-DOWNLOAD_CLIENT_2_API_KEY=your-debrid-api-key
-DOWNLOAD_CLIENT_2_PROVIDER=real_debrid
+DOWNLOAD_CLIENT_7_NAME=Real-Debrid
+DOWNLOAD_CLIENT_7_TYPE=debrid
+DOWNLOAD_CLIENT_7_API_KEY=your-debrid-api-key
+DOWNLOAD_CLIENT_7_PROVIDER=real_debrid
 ```
 
 Swap `PROVIDER` for any of the values above (e.g. `all_debrid`, `premiumize`,
@@ -154,14 +198,11 @@ require `TYPE=blackhole`, a `WATCH_FOLDER`, and a `COMPLETED_FOLDER` instead of
 host/port.
 
 ```bash
-DOWNLOAD_CLIENT_3_NAME=Blackhole
-DOWNLOAD_CLIENT_3_TYPE=blackhole
-DOWNLOAD_CLIENT_3_WATCH_FOLDER=/downloads/watch
-DOWNLOAD_CLIENT_3_COMPLETED_FOLDER=/downloads/complete
+DOWNLOAD_CLIENT_8_NAME=Blackhole
+DOWNLOAD_CLIENT_8_TYPE=blackhole
+DOWNLOAD_CLIENT_8_WATCH_FOLDER=/downloads/watch
+DOWNLOAD_CLIENT_8_COMPLETED_FOLDER=/downloads/complete
 ```
-
-See the [Download Clients user guide](../how-to/connect-download-client.md#via-environment-variables)
-for per-type examples of the remaining client types.
 
 ## Indexers
 
@@ -180,6 +221,26 @@ Configure multiple indexers using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `INDEXER_<N>_RATE_LIMIT` | Rate limit (requests/sec) | - |
 
 **Indexer Types:** `prowlarr`, `jackett`, `nzbhydra2`, `public`
+
+```bash
+# Prowlarr
+INDEXER_1_NAME=Prowlarr
+INDEXER_1_TYPE=prowlarr
+INDEXER_1_BASE_URL=http://prowlarr:9696
+INDEXER_1_API_KEY=your-prowlarr-api-key
+
+# Jackett
+INDEXER_2_NAME=Jackett
+INDEXER_2_TYPE=jackett
+INDEXER_2_BASE_URL=http://jackett:9117
+INDEXER_2_API_KEY=your-jackett-api-key
+
+# NZBHydra2
+INDEXER_3_NAME=NZBHydra2
+INDEXER_3_TYPE=nzbhydra2
+INDEXER_3_BASE_URL=http://nzbhydra2:5076
+INDEXER_3_API_KEY=your-nzbhydra2-api-key
+```
 
 ## PostgreSQL Configuration
 
@@ -234,11 +295,4 @@ FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer s
 | `LOG_LEVEL` | Log level (debug, info, warning, error) | `info` |
 | `SKIP_BACKUPS` | Disable automatic database backups | `false` |
 
-## Configuration Precedence
-
-Configuration is loaded in this order (highest to lowest priority):
-
-1. **Environment Variables** - Override everything
-2. **Database Settings** - Configured via Admin UI
-3. **YAML File** - From `config/config.yml`
-4. **Schema Defaults** - Built-in defaults
+See [Configuration](configuration.md#configuration-precedence) for how these variables interact with database settings and the YAML config file.

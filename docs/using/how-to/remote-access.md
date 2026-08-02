@@ -114,8 +114,4 @@ The p2p stack handles reconnection automatically:
 2. **Network change** - reconnection after network switch
 3. **Long disconnects** - may require re-pairing
 
-## API Reference
-
-### Connection Manager API
-
-See `player/lib/core/connection/README.md` for Flutter implementation details.
+See [API Reference](../reference/api.md#connection-manager-api) for Connection Manager API details.

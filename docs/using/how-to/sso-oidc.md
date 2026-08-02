@@ -29,17 +29,7 @@ OIDC_SCOPES=openid profile email
 
 ### Variable Reference
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `OIDC_ENABLED` | Enable OIDC authentication | Yes |
-| `OIDC_ISSUER` | OIDC issuer URL (e.g., `https://auth.example.com`) | Yes |
-| `OIDC_CLIENT_ID` | Application client ID | Yes |
-| `OIDC_CLIENT_SECRET` | Application client secret | Yes |
-| `OIDC_REDIRECT_URI` | Callback URL (auto-computed if not set) | No |
-| `OIDC_SCOPES` | Space-separated scope list | No |
-
-!!! note "Legacy Variable"
-    `OIDC_DISCOVERY_DOCUMENT_URI` is still accepted as a legacy alias for `OIDC_ISSUER`. The issuer is extracted by stripping the `/.well-known/openid-configuration` suffix.
+Every OIDC variable is listed in [Environment variables](../reference/environment-variables.md#authentication).
 
 ## Provider Setup
 

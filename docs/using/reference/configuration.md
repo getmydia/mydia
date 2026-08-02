@@ -28,37 +28,16 @@ tv_path: /media/tv
 
 Built-in defaults are used when no other configuration is specified.
 
-## Common Configuration Tasks
+## Configuration Precedence
 
-### Changing Library Paths
+Configuration is loaded in this order (highest to lowest priority):
 
-**Via Environment Variables:**
+1. **Environment Variables** - Override everything
+2. **Database Settings** - Configured via Admin UI
+3. **YAML File** - From `config/config.yml`
+4. **Schema Defaults** - Built-in defaults
 
-```bash
-MOVIES_PATH=/new/path/movies
-TV_PATH=/new/path/tv
-```
-
-**Via Admin UI:**
-
-1. Navigate to **Admin > Settings**
-2. Update library paths
-3. Mydia validates files are accessible before saving
-
-### Configuring Hostname
-
-For proper link generation:
-
-```bash
-PHX_HOST=mydia.example.com
-URL_SCHEME=https
-```
-
-### Enabling Debug Logging
-
-```bash
-LOG_LEVEL=debug
-```
+<!-- MOVES TO explanation/configuration-model.md IN TASK 11
 
 ## Configuration Validation
 
@@ -82,6 +61,4 @@ Some settings require a restart:
 | Feature flags | Yes |
 | Log level | No |
 
-## Configuration Backup
-
-Database settings are included in automatic database backups. Environment variables and YAML files should be backed up separately as part of your infrastructure management.
+-->

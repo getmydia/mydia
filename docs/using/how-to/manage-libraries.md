@@ -2,19 +2,7 @@
 
 Libraries are the core of Mydia's media organization system. Each library represents a collection of media files in a specific directory.
 
-## Library Types
-
-| Type | Description | Features |
-|------|-------------|----------|
-| **Movies** | Feature films | Full metadata, downloads, quality profiles |
-| **Series** | TV shows with seasons/episodes | Episode tracking, air dates, season monitoring |
-| **Mixed** | Combined movies and TV shows | Both movie and series features |
-| **Music** | Music collections | File scanning only (experimental) |
-| **Books** | E-books and audiobooks | File scanning only (experimental) |
-| **Adult** | Adult content | File scanning only (experimental) |
-
-!!! warning "Experimental Library Types"
-    Music, Books, and Adult libraries are highly experimental with minimal functionality. They support basic library scanning and browsing only - no metadata fetching, download automation, or quality profiles.
+See [Library Types](../reference/library-types.md) for the full list of supported types and their capabilities.
 
 ## Creating Libraries
 
@@ -95,6 +83,21 @@ Mydia uses **relative path storage** for media files:
 2. Admin UI (database settings)
 3. YAML configuration file
 4. Schema defaults (lowest)
+
+## Changing Library Paths
+
+**Via Environment Variables:**
+
+```bash
+MOVIES_PATH=/new/path/movies
+TV_PATH=/new/path/tv
+```
+
+**Via Admin UI:**
+
+1. Navigate to **Admin > Settings**
+2. Update library paths
+3. Mydia validates files are accessible before saving
 
 ## Next Steps
 

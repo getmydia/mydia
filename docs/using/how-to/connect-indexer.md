@@ -2,14 +2,7 @@
 
 Indexers provide search capabilities for finding media releases. Mydia supports Prowlarr, Jackett, and built-in Cardigann indexers.
 
-## Supported Indexers
-
-| Type | Description | Recommended |
-|------|-------------|-------------|
-| **Prowlarr** | Indexer manager with unified API | Yes |
-| **Jackett** | Indexer proxy | Yes |
-| **NZBHydra2** | NZB meta search aggregator | Yes |
-| **Cardigann** | Built-in indexer support | Experimental |
+See [Indexers](../reference/indexers.md) for the full list of supported indexer types.
 
 ## Prowlarr (Recommended)
 
@@ -28,12 +21,7 @@ Prowlarr is an indexer manager that aggregates multiple indexers into a single A
 
 ### Environment Variables
 
-```bash
-INDEXER_1_NAME=Prowlarr
-INDEXER_1_TYPE=prowlarr
-INDEXER_1_BASE_URL=http://prowlarr:9696
-INDEXER_1_API_KEY=your-prowlarr-api-key
-```
+Every indexer variable is listed in [Environment variables](../reference/environment-variables.md#indexers).
 
 ## Jackett
 
@@ -52,12 +40,7 @@ Jackett is an alternative indexer proxy.
 
 ### Environment Variables
 
-```bash
-INDEXER_2_NAME=Jackett
-INDEXER_2_TYPE=jackett
-INDEXER_2_BASE_URL=http://jackett:9117
-INDEXER_2_API_KEY=your-jackett-api-key
-```
+Every indexer variable is listed in [Environment variables](../reference/environment-variables.md#indexers).
 
 ## NZBHydra2
 
@@ -76,12 +59,7 @@ NZBHydra2 is a meta search aggregator for NZB indexers.
 
 ### Environment Variables
 
-```bash
-INDEXER_3_NAME=NZBHydra2
-INDEXER_3_TYPE=nzbhydra2
-INDEXER_3_BASE_URL=http://nzbhydra2:5076
-INDEXER_3_API_KEY=your-nzbhydra2-api-key
-```
+Every indexer variable is listed in [Environment variables](../reference/environment-variables.md#indexers).
 
 ## Cardigann (Experimental)
 

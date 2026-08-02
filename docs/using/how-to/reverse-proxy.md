@@ -285,3 +285,83 @@ See [docs/nix.md](https://github.com/getmydia/mydia/blob/master/docs/nix.md) in 
 1. Verify port mapping
 2. Check firewall rules
 3. Test with `curl http://localhost:4000`
+
+## Configuring Hostname
+
+For proper link generation:
+
+```bash
+PHX_HOST=mydia.example.com
+URL_SCHEME=https
+```
+
+## Configuration Backup
+
+Database settings are included in automatic database backups. Environment variables and YAML files should be backed up separately as part of your infrastructure management.
+
+## Migrations
+
+Database migrations run automatically on startup.
+
+### Automatic Backups
+
+Before running migrations, Mydia creates a backup:
+
+- **SQLite:** Backup file created alongside database
+- **PostgreSQL:** Recommend external backup solution
+
+### Backup Location
+
+```
+/config/mydia_backup_YYYYMMDD_HHMMSS.db
+```
+
+Only the 10 most recent backups are kept.
+
+### Disabling Backups
+
+```bash
+SKIP_BACKUPS=true
+```
+
+!!! warning
+    Not recommended. Manual backups should be in place.
+
+## Manual Backup & Restore
+
+### SQLite
+
+**Backup:**
+
+```bash
+# Stop container first
+docker compose stop mydia
+
+# Copy database file
+cp /path/to/config/mydia.db /path/to/backup/
+```
+
+**Restore:**
+
+```bash
+# Stop container
+docker compose stop mydia
+
+# Replace database file
+cp /path/to/backup/mydia.db /path/to/config/
+
+# Start container
+docker compose start mydia
+```
+
+### PostgreSQL
+
+Use standard PostgreSQL backup tools:
+
+```bash
+# Backup
+pg_dump -U mydia mydia > backup.sql
+
+# Restore
+psql -U mydia mydia < backup.sql
+```

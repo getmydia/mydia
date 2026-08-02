@@ -52,3 +52,7 @@ Currently, you can integrate with Mydia through:
 ## Contributing
 
 If you're interested in API development, check the [Development](../../contributing/setup.md) documentation and consider contributing to the project.
+
+## Connection Manager API
+
+See `player/lib/core/connection/README.md` for Flutter implementation details.
