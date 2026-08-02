@@ -155,3 +155,10 @@ config :wallaby,
   capabilities: chrome_capabilities,
   # Increase timeout for CI environments which may be slower
   max_wait_time: 10_000
+
+# Migration tests start this repo themselves, one temp database per test, so it
+# is intentionally absent from :ecto_repos and carries no :database here.
+config :mydia, Mydia.MigrationTestRepo,
+  pool_size: 1,
+  foreign_keys: :on,
+  priv: "priv/repo"

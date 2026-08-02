@@ -1,37 +1,24 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
-        </p>
-      </div>
-    </div>
-
-    <MydiaWeb.AdminComponents.tab_nav active_tab={@active_tab} />
-
-    <div class="bg-base-100">
-      <MydiaWeb.AdminRemoteAccessLive.Components.remote_access_panel
-        ra_config={@ra_config}
-        p2p_status={@p2p_status}
-        devices={@devices}
-        claim_code={@claim_code}
-        claim_code_rendezvous_status={@claim_code_rendezvous_status}
-        claim_expires_at={@claim_expires_at}
-        countdown_seconds={@countdown_seconds}
-        pairing_error={@pairing_error}
-        show_revoke_modal={@show_revoke_modal}
-        selected_device={@selected_device}
-        show_delete_modal={@show_delete_modal}
-        device_to_delete={@device_to_delete}
-        show_pairing_modal={@show_pairing_modal}
-        show_add_url_modal={@show_add_url_modal}
-        new_url={@new_url}
-        show_advanced={@show_advanced}
-        show_all_devices={@show_all_devices}
-        show_clear_inactive_modal={@show_clear_inactive_modal}
-      />
-    </div>
-  </div>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminRemoteAccessLive.Components.remote_access_panel
+      ra_config={@ra_config}
+      p2p_status={@p2p_status}
+      devices={@devices}
+      claim_code={@claim_code}
+      claim_code_rendezvous_status={@claim_code_rendezvous_status}
+      claim_expires_at={@claim_expires_at}
+      countdown_seconds={@countdown_seconds}
+      pairing_error={@pairing_error}
+      show_revoke_modal={@show_revoke_modal}
+      selected_device={@selected_device}
+      show_delete_modal={@show_delete_modal}
+      device_to_delete={@device_to_delete}
+      show_pairing_modal={@show_pairing_modal}
+      show_add_url_modal={@show_add_url_modal}
+      new_url={@new_url}
+      show_advanced={@show_advanced}
+      show_all_devices={@show_all_devices}
+      show_clear_inactive_modal={@show_clear_inactive_modal}
+    />
+  </.admin_page>
 </Layouts.app>

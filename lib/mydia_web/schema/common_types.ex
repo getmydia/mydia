@@ -248,6 +248,12 @@ defmodule MydiaWeb.Schema.CommonTypes do
   object :streaming_session_result do
     field :session_id, non_null(:string), description: "The HLS session identifier"
     field :duration, :float, description: "Media duration in seconds (if known)"
+
+    field :start_position, :integer,
+      description:
+        "Real media position, in seconds, at which the stream begins. " <>
+          "Clients must map stream-local positions by this offset. " <>
+          "Absent or 0 means the stream starts at the beginning."
   end
 
   @desc "A download quality option"

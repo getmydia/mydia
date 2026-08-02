@@ -50,7 +50,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
         Settings.create_quality_profile(%{
           name: "HD",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           quality_standards: %{
             preferred_resolutions: ["720p", "1080p"],
             movie_min_size_mb: 1000,
@@ -92,6 +92,36 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       refute has_element?(view, ~s{div[class*="modal-open"]})
     end
 
+    test "renders the upgrade cutoff and margin inputs with stable ids", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_quality_profile"]})
+      |> render_click()
+
+      assert has_element?(view, "#quality-profile-upgrade-score")
+      assert has_element?(view, "#quality-profile-upgrade-margin")
+    end
+
+    test "persists a custom upgrade cutoff score and margin through the form", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_quality_profile"]})
+      |> render_click()
+
+      view
+      |> form("#quality-profile-form",
+        quality_profile: %{
+          "name" => "Custom Upgrade Cutoff",
+          "upgrade_until_score" => "70",
+          "min_upgrade_margin" => "8",
+          "quality_standards" => %{"preferred_resolutions" => ["1080p"]}
+        }
+      )
+      |> render_submit()
+
+      profile = Settings.get_quality_profile_by_name("Custom Upgrade Cutoff")
+      assert profile.upgrade_until_score == 70
+      assert profile.min_upgrade_margin == 8
+    end
+
     test "validates quality profile form", %{view: view} do
       view
       |> element(~s{button[phx-click="new_quality_profile"]})
@@ -103,6 +133,45 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
         |> render_change()
 
       assert html =~ "can&#39;t be blank" or html =~ "can't be blank"
+    end
+
+    test "default selector renders \"None (no default)\" when nothing is configured", %{
+      conn: conn
+    } do
+      {:ok, _} = Settings.set_default_quality_profile(nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+
+      assert has_element?(
+               view,
+               ~s{#default-quality-profile-select option[value=""]},
+               "None (no default)"
+             )
+    end
+
+    test "default selector never interpolates a profile name, even when a default is configured",
+         %{conn: conn} do
+      {:ok, profile} =
+        Settings.create_quality_profile(%{
+          name: "Custom-#{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      {:ok, _} = Settings.set_default_quality_profile(profile.id)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+
+      assert has_element?(
+               view,
+               ~s{#default-quality-profile-select option[value=""]},
+               "None (no default)"
+             )
+
+      refute has_element?(
+               view,
+               ~s{#default-quality-profile-select option[value=""]},
+               profile.name
+             )
     end
   end
 end

@@ -80,26 +80,6 @@ defmodule Mydia.Streaming.Candidates do
   end
 
   @doc """
-  Schedules codec extraction without blocking the caller.
-  """
-  def ensure_codec_info_async(%MediaFile{analyzed_at: nil, analysis_attempts: 0} = media_file) do
-    case Task.Supervisor.start_child(Mydia.TaskSupervisor, fn -> ensure_codec_info(media_file) end) do
-      {:ok, _pid} ->
-        :ok
-
-      {:error, reason} ->
-        Logger.warning("Failed to schedule lazy ffprobe analysis",
-          file_id: media_file.id,
-          reason: inspect(reason)
-        )
-
-        {:error, reason}
-    end
-  end
-
-  def ensure_codec_info_async(%MediaFile{}), do: :ok
-
-  @doc """
   Builds a prioritized list of streaming candidates for a media file.
   """
   def build_streaming_candidates(media_file) do

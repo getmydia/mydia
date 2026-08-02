@@ -31,25 +31,25 @@ abstract final class DepthTokens {
   // ---------------------------------------------------------------------------
 
   /// Deepest layer — the shell background and ambient-backdrop base.
-  static const Color surfaceBase = AppColors.background; // 0xFF0A1120
+  static const Color surfaceBase = AppColors.background; // 0xFF0B0B0C
 
   /// One step above base; M3 `surfaceDim`.
-  static const Color surfaceDim = Color(0xFF0D1724);
+  static const Color surfaceDim = Color(0xFF0E0E10);
 
   /// Low container tone; M3 `surfaceContainerLow`.
-  static const Color surfaceLow = Color(0xFF101B2C);
+  static const Color surfaceLow = Color(0xFF111113);
 
   /// Default container tone; M3 `surfaceContainer`.
-  static const Color surfaceContainer = AppColors.surface; // 0xFF131C2E
+  static const Color surfaceContainer = AppColors.surface; // 0xFF141416
 
   /// High container tone; M3 `surfaceContainerHigh`.
-  static const Color surfaceHigh = Color(0xFF182436);
+  static const Color surfaceHigh = Color(0xFF191A1D);
 
   /// Elevated surface tone; M3 `surfaceContainerHighest`.
-  static const Color surfaceVariant = AppColors.surfaceVariant; // 0xFF1E293B
+  static const Color surfaceVariant = AppColors.surfaceVariant; // 0xFF1E1E21
 
   /// Brightest surface tone; M3 `surfaceBright`.
-  static const Color surfaceBright = Color(0xFF253550);
+  static const Color surfaceBright = Color(0xFF26272B);
 
   /// The surface tones in increasing-luminance order. Lets callers pick a
   /// layer by index and lets tests assert the hierarchy is monotonic.
@@ -257,9 +257,13 @@ abstract final class DepthTokens {
   /// transmitted colour.
   static const double playerChromeSaturation = 1.8;
 
-  /// Neutral near-black tint. Unlike [AppColors.background] (`#0A1120`) this
-  /// carries no blue cast, so backdrop colour survives the fill.
-  static const Color playerChromeTint = Color(0xFF0B0E14);
+  /// Neutral near-black tint for the playback panel's fill.
+  ///
+  /// This was a separate literal (`#0B0E14`) only while [AppColors.background]
+  /// carried a blue cast that would have drained backdrop colour through the
+  /// fill. The ground is neutral now, so there is nothing left to work around
+  /// and the two are the same colour.
+  static const Color playerChromeTint = AppColors.background;
 
   /// Top-edge rim — a white highlight. Glass catches light on its upper edge.
   static const Color playerRimTop = Color(0x24FFFFFF); // white @ ~0.14

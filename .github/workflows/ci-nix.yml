@@ -89,7 +89,7 @@ jobs:
       # a nixpkgs fetch and nothing more. A mismatch between player/.fvmrc and
       # the flake's nixpkgs fails here with the message that names the fix.
       - name: Assert the Android shell resolves the pinned Flutter
-        run: nix eval --raw ./player#packages.x86_64-linux.flutter.version
+        run: nix eval --raw .#packages.x86_64-linux.flutter.version
 
   test-sqlite-module:
     name: Test / NixOS Module (SQLite)

@@ -34,7 +34,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
     media_item = load_media_item(id)
     quality_profiles = Settings.list_quality_profiles()
-    default_quality_profile_id = Settings.get_default_quality_profile_id()
+
+    default_quality_profile_name =
+      case Settings.get_default_quality_profile() do
+        nil -> nil
+        profile -> profile.name
+      end
 
     # Load downloads with real-time status
     downloads_with_status = load_downloads_with_status(media_item)
@@ -74,7 +79,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_delete_confirm, false)
      |> assign(:delete_files, false)
      |> assign(:quality_profiles, quality_profiles)
-     |> assign(:default_quality_profile_id, default_quality_profile_id)
+     |> assign(:default_quality_profile_name, default_quality_profile_name)
      |> assign(:show_file_delete_confirm, false)
      |> assign(:file_to_delete, nil)
      |> assign(:delete_file_from_disk, true)

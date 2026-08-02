@@ -12,6 +12,7 @@ defmodule Mydia.Jobs.MediaImportTest do
   @rename_scene_name "The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv"
   import Mydia.MediaFixtures
   import Mydia.DownloadsFixtures
+  import Mydia.SettingsFixtures
 
   @moduletag :tmp_dir
 
@@ -237,35 +238,12 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     test "self-heals when the download row has been deleted" do
-      # If DownloadMonitor cleans up an unmatched orphan between when the
-      # MediaImport job was enqueued and when it runs, the row is gone.
-      # Returning :ok lets Oban mark the job done so it stops retrying.
+      # If the download row is deleted between when the MediaImport job was
+      # enqueued and when it runs, the row is gone. Returning :ok lets Oban
+      # mark the job done so it stops retrying.
       fake_id = Ecto.UUID.generate()
 
       assert :ok = perform_job(MediaImport, %{"download_id" => fake_id})
-    end
-
-    test "cancels (no retry) when the download is unmatched with no destination" do
-      # Unmatched downloads with no media_item_id AND no library_path_id cannot
-      # ever be imported — there's no destination. The job must return
-      # {:cancel, _} so Oban doesn't burn ~1000 retries waiting forever.
-      download =
-        download_fixture(%{
-          match_status: "unmatched",
-          completed_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          download_client: "TestClient",
-          download_client_id: "orphan-1"
-        })
-
-      # download_fixture creates a media_item by default; null it out so
-      # this row is a true orphan.
-      {:ok, download} =
-        download
-        |> Ecto.Changeset.change(media_item_id: nil, library_path_id: nil)
-        |> Repo.update()
-
-      assert {:cancel, :unmatched_no_destination} =
-               perform_job(MediaImport, %{"download_id" => download.id})
     end
 
     @tag :tmp_dir
@@ -1647,6 +1625,371 @@ defmodule Mydia.Jobs.MediaImportTest do
       Mydia.Downloads.Download.occupying()
       |> Repo.all()
       |> Enum.map(& &1.id)
+    end
+  end
+
+  # Task 9: linking an upgrade import's new file to what it supersedes.
+  #
+  # `MovieSearch`/`TVShowSearch` stamp exactly one
+  # `"upgrade_target_media_file_id"` on the download's metadata even for a
+  # season pack, which delivers files for many episodes. Stamping every
+  # imported file with that single id would be wrong: an already-above-cutoff
+  # episode in the pack would get pointed at some OTHER episode's old file.
+  # Instead each created file must supersede its OWN episode/media item's
+  # current best analyzed, untrashed file — the download's target id is only
+  # a fallback when that per-file lookup finds nothing (e.g. no quality
+  # profile resolves). Task 10 reads this pointer later to decide whether to
+  # trash the old file or reject the new one; this task only records it.
+  describe "supersedes_media_file_id on upgrade imports" do
+    @tag :tmp_dir
+    test "stamps supersedes pointer to the download's target for a single-file movie upgrade",
+         %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      profile =
+        quality_profile_fixture(%{quality_standards: %{preferred_resolutions: ["2160p"]}})
+
+      media_item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Upgrade Movie",
+          year: 2024,
+          quality_profile_id: profile.id
+        })
+
+      existing_file =
+        media_file_fixture(%{
+          media_item_id: media_item.id,
+          resolution: "1080p",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Upgrade.Movie.2024.2160p.mkv"), "new remux content")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "UpgradeMovieClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "UpgradeMovieClient",
+          download_client_id: "upgrade-movie-1",
+          metadata: %{"upgrade_target_media_file_id" => existing_file.id}
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.id != existing_file.id))
+
+      assert new_file, "expected a newly imported media file"
+      assert new_file.supersedes_media_file_id == existing_file.id
+    end
+
+    # Copilot review: the per-file lookup was used for movies too, with no
+    # fallback, so an unresolvable lookup left the pointer nil. A movie has one
+    # target and no sibling episodes, so the cross-episode hazard that
+    # justifies the no-fallback rule cannot apply to it — and a nil pointer
+    # strands the upgrade, because `UpgradeFinalize` only runs for a non-nil
+    # one. The old file would never be trashed, both copies would sit in the
+    # library, and `Health.upgrade_health/0` counts stale pointers so it could
+    # not see the stuck pair either.
+    #
+    # An unanalyzed target is one way to reach the empty lookup:
+    # `Upgrades.current_best_file_id/2` only considers analyzed, untrashed
+    # files.
+    @tag :tmp_dir
+    test "movie upgrade falls back to the download's target when the per-file lookup is empty",
+         %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      profile =
+        quality_profile_fixture(%{quality_standards: %{preferred_resolutions: ["2160p"]}})
+
+      media_item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Unanalyzed Target Movie",
+          year: 2024,
+          quality_profile_id: profile.id
+        })
+
+      existing_file =
+        media_file_fixture(%{
+          media_item_id: media_item.id,
+          resolution: "1080p",
+          analyzed_at: nil
+        })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+
+      File.write!(
+        Path.join(download_dir, "Unanalyzed.Target.Movie.2024.2160p.mkv"),
+        "new remux content"
+      )
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "UnanalyzedTargetClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "UnanalyzedTargetClient",
+          download_client_id: "unanalyzed-target-1",
+          metadata: %{"upgrade_target_media_file_id" => existing_file.id}
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.id != existing_file.id))
+
+      assert new_file, "expected a newly imported media file"
+
+      assert new_file.supersedes_media_file_id == existing_file.id,
+             "a movie upgrade must fall back to the download's target so the upgrade can finalize"
+    end
+
+    @tag :tmp_dir
+    test "season pack stamps each episode's own prior file, not the download's single target",
+         %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :series)
+
+      profile =
+        quality_profile_fixture(%{quality_standards: %{preferred_resolutions: ["2160p"]}})
+
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Pack Show",
+          quality_profile_id: profile.id
+        })
+
+      below_cutoff_episode =
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      above_cutoff_episode =
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+
+      below_cutoff_file =
+        media_file_fixture(%{
+          episode_id: below_cutoff_episode.id,
+          resolution: "480p",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      above_cutoff_file =
+        media_file_fixture(%{
+          episode_id: above_cutoff_episode.id,
+          resolution: "2160p",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Pack.Show.S01E01.mkv"), "e1 content")
+      File.write!(Path.join(download_dir, "Pack.Show.S01E02.mkv"), "e2 content")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "UpgradePackClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "UpgradePackClient",
+          download_client_id: "upgrade-pack-1",
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            "episode_count" => 2,
+            # UpgradeSweep only ever tracks ONE target: the season's single
+            # below-cutoff episode's file. Every imported file in this pack
+            # must NOT blindly inherit this id.
+            "upgrade_target_media_file_id" => below_cutoff_file.id
+          }
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      files_by_episode =
+        Library.list_media_files()
+        |> Enum.reject(&(&1.id in [below_cutoff_file.id, above_cutoff_file.id]))
+        |> Enum.filter(&(&1.episode_id in [below_cutoff_episode.id, above_cutoff_episode.id]))
+        |> Map.new(&{&1.episode_id, &1})
+
+      new_below = Map.fetch!(files_by_episode, below_cutoff_episode.id)
+      new_above = Map.fetch!(files_by_episode, above_cutoff_episode.id)
+
+      assert new_below.supersedes_media_file_id == below_cutoff_file.id
+
+      assert new_above.supersedes_media_file_id == above_cutoff_file.id,
+             "an already-above-cutoff episode must point at its OWN prior file, not the " <>
+               "download's single upgrade target, so Task 10's gate can reject the pack's " <>
+               "version for it and keep the existing file"
+
+      refute new_above.supersedes_media_file_id == below_cutoff_file.id
+    end
+
+    @tag :tmp_dir
+    test "a pack episode with no existing file gets a nil supersedes pointer",
+         %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :series)
+
+      profile =
+        quality_profile_fixture(%{quality_standards: %{preferred_resolutions: ["2160p"]}})
+
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "New Episode Pack Show",
+          quality_profile_id: profile.id
+        })
+
+      existing_episode =
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      new_episode =
+        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+
+      existing_file =
+        media_file_fixture(%{
+          episode_id: existing_episode.id,
+          resolution: "480p",
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "New.Episode.Pack.Show.S01E01.mkv"), "e1 content")
+      File.write!(Path.join(download_dir, "New.Episode.Pack.Show.S01E02.mkv"), "e2 content")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "NoExistingFileClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "NoExistingFileClient",
+          download_client_id: "no-existing-file-1",
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            "episode_count" => 2,
+            "upgrade_target_media_file_id" => existing_file.id
+          }
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file_for_new_episode =
+        Library.list_media_files() |> Enum.find(&(&1.episode_id == new_episode.id))
+
+      assert new_file_for_new_episode, "expected S01E02 to import despite having no prior file"
+      assert is_nil(new_file_for_new_episode.supersedes_media_file_id)
+    end
+
+    @tag :tmp_dir
+    test "a non-upgrade import leaves supersedes_media_file_id nil", %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Regular.Movie.2024.1080p.mkv"), "content")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Regular Movie", year: 2024})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "RegularClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "RegularClient",
+          download_client_id: "regular-1"
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.media_item_id == media_item.id))
+
+      assert new_file, "expected the regular movie file to import"
+      assert is_nil(new_file.supersedes_media_file_id)
     end
   end
 end

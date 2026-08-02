@@ -9,7 +9,7 @@
 #
 # Unchanged, intentionally NOT devenv-backed:
 #   - relay <build|push|restart|deploy>   (Docker + kubectl)
-#   - player android <build|run|shell>    (player/flake.nix, native Nix)
+#   - player android <build|run|shell>    (nix devShell .#android, native Nix)
 #   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
 #   - player e2e / e2e-build              (Docker E2E stack, compose.player-e2e.yml)
 
@@ -115,16 +115,19 @@ ${YELLOW}Player (Flutter):${NC}
   flutter <args>       Run any flutter command (in player/)
   player setup         Install deps and run code generation
   player build         Build + deploy web assets to priv/static/player
+  player icons [--check]
+                       Regenerate web icons from assets/*.svg (--check verifies
+                       the committed set is still current)
   player shell         Open a shell in the player directory
   player logs          Show recent build_runner (codegen) process logs
   player restart       Restart the flutter-codegen process
   player e2e [opts]    Run player E2E integration tests (Docker)
   player e2e-build     Pre-build E2E images (Docker)
 
-${YELLOW}Player Android (native, uses player/flake.nix):${NC}
+${YELLOW}Player Android (native, uses the .#android nix devShell):${NC}
   player android build Build Android APK (release)
   player android run   Build and run on connected Android device
-  player android shell Open nix develop shell in player directory
+  player android shell Open the .#android nix develop shell
 
 ${YELLOW}Player macOS (native, uses the host Xcode/CocoaPods/rustup toolchain):${NC}
   player macos build   Build the macOS app (release)
@@ -372,6 +375,15 @@ case "$COMMAND" in
                 in_shell_sh "[ -f player/web/manifest.json ] && cp player/web/manifest.json priv/static/player/ || true"
                 echo -e "${GREEN}Build deployed successfully!${NC}"
                 ;;
+            icons)
+                shift
+                if [ $# -gt 0 ]; then
+                    # Every argument path needs only coreutils, so skip the
+                    # ~2min devenv startup and let the script validate.
+                    exec player/tool/gen-web-icons.sh "$@"
+                fi
+                in_shell_sh "player/tool/gen-web-icons.sh"
+                ;;
             setup)
                 echo -e "${GREEN}Setting up player project (pub get + build_runner)...${NC}"
                 in_shell_sh "cd player && flutter pub get && flutter pub run build_runner build"
@@ -432,12 +444,12 @@ case "$COMMAND" in
                 fi
                 case "$2" in
                     build)
-                        echo -e "${GREEN}Building Android APK using player/flake.nix...${NC}"
+                        echo -e "${GREEN}Building Android APK using the .#android nix devShell...${NC}"
                         # build_runner is required, not optional: every generated
                         # Dart file is gitignored, so a fresh checkout has none and
                         # the build fails with hundreds of unrelated-looking Dart
                         # errors. Idempotent, so running it every time is safe.
-                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter pub run build_runner build && flutter build apk --release"
+                        nix develop .#android --command bash -c "cd player && flutter pub get && flutter pub run build_runner build && flutter build apk --release"
                         if [ $? -eq 0 ]; then
                             echo -e "${GREEN}APK built successfully!${NC}"
                             echo "Output: player/build/app/outputs/flutter-apk/app-release.apk"
@@ -446,11 +458,11 @@ case "$COMMAND" in
                     run)
                         echo -e "${GREEN}Building and running on Android device...${NC}"
                         extra_args="${@:3}"
-                        nix develop ./player --command bash -c "cd player && flutter pub get && flutter pub run build_runner build && flutter run $extra_args"
+                        nix develop .#android --command bash -c "cd player && flutter pub get && flutter pub run build_runner build && flutter run $extra_args"
                         ;;
                     shell)
-                        echo -e "${GREEN}Opening nix develop shell in player directory...${NC}"
-                        cd player && nix develop
+                        echo -e "${GREEN}Opening the .#android nix develop shell...${NC}"
+                        nix develop .#android
                         ;;
                     *)
                         echo -e "${RED}Error: Unknown android command: $2${NC}"
@@ -461,7 +473,7 @@ case "$COMMAND" in
                 ;;
             macos)
                 # macOS app builds use the HOST toolchain — not devenv, and not
-                # player/flake.nix either. Xcode and CocoaPods are Apple-licensed
+                # the .#android devShell either. Xcode and CocoaPods are Apple-licensed
                 # SDKs Nix cannot provide, and cargokit shells out to `rustup` to
                 # compile the Rust p2p core into the app bundle. Same escape hatch
                 # as `player android`, different reason.

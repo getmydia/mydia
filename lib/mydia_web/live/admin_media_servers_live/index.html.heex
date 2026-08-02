@@ -1,22 +1,9 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
-        </p>
-      </div>
-    </div>
-
-    <MydiaWeb.AdminComponents.tab_nav active_tab={@active_tab} />
-
-    <div class="bg-base-100">
-      <MydiaWeb.AdminMediaServersLive.Components.media_servers_tab
-        media_servers={@media_servers}
-        media_server_health={@media_server_health}
-      />
-    </div>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminMediaServersLive.Components.media_servers_tab
+      media_servers={@media_servers}
+      media_server_health={@media_server_health}
+    />
 
     <%!-- Media Server Modal --%>
     <%= if assigns[:show_media_server_modal] do %>
@@ -31,5 +18,5 @@
         plex_connection_statuses={assigns[:plex_connection_statuses] || %{}}
       />
     <% end %>
-  </div>
+  </.admin_page>
 </Layouts.app>

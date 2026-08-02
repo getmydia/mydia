@@ -18,8 +18,8 @@ defmodule Mydia.Library.ReleaseParser do
   5. `Title` + `Type` inference (from the resolver result)
   6. Build `%ParsedFileInfo{}` with confidence
 
-  See `docs/plans/2026-05-13-001-feat-release-name-parser-v3-plan.md`
-  Unit 6 for the design discussion.
+  Known corpus gaps and the clusters V3 deliberately does not handle are
+  catalogued in `test/mydia/library/release_parser/CORPUS_FAILURES.md`.
   """
 
   require Logger

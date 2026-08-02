@@ -91,7 +91,7 @@ defmodule MydiaWeb do
       import MydiaWeb.LibraryComponents
       # Collection components for collection views
       import MydiaWeb.CollectionComponents
-      # Admin configuration components (tab_nav, admin_page)
+      # Admin configuration page chrome (admin_page)
       import MydiaWeb.AdminComponents
 
       # Common modules used in templates

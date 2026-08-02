@@ -24,6 +24,7 @@ defmodule Mydia.Media.MediaItem do
           category: String.t() | nil,
           category_override: boolean(),
           seasons_refreshed_at: DateTime.t() | nil,
+          last_upgrade_check_at: DateTime.t() | nil,
           quality_profile: Mydia.Settings.QualityProfile.t() | Ecto.Association.NotLoaded.t(),
           episodes: [Mydia.Media.Episode.t()] | Ecto.Association.NotLoaded.t(),
           media_files: [Mydia.Library.MediaFile.t()] | Ecto.Association.NotLoaded.t(),
@@ -58,6 +59,8 @@ defmodule Mydia.Media.MediaItem do
     field :category, :string
     field :category_override, :boolean, default: false
     field :seasons_refreshed_at, :utc_datetime
+    # Set programmatically by the upgrade sweep; never cast from user input.
+    field :last_upgrade_check_at, :utc_datetime
 
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
     has_many :episodes, Mydia.Media.Episode

@@ -165,6 +165,7 @@ defmodule Mydia.Config.Loader do
       media: load_media_env(),
       metadata: load_metadata_env(),
       downloads: load_downloads_env(),
+      upgrades: load_upgrades_env(),
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
@@ -251,6 +252,16 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(
       :monitor_interval_minutes,
       System.get_env("DOWNLOAD_MONITOR_INTERVAL_MINUTES"),
+      &parse_integer/1
+    )
+  end
+
+  defp load_upgrades_env do
+    %{}
+    |> put_if_present(:sweep_enabled, System.get_env("UPGRADE_SWEEP_ENABLED"), &parse_boolean/1)
+    |> put_if_present(
+      :sweep_batch_size,
+      System.get_env("UPGRADE_SWEEP_BATCH_SIZE"),
       &parse_integer/1
     )
   end
@@ -479,11 +490,6 @@ defmodule Mydia.Config.Loader do
       |> put_if_present(
         :scan_interval,
         System.get_env("#{prefix}SCAN_INTERVAL"),
-        &parse_integer/1
-      )
-      |> put_if_present(
-        :quality_profile_id,
-        System.get_env("#{prefix}QUALITY_PROFILE_ID"),
         &parse_integer/1
       )
       |> put_if_present(

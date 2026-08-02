@@ -578,6 +578,43 @@ defmodule Mydia.PlaybackTest do
     end
   end
 
+  describe "completion percentage clamping" do
+    setup do
+      {:ok, user} = create_user()
+      {:ok, media_item} = create_media_item()
+      %{user: user, media_item: media_item}
+    end
+
+    test "caps percentage at 100 when position exceeds duration", %{
+      user: user,
+      media_item: media_item
+    } do
+      # A cold HLS play can post a position beyond the partial duration the
+      # player knew at the time. Without a cap this stores e.g. 340% and the
+      # UI renders a nonsense progress bar.
+      {:ok, progress} =
+        Playback.save_progress(user.id, [media_item_id: media_item.id], %{
+          position_seconds: 3400,
+          duration_seconds: 1000
+        })
+
+      assert progress.completion_percentage == 100.0
+    end
+
+    test "leaves a normal percentage untouched", %{
+      user: user,
+      media_item: media_item
+    } do
+      {:ok, progress} =
+        Playback.save_progress(user.id, [media_item_id: media_item.id], %{
+          position_seconds: 250,
+          duration_seconds: 1000
+        })
+
+      assert progress.completion_percentage == 25.0
+    end
+  end
+
   defp create_user do
     Accounts.create_user(%{
       email: "user#{System.unique_integer([:positive])}@example.com",

@@ -136,11 +136,11 @@ defmodule Mydia.SettingsTest do
       # Any and SD allow upgrades
       any_profile = Settings.get_quality_profile_by_name("Any")
       assert any_profile.upgrades_allowed == true
-      assert any_profile.upgrade_until_quality == "2160p"
+      assert any_profile.upgrade_until_score == 95
 
       sd_profile = Settings.get_quality_profile_by_name("SD")
       assert sd_profile.upgrades_allowed == true
-      assert sd_profile.upgrade_until_quality == "576p"
+      assert sd_profile.upgrade_until_score == 45
 
       # Others don't allow upgrades
       hd_profile = Settings.get_quality_profile_by_name("HD-1080p")
@@ -148,6 +148,53 @@ defmodule Mydia.SettingsTest do
 
       uhd_profile = Settings.get_quality_profile_by_name("4K/UHD")
       assert uhd_profile.upgrades_allowed == false
+    end
+  end
+
+  describe "ensure_default_quality_profiles/0 default seeding" do
+    test "seeds the default to \"Any\" on a fresh install" do
+      Repo.delete_all(QualityProfile)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      any = Repo.get_by!(QualityProfile, name: "Any")
+      assert Settings.get_default_quality_profile_id() == any.id
+    end
+
+    test "does not overwrite a default the operator already chose" do
+      Repo.delete_all(QualityProfile)
+      chosen = quality_profile_fixture(%{name: "Chosen"})
+      {:ok, _} = Settings.set_default_quality_profile(chosen.id)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      assert Settings.get_default_quality_profile_id() == chosen.id
+    end
+
+    test "does not re-seed after the operator explicitly cleared the default" do
+      Repo.delete_all(QualityProfile)
+      chosen = quality_profile_fixture(%{name: "Chosen"})
+      {:ok, _} = Settings.set_default_quality_profile(chosen.id)
+      {:ok, _} = Settings.set_default_quality_profile(nil)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      assert Settings.get_default_quality_profile_id() == nil
+    end
+
+    test "respects a clear made while no config row existed yet" do
+      # Reachable when "Any" was deleted, so boot seeding wrote no row at all,
+      # and the operator then picked "None". Clearing has to leave a row behind
+      # or the next boot reads the absence as "never configured" and seeds over
+      # the operator's explicit choice.
+      Repo.delete_all(QualityProfile)
+      assert Settings.get_default_quality_profile_id() == nil
+
+      {:ok, _} = Settings.set_default_quality_profile(nil)
+
+      assert {:ok, 8} = Settings.ensure_default_quality_profiles()
+
+      assert Settings.get_default_quality_profile_id() == nil
     end
   end
 
@@ -901,7 +948,7 @@ defmodule Mydia.SettingsTest do
         Settings.create_quality_profile(%{
           name: "Test Enhanced Profile",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description: "Test profile with enhanced fields",
           is_system: false,
           version: 1,
@@ -1498,7 +1545,7 @@ defmodule Mydia.SettingsTest do
           name: "Export Test Profile",
           description: "Profile for testing export functionality",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           quality_standards: %{
             preferred_resolutions: ["1080p", "720p"],
             preferred_video_codecs: ["h265", "h264"],
@@ -1520,7 +1567,7 @@ defmodule Mydia.SettingsTest do
       assert parsed["name"] == "Export Test Profile"
       assert parsed["description"] == "Profile for testing export functionality"
       assert parsed["upgrades_allowed"] == true
-      assert parsed["upgrade_until_quality"] == "1080p"
+      assert parsed["upgrade_until_score"] == 85
       assert is_map(parsed["quality_standards"])
       assert is_binary(parsed["exported_at"])
     end
@@ -1544,7 +1591,7 @@ defmodule Mydia.SettingsTest do
       assert Map.has_key?(parsed, "name")
       assert Map.has_key?(parsed, "description")
       assert Map.has_key?(parsed, "upgrades_allowed")
-      assert Map.has_key?(parsed, "upgrade_until_quality")
+      assert Map.has_key?(parsed, "upgrade_until_score")
       assert Map.has_key?(parsed, "quality_standards")
       assert Map.has_key?(parsed, "version")
       assert Map.has_key?(parsed, "exported_at")
@@ -1848,7 +1895,7 @@ defmodule Mydia.SettingsTest do
           name: "Round Trip Profile",
           description: "Test round-trip export/import",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           quality_standards: %{
             preferred_resolutions: ["2160p", "1080p"],
             preferred_video_codecs: ["h265", "av1"],
@@ -1867,7 +1914,7 @@ defmodule Mydia.SettingsTest do
       # Verify all settings match
       assert imported.description == original.description
       assert imported.upgrades_allowed == original.upgrades_allowed
-      assert imported.upgrade_until_quality == original.upgrade_until_quality
+      assert imported.upgrade_until_score == original.upgrade_until_score
       assert imported.quality_standards == original.quality_standards
     end
 

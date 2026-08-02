@@ -2,7 +2,9 @@ defmodule Mydia.Library.MetadataEnricherTest do
   use Mydia.DataCase, async: true
 
   import Mydia.MediaFixtures
+  import Mydia.SettingsFixtures
 
+  alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Library.MetadataEnricher
   alias Mydia.{Library, Media, Settings}
   alias Mydia.Media.MediaItem
@@ -458,6 +460,57 @@ defmodule Mydia.Library.MetadataEnricherTest do
       assert media_item.metadata_source == :tvdb
       assert media_item.tvdb_id == id
       assert is_nil(media_item.tmdb_id)
+    end
+  end
+
+  describe "quality profile on auto-created items" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "an auto-imported item stays unstamped and follows the configured default",
+         %{bypass: bypass, config: config} do
+      default = quality_profile_fixture(%{name: "Enricher Default"})
+      {:ok, _} = Settings.set_default_quality_profile(default.id)
+
+      id = System.unique_integer([:positive])
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(tv_body(id, "Unstamped Show")))
+      end)
+
+      match_result = %{
+        provider_id: to_string(id),
+        provider_type: :tmdb,
+        title: "Unstamped Show",
+        metadata: %{media_type: :tv_show}
+      }
+
+      assert {:ok, media_item} =
+               MetadataEnricher.enrich(match_result, config: config, fetch_episodes: false)
+
+      # Import must not freeze the current default onto the item. nil means
+      # "follow whatever default is configured", resolved at search time.
+      assert is_nil(media_item.quality_profile_id)
+
+      resolved = QualityProfileResolver.resolve(media_item)
+      assert resolved.id == default.id
+
+      # Changing the default moves the item with it, which stamping would break.
+      other = quality_profile_fixture(%{name: "Enricher Default Changed"})
+      {:ok, _} = Settings.set_default_quality_profile(other.id)
+
+      assert QualityProfileResolver.resolve(media_item).id == other.id
     end
   end
 

@@ -67,6 +67,20 @@ defmodule Mydia.Downloads.History do
   end
 
   @doc """
+  The `{download_client, download_client_id}` pairs of every tracked download.
+
+  Selects only the two columns: callers want set membership, not the rows, and
+  this runs on every external-torrent scan.
+  """
+  @spec tracked_client_pairs() :: MapSet.t({String.t() | nil, String.t() | nil})
+  def tracked_client_pairs do
+    Download
+    |> select([d], {d.download_client, d.download_client_id})
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc """
   Counts imported downloads — the set `clear_all_completed/1` would remove.
 
   Used to show a scope-accurate blast radius before the user confirms a
@@ -720,16 +734,10 @@ defmodule Mydia.Downloads.History do
 
   defp apply_status_filters(downloads, :failed) do
     Enum.filter(downloads, fn d ->
-      # Show downloads that failed in the client OR have import failures
-      # Exclude unmatched and unresolved_files which have their own sections
+      # Show downloads that failed in the client OR have import failures.
+      # Exclude unresolved_files, which has its own section.
       (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at)) and
-        d.match_status not in ["unmatched", "unresolved_files"]
-    end)
-  end
-
-  defp apply_status_filters(downloads, :unmatched) do
-    Enum.filter(downloads, fn d ->
-      d.match_status == "unmatched"
+        d.match_status != "unresolved_files"
     end)
   end
 

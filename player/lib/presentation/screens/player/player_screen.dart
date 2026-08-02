@@ -19,7 +19,7 @@ import '../../../core/player/progress_service.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
-import '../../../core/player/duration_override.dart';
+import '../../../core/player/stream_timeline.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
@@ -48,6 +48,31 @@ import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/local_proxy_service.dart';
 
+/// Below this, resuming is not worth offering; start from the beginning.
+const int kMinResumeThresholdSeconds = 30;
+
+/// Within this distance of the end, the user has effectively finished.
+const int kEndOfMediaThresholdSeconds = 60;
+
+/// Matches ProgressService's server-side watched threshold.
+const double kWatchedThreshold = 0.90;
+
+/// How far past the transcoded window a seek may land before the HLS session
+/// is torn down and restarted at the new position.
+///
+/// Restarting is expensive and visible: it ends the session, disposes the
+/// player, makes two GraphQL round trips, starts a fresh FFmpeg and waits for
+/// a playlist, all behind a spinner. Early in a session only a few seconds
+/// have been transcoded — and that is exactly the state playback returns to
+/// after every resume and every restart — so without a tolerance a single
+/// 10-second arrow-key skip or double-tap-forward would overshoot the
+/// seekable end and pay that cost, over and over, potentially looping.
+///
+/// Within this tolerance the seek is clamped to the seekable end instead,
+/// which is what the player did before restarts existed. Only a deliberate
+/// jump well beyond what has been transcoded is worth a restart.
+const Duration kSeekRestartTolerance = Duration(seconds: 30);
+
 class PlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
   final String mediaType;
@@ -71,10 +96,6 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
-  /// Minimum position (in seconds) to show the resume dialog.
-  /// If playback position is less than this, start from beginning.
-  static const _minResumeThresholdSeconds = 30;
-
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
@@ -87,6 +108,39 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// stays valid to call after disposal.
   late final Invalidator _invalidator;
 
+  /// `localProxyServiceProvider` is a plain (non-autoDispose) provider, so it
+  /// is effectively keep-alive for this container's lifetime — the same
+  /// instance `ref.read` would return at any later point. Safe to capture
+  /// once here, exactly like [_invalidator], and used by
+  /// [_terminateHlsSession] instead of a `dispose()`-time `ref.read`.
+  late final LocalProxyService _localProxyService;
+
+  /// The current P2P connection mode, kept in sync via `ref.listenManual`
+  /// (set up in [initState]) rather than read in `dispose()`:
+  /// `ref.read`/`ref.watch` are unsafe there — `BuildContext.mounted` is
+  /// already `false` throughout `State.dispose()`, a core Flutter
+  /// invariant, not a Riverpod-specific one. [_terminateHlsSession] needs
+  /// the *current* mode at termination time, and the user can switch modes
+  /// mid-session, so a one-time capture (at [initState] or anywhere else)
+  /// would risk going stale; the listener keeps it live for the whole
+  /// widget lifetime instead, matching what a fresh `ref.read` would have
+  /// returned at any given moment.
+  ///
+  /// The `ref.listenManual` subscription itself is set up in [initState] but
+  /// not stored: `ConsumerStatefulElement` already keeps its own reference
+  /// (to close automatically at unmount) whether or not the caller keeps
+  /// one too, and this widget never needs to cancel it early.
+  bool _isP2PMode = false;
+
+  /// The most recently resolved GraphQL client, kept in sync via
+  /// `ref.listenManual` for the same reason as [_isP2PMode]: a long
+  /// playback session can outlive a token refresh or reconnect that
+  /// produces a new client, so this is refreshed continuously rather than
+  /// captured once. Null until the first resolution completes;
+  /// [_terminateHlsSession] treats a still-null client the same as any
+  /// other best-effort failure (already caught and logged there).
+  GraphQLClient? _graphqlClient;
+
   /// Set once the 90% watched threshold is first crossed, so the invalidation
   /// fires once per playback rather than on every position tick.
   bool _watchedInvalidationSent = false;
@@ -96,6 +150,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _error;
   String? _loadingMessage;
   int? _savedPositionSeconds;
+  int? _savedDurationSeconds;
+
+  /// Set when a seek forced a session restart, so re-initialization starts at
+  /// this position instead of re-asking about the saved progress position.
+  int? _resumeOverrideSeconds;
+
+  /// True for the entire duration of [_restartSessionAt], including while it
+  /// awaits — `_player` is not set to null until partway through that method,
+  /// so [seekToReal] cannot rely on the null check alone to reject a seek
+  /// that arrives mid-restart. Nothing disables the keyboard/gesture
+  /// callbacks that reach `seekToReal` while the loading spinner is showing,
+  /// so without this flag a second seek near the transcoded boundary would
+  /// independently reach the same restart decision on the still-live old
+  /// player and start a second, concurrent `_initializePlayer()` — leaking
+  /// an HLS session and its FFmpeg process. Always cleared, including on the
+  /// error paths, by [trackRestartInFlight].
+  bool _isRestartingSession = false;
+  int? _runtimeMinutes;
   List<Query$SeasonEpisodes$seasonEpisodes>? _seasonEpisodes;
   int? _currentEpisodeIndex;
 
@@ -121,9 +193,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Total duration from server (for HLS streams where playlist duration is incomplete)
   Duration? _totalDuration;
 
+  // The mapping from the player's stream-local positions onto real media
+  // positions. Populated in two stages for HLS: first with just the
+  // resolved duration (offset zero) as soon as it's known — so a cast
+  // chosen before the session negotiates still gets a real duration — then
+  // rebuilt with the session's echoed start offset once it starts. Stays at
+  // its zero default for direct play and offline playback, which hold the
+  // whole file and need no correction.
+  StreamTimeline _timeline = StreamTimeline.zero;
+
   // Desktop feature state
   final FocusNode _focusNode = FocusNode();
-  DateTime? _lastClickTime;
 
   // Fullscreen state
   bool _isFullscreen = false;
@@ -139,6 +219,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void initState() {
     super.initState();
     _invalidator = ref.read(invalidatorProvider);
+    _localProxyService = ref.read(localProxyServiceProvider);
+
+    // Set up before `_initializePlayer` so both are live for the whole
+    // widget lifetime, regardless of which playback branch runs (offline,
+    // already-downloaded, or streaming) — `_terminateHlsSession` is called
+    // unconditionally from `dispose()` no matter which branch was taken.
+    ref.listenManual<conn.ConnectionState>(
+      conn.connectionProvider,
+      (previous, next) => _isP2PMode = next.isP2PMode,
+      fireImmediately: true,
+    );
+    ref.listenManual<AsyncValue<GraphQLClient>>(
+      asyncGraphqlClientProvider,
+      (previous, next) => next.whenData((client) => _graphqlClient = client),
+      fireImmediately: true,
+    );
+
     _initializePlayer();
 
     // Force landscape orientation on mobile devices
@@ -272,7 +369,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
         if (await _castToTargetIfSet()) return;
 
-        // Play downloaded content in offline mode
+        // Play downloaded content in offline mode. The whole file is already
+        // on disk, so this is direct play in every sense `seekToReal` and
+        // `_detectTracks` care about — no HLS session exists to restart, and
+        // media_kit's own duration is already the true runtime.
+        _isDirectPlay = true;
         await _initializeOfflinePlayback(offlinePath);
         return;
       }
@@ -298,7 +399,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             debugPrint('Could not initialize progress sync: $e');
           }
 
-          await _openPlayerAndStart(localPath, {});
+          // Same reasoning as the offline branch above: the whole file is
+          // already local, so this holds the whole file exactly like direct
+          // play and must never be treated as a restartable HLS session.
+          _isDirectPlay = true;
+
+          // No candidates query runs on this branch — there is no server-side
+          // stream to negotiate — so the runtime has to come from whatever
+          // `_fetchProgressAndEpisodes` just loaded. `shouldOfferResume`
+          // declines outright without one, which would silently cost this
+          // path its resume prompt. Only `_totalDuration` is set, not
+          // `_timeline`: the file is entirely local, so media_kit's own
+          // duration is the authoritative one for everything else.
+          _totalDuration = _resolveRealDuration(null);
+
+          await _openPlayerAndStart(localPath, {}, promptResume: true);
           return;
         }
         debugPrint('Downloaded file not found, falling back to streaming');
@@ -306,6 +421,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       // Online mode - initialize network services
       final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+
+      // Capture it directly rather than relying on the `ref.listenManual` in
+      // `initState` to have fired by now. That listener is the right mechanism
+      // for keeping the field fresh across a reconnect, but it only populates
+      // it once the provider resolves, and this await resolves on the same
+      // transition — the ordering between the two is a Riverpod internal. If
+      // the screen were disposed inside that window we would have started a
+      // session with a client `_terminateHlsSession()` could not see, and the
+      // HLS session would leak until its inactivity timeout.
+      _graphqlClient = graphqlClient;
 
       // Get server URL and token
       final serverUrl = await ref.read(serverUrlProvider.future);
@@ -374,18 +499,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       _isDirectPlay = canDirect;
 
-      // Set total duration from candidates metadata
-      if (candidatesResult != null) {
-        final duration = candidatesResult.metadata.duration;
-        if (duration != null) {
-          _totalDuration = Duration(
-            milliseconds: (duration * 1000).round(),
-          );
-          DurationOverride.value = _totalDuration;
-          debugPrint(
-              '[PlayerScreen] Total duration from candidates: $_totalDuration');
-        }
-      }
+      // Resolve the real runtime before anything asks the player for it. On a
+      // cold HLS stream media_kit only sees a partial, still-growing playlist,
+      // so its own duration is useless here.
+      //
+      // The saved progress record ranks below server metadata deliberately: it
+      // may itself have been written against a partial duration by an older
+      // build.
+      _totalDuration = _resolveRealDuration(candidatesResult);
+
+      // Publish the duration to the timeline as soon as we know it. Casting can
+      // short-circuit playback below, before any streaming session exists, and
+      // the receiver cannot work the runtime out for itself: a Mydia HLS
+      // playlist carries no EXT-X-ENDLIST until FFmpeg finishes. The offset is
+      // still zero here; the session result rebuilds this with the real one.
+      _timeline = StreamTimeline(totalDuration: _totalDuration);
 
       if (await _castToTargetIfSet()) return;
 
@@ -426,6 +554,68 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // Determine HLS strategy from candidates
         final hlsStrategy = _pickHlsStrategy(candidatesResult?.candidates);
 
+        // The resume decision must be made before the session starts: the
+        // offset is an input to FFmpeg, not something that can be seeked to
+        // once a live-style playlist is already running.
+        //
+        // Captured into locals rather than using `_savedPositionSeconds!`/
+        // `_totalDuration!` below: Dart's flow analysis cannot promote a
+        // field's nullability across the `shouldOfferResume(...)` call
+        // boundary, only across a direct `!= null` check in the same
+        // condition, so these null checks are what let the rest of this
+        // block use non-nullable locals instead of the bang operator.
+        //
+        // `resumeOverride` (not `startPositionSeconds == 0`) is what gates
+        // the dialog below: a seek-driven restart targeting real position 0
+        // (dragging the scrubber back to the start, holding arrow-left to
+        // the beginning, or any sub-second target — `Duration.inSeconds`
+        // truncates) sets `_resumeOverrideSeconds` to exactly 0, which is
+        // indistinguishable from "no override was set" if the check were on
+        // the value instead of on presence. Gating on the nullable local
+        // instead means a restart to position 0 never falls into the
+        // dialog branch, never overwrites 0 with the stale
+        // `_savedPositionSeconds`, and never sends the wrong `startPosition`
+        // to the new session.
+        final resumeOverride = _resumeOverrideSeconds;
+        _resumeOverrideSeconds = null;
+        var startPositionSeconds = resumeOverride ?? 0;
+        final savedPosition = _savedPositionSeconds;
+        final totalDuration = _totalDuration;
+        // The literal `mounted &&` here (not just the one passed into
+        // `shouldShowResumeDialog` below) is load-bearing for the analyzer:
+        // `use_build_context_synchronously` only recognizes a `mounted`
+        // check spelled directly in the guarding condition, not one hidden
+        // behind a function call, before `context` is used past the earlier
+        // `await`s in this method.
+        if (mounted &&
+            shouldShowResumeDialog(
+              resumeOverride: resumeOverride,
+              mounted: mounted,
+            ) &&
+            savedPosition != null &&
+            totalDuration != null &&
+            shouldOfferResume(
+              savedPositionSeconds: savedPosition,
+              realDuration: totalDuration,
+            )) {
+          final shouldResume = await showResumeDialog(
+            context,
+            savedPosition,
+            totalDuration.inSeconds,
+          );
+          // The dialog is an unbounded wait on the user, and it now happens
+          // before the session exists. If the route was replaced while it was
+          // open (`context.go`, a deep link, app teardown) it completes with
+          // null, `dispose()` has already run with `_hlsSessionId == null`,
+          // and carrying on would start an HLS session, build a `Player` and
+          // subscribe streams for a dead screen — with the FFmpeg process
+          // surviving until the server's inactivity timeout.
+          if (!mounted) return;
+          if (shouldResume == true) {
+            startPositionSeconds = savedPosition;
+          }
+        }
+
         // Start HLS session via GraphQL mutation (works for both modes)
         final result = await graphqlClient.mutate(
           MutationOptions(
@@ -433,6 +623,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             variables: Variables$Mutation$StartStreamingSession(
               fileId: widget.fileId,
               strategy: hlsStrategy,
+              startPosition:
+                  startPositionSeconds > 0 ? startPositionSeconds : null,
             ).toJson(),
           ),
         );
@@ -452,15 +644,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _hlsSessionId = sessionResult.sessionId;
         debugPrint('[PlayerScreen] HLS session started: $_hlsSessionId');
 
-        // Set total duration from session if not already set from candidates
+        // Use the echoed offset, not the requested one. The server clamps the
+        // value, and `-ss` lands on the nearest keyframe, so the stream can
+        // legitimately start earlier than asked. An older server omits the
+        // field entirely, which correctly yields offset zero.
+        final serverOffset = sessionResult.startPosition ?? 0;
+
         if (_totalDuration == null && sessionResult.duration != null) {
           _totalDuration = Duration(
             milliseconds: (sessionResult.duration! * 1000).round(),
           );
-          DurationOverride.value = _totalDuration;
-          debugPrint(
-              '[PlayerScreen] Total duration from session: $_totalDuration');
         }
+
+        _timeline = StreamTimeline(
+          startOffset: Duration(seconds: serverOffset),
+          totalDuration: _totalDuration,
+        );
+        debugPrint('[PlayerScreen] Stream timeline: $_timeline');
 
         // Build HLS URL based on mode
         if (isP2PMode) {
@@ -479,7 +679,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         );
       }
 
-      await _openPlayerAndStart(mediaSource, httpHeaders);
+      // `canDirect` is exactly the HLS/non-HLS split of this method: the HLS
+      // branch above has already asked about resuming and baked the answer
+      // into the session's start offset, so asking again here would prompt
+      // twice. The direct-play branch has no server-side offset to bake it
+      // into and must resume with a plain seek.
+      await _openPlayerAndStart(
+        mediaSource,
+        httpHeaders,
+        promptResume: canDirect,
+      );
     } catch (e) {
       debugPrint('Error initializing player: $e');
       if (mounted) {
@@ -489,6 +698,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         });
       }
     }
+  }
+
+  /// The real runtime, from the most trustworthy source available.
+  Duration? _resolveRealDuration(
+    Query$StreamingCandidates$streamingCandidates? candidatesResult,
+  ) {
+    final fromCandidates = candidatesResult?.metadata.duration;
+    if (fromCandidates != null && fromCandidates > 0) {
+      return Duration(milliseconds: (fromCandidates * 1000).round());
+    }
+
+    final fromProgress = _savedDurationSeconds;
+    if (fromProgress != null && fromProgress > 0) {
+      return Duration(seconds: fromProgress);
+    }
+
+    final fromRuntime = _runtimeMinutes;
+    if (fromRuntime != null && fromRuntime > 0) {
+      return Duration(minutes: fromRuntime);
+    }
+
+    return null;
   }
 
   /// Pick the best HLS strategy from streaming candidates.
@@ -507,23 +738,72 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return Enum$StreamingStrategy.TRANSCODE;
   }
 
-  /// Shared tail of _initializePlayer: create player, resume dialog, start playback.
+  /// Shared tail of _initializePlayer: create player, open the media, start
+  /// playback.
+  ///
+  /// Reached by three paths, not just the HLS one: the HLS branch, the
+  /// direct-play branch, and the "already downloaded, still online" branch.
+  /// [promptResume] separates them. The HLS branch passes false because it
+  /// has already asked about resuming and baked the answer into the
+  /// session's FFmpeg start offset — the only way to resume a live-style
+  /// playlist. The other two pass true: they hold the entire file locally,
+  /// have no server-side session to give an offset to, and seek correctly,
+  /// so for them resuming is a plain [Player.seek] after the media opens.
+  ///
+  /// Both are needed. Prompting here for every path would double-prompt the
+  /// HLS one; prompting only in the HLS branch (as this briefly did) silently
+  /// removed the resume prompt from the preferred desktop and mobile path,
+  /// where playback then always started at zero.
   Future<void> _openPlayerAndStart(
     String mediaSource,
-    Map<String, String> httpHeaders,
-  ) async {
+    Map<String, String> httpHeaders, {
+    required bool promptResume,
+  }) async {
     if (mounted) {
       setState(() {
         _loadingMessage = null;
       });
     }
 
+    // Asked before the player is built rather than after, matching the HLS
+    // branch's ordering: `_totalDuration` is already resolved by now, so
+    // there is nothing left to learn by opening the media first.
+    //
+    // Captured into locals for the same reason as the HLS branch: Dart's
+    // flow analysis cannot promote a field's nullability across the
+    // `shouldOfferResume(...)` call boundary.
+    var resumeFrom = Duration.zero;
+    final savedPosition = _savedPositionSeconds;
+    final totalDuration = _totalDuration;
+    if (promptResume &&
+        mounted &&
+        savedPosition != null &&
+        totalDuration != null &&
+        shouldOfferResume(
+          savedPositionSeconds: savedPosition,
+          realDuration: totalDuration,
+        )) {
+      final shouldResume = await showResumeDialog(
+        context,
+        savedPosition,
+        totalDuration.inSeconds,
+      );
+      // Same unbounded-wait hazard as the HLS branch: the route can be
+      // replaced while the dialog is open, in which case `dispose()` has
+      // already run and building a `Player` here would leak it.
+      if (!mounted) return;
+      if (shouldResume == true) {
+        resumeFrom = Duration(seconds: savedPosition);
+      }
+    }
+
     // Create media_kit player
-    _player = Player();
-    _videoController = VideoController(_player!);
+    final player = Player();
+    _player = player;
+    _videoController = VideoController(player);
 
     // Open media
-    await _player!.open(
+    await player.open(
       Media(mediaSource, httpHeaders: httpHeaders),
       play: false,
     );
@@ -534,39 +814,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Detect available tracks from media_kit
     _detectTracks();
 
-    // Check if we should show resume dialog
-    final duration = _player!.state.duration.inSeconds;
-    final savedPosition = _savedPositionSeconds;
-    if (mounted &&
-        savedPosition != null &&
-        savedPosition > _minResumeThresholdSeconds &&
-        duration > 0) {
-      final shouldResume = await showResumeDialog(
-        context,
-        savedPosition,
-        duration,
-      );
-
-      if (shouldResume == true) {
-        await _player!.seek(Duration(seconds: savedPosition));
-      }
+    // A plain seek, not a `seekToReal`: these paths hold the whole file, so
+    // the player's own coordinates already are the real ones and there is no
+    // session that could need restarting.
+    if (resumeFrom > Duration.zero) {
+      await player.seek(resumeFrom);
     }
 
     // Start playback
-    await _player!.play();
+    await player.play();
 
     // Start progress tracking
     if (_progressService != null) {
+      _progressService!.timeline = _timeline;
       if (widget.mediaType == 'movie') {
-        _progressService!.startMovieSync(_player!, widget.mediaId);
+        _progressService!.startMovieSync(player, widget.mediaId);
       } else if (widget.mediaType == 'episode') {
-        _progressService!.startEpisodeSync(_player!, widget.mediaId);
+        _progressService!.startEpisodeSync(player, widget.mediaId);
       }
     }
 
     // Listen for playback completion
     await _positionSubscription?.cancel();
-    _positionSubscription = _player!.stream.position.listen((_) {
+    _positionSubscription = player.stream.position.listen((_) {
       _onPlaybackProgress();
     });
 
@@ -725,6 +995,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (result.data != null) {
           final movie = Query$MovieDetail.fromJson(result.data!).movie;
           _savedPositionSeconds = movie?.progress?.positionSeconds;
+          _savedDurationSeconds = movie?.progress?.durationSeconds;
+          _runtimeMinutes = movie?.runtime;
 
           // Extract subtitle tracks from files
           _extractSubtitlesFromFiles(movie?.files);
@@ -742,6 +1014,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (result.data != null) {
           final episode = Query$EpisodeDetail.fromJson(result.data!).episode;
           _savedPositionSeconds = episode?.progress?.positionSeconds;
+          _savedDurationSeconds = episode?.progress?.durationSeconds;
+          _runtimeMinutes = episode?.runtime;
 
           // Extract subtitle tracks from files
           _extractSubtitlesFromFiles(episode?.files);
@@ -1217,6 +1491,130 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// Seeks to a real media position, restarting the stream if necessary.
+  ///
+  /// On an HLS stream the playlist only covers what FFmpeg has transcoded so
+  /// far, so a target well beyond it cannot be reached by seeking: media_kit
+  /// clamps to the end of what it has and playback appears to snap back. When
+  /// that happens the session is restarted at the target offset instead —
+  /// but only past [kSeekRestartTolerance], since a restart is far more
+  /// disruptive than the snap-back it avoids for a small skip.
+  Future<void> seekToReal(Duration target) async {
+    final player = _player;
+    if (player == null) return;
+
+    // A restart already in flight is dropped outright, not queued: the
+    // player this call would act on is on its way out (see
+    // `_isRestartingSession`'s dartdoc), and by the time the in-flight
+    // restart finishes, this target is stale anyway — the next seek the
+    // user makes will land in real coordinates against whatever the new
+    // session actually starts at.
+    if (_isRestartingSession) return;
+
+    final clamped = target.isNegative ? Duration.zero : target;
+    final local = _timeline.toPlayer(clamped);
+
+    // `player.state.duration` is deliberately the RAW player duration here, not
+    // a timeline lookup. Everywhere else that value is the bug; here it is
+    // exactly the question being asked, namely how much of the stream can
+    // actually be seeked into right now.
+    final seekableEnd = player.state.duration;
+
+    if (shouldRestartForSeek(
+      isDirectPlay: _isDirectPlay,
+      realTarget: clamped,
+      localTarget: local,
+      seekableEnd: seekableEnd,
+      startOffset: _timeline.startOffset,
+    )) {
+      await _restartSessionAt(clamped);
+      return;
+    }
+
+    // Within [kSeekRestartTolerance] of the transcoded end, land on the end
+    // rather than past it. media_kit would clamp an out-of-range target
+    // anyway; doing it here keeps the small-overshoot case explicit and
+    // costs nothing when the target is already in range. Skipped when the
+    // player has no duration yet (a stream that has not reported one), where
+    // clamping would turn every forward skip into a seek to zero.
+    final seekTarget = seekableEnd > Duration.zero && local > seekableEnd
+        ? seekableEnd
+        : local;
+
+    await player.seek(seekTarget);
+  }
+
+  /// Tears down the current HLS session and starts a new one at [target].
+  ///
+  /// The whole body runs under [trackRestartInFlight], which flips
+  /// [_isRestartingSession] on before anything else and guarantees it is
+  /// cleared afterward — including if any step throws — so [seekToReal]'s
+  /// re-entrancy guard can never wedge shut for the rest of the session.
+  Future<void> _restartSessionAt(Duration target) async {
+    await trackRestartInFlight(
+      (inFlight) => _isRestartingSession = inFlight,
+      () async {
+        if (mounted) {
+          setState(() {
+            _loadingMessage = 'Seeking...';
+            _isLoading = true;
+          });
+        }
+
+        // Persist where the user actually is before the old session goes
+        // away, so an interrupted restart does not lose their place.
+        await _saveProgress();
+
+        final sessionId = _hlsSessionId;
+        if (sessionId != null) {
+          await _endStreamingSession(sessionId);
+        }
+
+        await _positionSubscription?.cancel();
+        _positionSubscription = null;
+        _progressService?.stopSync();
+        await _player?.dispose();
+        _player = null;
+        _videoController = null;
+
+        _resumeOverrideSeconds = target.inSeconds;
+        await _initializePlayer();
+      },
+    );
+  }
+
+  /// Terminates the server-side HLS session. Safe to call more than once.
+  ///
+  /// Distinct from [_terminateHlsSession]: this is called mid-session, while
+  /// the widget is still live, so it resolves the GraphQL client fresh via
+  /// `ref.read` rather than through the captured field that dispose-time
+  /// cleanup is forced to use. It also does not stop the local P2P proxy —
+  /// unlike a final teardown, a seek-driven restart immediately starts a new
+  /// session over the same proxy.
+  Future<void> _endStreamingSession(String sessionId) async {
+    debugPrint('[PlayerScreen] Terminating HLS session: $sessionId');
+    try {
+      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+      final result = await graphqlClient.mutate(
+        MutationOptions(
+          document: documentNodeMutationEndStreamingSession,
+          variables: Variables$Mutation$EndStreamingSession(
+            sessionId: sessionId,
+          ).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Failed to terminate HLS session: ${result.exception}');
+      } else {
+        debugPrint('[PlayerScreen] HLS session terminated successfully');
+      }
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error terminating HLS session: $e');
+    }
+  }
+
   /// Refreshes everything that reflects watched state. Deliberately not called
   /// from the 10-second progress sync: that would refetch Home hundreds of
   /// times per movie over what may be a p2p relay.
@@ -1232,13 +1630,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   /// Terminate the HLS session on the server and clean up P2P resources.
   /// This stops FFmpeg and cleans up server-side resources.
+  ///
+  /// Reads only the fields captured in [initState] ([_isP2PMode],
+  /// [_localProxyService], [_graphqlClient]) — never `ref` directly. This
+  /// runs from `dispose()` (as well as the web beforeunload handler), and
+  /// `ref.read`/`ref.watch` unconditionally throw once `dispose()` has
+  /// started: `BuildContext.mounted` is already `false` throughout it, a
+  /// core Flutter invariant. Before this, every call from `dispose()` threw
+  /// on its very first line, before doing any of the cleanup below.
   Future<void> _terminateHlsSession() async {
     // Stop local proxy if P2P mode
-    final connectionState = ref.read(conn.connectionProvider);
-    if (connectionState.isP2PMode) {
+    if (_isP2PMode) {
       try {
-        final localProxyService = ref.read(localProxyServiceProvider);
-        await localProxyService.stop();
+        await _localProxyService.stop();
         debugPrint('[PlayerScreen] Local proxy stopped');
       } catch (e) {
         debugPrint('[PlayerScreen] Error stopping local proxy: $e');
@@ -1247,10 +1651,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // End HLS session via GraphQL (works for both modes)
     final sessionId = _hlsSessionId;
-    if (sessionId != null) {
+    final graphqlClient = _graphqlClient;
+    if (sessionId != null && graphqlClient != null) {
       debugPrint('[PlayerScreen] Terminating HLS session: $sessionId');
       try {
-        final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
         final result = await graphqlClient.mutate(
           MutationOptions(
             document: documentNodeMutationEndStreamingSession,
@@ -1269,6 +1673,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       } catch (e) {
         debugPrint('[PlayerScreen] Error terminating HLS session: $e');
       }
+    } else if (sessionId != null) {
+      // Extremely narrow window: disposed before `asyncGraphqlClientProvider`
+      // ever resolved once. The old code awaited it fresh every time (from
+      // inside `dispose()`, which is what made it unsafe); this only has
+      // whatever `ref.listenManual` had captured by now.
+      debugPrint(
+          '[PlayerScreen] Cannot terminate HLS session $sessionId: no GraphQL client resolved yet');
     }
   }
 
@@ -1386,20 +1797,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       case LogicalKeyboardKey.arrowLeft:
         // Seek backward 10 seconds
-        final currentPosition = player.state.position;
+        final currentPosition = _timeline.toReal(player.state.position);
         final newPosition = currentPosition - const Duration(seconds: 10);
         final targetPosition =
             newPosition < Duration.zero ? Duration.zero : newPosition;
-        player.seek(targetPosition);
+        seekToReal(targetPosition);
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.arrowRight:
         // Seek forward 10 seconds
-        final currentPosition = player.state.position;
-        final duration = player.state.duration;
+        final currentPosition = _timeline.toReal(player.state.position);
+        final duration = _timeline.resolveDuration(player.state.duration);
         final newPosition = currentPosition + const Duration(seconds: 10);
         final targetPosition = newPosition > duration ? duration : newPosition;
-        player.seek(targetPosition);
+        seekToReal(targetPosition);
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.arrowUp:
@@ -1472,20 +1883,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  /// Handle double-click for fullscreen toggle (desktop only)
-  void _handleTap() {
-    if (!PlatformFeatures.isDesktop) return;
-
-    final now = DateTime.now();
-    if (_lastClickTime != null &&
-        now.difference(_lastClickTime!) < const Duration(milliseconds: 300)) {
-      _lastClickTime = null;
-      _toggleFullscreen();
-    } else {
-      _lastClickTime = now;
-    }
-  }
-
   @override
   void dispose() {
     // Exit fullscreen if active
@@ -1513,9 +1910,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
     _terminateHlsSession();
-
-    // Clear duration override
-    DurationOverride.clear();
 
     // Unregister beforeunload handler on web
     if (kIsWeb) {
@@ -1667,6 +2061,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       child: Video(
         controller: _videoController!,
         controls: customVideoControlsBuilderWithCallback(
+          timeline: _timeline,
+          onSeekToReal: seekToReal,
           title: widget.title,
           onBack: () {
             if (context.canPop()) {
@@ -1697,14 +2093,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (PlatformFeatures.supportsGestureControls && player != null) {
       videoPlayer = GestureControls(
         player: player,
-        child: videoPlayer,
-      );
-    }
-
-    // Add double-click handler for desktop
-    if (PlatformFeatures.isDesktop) {
-      videoPlayer = GestureDetector(
-        onTap: _handleTap,
+        timeline: _timeline,
+        onSeekToReal: seekToReal,
         child: videoPlayer,
       );
     }
@@ -1793,6 +2183,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
+      final player = _player;
+      final startPosition =
+          player == null ? null : _timeline.toReal(player.state.position);
 
       await manager.startCast(
         device: device,
@@ -1801,7 +2194,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           mediaId: widget.mediaId,
           mediaType: widget.mediaType,
           title: widget.title ?? 'Untitled',
-          startPosition: _player?.state.position,
+          startPosition: startPosition,
           // The receiver cannot work this out for itself: Mydia's HLS
           // playlists carry no `#EXT-X-ENDLIST` until FFmpeg finishes, so a
           // Chromecast reports `duration: -1` for the whole session. Hand it
@@ -1916,19 +2309,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   /// The item's runtime, from the most trustworthy source available.
   ///
-  /// Prefers `_totalDuration` (the server's own figure, from the candidates
-  /// metadata) over the local player's, because on an HLS stream media_kit is
-  /// working from the same incomplete playlist the receiver is. Returns null
-  /// when neither knows yet, which the cast UI renders as an unknown length
-  /// rather than as zero.
+  /// A Chromecast reports `duration: -1` for a Mydia HLS session, because the
+  /// playlist carries no `#EXT-X-ENDLIST` until FFmpeg finishes. Hand it the
+  /// figure the server gave us instead.
   Duration? _knownCastDuration() {
-    final fromServer = _totalDuration;
-    if (fromServer != null && fromServer > Duration.zero) return fromServer;
+    final player = _player;
+    if (player == null) return _timeline.totalDuration;
 
-    final fromPlayer = _player?.state.duration;
-    if (fromPlayer != null && fromPlayer > Duration.zero) return fromPlayer;
-
-    return null;
+    final resolved = _timeline.resolveDuration(player.state.duration);
+    return resolved > Duration.zero ? resolved : null;
   }
 }
 
@@ -1978,5 +2367,118 @@ KeyEventResult handleEpisodeNavKey(
 
     default:
       return KeyEventResult.ignored;
+  }
+}
+
+/// Whether to offer resuming, given a saved position and the real runtime.
+///
+/// Extracted as a free function so it can be unit-tested without a widget tree,
+/// following the same pattern as [handleEpisodeNavKey].
+///
+/// A null [realDuration] declines deliberately. The alternative is computing a
+/// percentage against media_kit's partial HLS playlist length, which is exactly
+/// the bug that made every resume read as 100%.
+bool shouldOfferResume({
+  required int? savedPositionSeconds,
+  required Duration? realDuration,
+}) {
+  if (savedPositionSeconds == null) return false;
+  if (realDuration == null || realDuration <= Duration.zero) return false;
+  if (savedPositionSeconds <= kMinResumeThresholdSeconds) return false;
+
+  final total = realDuration.inSeconds;
+  if (savedPositionSeconds >= total - kEndOfMediaThresholdSeconds) return false;
+  if (savedPositionSeconds / total >= kWatchedThreshold) return false;
+
+  return true;
+}
+
+/// Whether `_initializePlayer` may even consider showing the resume dialog,
+/// given a possible seek-driven-restart override.
+///
+/// Deliberately gates on [resumeOverride]'s **presence** (`!= null`), not its
+/// value (`!= 0`): a restart targeting real position 0 — dragging the
+/// scrubber back to the start, holding arrow-left to the beginning, or any
+/// sub-second target, since `Duration.inSeconds` truncates — sets
+/// `_resumeOverrideSeconds` to exactly `0`, which a value-based check
+/// (`resumeOverride != 0`) cannot tell apart from "no override was set at
+/// all". Getting this wrong lets a restart to position 0 fall through to the
+/// dialog, which then prompts about the unrelated, never-refreshed
+/// `_savedPositionSeconds` from mount time and, if accepted, silently
+/// overwrites the user's explicit seek-to-start with that stale saved
+/// position.
+///
+/// Extracted as a free function, following the same pattern as
+/// [shouldOfferResume] and [shouldRestartForSeek], so this exact presence-
+/// vs-value distinction has its own name and test, independent of
+/// `_initializePlayer`'s own network/session machinery.
+@visibleForTesting
+bool shouldShowResumeDialog({
+  required int? resumeOverride,
+  required bool mounted,
+}) =>
+    resumeOverride == null && mounted;
+
+/// Whether [_PlayerScreenState.seekToReal] must restart the HLS session
+/// rather than seek the live player in place.
+///
+/// Extracted as a free function so the seek boundary math can be
+/// unit-tested without a widget tree or a live `Player` — constructing a
+/// real (non-fake-backed) `Player` requires native mpv/FFI
+/// (`NativePlayer`'s constructor calls `DynamicLibrary.open` synchronously),
+/// which is not available under `flutter test`; every other test in this
+/// suite that needs a `Player` injects a fake `platformPlayer` for exactly
+/// this reason, and `PlayerScreen` itself does not offer a way to do that.
+/// Same pattern as [shouldOfferResume] and [handleEpisodeNavKey].
+///
+/// [seekableEnd] must be the player's own **raw**, unresolved
+/// `player.state.duration` — see `seekToReal`'s own comment at its call site
+/// for why that is deliberate rather than a bug: it is exactly how much of
+/// the stream has been transcoded and can currently be seeked into, which a
+/// [StreamTimeline]-resolved duration would not tell you.
+///
+/// Overshooting [seekableEnd] by up to [kSeekRestartTolerance] does not
+/// restart: `seekToReal` clamps those to the seekable end instead. See that
+/// constant for why a small skip on a cold stream must not cost a restart.
+@visibleForTesting
+bool shouldRestartForSeek({
+  required bool isDirectPlay,
+  required Duration realTarget,
+  required Duration localTarget,
+  required Duration seekableEnd,
+  required Duration startOffset,
+}) {
+  // Direct play and offline playback hold the whole file locally — there is
+  // no HLS session to restart, and the player's own duration is already the
+  // true one, so seeking is always local for them.
+  if (isDirectPlay) return false;
+
+  return localTarget > seekableEnd + kSeekRestartTolerance ||
+      realTarget < startOffset;
+}
+
+/// Runs [restart], reporting in-flight state through [setInFlight] for the
+/// restart's entire duration — set `true` before anything else, guaranteed
+/// to be set back to `false` afterward even if [restart] throws.
+///
+/// Extracted from [_PlayerScreenState._restartSessionAt] so this exact
+/// set-before-any-await / always-cleared bookkeeping — the property
+/// [_PlayerScreenState.seekToReal]'s re-entrancy guard depends on — can be
+/// exercised with a controllable fake body (including one that throws),
+/// independent of `_restartSessionAt`'s own player/GraphQL machinery, which
+/// cannot be constructed in this test suite (see [shouldRestartForSeek]'s
+/// dartdoc). A restart that throws without clearing the flag would wedge
+/// [seekToReal] shut for the rest of the session — this is what guards
+/// against that.
+@visibleForTesting
+Future<void> trackRestartInFlight(
+  void Function(bool inFlight) setInFlight,
+  Future<void> Function() restart,
+) async {
+  setInFlight(true);
+  try {
+    await restart();
+  } finally {
+    setInFlight(false);
   }
 }

@@ -494,6 +494,41 @@ void main() {
       final options = captured.single as MutationOptions;
       expect(options.document, same(documentNodeMutationUpdateEpisodeProgress));
     });
+
+    /// `CastSessionManager` owns one long-lived `ProgressService` instance
+    /// (this manager is a keep-alive provider reused across every cast
+    /// target), so its `timeline` has to be re-pointed at each request's own
+    /// known duration — otherwise casting silently loses the same duration
+    /// authority `resolveSync` restored for local playback. A Chromecast's
+    /// own duration stream is exactly the thing that authority guards
+    /// against: Mydia's HLS playlists carry no `#EXT-X-ENDLIST` until FFmpeg
+    /// finishes, so the receiver reports a partial, still-growing figure.
+    test(
+        'syncs against the request\'s known duration, not whatever the '
+        'receiver reports', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      const withDuration = CastLaunchRequest(
+        fileId: 'file-1',
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        title: 'Arrival',
+        duration: Duration(seconds: 6420), // the server's own figure
+      );
+      await manager.startCast(device: device, request: withDuration);
+
+      // The receiver reports a much smaller, partial duration — it must not
+      // win over the figure the request already carried.
+      backend.emitDuration(const Duration(seconds: 200));
+      backend.emitPosition(const Duration(seconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final captured = verify(client.mutate(captureAny)).captured;
+      expect(captured, hasLength(1));
+      final options = captured.single as MutationOptions;
+      expect(options.variables['durationSeconds'], 6420);
+      expect(options.variables['positionSeconds'], 100);
+    });
   });
 
   group('stopCast', () {

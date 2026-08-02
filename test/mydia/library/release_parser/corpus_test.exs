@@ -14,7 +14,7 @@ defmodule Mydia.Library.ReleaseParser.CorpusTest do
 
   Output: per-cluster failure summary printed to test logs. The
   documented exclusion list (when corpus pass rate < 95%) lives at
-  `docs/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures.md`.
+  `test/mydia/library/release_parser/CORPUS_FAILURES.md`.
   """
 
   use ExUnit.Case, async: true
@@ -98,7 +98,7 @@ defmodule Mydia.Library.ReleaseParser.CorpusTest do
 
     # Per the plan's ≥95% fallback policy, the corpus pass rate is a
     # soft target. Failures are categorized in
-    # docs/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures.md
+    # test/mydia/library/release_parser/CORPUS_FAILURES.md
     # — the bulk are anime fansub + Windows path patterns (R8/R9 scope
     # or out-of-scope). After excluding the documented anime-specific
     # cluster the corrected pass rate is ≥95%.
@@ -109,7 +109,7 @@ defmodule Mydia.Library.ReleaseParser.CorpusTest do
     assert rate >= 0.70,
            "Corpus pass rate #{Float.round(rate * 100, 1)}% below 70% smoke-test floor. " <>
              "See cluster breakdown above and " <>
-             "docs/plans/2026-05-13-001-feat-release-name-parser-v3-corpus-failures.md."
+             "test/mydia/library/release_parser/CORPUS_FAILURES.md."
   end
 
   # ---- Per-case evaluation ----

@@ -6,8 +6,47 @@ import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_seek.dart';
 import '../../core/cast/cast_target.dart';
 import '../../core/graphql/graphql_provider.dart';
+import '../../core/router/navigator_keys.dart';
 import '../../domain/models/cast_device.dart';
 import 'cast_actions.dart';
+
+/// Mounts [CastMiniController] at the bottom of [child], floating above it.
+///
+/// `app.dart` wraps the router's output in this, which is what puts the bar on
+/// every screen — and also puts it outside the Navigator the router builds,
+/// and therefore outside that Navigator's Overlay. Material widgets in the bar
+/// need one: each IconButton's tooltip asserts "No Overlay widget found" and
+/// is replaced by a 100000px error box, which then overflows the bar's Row. So
+/// the layer carries an Overlay of its own. (Dialogs still need a Navigator,
+/// which no Overlay provides — see [_CastMiniControllerState._confirmStop].)
+///
+/// The layer is full-screen rather than a strip pinned to the bottom so
+/// tooltips have somewhere to lay out; an Overlay only as tall as the bar
+/// clamps them back on top of it.
+class CastBarLayer extends StatelessWidget {
+  const CastBarLayer({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        child,
+        // Neither the Overlay nor the Align hit-tests its own empty space, so
+        // everything outside the bar still reaches `child` below.
+        Positioned.fill(
+          child: Overlay.wrap(
+            child: const Align(
+              alignment: Alignment.bottomCenter,
+              child: CastMiniController(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// The sole cast control surface, shown at the bottom of every screen.
 ///
@@ -334,8 +373,15 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   }
 
   Future<void> _confirmStop() async {
+    // `app.dart` mounts this bar above the router so it floats over every
+    // route, which leaves its own context without a Navigator to push a
+    // dialog onto. Push onto the router's root navigator instead. The
+    // fallback is for widget tests, which pump the bar under a plain
+    // MaterialApp that has a Navigator of its own and no router.
+    final dialogContext = rootNavigatorKey.currentContext ?? context;
+
     final shouldStop = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       builder: (context) => AlertDialog(
         title: const Text('Stop Casting'),
         content: const Text('Do you want to stop casting and disconnect?'),

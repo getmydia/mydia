@@ -13,7 +13,7 @@ defmodule MydiaWeb.AdminComponents do
 
   attr :active_tab, :atom, required: true
 
-  def tab_nav(assigns) do
+  defp tab_nav(assigns) do
     remote_access_enabled =
       Application.get_env(:mydia, :features, [])
       |> Keyword.get(:remote_access_enabled, false)

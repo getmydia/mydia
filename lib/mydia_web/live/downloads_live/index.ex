@@ -1,6 +1,7 @@
 defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
+  alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Library
@@ -93,6 +94,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:clearable_count, 0)
      # Issues tab state
      |> assign(:issues_counts, %{unmatched: 0, unresolved: 0, other: 0})
+     # Derived view of client torrents Mydia does not manage. Read from the
+     # ExternalTorrents cache, never from the database.
+     |> assign(:scan, ExternalTorrents.get())
      |> assign(:removed_client_groups, [])
      |> assign(:search_open_for, nil)
      |> assign(:library_search_value, "")
@@ -102,7 +106,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:match_modal, nil)
      # Initialize all streams
      |> stream(:downloads, [])
-     |> stream(:unmatched_downloads, [])
+     |> stream(:needs_matching, [])
+     |> stream(:external_torrents, [])
      |> stream(:unresolved_downloads, [])
      |> stream(:other_issues, [])
      |> load_downloads()}
@@ -114,7 +119,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   @impl true
-  @allowed_tabs ~w(queue completed issues)
+  @allowed_tabs ~w(queue completed issues external)
 
   def handle_event("switch_tab", %{"tab" => tab}, socket) when tab in @allowed_tabs do
     tab_atom = String.to_existing_atom(tab)
@@ -569,23 +574,41 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   # --- Issues Tab Event Handlers ---
 
-  def handle_event("accept_suggestion", params, socket) do
+  def handle_event("adopt_suggestion", params, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      %{"download_id" => download_id, "media_item_id" => media_item_id} = params
-      episode_id = Map.get(params, "episode_id")
+      %{"torrent_id" => torrent_id, "media_item_id" => media_item_id} = params
+      adopt(socket, torrent_id, media_item_id, Map.get(params, "episode_id"))
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
 
-      download = Downloads.get_download!(download_id)
+  # The inline library picker sends `download_id` (see LibrarySearchForm), which
+  # here carries the derived torrent id rather than a database id.
+  def handle_event("adopt_library_match", params, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      %{"download_id" => torrent_id, "media_item_id" => media_item_id} = params
 
-      case Downloads.manually_match_download(download, media_item_id, episode_id) do
-        {:ok, _updated} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Download matched and import queued")
-           |> load_downloads()}
+      {:noreply, socket} = adopt(socket, torrent_id, media_item_id, nil)
 
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to match download")}
-      end
+      {:noreply,
+       socket
+       |> assign(:search_open_for, nil)
+       |> assign(:library_search_value, "")
+       |> assign(:library_search_results, [])}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("rescan_external", _params, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      ExternalTorrents.refresh()
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Rescanned download clients")
+       |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -625,30 +648,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
      socket
      |> assign(:library_search_value, query)
      |> assign(:library_search_results, results)}
-  end
-
-  def handle_event("select_library_match", params, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      %{"download_id" => download_id, "media_item_id" => media_item_id} = params
-
-      download = Downloads.get_download!(download_id)
-
-      case Downloads.manually_match_download(download, media_item_id) do
-        {:ok, _updated} ->
-          {:noreply,
-           socket
-           |> assign(:search_open_for, nil)
-           |> assign(:library_search_value, "")
-           |> assign(:library_search_results, [])
-           |> put_flash(:info, "Download matched and import queued")
-           |> load_downloads()}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to match download")}
-      end
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
   end
 
   # --- Match / re-match modal (in-flight correction + post-import re-match) ---
@@ -710,25 +709,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("match_modal_pick_episode", %{"episode_id" => episode_id}, socket) do
     %{selected: %{id: media_item_id}} = socket.assigns.match_modal
     submit_match(socket, media_item_id, episode_id)
-  end
-
-  def handle_event("refresh_suggestions", %{"id" => download_id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(download_id)
-
-      case Downloads.refresh_match_suggestions(download) do
-        {:ok, _updated} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Suggestions refreshed")
-           |> load_downloads()}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to refresh suggestions")}
-      end
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
   end
 
   def handle_event("resolve_files", %{"download_id" => download_id} = params, socket) do
@@ -822,6 +802,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply, socket |> maybe_refresh_clearable_count() |> load_downloads()}
   end
 
+  # A fresh client scan landed. Only the two scan-backed tabs need a full
+  # reload; the others just need the External tab count, which is an ETS read
+  # rather than the client polling a reload would trigger.
+  def handle_info(:external_scan_updated, socket) do
+    if socket.assigns.active_tab in [:issues, :external] do
+      {:noreply, load_downloads(socket)}
+    else
+      {:noreply, assign(socket, :scan, ExternalTorrents.get())}
+    end
+  end
+
   # Periodic live-progress refresh. Reschedules unconditionally so it resumes
   # when the operator switches back to the Queue or a new download starts, but
   # only re-polls clients when the Queue tab actually has active work — idle
@@ -868,10 +859,46 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp maybe_refresh_clearable_count(socket), do: socket
 
+  # A torrent id goes stale when the torrent leaves the client between render
+  # and click. Report it rather than raising: the row is about to vanish from
+  # the list anyway.
+  defp adopt(socket, torrent_id, media_item_id, episode_id) do
+    case ExternalTorrents.find(torrent_id) do
+      nil ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "That torrent is no longer in the client")
+         |> load_downloads()}
+
+      torrent ->
+        case Downloads.adopt_external_torrent(torrent, media_item_id, episode_id) do
+          {:ok, _download} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Download matched and import queued")
+             |> load_downloads()}
+
+          {:error, :already_tracked} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "That torrent is already tracked")
+             |> load_downloads()}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Failed to match download")}
+        end
+    end
+  end
+
   defp reload_stream(socket) do
+    socket = assign(socket, :scan, ExternalTorrents.get())
+
     case socket.assigns.active_tab do
       :issues ->
         load_issues_downloads(socket)
+
+      :external ->
+        load_external(socket)
 
       _ ->
         downloads = get_current_downloads(socket)
@@ -886,9 +913,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp delete_files?(params), do: Map.get(params, "delete_files") == "true"
 
   defp load_downloads(socket) do
+    # The External tab count is shown from every tab, so refresh the cached scan
+    # on every load. This is an ETS read, not I/O.
+    socket = assign(socket, :scan, ExternalTorrents.get())
+
     case socket.assigns.active_tab do
       :issues ->
         load_issues_downloads(socket)
+
+      :external ->
+        load_external(socket)
 
       tab ->
         filter =
@@ -927,19 +961,24 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp load_issues_downloads(socket) do
     all_downloads = Downloads.list_downloads_with_status()
 
-    unmatched = Enum.filter(all_downloads, fn d -> d.match_status == "unmatched" end)
+    # Needs Matching is derived from the clients, not from the database: these
+    # torrents have no download row and never will unless the user matches one.
+    # `:scan` was refreshed by the caller (load_downloads/1 or reload_stream/1).
+    scan = socket.assigns.scan
+    needs_matching = scan.needs_matching
+
     unresolved = Enum.filter(all_downloads, fn d -> d.match_status == "unresolved_files" end)
 
     other =
       all_downloads
       |> Enum.filter(fn d ->
         (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at)) and
-          d.match_status not in ["unmatched", "unresolved_files"]
+          d.match_status != "unresolved_files"
       end)
       |> enrich_path_mapping_suggestions()
 
     counts = %{
-      unmatched: length(unmatched),
+      unmatched: length(needs_matching),
       unresolved: length(unresolved),
       other: length(other)
     }
@@ -960,11 +999,22 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, all_empty)
     |> assign(:issues_counts, counts)
+    |> assign(:scan, scan)
     |> assign(:removed_client_groups, removed_client_groups())
     |> assign(:episodes_by_media_item, episodes_by_media_item)
-    |> stream(:unmatched_downloads, unmatched, reset: true)
+    |> stream(:needs_matching, needs_matching, reset: true)
     |> stream(:unresolved_downloads, unresolved, reset: true)
     |> stream(:other_issues, other, reset: true)
+  end
+
+  defp load_external(socket) do
+    scan = socket.assigns.scan
+
+    socket
+    |> assign(:has_more, false)
+    |> assign(:downloads_empty?, scan.external == [])
+    |> assign(:scan, scan)
+    |> stream(:external_torrents, scan.external, reset: true)
   end
 
   # Orphan groups annotated with a DOM-safe slug. Client names come from

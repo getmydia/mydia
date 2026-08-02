@@ -65,7 +65,6 @@ Configure additional libraries using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `LIBRARY_PATH_<N>_TYPE` | Library type | `music` |
 | `LIBRARY_PATH_<N>_MONITORED` | Enable monitoring | `true` |
 | `LIBRARY_PATH_<N>_SCAN_INTERVAL` | Automatic scan interval in seconds. Minimum 900. Omit for manual-only scanning. | `3600` |
-| `LIBRARY_PATH_<N>_QUALITY_PROFILE_ID` | Quality profile ID | `1` |
 
 **Library Types:** `movies`, `series`, `mixed`, `music`, `books`, `adult`
 

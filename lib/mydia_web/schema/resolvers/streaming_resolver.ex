@@ -9,6 +9,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   require Logger
 
   alias Mydia.Library
+  alias Mydia.Library.MediaFile
   alias Mydia.Streaming.Candidates
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
@@ -97,7 +98,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
               args[:max_bitrate]
           end
 
-        start_session_for_user(file_id, user.id, strategy, max_bitrate)
+        start_session_for_user(file_id, user.id, strategy, max_bitrate, args[:start_position])
     end
   end
 
@@ -120,32 +121,50 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
   # Private functions
 
-  defp start_session_for_user(file_id, user_id, strategy, max_bitrate) do
-    # Convert strategy to mode
+  @doc false
+  # Public for unit testing. Keeps the requested offset inside the media so a
+  # corrupted client-side progress value cannot start FFmpeg past the end,
+  # which would yield an empty playlist and look identical to the resume bug
+  # this whole change exists to fix.
+  def clamp_start_position(nil, _duration), do: 0
+
+  def clamp_start_position(position, _duration) when position <= 0, do: 0
+
+  def clamp_start_position(position, duration) when is_number(duration) and duration > 0 do
+    max(0, min(position, trunc(duration) - 1))
+  end
+
+  def clamp_start_position(position, _duration), do: position
+
+  defp start_session_for_user(file_id, user_id, strategy, max_bitrate, requested_position) do
     mode = strategy_to_mode(strategy)
 
-    # Build session opts
-    session_opts = if max_bitrate, do: [max_bitrate: max_bitrate], else: []
-
     with {:ok, media_file} <- load_media_file(file_id),
-         :ok <- Candidates.ensure_codec_info_async(media_file),
+         media_file <- ensure_duration_known(media_file),
+         duration <- get_duration_from_metadata(media_file),
+         start_position <- clamp_start_position(requested_position, duration),
+         session_opts <- build_session_opts(max_bitrate, start_position),
          {:ok, pid} <-
            HlsSessionSupervisor.start_session(media_file.id, user_id, mode, session_opts),
          {:ok, info} <- HlsSession.get_info(pid) do
-      # Extract duration from media file metadata
-      duration = get_duration_from_metadata(media_file)
+      # Report the offset the session is actually transcoding from, not the
+      # one this request clamped: start_session/4 may have reused a running
+      # session or adopted a concurrent winner, either of which can be running
+      # from a different offset than this caller asked for.
+      session_start_position = info.start_position
 
       Logger.info(
         "Started streaming session #{info.session_id} for file #{file_id}, user #{user_id}" <>
-          if(max_bitrate, do: " (max_bitrate: #{max_bitrate}kbps)", else: "")
+          if(max_bitrate, do: " (max_bitrate: #{max_bitrate}kbps)", else: "") <>
+          if(session_start_position > 0,
+            do: " (start_position: #{session_start_position}s)",
+            else: ""
+          )
       )
 
-      # Fire Trakt scrobble start
       content_id = resolve_content_id(media_file)
       Mydia.Integrations.Trakt.Scrobbler.scrobble_start(user_id, content_id)
 
-      # Emit a playback.started lifecycle event for subscribed plugins (U1).
-      # A real client write is always player-origin.
       if content_id != [] do
         Mydia.Events.playback_event("started", user_id, content_id, %{"origin" => "player"})
       end
@@ -153,7 +172,8 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       {:ok,
        %{
          session_id: info.session_id,
-         duration: duration
+         duration: duration,
+         start_position: session_start_position
        }}
     else
       {:error, reason} ->
@@ -161,6 +181,66 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         {:error, "Failed to start streaming session"}
     end
   end
+
+  defp build_session_opts(max_bitrate, start_position) do
+    opts = if max_bitrate, do: [max_bitrate: max_bitrate], else: []
+    if start_position > 0, do: [{:start_position, start_position} | opts], else: opts
+  end
+
+  # A never-probed file has no duration in its metadata, and the old
+  # fire-and-forget `Candidates.ensure_codec_info_async/1` (since deleted —
+  # this was its last caller) returned before the probe wrote anything, so the
+  # resolver reported `duration: nil` on every cold start. The client then had
+  # nothing to compute a resume percentage against and fell back to the
+  # partial HLS playlist length, which reads as 100%.
+  #
+  # Probing inline is what makes resume correct on a file's very first play.
+  # But ffprobe is itself bounded by :ffprobe_timeout_ms (30s by default)
+  # precisely because library paths can sit on slow network mounts, and
+  # blocking the play request for that long reads to a user as a hang.
+  #
+  # Cap the inline wait far below that. A fast local probe — the common case —
+  # still lands and resume is correct immediately. A slow one falls back to the
+  # old behaviour of no duration now, with the probe still running to populate
+  # metadata for the next play, instead of stalling playback.
+  @inline_probe_budget_ms 3_000
+
+  @doc false
+  # Public for unit testing, same as clamp_start_position/2: the budget_ms
+  # argument only exists so a test can force the fallback branch with a
+  # budget of 0 instead of mutating the global :ffprobe_timeout_ms env (which
+  # has previously caused SQLite/Postgres concurrency leaks in this repo).
+  def ensure_duration_known(media_file, budget_ms \\ @inline_probe_budget_ms)
+
+  def ensure_duration_known(%MediaFile{analyzed_at: nil} = media_file, budget_ms) do
+    task =
+      Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn ->
+        Candidates.ensure_codec_info(media_file)
+      end)
+
+    # `Task.ignore/1` on timeout, rather than a bare `Task.yield/2`: the reply
+    # and the monitor stay live otherwise, so `{ref, result}` and
+    # `{:DOWN, ...}` land in this process's mailbox minutes later. A GraphQL
+    # resolver over an Absinthe/Phoenix channel runs in a long-lived process,
+    # so those would accumulate. `Task.ignore/1` discards the reply without
+    # stopping the task, which is exactly the intent below.
+    case Task.yield(task, budget_ms) || Task.ignore(task) do
+      {:ok, %MediaFile{} = probed} ->
+        probed
+
+      _ ->
+        # Deliberately not shutting the task down: it finishes in the
+        # background and writes the metadata, so the next play has a duration.
+        Logger.info(
+          "ffprobe exceeded the #{budget_ms}ms inline budget for file " <>
+            "#{media_file.id}; starting the session without a known duration"
+        )
+
+        media_file
+    end
+  end
+
+  def ensure_duration_known(media_file, _budget_ms), do: media_file
 
   defp load_media_file(file_id) do
     {:ok, Library.get_media_file!(file_id, preload: [:library_path])}

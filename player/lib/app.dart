@@ -164,20 +164,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       routerConfig: router,
-      builder: (context, child) {
-        // Add cast mini controller overlay to all screens
-        return Stack(
-          children: [
-            if (child != null) child,
-            const Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: CastMiniController(),
-            ),
-          ],
-        );
-      },
+      // Float the cast mini controller above every route. `CastBarLayer`
+      // documents what mounting it out here costs the bar.
+      builder: (context, child) =>
+          CastBarLayer(child: child ?? const SizedBox.shrink()),
     );
   }
 }

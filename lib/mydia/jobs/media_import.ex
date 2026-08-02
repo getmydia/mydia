@@ -42,6 +42,7 @@ defmodule Mydia.Jobs.MediaImport do
   alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
   alias Mydia.Metadata.NfoWriter
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Upgrades
 
   defmodule Args do
     @moduledoc false
@@ -109,9 +110,9 @@ defmodule Mydia.Jobs.MediaImport do
 
     case fetch_download(download_id) do
       :not_found ->
-        # Self-heal: the row was deleted (likely by DownloadMonitor cleaning up
-        # an unmatched orphan, or by failure handling). No work to do — mark
-        # the job done so Oban stops retrying.
+        # Self-heal: the row was deleted (by failure handling, or by the user
+        # dismissing it). No work to do — mark the job done so Oban stops
+        # retrying.
         Logger.info("Media import short-circuit: download row no longer exists",
           download_id: download_id
         )
@@ -137,18 +138,6 @@ defmodule Mydia.Jobs.MediaImport do
         )
 
         :ok
-
-      orphaned_unmatched?(download) ->
-        # Self-heal: the download has no media_item, no library_path, and is
-        # tagged unmatched. There is no path to a successful import — discard
-        # so Oban stops retrying. The row stays so the user can still match
-        # it manually from the Issues tab while the torrent is in the client.
-        Logger.info("Media import discarded: unmatched download with no destination",
-          download_id: download_id,
-          attempt: attempt
-        )
-
-        {:cancel, :unmatched_no_destination}
 
       is_nil(download.completed_at) ->
         handle_incomplete_download(download, args, attempt, raw_args)
@@ -244,12 +233,6 @@ defmodule Mydia.Jobs.MediaImport do
   rescue
     Ecto.NoResultsError -> :not_found
   end
-
-  defp orphaned_unmatched?(%{match_status: "unmatched"} = download) do
-    is_nil(download.media_item_id) and is_nil(download.library_path_id)
-  end
-
-  defp orphaned_unmatched?(_download), do: false
 
   defp handle_incomplete_download(download, args, attempt, raw_args) do
     download_id = download.id
@@ -1702,6 +1685,19 @@ defmodule Mydia.Jobs.MediaImport do
           attrs
       end
 
+    # A season pack carries one target id but delivers many episodes. Each
+    # episode supersedes its OWN current best file, not the download's
+    # single target, which is what lets an above-cutoff episode keep its
+    # file when the gate in Task 10 (UpgradeFinalize) rejects the pack's
+    # version for it. A movie import is the degenerate single-file case of
+    # the same rule.
+    attrs =
+      Map.put(
+        attrs,
+        :supersedes_media_file_id,
+        supersede_target(download, Map.get(attrs, :media_item_id), Map.get(attrs, :episode_id))
+      )
+
     case Library.create_media_file(attrs) do
       {:ok, media_file} ->
         Logger.info("Created media file record",
@@ -1738,6 +1734,49 @@ defmodule Mydia.Jobs.MediaImport do
           {:error, :database_error}
         end
     end
+  end
+
+  # Only an upgrade-triggered download carries "upgrade_target_media_file_id"
+  # in its metadata; every ordinary import falls through the `_ -> nil` clause
+  # without running the lookup below, so the hot path for the common case
+  # (no upgrade in play) stays a single map pattern match.
+  #
+  # For an upgrade import, `Upgrades.current_best_file_id/2` resolves what
+  # THIS specific file (identified by its own media_item_id/episode_id, not
+  # the download's) currently supersedes.
+  defp supersede_target(download, media_item_id, episode_id) do
+    case download.metadata do
+      %{"upgrade_target_media_file_id" => target_id} when is_binary(target_id) ->
+        resolve_supersede_target(target_id, media_item_id, episode_id)
+
+      _ ->
+        nil
+    end
+  end
+
+  # Episodes: deliberately NO fallback to the download's single target_id. A
+  # season pack shares one target across many episodes, so an episode with no
+  # existing file of its own would inherit some OTHER episode's target id —
+  # exactly the cross-episode mistake this per-file resolution exists to
+  # avoid. `nil` correctly means "nothing to supersede for this file".
+  defp resolve_supersede_target(_target_id, _media_item_id, episode_id)
+       when is_binary(episode_id) do
+    Upgrades.current_best_file_id(nil, episode_id)
+  end
+
+  # Movies: one target, one file, no siblings to confuse it with, so the
+  # cross-episode hazard above cannot apply. Fall back to the target the sweep
+  # picked when the per-file lookup comes up empty — which it does whenever the
+  # quality profile stops resolving (deleted between grab and import) or the
+  # old file is no longer scorable. Leaving the pointer nil there would strand
+  # the upgrade: `UpgradeFinalize` only runs for a non-nil pointer, so the
+  # superseded file would never be trashed, the library would keep both copies,
+  # and `Health.upgrade_health/0` — which counts stale pointers — could not see
+  # it. A target that has since vanished is safe: a trash lands on
+  # `:orphaned` and a hard delete nilifies the FK (`on_delete: :nilify_all`),
+  # both of which clear the pointer and keep the new file.
+  defp resolve_supersede_target(target_id, media_item_id, nil) do
+    Upgrades.current_best_file_id(media_item_id, nil) || target_id
   end
 
   defp cleanup_download_client(download) do

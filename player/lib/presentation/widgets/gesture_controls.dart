@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../core/player/stream_timeline.dart';
+
 /// Gesture controls for mobile playback
 ///
 /// Features:
@@ -14,11 +16,23 @@ import 'package:media_kit/media_kit.dart';
 /// participate in the gesture arena.
 class GestureControls extends StatefulWidget {
   final Player player;
+
+  /// The mapping from the player's stream-local positions onto real media
+  /// positions. [StreamTimeline.zero] is correct for direct play and offline
+  /// files.
+  final StreamTimeline timeline;
+
+  /// Seeks to a real media position, restarting the HLS session when the
+  /// target is beyond what has been transcoded so far.
+  final Future<void> Function(Duration realTarget) onSeekToReal;
+
   final Widget child;
 
   const GestureControls({
     super.key,
     required this.player,
+    required this.timeline,
+    required this.onSeekToReal,
     required this.child,
   });
 
@@ -56,22 +70,24 @@ class _GestureControlsState extends State<GestureControls> {
   }
 
   void _seekBackward() {
-    final currentPosition = widget.player.state.position;
+    final timeline = widget.timeline;
+    final currentPosition = timeline.toReal(widget.player.state.position);
     final newPosition = currentPosition - const Duration(seconds: 10);
     final targetPosition =
         newPosition < Duration.zero ? Duration.zero : newPosition;
 
-    widget.player.seek(targetPosition);
+    widget.onSeekToReal(targetPosition);
     _showSeekFeedback(forward: false);
   }
 
   void _seekForward() {
-    final currentPosition = widget.player.state.position;
-    final duration = widget.player.state.duration;
+    final timeline = widget.timeline;
+    final currentPosition = timeline.toReal(widget.player.state.position);
+    final duration = timeline.resolveDuration(widget.player.state.duration);
     final newPosition = currentPosition + const Duration(seconds: 10);
     final targetPosition = newPosition > duration ? duration : newPosition;
 
-    widget.player.seek(targetPosition);
+    widget.onSeekToReal(targetPosition);
     _showSeekFeedback(forward: true);
   }
 

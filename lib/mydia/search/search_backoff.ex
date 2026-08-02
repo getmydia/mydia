@@ -12,10 +12,25 @@ defmodule Mydia.Search.SearchBackoff do
 
   ## Resource Types
 
-  - `"movie"` - Per-movie backoff, resource_id = media_item.id
+  - `"movie"` - Per-movie backoff for the missing-file search path, resource_id = media_item.id
   - `"tv_show"` - Per-show backoff, resource_id = media_item.id
   - `"season"` - Per-season backoff, resource_id = media_item.id, season_number set
-  - `"episode"` - Per-episode backoff, resource_id = episode.id
+  - `"episode"` - Per-episode backoff for the missing-file search path, resource_id = episode.id
+  - `"movie_upgrade"` - Per-movie backoff for the quality-upgrade search path, resource_id =
+    media_item.id. Deliberately namespaced apart from `"movie"`: a movie's file-presence state
+    changes over time (imported, then later trashed), so a backoff row from one search path must
+    not suppress the other once a movie crosses that boundary. See `Mydia.Upgrades.eligible_movies/1`.
+  - `"episode_upgrade"` - Per-episode backoff for the quality-upgrade search path, resource_id =
+    episode.id. Namespaced apart from `"episode"` for the same reason as `"movie_upgrade"`: an
+    episode's file-presence state changes over time, so a backoff row from one search path must
+    not suppress the other once an episode crosses that boundary. See
+    `Mydia.Upgrades.eligible_episodes/1`.
+  - `"season_upgrade"` - Per-season backoff for the quality-upgrade season-pack search path,
+    resource_id = media_item.id, season_number set. Namespaced apart from `"season"` (which
+    nothing currently reads for eligibility - unlike the other `_upgrade` buckets above, this
+    split isn't about file-presence races) so `Mydia.Jobs.UpgradeSweep` can suppress repeat
+    season-pack upgrade searches for a season that keeps finding no qualifying pack, without
+    also touching the ordinary missing-episode `"season"` bucket.
   """
 
   use Ecto.Schema
@@ -61,6 +76,14 @@ defmodule Mydia.Search.SearchBackoff do
       :first_failed_at
     ])
     |> validate_required([:resource_type, :resource_id])
-    |> validate_inclusion(:resource_type, ["movie", "tv_show", "season", "episode"])
+    |> validate_inclusion(:resource_type, [
+      "movie",
+      "tv_show",
+      "season",
+      "episode",
+      "movie_upgrade",
+      "episode_upgrade",
+      "season_upgrade"
+    ])
   end
 end

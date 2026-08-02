@@ -63,10 +63,17 @@ class ArtifactProvider {
       return result;
     }
 
-    final rustup = Rustup();
+    // LOCAL CHANGE (mydia, #252): only involve rustup when the build actually
+    // goes through it. With a standalone cargo on PATH (a Nix-provided
+    // toolchain, say) installing toolchains and targets into rustup downloads
+    // hundreds of megabytes nothing will use, and constructing Rustup() at all
+    // would require rustup to be installed.
+    final rustup = RustBuilder.buildsThroughRustup() ? Rustup() : null;
     for (final target in targets) {
       final builder = RustBuilder(target: target, environment: environment);
-      builder.prepare(rustup);
+      if (rustup != null) {
+        builder.prepare(rustup);
+      }
       _log.info('Building ${environment.crateInfo.packageName} for $target');
       final targetDir = await builder.build();
       // For local build accept both static and dynamic libraries.

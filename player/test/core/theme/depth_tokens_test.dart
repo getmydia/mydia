@@ -3,7 +3,8 @@
 // Verifies the token groups expose the documented constants with the expected
 // types, that the surface-tone hierarchy is monotonic (real layered depth, not
 // near-identical greys), and that wiring the tones into the theme keeps it
-// dark-only with the cinematic palette unchanged (R3).
+// dark-only, with a monotonic neutral surface ramp and a single accent hue
+// mapped across every Material 3 accent slot (R3).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -144,14 +145,16 @@ void main() {
       expect(DepthTokens.playerRimBottom.r, lessThan(0.5));
     });
 
-    test('tint is neutral, not the navy browse background', () {
-      expect(DepthTokens.playerChromeTint, isNot(AppColors.background));
+    test('tint is neutral — no colour cast to drain backdrop colour', () {
+      // Previously this compared the tint against a navy AppColors.background.
+      // The ground is neutral now, so the invariant is stated absolutely: the
+      // tint must carry no perceptible cast in any direction, otherwise the
+      // blurred, saturated backdrop behind the playback panel gets drained
+      // toward that hue instead of showing the video's own colour.
       final t = DepthTokens.playerChromeTint;
-      final bg = AppColors.background;
-      // Neutral: the tint's blue-to-red difference is smaller than the navy
-      // background's, so backdrop colour survives the fill instead of being
-      // drained to grey/blue mush.
-      expect(t.b - t.r, lessThan(bg.b - bg.r));
+      const tolerance = 2 / 255;
+      expect((t.b - t.r).abs(), lessThanOrEqualTo(tolerance));
+      expect((t.g - t.r).abs(), lessThanOrEqualTo(tolerance));
     });
 
     test('exposes panel and pill radii', () {
@@ -174,12 +177,15 @@ void main() {
   });
 
   group('theme wiring (R3)', () {
-    test('stays dark with the cinematic primary/secondary/accent hues', () {
+    test('stays dark, with one accent mapped across every accent slot', () {
       final scheme = AppTheme.darkTheme.colorScheme;
       expect(scheme.brightness, Brightness.dark);
+      // The palette collapsed from three accents to one. Material 3 still
+      // requires secondary and tertiary slots, so they carry the same hue
+      // rather than reintroducing the violet and cyan this removed.
       expect(scheme.primary, AppColors.primary);
-      expect(scheme.secondary, AppColors.secondary);
-      expect(scheme.tertiary, AppColors.accent);
+      expect(scheme.secondary, AppColors.primary);
+      expect(scheme.tertiary, AppColors.primary);
     });
 
     test('surface hierarchy is driven by the depth tokens', () {

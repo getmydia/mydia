@@ -118,10 +118,6 @@ defmodule Mydia.Settings.QualityMatcher do
       result_quality not in QualityProfile.preferred_resolutions(profile) ->
         false
 
-      # If there's an upgrade_until_quality, don't exceed it
-      profile.upgrade_until_quality && current_quality == profile.upgrade_until_quality ->
-        false
-
       # Compare quality levels
       true ->
         quality_level(result_quality) > quality_level(current_quality)

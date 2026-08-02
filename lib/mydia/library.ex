@@ -7,8 +7,9 @@ defmodule Mydia.Library do
   import Mydia.DB
   import Mydia.QueryHelpers
   alias Mydia.Repo
-  alias Mydia.Library.{MediaFile, FileAnalyzer, PhashGenerator, Text}
+  alias Mydia.Library.{MediaFile, FileAnalyzer, PhashGenerator, Text, TrashStore}
   alias Mydia.Library.ReleaseParser, as: FileParser
+  alias Mydia.Library.Structs.FileMetadata
 
   require Logger
 
@@ -275,11 +276,56 @@ defmodule Mydia.Library do
         %MediaFile{} = media_file,
         {:ok, %Mydia.Library.Structs.FileAnalysisResult{} = result}
       ) do
-    apply_analysis_success(media_file, result)
+    case apply_analysis_success(media_file, result) do
+      :ok ->
+        maybe_enqueue_upgrade_finalize(media_file)
+        :ok
+
+      other ->
+        other
+    end
   end
 
   def apply_analysis(%MediaFile{} = media_file, {:error, reason}) do
     apply_analysis_failure(media_file, reason)
+  end
+
+  # Enqueues Mydia.Jobs.UpgradeFinalize the moment a file that supersedes
+  # another finishes analysis — the first point it can be scored against its
+  # profile, and therefore the first point the upgrade/reject decision in
+  # Mydia.Upgrades.finalize_upgrade/1 can be made. apply_analysis_success/2
+  # only returns :ok on the actual nil -> analyzed transition (a
+  # re-analysis returns :already_analyzed), so this fires exactly once per
+  # import, never on a re-analysis of the same file.
+  defp maybe_enqueue_upgrade_finalize(%MediaFile{supersedes_media_file_id: nil}), do: :ok
+
+  defp maybe_enqueue_upgrade_finalize(%MediaFile{
+         id: media_file_id,
+         supersedes_media_file_id: supersedes_id
+       })
+       when is_binary(supersedes_id) do
+    alias Mydia.Jobs.UpgradeFinalize
+
+    changeset = UpgradeFinalize.new(%{"media_file_id" => media_file_id})
+
+    case insert_upgrade_finalize_job(changeset) do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to enqueue UpgradeFinalize",
+          media_file_id: media_file_id,
+          reason: inspect(reason)
+        )
+
+        :ok
+    end
+  end
+
+  defp insert_upgrade_finalize_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
   end
 
   defp apply_analysis_success(%MediaFile{} = media_file, result) do
@@ -315,6 +361,12 @@ defmodule Mydia.Library do
         |> maybe_put_struct_field(:container, result.container)
         |> maybe_put_struct_field(:width, result.width)
         |> maybe_put_struct_field(:height, result.height)
+        # The `audio_codec` column below is normalized for streaming
+        # compatibility, which collapses "DD+ 5.1" to "ac3" and "TrueHD Atmos"
+        # to "truehd" — losing the channel layout and the Atmos/E-AC3
+        # distinction that quality scoring needs. Keep the analyzer's own
+        # string so `Mydia.Upgrades.Attrs` has something lossless to read.
+        |> maybe_put_struct_field(:audio_codec_raw, result.audio_codec)
 
       write_analysis_success(
         media_file,
@@ -565,44 +617,217 @@ defmodule Mydia.Library do
   end
 
   @doc """
-  Moves a media file to trash by setting `trashed_at` to now.
+  Moves a media file to trash: the file leaves the library path for the trash
+  directory, and `trashed_at` is stamped on the row.
 
-  Trashed files are excluded from all queries by default and will be
-  permanently deleted after the configured retention period (default 30 days).
+  Trashed files are excluded from all queries by default and are permanently
+  deleted after the configured retention period (default 30 days).
+
+  The file has to physically move, not just get a timestamp. Trashed rows are
+  invisible to `list_media_files/1`, so a file left sitting on the library path
+  is seen by the next scan as a *new* file, matched back to the trashed row by
+  relative path, and restored - which silently reverted every automatic quality
+  upgrade and resurrected every release rejected for lying about its contents.
+  See `Mydia.Library.TrashStore` for where the trash lives and why.
+
+  A file that is already gone from disk stays a normal outcome: that is the
+  original reason this function exists (marking what a scan found missing).
+  That case is recorded on the row as `"trashed_missing"`, which is what stops
+  `TrashCleanup` from later deleting a file that has since come back at the
+  library path - an unmounted share that a scan read as a deleted library, for
+  instance. See `Mydia.Library.TrashStore.discard/2`.
+
+  Returns `{:error, reason}` without touching the row when a file that *is*
+  present could not be moved. A row marked trashed while its file sits in the
+  library is precisely the inconsistency this move exists to remove, so the two
+  are kept in step or neither changes.
   """
-  @spec trash_media_file(MediaFile.t()) :: {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()}
+  @spec trash_media_file(MediaFile.t()) ::
+          {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
   def trash_media_file(%MediaFile{} = media_file) do
-    media_file
-    |> Ecto.Changeset.change(trashed_at: DateTime.utc_now() |> DateTime.truncate(:second))
-    |> Repo.update()
+    media_file = Repo.preload(media_file, :library_path)
+
+    case TrashStore.store(media_file) do
+      {:ok, outcome} ->
+        media_file
+        |> Ecto.Changeset.change(
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          metadata: put_trash_state(media_file.metadata, outcome)
+        )
+        |> Repo.update()
+        |> case do
+          {:ok, trashed} ->
+            {:ok, trashed}
+
+          {:error, changeset} ->
+            # The bytes already moved but the row did not. Put them back
+            # rather than leave an active row pointing at an empty path.
+            _ = TrashStore.restore(media_file, moved_path(outcome))
+            {:error, changeset}
+        end
+
+      {:error, reason} ->
+        {:error, {:trash_move_failed, reason}}
+    end
   end
 
   @doc """
-  Restores a trashed media file by clearing `trashed_at`.
+  Restores a trashed media file: the file moves back to its library path and
+  `trashed_at` is cleared.
+
+  A trashed copy that is missing from the trash directory is not an error - the
+  row is restored anyway, exactly as it was before trashing moved files at all.
+
+  When the library path is already occupied the trashed copy is deliberately
+  left where it is rather than clobbering what is there, and the row keeps
+  pointing at it so those bytes stay reclaimable instead of becoming an
+  untracked file under `.mydia-trash/`.
   """
-  @spec restore_media_file(MediaFile.t()) :: {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()}
+  @spec restore_media_file(MediaFile.t()) ::
+          {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
   def restore_media_file(%MediaFile{} = media_file) do
-    media_file
-    |> Ecto.Changeset.change(trashed_at: nil)
-    |> Repo.update()
+    media_file = Repo.preload(media_file, :library_path)
+
+    case TrashStore.restore(media_file, trashed_path(media_file)) do
+      :ok ->
+        media_file
+        |> Ecto.Changeset.change(
+          trashed_at: nil,
+          metadata: drop_trash_state(media_file.metadata)
+        )
+        |> Repo.update()
+
+      {:ok, :trash_copy_retained} ->
+        media_file
+        |> Ecto.Changeset.change(trashed_at: nil)
+        |> Repo.update()
+
+      {:error, reason} ->
+        Logger.error("Could not restore a trashed media file",
+          media_file_id: media_file.id,
+          reason: inspect(reason)
+        )
+
+        {:error, {:trash_restore_failed, reason}}
+    end
   end
 
   @doc """
-  Permanently deletes all media files that have been trashed for longer than `days`.
+  Permanently deletes all media files that have been trashed for longer than `days`,
+  including the bytes behind them.
 
   Returns `{:ok, count}` with the number of permanently deleted files.
+
+  Deleting from disk is the other half of
+  [#295](https://github.com/getmydia/mydia/issues/295): the purge used to drop
+  the row and leave the file forever, so trash retention never reclaimed any
+  space.
+
+  A row whose bytes could not be deleted is **kept**, and its count is not
+  included in the return value. Dropping it would orphan the file: nothing
+  points at a path under `.mydia-trash/<id>/` once its row is gone, so no
+  later run would retry the delete and the space would never come back.
+  Keeping the row means the next purge tries again, which is the right
+  response to the transient failures that cause this - a read-only mount, a
+  permissions blip, an I/O error. Rows whose file was already gone still
+  purge normally; a missing file is a reached goal state, not a failure.
   """
   @spec purge_old_trashed_media_files(integer()) :: {:ok, non_neg_integer()}
   def purge_old_trashed_media_files(days \\ 30) do
     cutoff = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-days, :day)
 
+    expired =
+      from(f in MediaFile,
+        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff,
+        preload: :library_path
+      )
+      |> Repo.all()
+
+    {discarded, retained} =
+      Enum.split_with(expired, &(TrashStore.discard(&1, trash_state(&1)) == :ok))
+
+    if retained != [] do
+      Logger.warning(
+        "Kept trashed media file rows whose bytes could not be deleted; the next purge will " <>
+          "retry them. Dropping the rows would leave the files on disk with nothing tracking " <>
+          "them.",
+        count: length(retained),
+        media_file_ids: Enum.map(retained, & &1.id)
+      )
+    end
+
+    ids = Enum.map(discarded, & &1.id)
+
     {count, _} =
       from(f in MediaFile,
-        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff
+        where:
+          f.id in ^ids and not is_nil(f.trashed_at) and
+            f.trashed_at < ^cutoff
       )
       |> Repo.delete_all()
 
     {:ok, count}
+  end
+
+  # How a row came to be trashed, recorded on the row itself. Three states,
+  # and `TrashStore.discard/2` treats all three differently:
+  #
+  #   * "trashed_path" - the bytes were moved there. Recorded rather than
+  #     recomputed so restore and purge do not depend on the trash directory
+  #     configuration still resolving the same way later.
+  #   * "trashed_missing" - there was nothing on disk to move. Critically,
+  #     this is *not* the same as a legacy row even though both leave
+  #     "trashed_path" unset: the file may well be present at the library
+  #     path now (an unmounted share that came back), and deleting it there
+  #     would be silent data loss. See TrashStore.discard/2.
+  #   * neither key - a row trashed before TrashStore existed. Its file is
+  #     still at the library path and the purge deletes it there (#295).
+  defp trash_state(%MediaFile{} = media_file) do
+    cond do
+      path = trashed_path(media_file) -> {:moved, path}
+      trashed_missing?(media_file) -> :missing
+      true -> :legacy
+    end
+  end
+
+  defp trashed_path(%MediaFile{metadata: %FileMetadata{extra: extra}}) when is_map(extra) do
+    case extra["trashed_path"] do
+      path when is_binary(path) and path != "" -> path
+      _ -> nil
+    end
+  end
+
+  defp trashed_path(%MediaFile{}), do: nil
+
+  defp trashed_missing?(%MediaFile{metadata: %FileMetadata{extra: extra}}) when is_map(extra),
+    do: extra["trashed_missing"] == true
+
+  defp trashed_missing?(%MediaFile{}), do: false
+
+  defp moved_path({:moved, path}), do: path
+  defp moved_path(:missing), do: nil
+
+  defp put_trash_state(metadata, {:moved, path}) when is_binary(path) do
+    metadata
+    |> drop_trash_state()
+    |> then(&%{&1 | extra: Map.put(&1.extra, "trashed_path", path)})
+  end
+
+  defp put_trash_state(metadata, :missing) do
+    metadata
+    |> drop_trash_state()
+    |> then(&%{&1 | extra: Map.put(&1.extra, "trashed_missing", true)})
+  end
+
+  defp drop_trash_state(nil), do: FileMetadata.empty()
+
+  defp drop_trash_state(%FileMetadata{} = metadata) do
+    extra =
+      (metadata.extra || %{})
+      |> Map.delete("trashed_path")
+      |> Map.delete("trashed_missing")
+
+    %{metadata | extra: extra}
   end
 
   @doc """
@@ -2095,6 +2320,58 @@ defmodule Mydia.Library do
         where: ^Mydia.DB.json_equals(:metadata, "$.download_client_id", client_id)
 
     Repo.exists?(query)
+  end
+
+  @doc """
+  Batched `torrent_already_imported?/2`: which of `pairs` are already imported.
+
+  `pairs` are `{client_name, client_id}` tuples. Returns the subset found in
+  `media_files` provenance, as a MapSet for membership testing.
+
+  Checking one pair at a time costs a query each, which the external-torrent
+  scan pays on every pass over every foreign torrent in every client. This
+  filters server-side by the exact pairs asked about, so the rows it loads are
+  bounded by the candidates rather than by library size.
+
+  Chunked because the filter is an OR-chain of pair conditions and SQLite caps
+  expression depth; the chunk size keeps the generated SQL well inside it.
+  """
+  @spec imported_torrent_pairs([{String.t(), String.t()}]) :: MapSet.t({String.t(), String.t()})
+  def imported_torrent_pairs([]), do: MapSet.new()
+
+  def imported_torrent_pairs(pairs) do
+    pairs
+    |> Enum.uniq()
+    |> Enum.chunk_every(100)
+    |> Enum.reduce(MapSet.new(), fn chunk, acc ->
+      chunk
+      |> imported_pairs_chunk()
+      |> MapSet.union(acc)
+    end)
+  end
+
+  defp imported_pairs_chunk(chunk) do
+    condition =
+      Enum.reduce(chunk, dynamic(false), fn {client_name, client_id}, acc ->
+        dynamic(
+          ^acc or
+            (^Mydia.DB.json_equals(:metadata, "$.download_client", client_name) and
+               ^Mydia.DB.json_equals(:metadata, "$.download_client_id", client_id))
+        )
+      end)
+
+    wanted = MapSet.new(chunk)
+
+    from(f in MediaFile, where: ^condition, select: f.metadata)
+    |> Repo.all()
+    |> Enum.reduce(MapSet.new(), fn metadata, acc ->
+      # download_client / download_client_id are not declared FileMetadata
+      # fields, so they live in the `extra` catch-all.
+      extra = (metadata && metadata.extra) || %{}
+      pair = {extra["download_client"], extra["download_client_id"]}
+
+      if MapSet.member?(wanted, pair), do: MapSet.put(acc, pair), else: acc
+    end)
   end
 
   @doc """

@@ -128,7 +128,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "TRaSH - HD Bluray + WEB",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description:
             "TRaSH Guides: High-quality HD encodes for Blu-ray and streaming sources (6-15 GB)",
           quality_standards: %{
@@ -160,7 +160,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "TRaSH - UHD Bluray + WEB",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description: "TRaSH Guides: Ultra HD 4K encodes with HDR support (20-60 GB)",
           quality_standards: %{
             min_resolution: "2160p",
@@ -192,7 +192,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "TRaSH - Remux + WEB 1080p",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description: "TRaSH Guides: 1080p with lossless audio (20-40 GB)",
           quality_standards: %{
             min_resolution: "1080p",
@@ -223,7 +223,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "TRaSH - Remux + WEB 2160p",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description: "TRaSH Guides: 4K with lossless audio and HDR (40-100 GB)",
           quality_standards: %{
             min_resolution: "2160p",
@@ -255,7 +255,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "TRaSH - WEB-1080p",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description: "TRaSH Guides: Web releases optimized for TV shows (1-3 GB per episode)",
           quality_standards: %{
             min_resolution: "720p",
@@ -286,7 +286,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "TRaSH - WEB-2160p",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description:
             "TRaSH Guides: 4K web releases with HDR for TV shows (5-15 GB per episode)",
           quality_standards: %{
@@ -327,7 +327,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 720p Quality",
           upgrades_allowed: true,
-          upgrade_until_quality: "720p",
+          upgrade_until_score: 60,
           description:
             "Profilarr: Transparent x264 720p encodes using GPPI scoring (original language only)",
           quality_standards: %{
@@ -360,7 +360,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 1080p Quality",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description:
             "Profilarr: Transparent x264 1080p encodes using GPPI scoring (original language only)",
           quality_standards: %{
@@ -393,7 +393,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 1080p Quality HDR",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description:
             "Profilarr: Transparent x265 HDR 1080p encodes using GPPI scoring (original language only)",
           quality_standards: %{
@@ -427,7 +427,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 1080p Balanced",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description:
             "Profilarr: Consistent 1080p WEB-DLs with streaming source prioritization (original language only)",
           quality_standards: %{
@@ -461,7 +461,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 1080p Efficient",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description:
             "Profilarr: Efficient 1080p x265 WEB-DLs for smaller file sizes (original language only)",
           quality_standards: %{
@@ -494,7 +494,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 1080p Compact",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description:
             "Profilarr: Compact 1080p x265 encodes for maximum storage efficiency (original language only)",
           quality_standards: %{
@@ -528,7 +528,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 1080p Remux",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description:
             "Profilarr: Lossless 1080p Remux with premium audio (original language only)",
           quality_standards: %{
@@ -563,7 +563,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 2160p Quality",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description:
             "Profilarr: Transparent x265 4K encodes using EEI scoring (original language only)",
           quality_standards: %{
@@ -597,7 +597,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 2160p Balanced",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description:
             "Profilarr: Consistent 2160p WEB-DLs with streaming source prioritization (original language only)",
           quality_standards: %{
@@ -633,7 +633,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 2160p Efficient",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description:
             "Profilarr: Efficient 2160p HEVC WEB-DLs for smaller 4K file sizes (original language only)",
           quality_standards: %{
@@ -668,7 +668,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Profilarr - 2160p Remux",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description:
             "Profilarr: Lossless 4K UHD Remux with premium audio and HDR (original language only)",
           quality_standards: %{
@@ -709,7 +709,6 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Storage - Compact",
           upgrades_allowed: false,
-          upgrade_until_quality: nil,
           description:
             "Compact file sizes for limited storage (1-4 GB movies, 300-800 MB episodes)",
           quality_standards: %{
@@ -740,7 +739,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Storage - Balanced",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description: "Balanced quality and size (4-10 GB movies, 800-2 GB episodes)",
           quality_standards: %{
             min_resolution: "720p",
@@ -771,7 +770,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Storage - Archival",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description: "Maximum quality for archival (30-80 GB movies)",
           quality_standards: %{
             min_resolution: "1080p",
@@ -808,7 +807,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Use Case - Streaming",
           upgrades_allowed: true,
-          upgrade_until_quality: "1080p",
+          upgrade_until_score: 85,
           description: "Optimized for streaming (2-8 GB movies)",
           quality_standards: %{
             min_resolution: "720p",
@@ -839,7 +838,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Use Case - Local Playback",
           upgrades_allowed: true,
-          upgrade_until_quality: "2160p",
+          upgrade_until_score: 95,
           description: "High quality for local playback (10-40 GB movies)",
           quality_standards: %{
             min_resolution: "1080p",
@@ -867,7 +866,6 @@ defmodule Mydia.Settings.QualityProfilePresets do
         profile_data: %{
           name: "Use Case - Mobile",
           upgrades_allowed: false,
-          upgrade_until_quality: nil,
           description: "Mobile-friendly sizes and codecs (500 MB-2 GB movies)",
           quality_standards: %{
             max_resolution: "720p",

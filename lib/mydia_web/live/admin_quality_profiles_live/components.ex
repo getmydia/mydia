@@ -27,7 +27,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
               name="profile_id"
             >
               <option value="" selected={is_nil(@default_quality_profile_id)}>
-                Any Quality (first available)
+                None (no default)
               </option>
               <%= for profile <- @quality_profiles do %>
                 <option value={profile.id} selected={@default_quality_profile_id == profile.id}>
@@ -330,26 +330,26 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
         label="Allow automatic quality upgrades"
       />
 
-      <div class="form-control">
-        <label class="label">
-          <span class="label-text">Upgrade until quality</span>
-        </label>
-        <select
-          name="quality_profile[upgrade_until_quality]"
-          class="select select-bordered w-full"
-        >
-          <option value="" selected={!Ecto.Changeset.get_field(@form.source, :upgrade_until_quality)}>
-            No cap
-          </option>
-          <%= for res <- ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"] do %>
-            <option
-              value={res}
-              selected={Ecto.Changeset.get_field(@form.source, :upgrade_until_quality) == res}
-            >
-              {res}
-            </option>
-          <% end %>
-        </select>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <.input
+          field={@form[:upgrade_until_score]}
+          type="number"
+          id="quality-profile-upgrade-score"
+          label="Upgrade cutoff score"
+          min="0"
+          max="100"
+          hint="Files scoring below this are eligible for an automatic upgrade. Setting it near 100 means almost nothing is ever good enough, so the sweep will keep searching indefinitely."
+        />
+
+        <.input
+          field={@form[:min_upgrade_margin]}
+          type="number"
+          id="quality-profile-upgrade-margin"
+          label="Minimum upgrade margin"
+          min="0"
+          max="100"
+          hint="How much higher a candidate release's score must be than the current file's before it counts as a real upgrade. Keeps a sweep from swapping files for a negligible gain."
+        />
       </div>
     </div>
     """

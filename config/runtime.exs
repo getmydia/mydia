@@ -319,6 +319,16 @@ if config_env() == :prod do
   end
 end
 
+# Trash directory (all environments). Optional: leaving it unset trashes into a
+# .mydia-trash directory beside each library path, which is outside the library
+# and normally on the same filesystem. Set this only to collect every library's
+# trash in one place, and make sure the directory you pick is outside all of
+# your library paths. See Mydia.Library.TrashStore.
+case System.get_env("MYDIA_TRASH_DIR") do
+  dir when is_binary(dir) and dir != "" -> config :mydia, :trash_dir, dir
+  _ -> :ok
+end
+
 # FlareSolverr configuration (all environments)
 # FlareSolverr is a proxy server to bypass Cloudflare and DDoS-GUARD protection
 # Used by Cardigann indexers that require browser-based challenge solving

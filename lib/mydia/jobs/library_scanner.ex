@@ -707,13 +707,26 @@ defmodule Mydia.Jobs.LibraryScanner do
       # Process batch in a transaction — trash instead of hard-delete
       Repo.transaction(fn ->
         Enum.each(batch, fn media_file ->
-          {:ok, _} = Library.trash_media_file(media_file)
-
           # Preload library_path association for path resolution
           media_file = Mydia.Repo.preload(media_file, :library_path)
           absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
 
-          Logger.debug("Trashed media file record", path: absolute_path)
+          # These files are missing from disk, which is the one case
+          # Library.trash_media_file/1 has nothing to move, so a failure here
+          # is a database problem. Log it and keep going rather than raising a
+          # MatchError that aborts the whole batch transaction and rolls back
+          # every other file in it.
+          case Library.trash_media_file(media_file) do
+            {:ok, _} ->
+              Logger.debug("Trashed media file record", path: absolute_path)
+
+            {:error, reason} ->
+              Logger.error("Failed to trash a media file missing from disk",
+                path: absolute_path,
+                media_file_id: media_file.id,
+                reason: inspect(reason)
+              )
+          end
         end)
       end)
     end)
