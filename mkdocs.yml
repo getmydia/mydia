@@ -81,9 +81,11 @@ nav:
   - Home: index.md
   - Using Mydia:
       - Tutorials:
+          - using/tutorials/index.md
           - using/tutorials/get-mydia-running.md
           - using/tutorials/first-library-import.md
       - How-to guides:
+          - using/how-to/index.md
           - using/how-to/install-docker-compose.md
           - using/how-to/connect-download-client.md
           - using/how-to/connect-indexer.md
@@ -102,6 +104,7 @@ nav:
           - using/how-to/nixos.md
           - using/how-to/remote-access.md
       - Reference:
+          - using/reference/index.md
           - using/reference/environment-variables.md
           - using/reference/configuration.md
           - using/reference/library-types.md
@@ -111,6 +114,7 @@ nav:
           - using/reference/database.md
           - using/reference/api.md
       - Explanation:
+          - using/explanation/index.md
           - using/explanation/configuration-model.md
           - using/explanation/media-pipeline.md
           - using/explanation/quality-decisions.md

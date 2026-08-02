@@ -23,44 +23,42 @@ A modern, self-hosted media management platform for tracking, organizing, and mo
 - **Trakt.tv Integration** - Scrobbling and library sync
 - **Modern Real-Time UI** - Phoenix LiveView with instant updates and responsive design
 
-## Quick Start
+## Where to Start
 
-Get started with Mydia in minutes using Docker Compose:
+<div class="grid cards" markdown>
 
-```yaml
-services:
-  mydia:
-    image: ghcr.io/getmydia/mydia:latest
-    container_name: mydia
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=America/New_York
-      - SECRET_KEY_BASE=your-secret-key-base-here
-      - GUARDIAN_SECRET_KEY=your-guardian-secret-key-here
-      - PHX_HOST=localhost
-      - PORT=4000
-      - MOVIES_PATH=/media/library/movies
-      - TV_PATH=/media/library/tv
-    volumes:
-      - /path/to/mydia/config:/config
-      - /path/to/your/media:/media
-    ports:
-      - 4000:4000
-    restart: unless-stopped
-```
+-   **New to Mydia**
 
-Generate the required secrets:
+    Follow the [Get Mydia running](using/tutorials/get-mydia-running.md) tutorial
+    and have a working instance with an admin account in about 10 minutes.
 
-```bash
-# Generate SECRET_KEY_BASE
-openssl rand -base64 48
+-   **Have a specific task**
 
-# Generate GUARDIAN_SECRET_KEY
-openssl rand -base64 48
-```
+    The [how-to guides](using/how-to/index.md) cover installation, connecting
+    clients and indexers, deployment, and everything else you do once Mydia is
+    running.
 
-For detailed setup instructions, see the [Getting Started Guide](using/tutorials/get-mydia-running.md).
+-   **Looking something up**
+
+    The [reference](using/reference/index.md) section lists environment
+    variables, configuration options, and schemas.
+
+-   **Want to know why**
+
+    [Explanation](using/explanation/index.md) covers why Mydia works the way it
+    does, including how it compares to Radarr and Sonarr.
+
+-   **Building a plugin**
+
+    [Building Plugins](plugins/index.md) covers the plugin sandbox, the event
+    model, and how to write, test, and ship one.
+
+-   **Contributing to Mydia**
+
+    [Contributing](contributing/setup.md) covers the development environment,
+    testing, and the codebase's architecture.
+
+</div>
 
 ## Screenshots
 
@@ -83,12 +81,6 @@ For detailed setup instructions, see the [Getting Started Guide](using/tutorials
     ![Calendar](https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/calendar.png)
 
 </div>
-
-## Comparison with Radarr & Sonarr
-
-Mydia collapses several services into one and is much younger; Radarr and Sonarr are two specialised, deeply refined tools that expect to be surrounded by other tools.
-
-[Mydia Compared to Radarr and Sonarr](using/explanation/vs-radarr-sonarr.md) sets out the full argument, including a feature table and an honest account of where the *arr stack is still better.
 
 ## Getting Help
 
