@@ -94,6 +94,10 @@ nav:
           - using/how-to/sso-oidc.md
           - using/how-to/postgresql.md
           - using/how-to/reverse-proxy.md
+          - using/how-to/backup-restore.md
+          - using/how-to/update-mydia.md
+          - using/how-to/monitor-and-logs.md
+          - using/how-to/nixos.md
           - using/how-to/remote-access.md
       - Reference:
           - using/reference/environment-variables.md

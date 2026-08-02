@@ -178,6 +178,12 @@ GRANT ALL PRIVILEGES ON DATABASE mydia TO mydia;
 3. Review connection pool settings
 4. Check server resources
 
+### Database Errors
+
+1. Check disk space
+2. Verify database file permissions
+3. Try [restoring from a backup](backup-restore.md)
+
 ## When to Use PostgreSQL
 
 **Use PostgreSQL for:**

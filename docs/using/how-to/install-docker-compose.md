@@ -2,6 +2,14 @@
 
 Mydia can be installed using Docker (recommended) or from source for development.
 
+## Prerequisites
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| CPU | 1 core | 2+ cores |
+| RAM | 512MB | 1GB+ |
+| Disk | 1GB (plus media storage) | SSD storage for the database |
+
 ## Supported Architectures
 
 Multi-platform images are available for the following architectures:
@@ -193,6 +201,14 @@ id your_user
 ```
 
 Use these values for `PUID` and `PGID` in your container configuration.
+
+## Troubleshooting
+
+### Container Won't Start
+
+1. Check logs: `docker compose logs mydia`
+2. Verify required environment variables are set
+3. Check volume permissions
 
 ## Next Steps
 
