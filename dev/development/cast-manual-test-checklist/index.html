@@ -1537,6 +1537,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#resume" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resume
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1721,6 +1732,62 @@ already implemented behind the same gate.</p>
   failing cast may take up to three attempts (direct → bridge → transcode)
   before reporting an error to the user.</li>
 </ul>
+<h2 id="resume">Resume</h2>
+<p>Automated coverage for the resume decision itself lives in
+<code>resume_decision_coverage_test.dart</code>, one widget test per playback source. It
+cannot reach real receivers, real elapsed time, or a real progress sync round
+trip to the server, so run this section by hand against actual hardware.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Scenario</th>
+<th>Expected</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Watch 20 minutes of an episode locally, stop, choose a Chromecast from the detail screen, play</td>
+<td>Resume prompt appears, then the receiver starts at 20 minutes</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Let it run past a progress sync (10 seconds), stop casting</td>
+<td><strong>The server records roughly 20 minutes, not 0.</strong> This is the progress-destruction guard</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Scrub the cast to 50 minutes</td>
+<td>A brief reload, then playback at 50 minutes, not a snap back</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Scrub the cast back to 5 minutes, before the resume offset</td>
+<td>A reload, then playback at 5 minutes</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Airplane mode, play a downloaded episode, watch 10 minutes, quit, replay</td>
+<td>Resume prompt at 10 minutes</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Go back online</td>
+<td>The server picks up the offline position within a few seconds</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Repeat case 1 against a DLNA renderer</td>
+<td>Resume with no reload, since progressive routes seek directly</td>
+</tr>
+</tbody>
+</table>
+<p>Case 2 is the one to check most carefully. A resume that looks correct on
+screen, receiver playing from the right spot and all, can still report
+position 0 back to the server if the sync fires before the resumed offset
+takes effect. That silently erases the user's real watch history for that
+title, with nothing on screen to suggest anything went wrong.</p>
 
 
 
