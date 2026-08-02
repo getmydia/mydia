@@ -42,9 +42,9 @@ buys three things a scripting embed doesn't give for free:
 
 The published SDK (`mydia-plugin-sdk`) happens to be Rust today, but nothing
 about the contract is Rust-specific: it's a WIT interface, which is the point
-of the component model. The `#[mydia::plugin]` macro just adapts a plain typed
-handler function onto the component's exported interface, so plugin authors
-never hand-write the generated binding boilerplate.
+of the component model. The `#[mydia_plugin_sdk::plugin]` macro just adapts a
+plain typed handler function onto the component's exported interface, so plugin
+authors never hand-write the generated binding boilerplate.
 
 ## Exports, imports, and the contract version
 
@@ -75,9 +75,24 @@ media record, hold a key/value store, run on a schedule) is a named
 *declares* what it wants; the operator sees that declaration and approves it
 before the plugin runs at all. A plugin can never widen its own grant at
 runtime; there's no equivalent of asking for permission mid-execution the way
-a mobile app might. Adding a new capability class or a new `net:http` host in
-a manifest revision returns the plugin to unapproved, so an operator always
-sees exactly what a plugin can reach before it reaches it again.
+a mobile app might.
+
+Grants never auto-expand, and that is the guarantee worth trusting: what an
+approved plugin may do is fixed at the moment the operator approved it, in the
+`granted_capabilities` the host stores, and the host re-checks that grant on
+every call rather than trusting the manifest.
+
+It's worth being precise about what "never auto-expand" does **not** mean.
+Revising a manifest to declare a new capability class or a new `net:http` host
+does not return the plugin to unapproved. The stored grant is left exactly as it
+was, and the plugin keeps running on it. The newly declared capability is simply
+not granted, so calls against it come back `Denied` at runtime while the plugin
+still shows as approved and enabled.
+
+That is safe (nothing widened without an operator saying so) but it is
+operationally surprising, because the plugin looks fine and fails invisibly at
+the one call site that needed the new permission. If you revise a manifest to
+ask for more, re-approve the plugin afterwards to pick the new declaration up.
 
 This is also why `net:http` is an exact-hostname allowlist with no wildcards:
 a wildcard subdomain grant is effectively an open exfiltration channel, since

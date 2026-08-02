@@ -1,4 +1,4 @@
-# Quick Start
+# Get Mydia Running
 
 By the end of this tutorial, Mydia will be running with a working admin account and two empty libraries (movies and TV shows), ready for media. It takes about 10 minutes.
 

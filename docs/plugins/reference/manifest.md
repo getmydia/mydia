@@ -40,7 +40,7 @@ This page is a practical reference, using the bundled webhook notifier
 | `description` | no | One-line summary shown in the UI. |
 | `author` | no | Plugin author. |
 | `entrypoint` | no | Exported handler name. Defaults to the SDK handler; leave unset unless you know you need it. |
-| `delivery` | no | `durable` (retried, at-least-once) or `best-effort`. Defaults to best-effort. |
+| `delivery` | no | `durable` (enqueues an Oban job, retried, at-least-once) or `inline` (runs synchronously, not retried). Defaults to `inline`. Any other value, including a typo, silently becomes `inline`. |
 | `min_host_version` | no | Lowest Mydia version that can run this plugin. See below. |
 | `capabilities` | yes | What the plugin subscribes to and is allowed to do. See below. |
 | `settings_schema` | no | Operator-editable configuration fields. See below. |
@@ -83,8 +83,18 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
     scoped**: a user is only visible to the plugin after they click *Connect* on
     their profile. `data-list playback_progress` returns rows only for connected
     users, and `ensure-watched` is rejected for a user without an active
-    connection. Adding an egress host or a new capability class in a manifest
-    revision returns the plugin to unapproved.
+    connection.
+
+!!! warning "A manifest revision does not re-trigger approval"
+    Declaring a new capability class or a new `net:http` host in a revised
+    manifest does **not** return the plugin to unapproved. The stored grant is
+    left untouched, the plugin stays approved and enabled on its old grant, and
+    calls against the newly declared capability come back `Denied` at runtime
+    with no other signal.
+
+    Nothing widens without an operator approving it, which is the guarantee that
+    matters, but the failure is quiet. After revising a manifest to request more,
+    re-approve the plugin so the new declaration is actually granted.
 
 !!! warning "`net:http` is an exact-host allowlist"
     List each host you contact (`discord.com`, `api.example.com`). Wildcard
@@ -116,7 +126,7 @@ in the admin UI, and the operator's values arrive at runtime inside the event's
 |-----------|------------|---------|
 | `key` | all | The config key your handler reads. |
 | `label` | all | Form label shown to the operator. |
-| `required` | all | Operator must provide a value. |
+| `required` | all | **Not implemented.** Accepted in the manifest and then ignored: the form does not mark the field, and an empty value is not rejected. Validate in your handler instead. |
 | `options` | `enum` | The allowed choices (array of strings). |
 | `grants_host` | `url` | The host of the operator's value is added to the plugin's `net:http` allowlist at config time. |
 | `visible_when` | all | Show the field only when another field has a given value. |

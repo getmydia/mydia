@@ -1,32 +1,43 @@
 # Backing Up and Restoring Mydia
 
-This guide covers automatic database backups, the manual backup and restore procedure for SQLite and PostgreSQL, and what to do about configuration files.
+This guide covers the manual backup and restore procedure for SQLite and PostgreSQL, and what to do about configuration files.
 
-## Automatic Backups
+!!! danger "Your container does not back itself up before migrating"
+    Mydia applies pending database migrations automatically on startup, from the
+    supervision tree, with **no backup step**. There is no automatic pre-migration
+    backup in a container deployment, on either SQLite or PostgreSQL.
 
-Database migrations run automatically on startup. Before running them, Mydia creates an automatic backup:
+    Take a backup yourself before every upgrade, using the procedure below. Nothing
+    else will do it for you.
 
-- **SQLite:** a backup file is created alongside the database
-- **PostgreSQL:** Mydia does not create an automatic backup; use an external backup solution (see below)
+## What Mydia actually does
 
-### Backup Location
+| Environment | Pre-migration backup |
+|---|---|
+| Docker, Docker Compose, or any release build | **None.** Migrations run on boot, unbacked. |
+| Local development via `./dev` | Yes, SQLite only, before a pending migration runs. |
 
-SQLite backups are stored at:
+The automatic backup is a **development-environment** feature. It is a devenv task
+(`mix mydia.backup_before_migrate`) that runs when you enter the dev shell and a
+migration is pending. It copies the SQLite file to
+`<database>_backup_YYYYMMDD_HHMMSS.db` next to the database and keeps the 10 most
+recent copies. Nothing invokes it in a release build, so it never runs in your
+container.
 
-```
-/config/mydia_backup_YYYYMMDD_HHMMSS.db
-```
+There is no environment variable that turns automatic backups on for a container,
+and none that turns them off.
 
-Only the 10 most recent backups are kept.
+## Before you upgrade
 
-### Disabling Backups
+Upgrades are the moment a backup matters, because a migration rewrites your
+database in place and a failed one can leave it unusable. The routine is:
 
-```bash
-SKIP_BACKUPS=true
-```
+1. Take a backup with the procedure below.
+2. Confirm the backup file exists and is non-empty.
+3. Pull the new image and start it.
+4. Watch the logs for migration errors before you go and do something else.
 
-!!! warning
-    Not recommended. Manual backups should be in place before disabling automatic ones.
+See [Updating Mydia](update-mydia.md) for the upgrade itself.
 
 ## Manual Backup and Restore
 
@@ -80,4 +91,8 @@ docker compose exec -T postgres psql -U mydia mydia < backup.sql
 
 ## Configuration Backup
 
-Database settings are included in automatic database backups. Environment variables and YAML configuration files live outside the database, so back them up separately as part of your infrastructure management.
+Settings you changed in the web UI live in the database, so a database backup
+captures them. Environment variables and the YAML configuration file live outside
+the database, so back them up separately as part of your infrastructure
+management. See [How Configuration Works](../explanation/configuration-model.md)
+for which settings land where.

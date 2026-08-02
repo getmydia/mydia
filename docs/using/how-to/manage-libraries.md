@@ -25,14 +25,19 @@ LIBRARY_PATH_2_TYPE=books
 
 ### Via Admin UI
 
-1. Navigate to **Admin > Libraries**
-2. Click **Add Library**
-3. Configure:
-   - Name
-   - Path
-   - Type
-   - Quality Profile
-   - Monitoring settings
+1. Navigate to **Admin > Configuration**, then the **Library** tab
+2. Click **New** in the Library Paths panel
+3. Fill in the form:
+   - **Path** (required) is the path inside the container
+   - **Type** (required) is Movies, Series, Mixed, Music, Books, or Adult
+   - **Monitored** controls whether scan-all includes this library
+   - **Automatic scanning** picks a scan schedule, or Off
+   - **TV metadata source** appears for Series and Mixed libraries only
+   - Auto-import, auto-organize, write NFO, and auto-rename toggles
+4. Click **Add Library**
+
+Libraries have no name of their own; they are identified by their path. There is
+no per-library quality profile field in this form either.
 
 ## Library Scanning
 
@@ -88,9 +93,18 @@ TV_PATH=/new/path/tv
 
 **Via Admin UI:**
 
-1. Navigate to **Admin > Settings**
-2. Update library paths
-3. Mydia validates files are accessible before saving
+1. Navigate to **Admin > Configuration**, then the **Library** tab
+2. Edit the library and change its **Path**
+3. Save
+
+!!! warning "The path is not checked when you save"
+    Mydia validates that the path is present and unique, and nothing else. It does
+    not check that the directory exists inside the container, that it is readable,
+    or that it is writable. A typo saves cleanly and then produces an empty or
+    failing scan.
+
+    After changing a path, run a scan and check the result before assuming it
+    worked.
 
 When a path is set by an environment variable, the environment wins and the
 value is reapplied on every restart. See

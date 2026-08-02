@@ -30,10 +30,12 @@ jobs:
 
       - name: Check for em dashes in published prose
         run: |
+          # .venv is created by `uv sync` two steps above and is full of
+          # third-party package prose we neither own nor publish.
           if grep -rn '—' docs/ --include='*.md' \
                --exclude-dir=plans --exclude-dir=brainstorms \
                --exclude-dir=research --exclude-dir=solutions \
-               --exclude-dir=superpowers; then
+               --exclude-dir=superpowers --exclude-dir=.venv; then
             echo "::error::Em dashes found in published documentation."
             echo "Use commas, colons, or parentheses instead."
             exit 1

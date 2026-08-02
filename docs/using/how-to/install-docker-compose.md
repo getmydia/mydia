@@ -1,6 +1,10 @@
 # Installation
 
-Mydia can be installed using Docker (recommended) or from source for development.
+Mydia is distributed as a Docker image. This guide covers the container options:
+architectures, database variants, volumes, and a full stack you can copy.
+
+Building and running from a source checkout is a development workflow, covered in
+[Development Setup](../../contributing/setup.md).
 
 ## Prerequisites
 
@@ -12,14 +16,18 @@ Mydia can be installed using Docker (recommended) or from source for development
 
 ## Supported Architectures
 
-Multi-platform images are available for the following architectures:
+Released images are multi-arch. `ghcr.io/getmydia/mydia:latest` resolves to the
+right build for your machine, so you should not need to name an architecture.
 
-| Architecture | Available | Tag |
-|:------------:|:---------:|-----|
-| x86-64 | Yes | amd64-latest |
-| arm64 | Yes | arm64-latest |
+| Architecture | Released images |
+|:------------:|:---------------:|
+| x86-64 (amd64) | Yes |
+| arm64 (Apple Silicon, Raspberry Pi 4/5) | Yes |
 
-The multi-arch image `ghcr.io/getmydia/mydia:latest` automatically pulls the correct image for your architecture.
+Per-architecture tags exist as build inputs to the multi-arch manifest, in the form
+`<version>[-pg]-<arch>`, for example `1.4.0-arm64` or `1.4.0-pg-amd64`. They are
+pinned to one exact version and are not the tags you want for a normal install.
+There is no `amd64-latest` or `arm64-latest`.
 
 ## Database Variants
 
@@ -28,9 +36,13 @@ The multi-arch image `ghcr.io/getmydia/mydia:latest` automatically pulls the cor
 | `latest` | SQLite | Default, simpler setup, single-file database |
 | `latest-pg` | PostgreSQL | Scalability, existing PostgreSQL infrastructure |
 
+Every release tag comes in both flavours: the plain tag is SQLite and the `-pg`
+suffix is PostgreSQL. So `latest`/`latest-pg`, `1.4`/`1.4-pg`, `1.4.0`/`1.4.0-pg`.
+Pre-releases publish `beta` and `beta-pg` instead of moving `latest`.
+
 ## Docker Compose (Recommended)
 
-See the [Quick Start](../tutorials/get-mydia-running.md) guide for a minimal Docker Compose setup.
+See [Get Mydia Running](../tutorials/get-mydia-running.md) for a minimal Docker Compose setup.
 
 ## Complete Stack Example
 
@@ -57,7 +69,6 @@ services:
       # --- Server Settings ---
       - PHX_HOST=mydia.local
       - PORT=4000
-      - URL_SCHEME=http
 
       # --- Media Library Paths ---
       - MOVIES_PATH=/media/library/movies
@@ -161,9 +172,20 @@ docker run -d \
 | Volume | Function |
 |:------:|----------|
 | `/config` | Application data, database, and configuration files |
-| `/media/movies` | Movies library location |
-| `/media/tv` | TV shows library location |
-| `/media/downloads` | Download client output directory (optional) |
+| `/media` | Your media tree, mounted as a single volume |
+
+Mount `/media` once and lay your libraries out underneath it, which is what makes
+hardlinking work (see below). The paths in the examples on this page are:
+
+| Path inside the container | Contents |
+|---|---|
+| `/media/library/movies` | Movies library, set with `MOVIES_PATH` |
+| `/media/library/tv` | TV library, set with `TV_PATH` |
+| `/media/downloads` | Download client output |
+
+These are conventions, not requirements. Point `MOVIES_PATH` and `TV_PATH` wherever
+you like, as long as the paths exist inside the container and Mydia can write to
+them.
 
 ## Hardlink Support
 

@@ -60,3 +60,10 @@ A reactive `playback.finished` handler (origin `player` only: your own
 write-backs are already suppressed) can push that single watch immediately; the
 scheduler's single-flight serializes it against a running sync so your KV state
 never interleaves.
+
+## Next steps
+
+- [Test and iterate](test-and-iterate.md) - build, sideload, and reload without a full release cycle
+- [Read media and event data](media-data.md) - the `data:read` and `surfaces:write` calls this recipe leans on
+- [Manifest reference](../reference/manifest.md) - the `connection` descriptor, `schedule`, and every capability string
+- [Host API reference](../reference/host-api.md) - exact signatures for `connections-list`, `connection-request`, and `ensure-watched`

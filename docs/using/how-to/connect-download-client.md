@@ -8,7 +8,7 @@ See [Download Clients](../reference/download-clients.md) for the full list of su
 
 ### Via Admin UI
 
-1. Navigate to **Admin > Download Clients**
+1. Navigate to **Admin > Configuration**, then the **Clients** tab
 2. Click **Add Download Client**
 3. Select client type
 4. Enter connection details
@@ -70,7 +70,7 @@ Both folders must be readable and writable by Mydia. Final organization still ha
 
 ## Client Priority
 
-Set the **Priority** field when adding or editing a client in **Admin > Download Clients**; a *lower* number is tried before a higher one, so priority 1 is used before priority 2. The default is 1.
+Set the **Priority** field when adding or editing a client on **Admin > Configuration > Clients**; a *lower* number is tried before a higher one, so priority 1 is used before priority 2. The default is 1.
 
 Only clients that support the release's protocol are considered, and Mydia hands the release to a single client. There is no automatic failover: if the selected client rejects the release or is unreachable, the grab fails rather than retrying against the next client. See [How a Title Becomes a File](../explanation/media-pipeline.md#download-client-priority-and-its-one-sharp-edge) for why.
 

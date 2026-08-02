@@ -45,14 +45,25 @@ mydia.example.com {
 
 ## HTTPS Configuration
 
-Configure Mydia's public hostname and URL scheme for HTTPS access and proper link generation:
+Set your public hostname. SSL termination is handled by your reverse proxy.
 
 ```bash
 PHX_HOST=mydia.example.com
-URL_SCHEME=https
 ```
 
-SSL termination should be handled by your reverse proxy.
+!!! warning "Mydia always generates https:// links"
+    A release build hardcodes its external URL to `https://{PHX_HOST}` on port 443.
+    Every absolute URL it generates uses that, including the OIDC redirect URI.
+
+    `URL_SCHEME` is accepted and stored, but nothing in a release reads it. Setting
+    `URL_SCHEME=http` does not produce `http://` links.
+
+    Terminate TLS at your proxy and serve Mydia over https on your public hostname.
+    That is the only configuration in which generated links are correct.
+
+    If you must serve Mydia over plain http, absolute links will point at `https://`
+    and break. The one place this is fatal rather than cosmetic is OIDC login: see
+    [SSO / OIDC](sso-oidc.md#redirect-uri) for the workaround.
 
 ## WebSocket Configuration
 

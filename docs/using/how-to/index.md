@@ -7,7 +7,7 @@ them in order.
 If you are starting from nothing, begin with a
 [tutorial](../tutorials/index.md) instead.
 
-- [Installation](install-docker-compose.md) - install Mydia with Docker Compose or from source
+- [Installation](install-docker-compose.md) - install Mydia with Docker Compose or the Docker CLI
 - [Download clients](connect-download-client.md) - connect a torrent, usenet, or debrid client
 - [Indexers](connect-indexer.md) - connect Prowlarr, Jackett, or a Cardigann indexer
 - [Cardigann indexers](cardigann-indexers.md) - configure Mydia's built-in Cardigann support

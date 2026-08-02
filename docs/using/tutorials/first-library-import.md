@@ -1,8 +1,8 @@
 # Import Your First Movie
 
-This tutorial picks up where [Quick Start](get-mydia-running.md) left off. You have Mydia running with an admin account and an empty movies library. By the end of this one, that library holds one movie, matched and complete with a poster and metadata, without touching a download client, an indexer, or any external service. It takes about 5 minutes.
+This tutorial picks up where [Get Mydia Running](get-mydia-running.md) left off. You have Mydia running with an admin account and an empty movies library. By the end of this one, that library holds one movie, matched and complete with a poster and metadata, without touching a download client, an indexer, or any external service. It takes about 5 minutes.
 
-You need a running Mydia instance with the movies library from Quick Start. If you haven't done that yet, start there first.
+You need a running Mydia instance with the movies library from that tutorial. If you haven't done that yet, start there first.
 
 ## Step 1: Create a Placeholder File
 

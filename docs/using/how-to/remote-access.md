@@ -12,9 +12,26 @@ The Mydia player is in open beta on TestFlight. Install the [TestFlight app](htt
 
 ### Enable Remote Access
 
-1. Navigate to **Settings > Remote Access** in the Mydia web interface
-2. Toggle **Enable Remote Access**
-3. Your instance will start the p2p server and announce itself
+Remote access is off by default and is turned on with an environment variable, not
+from the web interface. There is no in-app toggle: until the variable is set, the
+**Remote Access** tab is not rendered at all.
+
+1. Set `ENABLE_REMOTE_ACCESS=true` in your container environment:
+
+    ```yaml
+    services:
+      mydia:
+        environment:
+          - ENABLE_REMOTE_ACCESS=true
+    ```
+
+2. Restart Mydia. The p2p server starts with the application and announces itself.
+3. Go to **Admin > Configuration > Remote Access** in the web interface. The tab
+   appears only once the variable is set.
+
+Optionally set `P2P_BIND_PORT` to a fixed UDP port and forward it, which lets peers
+hole-punch a direct connection instead of falling back to a relay. See
+[Environment Variables](../reference/environment-variables.md) for both.
 
 ### Direct URLs
 
@@ -31,6 +48,10 @@ stands in for your instance's cryptographic node identity, which is far too long
 to type, and it is valid for **five minutes** and one use only. After pairing,
 the device holds a long-lived device token and the code is no longer involved.
 
+To generate one, open **Admin > Configuration > Remote Access** and use **Pair New
+Device**. Paired devices are listed on the same page, where you can revoke them
+individually or clear the inactive ones.
+
 See [How Remote Access Works](../explanation/remote-access.md#claim-codes) for
 why the window is so short.
 
@@ -38,7 +59,8 @@ why the window is so short.
 
 ### App won't connect
 
-1. **Check remote access is enabled** on your Mydia instance
+1. **Check remote access is enabled** - if the **Remote Access** tab is missing from
+   Admin > Configuration, `ENABLE_REMOTE_ACCESS` is not set on the container
 2. **Verify p2p server is running** - check logs for startup messages
 3. **Generate a fresh claim code** - codes expire five minutes after you create
    them and cannot be reused, so a code left on screen while you fetched your
@@ -59,7 +81,8 @@ The p2p stack handles reconnection automatically:
 2. **Network change** - reconnection after network switch
 3. **Long disconnects** - may require re-pairing
 
-See [API Reference](../reference/api.md#connection-manager-api) for Connection Manager API details.
+The retry and path-selection logic lives in the player, not the server. See
+[API Reference](../reference/api.md#connection-manager) for where to find it.
 
 ## Next Steps
 

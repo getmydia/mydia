@@ -26,8 +26,14 @@ Complete reference of all environment variables supported by Mydia.
 | `PORT` | HTTP server port (also used for URL generation) | `4000` |
 | `HTTPS_PORT` | HTTPS server port (also used for URL generation) | `4443` |
 | `HOST` | Server binding address | `0.0.0.0` |
-| `URL_SCHEME` | URL scheme for external links | `http` |
+| `URL_SCHEME` | **No effect in a container.** Accepted and validated, but a release build hardcodes its external URL to `https://{PHX_HOST}` and never reads this. | `http` |
 | `PHX_CHECK_ORIGIN` | WebSocket origin checking | Allows `PHX_HOST` with any scheme |
+
+!!! warning "URL_SCHEME does not change generated links"
+    Absolute URLs, including the OIDC redirect URI, are always `https://{PHX_HOST}`
+    regardless of what you set here. If you serve Mydia over plain http, set
+    `OIDC_REDIRECT_URI` explicitly. See
+    [SSO / OIDC](../how-to/sso-oidc.md#redirect-uri).
 
 ### Port Configuration Notes
 
@@ -96,7 +102,7 @@ Configure multiple clients using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `DOWNLOAD_CLIENT_<N>_NAME` | Display name | `qBittorrent` |
 | `DOWNLOAD_CLIENT_<N>_TYPE` | Client type | `qbittorrent` |
 | `DOWNLOAD_CLIENT_<N>_ENABLED` | Enable this client | `true` |
-| `DOWNLOAD_CLIENT_<N>_PRIORITY` | Client priority (higher = preferred) | `1` |
+| `DOWNLOAD_CLIENT_<N>_PRIORITY` | Client priority. **Lower wins**: 1 is tried before 2. | `1` |
 | `DOWNLOAD_CLIENT_<N>_HOST` | Hostname or IP | `qbittorrent` |
 | `DOWNLOAD_CLIENT_<N>_PORT` | Client port | `8080` |
 | `DOWNLOAD_CLIENT_<N>_USE_SSL` | Use SSL/TLS | `false` |
@@ -213,12 +219,13 @@ Configure multiple indexers using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `INDEXER_<N>_NAME` | Display name | `Prowlarr` |
 | `INDEXER_<N>_TYPE` | Indexer type | `prowlarr` |
 | `INDEXER_<N>_ENABLED` | Enable this indexer | `true` |
-| `INDEXER_<N>_PRIORITY` | Search priority (higher = preferred) | `1` |
+| `INDEXER_<N>_PRIORITY` | Display order only, does not affect searching | `1` |
 | `INDEXER_<N>_BASE_URL` | Indexer base URL | `http://prowlarr:9696` |
 | `INDEXER_<N>_API_KEY` | Indexer API key | - |
 | `INDEXER_<N>_INDEXER_IDS` | Comma-separated indexer IDs | `1,2,3` |
 | `INDEXER_<N>_CATEGORIES` | Comma-separated categories | `movies,tv` |
-| `INDEXER_<N>_RATE_LIMIT` | Rate limit (requests/sec) | - |
+| `INDEXER_<N>_RATE_LIMIT` | Maximum requests **per minute**. Unset means no limit. | - |
+| `INDEXER_<N>_TIMEOUT` | Request timeout in milliseconds | - |
 
 **Indexer Types:** `prowlarr`, `jackett`, `nzbhydra2`, `public`
 
@@ -275,7 +282,7 @@ For PostgreSQL deployments (using `latest-pg` image):
 
 The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See [Architecture](../../contributing/architecture.md) for details.
 
-`METADATA_LANGUAGE` can also be set per-instance from **Settings → Configuration → Metadata** in the admin UI; the env var overrides the database value when both are set.
+`METADATA_LANGUAGE` can also be set per-instance from **Admin > Configuration > Settings**, under **Metadata**, in the admin UI; the env var overrides the database value when both are set.
 
 ## FlareSolverr
 
@@ -293,6 +300,5 @@ FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer s
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LOG_LEVEL` | Log level (debug, info, warning, error) | `info` |
-| `SKIP_BACKUPS` | Disable automatic database backups | `false` |
 
 See [Configuration](configuration.md#configuration-precedence) for how these variables interact with database settings and the YAML config file.

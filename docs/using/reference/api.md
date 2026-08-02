@@ -34,8 +34,11 @@ REST-style endpoints handle:
 
 - HLS manifest and segment serving
 - Subtitle file delivery
-- Download client webhooks
 - Admin configuration
+
+Mydia does not expose webhook endpoints. Download clients are not asked to call
+back into Mydia; a background job polls each configured client for status instead.
+See [The Media Pipeline](../explanation/media-pipeline.md) for how that loop works.
 
 ## Stability
 
@@ -53,6 +56,10 @@ Currently, you can integrate with Mydia through:
 
 If you're interested in API development, check the [Development](../../contributing/setup.md) documentation and consider contributing to the project.
 
-## Connection Manager API
+## Connection Manager
 
-See `player/lib/core/connection/README.md` for Flutter implementation details.
+The connection manager is player-side, not a server API. It lives in the Flutter
+app and decides how the player reaches your instance (direct URL, local network,
+or p2p) and how it retries when a path drops. It is not documented here because
+there is no HTTP surface to document; read
+`player/lib/core/connection/README.md` in the repository for the implementation.

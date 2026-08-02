@@ -165,13 +165,35 @@ Required scopes:
 
 ## Redirect URI
 
-The redirect URI is auto-computed from your `PHX_HOST` and `URL_SCHEME`:
+If you do not set one, Mydia derives the redirect URI from its own external URL,
+which a release build hardcodes to https on port 443:
 
 ```
-{URL_SCHEME}://{PHX_HOST}/auth/oidc/callback
+https://{PHX_HOST}/auth/oidc/callback
 ```
 
-Override with:
+`URL_SCHEME` does not enter into it. The variable exists and is validated, but
+nothing in a release reads it, so the scheme is always `https`.
+
+!!! warning "Serving Mydia over plain http breaks OIDC login"
+    If your install is reachable at `http://mydia.example.com`, the auto-computed
+    redirect URI is still `https://mydia.example.com/auth/oidc/callback`. Your
+    provider will either reject it as an unregistered redirect URI or bounce the
+    browser to an https address that nothing is listening on. Either way, login
+    fails, and the error surfaces at the provider rather than in Mydia's logs,
+    which makes it easy to misdiagnose.
+
+    Fix it by setting the redirect URI explicitly to match how you actually serve
+    Mydia:
+
+    ```bash
+    OIDC_REDIRECT_URI=http://mydia.example.com/auth/oidc/callback
+    ```
+
+    Register the same value with your identity provider. Putting Mydia behind a
+    proxy that terminates TLS is the better answer where you have the choice.
+
+Set it explicitly with:
 
 ```bash
 OIDC_REDIRECT_URI=https://mydia.example.com/auth/oidc/callback
@@ -200,4 +222,19 @@ OIDC_REDIRECT_URI=https://mydia.example.com/auth/oidc/callback
 
 ## Testing
 
-For detailed testing instructions, see the [OIDC Testing Guide](https://github.com/getmydia/mydia/blob/master/docs/OIDC_TESTING.md).
+Verify the setup end to end before you rely on it:
+
+1. Start Mydia and check the logs. On boot it logs the issuer, client ID, and
+   redirect URI it will use, or `(auto-generated)` if you did not set one. Confirm
+   the redirect URI matches what you registered with your provider.
+2. Log out, then use the OIDC button on the login page. A successful round trip
+   lands you back on the dashboard with your provider account.
+3. Check **Admin > Users**. A first-time OIDC login creates the user. If no admin
+   account exists yet, that user is promoted to admin so an OIDC-only deployment
+   is not left with nobody who can administer it.
+4. Keep at least one working local admin account until you have confirmed OIDC
+   login works. `LOCAL_AUTH_ENABLED=false` with a broken OIDC setup locks you out
+   of the web interface entirely.
+
+If you do lock yourself out, `mydia-cli user` inside the container can create or
+reset a local account. See [User Management](manage-users.md).

@@ -120,7 +120,7 @@ export PLUGINS_OVERRIDE_DIR=/path/mydia/reads
 cp target/wasm32-wasip2/release/my_plugin.wasm "$PLUGINS_OVERRIDE_DIR/my-plugin.wasm"
 ```
 
-Open **Admin > Plugins**. Your plugin shows up in the installed list, pending
+Open **Admin > Configuration > Plugins**. Your plugin shows up in the installed list, pending
 approval. Approve it: this grants the capabilities it declared and activates
 it, resolving the Wasm bytes you just dropped in.
 

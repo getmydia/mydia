@@ -10,7 +10,7 @@ Prowlarr is an indexer manager that aggregates multiple indexers into a single A
 
 ### Setup
 
-1. Navigate to **Admin > Indexers**
+1. Navigate to **Admin > Configuration**, then the **Indexers** tab
 2. Click **Add Indexer**
 3. Select **Prowlarr**
 4. Enter connection details:
@@ -29,7 +29,7 @@ Jackett is an alternative indexer proxy.
 
 ### Setup
 
-1. Navigate to **Admin > Indexers**
+1. Navigate to **Admin > Configuration**, then the **Indexers** tab
 2. Click **Add Indexer**
 3. Select **Jackett**
 4. Enter connection details:
@@ -48,7 +48,7 @@ NZBHydra2 is a meta search aggregator for NZB indexers.
 
 ### Setup
 
-1. Navigate to **Admin > Indexers**
+1. Navigate to **Admin > Configuration**, then the **Indexers** tab
 2. Click **Add Indexer**
 3. Select **NZBHydra2**
 4. Enter connection details:
@@ -73,7 +73,8 @@ To stop an indexer influencing results, disable it. To change which release wins
 
 ## Categories
 
-Filter indexers by content category:
+Restrict an indexer to particular content categories with
+`INDEXER_<N>_CATEGORIES`. There is no field for this in the admin form.
 
 - `movies` - Movie content
 - `tv` - TV show content
@@ -82,10 +83,18 @@ Filter indexers by content category:
 
 ## Rate Limiting
 
-Configure rate limits to prevent being blocked:
+Set `INDEXER_<N>_RATE_LIMIT` to cap how hard Mydia hits an indexer. There is no
+field for this in the admin form either.
 
-- Set requests per second
-- Mydia automatically throttles requests
+!!! warning "The limit is per minute"
+    The number is **requests per minute**, counted in a sliding one-minute window.
+    `INDEXER_1_RATE_LIMIT=30` allows thirty searches a minute. Once the window is
+    full, Mydia refuses further searches against that indexer until it drains,
+    rather than queueing them.
+
+    Leave it unset and there is no limit at all. If your indexer publishes an API
+    rate limit, set this below it. Getting the unit wrong by reading it as
+    per-second is a good way to earn a ban.
 
 ## Next Steps
 

@@ -30,9 +30,10 @@ before the plugin ever runs.
 
 -   **Have a specific task**
 
-    The [how-to guides](how-to/notifications.md) cover sending notifications,
-    reading media and event data, building a two-way sync, and the
-    test/reload loop.
+    The how-to guides cover [sending notifications](how-to/notifications.md),
+    [reading media and event data](how-to/media-data.md),
+    [building a two-way sync](how-to/two-way-sync.md), and the
+    [test and reload loop](how-to/test-and-iterate.md).
 
 -   **Need the contract**
 

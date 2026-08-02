@@ -5,20 +5,14 @@ Mydia includes built-in Cardigann indexer support, allowing direct indexer conne
 !!! warning "Experimental Feature"
     Cardigann support is highly experimental. Only a limited number of indexers have been tested. If you encounter issues, please report them on GitHub.
 
-## What is Cardigann?
+Cardigann is the community indexer definition format from Jackett, also used by
+Prowlarr. Mydia reads those definitions natively, so you can point it at trackers
+without running a separate indexer manager.
 
-Cardigann is a generic indexer definition format that describes how to interact with torrent/usenet indexers. It was originally developed for Jackett and is now used by Prowlarr as well.
-
-Mydia includes a native Cardigann implementation, allowing you to use hundreds of indexers directly without running a separate indexer manager.
-
-## When to Use Prowlarr/Jackett
-
-Consider using Prowlarr or Jackett instead if:
-
-- You need more reliable indexer support
-- You require specific indexers that don't work with Cardigann
-- You want centralized indexer management
-- You need advanced features like sync
+For why Mydia ships its own engine and what that trades away, see
+[Why Mydia ships its own indexer implementation](../explanation/media-pipeline.md#why-mydia-ships-its-own-indexer-implementation).
+The short version: use Prowlarr or Jackett when reliability matters more than
+running fewer services.
 
 ## Enabling Cardigann
 
@@ -41,9 +35,7 @@ Mydia includes definitions for many popular indexers. However, only a subset hav
 **Tested Indexers:**
 
 - 1337x
-- RARBG (mirrors)
 - YTS
-- And others...
 
 **Untested but Included:**
 
@@ -53,7 +45,7 @@ Many more indexer definitions are included but haven't been verified. They may w
 
 ### Adding a Cardigann Indexer
 
-1. Navigate to **Admin > Indexers**
+1. Navigate to **Admin > Configuration**, then the **Indexers** tab
 2. Click **Add Indexer**
 3. Select the indexer from the Cardigann list
 4. Enter required credentials (if applicable)

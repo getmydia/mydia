@@ -26,12 +26,20 @@ Show Title (Year)/Season 01/Show Title - S01E01 - Episode Title.mkv
 
 ## Import Wizard
 
-For bulk imports, use the Import Wizard:
+For bulk imports, use the Import Wizard. It scans a library you have already
+configured; you do not browse to a folder from inside it.
 
-1. Navigate to **Import**
-2. Select files or directories
-3. Review matched metadata
-4. Confirm import
+1. Click **Import Files** on the dashboard, or go to **Import** in the sidebar
+2. On **Select a Library to Scan**, click the library you want to bring in
+3. Review the matches on **Review Matches**, correcting any Mydia got wrong
+4. Click **Import** to confirm
+
+If the library you want is not on the list, add it first. See
+[Managing Libraries](manage-libraries.md).
+
+The [Import Your First Movie](../tutorials/first-library-import.md) tutorial walks
+the same screens with a single file, if you would rather see it once before running
+it against a whole collection.
 
 ## Next Steps
 
