@@ -11,7 +11,10 @@
 // core Flutter design. That is why `player_screen_key_handling_test.dart`
 // only ever tested an extracted free function instead of the widget itself.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
@@ -52,8 +55,12 @@ class FixedConnectionNotifier extends conn.ConnectionNotifier {
 }
 
 class FakeDownloadService extends Fake implements DownloadService {
+  FakeDownloadService({this.downloaded});
+
+  final DownloadedMedia? downloaded;
+
   @override
-  DownloadedMedia? getDownloadedMediaById(String mediaId) => null;
+  DownloadedMedia? getDownloadedMediaById(String mediaId) => downloaded;
 }
 
 /// Captures the [CastLaunchRequest] handed to `startCast` instead of routing
@@ -102,6 +109,46 @@ const testDevice = CastDevice(
   name: 'Living Room',
   protocol: CastProtocolKind.chromecast,
 );
+
+/// Mocks the path_provider platform channel so `getApplicationDocumentsDirectory`
+/// resolves instead of hanging.
+///
+/// `_resolveDownloadedFilePath` calls it as a fallback once the stored path
+/// misses. Under `testWidgets`, unlike plain `test()`, an unmocked platform
+/// channel does not fail fast with `MissingPluginException` — the awaiting
+/// Future simply never completes, even across repeated `tester.pump()`
+/// calls, so any test that exercises a non-null `downloaded` item hangs until
+/// the runner's watchdog kills it.
+///
+/// Register from `setUp`, not `setUpAll`: a handler registered before the
+/// per-test binding reset that precedes each `testWidgets` body does not
+/// survive into it.
+void mockPathProviderDocumentsDirectory() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('plugins.flutter.io/path_provider'),
+    (call) async => Directory.systemTemp.path,
+  );
+}
+
+/// A downloaded item whose `filePath` deliberately does not exist on disk.
+///
+/// `_resolveDownloadedFilePath` returns null for it, which is the branch these
+/// tests want: everything up to and including the resume decision runs, and
+/// playback then stops short of constructing a real media_kit `Player`, which
+/// cannot be built under `flutter test`.
+DownloadedMedia downloadedItem({int? runtimeMinutes}) => DownloadedMedia(
+      id: 'dl-1',
+      mediaId: 'movie-1',
+      title: 'Arrival',
+      quality: '1080p',
+      filePath: '/nonexistent/mydia-test/arrival.mkv',
+      fileSize: 1,
+      mediaType: 'movie',
+      downloadedAt: DateTime(2026, 1, 1),
+      runtime: runtimeMinutes,
+    );
 
 /// A well-formed `MovieDetail` response. All fields beyond the required ones
 /// (`id`, `title`, `monitored`, `addedAt`, `isFavorite`) are omitted deliberately
@@ -212,14 +259,15 @@ ProviderContainer buildPlayerScreenContainer({
   required conn.ConnectionState connectionState,
   required CapturingCastSessionManager castManager,
   required TrackingLocalProxyService proxyService,
+  DownloadedMedia? downloaded,
+  AuthStatus authStatus = AuthStatus.authenticated,
 }) {
   return ProviderContainer(overrides: [
     authStateProvider.overrideWith(
-      () => FakeAuthNotifier(
-        const AsyncValue.data(AuthStatus.authenticated),
-      ),
+      () => FakeAuthNotifier(AsyncValue.data(authStatus)),
     ),
-    downloadManagerProvider.overrideWith((ref) async => FakeDownloadService()),
+    downloadManagerProvider.overrideWith(
+        (ref) async => FakeDownloadService(downloaded: downloaded)),
     asyncGraphqlClientProvider.overrideWith((ref) async => stubClient(link)),
     serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
     authTokenProvider.overrideWith((ref) async => 'tok'),

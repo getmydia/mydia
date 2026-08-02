@@ -372,17 +372,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           return;
         }
 
-        // Placeholder plan: the offline branch does not yet resolve a real
-        // one, so this always starts at the beginning. A follow-up task
-        // gives it an actual resolved plan.
-        if (await _castToTargetIfSet(ResumePlan.fromStart)) return;
-
-        // Play downloaded content in offline mode. The whole file is already
-        // on disk, so this is direct play in every sense `seekToReal` and
-        // `_detectTracks` care about — no HLS session exists to restart, and
-        // media_kit's own duration is already the true runtime.
+        // The whole file is on disk, so this is direct play in every sense
+        // `seekToReal` and `_detectTracks` care about: no HLS session exists
+        // to restart, and media_kit's own duration is already the true
+        // runtime.
         _isDirectPlay = true;
-        await _initializeOfflinePlayback(offlinePath);
+
+        // No server is reachable, so the runtime comes from what was stored
+        // alongside the download. Without one, `shouldOfferResume` declines
+        // and this path silently loses its prompt.
+        _totalDuration = downloadedMedia.runtime != null
+            ? Duration(minutes: downloadedMedia.runtime!)
+            : null;
+
+        final plan = await resolveResumePlan(
+          savedPositionSeconds: _savedPositionSeconds,
+          realDuration: _totalDuration,
+          resumeOverride: null,
+          mounted: mounted,
+          ask: (saved, total) async {
+            if (!mounted) return null;
+            return showResumeDialog(context, saved, total);
+          },
+        );
+        if (plan == null) return;
+
+        if (await _castToTargetIfSet(plan)) return;
+
+        await _openPlayerAndStart(offlinePath, {}, plan: plan);
         return;
       }
 
@@ -878,52 +895,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } catch (e) {
       debugPrint('[PlayerScreen] Error fetching streaming candidates: $e');
       return null;
-    }
-  }
-
-  /// Initialize player for offline playback (no network services required).
-  Future<void> _initializeOfflinePlayback(String filePath) async {
-    try {
-      debugPrint('Initializing offline playback from: $filePath');
-
-      // Create media_kit player
-      _player = Player();
-      _videoController = VideoController(_player!);
-
-      // Open local file
-      await _player!.open(
-        Media(filePath),
-        play: false,
-      );
-
-      // Wait for player to be ready
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Start playback
-      await _player!.play();
-
-      // Listen for playback progress (but don't sync - we're offline)
-      // Cancel any existing subscription before creating a new one
-      await _positionSubscription?.cancel();
-      _positionSubscription = _player!.stream.position.listen((_) {
-        _onPlaybackProgress();
-      });
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-
-      debugPrint('Offline playback initialized successfully');
-    } catch (e) {
-      debugPrint('Error initializing offline playback: $e');
-      if (mounted) {
-        setState(() {
-          _error = 'Failed to play downloaded content: $e';
-          _isLoading = false;
-        });
-      }
     }
   }
 
