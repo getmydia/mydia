@@ -19,22 +19,7 @@ See [Download Clients](../reference/download-clients.md) for the full list of su
 
 Every download client variable is listed in [Environment variables](../reference/environment-variables.md#download-clients).
 
-## Configuration Options
-
-| Option | Description | Example |
-|--------|-------------|---------|
-| Name | Display name | `qBittorrent` |
-| Type | Client type | `qbittorrent` |
-| Host | Hostname or IP | `192.168.1.100` |
-| Port | Client port | `8080` |
-| Username | Auth username | `admin` |
-| Password | Auth password | `secret` |
-| API Key | API key (SABnzbd, debrid, qBittorrent 5.2+) | `abc123` |
-| Provider | Debrid provider (debrid only) | `real_debrid` |
-| Use SSL | Enable HTTPS | `true` |
-| Category | Default category | `mydia` |
-| Priority | Client priority | `1` |
-| Download Directory | Output directory | `/downloads` |
+See [Download Clients Reference](../reference/download-clients.md#configuration-fields) for the full list of Admin UI configuration fields.
 
 ## rqbit
 

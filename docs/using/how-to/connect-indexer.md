@@ -63,19 +63,7 @@ Every indexer variable is listed in [Environment variables](../reference/environ
 
 Mydia also includes built-in [Cardigann](cardigann-indexers.md) indexer support for connecting to indexers directly, without Prowlarr or Jackett.
 
-## Configuration Options
-
-| Option | Description | Example |
-|--------|-------------|---------|
-| Name | Display name | `Prowlarr` |
-| Type | Indexer type | `prowlarr` |
-| Base URL | Indexer URL | `http://prowlarr:9696` |
-| API Key | Authentication key | `abc123` |
-| Enabled | Enable/disable | `true` |
-| Priority | Search priority | `1` |
-| Indexer IDs | Specific indexers | `1,2,3` |
-| Categories | Content categories | `movies,tv` |
-| Rate Limit | Requests per second | `5` |
+See [Indexers Reference](../reference/indexers.md#configuration-fields) for the full list of Admin UI configuration fields.
 
 ## Indexer Priority
 
