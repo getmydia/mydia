@@ -42,9 +42,29 @@ void main() {
 
       expect(route, isNotNull);
       expect(route!.kind, CastRouteKind.directServer);
+      // Session-addressed rather than file-addressed: a Chromecast goes
+      // through the same `StartStreamingSession` mutation the bridge does, so
+      // the route has a session id to end and an offset to resume at.
+      expect(
+        route.mediaUrl,
+        startsWith(
+            'https://mydia.test/api/v1/hls/${sessions.started.single}/index.m3u8'),
+      );
+      expect(route.mediaUrl, contains('token=tok123'));
+    });
+
+    test('a direct DLNA connection still yields a file URL', () async {
+      // A progressive receiver needs whole-file bytes with Range support, not
+      // an HLS playlist, so this route keeps the /stream/file endpoint.
+      final route = await directResolver().resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.dlna,
+      );
+
+      expect(route!.kind, CastRouteKind.directServer);
       expect(route.mediaUrl,
           startsWith('https://mydia.test/api/v1/stream/file/file-1'));
-      expect(route.mediaUrl, contains('token=tok123'));
+      expect(sessions.started, isEmpty);
     });
 
     test('p2p connection yields a LAN bridge URL', () async {
@@ -186,7 +206,10 @@ void main() {
           .resolve(fileId: 'f', protocol: CastProtocolKind.chromecast);
 
       expect(route!.mediaKind, CastMediaKind.hls);
-      expect(route.mediaUrl, contains('strategy=HLS_COPY'));
+      expect(route.mediaUrl, contains('/api/v1/hls/'));
+      expect(sessions.started.single, isNot(contains('transcode')),
+          reason: 'an unforced Chromecast session is an HLS copy, not a '
+              'full transcode');
     });
 
     test('DLNA gets progressive, because DLNA renderers cannot play HLS',
@@ -205,7 +228,11 @@ void main() {
         forceTranscode: true,
       );
 
-      expect(route!.mediaUrl, contains('strategy=TRANSCODE'));
+      // The escalation now rides on the session the mutation opened rather
+      // than a `strategy=` query param, so the fake's transcode marker in the
+      // session id is where it shows.
+      expect(sessions.started.single, contains('transcode'));
+      expect(route!.mediaUrl, contains(sessions.started.single));
       expect(route.mediaKind, CastMediaKind.hls);
     });
 
@@ -245,7 +272,8 @@ void main() {
           fileId: 'f', protocol: CastProtocolKind.chromecast))!;
 
       expect(
-        resolver.resolveSubtitleUrl(route, '/api/player/v1/subtitles/movie/1/2'),
+        resolver.resolveSubtitleUrl(
+            route, '/api/player/v1/subtitles/movie/1/2'),
         'https://mydia.test/api/player/v1/subtitles/movie/1/2?token=tok123',
       );
     });

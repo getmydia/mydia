@@ -175,10 +175,24 @@ void main() {
     /// URL with no credential on it.
     ProviderContainer buildFullContainer() {
       client = MockGraphQLClient();
+      // A well-formed `StartStreamingSession` payload, because a direct
+      // Chromecast route now opens a real server-side session (that is what
+      // gives it a session id to end and an offset to resume at). The media
+      // token refresh mutation shares this stub and tolerates the extra key:
+      // it reads only `refreshMediaToken`, and a null there is a benign
+      // "refresh failed" that leaves the stored token in place.
       when(client.mutate(any)).thenAnswer(
         (_) async => QueryResult(
           source: QueryResultSource.network,
-          data: const {},
+          data: const {
+            '__typename': 'RootMutationType',
+            'startStreamingSession': {
+              '__typename': 'StreamingSessionResult',
+              'sessionId': 'sess-1',
+              'duration': null,
+              'startPosition': null,
+            },
+          },
           options: QueryOptions(document: gql('{ __typename }')),
         ),
       );

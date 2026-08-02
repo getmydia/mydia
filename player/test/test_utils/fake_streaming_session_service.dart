@@ -7,6 +7,11 @@ class FakeStreamingSessionService implements CastStreamingSessionService {
   final List<String> started = [];
   final List<String> ended = [];
 
+  /// The file ids sessions were asked for, in order, so a test can prove a
+  /// route targeted the media it meant to. The URL no longer carries the file
+  /// id on a session-addressed HLS route, so this is the only place it shows.
+  final List<String> requestedFileIds = [];
+
   /// Ids handed out, in order. Sequential so a test can tell one attempt's
   /// session from another's.
   int _next = 0;
@@ -14,16 +19,28 @@ class FakeStreamingSessionService implements CastStreamingSessionService {
   /// When set, `start` throws with this kind instead of returning an id.
   CastFailureKind? failure;
 
+  /// The offset the fake server reports back. Tests that care about the
+  /// echoed-not-requested distinction set this to something other than
+  /// [requestedStart].
+  Duration echoedStartOffset = Duration.zero;
+  Duration? requestedStart;
+
   @override
-  Future<String> start({required String fileId, required bool transcode}) async {
+  Future<({String sessionId, Duration startOffset})> start({
+    required String fileId,
+    required bool transcode,
+    Duration startPosition = Duration.zero,
+  }) async {
     final failure = this.failure;
     if (failure != null) {
       throw CastBackendException('fake session failure', failure);
     }
 
+    requestedStart = startPosition;
+    requestedFileIds.add(fileId);
     final id = 'session-${++_next}${transcode ? '-transcode' : ''}';
     started.add(id);
-    return id;
+    return (sessionId: id, startOffset: echoedStartOffset);
   }
 
   @override

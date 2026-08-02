@@ -19,24 +19,39 @@ import 'cast_backend.dart';
 /// without a GraphQL server, and so the manager can end the session it
 /// started when casting stops.
 abstract class CastStreamingSessionService {
-  /// Starts a session and returns its id.
+  /// Starts a session at [startPosition] and returns its id together with the
+  /// offset the server actually used.
+  ///
+  /// The echoed value, not the requested one, is authoritative: the server
+  /// clamps the request against the runtime and FFmpeg's `-ss` lands on the
+  /// nearest keyframe, so the stream can legitimately begin earlier than
+  /// asked. An older server omits the field, which correctly yields zero.
   ///
   /// Throws [CastBackendException] when the server refuses, so the manager's
   /// existing escalation ladder can treat it like any other route failure.
-  Future<String> start({required String fileId, required bool transcode});
+  Future<({String sessionId, Duration startOffset})> start({
+    required String fileId,
+    required bool transcode,
+    Duration startPosition = Duration.zero,
+  });
 
   /// Best-effort teardown. Never throws: a leaked server-side session is a
   /// far smaller problem than an exception on the stop-casting path.
   Future<void> end(String sessionId);
 }
 
-class GraphqlCastStreamingSessionService implements CastStreamingSessionService {
+class GraphqlCastStreamingSessionService
+    implements CastStreamingSessionService {
   final GraphQLClient _client;
 
   const GraphqlCastStreamingSessionService(this._client);
 
   @override
-  Future<String> start({required String fileId, required bool transcode}) async {
+  Future<({String sessionId, Duration startOffset})> start({
+    required String fileId,
+    required bool transcode,
+    Duration startPosition = Duration.zero,
+  }) async {
     final result = await _client.mutate(MutationOptions(
       document: documentNodeMutationStartStreamingSession,
       variables: Variables$Mutation$StartStreamingSession(
@@ -44,6 +59,8 @@ class GraphqlCastStreamingSessionService implements CastStreamingSessionService 
         strategy: transcode
             ? Enum$StreamingStrategy.TRANSCODE
             : Enum$StreamingStrategy.HLS_COPY,
+        startPosition:
+            startPosition > Duration.zero ? startPosition.inSeconds : null,
       ).toJson(),
     ));
 
@@ -66,7 +83,10 @@ class GraphqlCastStreamingSessionService implements CastStreamingSessionService 
       );
     }
 
-    return session.sessionId;
+    return (
+      sessionId: session.sessionId,
+      startOffset: Duration(seconds: session.startPosition ?? 0),
+    );
   }
 
   @override
@@ -74,12 +94,12 @@ class GraphqlCastStreamingSessionService implements CastStreamingSessionService 
     try {
       await _client.mutate(MutationOptions(
         document: documentNodeMutationEndStreamingSession,
-        variables:
-            Variables$Mutation$EndStreamingSession(sessionId: sessionId)
-                .toJson(),
+        variables: Variables$Mutation$EndStreamingSession(sessionId: sessionId)
+            .toJson(),
       ));
     } catch (e) {
-      debugPrint('[CastStreamingSession] Ignoring end error for $sessionId: $e');
+      debugPrint(
+          '[CastStreamingSession] Ignoring end error for $sessionId: $e');
     }
   }
 }

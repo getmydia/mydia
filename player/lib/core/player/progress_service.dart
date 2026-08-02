@@ -129,6 +129,11 @@ class ProgressService {
 
     _lastSyncTime = DateTime.now();
 
+    // Discarded deliberately: the periodic/manual player-driven sync has
+    // never surfaced success/failure to its callers (`startMovieSync`,
+    // `saveMovieProgress`) and does not start now — only the raw-position
+    // entry points below (`syncMoviePosition`/`syncEpisodePosition`, used by
+    // the cast receiver and the offline-progress flush) need to know.
     await _mutateMovieProgress(movieId, progress);
   }
 
@@ -159,12 +164,19 @@ class ProgressService {
 
     _lastSyncTime = DateTime.now();
 
+    // Discarded — see the matching comment in `_syncMovieProgress`.
     await _mutateEpisodeProgress(episodeId, progress);
   }
 
   /// Sync movie progress from a raw position, for playback we do not own —
   /// notably a cast receiver, where there is no local `Player` to read.
-  Future<void> syncMoviePosition(
+  ///
+  /// Returns whether the server actually received it: false when nothing was
+  /// sent at all (an invalid position/duration), or when the mutation was
+  /// sent but failed. Callers that need to know the server has the position —
+  /// e.g. before marking an offline-recorded record synced — must check this
+  /// rather than assume `await` completing means success.
+  Future<bool> syncMoviePosition(
     String movieId,
     Duration position,
     Duration duration,
@@ -175,14 +187,14 @@ class ProgressService {
         '[ProgressService] Skipping movie sync: invalid position/duration '
         '(position=${position.inSeconds}s, duration=${duration.inSeconds}s)',
       );
-      return;
+      return false;
     }
 
-    await _mutateMovieProgress(movieId, progress);
+    return _mutateMovieProgress(movieId, progress);
   }
 
   /// Sync episode progress from a raw position. See [syncMoviePosition].
-  Future<void> syncEpisodePosition(
+  Future<bool> syncEpisodePosition(
     String episodeId,
     Duration position,
     Duration duration,
@@ -193,13 +205,15 @@ class ProgressService {
         '[ProgressService] Skipping episode sync: invalid position/duration '
         '(position=${position.inSeconds}s, duration=${duration.inSeconds}s)',
       );
-      return;
+      return false;
     }
 
-    await _mutateEpisodeProgress(episodeId, progress);
+    return _mutateEpisodeProgress(episodeId, progress);
   }
 
-  Future<void> _mutateMovieProgress(
+  /// Returns true only when the mutation reached the server with no
+  /// exception thrown and no GraphQL exception in the result.
+  Future<bool> _mutateMovieProgress(
     String movieId,
     ({int positionSeconds, int durationSeconds}) progress,
   ) async {
@@ -221,13 +235,19 @@ class ProgressService {
       if (result.hasException) {
         debugPrint(
             '[ProgressService] Error syncing movie progress: ${result.exception}');
+        return false;
       }
+
+      return true;
     } catch (e) {
       debugPrint('[ProgressService] Exception syncing movie progress: $e');
+      return false;
     }
   }
 
-  Future<void> _mutateEpisodeProgress(
+  /// Returns true only when the mutation reached the server with no
+  /// exception thrown and no GraphQL exception in the result.
+  Future<bool> _mutateEpisodeProgress(
     String episodeId,
     ({int positionSeconds, int durationSeconds}) progress,
   ) async {
@@ -249,9 +269,13 @@ class ProgressService {
       if (result.hasException) {
         debugPrint(
             '[ProgressService] Error syncing episode progress: ${result.exception}');
+        return false;
       }
+
+      return true;
     } catch (e) {
       debugPrint('[ProgressService] Exception syncing episode progress: $e');
+      return false;
     }
   }
 
