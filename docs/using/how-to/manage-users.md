@@ -37,41 +37,7 @@ Admins can create users through the Admin UI:
 4. Select role (admin or guest)
 5. Save
 
-## OIDC/SSO Authentication
-
-Mydia supports OpenID Connect (OIDC) for single sign-on integration.
-
-### Supported Providers
-
-- Keycloak
-- Authelia
-- Auth0
-- Okta
-- Azure AD
-- Google
-- Any OIDC-compliant provider
-
-### Configuration
-
-```bash
-OIDC_ENABLED=true
-OIDC_ISSUER=https://your-provider
-OIDC_CLIENT_ID=mydia
-OIDC_CLIENT_SECRET=your-client-secret
-OIDC_REDIRECT_URI=http://localhost:4000/auth/oidc/callback
-OIDC_SCOPES=openid profile email
-```
-
-### Auto-Promotion
-
-The first user to log in via OIDC is automatically promoted to admin role. Subsequent OIDC users are assigned guest role by default.
-
-### Provider Configuration
-
-Mydia uses standard OAuth2 authentication with minimal provider configuration:
-
-- Set `client_id`, `client_secret`, and `redirect_uris` in your provider
-- No need to configure token endpoint auth methods or response modes
+Mydia also supports single sign-on via OpenID Connect (OIDC), including auto-promotion of the first OIDC user to admin. See [SSO/OIDC Configuration](sso-oidc.md) for supported providers, setup, and role assignment.
 
 ## Request System
 
