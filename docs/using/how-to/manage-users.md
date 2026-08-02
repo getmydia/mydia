@@ -45,7 +45,7 @@ LOCAL_AUTH_ENABLED=true
 Admins can create users through the Admin UI:
 
 1. Navigate to **Admin > Users**
-2. Click **Add User**
+2. Click **Create Local User**
 3. Enter username and email
 4. Select a role: Guest, Read Only, User, or Admin
 5. Either set a password or let Mydia generate a random one

@@ -7,7 +7,7 @@ See [Quality Profiles](../reference/quality-profiles.md) for the built-in profil
 ## Creating Custom Profiles
 
 1. Navigate to **Admin > Configuration**, then the **Quality** tab
-2. Click **Create Profile**
+2. Click **New**
 3. Configure settings
 4. Save profile
 

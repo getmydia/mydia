@@ -9,7 +9,7 @@ See [Download Clients](../reference/download-clients.md) for the full list of su
 ### Via Admin UI
 
 1. Navigate to **Admin > Configuration**, then the **Clients** tab
-2. Click **Add Download Client**
+2. Click **New**
 3. Select client type
 4. Enter connection details
 5. Test connection
