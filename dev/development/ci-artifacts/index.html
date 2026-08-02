@@ -10,13 +10,11 @@
       
       
       
-        <link rel="canonical" href="https://docs.mydia.dev/dev/user-guide/quality-profiles/">
+        <link rel="canonical" href="https://docs.mydia.dev/dev/development/ci-artifacts/">
       
       
-        <link rel="prev" href="../adding-media/">
+        <link rel="prev" href="../architecture/">
       
-      
-        <link rel="next" href="../download-clients/">
       
       
         
@@ -27,7 +25,7 @@
     
     
       
-        <title>Quality Profiles - Mydia Documentation</title>
+        <title>CI Builds - Mydia Documentation</title>
       
     
     
@@ -85,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quality-profiles" class="md-skip">
+        <a href="#using-ci-builds" class="md-skip">
           Skip to content
         </a>
       
@@ -125,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quality Profiles
+              CI Builds
             
           </span>
         </div>
@@ -442,8 +440,6 @@
       
   
   
-    
-  
   
   
     
@@ -456,11 +452,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
@@ -481,7 +479,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -499,7 +497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../libraries/" class="md-nav__link">
+      <a href="../../user-guide/libraries/" class="md-nav__link">
         
   
   
@@ -527,7 +525,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adding-media/" class="md-nav__link">
+      <a href="../../user-guide/adding-media/" class="md-nav__link">
         
   
   
@@ -552,37 +550,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quality Profiles
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../user-guide/quality-profiles/" class="md-nav__link">
         
   
   
@@ -598,203 +569,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#built-in-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Built-in Profiles
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#preset-gallery" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Preset Gallery
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Preset Gallery">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#trash-guides" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        TRaSH Guides
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#profilarrdictionarry" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Profilarr/Dictionarry
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#storage-use-case-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Storage &amp; Use-Case Profiles
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#profile-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Profile Configuration
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Profile Configuration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#resolution-filtering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Resolution Filtering
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#file-size-limits" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        File Size Limits
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#source-preferences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Source Preferences
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#codec-preferences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Codec Preferences
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#hdr-preferences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        HDR Preferences
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#upgrade-rules" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrade Rules
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#creating-custom-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Creating Custom Profiles
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#assigning-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Assigning Profiles
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -807,7 +581,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../download-clients/" class="md-nav__link">
+      <a href="../../user-guide/download-clients/" class="md-nav__link">
         
   
   
@@ -835,7 +609,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../indexers/" class="md-nav__link">
+      <a href="../../user-guide/indexers/" class="md-nav__link">
         
   
   
@@ -863,7 +637,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../users/" class="md-nav__link">
+      <a href="../../user-guide/users/" class="md-nav__link">
         
   
   
@@ -1442,8 +1216,10 @@
       
   
   
+    
   
   
+  
     
     
     
@@ -1454,13 +1230,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
@@ -1481,7 +1255,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1499,7 +1273,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../development/setup/" class="md-nav__link">
+      <a href="../setup/" class="md-nav__link">
         
   
   
@@ -1527,7 +1301,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../development/testing/" class="md-nav__link">
+      <a href="../testing/" class="md-nav__link">
         
   
   
@@ -1555,7 +1329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../development/e2e-testing/" class="md-nav__link">
+      <a href="../e2e-testing/" class="md-nav__link">
         
   
   
@@ -1583,7 +1357,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../development/architecture/" class="md-nav__link">
+      <a href="../architecture/" class="md-nav__link">
         
   
   
@@ -1608,10 +1382,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../development/ci-artifacts/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI Builds
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1627,6 +1428,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#finding-a-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding a run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#linux" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#android" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Android
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1666,10 +1542,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#built-in-profiles" class="md-nav__link">
+  <a href="#finding-a-run" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Built-in Profiles
+        Finding a run
       
     </span>
   </a>
@@ -1677,143 +1553,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#preset-gallery" class="md-nav__link">
+  <a href="#macos" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Preset Gallery
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Preset Gallery">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#trash-guides" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        TRaSH Guides
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#profilarrdictionarry" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Profilarr/Dictionarry
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#storage-use-case-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Storage &amp; Use-Case Profiles
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#profile-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Profile Configuration
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Profile Configuration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#resolution-filtering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Resolution Filtering
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#file-size-limits" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        File Size Limits
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#source-preferences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Source Preferences
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#codec-preferences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Codec Preferences
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#hdr-preferences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        HDR Preferences
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#upgrade-rules" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrade Rules
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#creating-custom-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Creating Custom Profiles
+        macOS
       
     </span>
   </a>
@@ -1821,10 +1564,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#assigning-profiles" class="md-nav__link">
+  <a href="#linux" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Assigning Profiles
+        Linux
       
     </span>
   </a>
@@ -1832,10 +1575,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
+  <a href="#windows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Next Steps
+        Windows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#android" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Android
       
     </span>
   </a>
@@ -1862,150 +1616,66 @@
   
 
 
-<h1 id="quality-profiles">Quality Profiles</h1>
-<p>Quality profiles define your preferences for media quality, including resolution, codecs, file size, and sources.</p>
-<h2 id="built-in-profiles">Built-in Profiles</h2>
-<p>Mydia includes 8 built-in profiles:</p>
-<table>
-<thead>
-<tr>
-<th>Profile</th>
-<th>Resolution</th>
-<th>Use Case</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>SD</td>
-<td>480p</td>
-<td>Low bandwidth, small storage</td>
-</tr>
-<tr>
-<td>HD-720p</td>
-<td>720p</td>
-<td>Balanced quality/size</td>
-</tr>
-<tr>
-<td>HD-1080p</td>
-<td>1080p</td>
-<td>Standard HD</td>
-</tr>
-<tr>
-<td>Ultra-HD</td>
-<td>2160p</td>
-<td>4K content</td>
-</tr>
-<tr>
-<td>WEB-DL-1080p</td>
-<td>1080p</td>
-<td>Streaming sources</td>
-</tr>
-<tr>
-<td>Bluray-1080p</td>
-<td>1080p</td>
-<td>Disc quality</td>
-</tr>
-<tr>
-<td>Remux-1080p</td>
-<td>1080p</td>
-<td>Lossless disc rip</td>
-</tr>
-<tr>
-<td>Remux-2160p</td>
-<td>2160p</td>
-<td>4K lossless</td>
-</tr>
-</tbody>
-</table>
-<h2 id="preset-gallery">Preset Gallery</h2>
-<p>The preset gallery offers 23 one-click import profiles:</p>
-<h3 id="trash-guides">TRaSH Guides</h3>
-<p>Community-vetted profiles following <a href="https://trash-guides.info/">TRaSH Guides</a> recommendations:</p>
-<ul>
-<li>HD Bluray + WEB</li>
-<li>UHD Bluray + WEB</li>
-<li>Remux + WEB</li>
-</ul>
-<h3 id="profilarrdictionarry">Profilarr/Dictionarry</h3>
-<p>Quality tiers for different use cases:</p>
-<ul>
-<li><strong>Quality</strong> - Best possible quality</li>
-<li><strong>Balanced</strong> - Quality vs. size tradeoff</li>
-<li><strong>Efficient</strong> - Good quality, smaller files</li>
-<li><strong>Compact</strong> - Minimal storage usage</li>
-<li><strong>Remux</strong> - Lossless quality</li>
-</ul>
-<p>Available for 720p, 1080p, and 2160p resolutions.</p>
-<h3 id="storage-use-case-profiles">Storage &amp; Use-Case Profiles</h3>
-<ul>
-<li>Storage-optimized</li>
-<li>Streaming-optimized</li>
-<li>Mobile-optimized</li>
-</ul>
-<h2 id="profile-configuration">Profile Configuration</h2>
-<h3 id="resolution-filtering">Resolution Filtering</h3>
-<p>Set minimum and maximum resolution:</p>
-<ul>
-<li>Minimum: Reject releases below this resolution</li>
-<li>Maximum: Reject releases above this resolution</li>
-</ul>
-<h3 id="file-size-limits">File Size Limits</h3>
-<p>Configure per-minute file size limits:</p>
-<ul>
-<li>Minimum: Reject undersized files (likely low quality)</li>
-<li>Maximum: Reject oversized files (storage constraints)</li>
-</ul>
-<h3 id="source-preferences">Source Preferences</h3>
-<p>Rank your preferred sources:</p>
-<ol>
-<li>Bluray</li>
-<li>WEB-DL</li>
-<li>WEBRip</li>
-<li>HDTV</li>
-<li>DVD</li>
-</ol>
-<h3 id="codec-preferences">Codec Preferences</h3>
-<p>Configure video codec preferences:</p>
-<ul>
-<li>x265/HEVC - Better compression, smaller files</li>
-<li>x264/AVC - Wider compatibility</li>
-<li>AV1 - Newest codec, best compression</li>
-</ul>
-<h3 id="hdr-preferences">HDR Preferences</h3>
-<p>Configure HDR format handling:</p>
-<ul>
-<li>Dolby Vision</li>
-<li>HDR10+</li>
-<li>HDR10</li>
-<li>HLG</li>
-</ul>
-<h3 id="upgrade-rules">Upgrade Rules</h3>
-<p>Configure automatic upgrades:</p>
-<ul>
-<li>Enable/disable automatic upgrades</li>
-<li>Set score threshold for upgrades</li>
-<li>Configure upgrade delay</li>
-</ul>
-<h2 id="creating-custom-profiles">Creating Custom Profiles</h2>
-<ol>
-<li>Navigate to <strong>Admin &gt; Quality Profiles</strong></li>
-<li>Click <strong>Create Profile</strong></li>
-<li>Configure settings</li>
-<li>Save profile</li>
-</ol>
-<h2 id="assigning-profiles">Assigning Profiles</h2>
-<p>Every search resolves a profile through two tiers:</p>
-<ol>
-<li><strong>The media item's own profile</strong>, if one is set. This always wins.</li>
-<li><strong>The global default profile</strong>, chosen at the top of <strong>Admin &gt; Quality Profiles</strong>. It governs every item that has no profile of its own.</li>
-</ol>
-<p>Wherever you pick a profile for a media item, the blank choice reads <strong>Use default (name)</strong>. Picking it clears the item's own profile so the item follows the global default, including any later change to that default. Setting a profile on the item instead pins it, and it stops tracking the default.</p>
-<p>A fresh install seeds the <strong>Any</strong> profile as the global default, so searches are ranked from the start rather than falling back to raw seeder counts. Changing the default afterwards is never overwritten on restart, and clearing it is respected too.</p>
-<h2 id="next-steps">Next Steps</h2>
-<ul>
-<li><a href="../download-clients/">Download Clients</a> - Configure download automation</li>
-<li><a href="../indexers/">Indexers</a> - Set up release searching</li>
-</ul>
+<h1 id="using-ci-builds">Using CI builds</h1>
+<p>Every push to <code>master</code> or <code>main</code>, and every pull request, that touches <code>player/</code>,
+<code>native/</code>, or <code>.github/workflows/ci-player.yml</code> produces downloadable player
+builds. Pushes and pull requests that do not touch those paths do not trigger a
+build, so there is nothing to download for them. These builds are the fastest
+way to try a change before it reaches a release.</p>
+<p>CI builds are not release builds. They are ad-hoc signed and never notarized, so
+Sparkle auto-update does not work on them. If you are testing the updater, use a
+release DMG instead.</p>
+<p>Artifacts are kept for 7 days.</p>
+<h2 id="finding-a-run">Finding a run</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--workflow<span class="o">=</span>ci-player.yml<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span>
+</code></pre></div>
+<p>Take the run ID from the leftmost column of the row you want.</p>
+<h2 id="macos">macOS</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-macos-app
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>ditto<span class="w"> </span>-x<span class="w"> </span>-k<span class="w"> </span>mydia-player-macos.zip<span class="w"> </span>.
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>xattr<span class="w"> </span>-cr<span class="w"> </span><span class="s2">&quot;Mydia Player.app&quot;</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>open<span class="w"> </span><span class="s2">&quot;Mydia Player.app&quot;</span>
+</code></pre></div>
+<p>There are two archives here, which is expected. <code>gh run download</code> unwraps
+GitHub's own artifact zip and leaves <code>mydia-player-macos.zip</code> on disk. That inner
+archive is the app bundle, packaged with <code>ditto</code> so its framework symlinks
+survive the trip. Extract it with <code>ditto -x -k</code> or by double clicking it in
+Finder. Both preserve symlinks; some third party unzip tools do not, and a
+bundle whose symlinks have been replaced by copies will not launch.</p>
+<p><code>xattr -cr</code> clears the quarantine attribute. Quarantine is set by the
+downloading application, not unconditionally by macOS: browsers and other
+LaunchServices-aware clients set it, but <code>gh run download</code> does not, so for the
+steps above this command is usually a no-op. Run it anyway; it is harmless when
+there is nothing to clear, and it is what makes the app launch if you instead
+download the artifact through the Actions UI in a browser. Without it,
+Gatekeeper refuses to launch a quarantined app, because a CI build carries an
+ad-hoc signature rather than a notarized Developer ID one.</p>
+<h2 id="linux">Linux</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-linux-bundle<span class="w"> </span>-D<span class="w"> </span>mydia-player
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>chmod<span class="w"> </span>+x<span class="w"> </span>mydia-player/mydia-player
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>./mydia-player/mydia-player
+</code></pre></div>
+<p>The artifact contains the contents of the build bundle, so pass <code>-D</code> to give it
+a directory of its own. The bundle links against libmpv and GTK 3 rather than
+shipping them, so both must already be installed. On Debian and Ubuntu the GTK
+package is <code>libgtk-3-0</code>; the libmpv runtime package is <code>libmpv2</code> on Ubuntu 24.04
+and later and <code>libmpv1</code> on older releases, so install whichever your release
+provides:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libgtk-3-0
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libmpv2<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libmpv1
+</code></pre></div>
+<h2 id="windows">Windows</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-windows-release<span class="w"> </span>-D<span class="w"> </span>mydia-player
+</code></pre></div>
+<p>Run <code>mydia-player\mydia-player.exe</code> from the extracted directory. The build is
+unsigned, so SmartScreen shows a warning; choose "More info" then "Run anyway".</p>
+<h2 id="android">Android</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-android-apk
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>adb<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>app-release.apk
+</code></pre></div>
+<p>The APK is signed with a debug key, so it will not upgrade over a Play Store or
+release install. Uninstall the release build first if <code>adb install</code> reports a
+signature mismatch.</p>
 
 
 
@@ -2043,7 +1713,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../adding-media/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Adding Media">
+          <a href="../architecture/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Architecture">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2053,27 +1723,11 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Adding Media
+                Architecture
               </div>
             </div>
           </a>
         
-        
-          
-          <a href="../download-clients/" class="md-footer__link md-footer__link--next" aria-label="Next: Download Clients">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                Download Clients
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
-            </div>
-          </a>
         
       </nav>
     
