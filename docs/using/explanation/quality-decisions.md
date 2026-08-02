@@ -60,29 +60,73 @@ short on purpose:
   independent checks apply here: a parsed-title similarity threshold, and a
   relevance score that reaches zero. Alternate and localised titles are the
   usual innocent victims.
-- The release is for the wrong thing: an episode search that matched a season
-  pack, the wrong episode, or a movie search that matched something with season
-  and episode markers in the name.
-- The title contains one of your blocked tags. This is a case-insensitive
-  substring test, so a short token matches inside longer words, including
-  release group names.
 - The release fails a validity check: an executable or script extension, a
   hashed or numeric-only title, an apparently password-protected archive, or no
   meaningful content in the name.
 - The release is on the blocklist, which is where releases go after a download
   built from them fails.
 - A Usenet post is younger than the indexer's configured minimum age.
+- The title contains a blocked tag. This one is real but is currently almost
+  unreachable; see [below](#blocked-tags-are-not-reachable-from-the-interface).
+- The release is a torrent with fewer seeders than the configured minimum. This
+  is not a profile field but an application-level setting, and it is the one
+  most likely to surprise you; see the next section.
 
 Nearly everything else is a **soft penalty**: it pushes a release down the
-ranking instead of removing it. Size outside your configured range, low seeders,
-and a poor seeder-to-leecher ratio all work this way, and the penalties are
-deliberately capped small enough that they cannot flip a correct release below an
-incorrect one. The reasoning is that a search returning nothing is a worse
-outcome than a search returning something imperfect, and hard size and seeder
-filters are extremely good at returning nothing.
+ranking instead of removing it. Size outside your configured range, a poor
+seeder-to-leecher ratio, and low (but non-zero) seeder counts all work this way,
+and those penalties are deliberately capped small enough that they cannot flip a
+correct release below an incorrect one. The reasoning is that a search returning
+nothing is a worse outcome than a search returning something imperfect, and hard
+size filters are extremely good at returning nothing.
 
-This is why raising the minimum seeder count does not behave like a filter. It
-biases the ranking; it does not empty the result list.
+### Minimum seeders is a filter, and the only one you are likely to set
+
+Minimum seeders is the exception to the paragraph above, and it behaves
+differently from everything else in a quality profile, so it is worth separating
+out.
+
+It is applied as a hard filter on the pooled indexer results, before
+deduplication and before ranking. A torrent below the threshold is removed, not
+demoted. The manual search interface applies the same filter to what it shows
+you. Inside the ranker there is *also* a small soft seeder penalty, which is
+what leads to the reasonable but wrong assumption that seeders are only ever a
+preference.
+
+Two details soften it. The default is zero, so out of the box it filters
+nothing, and it only applies to automatic background searches unless you set it
+yourself in the manual search interface. And Usenet results, which report no
+seeder count at all, are exempt rather than being filtered out wholesale.
+
+The practical warning: this is the one setting that can genuinely empty a result
+list. If you raised it to filter out dead torrents and searches stopped finding
+anything, lower it before investigating anything else.
+
+### Identity mismatch is a penalty, not a rejection
+
+An episode search that matched a season pack or the wrong episode, or a movie
+search that matched something with season and episode markers in its name, is an
+**identity mismatch**. You would expect that to be a hard rejection. It is not.
+
+It is a very large negative score adjustment, deliberately sized to exceed the
+maximum score any release can otherwise achieve, so that a matching release
+always outranks a mismatching one while the mismatching one stays selectable.
+The design intent is to fail open: if the parser cannot read a release name at
+all, no penalty is applied, so unusual naming conventions are not silently
+discarded.
+
+There is a consequence to this that is genuinely surprising, and it follows from
+the resolution-first sorting described at the top of this page. Because the
+resolution grouping is applied *before* scores are compared, a release that
+mismatches on identity but sits at a preferred resolution sorts above a release
+that matches on identity but sits at a non-preferred one. The enormous penalty
+only settles ties within a resolution grouping; it cannot reach across
+groupings.
+
+In practice this needs an unusual setup to bite, since a search that only
+returns wrong-identity releases at your preferred resolution is already an
+unusual search. But if you ever see Mydia grab a season pack for an episode
+search, this interaction, rather than a broken matcher, is the likely mechanism.
 
 ## What the score actually weighs
 
@@ -118,28 +162,48 @@ In rough order of how often each is the real cause:
 
 1. **The better release's resolution was not in your preferred list.** Nothing
    else can produce this outcome as reliably. Check the resolution list first.
-2. **It never survived the first pass.** On a busy title, a low-seeded release
+2. **It was filtered out for having too few seeders.** The only hard filter you
+   are likely to have set yourself, and the only one that can empty a list.
+3. **It never survived the first pass.** On a busy title, a low-seeded release
    can be cut before the profile is consulted.
-3. **It lost the duplicate collapse.** When the same release comes back from
+4. **It lost the duplicate collapse.** When the same release comes back from
    several indexers, Mydia keeps the copy with the most seeders and the most
    complete metadata, and discards the rest.
-4. **Its codec, source, or audio was unlisted rather than merely second.** See
+5. **Its codec, source, or audio was unlisted rather than merely second.** See
    above; the penalty for absent is larger than for last.
-5. **The title did not match closely enough.** Either the parsed title fell below
+6. **The title did not match closely enough.** Either the parsed title fell below
    the similarity threshold, or a name padded with tags and group suffixes drove
    the relevance score to zero and triggered a hard rejection.
-6. **It violated a resolution bound or a required HDR format.** This does not
+7. **It violated a resolution bound or a required HDR format.** This does not
    remove the release, but it zeroes the entire quality component, which is most
    of the available score.
-7. **A blocked tag matched inside another word.** Substring matching is
-   unanchored.
 8. **It was blocklisted** after a previous download built from it failed.
 
 Notice what is not on that list. Indexer priority is not a factor; indexers are
 queried concurrently and their priority number does not weight their results.
-Size limits and seeder minimums are almost never decisive on their own, because
-they are capped soft penalties. And "the cutoff was already met" is not a reason
-in Mydia at all, for the reason in the next section.
+Size limits are almost never decisive on their own, because they are capped soft
+penalties. Blocked tags are not a factor either, because you almost certainly do
+not have any set. And "the cutoff was already met" is not a reason in Mydia at
+all, for the reason two sections down.
+
+## Blocked tags are not reachable from the interface
+
+Blocked tags are a real hard rejection: a case-insensitive substring test against
+the release title, unanchored, so a short token can match inside a longer word or
+a release group name. If you had one set, it would remove releases outright.
+
+You almost certainly do not have one set. There is no field for blocked tags in
+the admin interface, no environment variable for them, and no database row that
+holds them. The only ways in are a compiled-in application setting overridden in
+a release configuration file, or an argument passed to a search job
+programmatically. Neither is something an operator does through normal
+configuration, and the shipped default is an empty list.
+
+So the mechanism exists and works, and for practical purposes it is not part of
+the configuration surface today. It is listed among the hard rejections above for
+completeness rather than because it is likely to be your answer. The same is true
+of the preferred-tag bonus mentioned later on this page: implemented, reachable
+only from job arguments, and empty in a running instance.
 
 ## There is no upgrade path yet
 
@@ -176,11 +240,11 @@ contributing points to a total. That model is the main reason the *arr stack's
 quality handling is more expressive than Mydia's, and it is genuinely more
 expressive.
 
-Mydia has three term-based mechanisms and none of them is a custom format.
-Blocked tags hard-reject on a substring match. Resolution, codec, source, audio,
-and HDR preferences are ordered lists scored by position. A preferred-tag bonus
-exists in the ranking code but is not reachable from any part of the interface,
-so in a running instance it is always empty.
+Mydia has three term-based mechanisms and none of them is a custom format. Only
+one of the three is configurable: resolution, codec, source, audio, and HDR
+preferences are ordered lists scored by position. The other two, blocked tags
+and a preferred-tag bonus, are implemented in the ranking code and not reachable
+from the interface, as described above.
 
 PROPER and REPACK markers are parsed out of release names and are then not used
 for scoring. A PROPER does not currently rank above the release it corrects.

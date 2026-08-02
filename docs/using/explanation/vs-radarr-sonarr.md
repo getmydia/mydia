@@ -70,8 +70,9 @@ more useful one.
 formats (release groups you trust, audio codecs you want, encoders you avoid)
 and assign each a score that feeds into release selection. It is the mechanism
 that makes TRaSH Guides possible, and it is genuinely powerful and genuinely
-well-designed. Mydia has ordered preference lists and a blocked-tag filter and
-nothing resembling per-format scoring. Profiles derived from those guides ship in
+well-designed. Mydia has ordered preference lists, and nothing resembling
+per-format scoring. It does have a blocked-tag filter, but it is not exposed in
+the interface, so in practice the ordered lists are the whole toolkit. Profiles derived from those guides ship in
 Mydia's preset gallery, and they translate the resolution, source, and size parts
 faithfully; the scoring layer has no equivalent to translate into. If custom
 formats are why your setup grabs what you want, Mydia will disappoint you today.
@@ -126,7 +127,7 @@ Useful as a summary, but the sections above are where the actual argument is.
 | **Quality profiles** | Yes | Advanced | Advanced |
 | **Custom formats** | Planned | Yes | Yes |
 | **Automatic upgrades** | Planned | Yes | Yes |
-| **Media server integration** | Planned | Plex, Kodi, Jellyfin | Plex, Kodi, Jellyfin |
+| **Media server integration** | Plex, Jellyfin | Plex, Kodi, Jellyfin | Plex, Kodi, Jellyfin |
 | **List import** | Experimental | Yes | Yes |
 | **Native playback** | Experimental (player app) | No | No |
 | **Remote access (p2p)** | Experimental | No | No |
