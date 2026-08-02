@@ -15,6 +15,7 @@ If you are starting from nothing, begin with a
 - [Adding media](add-media.md) - search for and add media you do not already have
 - [Importing an existing collection](import-existing-collection.md) - bring files already on disk into a library
 - [Quality profiles](quality-profiles.md) - create and assign quality profiles
+- [Automatic quality upgrades](automatic-quality-upgrades.md) - replace files that fall below your cutoff with better releases
 - [User management](manage-users.md) - roles, accounts, and the request system
 - [SSO/OIDC configuration](sso-oidc.md) - configure single sign-on
 - [PostgreSQL support](postgresql.md) - run Mydia on PostgreSQL instead of SQLite

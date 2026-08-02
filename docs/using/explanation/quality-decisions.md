@@ -183,8 +183,10 @@ Notice what is not on that list. Indexer priority is not a factor; indexers are
 queried concurrently and their priority number does not weight their results.
 Size limits are almost never decisive on their own, because they are capped soft
 penalties. Blocked tags are not a factor either, because you almost certainly do
-not have any set. And "the cutoff was already met" is not a reason in Mydia at
-all, for the reason two sections down.
+not have any set. And "the cutoff was already met" answers a different question
+entirely: it decides whether Mydia goes looking for an upgrade at all, rather
+than which release wins once it has. See
+[how upgrades are decided](#how-upgrades-are-decided).
 
 ## Blocked tags are not reachable from the interface
 
@@ -205,32 +207,127 @@ completeness rather than because it is likely to be your answer. The same is tru
 of the preferred-tag bonus mentioned later on this page: implemented, reachable
 only from job arguments, and empty in a running instance.
 
-## There is no upgrade path yet
+## How upgrades are decided
 
-This needs saying plainly, because the interface implies otherwise.
+Mydia does replace a file you already have when a better one turns up. It
+deserves its own section here, because the decision is made twice, on two
+different kinds of evidence, and everything above this point describes only the
+first half.
 
-Quality profiles have an **upgrades allowed** switch and an **upgrade until**
-quality, they are editable, they are saved, and they export and import with the
-profile. Nothing currently reads them when deciding anything. There is no code
-path that compares a candidate release against a file you already have and
-replaces it.
+For which settings to change and what the feature costs you in disk, see
+[automatic quality upgrades](../how-to/automatic-quality-upgrades.md). This
+section is about why it is shaped this way.
 
-What actually prevents a media item from being downloaded twice is much simpler:
-automatic searches only consider items that have no file at all, and the grab
-path independently refuses a release for something that already has one. An item
-with a file is not searched, so it is never upgraded, regardless of what its
-profile says.
+### The upgrade score is not the ranking score
 
-The practical consequences are worth being concrete about. Changing a profile
-from 720p to 1080p does not cause anything you already have to be re-fetched. A
-PROPER or REPACK of something you already downloaded will not replace it. If you
-want a better copy of a file you already have, you delete the file and let Mydia
-search again, or you grab a specific release by hand.
+The score described further up this page (quality blended with seeders, a
+title-relevance bonus, and a flat multiplier for zero seeders) exists to order
+candidates against each other. Upgrades never use it. They use the profile's
+quality score on its own: the weighted blend of your resolution, codec, audio,
+source, size, and HDR preferences on a 0 to 100 scale, with no availability term
+in it at all.
 
-Mydia's [comparison page](vs-radarr-sonarr.md) lists automatic upgrades as
-planned rather than present, and the front page does the same. This section
-exists because a switch in a settings form is a much louder claim than a word in
-a table, and the switch is currently telling you something that is not true.
+That separation is forced rather than chosen. A file sitting on your disk has no
+seeders and no indexer behind it, so any number mixing availability in cannot be
+compared against one. The two numbers answer different questions, which is why
+"the score" means something different in the two halves of this page.
+
+### First decision: a bounded daily sweep
+
+Once a day Mydia looks for files scoring below their profile's **upgrade cutoff
+score** and searches for something better. Four conditions gate an item into
+that sweep, and each of them is a plausible answer to "why is nothing being
+upgraded":
+
+- Its profile has upgrades allowed. This is per profile rather than global, and
+  most of the built-in profiles ship with it switched off.
+- The item is monitored, and for an episode the show is monitored too.
+- It has at least one analyzed, untrashed file. An unanalyzed file has no score,
+  and is skipped rather than being treated as maximally upgradeable.
+- Nothing is already downloading for it, including a season pack that covers it.
+
+The sweep is deliberately slow. It works oldest-checked-first, stamps each item
+at the moment it enqueues a search rather than when the search comes back, and
+stops once it has spent its budget of indexer searches for the day. Searches
+that keep coming back empty back off, in their own namespace so that an upgrade
+search and a missing-file search cannot suppress one another.
+
+All of that pacing exists to protect your indexer accounts. Missing-file
+searches only ever touch a small and shrinking set of items, but upgrade-eligible
+items can be the entire library, and an instance that queries a private tracker
+about every file it owns every night is an instance that gets banned.
+
+Movies cost one search each. Episodes are grouped by season first, and a season
+where most episodes are below cutoff is searched as a season pack, since one
+pack search covers the season for the price of one. Movies and episodes take
+turns leading each run, because a library with more below-cutoff movies than the
+daily budget would otherwise leave nothing for episodes on every run, forever.
+
+### The candidate comparison neutralises what it cannot see
+
+At this stage a candidate is a release name and a file is a fully analyzed
+artifact, so comparing them directly means comparing unequal evidence. Mydia
+handles that symmetrically: a dimension the file does not know is blanked on the
+candidate too, and a dimension the release name does not mention inherits the
+file's value.
+
+Both halves matter. Without the first, a file whose source was never determined
+would score the neutral middle while a candidate advertising "BluRay" scored full
+marks, handing every candidate a free win. Without the second, a terse but
+accurate release name would be punished for what it did not bother to say.
+
+Everything else on this page still governs which surviving candidate gets
+grabbed. The upgrade comparison runs after blocklist rejection and before
+ranking, so what it lets through is then ordered by the ordinary rules,
+resolution grouping first. A release at a resolution your profile does not list
+still cannot win.
+
+### Second decision: the release has to prove it
+
+Nothing is thrown away on the strength of a release name, because release names
+lie. The new file is downloaded and imported **alongside** the file it might
+replace, and only once it has been analyzed for real is the comparison run
+again, this time between two analyzed files scored against the same profile.
+
+Both comparisons apply the same **minimum upgrade margin**, deliberately: the
+gate that picks a candidate and the gate that accepts the imported file cannot be
+allowed to disagree about what counts as better. The difference is the evidence
+each one has. The first works from a release name; the second works from a file
+that has been measured.
+
+If the measured file clears the margin, the old file is trashed and the activity
+feed records both scores along with the per-dimension difference between them. If
+it does not, the *new* file is trashed instead and its release is blocklisted, so
+the next sweep does not grab the same lying release again.
+
+Season packs are the one exception to that blocklisting. An episode inside a pack
+that was already above cutoff is *supposed* to lose this comparison, so
+blocklisting the pack would burn a release that legitimately upgraded the rest of
+the season.
+
+Neither file is hard-deleted here. The loser is moved to trash and stays
+recoverable for the trash retention window.
+
+### An exact tie is not an upgrade
+
+A margin of zero means "any genuine improvement", not "no improvement required".
+A release scoring exactly what you already have is never an upgrade at any
+margin, and the reason is a loop rather than a preference: it would be grabbed,
+the current file trashed, the replacement would score the same, and the item
+would be eligible again tomorrow, indefinitely.
+
+### What this changes elsewhere on this page
+
+Two things above read differently now. "The cutoff was already met" is a real
+reason for Mydia not to search, since an item at or above its profile's cutoff
+score is never swept. And changing a profile from 720p to 1080p does now cause
+files you already have to be re-examined, over the following days rather than at
+once, provided the profile allows upgrades and those files fall below its
+cutoff.
+
+PROPER and REPACK markers are still not scored. A PROPER replaces the release it
+corrects only if it happens to score higher on the profile dimensions above,
+which is not what the marker is for.
 
 ## There are no custom formats
 
@@ -259,6 +356,8 @@ powerful has no equivalent to translate into.
 
 - [Quality profiles reference](../reference/quality-profiles.md) for the fields
   and the built-in profiles.
+- [Automatic quality upgrades](../how-to/automatic-quality-upgrades.md) for
+  turning upgrades on, pacing the sweep, and what it costs you in disk.
 - [How a title becomes a file](media-pipeline.md) for what happens either side
   of selection.
 - [Mydia compared to Radarr and Sonarr](vs-radarr-sonarr.md) for the wider

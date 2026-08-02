@@ -11,6 +11,7 @@ A modern, self-hosted media management platform for tracking, organizing, and mo
 
 - **Unified Media Management** - Track both movies and TV shows with rich metadata from TMDB/TVDB
 - **Automated Downloads** - Background search and download with quality profiles and smart release ranking
+- **Automatic Quality Upgrades** - A bounded daily sweep replaces files scoring below your profile's cutoff, and re-checks the replacement before trashing anything
 - **Download Clients** - qBittorrent, Transmission, SABnzbd, and NZBGet support
 - **Indexer Integration** - Search via Prowlarr and Jackett for finding releases
 - **Built-in Indexer Library** - Native Cardigann support (experimental, limited testing)

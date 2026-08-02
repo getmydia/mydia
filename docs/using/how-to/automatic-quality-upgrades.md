@@ -150,4 +150,4 @@ above does not apply to a path you chose yourself:
 
 - [Quality Profiles](quality-profiles.md) - configure cutoff scores, upgrade
   margins, and the per-profile upgrade checkbox
-- [Indexers](indexers.md) - set up the sources the sweep searches against
+- [Connect an indexer](connect-indexer.md) - set up the sources the sweep searches against

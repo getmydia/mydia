@@ -24,5 +24,6 @@ Profiles can be assigned:
 
 ## Next Steps
 
+- [Automatic quality upgrades](automatic-quality-upgrades.md) - turn on upgrades for a profile and pace the daily sweep
 - [Download Clients](connect-download-client.md) - Configure download automation
 - [Indexers](connect-indexer.md) - Set up release searching

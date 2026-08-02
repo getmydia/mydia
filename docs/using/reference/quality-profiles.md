@@ -17,7 +17,7 @@ Mydia seeds 8 built-in profiles. Sizes are the movie range; episode ranges are r
 | 4K/UHD | 2160p | REMUX, BluRay, WEB-DL | 15 to 80 GB | Ultra HD |
 | Remux-2160p | 2160p | REMUX | 40 to 100 GB | Lossless 4K |
 
-Only **Any** and **SD** ship with upgrades allowed; the rest have it switched off. In the current release this makes no difference either way, because nothing reads the upgrade fields. See [Upgrade Rules](#upgrade-rules).
+Only **Any** and **SD** ship with automatic upgrades allowed; the other six have it switched off, so a library on one of those profiles will never upgrade a file until you enable it yourself. See [Upgrade Rules](#upgrade-rules).
 
 ## Preset Gallery
 
@@ -58,6 +58,8 @@ Quality tiers, named `Profilarr - <resolution> <tier>`:
 - Use Case - Local Playback
 - Use Case - Streaming
 - Use Case - Mobile
+
+Unlike the built-in profiles, presets ship with automatic upgrades **allowed**, except **Storage - Compact** and **Use Case - Mobile**, which are size-constrained by intent and have it switched off.
 
 ## Profile Configuration
 
@@ -117,15 +119,20 @@ Minimum seeders is **not** a profile field. It is an application-level setting t
 
 ### Upgrade Rules
 
-!!! warning "Not currently implemented"
-    A profile stores two upgrade fields, and **nothing in the current release reads either of them.** There is no code path that compares a candidate release against a file you already have. An item that has a file is not searched again, whatever its profile says, so no upgrade ever happens. The fields are saved, exported, and imported faithfully; they simply have no effect yet.
+Three fields, all on the profile's **Basic** tab, control automatic quality upgrades for every item using the profile.
 
-| Field | Meaning when implemented |
-|-------|--------------------------|
-| Upgrades allowed | Whether a better release may replace an existing file |
-| Upgrade until quality | The resolution at which upgrading stops |
+| Field | Schema field | Default | Meaning |
+|-------|--------------|---------|---------|
+| Allow automatic quality upgrades | `upgrades_allowed` | `true` on new profiles | Whether items on this profile are considered for upgrades at all. When off, the daily sweep skips them regardless of the two fields below |
+| Upgrade cutoff score | `upgrade_until_score` | `85` | Integer 0 to 100. A file scoring **below** this is eligible for an upgrade search; a file at or above it is left alone. Near 100 means almost nothing is ever good enough, so the sweep keeps searching for that item indefinitely |
+| Minimum upgrade margin | `min_upgrade_margin` | `5` | Integer 0 to 100. How many points higher the replacement must score before it is accepted. `0` means "any genuine improvement"; an exact tie is never an upgrade, at any margin |
 
-There is no upgrade score threshold and no upgrade delay setting. For what this means in practice, including how to get a better copy of something you already have, see [Why Mydia Picked That Release](../explanation/quality-decisions.md#there-is-no-upgrade-path-yet).
+Both scores are the profile's **quality score**, the weighted blend of the preference lists above on a 0 to 100 scale. It is not the ranking score used to order search results, which mixes in seeders and title relevance. See [Why Mydia Picked That Release](../explanation/quality-decisions.md#the-upgrade-score-is-not-the-ranking-score).
+
+There is no per-profile upgrade delay, and no per-format upgrade scoring. Pacing for the daily sweep is instance-wide rather than per profile: see [Automatic Quality Upgrades](../how-to/automatic-quality-upgrades.md#pacing-the-sweep).
+
+!!! note "Legacy exports"
+    Profiles exported before the cutoff score existed carry an `upgrade_until_quality` resolution instead. Importing one translates it to a score (`480p` to 40, `576p` to 45, `720p` to 60, `1080p` to 85, `2160p` to 95, anything unrecognised to 85). The field itself no longer exists on a profile.
 
 ## Profile Metadata
 

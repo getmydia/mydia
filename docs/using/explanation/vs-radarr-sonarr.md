@@ -77,13 +77,11 @@ Mydia's preset gallery, and they translate the resolution, source, and size part
 faithfully; the scoring layer has no equivalent to translate into. If custom
 formats are why your setup grabs what you want, Mydia will disappoint you today.
 
-**Automatic upgrades.** The *arr applications will replace a file you already
-have when a better one appears, bounded by a cutoff so it stops. Mydia does not.
-Quality profiles have upgrade fields, they are editable, and nothing reads them;
-an item with a file is simply not searched again. Getting a better copy of
-something you already have means deleting the file or grabbing by hand. This is
-covered honestly in
-[why Mydia picked that release](quality-decisions.md#there-is-no-upgrade-path-yet).
+The gap reaches into upgrades too. Both applications replace files
+automatically, but an *arr upgrade decision can be driven by custom format
+scores, so "upgrade only for a release group I trust" is expressible there and
+not here. Mydia compares the same ordered preference lists it uses everywhere
+else, on a single 0 to 100 quality score.
 
 **Indexer reliability.** Prowlarr has years of accumulated handling for the
 specific ways individual trackers misbehave, and far more people noticing within
@@ -126,7 +124,7 @@ Useful as a summary, but the sections above are where the actual argument is.
 | **Download automation** | Yes | Yes | Yes |
 | **Quality profiles** | Yes | Advanced | Advanced |
 | **Custom formats** | Planned | Yes | Yes |
-| **Automatic upgrades** | Planned | Yes | Yes |
+| **Automatic upgrades** | Yes (bounded daily sweep) | Yes | Yes |
 | **Media server integration** | Plex, Jellyfin | Plex, Kodi, Jellyfin | Plex, Kodi, Jellyfin |
 | **List import** | Experimental | Yes | Yes |
 | **Native playback** | Experimental (player app) | No | No |
@@ -142,11 +140,11 @@ it out of proxy configuration, you would like to describe your instance in a fil
 and still change it at runtime, or you want the player app. It is also a
 reasonable choice if you enjoy being early to something and reporting bugs.
 
-**Radarr and Sonarr are the better choice if** your release selection depends on
-custom format scoring, you need automatic upgrades, indexer reliability is the
-thing you cannot compromise on, or you want software whose sharp edges have
-already been found by somebody else. None of those is a small consideration, and
-the third and fourth apply to most people.
+**Radarr and Sonarr are the better choice if** your release selection or your
+upgrade rules depend on custom format scoring, indexer reliability is the thing
+you cannot compromise on, or you want software whose sharp edges have already
+been found by somebody else. None of those is a small consideration, and the
+last two apply to most people.
 
 They also coexist perfectly well. Running Prowlarr in front of Mydia is normal.
 Running Mydia alongside an existing *arr setup to see whether it fits, before
@@ -156,6 +154,8 @@ moving anything, is a sensible way to evaluate it.
 
 - [Why Mydia picked that release](quality-decisions.md) for the quality system
   in detail, including what it cannot do.
+- [Automatic quality upgrades](../how-to/automatic-quality-upgrades.md) for
+  turning on the feature that used to be the largest gap on this page.
 - [Why configuration is layered](configuration-model.md) for the difference that
   is hardest to see from a feature table.
 - [Get Mydia running](../tutorials/get-mydia-running.md) to try it.

@@ -294,6 +294,18 @@ FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer s
 | `FLARESOLVERR_TIMEOUT` | Request timeout in milliseconds | `60000` |
 | `FLARESOLVERR_MAX_TIMEOUT` | Maximum timeout in milliseconds | `120000` |
 
+## Automatic Quality Upgrades
+
+These pace the daily upgrade sweep instance-wide. Which items it considers is set per quality profile instead; see [Quality Profiles](quality-profiles.md#upgrade-rules).
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `UPGRADE_SWEEP_ENABLED` | Master switch for the daily upgrade sweep. `false` stops all automatic upgrades without editing any profile | `true` |
+| `UPGRADE_SWEEP_BATCH_SIZE` | Maximum indexer searches one sweep run may cost. Counts searches, not items: a season pack covers a whole season for one | `50` |
+| `MYDIA_TRASH_DIR` | Where replaced and deleted files are moved. Must be outside every library path. Unset trashes into `.mydia-trash` beside each library | Beside each library |
+
+See [Automatic Quality Upgrades](../how-to/automatic-quality-upgrades.md) for what these cost you in disk.
+
 ## Advanced Configuration
 
 | Variable | Description | Default |

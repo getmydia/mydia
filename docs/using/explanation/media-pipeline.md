@@ -16,8 +16,10 @@ list of candidates; that has its own page,
 
 **Search.** Mydia turns a media item into one or more indexer queries. This is
 triggered when you add something monitored, on a schedule for monitored items
-that still have no file, and on demand when you ask for it. An item that already
-has a file is not searched; see [the note on upgrades](quality-decisions.md#there-is-no-upgrade-path-yet).
+that still have no file, and on demand when you ask for it. Those schedules skip
+anything that already has a file. A separate, slower daily sweep searches on
+behalf of files that *do* exist but score below their profile's upgrade cutoff;
+see [how upgrades are decided](quality-decisions.md#how-upgrades-are-decided).
 
 **Indexer query.** Every enabled indexer is queried, and the results are pooled.
 Indexers are search engines: they know what releases exist and where to get the
@@ -40,7 +42,9 @@ grabbed for, its files are analysed, samples and junk are discarded, and the
 real media files are placed into the library under Mydia's naming scheme.
 
 **The library.** The file is now a first-class record with metadata attached,
-and the item stops being searched.
+and the item stops being searched for a missing file. If it lands below its
+profile's upgrade cutoff it stays in scope for the upgrade sweep, which is the
+one way a completed item re-enters this pipeline.
 
 ## Why indexers and download clients are separate
 
