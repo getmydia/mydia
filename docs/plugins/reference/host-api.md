@@ -1,114 +1,14 @@
-# Authoring Plugins
+# Host API Reference
 
-Mydia plugins are sandboxed **WebAssembly components** that react to library
-events and can reach out through a small set of capability-gated host functions.
-You write a plugin in Rust against the published **`mydia-plugin-sdk`** crate:
-one plain, typed handler function becomes a complete component.
+The contract Mydia plugins run against: the event envelope and catalog, the
+capability classes and their host functions, the scheduled-handler export, and
+the manifest fields that govern versioning.
 
-This page covers the contract, the capability model, the event catalog, the
-host-version floor, and the edit → build → reload dev loop, with the bundled
-webhook notifier as the worked example.
-
-## The model in one minute
-
-- A plugin is a Wasm **component** built for `wasm32-wasip2` against the
-  canonical WIT contract `mydia:plugin@1.1.0`.
-- It **exports** `handler.on-event` (called for each subscribed event) and,
-  optionally, `handler.on-schedule` (called on a fixed interval).
-- It **imports** the host's capabilities: `http-request`, `data-read`, `log`,
-  plus the 1.1 additions `kv-get/set/delete`, `data-list`, `ensure-watched`,
-  `connections-list`, and `connection-request`. Each is enforced server-side on
-  every call. There is no ambient network, file, or OS access; the sandbox
-  denies stdio and the only way out is a host import.
-- The SDK's `#[mydia::plugin]` macro adapts your typed handler onto the exported
-  function, so you never touch the generated binding boilerplate. Pass
-  `#[mydia::plugin(on_schedule = my_fn)]` to add a schedule handler.
-
-The WIT contract is the single source of truth, living at
-`native/mydia_plugin_sdk/wit/plugin.wit`. Both the Elixir host and your guest
-build against it, so the contract cannot drift: wasmtime's component linker
-type-checks the boundary at instantiation and refuses an incompatible plugin.
-
-## Your first plugin
-
-Add the SDK as a dependency and write a handler. The starter lives at
-`native/mydia_plugin_sdk/examples/minimal`. Copy it.
-
-`Cargo.toml`:
-
-```toml
-[package]
-name = "my_plugin"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", branch = "master" }
-
-[profile.release]
-opt-level = "z"
-lto = true
-strip = true
-panic = "abort"
-```
-
-`src/lib.rs`:
-
-```rust
-use mydia_plugin_sdk::types::Event;
-
-#[mydia_plugin_sdk::plugin]
-fn on_event(evt: Event) -> Result<String, String> {
-    Ok(format!("{{\"handled\":\"{}\"}}", evt.event))
-}
-```
-
-The handler is an ordinary function over a typed [`Event`](#the-event), returning
-a small JSON result string on success or an error string the host surfaces as a
-plugin error. Because it is plain Rust, you can unit-test it directly (no Wasm
-build, no running host):
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mydia_plugin_sdk::types::Event;
-
-    #[test]
-    fn handles_event() {
-        let evt = Event {
-            event: "media_item.added".into(),
-            category: None,
-            severity: None,
-            actor_type: None,
-            actor_id: None,
-            resource_type: None,
-            resource_id: None,
-            metadata_json: "{}".into(),
-        };
-        assert_eq!(on_event(evt).unwrap(), r#"{"handled":"media_item.added"}"#);
-    }
-}
-```
-
-Build the component:
-
-```bash
-cargo build --release --target wasm32-wasip2
-```
-
-`panic = "abort"` matters: a guest that prints a panic message to the (denied)
-stderr on its way down trips a host-side limitation and times out instead of
-trapping cleanly. Abort traps immediately, with no stderr write.
-
-!!! note "Toolchain"
-    You need the `wasm32-wasip2` target (`rustup target add wasm32-wasip2`), or
-    run inside the Mydia devenv shell (`./dev shell`), which provides it. The
-    SDK's `wit-bindgen` dependency generates the component bindings. No system
-    binding-generator is required.
+New to plugins? Start with the
+[tutorial](../tutorial/write-your-first-plugin.md). For task-oriented recipes,
+see the [how-to guides](../how-to/notifications.md). For why the platform is
+shaped this way (the sandbox, the capability model, the host-version floor),
+see [The plugin model](../explanation/plugin-model.md).
 
 ## The event
 
@@ -266,22 +166,10 @@ checkpoint progress to KV as you go.
 
 ## Manifest
 
-A plugin ships a JSON manifest declaring its identity, capabilities, and
-operator-editable settings:
-
-```json
-{
-  "slug": "my-plugin",
-  "name": "My Plugin",
-  "version": "1.0.0",
-  "min_host_version": "0.5.0",
-  "capabilities": {
-    "events:subscribe": ["media_item.added", "download.completed"],
-    "net:http": ["example.com"],
-    "data:read": ["media_item"]
-  }
-}
-```
+A plugin ships a JSON manifest declaring its identity, the events it
+subscribes to, the capabilities it wants, and any operator-editable settings.
+See [Manifest & Settings](manifest.md) for the full field reference and a
+complete worked example.
 
 ### Host-version floor
 
@@ -301,43 +189,6 @@ so a `1.0` guest's `on-event` still resolves against a `1.1` host. Only a remova
 or a signature change bumps the major version. Target the lowest host you need
 via `min_host_version`; a `1.1` guest sets `"min_host_version": "1.1.0"` so an
 older host refuses it cleanly rather than failing to link.
-
-## The dev loop
-
-The override directory (`PLUGINS_OVERRIDE_DIR`) is the highest-precedence
-artifact layer: a `<slug>.wasm` dropped there shadows the installed bytes, and
-re-activation picks it up with **no host restart**. The SDK ships a helper that
-builds and drops in one step:
-
-```bash
-export PLUGINS_OVERRIDE_DIR=/path/mydia/reads
-native/mydia_plugin_sdk/sideload.sh path/to/my_plugin --name my-plugin
-```
-
-Then re-activate the plugin (toggle it in the admin UI, or call
-`Mydia.Plugins.reload/0`) and trigger an event. The loop is:
-
-```
-edit  ->  sideload.sh  ->  re-activate  ->  test
-```
-
-The plugin must already be installed (its manifest seeded) so the host knows its
-capabilities; the helper only refreshes the wasm bytes.
-
-## Worked example: the webhook notifier
-
-The bundled notifier (`plugins/webhook_notifier`) is the reference plugin and a
-complete worked example. It:
-
-- is authored on the SDK with `#[mydia::plugin]` over one typed handler;
-- enriches each event via `data-read` (the curated media projection);
-- formats a notification for the operator-selected target: a Discord embed, an
-  ntfy publish, or a fully templated `custom` webhook;
-- POSTs it through the gated `http-request` import;
-- keeps its handler logic in plain functions, unit-tested with `cargo test`.
-
-Read its `src/lib.rs` for a real example of reconstructing the event, calling
-host functions, and returning a result the host records.
 
 ## Reference
 

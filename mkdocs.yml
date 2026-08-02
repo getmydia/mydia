@@ -112,11 +112,18 @@ nav:
           - using/reference/api.md
   - Building Plugins:
       - plugins/index.md
+      - Tutorial:
+          - plugins/tutorial/write-your-first-plugin.md
       - How-to guides:
+          - plugins/how-to/notifications.md
           - plugins/how-to/media-data.md
+          - plugins/how-to/two-way-sync.md
+          - plugins/how-to/test-and-iterate.md
       - Reference:
           - plugins/reference/manifest.md
           - plugins/reference/host-api.md
+      - Explanation:
+          - plugins/explanation/plugin-model.md
   - Contributing:
       - contributing/setup.md
       - contributing/testing.md

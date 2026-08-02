@@ -1,4 +1,4 @@
-# Plugin Development
+# Building Plugins
 
 This section is for developers building Mydia plugins. If you just want to use a
 plugin someone else wrote, install and configure it from the admin UI; you do
@@ -16,92 +16,34 @@ A plugin is a WebAssembly **component** written in Rust against the published
 `mydia-plugin-sdk` crate. You write one typed handler function; the SDK turns it
 into a component the host can load. The plugin runs in a sandbox with no ambient
 network, filesystem, or OS access. The only way out is through a small set of
-capability-gated host functions you declare up front.
+capability-gated host functions you declare up front, approved by the operator
+before the plugin ever runs.
 
-If you just want to get something working, follow the quickstart below, then
-jump into the [Cookbook](how-to/media-data.md) for task-by-task recipes. For the full
-contract, capability model, and ABI details, see the [Reference](reference/host-api.md).
+## Where to start
 
-## Quickstart
+<div class="grid cards" markdown>
 
-### 1. Create the crate
+-   **New to plugins**
 
-A plugin is a `cdylib` crate that depends on the SDK.
+    Follow the [tutorial](tutorial/write-your-first-plugin.md) and have a
+    working plugin logging on `media_item.added` in about 10 minutes.
 
-`Cargo.toml`:
+-   **Have a specific task**
 
-```toml
-[package]
-name = "my_plugin"
-version = "0.1.0"
-edition = "2021"
+    The [how-to guides](how-to/notifications.md) cover sending notifications,
+    reading media and event data, building a two-way sync, and the
+    test/reload loop.
 
-[lib]
-crate-type = ["cdylib"]
+-   **Need the contract**
 
-[dependencies]
-mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", branch = "master" }
+    The [host API reference](reference/host-api.md) is the event catalog,
+    capability classes, and host functions. The
+    [manifest schema](reference/manifest.md) covers every manifest field.
 
-[profile.release]
-opt-level = "z"
-lto = true
-strip = true
-panic = "abort"
-```
+-   **Want to know why**
 
-### 2. Write the handler
+    [The plugin model](explanation/plugin-model.md) explains the sandbox, the
+    capability system, and what the host-version floor is for, including its
+    current limitations.
 
-`src/lib.rs`:
-
-```rust
-use mydia_plugin_sdk::types::Event;
-
-#[mydia_plugin_sdk::plugin]
-fn on_event(evt: Event) -> Result<String, String> {
-    Ok(format!("{{\"handled\":\"{}\"}}", evt.event))
-}
-```
-
-That is a complete plugin. The `#[mydia_plugin_sdk::plugin]` macro adapts your
-plain function onto the component's exported handler, so you never touch the
-generated bindings. The handler takes a typed [`Event`](how-to/media-data.md#act-on-only-the-events-you-care-about)
-and returns a short JSON result string on success, or an error string the host
-records as a plugin error.
-
-### 3. Build the component
-
-```bash
-cargo build --release --target wasm32-wasip2
-```
-
-The component lands at `target/wasm32-wasip2/release/my_plugin.wasm`.
-
-!!! tip "Toolchain"
-    You need the `wasm32-wasip2` target: `rustup target add wasm32-wasip2`. If
-    you build inside the Mydia repo, the devenv shell (`./dev shell`) provides
-    it. The SDK's `wit-bindgen` dependency generates the component bindings, so
-    no system binding generator is required.
-
-!!! warning "Always set `panic = \"abort\"`"
-    The sandbox denies stdio. A guest that panics and tries to print to stderr
-    on its way down trips a host-side limitation and times out instead of
-    failing cleanly. `panic = "abort"` traps immediately with no stderr write.
-
-### 4. Ship a manifest
-
-A plugin needs a JSON manifest declaring its identity, the events it subscribes
-to, and the capabilities it wants. The smallest useful one:
-
-```json
-{
-  "slug": "my-plugin",
-  "name": "My Plugin",
-  "version": "0.1.0",
-  "capabilities": {
-    "events:subscribe": ["media_item.added"]
-  }
-}
-```
-
-See [Manifest & Settings](reference/manifest.md) for every field, and the
-[Cookbook](how-to/media-data.md) for how to actually do things once an event arrives.
+</div>
