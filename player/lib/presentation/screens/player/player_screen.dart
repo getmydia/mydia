@@ -167,6 +167,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   int? _savedPositionSeconds;
   int? _savedDurationSeconds;
 
+  /// When the server last recorded progress for this media, populated by
+  /// [_fetchProgressAndEpisodes]. Feeds [pickNewerProgress] on the
+  /// downloaded-online branch, which needs a timestamp to decide whether the
+  /// server's record or a local one written offline is more recent.
+  DateTime? _serverLastWatchedAt;
+
   /// Set when a seek forced a session restart, so re-initialization starts at
   /// this position instead of re-asking about the saved progress position.
   int? _resumeOverrideSeconds;
@@ -394,19 +400,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // runtime.
         _isDirectPlay = true;
 
-        // No server is reachable, so the runtime comes from what was stored
-        // alongside the download. Without one, `shouldOfferResume` declines
-        // and this path silently loses its prompt.
-        _totalDuration = downloadedMedia.runtime != null
-            ? Duration(minutes: downloadedMedia.runtime!)
-            : null;
-
         _isDownloadedSource = true;
         try {
           _progressStore = await ref.read(playbackProgressStoreProvider.future);
         } catch (e) {
           debugPrint('Could not open local progress store: $e');
         }
+
+        // No server is reachable, so the saved position comes from whatever a
+        // previous offline session recorded locally. The stored duration is
+        // preferred over the download's own runtime metadata: it reflects the
+        // media's real duration as measured during actual playback, while
+        // `runtime` is catalog metadata that can be missing or approximate.
+        // Without either, `shouldOfferResume` declines and this path silently
+        // loses its prompt.
+        final localProgress = _progressStore?.get(widget.mediaId);
+        _savedPositionSeconds = localProgress?.positionSeconds;
+        _savedDurationSeconds = localProgress?.durationSeconds;
+        _totalDuration =
+            _savedDurationSeconds != null && _savedDurationSeconds! > 0
+                ? Duration(seconds: _savedDurationSeconds!)
+                : (downloadedMedia.runtime != null
+                    ? Duration(minutes: downloadedMedia.runtime!)
+                    : null);
 
         final plan = await resolveResumePlan(
           savedPositionSeconds: _savedPositionSeconds,
@@ -450,15 +466,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // play and must never be treated as a restartable HLS session.
           _isDirectPlay = true;
 
-          // No candidates query runs on this branch — there is no server-side
-          // stream to negotiate — so the runtime has to come from whatever
-          // `_fetchProgressAndEpisodes` just loaded. `shouldOfferResume`
-          // declines outright without one, which would silently cost this
-          // path its resume prompt. Only `_totalDuration` is set, not
-          // `_timeline`: the file is entirely local, so media_kit's own
-          // duration is the authoritative one for everything else.
-          _totalDuration = _resolveRealDuration(null);
-
           _isDownloadedSource = true;
           try {
             _progressStore =
@@ -466,6 +473,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           } catch (e) {
             debugPrint('Could not open local progress store: $e');
           }
+
+          // Reconcile the server's progress (just loaded above) against
+          // whatever this device recorded locally, e.g. during an earlier
+          // offline session the server never heard about. The more
+          // recently-updated side wins.
+          final reconciled = pickNewerProgress(
+            local: _progressStore?.get(widget.mediaId),
+            serverPositionSeconds: _savedPositionSeconds,
+            serverDurationSeconds: _savedDurationSeconds,
+            serverLastWatchedAt: _serverLastWatchedAt,
+          );
+          _savedPositionSeconds = reconciled.positionSeconds;
+          _savedDurationSeconds = reconciled.durationSeconds;
+
+          // No candidates query runs on this branch — there is no server-side
+          // stream to negotiate — so the runtime has to come from whatever
+          // was just reconciled above. `shouldOfferResume` declines outright
+          // without one, which would silently cost this path its resume
+          // prompt. Only `_totalDuration` is set, not `_timeline`: the file
+          // is entirely local, so media_kit's own duration is the
+          // authoritative one for everything else.
+          _totalDuration = _resolveRealDuration(null);
 
           final plan = await resolveResumePlan(
             savedPositionSeconds: _savedPositionSeconds,
@@ -944,6 +973,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           final movie = Query$MovieDetail.fromJson(result.data!).movie;
           _savedPositionSeconds = movie?.progress?.positionSeconds;
           _savedDurationSeconds = movie?.progress?.durationSeconds;
+          _serverLastWatchedAt =
+              DateTime.tryParse(movie?.progress?.lastWatchedAt ?? '');
           _runtimeMinutes = movie?.runtime;
 
           // Extract subtitle tracks from files
@@ -963,6 +994,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           final episode = Query$EpisodeDetail.fromJson(result.data!).episode;
           _savedPositionSeconds = episode?.progress?.positionSeconds;
           _savedDurationSeconds = episode?.progress?.durationSeconds;
+          _serverLastWatchedAt =
+              DateTime.tryParse(episode?.progress?.lastWatchedAt ?? '');
           _runtimeMinutes = episode?.runtime;
 
           // Extract subtitle tracks from files

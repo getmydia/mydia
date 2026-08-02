@@ -10,6 +10,7 @@ import '../../core/downloads/collection_sync_providers.dart';
 import '../../core/downloads/collection_sync_service.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/graphql/graphql_provider.dart';
+import '../../core/playback/playback_progress_providers.dart';
 import '../screens/collections/collection_detail_controller.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/p2p/p2p_service.dart';
@@ -396,6 +397,13 @@ class _AppShellState extends ConsumerState<AppShell> {
     final location = widget.location;
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
+
+    // Keeps the offline-to-online progress flush alive for the whole app
+    // session: AppShell mounts for every reachable route before the
+    // immersive player (which renders outside this shell) can be reached,
+    // so watching it once here is enough for the underlying provider —
+    // not autoDispose — to keep listening for the rest of the session.
+    ref.watch(progressFlushProvider);
     // Use MediaQuery instead of LayoutBuilder to determine layout.
     // LayoutBuilder defers building to the layout phase, which can prevent
     // proper repaint propagation on mobile when combined with GlobalKey

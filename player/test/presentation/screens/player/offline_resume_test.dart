@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/core/playback/playback_progress_store.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
@@ -115,6 +116,154 @@ void main() {
     }
 
     expect(find.textContaining('not available offline'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('offline playback offers to resume from local progress',
+      (tester) async {
+    // A real file for the same reason as the routing test above: a
+    // nonexistent path bails out of the offline branch before the resume
+    // decision ever runs, at the pre-existing "downloaded file not found"
+    // `setState`.
+    final tempDir =
+        Directory.systemTemp.createTempSync('mydia_offline_resume_offer_test_');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final tempFile = File('${tempDir.path}/arrival.mkv')
+      ..writeAsBytesSync(const [0]);
+
+    final store = InMemoryPlaybackProgressStore();
+
+    final container = buildPlayerScreenContainer(
+      link: StubLink((request, callIndex) =>
+          throw StateError('offline mode must not issue GraphQL requests')),
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
+      authStatus: AuthStatus.offlineMode,
+      progressStore: store,
+    );
+    addTearDown(container.dispose);
+
+    // 45 minutes into a 90 minute movie, written by a previous offline
+    // session. Before the local store existed there was no such record and
+    // this path could never prompt.
+    await seedLocalProgress(container, positionSeconds: 2700);
+
+    // The offline branch resolves the file path through real `dart:io` I/O
+    // (see the routing test's doc comment above for why plain `pump()`
+    // cannot observe that), so this has to run inside `runAsync` and poll
+    // for the real outcome.
+    await tester.runAsync(() async {
+      await pumpPlayerScreen(tester, container);
+      await pumpUntilReal(
+        tester,
+        () => find.text('Resume').evaluate().isNotEmpty,
+      );
+    });
+
+    expect(
+      find.text('Resume'),
+      findsOneWidget,
+      reason: 'a downloaded file held entirely on disk resumes with a plain '
+          'seek, but it still has to ask',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('offline playback does not ask below the resume threshold',
+      (tester) async {
+    final tempDir = Directory.systemTemp
+        .createTempSync('mydia_offline_resume_threshold_test_');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final tempFile = File('${tempDir.path}/arrival.mkv')
+      ..writeAsBytesSync(const [0]);
+
+    final store = InMemoryPlaybackProgressStore();
+
+    final container = buildPlayerScreenContainer(
+      link: StubLink((request, callIndex) =>
+          throw StateError('offline mode must not issue GraphQL requests')),
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
+      authStatus: AuthStatus.offlineMode,
+      progressStore: store,
+    );
+    addTearDown(container.dispose);
+
+    // 12 seconds in, below kMinResumeThresholdSeconds.
+    await seedLocalProgress(container, positionSeconds: 12);
+
+    await tester.runAsync(() async {
+      await pumpPlayerScreen(tester, container);
+      // Below the threshold, `resolveResumePlan` never asks, so
+      // `_initializePlayer` runs straight through to `_openPlayerAndStart`,
+      // which throws building a real media_kit `Player` under `flutter
+      // test` (same as the routing test above) and lands in `_error`. That
+      // is what clears the spinner and proves the resume decision settled
+      // without ever showing the dialog.
+      await pumpUntilReal(
+        tester,
+        () => find.byType(CircularProgressIndicator).evaluate().isEmpty,
+      );
+    });
+
+    expect(find.text('Resume'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+      'downloaded playback while online reconciles local progress the '
+      'server never heard about', (tester) async {
+    // Still downloaded, but back online this time: the "already downloaded"
+    // branch, not the offline one. The server has no progress at all for
+    // this movie, standing in for a session recorded entirely offline that
+    // has not been flushed yet — reconciliation has nothing to prefer over
+    // the local record.
+    final tempDir = Directory.systemTemp
+        .createTempSync('mydia_downloaded_online_resume_test_');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final tempFile = File('${tempDir.path}/arrival.mkv')
+      ..writeAsBytesSync(const [0]);
+
+    final store = InMemoryPlaybackProgressStore();
+
+    final container = buildPlayerScreenContainer(
+      link: StubLink.responses([movieDetailResponse()]),
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
+      progressStore: store,
+    );
+    addTearDown(container.dispose);
+
+    // 45 minutes into a 90 minute movie, recorded by an earlier offline
+    // session the server never heard about.
+    await seedLocalProgress(container, positionSeconds: 2700);
+
+    await tester.runAsync(() async {
+      await pumpPlayerScreen(tester, container);
+      await pumpUntilReal(
+        tester,
+        () => find.text('Resume').evaluate().isNotEmpty,
+      );
+    });
+
+    expect(
+      find.text('Resume'),
+      findsOneWidget,
+      reason: 'the server has no progress for this movie, so the resume '
+          'prompt can only come from the reconciled local record',
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

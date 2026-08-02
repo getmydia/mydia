@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../player/progress_service.dart';
 import 'local_playback_progress.dart';
 
 abstract class PlaybackProgressStore {
@@ -155,4 +156,39 @@ Future<void> recordLocalProgress({
   } catch (e) {
     debugPrint('[PlaybackProgressStore] Ignoring failed local write: $e');
   }
+}
+
+/// Pushes every locally-recorded position the server does not have yet.
+///
+/// Records are attempted independently: one unreachable item must not strand
+/// the rest of the queue. A failure leaves `syncedAt` null so the next
+/// reconnect tries again.
+Future<int> flushUnsyncedProgress({
+  required PlaybackProgressStore store,
+  required ProgressService progressService,
+  required DateTime now,
+}) async {
+  var synced = 0;
+
+  for (final record in store.unsynced()) {
+    final position = Duration(seconds: record.positionSeconds);
+    final duration = Duration(seconds: record.durationSeconds);
+
+    try {
+      if (record.mediaType == 'episode') {
+        await progressService.syncEpisodePosition(
+            record.mediaId, position, duration);
+      } else {
+        await progressService.syncMoviePosition(
+            record.mediaId, position, duration);
+      }
+      await store.markSynced(record.mediaId, now);
+      synced++;
+    } catch (e) {
+      debugPrint(
+          '[PlaybackProgressStore] Deferring sync for ${record.mediaId}: $e');
+    }
+  }
+
+  return synced;
 }
