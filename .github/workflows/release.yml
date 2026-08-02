@@ -1,7 +1,7 @@
 name: Release
 
 # Release procedure (Immutable Releases enabled on this repo).
-# Full docs: docs/contributing/releasing.md
+# Full docs: docs/development/releasing.md
 #
 #   1. SHA=$(git rev-parse origin/master)
 #      gh release create vX.Y.Z --target "$SHA" --draft --prerelease \
@@ -33,7 +33,7 @@ on:
         type: boolean
         default: false
       accept_drift:
-        description: 'Proceed even though master has moved past the commit the draft targets'
+        description: 'Proceed even though the default branch has moved past the commit the draft targets'
         type: boolean
         default: false
       allow_missing:
@@ -120,7 +120,7 @@ jobs:
             # at publish, so the tag can land on code these jobs never built.
             SHA=$(echo "$RELEASE_JSON" | jq -r '.targetCommitish')
             if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::Draft $TAG targets '$SHA', which is a branch, not a commit. Pin it first: gh release edit $TAG --repo $REPO --target \$(git rev-parse origin/master)" >&2
+              echo "::error::Draft $TAG targets '$SHA', which is a branch, not a commit. Pin it first: gh release edit $TAG --repo $REPO --target \$(git rev-parse origin/${DEFAULT_BRANCH})" >&2
               exit 1
             fi
 
@@ -134,19 +134,19 @@ jobs:
             # rather than absorbing it silently.
             DRIFT=$(git rev-list --count "${SHA}..origin/${DEFAULT_BRANCH}" 2>/dev/null || echo 0)
             if [ "$DRIFT" -gt 0 ]; then
-              echo "::group::${DRIFT} commit(s) on master are NOT in this release"
+              echo "::group::${DRIFT} commit(s) on ${DEFAULT_BRANCH} are NOT in this release"
               git log --oneline "${SHA}..origin/${DEFAULT_BRANCH}"
               echo "::endgroup::"
               {
                 echo "### Release drift"
                 echo
-                echo "\`$TAG\` targets \`${SHA:0:12}\`, which is **${DRIFT} commit(s) behind master**."
+                echo "\`$TAG\` targets \`${SHA:0:12}\`, which is **${DRIFT} commit(s) behind ${DEFAULT_BRANCH}**."
                 echo
                 git log --oneline "${SHA}..origin/${DEFAULT_BRANCH}" | sed 's/^/- /'
               } >> "$GITHUB_STEP_SUMMARY"
 
               if [ "$ACCEPT_DRIFT" != "true" ]; then
-                echo "::error::${DRIFT} commit(s) landed on master after this draft was cut. Either re-point the draft and update its notes (gh release edit $TAG --repo $REPO --target \$(git rev-parse origin/master)), or re-dispatch with -f accept_drift=true to ship $TAG as-is." >&2
+                echo "::error::${DRIFT} commit(s) landed on ${DEFAULT_BRANCH} after this draft was cut. Either re-point the draft and update its notes (gh release edit $TAG --repo $REPO --target \$(git rev-parse origin/${DEFAULT_BRANCH})), or re-dispatch with -f accept_drift=true to ship $TAG as-is." >&2
                 exit 1
               fi
               echo "accept_drift was set: shipping ${SHA:0:12} and leaving the ${DRIFT} newer commit(s) for a later release."
