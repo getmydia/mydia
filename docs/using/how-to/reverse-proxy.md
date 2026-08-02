@@ -65,7 +65,7 @@ mydia.example.com {
 
 ## HTTPS Configuration
 
-Configure Mydia for HTTPS access:
+Configure Mydia's public hostname and URL scheme for HTTPS access and proper link generation:
 
 ```bash
 PHX_HOST=mydia.example.com
@@ -285,15 +285,6 @@ See [docs/nix.md](https://github.com/getmydia/mydia/blob/master/docs/nix.md) in 
 1. Verify port mapping
 2. Check firewall rules
 3. Test with `curl http://localhost:4000`
-
-## Configuring Hostname
-
-For proper link generation:
-
-```bash
-PHX_HOST=mydia.example.com
-URL_SCHEME=https
-```
 
 ## Configuration Backup
 
