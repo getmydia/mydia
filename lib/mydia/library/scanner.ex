@@ -12,6 +12,8 @@ defmodule Mydia.Library.Scanner do
 
   require Logger
 
+  alias Mydia.Library.TrashStore
+
   @video_extensions ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .mpg .mpeg .m2ts .ts)
   @music_extensions ~w(.mp3 .flac .wav .aac .ogg .m4a .wma .opus .ape .alac .aiff)
   @book_extensions ~w(.epub .pdf .mobi .azw .azw3 .cbr .cbz .djvu .fb2 .lit .txt .rtf)
@@ -229,7 +231,7 @@ defmodule Mydia.Library.Scanner do
     # Use lstat to detect symlinks without following them
     case File.lstat(path) do
       {:ok, %File.Stat{type: :directory}} ->
-        if recursive do
+        if recursive and not trash_directory?(path) do
           walk_directory(path, recursive, extensions, progress_callback, state)
         else
           state
@@ -239,7 +241,11 @@ defmodule Mydia.Library.Scanner do
         # Follow symlink to check what it points to
         case File.stat(path) do
           {:ok, %File.Stat{type: :directory}} when recursive ->
-            walk_directory(path, recursive, extensions, progress_callback, state)
+            if trash_directory?(path) do
+              state
+            else
+              walk_directory(path, recursive, extensions, progress_callback, state)
+            end
 
           {:ok, %File.Stat{type: :regular}} ->
             process_file(path, extensions, progress_callback, state)
@@ -266,6 +272,14 @@ defmodule Mydia.Library.Scanner do
         %{state | errors: [error | state.errors]}
     end
   end
+
+  # Trashed media is moved *outside* every library path by default (see
+  # Mydia.Library.TrashStore), so this normally never fires. It is the second
+  # line of defence for nested library layouts, where one library path can
+  # contain the parent directory another library trashes into: a scan that
+  # walked the trash would classify every trashed file as new and restore its
+  # row, undoing the trash.
+  defp trash_directory?(path), do: Path.basename(path) == TrashStore.dir_name()
 
   defp process_file(path, extensions, progress_callback, state) do
     if video_file?(path, extensions) do

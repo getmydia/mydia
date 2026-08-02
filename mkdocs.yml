@@ -66,6 +66,7 @@ nav:
       - Managing Libraries: user-guide/libraries.md
       - Adding Media: user-guide/adding-media.md
       - Quality Profiles: user-guide/quality-profiles.md
+      - Automatic Quality Upgrades: user-guide/automatic-quality-upgrades.md
       - Download Clients: user-guide/download-clients.md
       - Indexers: user-guide/indexers.md
       - User Management: user-guide/users.md

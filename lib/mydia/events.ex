@@ -446,6 +446,114 @@ defmodule Mydia.Events do
   end
 
   @doc """
+  Records a media_file.upgraded event — Task 10's activity-trail record for
+  the moment `Mydia.Upgrades.finalize_upgrade/1` actually replaces a file
+  with a genuinely better one.
+
+  ## Parameters
+    - `new_file` - The `MediaFile` that won the comparison and stays.
+    - `old_file` - The `MediaFile` that was trashed.
+    - `media_item` - The top-level `MediaItem` both files were scored
+      against (the movie itself, or the show for an episode).
+    - `comparison` - `%{old_score:, new_score:, delta:, old_breakdown:,
+      new_breakdown:, breakdown_delta:}`, as built by
+      `Mydia.Upgrades.finalize_upgrade/1`.
+
+  ## Examples
+
+      iex> file_upgraded(new_file, old_file, media_item, comparison)
+      :ok
+  """
+  def file_upgraded(new_file, old_file, media_item, comparison) do
+    {resource_type, resource_id} = upgrade_resource(new_file, media_item)
+
+    create_event_async(%{
+      category: "media",
+      type: "media_file.upgraded",
+      actor_type: :job,
+      actor_id: "upgrade_finalize",
+      resource_type: resource_type,
+      resource_id: resource_id,
+      severity: :info,
+      metadata: upgrade_metadata(new_file, old_file, media_item, comparison)
+    })
+  end
+
+  @doc """
+  Records a media_file.upgrade_rejected event — the counterpart to
+  `file_upgraded/4` for when the candidate release did not actually deliver
+  the quality it claimed. The originating release is blacklisted separately
+  by `Mydia.Upgrades.finalize_upgrade/1`; this only records the trail.
+
+  Takes the same shape as `file_upgraded/4`, except `new_file` is the file
+  that got trashed here and `old_file` is the one that survived.
+
+  `blacklisted?` distinguishes the two very different things a rejection can
+  mean. A single-release rejection means the release lied and was blacklisted.
+  A season-pack rejection usually means only that *this* episode was already
+  good enough, so the pack is left grabbable - recording that here keeps the
+  activity feed from labelling an honest release a liar.
+
+  ## Examples
+
+      iex> upgrade_rejected(new_file, old_file, media_item, comparison, true)
+      :ok
+  """
+  def upgrade_rejected(new_file, old_file, media_item, comparison, blacklisted? \\ true) do
+    {resource_type, resource_id} = upgrade_resource(new_file, media_item)
+
+    metadata =
+      new_file
+      |> upgrade_metadata(old_file, media_item, comparison)
+      |> Map.put("blacklisted", blacklisted?)
+
+    create_event_async(%{
+      category: "media",
+      type: "media_file.upgrade_rejected",
+      actor_type: :job,
+      actor_id: "upgrade_finalize",
+      resource_type: resource_type,
+      resource_id: resource_id,
+      severity: :warning,
+      metadata: metadata
+    })
+  end
+
+  # Episode-scoped upgrades point the event at the episode resource (mirrors
+  # resource_type_for_search/1 below), so the activity timeline can navigate
+  # straight to it; movie-scoped upgrades fall back to the media_item.
+  defp upgrade_resource(%{episode_id: episode_id}, _media_item) when not is_nil(episode_id),
+    do: {"episode", episode_id}
+
+  defp upgrade_resource(_new_file, media_item), do: {"media_item", media_item.id}
+
+  defp upgrade_metadata(new_file, old_file, media_item, comparison) do
+    %{
+      "title" => media_item.title,
+      "media_type" => media_item.type,
+      "new_file_id" => new_file.id,
+      "old_file_id" => old_file.id,
+      "new_resolution" => new_file.resolution,
+      "old_resolution" => old_file.resolution,
+      "new_codec" => new_file.codec,
+      "old_codec" => old_file.codec,
+      "old_score" => comparison.old_score,
+      "new_score" => comparison.new_score,
+      "delta" => comparison.delta,
+      "old_breakdown" => stringify_breakdown(comparison.old_breakdown),
+      "new_breakdown" => stringify_breakdown(comparison.new_breakdown),
+      "breakdown_delta" => stringify_breakdown(comparison.breakdown_delta)
+    }
+  end
+
+  # QualityProfile.score_media_file/2's breakdown map uses atom keys; every
+  # other event helper in this module writes string-keyed metadata, so this
+  # keeps that convention rather than relying on Jason's atom-key encoding.
+  defp stringify_breakdown(breakdown) when is_map(breakdown) do
+    Map.new(breakdown, fn {dimension, value} -> {to_string(dimension), value} end)
+  end
+
+  @doc """
   Records a media_item.episodes_refreshed event for TV shows.
 
   ## Parameters
@@ -957,6 +1065,12 @@ defmodule Mydia.Events do
       "media_file.imported" ->
         {"hero-document-check", "text-success", "File Imported"}
 
+      "media_file.upgraded" ->
+        {"hero-arrow-up-circle", "text-success", "Quality Upgraded"}
+
+      "media_file.upgrade_rejected" ->
+        {"hero-x-circle", "text-warning", "Upgrade Rejected"}
+
       "media_item.episodes_refreshed" ->
         {"hero-arrow-path", "text-info", "Episodes Updated"}
 
@@ -1039,6 +1153,24 @@ defmodule Mydia.Events do
 
   defp build_event_description(%Event{type: "media_file.imported", metadata: metadata}) do
     metadata["file_path"] || "File imported"
+  end
+
+  defp build_event_description(%Event{type: "media_file.upgraded", metadata: metadata}) do
+    title = metadata["title"] || "Media item"
+    old_res = metadata["old_resolution"] || "unknown"
+    new_res = metadata["new_resolution"] || "unknown"
+    delta = metadata["delta"]
+
+    if delta do
+      "#{title} upgraded from #{old_res} to #{new_res} (score +#{delta})"
+    else
+      "#{title} upgraded from #{old_res} to #{new_res}"
+    end
+  end
+
+  defp build_event_description(%Event{type: "media_file.upgrade_rejected", metadata: metadata}) do
+    title = metadata["title"] || "Media item"
+    "#{title}'s upgrade candidate did not deliver the expected quality and was rejected"
   end
 
   defp build_event_description(%Event{

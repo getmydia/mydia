@@ -23,6 +23,49 @@ defmodule Mydia.Downloads.Queue do
 
   ## Public Functions
 
+  @doc """
+  Drops episodes already covered by an active season-pack download.
+
+  A season-pack download carries `media_item_id` plus `metadata.season_pack`
+  and **no** `episode_id`, so any query that excludes on `episode_id` alone
+  cannot see it - including the `check_for_active_download/4` episode arm
+  below, which is why an individual grab for an episode inside an in-flight
+  pack succeeds. Both the missing-file search path
+  (`Mydia.Jobs.TVShowSearch`) and the upgrade eligibility query
+  (`Mydia.Upgrades.eligible_episodes/1`) filter through here so the two cannot
+  drift apart.
+
+  Matched by `{media_item_id, season_number}` on downloads that are still
+  occupying their target (see `Mydia.Downloads.Download.occupying/1`).
+  """
+  @spec reject_episodes_in_active_season_packs([Episode.t()]) :: [Episode.t()]
+  def reject_episodes_in_active_season_packs([]), do: []
+
+  def reject_episodes_in_active_season_packs(episodes) when is_list(episodes) do
+    media_item_ids =
+      episodes
+      |> Enum.map(& &1.media_item_id)
+      |> Enum.uniq()
+
+    covered =
+      Download.occupying()
+      |> where([d], d.media_item_id in ^media_item_ids)
+      |> where(^Mydia.DB.json_is_true(:metadata, "$.season_pack"))
+      |> select([d], %{media_item_id: d.media_item_id, metadata: d.metadata})
+      |> Repo.all()
+      |> Enum.reduce(MapSet.new(), fn
+        %{media_item_id: mid, metadata: %{"season_number" => sn}}, acc when is_integer(sn) ->
+          MapSet.put(acc, {mid, sn})
+
+        _, acc ->
+          acc
+      end)
+
+    Enum.reject(episodes, fn episode ->
+      MapSet.member?(covered, {episode.media_item_id, episode.season_number})
+    end)
+  end
+
   def initiate_download(%SearchResult{} = search_result, opts \\ []) do
     # Normalize metadata: callers (e.g. TVShowSearch) may pass a plain map.
     # Coerce to %SearchResultMetadata{} so downstream pattern matches and

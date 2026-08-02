@@ -24,6 +24,11 @@ defmodule Mydia.Health do
       }}
   """
 
+  import Ecto.Query, only: [from: 2]
+
+  alias Mydia.Library.MediaFile
+  alias Mydia.Repo
+
   @type health_status :: :healthy | :unhealthy | :unknown
   @type service_type :: :download_client | :metadata_provider | :indexer | :database
   @type service_id :: String.t()
@@ -34,6 +39,12 @@ defmodule Mydia.Health do
           details: map(),
           error: String.t() | nil
         }
+
+  # A healthy upgrade clears its `supersedes_media_file_id` pointer within a
+  # minute or two of import (Mydia.Jobs.UpgradeFinalize runs right after
+  # analysis). A generous hour catches genuinely stuck rows without flagging
+  # one that is simply still waiting its turn in the analysis queue.
+  @upgrade_stuck_threshold_seconds 3600
 
   @doc """
   Registers a health check provider for a specific service type.
@@ -94,6 +105,42 @@ defmodule Mydia.Health do
   def list_providers do
     get_providers()
     |> Map.keys()
+  end
+
+  @doc """
+  Reports media files stuck mid-upgrade.
+
+  An automatic quality upgrade holds two files at once: the freshly
+  imported file records which file it `supersedes_media_file_id`, and that
+  pointer only clears once `Mydia.Jobs.UpgradeFinalize` scores both files
+  for real and trashes the loser. In the healthy case that happens within a
+  minute or two of import.
+
+  A pointer still set an hour later means one of two things: the file was
+  never analyzed (so finalize was never enqueued), or finalize ran and
+  failed after analysis succeeded. Either way the library is quietly
+  holding a duplicate file, so both shapes are reported the same way —
+  under a single staleness check against `inserted_at`, since neither the
+  cause nor the fix depends on which shape it is.
+
+  ## Example
+
+      iex> upgrade_health()
+      %{stuck_upgrades: 0}
+  """
+  @spec upgrade_health() :: %{stuck_upgrades: non_neg_integer()}
+  def upgrade_health do
+    cutoff = DateTime.add(DateTime.utc_now(), -@upgrade_stuck_threshold_seconds, :second)
+
+    count =
+      Repo.aggregate(
+        from(f in MediaFile,
+          where: not is_nil(f.supersedes_media_file_id) and f.inserted_at < ^cutoff
+        ),
+        :count
+      )
+
+    %{stuck_upgrades: count}
   end
 
   # Private helpers

@@ -309,7 +309,10 @@ config :mydia, Oban,
        # Check installed plugins for newer versions daily at 7 AM
        {"0 7 * * *", Mydia.Jobs.PluginUpdateCheck},
        # Prune per-invocation plugin debug logs daily at 4:30 AM (U5)
-       {"30 4 * * *", Mydia.Jobs.PluginLogCleanup}
+       {"30 4 * * *", Mydia.Jobs.PluginLogCleanup},
+       # Look for quality upgrades to existing files daily at 1 AM. Deliberately
+       # slower than the missing-file searches: this can touch the whole library.
+       {"0 1 * * *", Mydia.Jobs.UpgradeSweep}
      ]}
   ]
 
@@ -320,6 +323,23 @@ config :mydia, :event_retention_days, 90
 # Trash retention configuration
 # Trashed media files older than this will be permanently deleted
 config :mydia, :trash_retention_days, 30
+
+# Trash directory. Trashed media files are moved off the library path so a
+# library scan cannot resurrect them (see Mydia.Library.TrashStore). nil means
+# "beside each library path", e.g. a library at /media/movies trashes into
+# /media/.mydia-trash - outside the library, and normally on the same
+# filesystem so the move is an atomic rename rather than a copy. Set
+# MYDIA_TRASH_DIR to collect every library's trash in one directory instead;
+# it must be outside all of your library paths.
+config :mydia, :trash_dir, nil
+
+# Automatic quality upgrade sweep configuration (see Mydia.Jobs.UpgradeSweep)
+# lives entirely in the layered runtime config (lib/mydia/config/schema.ex,
+# the :upgrades embed) rather than here — the job reads through
+# Mydia.Config.get().upgrades so env/DB overrides actually take effect. See
+# Mydia.Config.Schema.Upgrades for the defaults (sweep_enabled: true,
+# sweep_batch_size: 50) and lib/mydia/config/loader.ex for the
+# UPGRADE_SWEEP_ENABLED / UPGRADE_SWEEP_BATCH_SIZE env vars.
 
 # HLS Streaming configuration
 config :mydia, :streaming,

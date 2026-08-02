@@ -14,7 +14,8 @@ defmodule Mydia.Settings.QualityProfile do
           id: binary(),
           name: String.t() | nil,
           upgrades_allowed: boolean(),
-          upgrade_until_quality: String.t() | nil,
+          upgrade_until_score: integer() | nil,
+          min_upgrade_margin: integer() | nil,
           description: String.t() | nil,
           is_system: boolean(),
           version: integer(),
@@ -69,7 +70,8 @@ defmodule Mydia.Settings.QualityProfile do
   schema "quality_profiles" do
     field :name, :string
     field :upgrades_allowed, :boolean, default: true
-    field :upgrade_until_quality, :string
+    field :upgrade_until_score, :integer, default: 85
+    field :min_upgrade_margin, :integer, default: 5
 
     # Enhanced fields for import/export and configuration management
     field :description, :string
@@ -92,7 +94,8 @@ defmodule Mydia.Settings.QualityProfile do
     |> cast(attrs, [
       :name,
       :upgrades_allowed,
-      :upgrade_until_quality,
+      :upgrade_until_score,
+      :min_upgrade_margin,
       :description,
       :is_system,
       :version,
@@ -104,6 +107,14 @@ defmodule Mydia.Settings.QualityProfile do
     |> unique_constraint(:name)
     |> validate_quality_standards()
     |> validate_preferred_resolutions_present()
+    |> validate_number(:upgrade_until_score,
+      greater_than_or_equal_to: 0,
+      less_than_or_equal_to: 100
+    )
+    |> validate_number(:min_upgrade_margin,
+      greater_than_or_equal_to: 0,
+      less_than_or_equal_to: 100
+    )
   end
 
   @doc """

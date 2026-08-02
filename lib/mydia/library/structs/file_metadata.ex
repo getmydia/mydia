@@ -10,6 +10,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
   ## Field Groups
 
   - **Core technical**: duration, container, format_name, width, height, source
+  - **Lossless audio description**: audio_codec_raw (see the field comment)
   - **H.264/AVC codec details**: video_profile_idc, video_level_idc, video_constraint_set
   - **HEVC/H.265 codec details**: hevc_profile_idc, hevc_tier_flag, hevc_level_idc
   - **VP9 codec details**: vp9_profile, vp9_level
@@ -27,6 +28,15 @@ defmodule Mydia.Library.Structs.FileMetadata do
     :width,
     :height,
     :source,
+
+    # The analyzer's full audio description, e.g. "DD+ 5.1" or "TrueHD Atmos",
+    # kept verbatim. The `media_files.audio_codec` column holds
+    # `Mydia.Streaming.Codec.normalize_audio_codec/1`'s output, which collapses
+    # both of those to a bare codec ("ac3", "truehd"), dropping the channel
+    # layout and the Atmos/E-AC3 distinction. That is the right shape for
+    # streaming-compatibility checks and the wrong shape for quality scoring,
+    # so the lossless string is preserved here for `Mydia.Upgrades.Attrs`.
+    :audio_codec_raw,
 
     # H.264/AVC codec details
     :video_profile_idc,
@@ -64,6 +74,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
           width: integer() | nil,
           height: integer() | nil,
           source: String.t() | nil,
+          audio_codec_raw: String.t() | nil,
           video_profile_idc: integer() | nil,
           video_level_idc: integer() | nil,
           video_constraint_set: integer() | nil,
@@ -88,6 +99,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
     "width" => :width,
     "height" => :height,
     "source" => :source,
+    "audio_codec_raw" => :audio_codec_raw,
     "video_profile_idc" => :video_profile_idc,
     "video_level_idc" => :video_level_idc,
     "video_constraint_set" => :video_constraint_set,

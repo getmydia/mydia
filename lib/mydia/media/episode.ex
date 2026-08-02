@@ -16,6 +16,7 @@ defmodule Mydia.Media.Episode do
           air_date: Date.t() | nil,
           metadata: map() | nil,
           monitored: boolean(),
+          last_upgrade_check_at: DateTime.t() | nil,
           media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
           media_files: [Mydia.Library.MediaFile.t()] | Ecto.Association.NotLoaded.t(),
           downloads: [Mydia.Downloads.Download.t()] | Ecto.Association.NotLoaded.t(),
@@ -30,6 +31,8 @@ defmodule Mydia.Media.Episode do
     field :air_date, :date
     field :metadata, Mydia.Media.EpisodeDataType
     field :monitored, :boolean, default: true
+    # Set programmatically by the upgrade sweep; never cast from user input.
+    field :last_upgrade_check_at, :utc_datetime
 
     belongs_to :media_item, Mydia.Media.MediaItem
     has_many :media_files, Mydia.Library.MediaFile

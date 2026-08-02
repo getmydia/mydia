@@ -291,7 +291,6 @@ defmodule Mydia.Settings.QualityMatcherTest do
       profile = %QualityProfile{
         name: "Test Profile",
         upgrades_allowed: true,
-        upgrade_until_quality: "1080p",
         quality_standards: %{preferred_resolutions: ["720p", "1080p", "2160p"]}
       }
 
@@ -344,27 +343,10 @@ defmodule Mydia.Settings.QualityMatcherTest do
       refute QualityMatcher.is_upgrade?(result, profile_no_upgrades, "720p")
     end
 
-    test "returns false when already at upgrade_until_quality", %{profile: profile} do
-      result = %SearchResult{
-        title: "Test Movie 2160p",
-        size: 8 * 1024 * 1024 * 1024,
-        seeders: 100,
-        leechers: 10,
-        download_url: "magnet:?xt=...",
-        indexer: "Test",
-        quality: %Quality{
-          resolution: "2160p",
-          source: "BluRay",
-          codec: "x265",
-          audio: "AC3",
-          hdr: false,
-          proper: false,
-          repack: false
-        }
-      }
-
-      refute QualityMatcher.is_upgrade?(result, profile, "1080p")
-    end
+    # The resolution-string upgrade ceiling (upgrade_until_quality) was retired
+    # in favor of a numeric score cutoff (QualityProfile.upgrade_until_score).
+    # is_upgrade?/3 no longer enforces a cap itself; that responsibility moves
+    # to the score-based comparator.
 
     test "returns true when no current quality (first download)", %{profile: profile} do
       result = %SearchResult{
