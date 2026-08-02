@@ -42,6 +42,24 @@ class CastLaunchRequest {
     this.subtitles = const [],
     this.duration,
   });
+
+  /// The same request, resumed from somewhere else.
+  ///
+  /// Only [startPosition] can be replaced, and passing null keeps the current
+  /// one. Everything else is carried across verbatim, which is the whole
+  /// point: a seek restart rebuilds the cast from this, and anything dropped
+  /// here disappears from the receiver for the rest of the session.
+  CastLaunchRequest copyWith({Duration? startPosition}) => CastLaunchRequest(
+        fileId: fileId,
+        mediaId: mediaId,
+        mediaType: mediaType,
+        title: title,
+        subtitleLabel: subtitleLabel,
+        imageUrl: imageUrl,
+        startPosition: startPosition ?? this.startPosition,
+        subtitles: subtitles,
+        duration: duration,
+      );
 }
 
 /// Owns the active cast session: routing, playback, progress and persistence.
@@ -63,6 +81,23 @@ class CastSessionManager {
 
   CastSession? _current;
   PersistedCastSession? _persisted;
+
+  /// The full request behind whatever is on the receiver right now.
+  ///
+  /// Kept alongside [_persisted] because the two answer different questions.
+  /// [PersistedCastSession] is what has to survive the app being killed, so
+  /// it carries only what a cold restore can act on; this carries everything
+  /// the *live* session was launched with — subtitle tracks, artwork, the
+  /// subtitle label. A seek restart rebuilds the cast from this rather than
+  /// from the persisted record, which would silently drop all three for the
+  /// rest of the session.
+  ///
+  /// Set wherever a cast actually loads ([_loadOnRoute], so every retry and
+  /// escalation included) and by [restoreSession] for the branch that adopts
+  /// a receiver already playing, so it is never out of step with
+  /// [_persisted].
+  CastLaunchRequest? _lastRequest;
+
   Duration _lastDuration = Duration.zero;
   DateTime? _lastProgressSync;
   bool _lanEnabled = false;
@@ -456,6 +491,8 @@ class CastSessionManager {
       subtitles: subtitles,
     ));
 
+    _lastRequest = request;
+
     _persisted = PersistedCastSession(
       device: device,
       mediaId: request.mediaId,
@@ -653,9 +690,12 @@ class CastSessionManager {
     if (_isRestartingForSeek) return;
 
     final session = _persisted;
+    final request = _lastRequest;
 
     if (session == null ||
+        request == null ||
         !shouldRestartCastForSeek(
+          mediaKind: CastRouteResolver.mediaKindFor(session.device.protocol),
           target: position,
           currentPosition: _current?.mediaInfo?.position ?? Duration.zero,
           startOffset: _timeline.startOffset,
@@ -666,18 +706,16 @@ class CastSessionManager {
     // Out of reach in the current stream: start a new session at the target
     // and reload the receiver on it. A visible blip, and strictly better than
     // the silent snap-back the receiver would otherwise do.
+    //
+    // Rebuilt from the live request, not from `session`: the persisted record
+    // carries no subtitle tracks, subtitle label or artwork, so restarting
+    // from it would strip all three off the receiver for the rest of the
+    // session.
     _isRestartingForSeek = true;
     try {
       await startCast(
         device: session.device,
-        request: CastLaunchRequest(
-          fileId: session.fileId,
-          mediaId: session.mediaId,
-          mediaType: session.mediaType,
-          title: session.title,
-          startPosition: position,
-          duration: session.duration,
-        ),
+        request: request.copyWith(startPosition: position),
       );
     } finally {
       _isRestartingForSeek = false;
@@ -729,6 +767,7 @@ class CastSessionManager {
     await _disableLanQuietly();
 
     _persisted = null;
+    _lastRequest = null;
     _lastDuration = Duration.zero;
     _lastProgressSync = null;
     _publish(null);
@@ -783,6 +822,14 @@ class CastSessionManager {
       startPosition: stored.position,
       duration: stored.duration,
     );
+
+    // The bridge branch below reloads through `_loadOnRoute`, which sets this
+    // itself; the direct branch adopts a receiver that is already playing and
+    // never loads, so it has to be recorded here. Either way a later seek
+    // restart carries exactly what the restore had — no subtitles or artwork,
+    // because a record that survived an app restart never had them.
+    _lastRequest = request;
+
     _listenToBackend(request);
 
     if (stored.routeKind == CastRouteKind.localBridge) {

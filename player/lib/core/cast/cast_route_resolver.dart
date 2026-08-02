@@ -93,6 +93,21 @@ class CastRouteResolver {
     required this.streamingSessions,
   });
 
+  /// How a receiver speaking [protocol] is fed media.
+  ///
+  /// Chromecast plays HLS natively, which gives seeking and adaptive bitrate.
+  /// DLNA renderers generally cannot, so they get a progressive byte-range
+  /// stream of the whole file.
+  ///
+  /// Deliberately one function rather than a rule repeated per call site:
+  /// [resolve] decides the kind, and anything that later has to reason about
+  /// the resulting stream — notably `shouldRestartCastForSeek`, which must
+  /// never restart a progressive route — has to reach the same answer.
+  static CastMediaKind mediaKindFor(CastProtocolKind protocol) =>
+      protocol == CastProtocolKind.chromecast
+          ? CastMediaKind.hls
+          : CastMediaKind.progressive;
+
   /// Whether [resolve] with these flags would produce a bridge route.
   ///
   /// The manager asks first so it can enable LAN access *before* the bridge
@@ -113,11 +128,8 @@ class CastRouteResolver {
     bool forceTranscode = false,
     Duration startPosition = Duration.zero,
   }) async {
-    // Chromecast plays HLS natively, which gives seeking and adaptive
-    // bitrate. DLNA renderers generally cannot, so they get progressive.
     final isChromecast = protocol == CastProtocolKind.chromecast;
-    final mediaKind =
-        isChromecast ? CastMediaKind.hls : CastMediaKind.progressive;
+    final mediaKind = mediaKindFor(protocol);
 
     if (usesBridge(forceBridge: forceBridge)) {
       final base = lanBaseUrl();

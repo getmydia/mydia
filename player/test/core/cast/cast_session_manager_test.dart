@@ -853,6 +853,52 @@ void main() {
       expect(sessions.requestedStart, const Duration(seconds: 300));
     });
 
+    test('a restart keeps the subtitles and artwork the cast was launched with',
+        () async {
+      // `PersistedCastSession` carries neither, because it exists to survive
+      // the app being killed and a cold restore cannot act on them. Rebuilding
+      // the restart request from it stripped subtitle tracks off the receiver
+      // for the rest of the session, on every forward scrub past the
+      // tolerance. The live request is what gets reused instead.
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'Arrival',
+          subtitleLabel: 'English',
+          imageUrl: 'https://mydia.test/poster.jpg',
+          startPosition: Duration(seconds: 2400),
+          duration: Duration(hours: 1),
+          subtitles: [
+            CastSubtitleTrack(
+              url: 'https://mydia.test/subs/en.vtt',
+              label: 'English',
+              language: 'en',
+            ),
+          ],
+        ),
+      );
+
+      expect(backend.loadedRequests.first.subtitles, hasLength(1),
+          reason: 'guard: the initial cast really did carry a subtitle track');
+
+      await manager.seek(const Duration(seconds: 3000));
+
+      expect(backend.loadedRequests, hasLength(2),
+          reason: 'guard: the seek really did restart rather than seek');
+      final reloaded = backend.loadedRequests.last;
+      expect(reloaded.subtitles, hasLength(1));
+      expect(reloaded.subtitles.single.language, 'en');
+      expect(reloaded.subtitle, 'English');
+      expect(reloaded.imageUrl, 'https://mydia.test/poster.jpg');
+    });
+
     test(
         'a seek that arrives while a restart is running is dropped, '
         'not queued', () async {

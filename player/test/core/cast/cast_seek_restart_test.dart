@@ -9,12 +9,14 @@
 // from the receiver at all.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_seek_restart.dart';
 
 void main() {
   test('a small forward skip seeks in place', () {
     expect(
       shouldRestartCastForSeek(
+        mediaKind: CastMediaKind.hls,
         target: const Duration(seconds: 2410),
         currentPosition: const Duration(seconds: 2400),
         startOffset: const Duration(seconds: 2394),
@@ -26,6 +28,7 @@ void main() {
   test('a skip exactly at the tolerance seeks in place', () {
     expect(
       shouldRestartCastForSeek(
+        mediaKind: CastMediaKind.hls,
         target: const Duration(seconds: 2430),
         currentPosition: const Duration(seconds: 2400),
         startOffset: Duration.zero,
@@ -37,6 +40,7 @@ void main() {
   test('a large forward scrub restarts', () {
     expect(
       shouldRestartCastForSeek(
+        mediaKind: CastMediaKind.hls,
         target: const Duration(seconds: 3000),
         currentPosition: const Duration(seconds: 2400),
         startOffset: const Duration(seconds: 2394),
@@ -50,6 +54,7 @@ void main() {
     // minute five simply is not in the playlist.
     expect(
       shouldRestartCastForSeek(
+        mediaKind: CastMediaKind.hls,
         target: const Duration(seconds: 300),
         currentPosition: const Duration(seconds: 2400),
         startOffset: const Duration(seconds: 2394),
@@ -61,6 +66,7 @@ void main() {
   test('a backward seek inside the window seeks in place', () {
     expect(
       shouldRestartCastForSeek(
+        mediaKind: CastMediaKind.hls,
         target: const Duration(seconds: 2500),
         currentPosition: const Duration(seconds: 2600),
         startOffset: const Duration(seconds: 2394),
@@ -72,11 +78,75 @@ void main() {
   test('a zero-offset session still restarts on a long forward scrub', () {
     expect(
       shouldRestartCastForSeek(
+        mediaKind: CastMediaKind.hls,
         target: const Duration(seconds: 3600),
         currentPosition: Duration.zero,
         startOffset: Duration.zero,
       ),
       isTrue,
     );
+  });
+
+  test('a target exactly at the start offset seeks in place', () {
+    // The offset is the first position the stream actually contains, so it is
+    // reachable. The predicate's first clause is deliberately strict
+    // (`target < startOffset`) for this reason.
+    expect(
+      shouldRestartCastForSeek(
+        mediaKind: CastMediaKind.hls,
+        target: const Duration(seconds: 2394),
+        currentPosition: const Duration(seconds: 2400),
+        startOffset: const Duration(seconds: 2394),
+      ),
+      isFalse,
+    );
+  });
+
+  group('progressive routes', () {
+    // A DLNA renderer gets a byte-range stream of the whole file: the offset
+    // is always zero, every position is addressable, and a receiver seek is
+    // valid anywhere. Restarting there tears down a session for a target it
+    // could already reach.
+    test('never restart, however far forward the target is', () {
+      expect(
+        shouldRestartCastForSeek(
+          mediaKind: CastMediaKind.progressive,
+          target: const Duration(seconds: 5400),
+          currentPosition: Duration.zero,
+          startOffset: Duration.zero,
+        ),
+        isFalse,
+        reason: 'a progressive receiver can seek anywhere in the file',
+      );
+    });
+
+    test('never restart even for a target before the offset', () {
+      // Defensive: a progressive route should never carry a non-zero offset in
+      // the first place, but the media kind alone must settle the decision.
+      expect(
+        shouldRestartCastForSeek(
+          mediaKind: CastMediaKind.progressive,
+          target: const Duration(seconds: 60),
+          currentPosition: const Duration(seconds: 2400),
+          startOffset: const Duration(seconds: 2394),
+        ),
+        isFalse,
+      );
+    });
+
+    test('the identical HLS case does restart', () {
+      // The control for the two above: same numbers, different media kind.
+      // Without it, those tests would pass even if the predicate had simply
+      // stopped restarting altogether.
+      expect(
+        shouldRestartCastForSeek(
+          mediaKind: CastMediaKind.hls,
+          target: const Duration(seconds: 5400),
+          currentPosition: Duration.zero,
+          startOffset: Duration.zero,
+        ),
+        isTrue,
+      );
+    });
   });
 }
