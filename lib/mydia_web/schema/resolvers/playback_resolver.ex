@@ -15,10 +15,9 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        attrs = %{
-          position_seconds: position,
-          duration_seconds: duration
-        }
+        attrs =
+          %{position_seconds: position}
+          |> put_duration(duration, user.id, media_item_id: movie_id)
 
         case Playback.save_progress(user.id, [media_item_id: movie_id], attrs) do
           {:ok, progress} ->
@@ -48,10 +47,9 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        attrs = %{
-          position_seconds: position,
-          duration_seconds: duration
-        }
+        attrs =
+          %{position_seconds: position}
+          |> put_duration(duration, user.id, episode_id: episode_id)
 
         case Playback.save_progress(user.id, [episode_id: episode_id], attrs) do
           {:ok, progress} ->
@@ -259,5 +257,28 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       end)
     end)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
+  end
+
+  # The GraphQL arg is optional but the changeset requires it, so an omitted
+  # duration used to fail validation and drop the write silently. Reuse
+  # whatever we already stored instead of rejecting the position.
+  #
+  # The stored row is fetched only when the client did not send a usable
+  # duration. This runs on every progress tick from every playing session, and
+  # `save_progress/4` already does its own lookup, so an unconditional fetch
+  # here would double the reads on the busiest write path in the app.
+  defp put_duration(attrs, duration, _user_id, _content_id)
+       when is_integer(duration) and duration > 0 do
+    Map.put(attrs, :duration_seconds, duration)
+  end
+
+  defp put_duration(attrs, _duration, user_id, content_id) do
+    case Playback.get_progress(user_id, content_id) do
+      %{duration_seconds: stored} when is_integer(stored) ->
+        Map.put(attrs, :duration_seconds, stored)
+
+      _ ->
+        attrs
+    end
   end
 end

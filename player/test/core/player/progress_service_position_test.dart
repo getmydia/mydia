@@ -3,6 +3,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:player/core/player/progress_service.dart';
+import 'package:player/core/player/stream_timeline.dart';
 
 import 'progress_service_position_test.mocks.dart';
 
@@ -69,6 +70,7 @@ void main() {
         ProgressService.isWatchedAt(
           const Duration(seconds: 90),
           const Duration(seconds: 100),
+          StreamTimeline.zero,
         ),
         isTrue,
       );
@@ -79,13 +81,21 @@ void main() {
         ProgressService.isWatchedAt(
           const Duration(seconds: 50),
           const Duration(seconds: 100),
+          StreamTimeline.zero,
         ),
         isFalse,
       );
     });
 
     test('is false for zero duration', () {
-      expect(ProgressService.isWatchedAt(Duration.zero, Duration.zero), isFalse);
+      expect(
+        ProgressService.isWatchedAt(
+          Duration.zero,
+          Duration.zero,
+          StreamTimeline.zero,
+        ),
+        isFalse,
+      );
     });
   });
 }

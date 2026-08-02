@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -538,6 +539,11 @@ void main() {
             player: player,
             onFullscreenTap: () {},
             isFullscreen: isFullscreen,
+            // These gating tests are about window drag and double-tap, not
+            // seeking, so a zero timeline and an inert seek callback keep the
+            // chrome constructible without pulling stream state into scope.
+            timeline: StreamTimeline.zero,
+            onSeekToReal: (_) async {},
           ),
         );
 

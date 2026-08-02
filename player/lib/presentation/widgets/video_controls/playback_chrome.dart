@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../../../core/player/duration_override.dart';
 import '../../../core/player/platform_features.dart';
+import '../../../core/player/stream_timeline.dart';
 import '../../../core/player/window_drag_service.dart';
 import '../../../core/theme/depth_tokens.dart';
 import 'center_play_button.dart';
@@ -366,6 +366,13 @@ class ChromeSlide extends StatelessWidget {
 /// regressed. Do not restructure this nesting without re-reading that test.
 class PlaybackChrome extends StatefulWidget {
   final Player player;
+  final StreamTimeline timeline;
+
+  /// Seeks to a real media position, restarting the HLS session when the
+  /// target is beyond what has been transcoded so far. See
+  /// `_PlayerScreenState.seekToReal`'s dartdoc for the full story.
+  final Future<void> Function(Duration realTarget) onSeekToReal;
+
   final String? title;
   final VoidCallback? onBack;
   final Widget? castAction;
@@ -387,6 +394,8 @@ class PlaybackChrome extends StatefulWidget {
   const PlaybackChrome({
     super.key,
     required this.player,
+    required this.timeline,
+    required this.onSeekToReal,
     this.title,
     this.onBack,
     this.castAction,
@@ -411,15 +420,15 @@ class PlaybackChrome extends StatefulWidget {
 class _PlaybackChromeState extends State<PlaybackChrome> {
   bool _seeking = false;
 
-  void _seekBy(Duration delta) {
+  void _seekBy(Duration offset) {
     final player = widget.player;
-    final duration = DurationOverride.getDuration(player.state.duration);
-    final target = player.state.position + delta;
-    player.seek(
-      target < Duration.zero
-          ? Duration.zero
-          : (target > duration ? duration : target),
-    );
+    final timeline = widget.timeline;
+    final duration = timeline.resolveDuration(player.state.duration);
+    final target = timeline.toReal(player.state.position) + offset;
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (target > duration ? duration : target);
+    widget.onSeekToReal(clamped);
   }
 
   @override
@@ -539,6 +548,8 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                         ),
                         scrubber: _ScrubberRow(
                           player: widget.player,
+                          timeline: widget.timeline,
+                          onSeekToReal: widget.onSeekToReal,
                           touchTargets: metrics.touchTargets,
                           onSeekStart: () => setState(() => _seeking = true),
                           onSeekEnd: () => setState(() => _seeking = false),
@@ -563,12 +574,16 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
 /// track.
 class _ScrubberRow extends StatelessWidget {
   final Player player;
+  final StreamTimeline timeline;
+  final Future<void> Function(Duration realTarget) onSeekToReal;
   final bool touchTargets;
   final VoidCallback onSeekStart;
   final VoidCallback onSeekEnd;
 
   const _ScrubberRow({
     required this.player,
+    required this.timeline,
+    required this.onSeekToReal,
     required this.touchTargets,
     required this.onSeekStart,
     required this.onSeekEnd,
@@ -623,8 +638,10 @@ class _ScrubberRow extends StatelessWidget {
           stream: player.stream.duration,
           initialData: player.state.duration,
           builder: (context, durationSnapshot) {
-            final position = positionSnapshot.data ?? Duration.zero;
-            final duration = DurationOverride.getDuration(
+            final position = timeline.toReal(
+              positionSnapshot.data ?? Duration.zero,
+            );
+            final duration = timeline.resolveDuration(
               durationSnapshot.data ?? Duration.zero,
             );
             final remaining = duration - position;
@@ -636,6 +653,8 @@ class _ScrubberRow extends StatelessWidget {
                 Expanded(
                   child: VideoProgressBar(
                     player: player,
+                    timeline: timeline,
+                    onSeekToReal: onSeekToReal,
                     touchTarget: touchTargets,
                     onSeekStart: onSeekStart,
                     onSeekEnd: onSeekEnd,
