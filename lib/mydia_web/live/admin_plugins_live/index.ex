@@ -102,7 +102,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       case result do
         {:ok, _} ->
           socket
-          |> put_flash(:info, "#{approval.name} approved and activated.")
+          |> put_flash(:info, approval_flash(approval))
           |> assign(:approval, nil)
           |> assign(:catalog, [])
           |> load_installed()
@@ -279,6 +279,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   ## Helpers
 
+  defp approval_flash(%{ungranted: ungranted, name: name}) when ungranted != %{},
+    do: "#{name} re-approved. Its newly requested capabilities are now granted."
+
+  defp approval_flash(%{name: name}), do: "#{name} approved and activated."
+
   defp network_event_for?(%{type: "plugin.http_request"} = event, slug),
     do: event.actor_id == slug
 
@@ -368,6 +373,10 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       read_only: source == :env,
       capabilities: capabilities,
       granted: granted,
+      # A revised manifest never widens a grant, so an approved plugin can end up
+      # asking for more than it holds and failing Denied at just those call sites.
+      ungranted: Plugins.ungranted_capabilities(config),
+      needs_reapproval: Plugins.needs_reapproval?(config),
       pending_approval: not config.enabled and capabilities != %{},
       has_settings: settings_schema != [],
       # Once approved, the granted net:http reflects the operator-configured host.
@@ -485,6 +494,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       name: entry.name,
       version: entry.version,
       capabilities: entry.manifest.capabilities,
+      ungranted: %{},
       settings_schema: entry.manifest.settings_schema
     }
   end
@@ -498,6 +508,10 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       name: config.name,
       version: config.version,
       capabilities: capabilities,
+      # Non-empty only for a re-approval: the capabilities the revised manifest
+      # asks for on top of what was already approved.
+      ungranted:
+        (Plugins.needs_reapproval?(config) && Plugins.ungranted_capabilities(config)) || %{},
       settings_schema: settings_schema_of(config)
     }
   end
@@ -508,6 +522,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       name: config.name,
       enabled: config.enabled,
       granted: config.granted_capabilities || %{},
+      ungranted: Plugins.ungranted_capabilities(config),
       settings_schema: settings_schema_of(config)
     }
   end

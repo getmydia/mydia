@@ -257,6 +257,173 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "manifest revisions vs. grants (R5, deny-by-default)" do
+    # A revision is exactly what `refresh_bundled_manifest/2` does: re-store the
+    # declared manifest, never touch `granted_capabilities`.
+    defp revise!(config, capabilities) do
+      manifest = Map.put(config.manifest, "capabilities", capabilities)
+      {:ok, revised} = Settings.update_plugin_config(config, %{manifest: manifest})
+      revised
+    end
+
+    defp seed_installed!(capabilities, opts \\ []) do
+      granted = Keyword.get(opts, :granted, capabilities)
+
+      {:ok, config} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          manifest: %{
+            "slug" => "webhook-notifier",
+            "name" => "Webhook Notifier",
+            "version" => "1.0.0",
+            "capabilities" => capabilities,
+            "settings_schema" => Keyword.get(opts, :settings_schema, [])
+          },
+          wasm_module: guest_wasm(),
+          granted_capabilities: granted,
+          enabled: Keyword.get(opts, :enabled, true),
+          settings: Keyword.get(opts, :settings, %{})
+        })
+
+      config
+    end
+
+    defp base_caps,
+      do: %{"events:subscribe" => ["media_item.added"], "net:http" => ["discord.com"]}
+
+    test "a revision requesting a strictly new capability class is detected" do
+      config = seed_installed!(base_caps())
+      refute Plugins.needs_reapproval?(config)
+
+      revised = revise!(config, Map.put(base_caps(), "data:read", ["media_item"]))
+
+      assert Plugins.ungranted_capabilities(revised) == %{"data:read" => ["media_item"]}
+      assert Plugins.needs_reapproval?(revised)
+    end
+
+    test "a revision widening a capability payload is detected" do
+      config = seed_installed!(base_caps())
+
+      revised =
+        revise!(config, %{
+          "events:subscribe" => ["media_item.added", "download.completed"],
+          "net:http" => ["discord.com", "api.example.com"]
+        })
+
+      assert Plugins.ungranted_capabilities(revised) == %{
+               "events:subscribe" => ["download.completed"],
+               "net:http" => ["api.example.com"]
+             }
+    end
+
+    test "a revision that only changes name and version is not flagged" do
+      config = seed_installed!(base_caps())
+
+      {:ok, revised} =
+        Settings.update_plugin_config(config, %{
+          name: "Webhook Notifier (renamed)",
+          version: "2.0.0",
+          manifest: Map.merge(config.manifest, %{"name" => "Renamed", "version" => "2.0.0"})
+        })
+
+      assert Plugins.ungranted_capabilities(revised) == %{}
+      refute Plugins.needs_reapproval?(revised)
+    end
+
+    test "a revision that narrows the declared set is not flagged" do
+      config = seed_installed!(base_caps())
+      revised = revise!(config, %{"events:subscribe" => ["media_item.added"]})
+
+      refute Plugins.needs_reapproval?(revised)
+    end
+
+    test "an operator-configured host in the grant does not look like drift" do
+      config =
+        seed_installed!(base_caps(),
+          granted: Map.put(base_caps(), "net:http", ["discord.com", "ntfy.example.com"])
+        )
+
+      refute Plugins.needs_reapproval?(config)
+    end
+
+    test "a plugin holding no grant is pending approval, not awaiting re-approval" do
+      config = seed_installed!(base_caps(), granted: %{}, enabled: false)
+
+      refute Plugins.needs_reapproval?(config)
+      assert Plugins.ungranted_capabilities(config) == base_caps()
+    end
+
+    test "a config with no stored manifest (env-sourced) reports nothing" do
+      config = %Mydia.Settings.PluginConfig{
+        slug: "env-plugin",
+        manifest: nil,
+        granted_capabilities: %{"net:http" => ["discord.com"]}
+      }
+
+      assert Plugins.ungranted_capabilities(config) == %{}
+      refute Plugins.needs_reapproval?(config)
+    end
+
+    test "a revision never widens the stored grant on its own" do
+      config = seed_installed!(base_caps())
+      revised = revise!(config, Map.put(base_caps(), "data:read", ["media_item"]))
+
+      assert revised.granted_capabilities == base_caps()
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").granted_capabilities ==
+               base_caps()
+    end
+
+    test "re-approving grants the currently requested set and clears the state" do
+      config = seed_installed!(base_caps())
+
+      revised =
+        revise!(config, %{
+          "events:subscribe" => ["media_item.added", "download.completed"],
+          "net:http" => ["discord.com", "api.example.com"],
+          "data:read" => ["media_item"]
+        })
+
+      assert Plugins.needs_reapproval?(revised)
+
+      assert {:ok, descriptor} = Plugins.approve("webhook-notifier")
+
+      reloaded = Settings.get_plugin_config_by_slug("webhook-notifier")
+      refute Plugins.needs_reapproval?(reloaded)
+      assert Plugins.ungranted_capabilities(reloaded) == %{}
+      assert reloaded.granted_capabilities["data:read"] == ["media_item"]
+      assert "api.example.com" in reloaded.granted_capabilities["net:http"]
+      assert "download.completed" in reloaded.granted_capabilities["events:subscribe"]
+
+      # The live descriptor enforces the new grant without a restart.
+      assert descriptor.granted_capabilities["data:read"] == ["media_item"]
+      {:ok, registered} = Registry.lookup("webhook-notifier")
+      assert "api.example.com" in registered.granted_capabilities["net:http"]
+    end
+
+    test "saving settings does not grant hosts a revised manifest newly declares" do
+      config =
+        seed_installed!(base_caps(),
+          settings_schema: [%{"key" => "webhook_url", "type" => "url", "grants_host" => true}]
+        )
+
+      revise!(config, Map.put(base_caps(), "net:http", ["discord.com", "sneaky.example.com"]))
+
+      assert {:ok, updated} =
+               Plugins.update_settings("webhook-notifier", %{
+                 "webhook_url" => "https://ntfy.example.com/mydia"
+               })
+
+      hosts = updated.granted_capabilities["net:http"]
+      assert "discord.com" in hosts
+      assert "ntfy.example.com" in hosts
+      refute "sneaky.example.com" in hosts
+      assert Plugins.needs_reapproval?(updated)
+    end
+  end
+
   describe "ensure_bundled/0 manifest reconciliation" do
     test "refreshes a stale stored manifest while leaving admin state untouched" do
       # A bundled row seeded before settings_schema was added to the JSON: its
@@ -292,6 +459,36 @@ defmodule Mydia.PluginsTest do
       assert refreshed.enabled
       assert refreshed.granted_capabilities == %{"net:http" => ["discord.com"]}
       assert refreshed.settings == %{"target" => "ntfy"}
+    end
+
+    test "a built-in upgrade that requests more than was granted is flagged for re-approval" do
+      {:ok, config} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          source_url: "bundled",
+          enabled: true,
+          granted_capabilities: %{"net:http" => ["discord.com"]},
+          manifest: %{
+            "slug" => "webhook-notifier",
+            "name" => "Webhook Notifier",
+            "version" => "1.0.0",
+            "capabilities" => %{"net:http" => ["discord.com"]}
+          }
+        })
+
+      # Before the upgrade the grant matches the declaration exactly.
+      refute Plugins.needs_reapproval?(config)
+
+      Plugins.ensure_bundled()
+
+      refreshed = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert Plugins.needs_reapproval?(refreshed)
+      assert Map.has_key?(Plugins.ungranted_capabilities(refreshed), "events:subscribe")
+
+      # ...and the grant itself was left exactly as approved.
+      assert refreshed.granted_capabilities == %{"net:http" => ["discord.com"]}
     end
   end
 
