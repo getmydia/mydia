@@ -3,7 +3,6 @@ title: V3 Release Parser — Corpus Failure Analysis (≥95% fallback)
 type: report
 status: documenting
 date: 2026-05-13
-parent: docs/plans/2026-05-13-001-feat-release-name-parser-v3-plan.md
 ---
 
 # Release Parser V3 — Corpus Failure Analysis

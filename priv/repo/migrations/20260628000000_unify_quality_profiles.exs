@@ -18,20 +18,27 @@ defmodule Mydia.Repo.Migrations.UnifyQualityProfiles do
   # --- Backfill ---
 
   defp backfill_preferred_resolutions do
-    %{rows: rows} =
-      repo().query!("SELECT id, qualities, quality_standards FROM quality_profiles")
+    # A migration replayed after a schema_migrations reset finds `qualities`
+    # already dropped, with nothing left to backfill from, and selecting a
+    # missing column would abort it. The guard is SQLite-only: on PostgreSQL it
+    # always falls through, so a Postgres replay still aborts exactly as it did
+    # before, which keeps the Postgres path byte-identical.
+    if postgres?() or sqlite_column?("quality_profiles", "qualities") do
+      %{rows: rows} =
+        repo().query!("SELECT id, qualities, quality_standards FROM quality_profiles")
 
-    Enum.each(rows, fn [id, qualities_raw, standards_raw] ->
-      qualities = decode_list(qualities_raw)
-      standards = decode_map(standards_raw)
-      new_standards = QualityProfileBackfill.backfilled_standards(qualities, standards)
+      Enum.each(rows, fn [id, qualities_raw, standards_raw] ->
+        qualities = decode_list(qualities_raw)
+        standards = decode_map(standards_raw)
+        new_standards = QualityProfileBackfill.backfilled_standards(qualities, standards)
 
-      if new_standards != standards do
-        encoded = Jason.encode!(new_standards)
-        {sql, params} = update_sql(encoded, id)
-        repo().query!(sql, params)
-      end
-    end)
+        if new_standards != standards do
+          encoded = Jason.encode!(new_standards)
+          {sql, params} = update_sql(encoded, id)
+          repo().query!(sql, params)
+        end
+      end)
+    end
   end
 
   defp update_sql(encoded, id) do
@@ -70,34 +77,32 @@ defmodule Mydia.Repo.Migrations.UnifyQualityProfiles do
 
   # --- Drop columns (adapter-aware) ---
 
+  @dead_columns ~w(qualities metadata_preferences customizations)
+
   defp drop_dead_columns do
     if postgres?() do
-      execute("ALTER TABLE quality_profiles DROP COLUMN IF EXISTS qualities")
-      execute("ALTER TABLE quality_profiles DROP COLUMN IF EXISTS metadata_preferences")
-      execute("ALTER TABLE quality_profiles DROP COLUMN IF EXISTS customizations")
+      for column <- @dead_columns do
+        execute("ALTER TABLE quality_profiles DROP COLUMN IF EXISTS #{column}")
+      end
     else
-      # SQLite: rebuild the table without the three dropped columns.
-      recreate_table(
-        table: :quality_profiles,
-        primary_key: false,
-        columns: [
-          {:id, :binary_id, [primary_key: true]},
-          {:name, :string, [null: false]},
-          {:upgrades_allowed, :boolean, [default: true]},
-          {:upgrade_until_quality, :string, []},
-          {:description, :text, []},
-          {:is_system, :boolean, [default: false]},
-          {:version, :integer, [default: 1]},
-          {:source_url, :string, []},
-          {:last_synced_at, :utc_datetime, []},
-          {:quality_standards, :text, []}
-        ],
-        indexes: [
-          {[:name], [unique: true]},
-          [:is_system],
-          [:version]
-        ]
-      )
+      # Rebuilding the table here would drop it, and under PRAGMA foreign_keys=ON
+      # that fires the foreign key actions of media_files, media_items,
+      # library_paths, and import_lists: an abort from the first and silently
+      # erased assignments from the other three. Dropping the columns in place
+      # touches no foreign key at all.
+      #
+      # SQLite has had ALTER TABLE ... DROP COLUMN since 3.35 and exqlite bundles
+      # 3.53. None of these columns is indexed or constrained, which is what
+      # SQLite requires for a direct drop. There is no IF EXISTS form, so the
+      # presence check makes a replay safe.
+      for column <- @dead_columns, sqlite_column?("quality_profiles", column) do
+        execute(~s|ALTER TABLE quality_profiles DROP COLUMN "#{column}"|)
+      end
     end
+  end
+
+  defp sqlite_column?(table, column) do
+    %{rows: rows} = repo().query!(~s|PRAGMA table_info("#{table}")|)
+    Enum.any?(rows, fn [_cid, name | _] -> name == column end)
   end
 end

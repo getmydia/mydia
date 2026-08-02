@@ -5,11 +5,13 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/stream_timeline.dart';
+import '../../../core/player/window_drag_service.dart';
 import '../../../core/theme/depth_tokens.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
 import 'panel_controls.dart';
+import 'playback_surface.dart';
 import 'transport_cluster.dart';
 import 'video_progress_bar.dart';
 
@@ -22,6 +24,15 @@ import 'video_progress_bar.dart';
 /// not scrubbing, and the pointer is not resting over the chrome. That last
 /// condition fixes a real defect — previously the chrome would fade out from
 /// under a stationary cursor that was aiming at a button.
+///
+/// The pointer-left-the-window hide (below, in [build]) is gated on
+/// `!PlatformFeatures.isMobile`, i.e. it is live on Flutter web as well as
+/// native desktop, not desktop-only. That is deliberate: on web, moving the
+/// cursor to the browser's tab strip or URL bar also collapses the auto-hide
+/// timer to zero and hides the chrome mid-playback. A pointer that has left
+/// the content area is nobody aiming at a control regardless of which chrome
+/// (OS window or browser tab) it left into, and the same `MouseRegion`
+/// already hides the mouse cursor itself on web for the same reason.
 class ChromeVisibility extends StatefulWidget {
   /// Whether playback is running. Chrome never auto-hides while paused.
   final bool isPlaying;
@@ -33,12 +44,26 @@ class ChromeVisibility extends StatefulWidget {
 
   final Duration autoHide;
 
+  /// Toggles fullscreen on a background double-click. Null by default.
+  ///
+  /// The platform gate lives in [PlaybackChrome], not here. Registering a
+  /// double-tap handler makes Flutter defer the single tap by
+  /// `kDoubleTapTimeout`, and `flutter test` runs on Linux where
+  /// `PlatformFeatures.isDesktop` is true, so gating here would silently add
+  /// that deferral to every widget test that constructs this class directly.
+  final VoidCallback? onDoubleTap;
+
+  /// Starts an OS window drag from the background. Null by default.
+  final VoidCallback? onWindowDrag;
+
   const ChromeVisibility({
     super.key,
     required this.isPlaying,
     required this.child,
     this.isSeeking = false,
     this.autoHide = const Duration(seconds: 3),
+    this.onDoubleTap,
+    this.onWindowDrag,
   });
 
   static const Key contentKey = Key('chrome-content');
@@ -94,6 +119,16 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   /// this itself, only [_mayHide] does. Route through `setState` if that
   /// changes.
   bool _pointerOverChrome = false;
+
+  /// Whether the player's own route is still the top one, sampled in [build].
+  ///
+  /// Read in [build] rather than in the exit handler on purpose:
+  /// `ModalRoute.of` registers an inherited-widget dependency, and
+  /// `_ModalScopeStatus.updateShouldNotify` compares `isCurrent`, so sampling
+  /// it here means this widget rebuilds when a selector opens or closes and
+  /// the flag stays accurate without calling into the element tree from a
+  /// pointer callback.
+  bool _routeIsCurrent = true;
 
   /// Authoritative shown/hidden intent. Deliberately **not** derived from
   /// `_controller.value > 0` (the brief's original approach): that value is
@@ -175,6 +210,8 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
 
   @override
   Widget build(BuildContext context) {
+    _routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+
     final content = ChromeAnimation(
       animation: _curved,
       child: FadeTransition(
@@ -206,10 +243,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     Widget stack = Stack(
       fit: StackFit.expand,
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        PlaybackSurface(
           onTap: _toggle,
-          child: const SizedBox.expand(),
+          onDoubleTap: widget.onDoubleTap,
+          onWindowDrag: widget.onWindowDrag,
         ),
         content,
       ],
@@ -225,6 +262,22 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
           // every hover event, up to ~120/sec.
           if (_visible && _hideTimer != null) return;
           _show();
+        },
+        onExit: (_) {
+          // A pointer outside the window is nobody aiming at a control, so
+          // collapse the auto-hide timer to zero. `_mayHide` still governs,
+          // which is what preserves the paused, seeking and
+          // pointer-over-chrome invariants. The 250ms reverse fade still
+          // runs; "immediately" refers to the timer, not the animation.
+          //
+          // `_routeIsCurrent` keeps an open selector from hiding the chrome
+          // underneath itself, which would leave it gone after dismissal
+          // until the mouse moved again.
+          //
+          // `mounted` is checked because a test's `gesture.removePointer`
+          // teardown, and a real window close, both synthesise an exit that
+          // can arrive while this State is being torn down.
+          if (mounted && _routeIsCurrent && _mayHide) _hide();
         },
         child: stack,
       );
@@ -298,10 +351,11 @@ class ChromeSlide extends StatelessWidget {
 ///
 /// **Why double-tap ±10s (`gesture_controls.dart`) still works through
 /// [ChromeVisibility]'s background tap-to-toggle catcher:** that catcher is
-/// a full-screen, opaque `GestureDetector` and is the *first* child of this
-/// widget's `Stack` (see `ChromeVisibility.build`), i.e. the bottom-most
-/// layer, not the topmost — it only claims a tap that nothing painted above
-/// it wants. In production, [PlaybackChrome] is never a `Stack` sibling of
+/// [PlaybackSurface] (a `Listener` wrapping an opaque `GestureDetector`) and
+/// is the *first* child of this widget's `Stack` (see
+/// `ChromeVisibility.build`), i.e. the bottom-most layer, not the topmost —
+/// it only claims a tap that nothing painted above it wants. In production,
+/// [PlaybackChrome] is never a `Stack` sibling of
 /// `GestureControls`; it is the `controls` builder media_kit's `Video`
 /// renders via `Positioned.fill` inside `Video`'s own internal `Stack`, and
 /// `GestureControls` wraps that entire `Video` as its child, using
@@ -388,6 +442,18 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
         return ChromeVisibility(
           isPlaying: snapshot.data ?? false,
           isSeeking: _seeking,
+          // Both gates live here, not inside ChromeVisibility, so widget
+          // tests can construct that class with plain callbacks and get
+          // deterministic behaviour regardless of the host platform.
+          //
+          // Double-click stays available in fullscreen, since that is how
+          // you get back out. The window drag does not: there is no window
+          // to move.
+          onDoubleTap:
+              PlatformFeatures.isDesktop ? widget.onFullscreenTap : null,
+          onWindowDrag: PlatformFeatures.isDesktop && !widget.isFullscreen
+              ? startWindowDrag
+              : null,
           child: SafeArea(
             child: Stack(
               children: [

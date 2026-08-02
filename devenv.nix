@@ -152,6 +152,11 @@ in
     git
     curl
 
+    # Rasterize the player's SVG logo into the web icon set
+    # (player/tool/gen-web-icons.sh). librsvg is cross-platform in nixpkgs, so it
+    # belongs in this unconditional list, not the Linux-gated one below.
+    librsvg
+
     # Inspect/validate WASM components (WIT plugin guests)
     wasm-tools
   ]
