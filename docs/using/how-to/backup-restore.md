@@ -83,7 +83,7 @@ Running PostgreSQL inside the same Docker Compose stack as Mydia? Run the comman
 
 ```bash
 # Backup
-docker compose exec postgres pg_dump -U mydia mydia > backup.sql
+docker compose exec -T postgres pg_dump -U mydia mydia > backup.sql
 
 # Restore
 docker compose exec -T postgres psql -U mydia mydia < backup.sql

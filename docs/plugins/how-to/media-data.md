@@ -11,7 +11,7 @@ the snippets short and safe. Add it to `Cargo.toml`:
 
 ```toml
 [dependencies]
-mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", branch = "master" }
+mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", tag = "v0.13.0-beta.1" }
 serde_json = "1"
 ```
 

@@ -40,7 +40,7 @@ buys three things a scripting embed doesn't give for free:
   other or across calls. A scripting-language plugin system that shares one
   interpreter heap across plugins doesn't get this for free either.
 
-The published SDK (`mydia-plugin-sdk`) happens to be Rust today, but nothing
+The SDK (`mydia-plugin-sdk`) happens to be Rust today, but nothing
 about the contract is Rust-specific: it's a WIT interface, which is the point
 of the component model. The `#[mydia_plugin_sdk::plugin]` macro just adapts a
 plain typed handler function onto the component's exported interface, so plugin

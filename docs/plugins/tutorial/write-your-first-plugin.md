@@ -17,7 +17,9 @@ running inside a real Mydia instance. It takes about 10 minutes.
 
 ## Step 1: Create the Crate
 
-A plugin is a `cdylib` crate that depends on the published `mydia-plugin-sdk`.
+A plugin is a `cdylib` crate that depends on `mydia-plugin-sdk`, which lives in
+the Mydia repository and is consumed as a git dependency rather than from
+crates.io.
 The starter at `native/mydia_plugin_sdk/examples/minimal` is exactly this
 layout if you want to copy it instead of typing it out.
 
@@ -33,7 +35,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", branch = "master" }
+mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", tag = "v0.13.0-beta.1" }
 
 [profile.release]
 opt-level = "z"
@@ -41,6 +43,16 @@ lto = true
 strip = true
 panic = "abort"
 ```
+
+!!! tip "Pin the SDK to a tag, not a branch"
+    The SDK is not on crates.io, so it is consumed as a git dependency. Pin it
+    to the release tag matching the Mydia host you are targeting, and bump it
+    deliberately when you move to a newer host. Tracking `branch = "master"`
+    instead means your build silently follows unreleased host changes, so a
+    rebuild months later can produce a component built against a different
+    contract than the one your host implements. See
+    [Host-version floor](../reference/host-api.md#host-version-floor) for how a
+    plugin declares the oldest host it supports.
 
 !!! warning "Always set `panic = \"abort\"`"
     The sandbox denies stdio. A guest that panics and tries to print to stderr
