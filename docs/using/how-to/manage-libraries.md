@@ -8,7 +8,7 @@ See [Library Types](../reference/library-types.md) for the full list of supporte
 
 ### Via Environment Variables
 
-Configure libraries at container startup:
+Configure libraries at container startup. `MOVIES_PATH` and `TV_PATH` each create a default library automatically; use the numbered `LIBRARY_PATH_<N>_*` variables to add more:
 
 ```bash
 # Default libraries

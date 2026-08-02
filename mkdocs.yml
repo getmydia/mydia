@@ -82,6 +82,7 @@ nav:
   - Using Mydia:
       - Tutorials:
           - using/tutorials/get-mydia-running.md
+          - using/tutorials/first-library-import.md
       - How-to guides:
           - using/how-to/install-docker-compose.md
           - using/how-to/connect-download-client.md
@@ -121,7 +122,6 @@ nav:
       - contributing/testing.md
       - contributing/e2e-testing.md
       - contributing/architecture.md
-  - getting-started/first-steps.md
 
 extra:
   version:

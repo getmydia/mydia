@@ -212,5 +212,5 @@ Use these values for `PUID` and `PGID` in your container configuration.
 
 ## Next Steps
 
-- [First Steps](../../getting-started/first-steps.md) - Initial configuration guide
+- [Managing Libraries](manage-libraries.md) - Configure your media libraries
 - [Environment Variables](../reference/environment-variables.md) - Complete configuration reference

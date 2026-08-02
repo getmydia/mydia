@@ -11,6 +11,10 @@ See [Quality Profiles](../reference/quality-profiles.md) for the built-in profil
 3. Configure settings
 4. Save profile
 
+## Using the Preset Gallery
+
+Instead of building a profile from scratch, click **Browse Presets** on the Quality Profiles page and pick one to import. See [Quality Profiles Reference](../reference/quality-profiles.md#preset-gallery) for the full list of presets.
+
 ## Assigning Profiles
 
 Profiles can be assigned:

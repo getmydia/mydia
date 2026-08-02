@@ -1,6 +1,6 @@
 # Quick Start
 
-Get Mydia up and running in just a few minutes using Docker Compose.
+By the end of this tutorial, Mydia will be running with a working admin account and two empty libraries (movies and TV shows), ready for media. It takes about 10 minutes.
 
 ## Prerequisites
 
@@ -49,6 +49,8 @@ services:
     restart: unless-stopped
 ```
 
+This uses SQLite, Mydia's default database, so there's no extra database service to set up.
+
 Replace the placeholder values:
 
 - `your-secret-key-base-here` - Your generated SECRET_KEY_BASE
@@ -62,20 +64,10 @@ Replace the placeholder values:
 docker compose up -d
 ```
 
-## Step 4: Access the Web Interface
+## Step 4: Create Your Admin Account
 
 Open your browser and navigate to `http://localhost:4000`.
 
-On first visit, you'll be guided through creating the initial admin user.
+On first visit, Mydia walks you through creating the initial admin user: set a password of your own, or generate a secure one that's shown once on screen. Submit the form and Mydia creates the account, logs you in automatically, and lands you on the dashboard.
 
-## Step 5: Configure Your Setup
-
-1. **Add Download Clients** - Configure qBittorrent, Transmission, rqbit, SABnzbd, or NZBGet
-2. **Add Indexers** - Set up Prowlarr or Jackett for searching releases
-3. **Scan Your Library** - Let Mydia discover your existing media
-
-## Next Steps
-
-- [Installation Options](../how-to/install-docker-compose.md) - Alternative installation methods
-- [First Steps](../../getting-started/first-steps.md) - Detailed guide for initial configuration
-- [Managing Libraries](../how-to/manage-libraries.md) - Set up your media libraries
+You now have Mydia running with an admin account and two empty libraries. Continue to [Import Your First Movie](first-library-import.md) to bring a file in and watch Mydia match it.

@@ -21,6 +21,15 @@ Every download client variable is listed in [Environment variables](../reference
 
 See [Download Clients Reference](../reference/download-clients.md#configuration-fields) for the full list of Admin UI configuration fields.
 
+## qBittorrent
+
+qBittorrent is one of the most common torrent clients paired with Mydia. Use these connection values when adding it:
+
+- Type: `qbittorrent`
+- Host: your qBittorrent hostname or IP (for example, `qbittorrent` if it runs as a linked container)
+- Port: `8080` by default
+- Username/Password: your qBittorrent Web UI credentials
+
 ## rqbit
 
 Mydia connects to a separately running `rqbit server` over rqbit's HTTP API. Mydia does not install, start, or supervise the rqbit process.
