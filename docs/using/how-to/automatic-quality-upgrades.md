@@ -150,6 +150,33 @@ above does not apply to a path you chose yourself:
   and then delete the original, which is slow for large media and briefly
   needs room for both copies. It logs a warning when this happens.
 
+## When an upgrade gets stuck
+
+While an upgrade is in flight, the newly imported file records which file it
+is meant to replace. That record clears as soon as Mydia has scored both
+copies for real and trashed the loser, which normally happens a minute or two
+after import.
+
+If it has not cleared an hour later, the upgrade is wedged and both copies
+are still taking up room. **Admin > Configuration > Status** says so at the
+top of the page, with a count of the files affected and a link to the jobs
+page. Nothing is shown there when the count is zero, so a Status page with no
+such warning means nothing is stuck.
+
+Two things cause it, and both leave a trace on **Admin > Jobs**:
+
+- The new file was never analyzed, so the step that finishes the upgrade was
+  never queued in the first place. There is no `UpgradeFinalize` job for the
+  file at all, and the analysis job for it failed or never ran.
+- Analysis succeeded but the finishing step itself failed. There is an
+  `UpgradeFinalize` job in the `discarded` or `retryable` state, and its
+  **Details** view carries the error that explains why.
+
+Filter the jobs list by state to find them. Nothing is lost while an upgrade
+sits in this state: the file you already had is untouched and still playable,
+and the replacement is imported alongside it. The cost is disk, and it lasts
+until the upgrade finishes or you remove one of the two copies yourself.
+
 ## Next Steps
 
 - [Quality Profiles](quality-profiles.md) - configure cutoff scores, upgrade
