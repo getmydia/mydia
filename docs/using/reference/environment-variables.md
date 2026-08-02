@@ -311,7 +311,7 @@ See [Automatic Quality Upgrades](../how-to/automatic-quality-upgrades.md) for wh
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LOG_LEVEL` | Log level (debug, info, warning, error) | `info` |
-| `SKIP_BACKUPS` | Skip the automatic database copy Mydia takes before applying pending migrations. SQLite only, since PostgreSQL has no automatic backup to skip. Accepts `true`, `1`, `yes`, `on` | `false` |
+| `SKIP_BACKUPS` | Skip the automatic database snapshot Mydia takes before applying pending migrations. SQLite only, since PostgreSQL has no automatic backup to skip. Accepts `true`, `1`, `yes`, `on` | `false` |
 
 See [Backing Up and Restoring](../how-to/backup-restore.md) for what the automatic backup does, where it writes, and what it does not protect you from.
 

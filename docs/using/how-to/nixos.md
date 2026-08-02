@@ -135,5 +135,5 @@ which is the authoritative option list if this page ever falls behind.
 
 - [Managing Libraries](manage-libraries.md) - Point Mydia at the paths you listed in `mediaLibraries`
 - [Reverse Proxy](reverse-proxy.md) - Put TLS in front of `listenAddress`
-- [Backing Up and Restoring](backup-restore.md) - The unit copies the SQLite database before migrating, nothing backs up the rest of `dataDir` for you
+- [Backing Up and Restoring](backup-restore.md) - The unit snapshots the SQLite database before migrating, nothing backs up the rest of `dataDir` for you
 - [Monitoring and Logs](monitor-and-logs.md) - Where to look when the unit misbehaves

@@ -7,8 +7,11 @@ defmodule Mydia.Release.MigrationBackupTest do
   import ExUnit.CaptureLog
 
   alias Mydia.Release.MigrationBackup
+  alias Mydia.SqliteFixtures
 
   @moduletag :capture_log
+
+  @marker "row-committed-before-the-backup"
 
   setup do
     db_path =
@@ -17,7 +20,10 @@ defmodule Mydia.Release.MigrationBackupTest do
         "test_migration_backup_#{System.unique_integer([:positive])}.db"
       )
 
-    File.write!(db_path, "test database content")
+    # A real WAL-mode database with a live writer, matching production. The
+    # backup opens its own connection to this file and never touches Mydia.Repo.
+    conn = SqliteFixtures.create!(db_path)
+    SqliteFixtures.insert!(conn, @marker)
 
     original_repo_config = Application.get_env(:mydia, Mydia.Repo)
     original_adapter = Application.get_env(:mydia, :database_adapter)
@@ -30,6 +36,7 @@ defmodule Mydia.Release.MigrationBackupTest do
     )
 
     on_exit(fn ->
+      SqliteFixtures.close(conn)
       Application.put_env(:mydia, Mydia.Repo, original_repo_config)
       Application.put_env(:mydia, :database_adapter, original_adapter)
 
@@ -39,11 +46,11 @@ defmodule Mydia.Release.MigrationBackupTest do
         System.delete_env("SKIP_BACKUPS")
       end
 
-      File.rm(db_path)
+      SqliteFixtures.cleanup(db_path)
       Enum.each(backups(db_path), &File.rm/1)
     end)
 
-    {:ok, db_path: db_path}
+    {:ok, db_path: db_path, conn: conn}
   end
 
   # The adapter is forced explicitly in every test so both the SQLite and the
@@ -70,7 +77,7 @@ defmodule Mydia.Release.MigrationBackupTest do
 
       assert is_binary(backup_path)
       assert File.exists?(backup_path)
-      assert File.read!(backup_path) == "test database content"
+      assert SqliteFixtures.markers(backup_path) == [@marker]
       assert Path.dirname(backup_path) == Path.dirname(db_path)
     end
 
@@ -152,11 +159,12 @@ defmodule Mydia.Release.MigrationBackupTest do
   end
 
   describe "a failed backup" do
-    setup %{db_path: db_path} do
+    setup %{db_path: db_path, conn: conn} do
       force_adapter(Ecto.Adapters.SQLite3)
-      # Nothing to copy: the closest deterministic stand-in for a backup that
-      # cannot be written.
-      File.rm!(db_path)
+      # Nothing to snapshot: the closest deterministic stand-in for a backup
+      # that cannot be written.
+      SqliteFixtures.close(conn)
+      SqliteFixtures.cleanup(db_path)
       :ok
     end
 
@@ -169,6 +177,8 @@ defmodule Mydia.Release.MigrationBackupTest do
 
       assert log =~ "THE PRE-MIGRATION DATABASE BACKUP FAILED"
       assert log =~ "WILL apply pending migrations without a"
+      # Names the cause instead of dumping a tuple at the operator.
+      assert log =~ "there is no database file at"
     end
 
     test "does not stop the boot: init/1 still returns :ignore" do

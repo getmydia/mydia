@@ -86,16 +86,57 @@ defmodule Mydia.Release.MigrationBackup do
 
   defp log_failure(reason) do
     Logger.error("""
-    THE PRE-MIGRATION DATABASE BACKUP FAILED: #{inspect(reason)}
+    THE PRE-MIGRATION DATABASE BACKUP FAILED: #{explain(reason)}
 
     Mydia is continuing to start and WILL apply pending migrations without a
-    backup. If a migration goes wrong there is no automatic copy to restore from.
+    backup. If a migration goes wrong there is no automatic snapshot to restore
+    from.
 
-    Stop Mydia now if you want to take one by hand first. The usual causes are no
-    free disk space beside the database file, or the database directory not being
-    writable by the container user.
+    Stop Mydia now if you want to take one by hand first.
 
     https://docs.mydia.dev/latest/using/how-to/backup-restore/
+
+    (#{inspect(reason)})
     """)
   end
+
+  # Name what actually went wrong. "VACUUM INTO failed" tells an operator
+  # nothing they can act on; "there was not enough free space" does.
+  defp explain({:disk_full, path}) do
+    "there was not enough free space to write #{path}. Free some disk beside the database and restart."
+  end
+
+  defp explain({:backup_path_unwritable, path, _message}) do
+    "#{path} could not be opened for writing. Check that the directory exists and is writable by the user Mydia runs as."
+  end
+
+  defp explain({:backup_already_exists, path}) do
+    "#{path} already exists and was not overwritten. Move or delete it and restart."
+  end
+
+  defp explain({:source_not_a_database, path}) do
+    "#{path} is not a SQLite database file. Check DATABASE_PATH points at the right file."
+  end
+
+  defp explain({:database_not_found, path}) do
+    "there is no database file at #{path}."
+  end
+
+  defp explain({:database_open_failed, path, _reason}) do
+    "the database at #{path} could not be opened to snapshot it."
+  end
+
+  defp explain({:backup_empty, path}) do
+    "#{path} was written but is empty."
+  end
+
+  defp explain({:backup_not_a_database, path}) do
+    "#{path} was written but is not a valid SQLite database."
+  end
+
+  defp explain({:unsupported_adapter, adapter}) do
+    "the automatic backup does not support #{adapter}."
+  end
+
+  defp explain(other), do: "the backup step failed with #{inspect(other)}."
 end

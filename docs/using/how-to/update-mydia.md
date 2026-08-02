@@ -3,10 +3,10 @@
 This guide covers updating an existing Mydia installation, tracking pre-release builds, and pinning to a specific version.
 
 !!! warning "Back up before you upgrade"
-    Mydia applies pending migrations on startup. On SQLite it copies the database
-    file first, beside the original, which covers a migration going wrong but not
-    the disk it lives on. On PostgreSQL it takes no backup at all. Take your own
-    before pulling a new image. See
+    Mydia applies pending migrations on startup. On SQLite it snapshots the
+    database first, beside the original, which covers a migration going wrong but
+    not the disk it lives on. On PostgreSQL it takes no backup at all. Take your
+    own before pulling a new image. See
     [Backing Up and Restoring](backup-restore.md).
 
 ## Via Docker Compose
@@ -25,9 +25,9 @@ docker pull ghcr.io/getmydia/mydia:latest
 # Run your docker run command again
 ```
 
-Migrations run automatically on startup, after Mydia copies the SQLite database
-(see [Backing Up and Restoring](backup-restore.md)). Your data in `/config` is
-preserved.
+Migrations run automatically on startup, after Mydia snapshots the SQLite
+database (see [Backing Up and Restoring](backup-restore.md)). Your data in
+`/config` is preserved.
 
 ## Testing Pre-release Builds
 

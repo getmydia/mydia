@@ -3,9 +3,9 @@
 This guide covers the automatic pre-migration backup, the manual backup and restore procedure for SQLite and PostgreSQL, and what to do about configuration files.
 
 !!! warning "The automatic backup is a safety net, not a backup strategy"
-    Mydia copies its SQLite database before applying pending migrations, so an
-    upgrade that goes wrong has something to restore from. That copy lands next to
-    the database, on the same disk, and there is no equivalent on PostgreSQL. It
+    Mydia snapshots its SQLite database before applying pending migrations, so an
+    upgrade that goes wrong has something to restore from. That snapshot lands next
+    to the database, on the same disk, and there is no equivalent on PostgreSQL. It
     will not survive a lost volume, a failed disk, or a deleted container. Keep
     taking your own backups, off the machine.
 
@@ -13,32 +13,40 @@ This guide covers the automatic pre-migration backup, the manual backup and rest
 
 | Database | Pre-migration backup |
 |---|---|
-| SQLite | Yes. The database file is copied before pending migrations run, in every deployment: Docker, NixOS, and the dev shell. |
+| SQLite | Yes. A snapshot is written before pending migrations run, in every deployment: Docker, NixOS, and the dev shell. |
 | PostgreSQL | None. Mydia logs a warning instead. |
 
 On SQLite, Mydia checks for pending migrations at startup, before the migrator
-runs. If any are pending it checkpoints the write-ahead log, copies the database
-to `<database>_backup_YYYYMMDD_HHMMSS.db` beside the original, and keeps the 10
-most recent copies. With nothing pending it copies nothing, so an ordinary
-restart costs nothing.
+runs. If any are pending it writes `<database>_backup_YYYYMMDD_HHMMSS.db` beside
+the original and keeps the 10 most recent. With nothing pending it writes
+nothing, so an ordinary restart costs nothing.
 
-On PostgreSQL, Mydia takes no backup. The file copy has no PostgreSQL
+The snapshot is taken with SQLite's own `VACUUM INTO`, not a file copy. This
+matters more than it sounds. Mydia runs SQLite in write-ahead-log mode, so
+recently committed data can still be sitting in the `mydia.db-wal` sidecar rather
+than in `mydia.db` itself. Copying the main file alone would produce a backup
+that looks complete and is quietly missing your most recent changes, which you
+would only discover when you tried to restore it. `VACUUM INTO` reads through the
+log, cannot produce a torn or half-written file, and compacts the result, so the
+snapshot is usually smaller than the live database.
+
+On PostgreSQL, Mydia takes no backup. `VACUUM INTO` has no PostgreSQL
 equivalent, and Mydia deliberately does not shell out to `pg_dump`, which is not
 guaranteed to be installed alongside the server. An unreliable backup is worse
 than an honest absence of one. Mydia logs a warning naming the situation instead,
 and you should take your own dump before every upgrade using the procedure below.
 
 If the backup fails, and a full disk is the usual reason, Mydia logs the failure
-at error level, states plainly that it is about to migrate unprotected, and
-starts anyway. Refusing to boot would lock you out of the instance over a problem
-you cannot fix from inside it.
+at error level, names what went wrong, states plainly that it is about to migrate
+unprotected, and starts anyway. Refusing to boot would lock you out of the
+instance over a problem you cannot fix from inside it.
 
 ### Turning it off
 
-Set `SKIP_BACKUPS=true` to disable the automatic backup. Copying a
-multi-gigabyte database file on every upgrade costs time and disk, and if you
-already snapshot the volume out of band you may not want a second copy. Mydia
-logs that it is skipping the backup and migrates without one.
+Set `SKIP_BACKUPS=true` to disable the automatic backup. Snapshotting a
+multi-gigabyte database on every upgrade costs time and disk, and if you already
+snapshot the volume out of band you may not want a second copy. Mydia logs that
+it is skipping the backup and migrates without one.
 
 ## Before you upgrade
 
@@ -71,6 +79,12 @@ cp /path/to/config/mydia.db /path/to/backup/mydia_$(date +%Y%m%d).db
 docker compose start mydia
 ```
 
+Stopping the container first is not optional. A running Mydia keeps recent
+writes in `mydia.db-wal`, so copying `mydia.db` on its own from under a live
+server gives you an incomplete database. A clean stop folds the log back in and
+removes the sidecar. If you find `mydia.db-wal` or `mydia.db-shm` still present
+after stopping, copy them alongside the database rather than leaving them behind.
+
 **Restore:**
 
 ```bash
@@ -80,18 +94,22 @@ docker compose stop mydia
 # Replace the database file with the backup
 cp /path/to/backup/mydia_20240101.db /path/to/config/mydia.db
 
+# Remove any leftover write-ahead log, or SQLite will replay it over your restore
+rm -f /path/to/config/mydia.db-wal /path/to/config/mydia.db-shm
+
 # Start the container
 docker compose start mydia
 ```
 
-Restoring an automatic pre-migration backup works the same way. Those copies sit
-beside the database as `mydia_backup_YYYYMMDD_HHMMSS.db`, so pick the newest one
-from before the upgrade:
+Restoring an automatic pre-migration backup works the same way. Those snapshots
+sit beside the database as `mydia_backup_YYYYMMDD_HHMMSS.db`, so pick the newest
+one from before the upgrade:
 
 ```bash
 docker compose stop mydia
 ls -t /path/to/config/mydia_backup_*.db | head
 cp /path/to/config/mydia_backup_20240101_120000.db /path/to/config/mydia.db
+rm -f /path/to/config/mydia.db-wal /path/to/config/mydia.db-shm
 docker compose start mydia
 ```
 
