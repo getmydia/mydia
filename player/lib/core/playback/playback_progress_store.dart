@@ -161,8 +161,15 @@ Future<void> recordLocalProgress({
 /// Pushes every locally-recorded position the server does not have yet.
 ///
 /// Records are attempted independently: one unreachable item must not strand
-/// the rest of the queue. A failure leaves `syncedAt` null so the next
-/// reconnect tries again.
+/// the rest of the queue. A record is only marked synced when
+/// `ProgressService` reports the server actually received it — its `false`
+/// return covers both "nothing was sent" (an invalid position/duration) and
+/// "sent but rejected/failed" — so a flaky reconnect can no longer discard
+/// progress the local store exists to protect. The try/catch is a
+/// belt-and-braces guard for a future throwing implementation; `false` is the
+/// primary failure signal today. Either way, a failure leaves `syncedAt` null
+/// so the next reconnect retries — indefinitely, for a record the server
+/// keeps rejecting; there is no dead-letter handling.
 Future<int> flushUnsyncedProgress({
   required PlaybackProgressStore store,
   required ProgressService progressService,
@@ -175,13 +182,18 @@ Future<int> flushUnsyncedProgress({
     final duration = Duration(seconds: record.durationSeconds);
 
     try {
-      if (record.mediaType == 'episode') {
-        await progressService.syncEpisodePosition(
-            record.mediaId, position, duration);
-      } else {
-        await progressService.syncMoviePosition(
-            record.mediaId, position, duration);
+      final ok = record.mediaType == 'episode'
+          ? await progressService.syncEpisodePosition(
+              record.mediaId, position, duration)
+          : await progressService.syncMoviePosition(
+              record.mediaId, position, duration);
+
+      if (!ok) {
+        debugPrint(
+            '[PlaybackProgressStore] Server did not accept sync for ${record.mediaId}, leaving unsynced');
+        continue;
       }
+
       await store.markSynced(record.mediaId, now);
       synced++;
     } catch (e) {
