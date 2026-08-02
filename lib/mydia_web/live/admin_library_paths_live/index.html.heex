@@ -1,23 +1,10 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
-        </p>
-      </div>
-    </div>
-
-    <MydiaWeb.AdminComponents.tab_nav active_tab={@active_tab} />
-
-    <div class="bg-base-100">
-      <MydiaWeb.AdminLibraryPathsLive.Components.library_paths_tab
-        library_paths={@library_paths}
-        reorganizing_library_ids={@reorganizing_library_ids}
-        reclassifying_library_ids={@reclassifying_library_ids}
-      />
-    </div>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminLibraryPathsLive.Components.library_paths_tab
+      library_paths={@library_paths}
+      reorganizing_library_ids={@reorganizing_library_ids}
+      reclassifying_library_ids={@reclassifying_library_ids}
+    />
 
     <%!-- Library Path Modal --%>
     <%= if assigns[:show_library_path_modal] do %>
@@ -26,5 +13,5 @@
         library_path_mode={@library_path_mode}
       />
     <% end %>
-  </div>
+  </.admin_page>
 </Layouts.app>
