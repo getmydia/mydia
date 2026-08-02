@@ -29,7 +29,7 @@ whole season at a fraction of the indexer cost.
 ## Turning it on for a profile
 
 Automatic upgrades are controlled per quality profile, not globally. Open
-**Admin > Quality Profiles**, edit a profile, and look for **Allow automatic
+**Admin > Configuration**, go to the **Quality** tab, edit a profile, and look for **Allow automatic
 quality upgrades** on the Basic tab. This is checked by default on new
 profiles, but the built-in profiles Mydia ships with are not all the same:
 only **Any** and **SD** have it on out of the box. The other six
@@ -98,10 +98,14 @@ daily trash cleanup job deletes it for real and the space comes back.
 So an upgrade costs you the size of the replaced file for the length of the
 retention window, and nothing after that. If you have a lot of files sitting
 below your cutoff score when you first turn this on, expect disk usage to
-rise for about a month and then level off. Shortening
-`trash_retention_days` shortens that overlap; lowering
-`upgrade_sweep_batch_size` spreads the upgrades out over more days instead
-of letting one large first sweep replace everything at once.
+rise for about a month and then level off.
+
+Lowering `upgrades.sweep_batch_size` (`UPGRADE_SWEEP_BATCH_SIZE`) spreads the
+upgrades out over more days instead of letting one large first sweep replace
+everything at once. The retention window itself is not adjustable from a
+container: `trash_retention_days` is compile-time configuration and is not part
+of the runtime config schema, so it cannot be set through `config.yml` or an
+environment variable.
 
 Nothing is deleted the moment it is replaced. For the full retention window
 the original is sitting in the trash directory, out of your library listings
