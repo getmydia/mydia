@@ -93,8 +93,12 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(backend.connectedDevice, device);
-      expect(backend.loadedRequests.single.url,
-          startsWith('https://mydia.test/api/v1/stream/file/file-1'));
+      expect(
+        backend.loadedRequests.single.url,
+        startsWith(
+            'https://mydia.test/api/v1/hls/${sessions.started.single}/index.m3u8'),
+      );
+      expect(sessions.requestedFileIds.single, 'file-1');
       expect(backend.loadedRequests.single.kind, CastMediaKind.hls);
     });
 
@@ -298,7 +302,12 @@ void main() {
       // turns it on, discovers there is no LAN interface, and turns it
       // straight back off before escalating to TRANSCODE.
       expect(lanCalls, [true, false]);
-      expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
+      // The Chromecast escalation now rides on the server-side session rather
+      // than a `strategy=` query param, so the fake's transcode marker in the
+      // session id is where it shows.
+      expect(sessions.started.last, contains('transcode'));
+      expect(
+          backend.loadedRequests.single.url, contains(sessions.started.last));
     });
 
     test(
@@ -313,8 +322,10 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(backend.loadedRequests.single.url,
-          startsWith('https://mydia.test/api/v1/stream/file/file-1'));
-      expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
+          startsWith('https://mydia.test/api/v1/hls/'));
+      expect(sessions.started.last, contains('transcode'));
+      expect(
+          backend.loadedRequests.single.url, contains(sessions.started.last));
     });
 
     test('stops escalating after the TRANSCODE attempt and rethrows', () async {
@@ -714,6 +725,11 @@ void main() {
       expect(backend.loadedRequests, hasLength(1));
       expect(backend.loadedRequests.single.url,
           startsWith('http://192.168.1.20:5000/g/abcd/hls/'));
+      // The stored position is now asked of the server, so the rebuilt HLS
+      // session starts there rather than at the beginning.
+      expect(sessions.requestedStart, const Duration(minutes: 5));
+      // This fake echoes an offset of zero, i.e. an older server that ignored
+      // the request, so the whole position is still left to a receiver seek.
       expect(backend.loadedRequests.single.startPosition,
           const Duration(minutes: 5));
 
@@ -755,7 +771,9 @@ void main() {
 
       await manager.reconnectStoredSession();
 
-      expect(backend.loadedRequests.single.url, contains('file-1'));
+      // The URL is session-addressed now, so the file id only shows in what
+      // the route asked the server for.
+      expect(sessions.requestedFileIds.last, 'file-1');
       expect(backend.loadedRequests.single.title, 'Arrival');
     });
 
@@ -783,18 +801,73 @@ void main() {
       expect(sessions.live, isEmpty);
     });
 
-    test('ends the session started for an abandoned bridge attempt', () async {
+    test('ends the direct route\'s session too, rather than leaking it',
+        () async {
+      // The direct Chromecast route used to redirect through
+      // /api/v1/stream/file/:id, which returns no session id — so
+      // `_adoptHlsSession` had nothing to end and the session it had started
+      // leaked until the server's inactivity timeout.
       final manager = build();
       addTearDown(manager.dispose);
-      // Direct fails, bridge is tried (starting a session) and fails too, then
-      // TRANSCODE back on the direct route succeeds — the bridge session is
-      // now orphaned on the server.
+      await manager.startCast(device: device, request: launch);
+
+      expect(sessions.live, hasLength(1));
+
+      await manager.stopCast();
+
+      expect(sessions.live, isEmpty);
+    });
+
+    test('ends the direct route\'s previous session when switching items',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+      final first = sessions.started.single;
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-2',
+          mediaId: 'movie-2',
+          mediaType: 'movie',
+          title: 'Contact',
+        ),
+      );
+
+      expect(sessions.ended, contains(first));
+      expect(sessions.live, hasLength(1));
+    });
+
+    test('a DLNA cast still opens no session at all', () async {
+      // Progressive routes are served straight from the file endpoint, so
+      // there is nothing to start and nothing to leak.
+      const dlna = CastDevice(
+        id: 'd2',
+        name: 'Bedroom TV',
+        protocol: CastProtocolKind.dlna,
+      );
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: dlna, request: launch);
+
+      expect(sessions.started, isEmpty);
+    });
+
+    test('ends the sessions started for abandoned attempts', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      // Direct fails, bridge is tried and fails too, then TRANSCODE back on
+      // the direct route succeeds. Every Chromecast route opens a session, so
+      // the two losing attempts are now orphaned on the server.
       backend.failNextLoad(CastFailureKind.mediaLoadFailed, times: 2);
 
       await manager.startCast(device: device, request: launch);
 
-      expect(sessions.started, isNotEmpty);
-      expect(sessions.live, isEmpty);
+      expect(sessions.started, hasLength(3));
+      expect(sessions.live, [sessions.started.last],
+          reason: 'only the attempt that actually loaded survives');
     });
 
     test('ends every session started by a wholly failed cast', () async {
@@ -843,7 +916,9 @@ void main() {
 
       await manager.startCast(device: device, request: launch);
 
-      expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
+      expect(sessions.started.last, contains('transcode'));
+      expect(
+          backend.loadedRequests.single.url, contains(sessions.started.last));
       expect(lanCalls, [true, false]);
     });
 
