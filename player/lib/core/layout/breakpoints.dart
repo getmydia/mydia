@@ -65,6 +65,31 @@ abstract class Breakpoints {
     }
   }
 
+  /// Get responsive landscape (16:9) episode-card dimensions based on screen
+  /// width. Mirrors [getCardSize] but for the horizontal episodes rail, where
+  /// cards are wide stills rather than portrait posters. Widths grow across the
+  /// mobile → tablet → desktop tiers; each tier keeps a ~16:9 aspect ratio.
+  static CardSize getEpisodeCardSize(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= desktop) {
+      return const CardSize(width: 300, height: 169);
+    } else if (width >= tablet) {
+      return const CardSize(width: 240, height: 135);
+    } else {
+      return const CardSize(width: 200, height: 113);
+    }
+  }
+
+  /// Get responsive episode rail height based on screen width. Sized to the
+  /// landscape card height ([getEpisodeCardSize]) plus a fixed strip for the
+  /// episode code and title beneath the thumbnail, so it always exceeds the
+  /// card height at each tier.
+  static double getEpisodeRailHeight(BuildContext context) {
+    // Allowance for the code + title strip rendered below each card thumbnail.
+    const double labelStrip = 64;
+    return getEpisodeCardSize(context).height + labelStrip;
+  }
+
   /// Get responsive horizontal padding based on screen width
   static double getHorizontalPadding(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
