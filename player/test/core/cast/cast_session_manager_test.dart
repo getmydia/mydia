@@ -788,6 +788,97 @@ void main() {
     });
   });
 
+  group('seek', () {
+    // A resume offset baked into the numbers, matching the resume scenario
+    // in cast_resume_offset_test.dart: the server echoes back 2394s for a
+    // request at 2400s (it snapped to the nearest keyframe).
+    const launchWithPosition = CastLaunchRequest(
+      fileId: 'file-1',
+      mediaId: 'movie-1',
+      mediaType: 'movie',
+      title: 'Arrival',
+      startPosition: Duration(seconds: 2400),
+      duration: Duration(hours: 1),
+    );
+
+    test(
+        'seeks the receiver in place, translated to player coordinates, '
+        'when the target is within reach', () async {
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      await manager.seek(const Duration(seconds: 2410));
+
+      expect(backend.seeks, [const Duration(seconds: 16)],
+          reason: 'real target minus the offset the server actually used');
+      expect(backend.loadedRequests, hasLength(1),
+          reason: 'a reachable target seeks in place, no restart');
+      expect(sessions.started, hasLength(1));
+    });
+
+    test(
+        'restarts the session on the same item when the target is far '
+        'ahead of the current position', () async {
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      await manager.seek(const Duration(seconds: 3000));
+
+      expect(backend.seeks, isEmpty,
+          reason: 'the receiver was reloaded, not seeked in place');
+      expect(backend.loadedRequests, hasLength(2));
+      expect(sessions.requestedStart, const Duration(seconds: 3000));
+      expect(manager.persistedSession?.position, const Duration(seconds: 3000));
+      // The persisted session's own fields drive the restart, not some other
+      // item the caller might have on screen.
+      expect(sessions.requestedFileIds.last, 'file-1');
+      expect(backend.loadedRequests.last.title, 'Arrival');
+    });
+
+    test('restarts the session when the target is before the start offset',
+        () async {
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      await manager.seek(const Duration(seconds: 300));
+
+      expect(backend.seeks, isEmpty);
+      expect(backend.loadedRequests, hasLength(2));
+      expect(sessions.requestedStart, const Duration(seconds: 300));
+    });
+
+    test(
+        'a seek that arrives while a restart is running is dropped, '
+        'not queued', () async {
+      // A user dragging the scrub bar (or double-tapping skip-forward) can
+      // fire a second `seek` before the first one's restart (`startCast`)
+      // has finished. `startCast` mutates shared state — `_persisted`,
+      // `_activeHlsSessionId` — across several `await` points, so two
+      // concurrent runs race: each call's `_adoptHlsSession` can decide the
+      // *other* call's just-loaded session is the stale one to tear down,
+      // killing whichever one actually ended up on the receiver.
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      final first = manager.seek(const Duration(seconds: 3000));
+      final second = manager.seek(const Duration(seconds: 3100));
+      await first;
+      await second;
+
+      // One restart, not two: the initial cast plus exactly one reload.
+      expect(sessions.started, hasLength(2));
+      expect(backend.loadedRequests, hasLength(2));
+    });
+  });
+
   group('server-side HLS sessions', () {
     test('ends the session it started when casting stops', () async {
       final manager = build(isP2pMode: true);

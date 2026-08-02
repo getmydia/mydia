@@ -7,6 +7,7 @@ import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
 import 'cast_backend.dart';
 import 'cast_route_resolver.dart';
+import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
 
@@ -68,6 +69,21 @@ class CastSessionManager {
 
   /// Server-side HLS session backing the media currently on the receiver.
   String? _activeHlsSessionId;
+
+  /// True while a cast-seek restart (`startCast`) is running.
+  ///
+  /// `startCast` re-runs the whole route-resolution/load path and mutates
+  /// shared state — `_persisted`, `_activeHlsSessionId`, the backend
+  /// listeners re-armed by `_listenToBackend` — across several `await`
+  /// points. A user dragging a scrub bar fires `seek` faster than one
+  /// restart completes; without this guard a second call reads the same
+  /// stale `_persisted`/`_current` the first call already decided to act on,
+  /// so both restart concurrently, and whichever call's `_adoptHlsSession`
+  /// runs last tears down the session the other one just adopted — killing
+  /// whatever actually ended up loaded on the receiver. Mirrors
+  /// `_PlayerScreenState._isRestartingSession` in player_screen.dart, which
+  /// guards the equivalent local-playback restart the same way.
+  bool _isRestartingForSeek = false;
 
   /// Maps receiver-reported positions onto real media positions.
   ///
@@ -623,7 +639,50 @@ class CastSessionManager {
 
   Future<void> play() => _backend.play();
   Future<void> pause() => _backend.pause();
-  Future<void> seek(Duration position) => _backend.seek(position);
+
+  /// Seeks to a real media position, restarting the session when the target
+  /// is outside what the receiver can reach.
+  ///
+  /// [position] is a real media position, matching what `mediaInfo` publishes
+  /// and what the scrub bar computes against `request.duration`.
+  Future<void> seek(Duration position) async {
+    // A restart already in flight is dropped outright, not queued: this
+    // call's target is superseded either way, and the machinery it would
+    // otherwise re-enter is not safe to run twice at once (see
+    // `_isRestartingForSeek`'s dartdoc).
+    if (_isRestartingForSeek) return;
+
+    final session = _persisted;
+
+    if (session == null ||
+        !shouldRestartCastForSeek(
+          target: position,
+          currentPosition: _current?.mediaInfo?.position ?? Duration.zero,
+          startOffset: _timeline.startOffset,
+        )) {
+      return _backend.seek(_timeline.toPlayer(position));
+    }
+
+    // Out of reach in the current stream: start a new session at the target
+    // and reload the receiver on it. A visible blip, and strictly better than
+    // the silent snap-back the receiver would otherwise do.
+    _isRestartingForSeek = true;
+    try {
+      await startCast(
+        device: session.device,
+        request: CastLaunchRequest(
+          fileId: session.fileId,
+          mediaId: session.mediaId,
+          mediaType: session.mediaType,
+          title: session.title,
+          startPosition: position,
+          duration: session.duration,
+        ),
+      );
+    } finally {
+      _isRestartingForSeek = false;
+    }
+  }
 
   /// Re-cast whatever the stored session was playing.
   ///
