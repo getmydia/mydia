@@ -1,62 +1,99 @@
 ---
 allowed-tools: Bash(git*,gh*), Read, Edit
 argument-hint: [major|minor|patch|beta|rc (optional - auto-detected)]
-description: Create and publish a new release with version bump and release notes
+description: Cut a draft release pinned to a commit and dispatch the release workflow
 ---
 
 # Release Process
 
-Create a new release by:
+Releases are draft-first. You create a draft pinned to a commit, then dispatch
+`release.yml`, which builds every platform, uploads the assets, and publishes
+the draft. **Never create a git tag yourself.** GitHub creates it when the
+workflow publishes the draft.
 
-1. **Analyze changes since last release**
+Full reference: `docs/development/releasing.md`.
 
-   - Get the latest tag using `git describe --tags --abbrev=0` or `git tag --sort=-version:refname | head -n1`
-   - Use `git log <last-tag>..HEAD --oneline` to see all commits since last release
-   - Look at the git diff and commit messages to understand the nature of changes
+## 1. Analyze changes since the last release
 
-2. **Determine version increment** (unless specified as $1)
+- Latest tag: `git tag --sort=-version:refname | grep -v metadata-relay | head -n1`
+- Commits since: `git log <last-tag>..origin/master --oneline`
+- Read the commit messages and diffs to understand what actually changed
 
-   - **PREFER patch (0.0.X)** for bugfixes, small improvements, or unclear changes
-   - Use **minor (0.X.0)** ONLY for significant new features or major functionality additions
-   - Use **major (X.0.0)** ONLY if explicitly instructed with `$ARGUMENTS` containing "major"
-   - Use **beta** to create a pre-release version with `-beta.N` suffix (e.g., v1.2.3-beta.1)
-   - Use **rc** to create a release candidate with `-rc.N` suffix (e.g., v1.2.3-rc.1)
-   - Current version is derived from the latest git tag (mix.exs reads BUILD_VERSION at compile time)
-   - Parse the latest tag version, increment appropriately
+## 2. Determine the version increment (unless given as `$1`)
 
-3. **Categorize changes** for release notes:
+- **Prefer patch (0.0.X)** for bugfixes, small improvements, or unclear changes
+- **minor (0.X.0)** only for significant new features
+- **major (X.0.0)** only when explicitly asked
+- **beta** for a prerelease with a `-beta.N` suffix
+- **rc** for a release candidate with an `-rc.N` suffix
 
-   - 🎉 **New Features** - Significant new functionality
-   - 🐛 **Bug Fixes** - Fixes for bugs or issues
-   - 🔧 **Technical Changes** - Refactoring, dependencies, configuration
-   - 🚀 **Deployment Notes** - Important deployment-related changes (migrations, config changes)
-   - Skip empty sections
+Be conservative: when in doubt, patch. To create `beta.N`, find the existing
+beta tags for that version and increment N.
 
-4. **Create release tag**
+The version comes from the tag. `mix.exs` reads `BUILD_VERSION` at compile
+time, so there is nothing to edit and no commit to make.
 
-   - Version is set automatically from the git tag via `BUILD_VERSION` in CI — no need to update mix.exs
-   - **For stable releases**:
-     - Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
-     - Push: `git push && git push --tags`
-   - **For beta/rc releases**:
-     - Tag: `git tag -a vX.Y.Z-beta.N -m "Release vX.Y.Z-beta.N"`
-     - Push: `git push --tags`
+## 3. Write the release notes
 
-5. **Create GitHub release with gh CLI**
-   - Generate release notes with sections identified above
-   - Keep it concise - short bullet points (one line each)
-   - Add link to full changelog: `**Full Changelog**: https://github.com/OWNER/REPO/compare/vOLD...vNEW`
-   - **For stable releases**: `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."`
-   - **For beta/rc releases**: `gh release create vX.Y.Z-beta.N --title "vX.Y.Z-beta.N" --notes "..." --prerelease`
+Categorize into these sections, skipping any that are empty:
 
-## Important Notes
+- 🎉 **New Features**
+- 🐛 **Bug Fixes**
+- 🔧 **Technical Changes**
+- 🚀 **Deployment Notes** (migrations, config changes, anything an operator must act on)
 
-- Always verify you're on the correct branch (usually main/master)
-- Ensure working directory is clean before starting
-- If $1 is provided (major/minor/patch/beta/rc), use that instead of auto-detection
-- Be conservative: when in doubt, use patch version
-- **Beta/RC releases**: These are for testing unreleased versions without affecting stable production
-  - Docker images are tagged with 'beta' (not 'latest')
-  - No commit is made, only a Git tag
-  - GitHub release is marked as pre-release
-  - To create beta.N, find existing beta tags and increment N (e.g., if v1.2.3-beta.1 exists, create v1.2.3-beta.2)
+Keep bullets to one line each. End with:
+`**Full Changelog**: https://github.com/getmydia/mydia/compare/vOLD...vNEW`
+
+**A patch release carries the preceding minor's notes as well as its own.**
+Someone upgrading from v0.11.x to v0.12.1 reads the v0.12.1 page and needs to
+see what v0.12.0 changed.
+
+## 4. Create the draft, pinned to a commit
+
+```bash
+git fetch origin
+SHA=$(git rev-parse origin/master)
+
+gh release create vX.Y.Z \
+  --repo getmydia/mydia \
+  --target "$SHA" \
+  --draft \
+  --notes-file notes.md
+```
+
+Add `--prerelease` for beta and rc.
+
+`--target` must be a full commit SHA. The workflow rejects a draft targeting a
+branch, because a branch is resolved once at build time and again when the tag
+is created, which lets the tag land on code that was never built.
+
+## 5. Dispatch the workflow
+
+```bash
+gh workflow run release.yml --repo getmydia/mydia -f version=vX.Y.Z
+```
+
+Then watch it:
+
+```bash
+gh run watch "$(gh run list --repo getmydia/mydia --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+```
+
+## Important notes
+
+- **Never create or push a git tag.** The workflow's publish step creates it.
+- If `$1` is provided (major/minor/patch/beta/rc), use it instead of auto-detection
+- Verify the working directory is clean before starting
+- If commits land on master after the draft is cut, the workflow fails and lists
+  them. Either re-point the draft (`gh release edit vX.Y.Z --target <new-sha>`)
+  and update the notes, or re-dispatch with `-f accept_drift=true` to ship the
+  pinned commit as-is.
+- If a platform build fails, the release stays a draft. Re-run the failed jobs
+  from the Actions UI. To ship without that platform, re-dispatch with
+  `-f allow_missing=<platform>`.
+- Before a release you care about, rehearse first:
+  `gh workflow run release.yml -f dry_run=true`. It builds, signs, and notarizes
+  everything without publishing or pushing.
+- Prereleases tag Docker images `beta` rather than `latest`, and skip the docs
+  deploy.
