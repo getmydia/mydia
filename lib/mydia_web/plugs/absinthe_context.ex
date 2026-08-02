@@ -17,11 +17,17 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
   end
 
   defp build_context(conn) do
-    base = %{source: :http}
+    # remote_ip lets unauthenticated resolvers rate limit per caller, the same way
+    # MydiaWeb.Plugs.ApiAuth does for API key validation.
+    base = %{source: :http, remote_ip: format_ip(conn.remote_ip)}
 
     case Guardian.Plug.current_resource(conn) do
       nil -> base
       user -> Map.put(base, :current_user, user)
     end
   end
+
+  defp format_ip({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
+  defp format_ip({a, b, c, d, e, f, g, h}), do: "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"
+  defp format_ip(_), do: "unknown"
 end

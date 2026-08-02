@@ -140,6 +140,56 @@ defmodule MydiaWeb.Schema.RemoteAccessTest do
       assert message =~ "Invalid"
     end
 
+    test "rate limits a caller that keeps guessing device tokens" do
+      caller = unique_caller()
+
+      # Each miss costs one Argon2 pass per paired device, so the ceiling is what
+      # stops this unauthenticated mutation being a CPU amplifier.
+      for _ <- 1..10 do
+        assert {:ok, %{errors: [%{message: message}]}} =
+                 run_query(@refresh_access_token_mutation, %{"deviceToken" => "bad"}, caller)
+
+        assert message =~ "Invalid"
+      end
+
+      assert {:ok, %{errors: [%{message: message}]}} =
+               run_query(@refresh_access_token_mutation, %{"deviceToken" => "bad"}, caller)
+
+      assert message =~ "Too many"
+    end
+
+    test "does not rate limit a different caller", %{device_token: device_token} do
+      noisy = unique_caller()
+
+      for _ <- 1..10 do
+        run_query(@refresh_access_token_mutation, %{"deviceToken" => "bad"}, noisy)
+      end
+
+      assert {:ok, %{data: %{"refreshAccessToken" => response}}} =
+               run_query(
+                 @refresh_access_token_mutation,
+                 %{"deviceToken" => device_token},
+                 unique_caller()
+               )
+
+      assert is_binary(response["token"])
+    end
+
+    test "successful refreshes never consume the rate limit budget", %{
+      device_token: device_token
+    } do
+      caller = unique_caller()
+
+      for _ <- 1..12 do
+        assert {:ok, %{data: %{"refreshAccessToken" => _}}} =
+                 run_query(
+                   @refresh_access_token_mutation,
+                   %{"deviceToken" => device_token},
+                   caller
+                 )
+      end
+    end
+
     test "records that the device was seen", %{device: device, device_token: device_token} do
       assert is_nil(device.last_seen_at)
 
@@ -151,8 +201,14 @@ defmodule MydiaWeb.Schema.RemoteAccessTest do
   end
 
   # Helper function to run GraphQL queries (no auth needed for token refresh)
-  defp run_query(query, variables) do
-    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: %{})
+  defp run_query(query, variables, context \\ %{}) do
+    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
+  end
+
+  # The rate limiter is backed by a process-wide ETS table rather than the Ecto
+  # sandbox, so each test needs its own bucket to stay isolated.
+  defp unique_caller do
+    %{remote_ip: "203.0.113.#{System.unique_integer([:positive])}"}
   end
 
   # Test Helpers
