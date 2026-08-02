@@ -112,11 +112,6 @@ Future<ResumePlan?> resolveResumePlan({
     return ResumePlan(Duration(seconds: resumeOverride));
   }
 
-  if (!shouldShowResumeDialog(
-      resumeOverride: resumeOverride, mounted: mounted)) {
-    return ResumePlan.fromStart;
-  }
-
   if (savedPositionSeconds == null || realDuration == null) {
     return ResumePlan.fromStart;
   }
