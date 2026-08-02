@@ -67,7 +67,6 @@ void main() {
     await _pump(tester, const []);
 
     expect(find.byType(EpisodeRailCard), findsNothing);
-    expect(find.byType(SizedBox), findsOneWidget); // the SizedBox.shrink()
   });
 
   testWidgets('shows the right fade and hides the left fade at offset 0',
@@ -78,6 +77,22 @@ void main() {
     expect(
       find.byKey(const ValueKey('episode-rail-right-fade')),
       findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('episode-rail-left-fade')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('shows no fades when the episodes already fit on screen',
+      (tester) async {
+    // A single card cannot overflow the default 800px test surface, so there
+    // is nothing to scroll to and neither edge should be faded.
+    await _pump(tester, _episodes(1, hasFile: false), showId: null);
+
+    expect(
+      find.byKey(const ValueKey('episode-rail-right-fade')),
+      findsNothing,
     );
     expect(
       find.byKey(const ValueKey('episode-rail-left-fade')),

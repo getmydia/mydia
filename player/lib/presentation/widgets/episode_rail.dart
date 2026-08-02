@@ -36,13 +36,33 @@ class EpisodeRail extends StatefulWidget {
 
 class _EpisodeRailState extends State<EpisodeRail> {
   final ScrollController _scrollController = ScrollController();
+
+  // Both fades start hidden and are turned on once layout reports how far the
+  // rail can actually scroll. Assuming a right fade up front would leave one
+  // stranded over a rail whose episodes already fit on screen.
   bool _showLeftFade = false;
-  bool _showRightFade = true;
+  bool _showRightFade = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_updateFadeState);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Runs once on mount and again whenever the width changes (rotation,
+    // resize, window drag), both of which change how far the rail can scroll.
+    _scheduleFadeUpdate();
+  }
+
+  @override
+  void didUpdateWidget(covariant EpisodeRail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.episodes.length != widget.episodes.length) {
+      _scheduleFadeUpdate();
+    }
   }
 
   @override
@@ -52,10 +72,18 @@ class _EpisodeRailState extends State<EpisodeRail> {
     super.dispose();
   }
 
+  /// Scroll extent is only known once the list has been laid out, so anything
+  /// that changes it has to defer the recompute to the end of the frame.
+  void _scheduleFadeUpdate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateFadeState());
+  }
+
   void _updateFadeState() {
-    final showLeft = _scrollController.offset > 10;
-    final showRight = _scrollController.offset <
-        _scrollController.position.maxScrollExtent - 10;
+    if (!mounted || !_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    final showLeft = position.pixels > 10;
+    final showRight = position.pixels < position.maxScrollExtent - 10;
 
     if (showLeft != _showLeftFade || showRight != _showRightFade) {
       setState(() {
