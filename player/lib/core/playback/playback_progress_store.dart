@@ -126,3 +126,33 @@ class InMemoryPlaybackProgressStore implements PlaybackProgressStore {
     durationSeconds: serverDurationSeconds ?? local.durationSeconds,
   );
 }
+
+/// Records a position locally, swallowing every failure.
+///
+/// A store write must never cost the user their playback, so this mirrors the
+/// error policy `_fetchProgressAndEpisodes` already uses. A non-positive
+/// duration is dropped rather than stored: a percentage against it is
+/// meaningless, and the server's own progress mutation rejects it.
+Future<void> recordLocalProgress({
+  required PlaybackProgressStore store,
+  required String mediaId,
+  required String mediaType,
+  required Duration position,
+  required Duration duration,
+  required DateTime now,
+}) async {
+  if (duration <= Duration.zero) return;
+  if (position < Duration.zero) return;
+
+  try {
+    await store.save(LocalPlaybackProgress(
+      mediaId: mediaId,
+      mediaType: mediaType,
+      positionSeconds: position.inSeconds,
+      durationSeconds: duration.inSeconds,
+      updatedAt: now,
+    ));
+  } catch (e) {
+    debugPrint('[PlaybackProgressStore] Ignoring failed local write: $e');
+  }
+}

@@ -25,6 +25,9 @@ import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/playback/local_playback_progress.dart';
+import 'package:player/core/playback/playback_progress_providers.dart';
+import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -157,6 +160,26 @@ DownloadedMedia downloadedItem({
       runtime: runtimeMinutes,
     );
 
+/// Writes a local progress record into a container's store before the screen
+/// mounts, standing in for a previous playback session.
+Future<void> seedLocalProgress(
+  ProviderContainer container, {
+  String mediaId = 'movie-1',
+  String mediaType = 'movie',
+  int positionSeconds = 600,
+  int durationSeconds = 5400,
+  DateTime? updatedAt,
+}) async {
+  final store = await container.read(playbackProgressStoreProvider.future);
+  await store.save(LocalPlaybackProgress(
+    mediaId: mediaId,
+    mediaType: mediaType,
+    positionSeconds: positionSeconds,
+    durationSeconds: durationSeconds,
+    updatedAt: updatedAt ?? DateTime.utc(2026, 8, 2, 12),
+  ));
+}
+
 /// A well-formed `MovieDetail` response. All fields beyond the required ones
 /// (`id`, `title`, `monitored`, `addedAt`, `isFavorite`) are omitted deliberately
 /// so the fallback chain in `_resolveRealDuration` sees nothing from progress
@@ -268,6 +291,7 @@ ProviderContainer buildPlayerScreenContainer({
   required TrackingLocalProxyService proxyService,
   DownloadedMedia? downloaded,
   AuthStatus authStatus = AuthStatus.authenticated,
+  PlaybackProgressStore? progressStore,
 }) {
   return ProviderContainer(overrides: [
     authStateProvider.overrideWith(
@@ -283,6 +307,8 @@ ProviderContainer buildPlayerScreenContainer({
     localProxyServiceProvider.overrideWithValue(proxyService),
     castSessionManagerProvider.overrideWith((ref) async => castManager),
     castSessionProvider.overrideWith((ref) => Stream.value(null)),
+    playbackProgressStoreProvider.overrideWith(
+        (ref) async => progressStore ?? InMemoryPlaybackProgressStore()),
   ]);
 }
 

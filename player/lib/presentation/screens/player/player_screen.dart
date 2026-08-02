@@ -16,6 +16,8 @@ import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/progress_service.dart';
+import '../../../core/playback/playback_progress_providers.dart';
+import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
@@ -98,6 +100,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Set once the offline or already-downloaded branch of
+  /// [_initializePlayer] resolves [playbackProgressStoreProvider]. Null
+  /// whenever that resolution failed, so a broken box open cannot block
+  /// playback; `_saveProgress` treats a null store the same as one that was
+  /// never needed.
+  PlaybackProgressStore? _progressStore;
+
+  /// True once the offline or already-downloaded branch of
+  /// [_initializePlayer] runs. Downloaded media is the only source that can
+  /// be played with no server in reach, so it is the only one `_saveProgress`
+  /// writes locally for; streaming playback writes straight to the server,
+  /// which is reachable by definition.
+  bool _isDownloadedSource = false;
 
   /// Captured in [initState] rather than read from `dispose()`: by the time
   /// `dispose()` runs the widget's element may already be defunct, and
@@ -385,6 +401,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             ? Duration(minutes: downloadedMedia.runtime!)
             : null;
 
+        _isDownloadedSource = true;
+        try {
+          _progressStore = await ref.read(playbackProgressStoreProvider.future);
+        } catch (e) {
+          debugPrint('Could not open local progress store: $e');
+        }
+
         final plan = await resolveResumePlan(
           savedPositionSeconds: _savedPositionSeconds,
           realDuration: _totalDuration,
@@ -435,6 +458,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // `_timeline`: the file is entirely local, so media_kit's own
           // duration is the authoritative one for everything else.
           _totalDuration = _resolveRealDuration(null);
+
+          _isDownloadedSource = true;
+          try {
+            _progressStore =
+                await ref.read(playbackProgressStoreProvider.future);
+          } catch (e) {
+            debugPrint('Could not open local progress store: $e');
+          }
 
           final plan = await resolveResumePlan(
             savedPositionSeconds: _savedPositionSeconds,
@@ -1399,12 +1430,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Future<void> _saveProgress() async {
-    if (_player == null || _progressService == null) return;
+    final player = _player;
+    if (player == null) return;
+
+    // Downloaded media is the only source that writes locally: it is the only
+    // one that can be played with no server in reach. Streaming playback
+    // writes straight to the server, which is reachable by definition.
+    final store = _progressStore;
+    if (_isDownloadedSource && store != null) {
+      await recordLocalProgress(
+        store: store,
+        mediaId: widget.mediaId,
+        mediaType: widget.mediaType,
+        position: player.state.position,
+        duration: _totalDuration ?? player.state.duration,
+        now: DateTime.now(),
+      );
+    }
+
+    if (_progressService == null) return;
 
     if (widget.mediaType == 'movie') {
-      await _progressService!.saveMovieProgress(_player!, widget.mediaId);
+      await _progressService!.saveMovieProgress(player, widget.mediaId);
     } else if (widget.mediaType == 'episode') {
-      await _progressService!.saveEpisodeProgress(_player!, widget.mediaId);
+      await _progressService!.saveEpisodeProgress(player, widget.mediaId);
     }
   }
 
