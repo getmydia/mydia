@@ -170,12 +170,11 @@ void main() {
       final store = HivePlaybackProgressStore(box);
       expect(store.get('bad'), isNull);
 
-      // get() is deliberately synchronous; the malformed-record cleanup
-      // fires an unawaited delete underneath it. Give that a moment to land
-      // before checking the box was actually cleaned up rather than just
-      // reporting null this one time.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-
+      // No wait needed: Box.delete's keystore mutation happens synchronously
+      // (inside beginTransaction, before the method's first await), and
+      // get()/unsynced() both read that same in-memory keystore. The
+      // unawaited delete's own Future only covers flushing to disk, which
+      // neither assertion below depends on.
       expect(store.get('bad'), isNull);
       expect(store.unsynced(), isEmpty);
     });
