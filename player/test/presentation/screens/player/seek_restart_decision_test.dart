@@ -213,7 +213,8 @@ void main() {
       // back to the start of a resumed session. The target itself (real 0)
       // must still correctly decide to restart — the bug was in how
       // `_initializePlayer` reacted afterward, covered by
-      // `shouldShowResumeDialog` below, not in this decision.
+      // `resolveResumePlan`'s override-presence handling in
+      // `resume_plan_test.dart`, not in this decision.
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
@@ -223,43 +224,6 @@ void main() {
           startOffset: const Duration(seconds: 600),
         ),
         isTrue,
-      );
-    });
-  });
-
-  group('shouldShowResumeDialog', () {
-    test(
-        'suppresses the dialog for a seek-driven restart targeting real '
-        'position 0 — the exact collision a value-based check would miss', () {
-      // `resumeOverride: 0` is what `_restartSessionAt` sets when the user
-      // sought back to the very start. A regression that checked
-      // `resumeOverride != 0` instead of `resumeOverride != null` would
-      // return true here, and this test would fail against it.
-      expect(
-        shouldShowResumeDialog(resumeOverride: 0, mounted: true),
-        isFalse,
-      );
-    });
-
-    test('suppresses the dialog for a restart targeting any other position',
-        () {
-      expect(
-        shouldShowResumeDialog(resumeOverride: 45, mounted: true),
-        isFalse,
-      );
-    });
-
-    test('allows the dialog on a fresh mount with no override', () {
-      expect(
-        shouldShowResumeDialog(resumeOverride: null, mounted: true),
-        isTrue,
-      );
-    });
-
-    test('suppresses the dialog when not mounted, even with no override', () {
-      expect(
-        shouldShowResumeDialog(resumeOverride: null, mounted: false),
-        isFalse,
       );
     });
   });

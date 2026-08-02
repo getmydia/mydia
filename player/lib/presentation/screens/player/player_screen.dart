@@ -54,8 +54,7 @@ export '../../../core/player/resume_plan.dart'
         kMinResumeThresholdSeconds,
         kEndOfMediaThresholdSeconds,
         kWatchedThreshold,
-        shouldOfferResume,
-        shouldShowResumeDialog;
+        shouldOfferResume;
 
 /// How far past the transcoded window a seek may land before the HLS session
 /// is torn down and restarted at the new position.
@@ -274,7 +273,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// widget is disposed while `startCast` is awaited. `ref.read` itself is
   /// not safe to call again at that point, which is why the notifier is
   /// captured before any `await` rather than re-read after one.
-  Future<bool> _castToTargetIfSet() async {
+  ///
+  /// [plan] is resolved by the caller before this runs, on every branch that
+  /// calls it — so the receiver starts where the user asked, instead of
+  /// always at zero the way it did when each of the three call sites reached
+  /// this before the resume decision existed.
+  Future<bool> _castToTargetIfSet(ResumePlan plan) async {
     final target = ref.read(castTargetProvider);
     if (target == null) return false;
 
@@ -302,6 +306,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           mediaType: widget.mediaType,
           title: widget.title ?? 'Untitled',
           duration: _knownCastDuration(),
+          startPosition: plan.position,
         ),
       );
       // The session now owns the device; currentCastDeviceProvider reports
@@ -367,7 +372,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           return;
         }
 
-        if (await _castToTargetIfSet()) return;
+        // Placeholder plan: the offline branch does not yet resolve a real
+        // one, so this always starts at the beginning. A follow-up task
+        // gives it an actual resolved plan.
+        if (await _castToTargetIfSet(ResumePlan.fromStart)) return;
 
         // Play downloaded content in offline mode. The whole file is already
         // on disk, so this is direct play in every sense `seekToReal` and
@@ -385,8 +393,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             await _resolveDownloadedFilePath(downloadedMedia.filePath);
         if (localPath != null) {
           debugPrint('Playing from local file: $localPath');
-
-          if (await _castToTargetIfSet()) return;
 
           // Try to initialize progress sync (optional - local playback
           // works even if server is unreachable)
@@ -413,7 +419,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // duration is the authoritative one for everything else.
           _totalDuration = _resolveRealDuration(null);
 
-          await _openPlayerAndStart(localPath, {}, promptResume: true);
+          final plan = await resolveResumePlan(
+            savedPositionSeconds: _savedPositionSeconds,
+            realDuration: _totalDuration,
+            resumeOverride: null,
+            mounted: mounted,
+            ask: (saved, total) async {
+              if (!mounted) return null;
+              return showResumeDialog(context, saved, total);
+            },
+          );
+          if (plan == null) return;
+
+          if (await _castToTargetIfSet(plan)) return;
+
+          await _openPlayerAndStart(localPath, {}, plan: plan);
           return;
         }
         debugPrint('Downloaded file not found, falling back to streaming');
@@ -515,7 +535,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // still zero here; the session result rebuilds this with the real one.
       _timeline = StreamTimeline(totalDuration: _totalDuration);
 
-      if (await _castToTargetIfSet()) return;
+      // Resolved here, upstream of both the cast fork below and the
+      // HLS/direct fork further down. Every branch consumes this one value.
+      // Keeping the decision inside the branches is what let three cast
+      // exits and the offline path start at zero without ever asking.
+      final resumeOverride = _resumeOverrideSeconds;
+      _resumeOverrideSeconds = null;
+      final plan = await resolveResumePlan(
+        savedPositionSeconds: _savedPositionSeconds,
+        realDuration: _totalDuration,
+        resumeOverride: resumeOverride,
+        mounted: mounted,
+        ask: (saved, total) async {
+          if (!mounted) return null;
+          return showResumeDialog(context, saved, total);
+        },
+      );
+      if (plan == null) return;
+
+      if (await _castToTargetIfSet(plan)) return;
 
       String mediaSource;
       Map<String, String> httpHeaders = {};
@@ -554,67 +592,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // Determine HLS strategy from candidates
         final hlsStrategy = _pickHlsStrategy(candidatesResult?.candidates);
 
-        // The resume decision must be made before the session starts: the
-        // offset is an input to FFmpeg, not something that can be seeked to
-        // once a live-style playlist is already running.
-        //
-        // Captured into locals rather than using `_savedPositionSeconds!`/
-        // `_totalDuration!` below: Dart's flow analysis cannot promote a
-        // field's nullability across the `shouldOfferResume(...)` call
-        // boundary, only across a direct `!= null` check in the same
-        // condition, so these null checks are what let the rest of this
-        // block use non-nullable locals instead of the bang operator.
-        //
-        // `resumeOverride` (not `startPositionSeconds == 0`) is what gates
-        // the dialog below: a seek-driven restart targeting real position 0
-        // (dragging the scrubber back to the start, holding arrow-left to
-        // the beginning, or any sub-second target — `Duration.inSeconds`
-        // truncates) sets `_resumeOverrideSeconds` to exactly 0, which is
-        // indistinguishable from "no override was set" if the check were on
-        // the value instead of on presence. Gating on the nullable local
-        // instead means a restart to position 0 never falls into the
-        // dialog branch, never overwrites 0 with the stale
-        // `_savedPositionSeconds`, and never sends the wrong `startPosition`
-        // to the new session.
-        final resumeOverride = _resumeOverrideSeconds;
-        _resumeOverrideSeconds = null;
-        var startPositionSeconds = resumeOverride ?? 0;
-        final savedPosition = _savedPositionSeconds;
-        final totalDuration = _totalDuration;
-        // The literal `mounted &&` here (not just the one passed into
-        // `shouldShowResumeDialog` below) is load-bearing for the analyzer:
-        // `use_build_context_synchronously` only recognizes a `mounted`
-        // check spelled directly in the guarding condition, not one hidden
-        // behind a function call, before `context` is used past the earlier
-        // `await`s in this method.
-        if (mounted &&
-            shouldShowResumeDialog(
-              resumeOverride: resumeOverride,
-              mounted: mounted,
-            ) &&
-            savedPosition != null &&
-            totalDuration != null &&
-            shouldOfferResume(
-              savedPositionSeconds: savedPosition,
-              realDuration: totalDuration,
-            )) {
-          final shouldResume = await showResumeDialog(
-            context,
-            savedPosition,
-            totalDuration.inSeconds,
-          );
-          // The dialog is an unbounded wait on the user, and it now happens
-          // before the session exists. If the route was replaced while it was
-          // open (`context.go`, a deep link, app teardown) it completes with
-          // null, `dispose()` has already run with `_hlsSessionId == null`,
-          // and carrying on would start an HLS session, build a `Player` and
-          // subscribe streams for a dead screen — with the FFmpeg process
-          // surviving until the server's inactivity timeout.
-          if (!mounted) return;
-          if (shouldResume == true) {
-            startPositionSeconds = savedPosition;
-          }
-        }
+        // The resume decision was already made above, before the cast fork —
+        // it has to be: the offset is an input to FFmpeg, not something that
+        // can be seeked to once a live-style playlist is already running.
+        final startPositionSeconds = plan.position.inSeconds;
 
         // Start HLS session via GraphQL mutation (works for both modes)
         final result = await graphqlClient.mutate(
@@ -680,14 +661,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
 
       // `canDirect` is exactly the HLS/non-HLS split of this method: the HLS
-      // branch above has already asked about resuming and baked the answer
-      // into the session's start offset, so asking again here would prompt
-      // twice. The direct-play branch has no server-side offset to bake it
-      // into and must resume with a plain seek.
+      // branch above has already baked the resume decision into the
+      // session's start offset, so acting on `plan` again here would
+      // double-apply it via a seek on top of that offset. The direct-play
+      // branch has no server-side offset to bake it into and must resume
+      // with a plain seek, which is what passing `plan` through does.
       await _openPlayerAndStart(
         mediaSource,
         httpHeaders,
-        promptResume: canDirect,
+        plan: canDirect ? plan : ResumePlan.fromStart,
       );
     } catch (e) {
       debugPrint('Error initializing player: $e');
@@ -743,58 +725,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   ///
   /// Reached by three paths, not just the HLS one: the HLS branch, the
   /// direct-play branch, and the "already downloaded, still online" branch.
-  /// [promptResume] separates them. The HLS branch passes false because it
-  /// has already asked about resuming and baked the answer into the
-  /// session's FFmpeg start offset — the only way to resume a live-style
-  /// playlist. The other two pass true: they hold the entire file locally,
-  /// have no server-side session to give an offset to, and seek correctly,
-  /// so for them resuming is a plain [Player.seek] after the media opens.
-  ///
-  /// Both are needed. Prompting here for every path would double-prompt the
-  /// HLS one; prompting only in the HLS branch (as this briefly did) silently
-  /// removed the resume prompt from the preferred desktop and mobile path,
-  /// where playback then always started at zero.
+  /// It no longer prompts — the resume decision is made once, upstream of
+  /// every fork, by [resolveResumePlan] — it only executes [plan]. The HLS
+  /// branch bakes that same decision into the session's FFmpeg start offset,
+  /// the only way to resume a live-style playlist; the other two hold the
+  /// entire file locally, have no server-side session to give an offset to,
+  /// and seek correctly, so for them resuming is a plain [Player.seek] after
+  /// the media opens.
   Future<void> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders, {
-    required bool promptResume,
+    required ResumePlan plan,
   }) async {
     if (mounted) {
       setState(() {
         _loadingMessage = null;
       });
-    }
-
-    // Asked before the player is built rather than after, matching the HLS
-    // branch's ordering: `_totalDuration` is already resolved by now, so
-    // there is nothing left to learn by opening the media first.
-    //
-    // Captured into locals for the same reason as the HLS branch: Dart's
-    // flow analysis cannot promote a field's nullability across the
-    // `shouldOfferResume(...)` call boundary.
-    var resumeFrom = Duration.zero;
-    final savedPosition = _savedPositionSeconds;
-    final totalDuration = _totalDuration;
-    if (promptResume &&
-        mounted &&
-        savedPosition != null &&
-        totalDuration != null &&
-        shouldOfferResume(
-          savedPositionSeconds: savedPosition,
-          realDuration: totalDuration,
-        )) {
-      final shouldResume = await showResumeDialog(
-        context,
-        savedPosition,
-        totalDuration.inSeconds,
-      );
-      // Same unbounded-wait hazard as the HLS branch: the route can be
-      // replaced while the dialog is open, in which case `dispose()` has
-      // already run and building a `Player` here would leak it.
-      if (!mounted) return;
-      if (shouldResume == true) {
-        resumeFrom = Duration(seconds: savedPosition);
-      }
     }
 
     // Create media_kit player
@@ -817,8 +763,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // A plain seek, not a `seekToReal`: these paths hold the whole file, so
     // the player's own coordinates already are the real ones and there is no
     // session that could need restarting.
-    if (resumeFrom > Duration.zero) {
-      await player.seek(resumeFrom);
+    if (plan.resumes) {
+      await player.seek(plan.position);
     }
 
     // Start playback

@@ -129,4 +129,74 @@ void main() {
       expect(plan, isNull);
     });
   });
+
+  // Moved from `seek_restart_decision_test.dart`'s `shouldShowResumeDialog`
+  // group when that function was retired: `resolveResumePlan`'s
+  // `resumeOverride != null` early return is now the only place this
+  // presence-not-value gate lives, so its coverage moves here with it.
+  group('resolveResumePlan (override presence, not value, gates the ask)', () {
+    test(
+        'an override of exactly 0 is honored as a real target, not treated '
+        'as unset — the exact collision a value-based check would miss',
+        () async {
+      // `resumeOverride: 0` is what `_restartSessionAt` sets when the user
+      // sought back to the very start. A regression that checked
+      // `resumeOverride != 0` instead of `resumeOverride != null` would call
+      // `ask` here instead, and prompt about the unrelated, stale
+      // `savedPositionSeconds` below.
+      final plan = await resolveResumePlan(
+        savedPositionSeconds: 2700,
+        realDuration: const Duration(seconds: 5400),
+        resumeOverride: 0,
+        mounted: true,
+        ask: never,
+      );
+
+      expect(plan!.position, Duration.zero);
+      expect(plan.resumes, isFalse);
+    });
+
+    test(
+        'a non-zero override is honored verbatim without asking, distinct '
+        'from unset', () async {
+      final plan = await resolveResumePlan(
+        savedPositionSeconds: 2700,
+        realDuration: const Duration(seconds: 5400),
+        resumeOverride: 45,
+        mounted: true,
+        ask: never,
+      );
+
+      expect(plan!.position, const Duration(seconds: 45));
+    });
+
+    test('asks on a fresh mount with no override', () async {
+      var asked = false;
+      final plan = await resolveResumePlan(
+        savedPositionSeconds: 2700,
+        realDuration: const Duration(seconds: 5400),
+        resumeOverride: null,
+        mounted: true,
+        ask: (saved, total) async {
+          asked = true;
+          return true;
+        },
+      );
+
+      expect(asked, isTrue);
+      expect(plan!.resumes, isTrue);
+    });
+
+    test('returns null when not mounted, even with no override', () async {
+      final plan = await resolveResumePlan(
+        savedPositionSeconds: 2700,
+        realDuration: const Duration(seconds: 5400),
+        resumeOverride: null,
+        mounted: false,
+        ask: never,
+      );
+
+      expect(plan, isNull);
+    });
+  });
 }

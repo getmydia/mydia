@@ -30,31 +30,6 @@ bool shouldOfferResume({
   return true;
 }
 
-/// Whether `_initializePlayer` may even consider showing the resume dialog,
-/// given a possible seek-driven-restart override.
-///
-/// Deliberately gates on [resumeOverride]'s **presence** (`!= null`), not its
-/// value (`!= 0`): a restart targeting real position 0 — dragging the
-/// scrubber back to the start, holding arrow-left to the beginning, or any
-/// sub-second target, since `Duration.inSeconds` truncates — sets
-/// `_resumeOverrideSeconds` to exactly `0`, which a value-based check
-/// (`resumeOverride != 0`) cannot tell apart from "no override was set at
-/// all". Getting this wrong lets a restart to position 0 fall through to the
-/// dialog, which then prompts about the unrelated, never-refreshed
-/// `_savedPositionSeconds` from mount time and, if accepted, silently
-/// overwrites the user's explicit seek-to-start with that stale saved
-/// position.
-///
-/// Extracted as a free function, following the same pattern as
-/// [shouldOfferResume] and [shouldRestartForSeek], so this exact presence-
-/// vs-value distinction has its own name and test, independent of
-/// `_initializePlayer`'s own network/session machinery.
-bool shouldShowResumeDialog({
-  required int? resumeOverride,
-  required bool mounted,
-}) =>
-    resumeOverride == null && mounted;
-
 /// The decided answer to "where should this playback begin?".
 ///
 /// One value produced at one call site, upstream of every fork in
