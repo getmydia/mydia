@@ -77,12 +77,16 @@ Mydia uses **relative path storage** for media files:
 - **Path Independence** - Database records are portable
 - **Automatic Migration** - Paths convert automatically on upgrade
 
+<!-- MOVES TO explanation/configuration-model.md IN TASK 11
+
 ### Configuration Priority
 
 1. Environment variables (highest)
 2. Admin UI (database settings)
 3. YAML configuration file
 4. Schema defaults (lowest)
+
+-->
 
 ## Changing Library Paths
 
@@ -101,5 +105,6 @@ TV_PATH=/new/path/tv
 
 ## Next Steps
 
-- [Adding Media](add-media.md) - Import media into your libraries
+- [Importing an Existing Collection](import-existing-collection.md) - Bring files you already have into a library via scanning
+- [Adding Media](add-media.md) - Search for and download new media
 - [Quality Profiles](quality-profiles.md) - Configure download quality

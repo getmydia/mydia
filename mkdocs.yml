@@ -89,6 +89,7 @@ nav:
           - using/how-to/cardigann-indexers.md
           - using/how-to/manage-libraries.md
           - using/how-to/add-media.md
+          - using/how-to/import-existing-collection.md
           - using/how-to/quality-profiles.md
           - using/how-to/manage-users.md
           - using/how-to/sso-oidc.md

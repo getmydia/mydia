@@ -107,5 +107,6 @@ OIDC_ENABLED=true
 
 ## Next Steps
 
+- [Adding Media](add-media.md) - How guests search for media to request
 - [SSO/OIDC](sso-oidc.md) - Detailed OIDC configuration
 - [Environment Variables](../reference/environment-variables.md) - All auth options
