@@ -11,6 +11,15 @@ Cardigann is a generic indexer definition format that describes how to interact 
 
 Mydia includes a native Cardigann implementation, allowing you to use hundreds of indexers directly without running a separate indexer manager.
 
+## When to Use Prowlarr/Jackett
+
+Consider using Prowlarr or Jackett instead if:
+
+- You need more reliable indexer support
+- You require specific indexers that don't work with Cardigann
+- You want centralized indexer management
+- You need advanced features like sync
+
 ## Enabling Cardigann
 
 Cardigann is enabled by default:
@@ -88,15 +97,6 @@ See [Environment Variables](../reference/environment-variables.md#flaresolverr) 
 - Rate limiting varies by indexer
 - CAPTCHA challenges not supported
 
-### When to Use Prowlarr/Jackett
-
-Consider using Prowlarr or Jackett instead if:
-
-- You need more reliable indexer support
-- You require specific indexers that don't work with Cardigann
-- You want centralized indexer management
-- You need advanced features like sync
-
 ## Troubleshooting
 
 ### Search Returns No Results
@@ -127,6 +127,10 @@ When reporting Cardigann issues:
 3. Include relevant log entries
 4. Specify if it works with Prowlarr/Jackett
 
+<!-- MOVES TO explanation/media-pipeline.md IN TASK 11
+
 ## Architecture
 
 For technical details about the Cardigann implementation, see the [Cardigann Architecture](https://github.com/getmydia/mydia/blob/master/docs/CARDIGANN_ARCHITECTURE.md) documentation.
+
+-->

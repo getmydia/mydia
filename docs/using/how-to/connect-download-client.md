@@ -76,10 +76,16 @@ Both folders must be readable and writable by Mydia. Final organization still ha
 
 ## Client Priority
 
+Set the **Priority** field when adding or editing a client in **Admin > Download Clients**; a higher number is tried before a lower one.
+
+<!-- MOVES TO explanation/media-pipeline.md IN TASK 11
+
 When multiple clients are configured, priority determines which client is used:
 
 - Higher priority = preferred
 - If primary client fails, falls back to lower priority clients
+
+-->
 
 ## Categories
 

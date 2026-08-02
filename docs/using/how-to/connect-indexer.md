@@ -61,24 +61,7 @@ NZBHydra2 is a meta search aggregator for NZB indexers.
 
 Every indexer variable is listed in [Environment variables](../reference/environment-variables.md#indexers).
 
-## Cardigann (Experimental)
-
-Mydia includes built-in Cardigann indexer support, allowing direct indexer connections without Prowlarr or Jackett.
-
-!!! warning "Experimental Feature"
-    Cardigann support is highly experimental. Only a limited number of indexers have been tested. Report issues on GitHub.
-
-### Enable Cardigann
-
-Set environment variable:
-
-```bash
-ENABLE_CARDIGANN=true
-```
-
-### Configuration
-
-Cardigann indexers are configured through the Admin UI with their specific settings.
+Mydia also includes built-in [Cardigann](cardigann-indexers.md) indexer support for connecting to indexers directly, without Prowlarr or Jackett.
 
 ## Configuration Options
 
@@ -96,11 +79,17 @@ Cardigann indexers are configured through the Admin UI with their specific setti
 
 ## Indexer Priority
 
+Set the **Priority** field when adding or editing an indexer in **Admin > Indexers**; a higher number is searched before a lower one.
+
+<!-- MOVES TO explanation/media-pipeline.md IN TASK 11
+
 When multiple indexers are configured:
 
 - Higher priority indexers are searched first
 - Results are aggregated from all enabled indexers
 - Duplicate results are deduplicated
+
+-->
 
 ## Categories
 
