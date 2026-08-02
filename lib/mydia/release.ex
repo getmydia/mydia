@@ -7,24 +7,40 @@ defmodule Mydia.Release do
   - Checking for pending migrations
   - Creating timestamped database backups before migrations
   - Cleaning up old backup files
+
+  `backup_before_migrations/1` is the entry point used both by the dev shell
+  (`mix mydia.backup_before_migrate`) and by the release boot path
+  (`Mydia.Release.MigrationBackup`, a supervision child that runs between
+  `Mydia.Repo` and `Ecto.Migrator`).
   """
 
   require Logger
 
+  alias Mydia.DB
+
   @app :mydia
   @max_backups 10
+  @docs_url "https://docs.mydia.dev/latest/using/how-to/backup-restore/"
 
   @doc """
   Runs pending database migrations.
 
   This is the standard function called by release scripts and entrypoints
   to ensure the database schema is up to date.
+
+  Takes the same pre-migration backup the supervision tree takes on container
+  boot. `eval` callers (the NixOS unit runs this from `ExecStartPre`) never reach
+  the supervision tree, so without this they would migrate unprotected.
   """
   def migrate do
     load_app()
 
     for repo <- repos() do
-      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
+      {:ok, _, _} =
+        Ecto.Migrator.with_repo(repo, fn repo ->
+          Mydia.Release.MigrationBackup.run()
+          Ecto.Migrator.run(repo, :up, all: true)
+        end)
     end
   end
 
@@ -47,19 +63,62 @@ defmodule Mydia.Release do
   @doc """
   Creates a database backup if there are pending migrations.
 
-  Returns `{:ok, backup_path}` if a backup was created,
-  `{:ok, :no_migrations}` if there are no pending migrations,
-  or `{:error, reason}` if the backup failed.
-  """
-  def backup_before_migrations do
-    case pending_migrations?() do
-      true ->
-        create_backup()
+  The file-copy strategy this module implements is only valid for SQLite, where
+  the whole database is one file. On PostgreSQL no backup is taken and the
+  operator is told so, loudly: Mydia deliberately does not shell out to
+  `pg_dump`, which is not guaranteed to exist in the container, because an
+  unreliable backup is worse than an honest absence of one.
 
-      false ->
+  Set `SKIP_BACKUPS=true` to opt out entirely. Copying a multi-gigabyte SQLite
+  file on every upgrade is a real cost, and some operators back up out of band.
+
+  ## Options
+
+    * `:pending_migrations?` - override the pending-migration check. Defaults to
+      `pending_migrations?/0`. Exists so the boot path and its tests can decide
+      migration status without a live migration being pending.
+
+  ## Returns
+
+    * `{:ok, backup_path}` - a backup was written
+    * `{:ok, :no_migrations}` - nothing is pending, so nothing was backed up
+    * `{:ok, :skipped}` - `SKIP_BACKUPS` is set
+    * `{:ok, :unsupported_adapter}` - PostgreSQL, operator warned
+    * `{:error, reason}` - the backup was attempted and failed
+  """
+  @spec backup_before_migrations(keyword()) ::
+          {:ok, String.t() | :no_migrations | :skipped | :unsupported_adapter} | {:error, term()}
+  def backup_before_migrations(opts \\ []) do
+    cond do
+      skip_backups?() ->
+        Logger.info(
+          "SKIP_BACKUPS is set, so no pre-migration database backup will be taken. " <>
+            "Back up before upgrading: #{@docs_url}"
+        )
+
+        {:ok, :skipped}
+
+      not Keyword.get_lazy(opts, :pending_migrations?, &pending_migrations?/0) ->
         Logger.info("No pending migrations detected, skipping backup")
         {:ok, :no_migrations}
+
+      DB.sqlite?() ->
+        checkpoint_wal()
+        create_backup()
+
+      true ->
+        warn_no_postgres_backup()
+        {:ok, :unsupported_adapter}
     end
+  end
+
+  @doc """
+  Returns true when the operator has opted out of automatic backups via
+  `SKIP_BACKUPS`.
+  """
+  @spec skip_backups?() :: boolean()
+  def skip_backups? do
+    Mydia.Settings.parse_setting_boolean(System.get_env("SKIP_BACKUPS"))
   end
 
   @doc """
@@ -97,6 +156,42 @@ defmodule Mydia.Release do
   end
 
   # Private functions
+
+  defp warn_no_postgres_backup do
+    Logger.warning("""
+    Pending database migrations are about to run and NO BACKUP WAS TAKEN.
+
+    Mydia's automatic pre-migration backup copies the SQLite database file, which
+    has no PostgreSQL equivalent, and Mydia will not shell out to pg_dump because
+    it is not guaranteed to be installed alongside the server.
+
+    Back up your database before every upgrade:
+
+        pg_dump -h HOST -U USER DBNAME > mydia_backup.sql
+
+    If you have not, stop Mydia now and take one before it finishes starting.
+    #{@docs_url}
+    """)
+  end
+
+  # Production SQLite runs in WAL mode (see config/runtime.exs), so freshly
+  # committed transactions can still live in the -wal sidecar file. Copying only
+  # the .db would produce a backup that silently omits them. Folding the WAL back
+  # into the main file first makes the copy self-contained.
+  #
+  # Keyed off the live repo's adapter rather than :database_adapter so a test
+  # that forces the SQLite branch never issues this against a PostgreSQL repo.
+  defp checkpoint_wal do
+    if Mydia.Repo.__adapter__() == Ecto.Adapters.SQLite3 do
+      Ecto.Adapters.SQL.query(Mydia.Repo, "PRAGMA wal_checkpoint(TRUNCATE)", [])
+    end
+
+    :ok
+  rescue
+    error ->
+      Logger.debug("WAL checkpoint before backup did not run: #{inspect(error)}")
+      :ok
+  end
 
   defp get_database_path do
     case Application.get_env(@app, Mydia.Repo)[:database] do

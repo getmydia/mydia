@@ -46,6 +46,6 @@ shows the queues, what is running, and what failed.
 ## Next Steps
 
 - [Updating Mydia](update-mydia.md) - what to watch in the logs during an upgrade
-- [Backing Up and Restoring](backup-restore.md) - take a backup before an upgrade, since Mydia will not
+- [Backing Up and Restoring](backup-restore.md) - what the automatic pre-migration copy does and does not cover
 - [Managing Libraries](manage-libraries.md) - when a scan finds nothing, the path is the usual culprit
 - [Environment Variables](../reference/environment-variables.md) - `LOG_LEVEL` and the rest
