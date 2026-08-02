@@ -22,7 +22,7 @@ The multi-arch image `ghcr.io/getmydia/mydia:latest` automatically pulls the cor
 
 ## Docker Compose (Recommended)
 
-See the [Quick Start](quick-start.md) guide for a minimal Docker Compose setup.
+See the [Quick Start](../tutorials/get-mydia-running.md) guide for a minimal Docker Compose setup.
 
 ## Complete Stack Example
 
@@ -196,5 +196,5 @@ Use these values for `PUID` and `PGID` in your container configuration.
 
 ## Next Steps
 
-- [First Steps](first-steps.md) - Initial configuration guide
+- [First Steps](../../getting-started/first-steps.md) - Initial configuration guide
 - [Environment Variables](../reference/environment-variables.md) - Complete configuration reference

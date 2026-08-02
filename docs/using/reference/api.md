@@ -51,4 +51,4 @@ Currently, you can integrate with Mydia through:
 
 ## Contributing
 
-If you're interested in API development, check the [Development](../development/setup.md) documentation and consider contributing to the project.
+If you're interested in API development, check the [Development](../../contributing/setup.md) documentation and consider contributing to the project.

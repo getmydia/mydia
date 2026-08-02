@@ -160,7 +160,7 @@ DOWNLOAD_CLIENT_3_WATCH_FOLDER=/downloads/watch
 DOWNLOAD_CLIENT_3_COMPLETED_FOLDER=/downloads/complete
 ```
 
-See the [Download Clients user guide](../user-guide/download-clients.md#via-environment-variables)
+See the [Download Clients user guide](../how-to/connect-download-client.md#via-environment-variables)
 for per-type examples of the remaining client types.
 
 ## Indexers
@@ -212,7 +212,7 @@ For PostgreSQL deployments (using `latest-pg` image):
 | `METADATA_RELAY_URL` | URL for the metadata relay service | `https://relay.mydia.dev` |
 | `METADATA_LANGUAGE` | Language sent to TMDB/TVDB for titles, descriptions, and posters. Accepts ISO 639-1 codes (`de`) or BCP 47 tags (`de-DE`, `pt-BR`). | `en-US` |
 
-The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See [Architecture](../development/architecture.md) for details.
+The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See [Architecture](../../contributing/architecture.md) for details.
 
 `METADATA_LANGUAGE` can also be set per-instance from **Settings → Configuration → Metadata** in the admin UI; the env var overrides the database value when both are set.
 

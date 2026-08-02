@@ -114,5 +114,5 @@ Profiles can be assigned:
 
 ## Next Steps
 
-- [Download Clients](download-clients.md) - Configure download automation
-- [Indexers](indexers.md) - Set up release searching
+- [Download Clients](connect-download-client.md) - Configure download automation
+- [Indexers](connect-indexer.md) - Set up release searching

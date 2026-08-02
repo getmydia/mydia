@@ -205,5 +205,5 @@ Always test connections before saving:
 
 ## Next Steps
 
-- [Indexers](indexers.md) - Configure release searching
+- [Indexers](connect-indexer.md) - Configure release searching
 - [Environment Variables](../reference/environment-variables.md) - All configuration options

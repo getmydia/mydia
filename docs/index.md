@@ -60,7 +60,7 @@ openssl rand -base64 48
 openssl rand -base64 48
 ```
 
-For detailed setup instructions, see the [Getting Started Guide](getting-started/quick-start.md).
+For detailed setup instructions, see the [Getting Started Guide](using/tutorials/get-mydia-running.md).
 
 ## Screenshots
 

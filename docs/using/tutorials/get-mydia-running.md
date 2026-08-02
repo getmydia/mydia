@@ -76,6 +76,6 @@ On first visit, you'll be guided through creating the initial admin user.
 
 ## Next Steps
 
-- [Installation Options](installation.md) - Alternative installation methods
-- [First Steps](first-steps.md) - Detailed guide for initial configuration
-- [Managing Libraries](../user-guide/libraries.md) - Set up your media libraries
+- [Installation Options](../how-to/install-docker-compose.md) - Alternative installation methods
+- [First Steps](../../getting-started/first-steps.md) - Detailed guide for initial configuration
+- [Managing Libraries](../how-to/manage-libraries.md) - Set up your media libraries

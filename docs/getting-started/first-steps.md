@@ -88,6 +88,6 @@ To configure quality profiles:
 
 ## Next Steps
 
-- [Managing Libraries](../user-guide/libraries.md) - Detailed library configuration
-- [Quality Profiles](../user-guide/quality-profiles.md) - Profile configuration guide
-- [Download Clients](../user-guide/download-clients.md) - Advanced client setup
+- [Managing Libraries](../using/how-to/manage-libraries.md) - Detailed library configuration
+- [Quality Profiles](../using/how-to/quality-profiles.md) - Profile configuration guide
+- [Download Clients](../using/how-to/connect-download-client.md) - Advanced client setup

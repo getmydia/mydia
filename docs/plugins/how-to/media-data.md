@@ -1,7 +1,7 @@
 # Cookbook
 
 Practical recipes for common plugin tasks. Each one is self-contained: a goal,
-the code, and a note on why it works. They assume the [quickstart](index.md)
+the code, and a note on why it works. They assume the [quickstart](../index.md)
 crate layout and build on the same typed `Event` handler.
 
 Most recipes parse JSON out of the event. The examples use `serde_json` because
@@ -25,7 +25,7 @@ serde_json = "1"
 **Goal:** when a movie or show is added, POST a message to a webhook.
 
 First, subscribe to the event and request the HTTP host in your
-[manifest](manifest.md):
+[manifest](../reference/manifest.md):
 
 ```json
 {
@@ -175,7 +175,7 @@ fn on_event(evt: Event) -> Result<String, String> {
 any secrets. The `media_item` projection includes `title`, `original_title`,
 `year`, `overview`, `tagline`, `genres`, `runtime`, `rating`, `poster_path`,
 the external IDs (`tmdb_id`, `tvdb_id`, `imdb_id`), and more. See the
-[Reference](authoring.md#host-functions) for the full field list.
+[Reference](../reference/host-api.md#host-functions) for the full field list.
 
 ## Read operator settings
 
@@ -183,7 +183,7 @@ the external IDs (`tmdb_id`, `tvdb_id`, `imdb_id`), and more. See the
 choice of target), and read those values at runtime.
 
 Declare the fields in your manifest's `settings_schema` (see
-[Manifest & Settings](manifest.md)). At runtime, the operator's configured
+[Manifest & Settings](../reference/manifest.md)). At runtime, the operator's configured
 values arrive inside `evt.metadata_json` under the `config` key, alongside the
 event's own detail under `metadata`:
 

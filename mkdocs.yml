@@ -45,8 +45,9 @@ theme:
   features:
     - navigation.instant
     - navigation.tracking
+    - navigation.tabs
     - navigation.sections
-    - navigation.expand
+    - navigation.indexes
     - navigation.top
     - navigation.footer
     - search.suggest
@@ -78,38 +79,40 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Getting Started:
-      - Quick Start: getting-started/quick-start.md
-      - Installation: getting-started/installation.md
-      - First Steps: getting-started/first-steps.md
-  - User Guide:
-      - Managing Libraries: user-guide/libraries.md
-      - Adding Media: user-guide/adding-media.md
-      - Quality Profiles: user-guide/quality-profiles.md
-      - Download Clients: user-guide/download-clients.md
-      - Indexers: user-guide/indexers.md
-      - User Management: user-guide/users.md
-  - Reference:
-      - Environment Variables: reference/environment-variables.md
-      - Configuration: reference/configuration.md
-      - Database: reference/database.md
-      - API: reference/api.md
-      - Remote Access: reference/remote-access.md
-  - Advanced:
-      - Deployment: advanced/deployment.md
-      - PostgreSQL: advanced/postgresql.md
-      - SSO/OIDC: advanced/oidc.md
-      - Cardigann Indexers: advanced/cardigann.md
-  - Plugin Development:
-      - Introduction: plugins/index.md
-      - Cookbook: plugins/cookbook.md
-      - Manifest & Settings: plugins/manifest.md
-      - Reference: plugins/authoring.md
-  - Development:
-      - Setup: development/setup.md
-      - Testing: development/testing.md
-      - E2E Testing: development/e2e-testing.md
-      - Architecture: development/architecture.md
+  - Using Mydia:
+      - Tutorials:
+          - using/tutorials/get-mydia-running.md
+      - How-to guides:
+          - using/how-to/install-docker-compose.md
+          - using/how-to/connect-download-client.md
+          - using/how-to/connect-indexer.md
+          - using/how-to/cardigann-indexers.md
+          - using/how-to/manage-libraries.md
+          - using/how-to/add-media.md
+          - using/how-to/quality-profiles.md
+          - using/how-to/manage-users.md
+          - using/how-to/sso-oidc.md
+          - using/how-to/postgresql.md
+          - using/how-to/reverse-proxy.md
+          - using/how-to/remote-access.md
+      - Reference:
+          - using/reference/environment-variables.md
+          - using/reference/configuration.md
+          - using/reference/database.md
+          - using/reference/api.md
+  - Building Plugins:
+      - plugins/index.md
+      - How-to guides:
+          - plugins/how-to/media-data.md
+      - Reference:
+          - plugins/reference/manifest.md
+          - plugins/reference/host-api.md
+  - Contributing:
+      - contributing/setup.md
+      - contributing/testing.md
+      - contributing/e2e-testing.md
+      - contributing/architecture.md
+  - getting-started/first-steps.md
 
 extra:
   version:

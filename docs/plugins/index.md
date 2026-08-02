@@ -19,8 +19,8 @@ network, filesystem, or OS access. The only way out is through a small set of
 capability-gated host functions you declare up front.
 
 If you just want to get something working, follow the quickstart below, then
-jump into the [Cookbook](cookbook.md) for task-by-task recipes. For the full
-contract, capability model, and ABI details, see the [Reference](authoring.md).
+jump into the [Cookbook](how-to/media-data.md) for task-by-task recipes. For the full
+contract, capability model, and ABI details, see the [Reference](reference/host-api.md).
 
 ## Quickstart
 
@@ -64,7 +64,7 @@ fn on_event(evt: Event) -> Result<String, String> {
 
 That is a complete plugin. The `#[mydia_plugin_sdk::plugin]` macro adapts your
 plain function onto the component's exported handler, so you never touch the
-generated bindings. The handler takes a typed [`Event`](cookbook.md#act-on-only-the-events-you-care-about)
+generated bindings. The handler takes a typed [`Event`](how-to/media-data.md#act-on-only-the-events-you-care-about)
 and returns a short JSON result string on success, or an error string the host
 records as a plugin error.
 
@@ -103,5 +103,5 @@ to, and the capabilities it wants. The smallest useful one:
 }
 ```
 
-See [Manifest & Settings](manifest.md) for every field, and the
-[Cookbook](cookbook.md) for how to actually do things once an event arrives.
+See [Manifest & Settings](reference/manifest.md) for every field, and the
+[Cookbook](how-to/media-data.md) for how to actually do things once an event arrives.

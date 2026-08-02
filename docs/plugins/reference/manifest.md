@@ -98,7 +98,7 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
 `settings_schema` is an array of field definitions. Mydia renders them as a form
 in the admin UI, and the operator's values arrive at runtime inside the event's
 `metadata_json` under the `config` key (see
-[Read operator settings](cookbook.md#read-operator-settings)).
+[Read operator settings](../how-to/media-data.md#read-operator-settings)).
 
 ### Field types
 
@@ -194,7 +194,7 @@ never sees the token.
   `client_id` is the public/embeddable id; an operator can override it via a
   `client_id` setting.
 - The plugin reaches the connected account with `connection-request`, which
-  attaches the bearer token host-side (see the [Reference](authoring.md)).
+  attaches the bearer token host-side (see the [Reference](host-api.md)).
 
 ## Host-version floor
 
@@ -207,4 +207,4 @@ activate a plugin whose floor exceeds the running host, with a clear
 The plugin contract evolves additively: new functions, records, variant cases,
 and optional fields are added without breaking existing plugins. Only a removal
 or a signature change bumps the major ABI version. For the full contract and
-versioning rules, see the [Reference](authoring.md#evolving-the-contract).
+versioning rules, see the [Reference](host-api.md#evolving-the-contract).

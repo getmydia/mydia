@@ -67,4 +67,4 @@ For bulk imports, use the Import Wizard:
 ## Next Steps
 
 - [Quality Profiles](quality-profiles.md) - Configure download preferences
-- [Download Clients](download-clients.md) - Set up download automation
+- [Download Clients](connect-download-client.md) - Set up download automation

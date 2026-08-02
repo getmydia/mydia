@@ -98,5 +98,5 @@ Mydia uses **relative path storage** for media files:
 
 ## Next Steps
 
-- [Adding Media](adding-media.md) - Import media into your libraries
+- [Adding Media](add-media.md) - Import media into your libraries
 - [Quality Profiles](quality-profiles.md) - Configure download quality

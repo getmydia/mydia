@@ -107,5 +107,5 @@ OIDC_ENABLED=true
 
 ## Next Steps
 
-- [SSO/OIDC](../advanced/oidc.md) - Detailed OIDC configuration
+- [SSO/OIDC](sso-oidc.md) - Detailed OIDC configuration
 - [Environment Variables](../reference/environment-variables.md) - All auth options
