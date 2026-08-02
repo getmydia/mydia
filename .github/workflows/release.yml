@@ -1,25 +1,48 @@
 name: Release
 
-# Release procedure (Immutable Releases enabled on this repo):
+# Release procedure (Immutable Releases enabled on this repo).
+# Full docs: docs/contributing/releasing.md
 #
-#   1. gh release create vX.Y.Z --target master --draft --prerelease \
+#   1. SHA=$(git rev-parse origin/master)
+#      gh release create vX.Y.Z --target "$SHA" --draft --prerelease \
 #        --notes-file notes.md
 #   2. gh workflow run release.yml -f version=vX.Y.Z
+#
+# The draft must target a full commit SHA, not a branch. A branch target is
+# resolved separately at build time and again at publish time, so the tag can
+# end up on code that was never built. Pinning the draft to a commit makes the
+# notes, the images and the tag all describe the same thing.
 #
 # The workflow uploads assets to the draft and publishes it. The `release`
 # event is not used because GitHub Actions silently drops `release: created`
 # for drafts (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
 # and asset uploads to a published immutable release are blocked.
+#
+# To rehearse without shipping anything:
+#
+#   gh workflow run release.yml -f dry_run=true
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag of an existing draft release (e.g., v1.0.0)'
-        required: true
+        description: 'Version tag of an existing draft release (e.g., v1.0.0). Ignored when dry_run is set.'
+        required: false
+      dry_run:
+        description: 'Build, sign and notarize every platform without publishing, pushing images or uploading to stores'
+        type: boolean
+        default: false
+      accept_drift:
+        description: 'Proceed even though master has moved past the commit the draft targets'
+        type: boolean
+        default: false
+      allow_missing:
+        description: "Comma-separated platforms whose failure must not block publish (android,ios,macos,windows,linux,docker)"
+        required: false
+        default: ''
 
 concurrency:
-  group: release-${{ github.event.inputs.version }}
+  group: release-${{ inputs.dry_run && format('dryrun-{0}', github.run_id) || inputs.version }}
   cancel-in-progress: false
 
 env:
@@ -38,46 +61,116 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
       version_code: ${{ steps.get_version.outputs.version_code }}
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
+      sha: ${{ steps.get_version.outputs.sha }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Extract version info
         id: get_version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ACCEPT_DRIFT: ${{ inputs.accept_drift }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RUN_NUMBER: ${{ github.run_number }}
+          DISPATCH_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          TAG="${{ github.event.inputs.version }}"
-
-          # Enforce draft-first authoring. This repo has Immutable Releases
-          # enabled, so assets can only be uploaded while the release is a
-          # draft. The workflow publishes the draft at the end.
-          IS_DRAFT=$(gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft --jq '.isDraft')
-          if [ "$IS_DRAFT" != "true" ]; then
-            echo "::error::Release $TAG is not a draft. Create the release with --draft so the workflow can upload assets before publishing." >&2
-            exit 1
-          fi
-
-          # Remove 'v' prefix for marketing version (CFBundleShortVersionString / versionName)
-          VERSION_NUM="${TAG#v}"
+          set -euo pipefail
 
           # Build number (CFBundleVersion / Android versionCode) — globally
           # monotonic via github.run_number, with an offset to clear the
           # historical high-water mark of 1000 from earlier failed uploads.
           # Re-runs of the same workflow run preserve run_number; new dispatches
           # increment it, which is exactly what TestFlight/Play Store require.
-          VERSION_CODE=$(( ${{ github.run_number }} + 10000 ))
+          VERSION_CODE=$(( RUN_NUMBER + 10000 ))
 
-          # Check if this is a prerelease
-          if [[ "$TAG" =~ -beta|-rc|-alpha ]]; then
+          if [ "$DRY_RUN" = "true" ]; then
+            # Rehearsal: no draft, no tag, no publish. Everything that has
+            # historically broken (signing, notarization, appcast, installer)
+            # still runs, against a synthetic version.
+            TAG="(dry run)"
+            VERSION_NUM="0.0.0-dryrun.${RUN_NUMBER}"
             IS_PRERELEASE=true
+            SHA="$DISPATCH_SHA"
+            echo "Dry run: building ${VERSION_NUM} from ${SHA}. Nothing will be pushed or published."
           else
-            IS_PRERELEASE=false
+            TAG="$INPUT_VERSION"
+            if [ -z "$TAG" ]; then
+              echo "::error::version is required unless dry_run is set." >&2
+              exit 1
+            fi
+
+            # Enforce draft-first authoring. This repo has Immutable Releases
+            # enabled, so assets can only be uploaded while the release is a
+            # draft. The workflow publishes the draft at the end.
+            RELEASE_JSON=$(gh release view "$TAG" --repo "$REPO" --json isDraft,targetCommitish)
+            IS_DRAFT=$(echo "$RELEASE_JSON" | jq -r '.isDraft')
+            if [ "$IS_DRAFT" != "true" ]; then
+              echo "::error::Release $TAG is not a draft. Create the release with --draft so the workflow can upload assets before publishing." >&2
+              exit 1
+            fi
+
+            # The draft must name a commit, not a branch. A branch target is
+            # resolved independently here and again when GitHub creates the tag
+            # at publish, so the tag can land on code these jobs never built.
+            SHA=$(echo "$RELEASE_JSON" | jq -r '.targetCommitish')
+            if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Draft $TAG targets '$SHA', which is a branch, not a commit. Pin it first: gh release edit $TAG --repo $REPO --target \$(git rev-parse origin/master)" >&2
+              exit 1
+            fi
+
+            if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
+              echo "::error::Draft $TAG targets commit $SHA, which does not exist in this repository." >&2
+              exit 1
+            fi
+
+            # Drift check. Anything merged since the draft was cut is not in
+            # this release, and the notes were written without it. Surface it
+            # rather than absorbing it silently.
+            DRIFT=$(git rev-list --count "${SHA}..origin/${DEFAULT_BRANCH}" 2>/dev/null || echo 0)
+            if [ "$DRIFT" -gt 0 ]; then
+              echo "::group::${DRIFT} commit(s) on master are NOT in this release"
+              git log --oneline "${SHA}..origin/${DEFAULT_BRANCH}"
+              echo "::endgroup::"
+              {
+                echo "### Release drift"
+                echo
+                echo "\`$TAG\` targets \`${SHA:0:12}\`, which is **${DRIFT} commit(s) behind master**."
+                echo
+                git log --oneline "${SHA}..origin/${DEFAULT_BRANCH}" | sed 's/^/- /'
+              } >> "$GITHUB_STEP_SUMMARY"
+
+              if [ "$ACCEPT_DRIFT" != "true" ]; then
+                echo "::error::${DRIFT} commit(s) landed on master after this draft was cut. Either re-point the draft and update its notes (gh release edit $TAG --repo $REPO --target \$(git rev-parse origin/master)), or re-dispatch with -f accept_drift=true to ship $TAG as-is." >&2
+                exit 1
+              fi
+              echo "accept_drift was set: shipping ${SHA:0:12} and leaving the ${DRIFT} newer commit(s) for a later release."
+            fi
+
+            # Remove 'v' prefix for marketing version (CFBundleShortVersionString / versionName)
+            VERSION_NUM="${TAG#v}"
+
+            if [[ "$TAG" =~ -beta|-rc|-alpha ]]; then
+              IS_PRERELEASE=true
+            else
+              IS_PRERELEASE=false
+            fi
           fi
 
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "version=$VERSION_NUM" >> $GITHUB_OUTPUT
-          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
-          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION_NUM"
+            echo "version_code=$VERSION_CODE"
+            echo "is_prerelease=$IS_PRERELEASE"
+            echo "sha=$SHA"
+          } >> "$GITHUB_OUTPUT"
 
-          echo "Building version: $VERSION_NUM (code: $VERSION_CODE, prerelease: $IS_PRERELEASE)"
+          echo "Building version: $VERSION_NUM (code: $VERSION_CODE, prerelease: $IS_PRERELEASE, commit: $SHA)"
 
   docker-build:
     name: Docker / ${{ matrix.db }} / ${{ matrix.arch }}
@@ -116,6 +209,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       # Route Docker Hub pulls through Google's pull-through cache to avoid
       # anonymous rate-limit timeouts. The daemon mirror covers the BuildKit
@@ -147,16 +242,17 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: ${{ matrix.platform }}
-          push: true
+          # A rehearsal proves the image builds without writing to ghcr.
+          push: ${{ !inputs.dry_run }}
           build-args: |
             DATABASE_TYPE=${{ matrix.db }}
             BUILD_VERSION=${{ needs.prepare.outputs.version }}
-            BUILD_COMMIT=${{ github.sha }}
+            BUILD_COMMIT=${{ needs.prepare.outputs.sha }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}${{ matrix.tag_suffix }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
           cache-from: type=gha,scope=docker-${{ matrix.db }}
           # Only amd64 writes cache to avoid arm64 overwriting with different layers
           cache-to: ${{ matrix.arch == 'amd64' && format('type=gha,mode=max,scope=docker-{0}', matrix.db) || '' }}
@@ -164,6 +260,8 @@ jobs:
   docker-merge:
     name: Docker / ${{ matrix.db }} / Merge
     needs: [prepare, docker-build]
+    # Nothing was pushed during a rehearsal, so there is nothing to merge.
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -202,15 +300,52 @@ jobs:
       - name: Create multi-arch manifest
         id: merge
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           VERSION: ${{ needs.prepare.outputs.version }}
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           IS_PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
           SUFFIX: ${{ matrix.tag_suffix }}
         run: |
+          set -euo pipefail
+
           SOURCES="${IMAGE}:${VERSION}${SUFFIX}-amd64 ${IMAGE}:${VERSION}${SUFFIX}-arm64"
 
-          TAGS="-t ${IMAGE}:${VERSION}${SUFFIX}"
+          # The exact version tag is always applied. Floating tags are only
+          # applied when this release is the newest of its class, so that
+          # patching an older line (v0.11.2 after v0.12.0) cannot drag
+          # :latest, :0 and :0.11 backwards onto the older build. The same
+          # applies to :beta against other prereleases.
           if [ "$IS_PRERELEASE" = "true" ]; then
+            CLASS="prerelease"
+            NEWEST=$(gh release list --repo "$REPO" --limit 100 \
+              --json tagName,isDraft,isPrerelease \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | ltrimstr("v")] | .[]' \
+              | sort -V | tail -n1)
+          else
+            CLASS="stable"
+            NEWEST=$(gh release list --repo "$REPO" --limit 100 \
+              --json tagName,isDraft,isPrerelease \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | ltrimstr("v")] | .[]' \
+              | sort -V | tail -n1)
+          fi
+
+          # This release is not published yet, so it is absent from the list
+          # above. It is the newest when it sorts strictly after everything
+          # already published in its class.
+          IS_NEWEST=true
+          if [ -n "$NEWEST" ]; then
+            HIGHEST=$(printf '%s\n%s\n' "$VERSION" "$NEWEST" | sort -V | tail -n1)
+            if [ "$HIGHEST" != "$VERSION" ]; then
+              IS_NEWEST=false
+            fi
+          fi
+
+          TAGS="-t ${IMAGE}:${VERSION}${SUFFIX}"
+          if [ "$IS_NEWEST" != "true" ]; then
+            echo "::warning::${VERSION} is older than the newest published ${CLASS} release (${NEWEST}). Applying only :${VERSION}${SUFFIX} and skipping the floating tags so they keep pointing at ${NEWEST}."
+            echo "- \`${SUFFIX:-sqlite}\`: applied \`${VERSION}${SUFFIX}\` only; floating tags left on \`${NEWEST}\`" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$IS_PRERELEASE" = "true" ]; then
             TAGS="${TAGS} -t ${IMAGE}:beta${SUFFIX}"
           else
             MAJOR_MINOR=$(echo "$VERSION" | grep -oE '^[0-9]+\.[0-9]+')
@@ -231,53 +366,6 @@ jobs:
           subject-digest: ${{ steps.merge.outputs.digest }}
           push-to-registry: true
 
-  player-web:
-    name: Player / Web
-    needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-          cache: true
-
-      - name: Update version
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION_CODE="${{ needs.prepare.outputs.version_code }}"
-          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
-          echo "Updated pubspec.yaml version to ${VERSION}+${VERSION_CODE}"
-          cat pubspec.yaml | grep "^version:"
-
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-
-      - name: Build web
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          flutter build web \
-            --release \
-            --base-href /player/ \
-            --tree-shake-icons
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mydia-player-web
-          path: ${{ env.PLAYER_PATH }}/build/web
-          retention-days: 7
-
   player-android:
     name: Player / Android
     needs: prepare
@@ -285,19 +373,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Check platform support
-        id: check_android
-        run: |
-          if [ -d "${{ env.PLAYER_PATH }}/android" ]; then
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "enabled=false" >> $GITHUB_OUTPUT
-            echo "Android platform not configured yet. Skipping build."
-          fi
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Setup Flutter
-        if: steps.check_android.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -305,14 +384,12 @@ jobs:
           cache: true
 
       - name: Setup Java
-        if: steps.check_android.outputs.enabled == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Update version
-        if: steps.check_android.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
@@ -320,24 +397,22 @@ jobs:
           sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
 
       - name: Install dependencies
-        if: steps.check_android.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub get
 
       - name: Run code generation
-        if: steps.check_android.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
 
       - name: Decode keystore
-        if: steps.check_android.outputs.enabled == 'true' && env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         working-directory: ${{ env.PLAYER_PATH }}
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
 
       - name: Create key.properties
-        if: steps.check_android.outputs.enabled == 'true' && env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         working-directory: ${{ env.PLAYER_PATH }}
@@ -350,17 +425,15 @@ jobs:
           EOF
 
       - name: Build APK
-        if: steps.check_android.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build apk --release
 
       - name: Build AAB
-        if: steps.check_android.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build appbundle --release
 
       - name: Setup Ruby for Fastlane
-        if: steps.check_android.outputs.enabled == 'true' && env.PLAY_STORE_CREDENTIALS != ''
+        if: ${{ !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
         env:
           PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
         uses: ruby/setup-ruby@v1
@@ -370,7 +443,7 @@ jobs:
           working-directory: ${{ env.PLAYER_PATH }}/android
 
       - name: Upload to Play Store
-        if: steps.check_android.outputs.enabled == 'true' && env.PLAY_STORE_CREDENTIALS != ''
+        if: ${{ !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
         env:
           PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
         working-directory: ${{ env.PLAYER_PATH }}/android
@@ -381,7 +454,6 @@ jobs:
           rm play-store-credentials.json
 
       - name: "Upload artifact: APK"
-        if: steps.check_android.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: mydia-player-android-apk
@@ -395,19 +467,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Check platform support
-        id: check_ios
-        run: |
-          if [ -d "${{ env.PLAYER_PATH }}/ios" ]; then
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "enabled=false" >> $GITHUB_OUTPUT
-            echo "iOS platform not configured yet. Skipping build."
-          fi
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Setup Flutter
-        if: steps.check_ios.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -415,7 +478,6 @@ jobs:
           cache: true
 
       - name: Update version
-        if: steps.check_ios.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
@@ -428,17 +490,15 @@ jobs:
           sed -i '' "s/^version: .*/version: ${MARKETING_VERSION}+${VERSION_CODE}/" pubspec.yaml
 
       - name: Install dependencies
-        if: steps.check_ios.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub get
 
       - name: Run code generation
-        if: steps.check_ios.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
 
       - name: Install certificate and provisioning profile
-        if: steps.check_ios.outputs.enabled == 'true' && env.IOS_CERTIFICATE_BASE64 != ''
+        if: env.IOS_CERTIFICATE_BASE64 != ''
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
@@ -464,7 +524,7 @@ jobs:
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
 
       - name: Configure manual signing for CI
-        if: steps.check_ios.outputs.enabled == 'true' && env.IOS_CERTIFICATE_BASE64 != ''
+        if: env.IOS_CERTIFICATE_BASE64 != ''
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
         working-directory: ${{ env.PLAYER_PATH }}/ios
@@ -487,21 +547,21 @@ jobs:
           EOF
 
       - name: Build iOS (unsigned)
-        if: steps.check_ios.outputs.enabled == 'true' && env.IOS_CERTIFICATE_BASE64 == ''
+        if: env.IOS_CERTIFICATE_BASE64 == ''
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ios --release --no-codesign
 
       - name: Build iOS (signed)
-        if: steps.check_ios.outputs.enabled == 'true' && env.IOS_CERTIFICATE_BASE64 != ''
+        if: env.IOS_CERTIFICATE_BASE64 != ''
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ios --release
 
       - name: Setup Ruby for Fastlane
-        if: steps.check_ios.outputs.enabled == 'true' && env.APP_STORE_CONNECT_API_KEY_ID != ''
+        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
         uses: ruby/setup-ruby@v1
@@ -511,7 +571,7 @@ jobs:
           working-directory: ${{ env.PLAYER_PATH }}/ios
 
       - name: Upload to TestFlight
-        if: steps.check_ios.outputs.enabled == 'true' && env.APP_STORE_CONNECT_API_KEY_ID != ''
+        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -520,7 +580,7 @@ jobs:
         run: bundle exec fastlane beta
 
       - name: Cleanup keychain
-        if: always() && steps.check_ios.outputs.enabled == 'true'
+        if: always()
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
@@ -531,19 +591,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Check platform support
-        id: check_macos
-        run: |
-          if [ -d "${{ env.PLAYER_PATH }}/macos" ]; then
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "enabled=false" >> $GITHUB_OUTPUT
-            echo "macOS platform not configured yet. Skipping build."
-          fi
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Setup Flutter
-        if: steps.check_macos.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -551,7 +602,6 @@ jobs:
           cache: true
 
       - name: Update version
-        if: steps.check_macos.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
@@ -559,22 +609,19 @@ jobs:
           sed -i '' "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
 
       - name: Install dependencies
-        if: steps.check_macos.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub get
 
       - name: Run code generation
-        if: steps.check_macos.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
 
       - name: Build macOS
-        if: steps.check_macos.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build macos --release
 
       - name: Install signing certificate
-        if: steps.check_macos.outputs.enabled == 'true' && env.MACOS_CERTIFICATE != ''
+        if: env.MACOS_CERTIFICATE != ''
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         run: |
@@ -594,7 +641,7 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
       - name: Sign app bundle
-        if: steps.check_macos.outputs.enabled == 'true' && env.MACOS_CERTIFICATE != ''
+        if: env.MACOS_CERTIFICATE != ''
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         run: |
@@ -618,7 +665,7 @@ jobs:
           fi
 
       - name: Notarize app bundle
-        if: steps.check_macos.outputs.enabled == 'true' && env.MACOS_CERTIFICATE != ''
+        if: env.MACOS_CERTIFICATE != ''
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
@@ -632,14 +679,13 @@ jobs:
           rm "Mydia Player.zip"
 
       - name: Staple notarization ticket
-        if: steps.check_macos.outputs.enabled == 'true' && env.MACOS_CERTIFICATE != ''
+        if: env.MACOS_CERTIFICATE != ''
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         run: |
           xcrun stapler staple "${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
 
       - name: Create DMG
-        if: steps.check_macos.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
         run: |
           # Create a temporary directory for DMG contents
@@ -655,14 +701,13 @@ jobs:
           rm -rf dmg_contents
 
       - name: Download Sparkle tools
-        if: steps.check_macos.outputs.enabled == 'true'
         run: |
           curl -L https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz -o sparkle.tar.xz
           mkdir -p sparkle-tools
           tar xf sparkle.tar.xz -C sparkle-tools
 
       - name: Generate appcast
-        if: steps.check_macos.outputs.enabled == 'true' && env.SPARKLE_EDDSA_KEY != ''
+        if: env.SPARKLE_EDDSA_KEY != ''
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
@@ -710,7 +755,7 @@ jobs:
           EOF
 
       - name: Validate appcast
-        if: steps.check_macos.outputs.enabled == 'true' && env.SPARKLE_EDDSA_KEY != ''
+        if: env.SPARKLE_EDDSA_KEY != ''
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
@@ -753,7 +798,6 @@ jobs:
           echo "appcast.xml validated (well-formed, single signature/length, sparkle:version=$sparkle_version)"
 
       - name: Upload DMG artifact
-        if: steps.check_macos.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: mydia-player-macos-dmg
@@ -761,7 +805,7 @@ jobs:
           retention-days: 30
 
       - name: Upload appcast artifact
-        if: steps.check_macos.outputs.enabled == 'true' && env.SPARKLE_EDDSA_KEY != ''
+        if: env.SPARKLE_EDDSA_KEY != ''
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         uses: actions/upload-artifact@v4
@@ -781,20 +825,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Check platform support
-        id: check_windows
-        shell: bash
-        run: |
-          if [ -d "${{ env.PLAYER_PATH }}/windows" ]; then
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "enabled=false" >> $GITHUB_OUTPUT
-            echo "Windows platform not configured yet. Skipping build."
-          fi
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Setup Flutter
-        if: steps.check_windows.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -802,7 +836,6 @@ jobs:
           cache: true
 
       - name: Update version
-        if: steps.check_windows.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         shell: bash
         run: |
@@ -811,29 +844,24 @@ jobs:
           sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
 
       - name: Install dependencies
-        if: steps.check_windows.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub get
 
       - name: Run code generation
-        if: steps.check_windows.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
 
       - name: Build Windows
-        if: steps.check_windows.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build windows --release
 
       - name: Build installer
-        if: steps.check_windows.outputs.enabled == 'true'
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
         with:
           path: player/windows/installer.iss
           options: /DMyAppVersion=${{ needs.prepare.outputs.version }}
 
       - name: Upload artifact
-        if: steps.check_windows.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: mydia-player-windows-installer
@@ -847,19 +875,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Check platform support
-        id: check_linux
-        run: |
-          if [ -d "${{ env.PLAYER_PATH }}/linux" ]; then
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "enabled=false" >> $GITHUB_OUTPUT
-            echo "Linux platform not configured yet. Skipping build."
-          fi
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Install system dependencies
-        if: steps.check_linux.outputs.enabled == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -873,7 +892,6 @@ jobs:
             libmpv-dev
 
       - name: Setup Flutter
-        if: steps.check_linux.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -881,7 +899,6 @@ jobs:
           cache: true
 
       - name: Update version
-        if: steps.check_linux.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
@@ -889,22 +906,18 @@ jobs:
           sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
 
       - name: Install dependencies
-        if: steps.check_linux.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub get
 
       - name: Run code generation
-        if: steps.check_linux.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
 
       - name: Build Linux
-        if: steps.check_linux.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build linux --release
 
       - name: Upload artifact
-        if: steps.check_linux.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: mydia-player-linux-bundle
@@ -913,11 +926,12 @@ jobs:
 
   publish:
     name: Publish Release
-    if: always() && needs.prepare.result == 'success'
+    # always() so this job runs even when a platform failed, and can report
+    # which one. The gate below decides whether it proceeds.
+    if: always() && needs.prepare.result == 'success' && !inputs.dry_run
     needs:
       - prepare
       - docker-merge
-      - player-web
       - player-android
       - player-ios
       - player-macos
@@ -927,6 +941,72 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Require every platform to have built
+        id: gate
+        env:
+          ALLOW_MISSING: ${{ inputs.allow_missing }}
+          RESULT_DOCKER: ${{ needs.docker-merge.result }}
+          RESULT_ANDROID: ${{ needs.player-android.result }}
+          RESULT_IOS: ${{ needs.player-ios.result }}
+          RESULT_MACOS: ${{ needs.player-macos.result }}
+          RESULT_WINDOWS: ${{ needs.player-windows.result }}
+          RESULT_LINUX: ${{ needs.player-linux.result }}
+        run: |
+          set -euo pipefail
+
+          # Publishing used to happen regardless of platform outcome, so a
+          # failed Windows build shipped a release quietly missing its
+          # installer. Every platform must now succeed, or be waived by name.
+          WAIVED=",$(echo "$ALLOW_MISSING" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'),"
+
+          # Join array elements with ", ". ${arr[*]} only ever uses the first
+          # character of IFS, so a two-character separator cannot be done that
+          # way.
+          join() { printf '%s, ' "$@" | sed 's/, $//'; }
+
+          FAILED=()
+          FAILED_NAMES=()
+          WAIVED_LIST=()
+          WAIVED_NAMES=()
+          for entry in \
+            "docker:$RESULT_DOCKER" \
+            "android:$RESULT_ANDROID" \
+            "ios:$RESULT_IOS" \
+            "macos:$RESULT_MACOS" \
+            "windows:$RESULT_WINDOWS" \
+            "linux:$RESULT_LINUX"; do
+            name="${entry%%:*}"
+            result="${entry#*:}"
+            [ "$result" = "success" ] && continue
+            if [[ "$WAIVED" == *",${name},"* ]]; then
+              WAIVED_LIST+=("${name} (${result})")
+              WAIVED_NAMES+=("${name}")
+            else
+              FAILED+=("${name} (${result})")
+              FAILED_NAMES+=("${name}")
+            fi
+          done
+
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            # The suggestion carries the already-waived platforms too, so that
+            # pasting it does not silently drop an existing waiver.
+            SUGGEST=$(IFS=','; echo "${FAILED_NAMES[*]}${WAIVED_NAMES[*]:+,${WAIVED_NAMES[*]}}")
+            printf '::error::Refusing to publish: %s did not succeed. Re-run the failed jobs, or re-dispatch with -f allow_missing=%s to ship without them.\n' \
+              "$(join "${FAILED[@]}")" "$SUGGEST" >&2
+            exit 1
+          fi
+
+          if [ ${#WAIVED_LIST[@]} -gt 0 ]; then
+            NOTE="Published without: $(join "${WAIVED_LIST[@]}")"
+            echo "::warning::${NOTE}"
+            {
+              echo "### Waived platforms"
+              echo
+              echo "$NOTE"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "note=${NOTE}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -1040,17 +1120,31 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+          WAIVER: ${{ steps.gate.outputs.note }}
         run: |
+          set -euo pipefail
+
+          # A waived platform means the release ships without one of its
+          # assets. Record that on the release itself, so the gap is visible
+          # to anyone who lands on the page rather than only in the run log.
+          if [ -n "$WAIVER" ]; then
+            BODY=$(gh release view "$TAG" --repo "$REPO" --json body --jq '.body')
+            printf '%s\n\n---\n\n> **Incomplete release.** %s\n' "$BODY" "$WAIVER" \
+              | gh release edit "$TAG" --repo "$REPO" --notes-file -
+          fi
+
           gh release edit "${TAG}" \
             --draft=false \
-            --repo "${{ github.repository }}"
+            --repo "$REPO"
 
-          echo "Released: https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+          echo "Released: https://github.com/${REPO}/releases/tag/${TAG} (${SHA})"
 
   docs:
     name: Deploy Docs
-    if: needs.prepare.outputs.is_prerelease == 'false'
+    if: needs.prepare.outputs.is_prerelease == 'false' && !inputs.dry_run
     needs:
       - prepare
       - publish
@@ -1062,6 +1156,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4

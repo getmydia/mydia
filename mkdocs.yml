@@ -92,6 +92,7 @@ nav:
       - E2E Testing: development/e2e-testing.md
       - Architecture: development/architecture.md
       - CI Builds: development/ci-artifacts.md
+      - Releasing: development/releasing.md
 
 extra:
   version:
