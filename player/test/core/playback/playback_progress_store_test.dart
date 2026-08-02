@@ -3,7 +3,10 @@
 // offline, and `DownloadedMedia` has no position field. Without this store
 // there is nothing for an offline resume prompt to offer.
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 
@@ -89,6 +92,92 @@ void main() {
       final store = InMemoryPlaybackProgressStore();
       await store.markSynced('ghost', DateTime.utc(2026, 8, 2, 14));
       expect(store.get('ghost'), isNull);
+    });
+  });
+
+  group('HivePlaybackProgressStore', () {
+    late Directory tempDir;
+    late Box<Map> box;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('playback_store_test');
+      Hive.init(tempDir.path);
+      box = await Hive.openBox<Map>('playback_progress_test');
+    });
+
+    tearDown(() async {
+      await box.deleteFromDisk();
+      await Hive.close();
+      await tempDir.delete(recursive: true);
+    });
+
+    test('save then get round-trips through a real box', () async {
+      final store = HivePlaybackProgressStore(box);
+      await store.save(
+        progress(positionSeconds: 900, updatedAt: DateTime.utc(2026, 8, 2, 12)),
+      );
+
+      final loaded = store.get('movie-1');
+
+      expect(loaded, isNotNull);
+      expect(loaded!.mediaId, 'movie-1');
+      expect(loaded.mediaType, 'movie');
+      expect(loaded.positionSeconds, 900);
+      expect(loaded.durationSeconds, 5400);
+      expect(loaded.updatedAt, DateTime.utc(2026, 8, 2, 12));
+      expect(loaded.syncedAt, isNull);
+    });
+
+    test('a record with syncedAt set also round-trips', () async {
+      final store = HivePlaybackProgressStore(box);
+      await store.save(progress(syncedAt: DateTime.utc(2026, 8, 2, 13)));
+
+      expect(store.get('movie-1')?.syncedAt, DateTime.utc(2026, 8, 2, 13));
+    });
+
+    test('unsynced reads only unsynced records from a real box', () async {
+      final store = HivePlaybackProgressStore(box);
+      await store.save(progress(mediaId: 'a'));
+      await store.save(
+        progress(mediaId: 'b', syncedAt: DateTime.utc(2026, 8, 2, 13)),
+      );
+
+      expect(store.unsynced().map((p) => p.mediaId), ['a']);
+    });
+
+    test('markSynced persists to the real box', () async {
+      final store = HivePlaybackProgressStore(box);
+      await store.save(progress(mediaId: 'a', positionSeconds: 600));
+
+      await store.markSynced('a', DateTime.utc(2026, 8, 2, 14));
+
+      // Read back through a fresh store instance wrapping the same box, to
+      // prove the write landed in the box itself rather than in some
+      // instance-level cache the store does not actually have.
+      final reloaded = HivePlaybackProgressStore(box).get('a');
+      expect(reloaded?.syncedAt, DateTime.utc(2026, 8, 2, 14));
+      expect(
+        reloaded?.positionSeconds,
+        600,
+        reason: 'marking synced must not disturb the position',
+      );
+    });
+
+    test('a malformed record is discarded rather than crashing the store',
+        () async {
+      await box.put('bad', {'nonsense': true});
+
+      final store = HivePlaybackProgressStore(box);
+      expect(store.get('bad'), isNull);
+
+      // get() is deliberately synchronous; the malformed-record cleanup
+      // fires an unawaited delete underneath it. Give that a moment to land
+      // before checking the box was actually cleaned up rather than just
+      // reporting null this one time.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(store.get('bad'), isNull);
+      expect(store.unsynced(), isEmpty);
     });
   });
 
