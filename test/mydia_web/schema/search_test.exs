@@ -190,7 +190,9 @@ defmodule MydiaWeb.Schema.SearchTest do
     assert {:ok, %{errors: [%{message: message}]}} =
              run_query(@search_query, %{"query" => "alien"})
 
-    assert message =~ "unauthenticated"
+    # Root-field middleware rejects before the resolver runs, so the unified
+    # "Authentication required" message is the expected one now.
+    assert message =~ "Authentication required" or message =~ "unauthenticated"
   end
 
   test "another user's private collection is not reachable through the API", %{user: user} do

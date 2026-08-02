@@ -61,16 +61,26 @@ defmodule Mydia.RemoteAccess.Pairing do
   Generates a JWT access token for the device's user.
   """
   def generate_access_token(device) do
-    # Preload user if not already loaded
-    device = Mydia.Repo.preload(device, :user)
-
-    case Guardian.encode_and_sign(device.user, %{
-           "device_id" => device.id,
-           "typ" => "access"
-         }) do
+    case generate_access_token_with_claims(device) do
       {:ok, token, _claims} -> token
       {:error, reason} -> raise "Failed to generate access token: #{inspect(reason)}"
     end
+  end
+
+  @doc """
+  Generates a JWT access token for the device's user, returning the claims too.
+
+  Used by the token refresh flow, which needs the expiry to hand back to the
+  client and must report failures rather than raising.
+  """
+  def generate_access_token_with_claims(device) do
+    # Preload user if not already loaded
+    device = Mydia.Repo.preload(device, :user)
+
+    Guardian.encode_and_sign(device.user, %{
+      "device_id" => device.id,
+      "typ" => "access"
+    })
   end
 
   # Generates a unique device token

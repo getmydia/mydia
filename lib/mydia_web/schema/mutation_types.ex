@@ -86,6 +86,12 @@ defmodule MydiaWeb.Schema.MutationTypes do
       resolve(&RemoteAccessResolver.refresh_media_token/3)
     end
 
+    @desc "Exchange a pairing device token for a fresh access token"
+    field :refresh_access_token, :access_token do
+      arg(:device_token, non_null(:string))
+      resolve(&RemoteAccessResolver.refresh_access_token/3)
+    end
+
     @desc "Generate a pairing claim code for device pairing (requires authentication)"
     field :generate_claim_code, :claim_code do
       resolve(&RemoteAccessResolver.generate_claim_code/3)

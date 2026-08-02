@@ -3,8 +3,11 @@ defmodule MydiaWeb.Schema.Resolvers.RemoteAccessResolver do
   Resolvers for remote access GraphQL mutations (media token management).
   """
 
+  require Logger
+
   alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.MediaToken
+  alias Mydia.RemoteAccess.Pairing
 
   @doc """
   Generates a pairing claim code for the current user.
@@ -89,6 +92,31 @@ defmodule MydiaWeb.Schema.Resolvers.RemoteAccessResolver do
 
       {:error, reason} ->
         {:error, "Failed to refresh token: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Exchanges a long-lived pairing device token for a fresh access token.
+
+  Access tokens expire after the configured Guardian TTL while the device pairing
+  itself does not, so without this a paired player silently drops to unauthenticated
+  once its token ages out and has to be re-paired by hand. Deliberately requires no
+  authentication: the device token is the proof of identity, the same way
+  `refresh_media_token/3` trusts the media token.
+  """
+  def refresh_access_token(_parent, %{device_token: device_token}, _context) do
+    with {:ok, device} <- RemoteAccess.verify_device_token(device_token),
+         {:ok, token, claims} <- Pairing.generate_access_token_with_claims(device) do
+      RemoteAccess.touch_device(device)
+
+      {:ok, %{token: token, expires_at: DateTime.from_unix!(claims["exp"])}}
+    else
+      {:error, :not_found} ->
+        {:error, "Invalid or revoked device token"}
+
+      {:error, reason} ->
+        Logger.warning("Failed to refresh access token: #{inspect(reason)}")
+        {:error, "Failed to refresh access token"}
     end
   end
 end

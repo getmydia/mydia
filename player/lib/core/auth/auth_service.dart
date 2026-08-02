@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:graphql/client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,9 +47,8 @@ class AuthService {
   /// Store the server URL.
   Future<void> setServerUrl(String url) async {
     // Ensure URL doesn't have trailing slash
-    final normalizedUrl = url.endsWith('/')
-        ? url.substring(0, url.length - 1)
-        : url;
+    final normalizedUrl =
+        url.endsWith('/') ? url.substring(0, url.length - 1) : url;
     await _storage.write(_serverUrlKey, normalizedUrl);
   }
 
@@ -86,9 +86,8 @@ class AuthService {
   /// Store a custom relay URL.
   Future<void> setRelayUrl(String url) async {
     // Ensure URL doesn't have trailing slash
-    final normalizedUrl = url.endsWith('/')
-        ? url.substring(0, url.length - 1)
-        : url;
+    final normalizedUrl =
+        url.endsWith('/') ? url.substring(0, url.length - 1) : url;
     await _storage.write(_relayUrlKey, normalizedUrl);
   }
 
@@ -190,9 +189,8 @@ class AuthService {
         throw Exception('Login failed: $errorMessage');
       }
 
-      final mutation = result.data != null
-          ? Mutation$Login.fromJson(result.data!)
-          : null;
+      final mutation =
+          result.data != null ? Mutation$Login.fromJson(result.data!) : null;
       final loginData = mutation?.login;
       if (loginData == null) {
         throw Exception('No data returned from login mutation');
@@ -290,18 +288,105 @@ class AuthService {
     }
   }
 
-  /// Refresh the authentication token.
+  /// Storage key for the durable device token handed out during pairing.
   ///
-  /// Note: The current Mydia backend uses Guardian JWT tokens which don't have
-  /// a built-in refresh mechanism. This method is a placeholder for future
-  /// implementation if token refresh is added to the backend.
+  /// Written by `PairingService`; survives access token expiry, which is what
+  /// makes unattended refresh possible.
+  static const _deviceTokenKey = 'pairing_device_token';
+
+  /// Mutation that trades the pairing device token for a fresh access token.
   ///
-  /// For now, it returns null to indicate that token refresh is not supported.
-  /// When a 401 occurs, the app should redirect to login.
+  /// Deliberately unauthenticated on the server: the device token is the proof
+  /// of identity. Written as a raw document so it works over both the HTTP
+  /// client and the P2P link without depending on codegen output.
+  static const refreshAccessTokenMutation = r'''
+mutation RefreshAccessToken($deviceToken: String!) {
+  refreshAccessToken(deviceToken: $deviceToken) {
+    token
+    expiresAt
+  }
+}
+''';
+
+  /// Get the durable pairing device token, if this client was paired.
+  Future<String?> getDeviceToken() async {
+    return await _storage.read(_deviceTokenKey);
+  }
+
+  /// Refresh the access token over HTTP (direct connection mode).
+  ///
+  /// Access tokens expire well before a pairing does, so without this a paired
+  /// client silently drops to unauthenticated and every gated request fails.
+  /// Returns the new token, or null when the client cannot re-authenticate on
+  /// its own and the user has to pair again.
   Future<String?> refreshToken() async {
-    // TODO: Implement token refresh when backend supports it
-    // For now, Guardian tokens need re-authentication
-    return null;
+    final deviceToken = await getDeviceToken();
+    final serverUrl = await getServerUrl();
+
+    if (deviceToken == null || serverUrl == null) return null;
+
+    try {
+      // No auth on this client: the mutation is intentionally public.
+      final client = createGraphQLClient(serverUrl, null);
+
+      final result = await client.mutate(
+        MutationOptions(
+          document: gql(refreshAccessTokenMutation),
+          variables: {'deviceToken': deviceToken},
+          fetchPolicy: FetchPolicy.noCache,
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint(
+            '[AuthService] Access token refresh failed: ${result.exception}');
+        return null;
+      }
+
+      return await _storeRefreshedToken(result.data);
+    } catch (e) {
+      debugPrint('[AuthService] Access token refresh error: $e');
+      return null;
+    }
+  }
+
+  /// Refresh the access token over an arbitrary transport.
+  ///
+  /// The P2P link owns its own transport, so it supplies [send] rather than
+  /// having this service reach into the P2P stack. [send] receives the mutation
+  /// document and variables and returns the decoded `data` map.
+  Future<String?> refreshTokenVia(
+    Future<Map<String, dynamic>> Function(
+      String query,
+      Map<String, dynamic> variables,
+    ) send,
+  ) async {
+    final deviceToken = await getDeviceToken();
+    if (deviceToken == null) return null;
+
+    try {
+      final data = await send(
+        refreshAccessTokenMutation,
+        {'deviceToken': deviceToken},
+      );
+      return await _storeRefreshedToken(data);
+    } catch (e) {
+      debugPrint('[AuthService] Access token refresh error: $e');
+      return null;
+    }
+  }
+
+  /// Persist a refreshed access token so later requests pick it up.
+  Future<String?> _storeRefreshedToken(Map<String, dynamic>? data) async {
+    final payload = data?['refreshAccessToken'];
+    if (payload is! Map) return null;
+
+    final token = payload['token'];
+    if (token is! String || token.isEmpty) return null;
+
+    await setToken(token);
+    debugPrint('[AuthService] Access token refreshed');
+    return token;
   }
 
   /// Verify the current token is still valid by making a test API call.

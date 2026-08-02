@@ -22,18 +22,28 @@ const _baseBackoff = Duration(seconds: 1);
 ///
 /// Includes automatic retry with exponential backoff for transient connection
 /// errors. Between retries, it calls [ensureConnected] to re-dial the peer.
+/// Server error text returned when a request carries no valid access token.
+///
+/// Access tokens outlive nothing in particular: they expire on the server's
+/// Guardian TTL while the pairing itself stays valid, so this is an expected
+/// condition to recover from rather than a fatal one.
+const _authErrorMarker = 'Authentication required';
+
 class P2pGraphQLLink extends Link {
   final P2pService _p2pService;
   final String _serverNodeId;
   final Future<String?> Function() _getAuthToken;
+  final Future<String?> Function()? _refreshAuthToken;
 
   P2pGraphQLLink({
     required P2pService p2pService,
     required String serverNodeId,
     required Future<String?> Function() getAuthToken,
+    Future<String?> Function()? refreshAuthToken,
   })  : _p2pService = p2pService,
         _serverNodeId = serverNodeId,
-        _getAuthToken = getAuthToken;
+        _getAuthToken = getAuthToken,
+        _refreshAuthToken = refreshAuthToken;
 
   @override
   Stream<Response> request(Request request, [NextLink? forward]) async* {
@@ -49,7 +59,7 @@ class P2pGraphQLLink extends Link {
       debugPrint('[P2pGraphQLLink] Sending request: $operationName');
 
       // Attempt the request with retries on connection errors
-      final responseData = await _sendWithRetry(
+      final responseData = await _sendWithAuthRecovery(
         query: query,
         operationName: operationName,
         variables: variables.isNotEmpty ? variables : null,
@@ -80,6 +90,52 @@ class P2pGraphQLLink extends Link {
       );
     }
   }
+
+  /// Send a request, refreshing the access token once if the server rejects it.
+  ///
+  /// A paired client keeps a durable device token, so an expired access token is
+  /// recoverable without user involvement. Without this the client would stay
+  /// permanently unauthenticated until someone re-paired it by hand.
+  Future<Map<String, dynamic>> _sendWithAuthRecovery({
+    required String query,
+    String? operationName,
+    Map<String, dynamic>? variables,
+    String? authToken,
+  }) async {
+    try {
+      return await _sendWithRetry(
+        query: query,
+        operationName: operationName,
+        variables: variables,
+        authToken: authToken,
+      );
+    } catch (e) {
+      final refresh = _refreshAuthToken;
+      if (refresh == null || !_isAuthError(e)) rethrow;
+
+      debugPrint('[P2pGraphQLLink] Access token rejected, refreshing');
+      final refreshed = await refresh();
+
+      if (refreshed == null) {
+        debugPrint('[P2pGraphQLLink] Refresh failed, device must pair again');
+        rethrow;
+      }
+
+      return await _sendWithRetry(
+        query: query,
+        operationName: operationName,
+        variables: variables,
+        authToken: refreshed,
+      );
+    }
+  }
+
+  /// Whether the server rejected the request for lack of a valid token.
+  ///
+  /// Matches on the message because the P2P transport surfaces GraphQL errors as
+  /// plain [Exception]s with no structured error code to key off.
+  static bool _isAuthError(Object error) =>
+      error.toString().contains(_authErrorMarker);
 
   /// Send a GraphQL request with automatic retry on connection errors.
   ///
@@ -163,15 +219,19 @@ class P2pGraphQLLink extends Link {
 /// [p2pService] - The P2P service instance for sending requests
 /// [serverNodeId] - The node ID of the Mydia server to connect to
 /// [getAuthToken] - A function that returns the current auth token
+/// [refreshAuthToken] - Mints a fresh access token when the server rejects the
+/// current one, returning null if the device has to pair again
 GraphQLClient createP2pGraphQLClient({
   required P2pService p2pService,
   required String serverNodeId,
   required Future<String?> Function() getAuthToken,
+  Future<String?> Function()? refreshAuthToken,
 }) {
   final link = P2pGraphQLLink(
     p2pService: p2pService,
     serverNodeId: serverNodeId,
     getAuthToken: getAuthToken,
+    refreshAuthToken: refreshAuthToken,
   );
 
   return GraphQLClient(

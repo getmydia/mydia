@@ -78,7 +78,10 @@ defmodule MydiaWeb.Schema.ApiKeyTest do
       result = run_query(@list_api_keys_query, %{})
 
       assert {:ok, %{errors: [%{message: message}]}} = result
-      assert message =~ "unauthorized" or message =~ "not authenticated"
+      # Root-field middleware rejects before the resolver runs, so the unified
+      # "Authentication required" message is the expected one now.
+      assert message =~ "Authentication required" or message =~ "unauthorized" or
+               message =~ "not authenticated"
     end
   end
 
@@ -140,7 +143,10 @@ defmodule MydiaWeb.Schema.ApiKeyTest do
       result = run_query(@create_api_key_mutation, variables)
 
       assert {:ok, %{errors: [%{message: message}]}} = result
-      assert message =~ "unauthorized" or message =~ "not authenticated"
+      # Root-field middleware rejects before the resolver runs, so the unified
+      # "Authentication required" message is the expected one now.
+      assert message =~ "Authentication required" or message =~ "unauthorized" or
+               message =~ "not authenticated"
     end
 
     test "rejects invalid permissions", %{user: user} do
@@ -177,7 +183,10 @@ defmodule MydiaWeb.Schema.ApiKeyTest do
       result = run_query(@revoke_api_key_mutation, variables)
 
       assert {:ok, %{errors: [%{message: message}]}} = result
-      assert message =~ "unauthorized" or message =~ "not authenticated"
+      # Root-field middleware rejects before the resolver runs, so the unified
+      # "Authentication required" message is the expected one now.
+      assert message =~ "Authentication required" or message =~ "unauthorized" or
+               message =~ "not authenticated"
     end
 
     test "prevents revoking another user's key" do
@@ -215,7 +224,10 @@ defmodule MydiaWeb.Schema.ApiKeyTest do
       result = run_query(@delete_api_key_mutation, variables)
 
       assert {:ok, %{errors: [%{message: message}]}} = result
-      assert message =~ "unauthorized" or message =~ "not authenticated"
+      # Root-field middleware rejects before the resolver runs, so the unified
+      # "Authentication required" message is the expected one now.
+      assert message =~ "Authentication required" or message =~ "unauthorized" or
+               message =~ "not authenticated"
     end
 
     test "prevents deleting another user's key" do
