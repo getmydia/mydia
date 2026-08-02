@@ -302,22 +302,22 @@ that should land in the plugin's activity log. It is ungated and fire-and-forget
 ## Build a two-way sync plugin
 
 **Goal:** keep mydia's watched state in sync with a third-party service per user,
-on a schedule and reactively — the shape the bundled **Simkl** plugin
+on a schedule and reactively: the shape the bundled **Simkl** plugin
 (`plugins/simkl_sync`) implements. Read its `src/lib.rs` for the complete, tested
 version; this recipe is the skeleton and the invariants that matter.
 
 The surfaces a sync plugin uses:
 
-- `users:connections` + a manifest `connection` descriptor — the host runs the
+- `users:connections` + a manifest `connection` descriptor: the host runs the
   OAuth flow and holds each user's token; you get `connections-list` (identity +
   status) and `connection-request` (authenticated calls, token injected
   host-side).
-- `schedule:interval` + `on-schedule` — a periodic full sync.
-- `events:subscribe: ["playback.finished"]` — react to a fresh local watch.
-- `state:kv` — watermarks, cursors, and an echo-guard set, **keyed per
+- `schedule:interval` + `on-schedule`: a periodic full sync.
+- `events:subscribe: ["playback.finished"]` (react to a fresh local watch).
+- `state:kv`: watermarks, cursors, and an echo-guard set, **keyed per
   connection** under `conn/<connection-id>/...` so reconnecting a different
   account starts clean.
-- `data:read playback_progress` + `surfaces:write playback:watched` — read what
+- `data:read playback_progress` + `surfaces:write playback:watched`: read what
   the user watched locally; mark what the service says they watched.
 
 ```rust
@@ -344,7 +344,7 @@ wall-clock; there is no fuel metering):
    checkpoint keeps the item out of the push even though the local write hasn't
    landed; the next run re-applies it (`ensure-watched` is idempotent).
 2. **Push is at-least-once.** `kv-set` the pending batch before you POST, clear
-   it after. A kill in between re-sends next run — a duplicate history entry is
+   it after. A kill in between re-sends next run: a duplicate history entry is
    benign; a lost watch is not.
 3. **Never echo.** An item you just pulled from the service must not be pushed
    back. Exclude anything in the pulled-set from the push batch.
@@ -352,7 +352,7 @@ wall-clock; there is no fuel metering):
 Keep watermarks anchored to the **service's** timestamps (never local `now()`),
 per user, per direction, so a clock skew or a re-run never re-syncs the world.
 
-A reactive `playback.finished` handler (origin `player` only — your own
+A reactive `playback.finished` handler (origin `player` only: your own
 write-backs are already suppressed) can push that single watch immediately; the
 scheduler's single-flight serializes it against a running sync so your KV state
 never interleaves.

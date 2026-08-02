@@ -112,7 +112,7 @@ DOWNLOAD_CLIENT_8_WATCH_FOLDER=/downloads/watch
 DOWNLOAD_CLIENT_8_COMPLETED_FOLDER=/downloads/complete
 ```
 
-Every client needs a `_NAME` — Mydia discovers clients by their `_NAME`
+Every client needs a `_NAME`: Mydia discovers clients by their `_NAME`
 variable, so a block without one is silently ignored.
 
 ## Configuration Options
@@ -146,7 +146,7 @@ rqbit supports torrents only. It does not support categories, labels, tags, or U
 
 ## Debrid
 
-Debrid clients connect to a hosted debrid service instead of a self-hosted daemon, so they need no host or port — only an API key and a provider.
+Debrid clients connect to a hosted debrid service instead of a self-hosted daemon, so they need no host or port, only an API key and a provider.
 
 Use these values when adding a debrid client:
 
@@ -160,7 +160,7 @@ A debrid provider can accept one release and still fail to fetch another: a subm
 
 ## Blackhole
 
-A blackhole client writes `.torrent` files into a watched folder for a separate torrent client to pick up, then detects finished downloads in a completed folder. It uses no host or port — only the two folder paths.
+A blackhole client writes `.torrent` files into a watched folder for a separate torrent client to pick up, then detects finished downloads in a completed folder. It uses no host or port, only the two folder paths.
 
 Use these values when adding a blackhole client:
 

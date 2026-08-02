@@ -6,6 +6,26 @@ repo_name: getmydia/mydia
 docs_dir: docs
 site_dir: _site
 
+# Planning artifacts live under docs/ but must never be published.
+# MkDocs builds every .md in docs_dir regardless of nav, so excluding
+# them here is what keeps local builds matching CI.
+exclude_docs: |
+  plans/
+  brainstorms/
+  research/
+  solutions/
+  superpowers/
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
 theme:
   name: material
   custom_dir: docs/overrides

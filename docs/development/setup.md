@@ -4,20 +4,20 @@ Set up a local development environment for Mydia.
 
 The local developer environment is built on [devenv.sh](https://devenv.sh) (a
 Nix-based, declarative dev environment) and auto-loaded per git worktree via
-[direnv](https://direnv.net). The daily loop — Phoenix server, `mix test`,
-`mix precommit`, Flutter codegen — runs **natively** (no Docker dev container).
+[direnv](https://direnv.net). The daily loop (Phoenix server, `mix test`,
+`mix precommit`, Flutter codegen) runs **natively** (no Docker dev container).
 Each worktree derives its own non-colliding ports and isolated state, so several
 worktrees can run their full stacks at once.
 
 > Docker is still used for the production image (`Dockerfile`), the player E2E
-> stack (`compose.player-e2e.yml`), and the metadata-relay deploy — but **not**
+> stack (`compose.player-e2e.yml`), and the metadata-relay deploy, but **not**
 > for day-to-day development.
 
 ## Prerequisites
 
-- **Nix** — https://nixos.org/download (the Determinate Systems installer works well)
-- **devenv** — `nix profile install nixpkgs#devenv`
-- **direnv** — https://direnv.net (install + hook into your shell)
+- **Nix**: https://nixos.org/download (the Determinate Systems installer works well)
+- **devenv**: `nix profile install nixpkgs#devenv`
+- **direnv**: https://direnv.net (install + hook into your shell)
 - **Git**
 
 Your user must be a Nix **trusted user** (devenv requires it). If `devenv shell`
@@ -47,7 +47,7 @@ direnv allow
 On shell entry devenv prints this worktree's assigned URL and ports, e.g.:
 
 ```
-Mydia dev environment (devenv) — /home/you/mydia
+Mydia dev environment (devenv): /home/you/mydia
   Phoenix:   http://localhost:4740
   P2P bind:  4741
   Flutter:   dev-server port 4743
@@ -137,7 +137,7 @@ Database → Tests, with a compact per-step summary.
 Pre-commit hooks are managed by devenv (`git-hooks.hooks` in `devenv.nix`) and
 installed automatically when you enter the shell. They lint Rust (cargo
 fmt/clippy against the pinned 1.96.0 toolchain), the WASM plugin guests, and
-Elixir/Dart formatting — no `nix develop` needed. devenv owns the generated
+Elixir/Dart formatting. No `nix develop` needed. devenv owns the generated
 `.pre-commit-config.yaml` (git-ignored); edit `devenv.nix` to change hooks.
 
 ## Player (Flutter)
@@ -161,7 +161,7 @@ Android builds use the player's own Nix flake (not devenv):
 ./dev player android shell   # nix develop shell in player/
 ```
 
-macOS app builds use the host toolchain (not devenv, not the flake) — Xcode and
+macOS app builds use the host toolchain (not devenv, not the flake): Xcode and
 CocoaPods are Apple-licensed SDKs Nix cannot provide, and cargokit builds the
 Rust p2p core via `rustup`:
 

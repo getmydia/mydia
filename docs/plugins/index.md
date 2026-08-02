@@ -10,7 +10,7 @@ someone finishes watching something, Mydia hands the event to your plugin and
 lets it do something useful: post a notification, call an external API, enrich
 the event with library data. Plugins can also run on a fixed schedule, keep a
 little durable state, link a per-user third-party account, and sync watched
-state both ways — the bundled Simkl plugin does all of this.
+state both ways. The bundled Simkl plugin does all of this.
 
 A plugin is a WebAssembly **component** written in Rust against the published
 `mydia-plugin-sdk` crate. You write one typed handler function; the SDK turns it

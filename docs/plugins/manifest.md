@@ -58,7 +58,7 @@ install time. A plugin can never widen its own grant at runtime.
 | `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`). Returns a curated, read-only projection. |
 | `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched` (the `ensure-watched` host function). |
 | `state:kv` | A small per-plugin key/value store that survives across invocations (watermarks, cursors, dedupe sets). |
-| `users:connections` | Per-user third-party connections the host holds on the plugin's behalf. **Cross-user** — see below. |
+| `users:connections` | Per-user third-party connections the host holds on the plugin's behalf. **Cross-user**: see below. |
 | `schedule:interval` | Lets the plugin run on a fixed interval via `on-schedule`. Paired with the `schedule` descriptor. |
 
 The event catalog for `events:subscribe`:
@@ -70,9 +70,9 @@ The event catalog for `events:subscribe`:
 - `download.completed`
 - `download.failed`
 - `playback.started`
-- `playback.progressed` — sampled: the host emits at most one per 5% completion bucket, so a burst of position updates yields a single event.
-- `playback.paused` — in the catalog; not yet emitted (no player pause signal).
-- `playback.finished` — the unwatched→watched edge (the 90% auto-mark, an explicit mark-watched, or a sync write).
+- `playback.progressed` (sampled): the host emits at most one per 5% completion bucket, so a burst of position updates yields a single event.
+- `playback.paused`: in the catalog; not yet emitted (no player pause signal).
+- `playback.finished`: the unwatched→watched edge (the 90% auto-mark, an explicit mark-watched, or a sync write).
 
 Every `playback.*` event carries an `origin` in its metadata: `player` (a real client write), `sync:<provider>` (a media-server or Trakt import), or `plugin:<slug>` (a plugin write-back). The dispatcher never delivers an event back to the plugin that originated it, so a plugin's own `ensure-watched` writes do not echo to itself.
 
@@ -160,7 +160,7 @@ capability. The host invokes its `on-schedule` export on a fixed interval:
 
 - `interval_minutes` is floored at **5 minutes**; a smaller value is rejected at
   parse.
-- A schedule with no `schedule:interval` capability is rejected — the admin
+- A schedule with no `schedule:interval` capability is rejected: the admin
   always sees the schedule at approval.
 - Ticks are **non-reentrant**: if a previous run (scheduled, reactive, or
   inline) is still in flight the tick is a no-op, so work never piles up.
@@ -168,7 +168,7 @@ capability. The host invokes its `on-schedule` export on a fixed interval:
   60s). A run that fails backs off exponentially; a success resets the counter.
 - A scheduled run may return a `connections_invalid` array in its JSON result;
   the host marks those users' connections `error` (only users who actually hold
-  an active connection — a guest can't mass-error state).
+  an active connection: a guest can't mass-error state).
 
 ## Connection descriptor
 

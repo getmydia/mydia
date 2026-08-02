@@ -109,7 +109,7 @@ Configure multiple clients using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `DOWNLOAD_CLIENT_<N>_WATCH_FOLDER` | Watch folder (blackhole only) | `/downloads/watch` |
 | `DOWNLOAD_CLIENT_<N>_COMPLETED_FOLDER` | Completed folder (blackhole only) | `/downloads/complete` |
 
-> `DOWNLOAD_CLIENT_<N>_NAME` is required — clients are discovered by their `_NAME` variable, so a block without it is ignored.
+> `DOWNLOAD_CLIENT_<N>_NAME` is required: clients are discovered by their `_NAME` variable, so a block without it is ignored.
 
 **Client Types:** `qbittorrent`, `transmission`, `rqbit`, `rtorrent`, `blackhole`, `sabnzbd`, `nzbget`, `debrid`
 
@@ -129,7 +129,7 @@ DOWNLOAD_CLIENT_1_PASSWORD=adminpass
 
 Debrid clients connect to a hosted debrid service rather than a self-hosted
 torrent/usenet daemon. They require `TYPE=debrid`, an `API_KEY`, and a
-`PROVIDER` selecting which service to use. `HOST`/`PORT` are ignored — each
+`PROVIDER` selecting which service to use. `HOST`/`PORT` are ignored: each
 provider's API endpoint is built in.
 
 **Providers:** `real_debrid`, `all_debrid`, `premiumize`, `tor_box`
