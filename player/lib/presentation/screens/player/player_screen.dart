@@ -47,15 +47,15 @@ import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/player/resume_plan.dart';
 
-/// Below this, resuming is not worth offering; start from the beginning.
-const int kMinResumeThresholdSeconds = 30;
-
-/// Within this distance of the end, the user has effectively finished.
-const int kEndOfMediaThresholdSeconds = 60;
-
-/// Matches ProgressService's server-side watched threshold.
-const double kWatchedThreshold = 0.90;
+export '../../../core/player/resume_plan.dart'
+    show
+        kMinResumeThresholdSeconds,
+        kEndOfMediaThresholdSeconds,
+        kWatchedThreshold,
+        shouldOfferResume,
+        shouldShowResumeDialog;
 
 /// How far past the transcoded window a seek may land before the HLS session
 /// is torn down and restarted at the new position.
@@ -2369,55 +2369,6 @@ KeyEventResult handleEpisodeNavKey(
       return KeyEventResult.ignored;
   }
 }
-
-/// Whether to offer resuming, given a saved position and the real runtime.
-///
-/// Extracted as a free function so it can be unit-tested without a widget tree,
-/// following the same pattern as [handleEpisodeNavKey].
-///
-/// A null [realDuration] declines deliberately. The alternative is computing a
-/// percentage against media_kit's partial HLS playlist length, which is exactly
-/// the bug that made every resume read as 100%.
-bool shouldOfferResume({
-  required int? savedPositionSeconds,
-  required Duration? realDuration,
-}) {
-  if (savedPositionSeconds == null) return false;
-  if (realDuration == null || realDuration <= Duration.zero) return false;
-  if (savedPositionSeconds <= kMinResumeThresholdSeconds) return false;
-
-  final total = realDuration.inSeconds;
-  if (savedPositionSeconds >= total - kEndOfMediaThresholdSeconds) return false;
-  if (savedPositionSeconds / total >= kWatchedThreshold) return false;
-
-  return true;
-}
-
-/// Whether `_initializePlayer` may even consider showing the resume dialog,
-/// given a possible seek-driven-restart override.
-///
-/// Deliberately gates on [resumeOverride]'s **presence** (`!= null`), not its
-/// value (`!= 0`): a restart targeting real position 0 — dragging the
-/// scrubber back to the start, holding arrow-left to the beginning, or any
-/// sub-second target, since `Duration.inSeconds` truncates — sets
-/// `_resumeOverrideSeconds` to exactly `0`, which a value-based check
-/// (`resumeOverride != 0`) cannot tell apart from "no override was set at
-/// all". Getting this wrong lets a restart to position 0 fall through to the
-/// dialog, which then prompts about the unrelated, never-refreshed
-/// `_savedPositionSeconds` from mount time and, if accepted, silently
-/// overwrites the user's explicit seek-to-start with that stale saved
-/// position.
-///
-/// Extracted as a free function, following the same pattern as
-/// [shouldOfferResume] and [shouldRestartForSeek], so this exact presence-
-/// vs-value distinction has its own name and test, independent of
-/// `_initializePlayer`'s own network/session machinery.
-@visibleForTesting
-bool shouldShowResumeDialog({
-  required int? resumeOverride,
-  required bool mounted,
-}) =>
-    resumeOverride == null && mounted;
 
 /// Whether [_PlayerScreenState.seekToReal] must restart the HLS session
 /// rather than seek the live player in place.
