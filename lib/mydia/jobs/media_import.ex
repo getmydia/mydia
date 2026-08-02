@@ -1761,21 +1761,40 @@ defmodule Mydia.Jobs.MediaImport do
   #
   # For an upgrade import, `Upgrades.current_best_file_id/2` resolves what
   # THIS specific file (identified by its own media_item_id/episode_id, not
-  # the download's) currently supersedes. Deliberately NOT falling back to
-  # the download's single target_id when that lookup returns nil: a season
-  # pack shares one target across many episodes, and an episode with no
-  # existing file of its own would otherwise inherit some OTHER episode's
-  # target id — exactly the cross-episode mistake this whole per-file
-  # resolution exists to avoid. `nil` here correctly means "nothing to
-  # supersede for this file" and must stay nil.
+  # the download's) currently supersedes.
   defp supersede_target(download, media_item_id, episode_id) do
     case download.metadata do
       %{"upgrade_target_media_file_id" => target_id} when is_binary(target_id) ->
-        Upgrades.current_best_file_id(media_item_id, episode_id)
+        resolve_supersede_target(target_id, media_item_id, episode_id)
 
       _ ->
         nil
     end
+  end
+
+  # Episodes: deliberately NO fallback to the download's single target_id. A
+  # season pack shares one target across many episodes, so an episode with no
+  # existing file of its own would inherit some OTHER episode's target id —
+  # exactly the cross-episode mistake this per-file resolution exists to
+  # avoid. `nil` correctly means "nothing to supersede for this file".
+  defp resolve_supersede_target(_target_id, _media_item_id, episode_id)
+       when is_binary(episode_id) do
+    Upgrades.current_best_file_id(nil, episode_id)
+  end
+
+  # Movies: one target, one file, no siblings to confuse it with, so the
+  # cross-episode hazard above cannot apply. Fall back to the target the sweep
+  # picked when the per-file lookup comes up empty — which it does whenever the
+  # quality profile stops resolving (deleted between grab and import) or the
+  # old file is no longer scorable. Leaving the pointer nil there would strand
+  # the upgrade: `UpgradeFinalize` only runs for a non-nil pointer, so the
+  # superseded file would never be trashed, the library would keep both copies,
+  # and `Health.upgrade_health/0` — which counts stale pointers — could not see
+  # it. A target that has since vanished is safe: a trash lands on
+  # `:orphaned` and a hard delete nilifies the FK (`on_delete: :nilify_all`),
+  # both of which clear the pointer and keep the new file.
+  defp resolve_supersede_target(target_id, media_item_id, nil) do
+    Upgrades.current_best_file_id(media_item_id, nil) || target_id
   end
 
   defp cleanup_download_client(download) do

@@ -203,21 +203,39 @@ defmodule Mydia.Library.TrashStore do
 
   The caller distinguishes `:missing` from `:legacy` by the marker
   `trash_media_file/1` records; they are indistinguishable from disk alone.
+
+  ## Why the return value matters
+
+  Returns `:ok` only when nothing is left on disk - either the bytes were
+  deleted or there were none to delete. `{:error, reason}` means the file is
+  still there (a permissions blip, a read-only mount, an I/O error).
+
+  The caller must keep the row when this returns an error. Dropping it would
+  orphan the bytes: a file under `.mydia-trash/<id>/` with no row pointing at
+  it is one nothing can ever restore or purge, so the space is never reclaimed
+  and no later run retries the delete. Keeping the row means the next purge
+  tries again, which is right for exactly the transient failures that produce
+  this.
   """
-  @spec discard(MediaFile.t(), {:moved, String.t()} | :missing | :legacy) :: :ok
+  @spec discard(MediaFile.t(), {:moved, String.t()} | :missing | :legacy) ::
+          :ok | {:error, term()}
   def discard(%MediaFile{} = media_file, {:moved, trash_path}) when is_binary(trash_path) do
-    delete_file(media_file, trash_path)
+    result = delete_file(media_file, trash_path)
     prune_container(trash_path)
 
     # The NFO sidecar is never moved into the trash (the scanner does not index
     # it, so it cannot resurrect anything), but it must not outlive the media
-    # file it describes.
-    case MediaFile.absolute_path(media_file) do
-      nil -> :ok
-      library_path -> Mydia.Metadata.NfoWriter.delete_nfo_for_file(library_path)
-    end
+    # file it describes. Only worth removing once the media file itself is
+    # gone: on a failed delete the row survives and the file it describes is
+    # still on disk.
+    with :ok <- result do
+      case MediaFile.absolute_path(media_file) do
+        nil -> :ok
+        library_path -> Mydia.Metadata.NfoWriter.delete_nfo_for_file(library_path)
+      end
 
-    :ok
+      :ok
+    end
   end
 
   def discard(%MediaFile{} = media_file, :missing) do
@@ -236,9 +254,10 @@ defmodule Mydia.Library.TrashStore do
         :ok
 
       library_path ->
-        delete_file(media_file, library_path)
-        Mydia.Metadata.NfoWriter.delete_nfo_for_file(library_path)
-        :ok
+        with :ok <- delete_file(media_file, library_path) do
+          Mydia.Metadata.NfoWriter.delete_nfo_for_file(library_path)
+          :ok
+        end
     end
   end
 
@@ -418,6 +437,8 @@ defmodule Mydia.Library.TrashStore do
     end
   end
 
+  # `:enoent` is success: the goal state is "no bytes at this path", and
+  # something else having already removed them reaches it just as well.
   defp delete_file(media_file, path) do
     case File.rm(path) do
       :ok ->
@@ -426,15 +447,21 @@ defmodule Mydia.Library.TrashStore do
           path: path
         )
 
+        :ok
+
       {:error, :enoent} ->
         :ok
 
       {:error, reason} ->
-        Logger.error("Could not permanently delete a trashed media file",
+        Logger.error(
+          "Could not permanently delete a trashed media file; keeping its row so the next " <>
+            "purge retries rather than orphaning the bytes",
           media_file_id: media_file.id,
           path: path,
           reason: inspect(reason)
         )
+
+        {:error, reason}
     end
   end
 

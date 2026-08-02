@@ -1725,6 +1725,85 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert new_file.supersedes_media_file_id == existing_file.id
     end
 
+    # Copilot review: the per-file lookup was used for movies too, with no
+    # fallback, so an unresolvable lookup left the pointer nil. A movie has one
+    # target and no sibling episodes, so the cross-episode hazard that
+    # justifies the no-fallback rule cannot apply to it — and a nil pointer
+    # strands the upgrade, because `UpgradeFinalize` only runs for a non-nil
+    # one. The old file would never be trashed, both copies would sit in the
+    # library, and `Health.upgrade_health/0` counts stale pointers so it could
+    # not see the stuck pair either.
+    #
+    # An unanalyzed target is one way to reach the empty lookup:
+    # `Upgrades.current_best_file_id/2` only considers analyzed, untrashed
+    # files.
+    @tag :tmp_dir
+    test "movie upgrade falls back to the download's target when the per-file lookup is empty",
+         %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      profile =
+        quality_profile_fixture(%{quality_standards: %{preferred_resolutions: ["2160p"]}})
+
+      media_item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Unanalyzed Target Movie",
+          year: 2024,
+          quality_profile_id: profile.id
+        })
+
+      existing_file =
+        media_file_fixture(%{
+          media_item_id: media_item.id,
+          resolution: "1080p",
+          analyzed_at: nil
+        })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+
+      File.write!(
+        Path.join(download_dir, "Unanalyzed.Target.Movie.2024.2160p.mkv"),
+        "new remux content"
+      )
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "UnanalyzedTargetClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "UnanalyzedTargetClient",
+          download_client_id: "unanalyzed-target-1",
+          metadata: %{"upgrade_target_media_file_id" => existing_file.id}
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.id != existing_file.id))
+
+      assert new_file, "expected a newly imported media file"
+
+      assert new_file.supersedes_media_file_id == existing_file.id,
+             "a movie upgrade must fall back to the download's target so the upgrade can finalize"
+    end
+
     @tag :tmp_dir
     test "season pack stamps each episode's own prior file, not the download's single target",
          %{tmp_dir: tmp_dir} do

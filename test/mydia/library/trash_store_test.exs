@@ -259,6 +259,51 @@ defmodule Mydia.Library.TrashStoreTest do
       assert File.exists?(nfo)
     end
 
+    # Copilot review: the purge used to drop every expired row whether or not
+    # its bytes actually went away, because `discard/2` swallowed the error.
+    # A file under `.mydia-trash/<id>/` with no row pointing at it is one
+    # nothing can restore or purge, so the space was gone for good and no
+    # later run retried. Keeping the row is what makes the retry possible.
+    #
+    # The delete is forced to fail with a directory at the trashed path:
+    # `unlink` refuses a directory for any uid, so this holds when the suite
+    # runs as root, which a permissions-based test would not.
+    @tag :tmp_dir
+    test "keeps the row when the trashed file cannot be deleted", %{tmp_dir: tmp_dir} do
+      {_root, media_file, _path} = library_with_file(tmp_dir)
+
+      {:ok, trashed} = Library.trash_media_file(media_file)
+      trashed_path = trashed.metadata.extra["trashed_path"]
+      backdate(trashed)
+
+      File.rm!(trashed_path)
+      File.mkdir_p!(trashed_path)
+      File.write!(Path.join(trashed_path, "undeletable"), "x")
+
+      assert {:ok, 0} = Library.purge_old_trashed_media_files(30)
+
+      # The row survives, so the next purge tries again.
+      assert %{} = kept = Library.get_media_file(media_file.id)
+      refute is_nil(kept.trashed_at)
+      assert File.exists?(trashed_path)
+    end
+
+    @tag :tmp_dir
+    test "purges normally when the trashed file is already gone from disk", %{tmp_dir: tmp_dir} do
+      {_root, media_file, _path} = library_with_file(tmp_dir)
+
+      {:ok, trashed} = Library.trash_media_file(media_file)
+      trashed_path = trashed.metadata.extra["trashed_path"]
+      backdate(trashed)
+
+      # Someone emptied the trash by hand. The goal state is already reached,
+      # so this must not be mistaken for a failed delete and retried forever.
+      File.rm!(trashed_path)
+
+      assert {:ok, 1} = Library.purge_old_trashed_media_files(30)
+      assert is_nil(Library.get_media_file(media_file.id))
+    end
+
     @tag :tmp_dir
     test "deletes a legacy trashed file still sitting in the library", %{tmp_dir: tmp_dir} do
       # Issue #295: rows trashed before the file moved off the library path.

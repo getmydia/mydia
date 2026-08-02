@@ -722,6 +722,15 @@ defmodule Mydia.Library do
   [#295](https://github.com/getmydia/mydia/issues/295): the purge used to drop
   the row and leave the file forever, so trash retention never reclaimed any
   space.
+
+  A row whose bytes could not be deleted is **kept**, and its count is not
+  included in the return value. Dropping it would orphan the file: nothing
+  points at a path under `.mydia-trash/<id>/` once its row is gone, so no
+  later run would retry the delete and the space would never come back.
+  Keeping the row means the next purge tries again, which is the right
+  response to the transient failures that cause this - a read-only mount, a
+  permissions blip, an I/O error. Rows whose file was already gone still
+  purge normally; a missing file is a reached goal state, not a failure.
   """
   @spec purge_old_trashed_media_files(integer()) :: {:ok, non_neg_integer()}
   def purge_old_trashed_media_files(days \\ 30) do
@@ -734,11 +743,20 @@ defmodule Mydia.Library do
       )
       |> Repo.all()
 
-    Enum.each(expired, fn media_file ->
-      TrashStore.discard(media_file, trash_state(media_file))
-    end)
+    {discarded, retained} =
+      Enum.split_with(expired, &(TrashStore.discard(&1, trash_state(&1)) == :ok))
 
-    ids = Enum.map(expired, & &1.id)
+    if retained != [] do
+      Logger.warning(
+        "Kept trashed media file rows whose bytes could not be deleted; the next purge will " <>
+          "retry them. Dropping the rows would leave the files on disk with nothing tracking " <>
+          "them.",
+        count: length(retained),
+        media_file_ids: Enum.map(retained, & &1.id)
+      )
+    end
+
+    ids = Enum.map(discarded, & &1.id)
 
     {count, _} =
       from(f in MediaFile,
