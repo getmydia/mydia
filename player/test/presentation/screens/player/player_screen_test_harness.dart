@@ -132,18 +132,25 @@ void mockPathProviderDocumentsDirectory() {
   );
 }
 
-/// A downloaded item whose `filePath` deliberately does not exist on disk.
+/// A downloaded item pointing at [filePath].
 ///
-/// `_resolveDownloadedFilePath` returns null for it, which is the branch these
-/// tests want: everything up to and including the resume decision runs, and
-/// playback then stops short of constructing a real media_kit `Player`, which
-/// cannot be built under `flutter test`.
-DownloadedMedia downloadedItem({int? runtimeMinutes}) => DownloadedMedia(
+/// `_resolveDownloadedFilePath` checks `file_utils.fileExists(filePath)`
+/// first, before it ever falls back to `path_provider`: pass a path to a
+/// file that actually exists on disk (e.g. a real temp file the caller
+/// creates and tears down) to drive the offline branch past its "downloaded
+/// file not found" bail-out and into the shared resume/start path this test
+/// suite cares about. Pass a path that does not exist — the default used to
+/// hardcode one — to exercise that bail-out instead.
+DownloadedMedia downloadedItem({
+  required String filePath,
+  int? runtimeMinutes,
+}) =>
+    DownloadedMedia(
       id: 'dl-1',
       mediaId: 'movie-1',
       title: 'Arrival',
       quality: '1080p',
-      filePath: '/nonexistent/mydia-test/arrival.mkv',
+      filePath: filePath,
       fileSize: 1,
       mediaType: 'movie',
       downloadedAt: DateTime(2026, 1, 1),
@@ -312,5 +319,32 @@ Future<void> pumpUntil(
 }) async {
   for (var i = 0; i < maxTries && !condition(); i++) {
     await tester.pump(const Duration(milliseconds: 20));
+  }
+}
+
+/// Polls [condition] until it is satisfied or [ceiling] elapses, yielding to
+/// the real event loop between checks.
+///
+/// For tests whose `_initializePlayer` path depends on real asynchronous I/O
+/// — `dart:io` file checks, a `path_provider` platform-channel round trip
+/// (see [mockPathProviderDocumentsDirectory]'s doc comment for why those
+/// never resolve under plain `tester.pump()`) — a fixed pump-count budget is
+/// either wastefully long or, on a slower/loaded machine, flaky-short. This
+/// polls the actual outcome instead of guessing a duration, with a ceiling
+/// generous enough that hitting it means something is genuinely stuck, not
+/// just slow.
+///
+/// Must be called from inside `tester.runAsync(() async { ... })`: the real
+/// `Future.delayed` between pumps is what yields to the real event loop for
+/// pending I/O to complete, and that only takes effect inside `runAsync`.
+Future<void> pumpUntilReal(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration ceiling = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(ceiling);
+  while (!condition() && DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 20));
+    await Future.delayed(const Duration(milliseconds: 5));
   }
 }
