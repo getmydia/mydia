@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'window_controller.dart';
+import 'window_geometry.dart';
 import 'window_geometry_math.dart';
 import 'window_geometry_store.dart';
 
@@ -15,11 +17,13 @@ typedef WorkAreaReader = Future<List<WorkArea>> Function();
 /// Every method swallows its failures: this runs inside `_startApp`, which
 /// documents an invariant that nothing after
 /// `WidgetsFlutterBinding.ensureInitialized()` escapes uncaught.
-class WindowGeometryController {
+class WindowGeometryController with WindowListener {
   final WindowController _window;
   final WindowGeometryStore _store;
   final WorkAreaReader _readWorkAreas;
   final Duration _debounce;
+  Timer? _pending;
+  bool _paused = false;
 
   WindowGeometryController({
     required WindowController window,
@@ -57,6 +61,88 @@ class WindowGeometryController {
       if (stored?.maximized ?? false) await _window.maximize();
     } catch (e) {
       debugPrint('[WindowGeometry] Failed to restore window geometry: $e');
+    }
+  }
+
+  /// Stops all reading and writing of window state.
+  ///
+  /// The player owns the window while it is mounted, and its aspect-driven
+  /// resizes must never reach the store — otherwise a 2.39:1 letterbox window
+  /// becomes the geometry the app relaunches into.
+  void pause() {
+    _paused = true;
+    _pending?.cancel();
+    _pending = null;
+  }
+
+  void resume() => _paused = false;
+
+  void dispose() {
+    _pending?.cancel();
+    _pending = null;
+  }
+
+  // `onWindowResized`/`onWindowMoved` are documented `@platforms macos,windows`
+  // and never fire on Linux, so we take the continuous variants and lean on
+  // the debounce to make that affordable.
+  @override
+  void onWindowResize() => _schedule();
+
+  @override
+  void onWindowMove() => _schedule();
+
+  @override
+  void onWindowMaximize() => _schedule();
+
+  @override
+  void onWindowUnmaximize() => _schedule();
+
+  @override
+  void onWindowClose() => unawaited(flush());
+
+  void _schedule() {
+    if (_paused) return;
+    _pending?.cancel();
+    _pending = Timer(_debounce, () => unawaited(_save()));
+  }
+
+  /// Writes any pending change now. Best-effort: if the OS kills the process
+  /// first we lose at most one debounce interval of dragging.
+  Future<void> flush() async {
+    if (_pending == null) return;
+    _pending!.cancel();
+    _pending = null;
+    await _save();
+  }
+
+  Future<void> _save() async {
+    if (_paused) return;
+
+    try {
+      // Fullscreen bounds are the display. Neither worth storing nor safe to
+      // restore into, and we deliberately never restore fullscreen.
+      if (await _window.isFullScreen()) return;
+
+      if (await _window.isMaximized()) {
+        // getBounds() would return the maximized frame here. Record only the
+        // flag so the user's real window size survives.
+        final stored = _store.get();
+        if (stored == null || !stored.maximized) {
+          await _store.save(
+            (stored ??
+                    WindowGeometry(
+                        bounds: await _window.getBounds(), maximized: true))
+                .copyWith(maximized: true),
+          );
+        }
+        return;
+      }
+
+      await _store.save(
+        WindowGeometry(bounds: await _window.getBounds(), maximized: false),
+      );
+    } catch (e) {
+      debugPrint('[WindowGeometry] Failed to save window geometry: $e');
     }
   }
 }
