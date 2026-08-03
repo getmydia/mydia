@@ -143,6 +143,8 @@ in
 
     # Media processing
     ffmpeg
+    # fpcalc, the audio fingerprinter behind intro/credits segment detection
+    chromaprint
 
     # Build tools for NIFs (bcrypt_elixir, argon2_elixir, membrane, exqlite)
     gnumake

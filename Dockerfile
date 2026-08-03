@@ -223,6 +223,7 @@ RUN apk add --no-cache \
     curl \
     ca-certificates \
     ffmpeg \
+    chromaprint \
     fdk-aac \
     su-exec \
     tzdata \
