@@ -409,6 +409,31 @@ void main() {
       expect(c.read(castConnectionProvider), CastConnection.chosenOffline);
       expect(c.read(castDisplayDeviceProvider), device);
     });
+
+    test(
+        'castDisplayDeviceProvider names the lost session\'s device over a '
+        'newly chosen target', () async {
+      // The user picked a different device while the old session is still
+      // draining as lost. The session's device must still win — it is the
+      // receiver the stale bar's Reconnect acts on — not whatever the picker
+      // was most recently pointed at.
+      const otherDevice = CastDevice(
+        id: 'd10',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.chromecast,
+      );
+      final c = containerWith(const CastSession(
+        device: device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.lost,
+      ));
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+      c.read(castTargetProvider.notifier).set(otherDevice);
+
+      expect(c.read(castDisplayDeviceProvider), device);
+    });
   });
 
   group('isCastingProvider means media is loaded', () {
@@ -457,6 +482,37 @@ void main() {
       await c.read(castSessionProvider.future);
 
       expect(c.read(isCastingProvider), isTrue);
+    });
+
+    test('stays true for a lost session that still carries media', () async {
+      // Pinning current behavior, not an oversight: a dropped cast keeps
+      // PlayerScreen in cast mode (showing the stale bar with Reconnect)
+      // rather than snapping back to local playback the instant the
+      // connection drops. Stop is the deliberate exit path out of cast mode;
+      // isCastingProvider going false on a mere disconnect would fight that
+      // by restarting local playback out from under the stale bar.
+      final c = ProviderContainer(overrides: [
+        castSessionProvider.overrideWith((ref) => Stream.value(
+              const CastSession(
+                device: device,
+                playbackState: CastPlaybackState.playing,
+                connectionState: CastConnectionState.lost,
+                mediaInfo: CastMediaInfo(
+                  title: 'Arrival',
+                  duration: Duration(minutes: 116),
+                  position: Duration.zero,
+                ),
+              ),
+            )),
+      ]);
+      addTearDown(c.dispose);
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(isCastingProvider), isTrue,
+          reason: 'a lost session with media must keep the cast UI up so '
+              'Reconnect is meaningful; Stop is what tears it down');
     });
   });
 }
