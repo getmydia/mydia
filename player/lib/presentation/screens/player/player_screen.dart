@@ -52,6 +52,8 @@ import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/window/desktop_window.dart';
+import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
 import '../settings/settings_controller.dart';
 
@@ -260,6 +262,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Timer? _upNextTimer;
   static const _autoPlayCountdownDuration = 10;
 
+  /// Reshapes the OS window to the video's aspect on desktop. A no-op
+  /// everywhere else, so no platform check is needed at the call sites.
+  ///
+  /// Nullable rather than `late final`: it is assigned in [initState] after
+  /// two `ref.read` calls and two `fireImmediately` listener callbacks, any
+  /// of which could throw first. `dispose()` always reaches
+  /// `_windowSizer?.detach()` regardless of how far `initState` got, and a
+  /// `late` field that was never assigned would throw
+  /// `LateInitializationError` there instead of letting `dispose` finish.
+  PlayerWindowSizer? _windowSizer;
+
   @override
   void initState() {
     super.initState();
@@ -280,6 +293,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       (previous, next) => next.whenData((client) => _graphqlClient = client),
       fireImmediately: true,
     );
+
+    // Before `_initializePlayer`: attach pauses geometry persistence and
+    // snapshots the browse window, and the snapshot must be taken before
+    // anything reshapes the window.
+    final windowSizer = createPlayerWindowSizer();
+    _windowSizer = windowSizer;
+    unawaited(windowSizer.attach());
 
     _loadAutoSkipPreference();
     _initializePlayer();
@@ -869,6 +889,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = Player();
     _player = player;
     _videoController = VideoController(player);
+
+    // Re-bound whenever `_initializePlayer` runs again for this screen: a
+    // source switch, a session restart, or a fresh `PlayerScreen` state for
+    // a new queue item. It is *not* re-bound by navigating to the next
+    // episode of a season -- that reuses this same `PlayerScreen` state
+    // (go_router keys the page by route pattern, not the resolved path), so
+    // `initState` and this call do not run again then. The sizer cancels
+    // the previous subscription itself.
+    _windowSizer?.bindVideoParams(player.stream.videoParams);
 
     // Open media
     await player.open(
@@ -2065,6 +2094,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Exit fullscreen if active
     if (_isFullscreen) {
       defaultExitNativeFullscreen();
+    }
+
+    // Restores the window the user was browsing in and resumes geometry
+    // persistence. Fire-and-forget: `dispose` cannot await, and the sizer
+    // swallows its own failures. Null only if `initState` threw before the
+    // assignment ran, in which case there is nothing to detach.
+    final windowSizer = _windowSizer;
+    if (windowSizer != null) {
+      unawaited(windowSizer.detach());
     }
 
     // Restore portrait orientation on mobile devices

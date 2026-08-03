@@ -9,7 +9,7 @@ import 'core/downloads/download_service.dart';
 import 'package:flutter/services.dart';
 
 import 'core/graphql/watch/fetch_log.dart';
-import 'core/player/window_drag_service.dart';
+import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
 
@@ -95,11 +95,17 @@ Future<void> _startApp() async {
     debugPrint('Stack trace: $st');
   }
 
-  // Prepare the OS window for hold-anywhere dragging on native desktop.
-  // Best-effort and self-guarding: `initWindowDrag` never throws and is a
+  // Prepare the OS window on native desktop: restore the size, position and
+  // maximized state from the last run, apply a minimum size, and enable
+  // hold-anywhere dragging. Runs before `runApp` so the window is already the
+  // right shape by the time the first frame paints.
+  //
+  // Best-effort and self-guarding: `initDesktopWindow` never throws and is a
   // no-op off desktop, so this cannot violate this function's invariant that
-  // `runApp` is called exactly once on every path.
-  await initWindowDrag();
+  // `runApp` is called exactly once on every path. It opens its own Hive box
+  // rather than depending on the `initHiveForFlutter` call further down, since
+  // geometry must be restored before the first frame.
+  await initDesktopWindow();
 
   // Everything below persists to Hive boxes under the same per-user data
   // directory. A second instance of the app fails to open every one of them
