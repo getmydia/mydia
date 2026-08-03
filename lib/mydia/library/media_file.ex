@@ -85,7 +85,7 @@ defmodule Mydia.Library.MediaFile do
     belongs_to :media_item, Mydia.Media.MediaItem
     belongs_to :episode, Mydia.Media.Episode
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
-    has_many :segments, Mydia.Library.MediaSegment, on_replace: :delete
+    has_many :segments, Mydia.Library.MediaSegment
     belongs_to :supersedes_media_file, __MODULE__, foreign_key: :supersedes_media_file_id
 
     timestamps(type: :utc_datetime)
