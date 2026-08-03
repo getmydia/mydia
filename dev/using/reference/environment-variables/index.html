@@ -3849,8 +3849,14 @@ host/port.</p>
 <td>Log level (debug, info, warning, error)</td>
 <td><code>info</code></td>
 </tr>
+<tr>
+<td><code>SKIP_BACKUPS</code></td>
+<td>Skip the automatic database snapshot Mydia takes before applying pending migrations. SQLite only, since PostgreSQL has no automatic backup to skip. Accepts <code>true</code>, <code>1</code>, <code>yes</code>, <code>on</code></td>
+<td><code>false</code></td>
+</tr>
 </tbody>
 </table>
+<p>See <a href="../../how-to/backup-restore/">Backing Up and Restoring</a> for what the automatic backup does, where it writes, and what it does not protect you from.</p>
 <p>See <a href="../configuration/#configuration-precedence">Configuration</a> for how these variables interact with database settings and the YAML config file.</p>
 
 

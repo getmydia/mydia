@@ -2805,8 +2805,10 @@
 <p>This guide covers updating an existing Mydia installation, tracking pre-release builds, and pinning to a specific version.</p>
 <div class="admonition warning">
 <p class="admonition-title">Back up before you upgrade</p>
-<p>Mydia applies pending migrations on startup and does <strong>not</strong> back itself up
-first. Take a backup before pulling a new image. See
+<p>Mydia applies pending migrations on startup. On SQLite it snapshots the
+database first, beside the original, which covers a migration going wrong but
+not the disk it lives on. On PostgreSQL it takes no backup at all. Take your
+own before pulling a new image. See
 <a href="../backup-restore/">Backing Up and Restoring</a>.</p>
 </div>
 <h2 id="via-docker-compose">Via Docker Compose</h2>
@@ -2819,7 +2821,9 @@ first. Take a backup before pulling a new image. See
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>docker<span class="w"> </span>pull<span class="w"> </span>ghcr.io/getmydia/mydia:latest
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Run your docker run command again</span>
 </code></pre></div>
-<p>Migrations run automatically on startup. Your data in <code>/config</code> is preserved.</p>
+<p>Migrations run automatically on startup, after Mydia snapshots the SQLite
+database (see <a href="../backup-restore/">Backing Up and Restoring</a>). Your data in
+<code>/config</code> is preserved.</p>
 <h2 id="testing-pre-release-builds">Testing Pre-release Builds</h2>
 <p>Mydia publishes two rolling tags: <code>:latest</code> (stable) and <code>:master</code> (rebuilds on every merge to the main branch). Track <code>:master</code> to try changes before they reach a stable release:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">services</span><span class="p">:</span>

@@ -3121,15 +3121,16 @@ users, and <code>ensure-watched</code> is rejected for a user without an active
 connection.</p>
 </div>
 <div class="admonition warning">
-<p class="admonition-title">A manifest revision does not re-trigger approval</p>
-<p>Declaring a new capability class or a new <code>net:http</code> host in a revised
-manifest does <strong>not</strong> return the plugin to unapproved. The stored grant is
-left untouched, the plugin stays approved and enabled on its old grant, and
-calls against the newly declared capability come back <code>Denied</code> at runtime
-with no other signal.</p>
-<p>Nothing widens without an operator approving it, which is the guarantee that
-matters, but the failure is quiet. After revising a manifest to request more,
-re-approve the plugin so the new declaration is actually granted.</p>
+<p class="admonition-title">A manifest revision needs a re-approval</p>
+<p>Declaring a new capability class, a new <code>net:http</code> host, or a new subscribed
+event in a revised manifest does <strong>not</strong> grant it. The stored grant is left
+untouched, the plugin stays approved and enabled on its old grant, and calls
+against anything newly declared come back <code>Denied</code>.</p>
+<p>Mydia flags the state rather than leaving it quiet: the plugin is badged
+<strong>needs re-approval</strong> in Configuration &gt; Plugins, its row names the
+capabilities it is asking for beyond what was approved, and <strong>Review &amp;
+re-approve</strong> grants the currently declared set. The host also logs a warning
+naming them when such a plugin starts. Until you re-approve, nothing widens.</p>
 </div>
 <div class="admonition warning">
 <p class="admonition-title"><code>net:http</code> is an exact-host allowlist</p>

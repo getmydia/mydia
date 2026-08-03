@@ -1145,13 +1145,30 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-mydia-actually-does" class="md-nav__link">
+  <a href="#what-mydia-does-for-you" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What Mydia actually does
+        What Mydia does for you
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="What Mydia does for you">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#turning-it-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Turning it off
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2766,13 +2783,30 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-mydia-actually-does" class="md-nav__link">
+  <a href="#what-mydia-does-for-you" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What Mydia actually does
+        What Mydia does for you
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="What Mydia does for you">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#turning-it-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Turning it off
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2858,45 +2892,76 @@
 
 
 <h1 id="backing-up-and-restoring-mydia">Backing Up and Restoring Mydia</h1>
-<p>This guide covers the manual backup and restore procedure for SQLite and PostgreSQL, and what to do about configuration files.</p>
-<div class="admonition danger">
-<p class="admonition-title">Your container does not back itself up before migrating</p>
-<p>Mydia applies pending database migrations automatically on startup, from the
-supervision tree, with <strong>no backup step</strong>. There is no automatic pre-migration
-backup in a container deployment, on either SQLite or PostgreSQL.</p>
-<p>Take a backup yourself before every upgrade, using the procedure below. Nothing
-else will do it for you.</p>
+<p>This guide covers the automatic pre-migration backup, the manual backup and restore procedure for SQLite and PostgreSQL, and what to do about configuration files.</p>
+<div class="admonition warning">
+<p class="admonition-title">The automatic backup is a safety net, not a backup strategy</p>
+<p>Mydia snapshots its SQLite database before applying pending migrations, so an
+upgrade that goes wrong has something to restore from. That snapshot lands next
+to the database, on the same disk, and there is no equivalent on PostgreSQL. It
+will not survive a lost volume, a failed disk, or a deleted container. Keep
+taking your own backups, off the machine.</p>
 </div>
-<h2 id="what-mydia-actually-does">What Mydia actually does</h2>
+<h2 id="what-mydia-does-for-you">What Mydia does for you</h2>
 <table>
 <thead>
 <tr>
-<th>Environment</th>
+<th>Database</th>
 <th>Pre-migration backup</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Docker, Docker Compose, or any release build</td>
-<td><strong>None.</strong> Migrations run on boot, unbacked.</td>
+<td>SQLite</td>
+<td>Yes. A snapshot is written before pending migrations run, in every deployment: Docker, NixOS, and the dev shell.</td>
 </tr>
 <tr>
-<td>Local development via <code>./dev</code></td>
-<td>Yes, SQLite only, before a pending migration runs.</td>
+<td>PostgreSQL</td>
+<td>None. Mydia logs a warning instead.</td>
 </tr>
 </tbody>
 </table>
-<p>The automatic backup is a <strong>development-environment</strong> feature. It is a devenv task
-(<code>mix mydia.backup_before_migrate</code>) that runs when you enter the dev shell and a
-migration is pending. It copies the SQLite file to
-<code>&lt;database&gt;_backup_YYYYMMDD_HHMMSS.db</code> next to the database and keeps the 10 most
-recent copies. Nothing invokes it in a release build, so it never runs in your
-container.</p>
-<p>There is no environment variable that turns automatic backups on for a container,
-and none that turns them off.</p>
+<p>On SQLite, Mydia checks for pending migrations at startup, before the migrator
+runs. If any are pending it writes <code>&lt;database&gt;_backup_YYYYMMDD_HHMMSS.db</code> beside
+the original and keeps the 10 most recent. With nothing pending it writes
+nothing, so an ordinary restart costs nothing.</p>
+<p>The snapshot is taken with SQLite's own <code>VACUUM INTO</code>, not a file copy. This
+matters more than it sounds. Mydia runs SQLite in write-ahead-log mode, so
+recently committed data can still be sitting in the <code>mydia.db-wal</code> sidecar rather
+than in <code>mydia.db</code> itself. Copying the main file alone would produce a backup
+that looks complete and is quietly missing your most recent changes, which you
+would only discover when you tried to restore it. <code>VACUUM INTO</code> reads through the
+log, cannot produce a torn or half-written file, and compacts the result, so the
+snapshot is usually smaller than the live database.</p>
+<p>On PostgreSQL, Mydia takes no backup. <code>VACUUM INTO</code> has no PostgreSQL
+equivalent, and Mydia deliberately does not shell out to <code>pg_dump</code>, which is not
+guaranteed to be installed alongside the server. An unreliable backup is worse
+than an honest absence of one. Mydia logs a warning naming the situation instead,
+and you should take your own dump before every upgrade using the procedure below.</p>
+<p>If the backup fails, and a full disk is the usual reason, Mydia logs the failure
+at error level, names what went wrong, states plainly that it is about to migrate
+unprotected, and starts anyway. Refusing to boot would lock you out of the
+instance over a problem you cannot fix from inside it.</p>
+<h3 id="turning-it-off">Turning it off</h3>
+<p>Set <code>SKIP_BACKUPS=true</code> to disable the automatic backup. Snapshotting a
+multi-gigabyte database on every upgrade costs time and disk, and if you already
+snapshot the volume out of band you may not want a second copy. Mydia logs that
+it is skipping the backup and migrates without one.</p>
+<div class="admonition warning">
+<p class="admonition-title">A volume snapshot is not automatically an equivalent</p>
+<p>Mydia's backup reads through the write-ahead log, so it always captures
+committed transactions that have not yet reached <code>mydia.db</code>. A volume
+snapshot only matches that guarantee if it is atomic across <code>mydia.db</code>,
+<code>mydia.db-wal</code>, and <code>mydia.db-shm</code> together. A snapshot that copies those
+files one at a time, or copies only <code>mydia.db</code>, can miss recent writes in
+exactly the way described above. If you are turning the automatic backup off
+in favour of volume snapshots, check that yours is atomic across the whole
+set.</p>
+</div>
 <h2 id="before-you-upgrade">Before you upgrade</h2>
 <p>Upgrades are the moment a backup matters, because a migration rewrites your
-database in place and a failed one can leave it unusable. The routine is:</p>
+database in place and a failed one can leave it unusable. The automatic copy
+covers the migration itself; it does not cover the disk it sits on. The routine
+is:</p>
 <ol>
 <li>Take a backup with the procedure below.</li>
 <li>Confirm the backup file exists and is non-empty.</li>
@@ -2916,6 +2981,11 @@ database in place and a failed one can leave it unusable. The routine is:</p>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Start the container</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>docker<span class="w"> </span>compose<span class="w"> </span>start<span class="w"> </span>mydia
 </code></pre></div>
+<p>Stopping the container first is not optional. A running Mydia keeps recent
+writes in <code>mydia.db-wal</code>, so copying <code>mydia.db</code> on its own from under a live
+server gives you an incomplete database. A clean stop folds the log back in and
+removes the sidecar. If you find <code>mydia.db-wal</code> or <code>mydia.db-shm</code> still present
+after stopping, copy them alongside the database rather than leaving them behind.</p>
 <p><strong>Restore:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Stop the container</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>stop<span class="w"> </span>mydia
@@ -2923,22 +2993,37 @@ database in place and a failed one can leave it unusable. The routine is:</p>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Replace the database file with the backup</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>cp<span class="w"> </span>/path/to/backup/mydia_20240101.db<span class="w"> </span>/path/to/config/mydia.db
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Start the container</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>docker<span class="w"> </span>compose<span class="w"> </span>start<span class="w"> </span>mydia
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Remove any leftover write-ahead log, or SQLite will replay it over your restore</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>rm<span class="w"> </span>-f<span class="w"> </span>/path/to/config/mydia.db-wal<span class="w"> </span>/path/to/config/mydia.db-shm
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Start the container</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>docker<span class="w"> </span>compose<span class="w"> </span>start<span class="w"> </span>mydia
 </code></pre></div>
+<p>Restoring an automatic pre-migration backup works the same way. Those snapshots
+sit beside the database as <code>mydia_backup_YYYYMMDD_HHMMSS.db</code>, so pick the newest
+one from before the upgrade:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>stop<span class="w"> </span>mydia
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>ls<span class="w"> </span>-t<span class="w"> </span>/path/to/config/mydia_backup_*.db<span class="w"> </span><span class="p">|</span><span class="w"> </span>head
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>cp<span class="w"> </span>/path/to/config/mydia_backup_20240101_120000.db<span class="w"> </span>/path/to/config/mydia.db
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>rm<span class="w"> </span>-f<span class="w"> </span>/path/to/config/mydia.db-wal<span class="w"> </span>/path/to/config/mydia.db-shm
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>docker<span class="w"> </span>compose<span class="w"> </span>start<span class="w"> </span>mydia
+</code></pre></div>
+<p>Roll the image back to the version that wrote the backup at the same time.
+Restoring an older database under a newer Mydia just replays the migration you
+were trying to undo.</p>
 <h3 id="postgresql">PostgreSQL</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Backup</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>pg_dump<span class="w"> </span>-h<span class="w"> </span>localhost<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&gt;<span class="w"> </span>backup.sql
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Restore</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>psql<span class="w"> </span>-h<span class="w"> </span>localhost<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&lt;<span class="w"> </span>backup.sql
-</code></pre></div>
-<p>Running PostgreSQL inside the same Docker Compose stack as Mydia? Run the commands through the <code>postgres</code> service instead:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Backup</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>postgres<span class="w"> </span>pg_dump<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&gt;<span class="w"> </span>backup.sql
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>pg_dump<span class="w"> </span>-h<span class="w"> </span>localhost<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&gt;<span class="w"> </span>backup.sql
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Restore</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>postgres<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&lt;<span class="w"> </span>backup.sql
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>psql<span class="w"> </span>-h<span class="w"> </span>localhost<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&lt;<span class="w"> </span>backup.sql
+</code></pre></div>
+<p>Running PostgreSQL inside the same Docker Compose stack as Mydia? Run the commands through the <code>postgres</code> service instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Backup</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>postgres<span class="w"> </span>pg_dump<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&gt;<span class="w"> </span>backup.sql
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Restore</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>postgres<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>mydia<span class="w"> </span>mydia<span class="w"> </span>&lt;<span class="w"> </span>backup.sql
 </code></pre></div>
 <h2 id="configuration-backup">Configuration Backup</h2>
 <p>Settings you changed in the web UI live in the database, so a database backup

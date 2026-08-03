@@ -1066,6 +1066,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#when-an-upgrade-gets-stuck" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When an upgrade gets stuck
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2827,6 +2838,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#when-an-upgrade-gets-stuck" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When an upgrade gets stuck
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3000,6 +3022,29 @@ above does not apply to a path you chose yourself:</p>
   and then delete the original, which is slow for large media and briefly
   needs room for both copies. It logs a warning when this happens.</li>
 </ul>
+<h2 id="when-an-upgrade-gets-stuck">When an upgrade gets stuck</h2>
+<p>While an upgrade is in flight, the newly imported file records which file it
+is meant to replace. That record clears as soon as Mydia has scored both
+copies for real and trashed the loser, which normally happens a minute or two
+after import.</p>
+<p>If it has not cleared an hour later, the upgrade is wedged and both copies
+are still taking up room. <strong>Admin &gt; Configuration &gt; Status</strong> says so at the
+top of the page, with a count of the files affected and a link to the jobs
+page. Nothing is shown there when the count is zero, so a Status page with no
+such warning means nothing is stuck.</p>
+<p>Two things cause it, and both leave a trace on <strong>Admin &gt; Jobs</strong>:</p>
+<ul>
+<li>The new file was never analyzed, so the step that finishes the upgrade was
+  never queued in the first place. There is no <code>UpgradeFinalize</code> job for the
+  file at all, and the analysis job for it failed or never ran.</li>
+<li>Analysis succeeded but the finishing step itself failed. There is an
+  <code>UpgradeFinalize</code> job in the <code>discarded</code> or <code>retryable</code> state, and its
+  <strong>Details</strong> view carries the error that explains why.</li>
+</ul>
+<p>Filter the jobs list by state to find them. Nothing is lost while an upgrade
+sits in this state: the file you already had is untouched and still playable,
+and the replacement is imported alongside it. The cost is disk, and it lasts
+until the upgrade finishes or you remove one of the two copies yourself.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="../quality-profiles/">Quality Profiles</a> - configure cutoff scores, upgrade
