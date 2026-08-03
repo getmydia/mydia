@@ -15,6 +15,8 @@ defmodule Mydia.Accounts do
   alias Mydia.Repo
   alias Mydia.Accounts.{User, ApiKey, UserPreference}
 
+  @changelog_key "last_seen_changelog_version"
+
   ## Users
 
   @doc """
@@ -295,6 +297,46 @@ defmodule Mydia.Accounts do
   """
   def change_preference(%UserPreference{} = preference, attrs \\ %{}) do
     UserPreference.changeset(preference, attrs)
+  end
+
+  @doc """
+  The newest changelog version this user has seen, or `nil`.
+
+  `nil` means the user has never been shown the changelog, which includes every
+  user that existed before this feature shipped.
+  """
+  def last_seen_changelog_version(%User{} = user) do
+    pref = get_user_preference!(user)
+    Map.get(pref.preferences || %{}, @changelog_key)
+  end
+
+  @doc """
+  Records that the user has seen the changelog up to `version_string`.
+
+  Only ever moves the stored value forward, so rolling a deployment back and
+  upgrading again does not replay notes the user already read. An unparseable
+  stored value is treated as absent and overwritten.
+  """
+  def mark_changelog_seen(%User{} = user, version_string) when is_binary(version_string) do
+    pref = get_user_preference!(user)
+    current = Map.get(pref.preferences || %{}, @changelog_key)
+
+    if changelog_version_newer?(current, version_string) do
+      update_preference(pref, %{@changelog_key => version_string})
+    else
+      {:ok, pref}
+    end
+  end
+
+  defp changelog_version_newer?(nil, _new), do: true
+
+  defp changelog_version_newer?(current, new) do
+    with {:ok, current_version} <- Version.parse(current),
+         {:ok, new_version} <- Version.parse(new) do
+      Version.compare(new_version, current_version) == :gt
+    else
+      _ -> true
+    end
   end
 
   ## API Keys
