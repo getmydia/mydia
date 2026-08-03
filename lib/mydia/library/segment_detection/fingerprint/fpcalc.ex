@@ -94,30 +94,40 @@ defmodule Mydia.Library.SegmentDetection.Fingerprint.Fpcalc do
 
   defp parse_hashes(_fields), do: {:error, :no_fingerprint}
 
+  # Input seeking first, output seeking as a fallback, mirroring the same
+  # trade-off ThumbnailGenerator makes: `-ss` before `-i` skips straight to the
+  # window and is dramatically cheaper on a credits window 22 minutes into a
+  # file, but it fails on some containers. Output seeking decodes from the start
+  # and is slower, so it is only worth paying for when the fast path errors.
+  #
+  # Without the fallback a container that rejects input seeking never yields
+  # segments at all: the file burns its three attempts and lands in `failed`.
   defp decode_window(path, start_s, length_s, tmp) do
-    args = [
-      "-nostdin",
-      "-ss",
-      to_string(start_s),
-      "-t",
-      to_string(length_s),
-      "-i",
-      path,
-      "-vn",
-      "-ac",
-      "1",
-      "-ar",
-      @sample_rate,
-      "-f",
-      "wav",
-      "-y",
-      tmp
-    ]
+    case Ffmpeg.run(decode_args(path, start_s, length_s, tmp, :input)) do
+      {:ok, _output} ->
+        :ok
 
-    case Ffmpeg.run(args) do
-      {:ok, _output} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:error, {:ffmpeg_error, _code, _output}} ->
+        case Ffmpeg.run(decode_args(path, start_s, length_s, tmp, :output)) do
+          {:ok, _output} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
+  end
+
+  defp decode_args(path, start_s, length_s, tmp, seek) do
+    seek_args =
+      case seek do
+        :input -> ["-ss", to_string(start_s), "-t", to_string(length_s), "-i", path]
+        :output -> ["-i", path, "-ss", to_string(start_s), "-t", to_string(length_s)]
+      end
+
+    ["-nostdin"] ++
+      seek_args ++
+      ["-vn", "-ac", "1", "-ar", @sample_rate, "-f", "wav", "-y", tmp]
   end
 
   # `-length` is mandatory, do not remove it as redundant.
