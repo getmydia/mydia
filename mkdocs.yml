@@ -142,6 +142,7 @@ nav:
       - contributing/e2e-testing.md
       - contributing/architecture.md
       - contributing/ci-artifacts.md
+      - contributing/releasing.md
 
 extra:
   version:

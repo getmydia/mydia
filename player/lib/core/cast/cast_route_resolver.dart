@@ -27,15 +27,25 @@ class CastRoute {
 
   /// Server-side HLS session backing this route, when it needed one.
   ///
-  /// Only the bridged Chromecast route does: the local proxy addresses HLS by
-  /// session id, so one has to exist before the URL means anything. The
-  /// session manager ends it when the route is abandoned or casting stops.
+  /// Every Chromecast route does, bridged or direct: both address HLS by
+  /// session id, so one has to exist before the URL means anything, and only
+  /// a session can carry a resume offset. Null on a progressive route, which
+  /// is served straight from the file endpoint. The session manager ends it
+  /// when the route is abandoned or casting stops.
   final String? hlsSessionId;
 
   /// Media token captured when the route was resolved, so every URL built
   /// from this route — media *and* sidecar subtitles — carries the same
   /// credential the receiver needs.
   final String? mediaToken;
+
+  /// The real media position the stream itself begins at.
+  ///
+  /// Non-zero only on an HLS route resumed mid-item, where the offset is baked
+  /// into FFmpeg's `-ss` because a live-style playlist cannot be seeked into.
+  /// The receiver's position zero means this much into the media, which is
+  /// what `CastSessionManager`'s `StreamTimeline` translates back.
+  final Duration startOffset;
 
   const CastRoute({
     required this.mediaUrl,
@@ -44,6 +54,7 @@ class CastRoute {
     required this.subtitlesSupported,
     this.hlsSessionId,
     this.mediaToken,
+    this.startOffset = Duration.zero,
   });
 }
 
@@ -82,6 +93,21 @@ class CastRouteResolver {
     required this.streamingSessions,
   });
 
+  /// How a receiver speaking [protocol] is fed media.
+  ///
+  /// Chromecast plays HLS natively, which gives seeking and adaptive bitrate.
+  /// DLNA renderers generally cannot, so they get a progressive byte-range
+  /// stream of the whole file.
+  ///
+  /// Deliberately one function rather than a rule repeated per call site:
+  /// [resolve] decides the kind, and anything that later has to reason about
+  /// the resulting stream — notably `shouldRestartCastForSeek`, which must
+  /// never restart a progressive route — has to reach the same answer.
+  static CastMediaKind mediaKindFor(CastProtocolKind protocol) =>
+      protocol == CastProtocolKind.chromecast
+          ? CastMediaKind.hls
+          : CastMediaKind.progressive;
+
   /// Whether [resolve] with these flags would produce a bridge route.
   ///
   /// The manager asks first so it can enable LAN access *before* the bridge
@@ -90,25 +116,20 @@ class CastRouteResolver {
   bool usesBridge({bool forceBridge = false}) => forceBridge || isP2pMode;
 
   /// Returns null when neither route is usable.
+  ///
+  /// [startPosition] is where the user wants playback to resume. On an HLS
+  /// route it is baked into the server-side session, because a live-style
+  /// playlist cannot be seeked into; on a progressive one it is left to a
+  /// plain receiver seek, which byte ranges support.
   Future<CastRoute?> resolve({
     required String fileId,
     required CastProtocolKind protocol,
     bool forceBridge = false,
     bool forceTranscode = false,
+    Duration startPosition = Duration.zero,
   }) async {
-    // Chromecast plays HLS natively, which gives seeking and adaptive
-    // bitrate. DLNA renderers generally cannot, so they get progressive.
     final isChromecast = protocol == CastProtocolKind.chromecast;
-    final mediaKind =
-        isChromecast ? CastMediaKind.hls : CastMediaKind.progressive;
-
-    // [forceTranscode] is the escalation after a receiver rejects the media
-    // outright, which is nearly always an unsupported codec.
-    final strategy = forceTranscode
-        ? StreamingStrategy.transcode
-        : isChromecast
-            ? StreamingStrategy.hlsCopy
-            : StreamingStrategy.directPlay;
+    final mediaKind = mediaKindFor(protocol);
 
     if (usesBridge(forceBridge: forceBridge)) {
       final base = lanBaseUrl();
@@ -127,17 +148,19 @@ class CastRouteResolver {
         );
       }
 
-      final sessionId = await streamingSessions.start(
+      final session = await streamingSessions.start(
         fileId: fileId,
         transcode: forceTranscode,
+        startPosition: startPosition,
       );
 
       return CastRoute(
-        mediaUrl: '$base/hls/$sessionId/index.m3u8',
+        mediaUrl: '$base/hls/${session.sessionId}/index.m3u8',
         kind: CastRouteKind.localBridge,
         mediaKind: mediaKind,
         subtitlesSupported: false,
-        hlsSessionId: sessionId,
+        hlsSessionId: session.sessionId,
+        startOffset: session.startOffset,
       );
     }
 
@@ -146,11 +169,43 @@ class CastRouteResolver {
 
     final token = await mediaToken();
 
+    if (isChromecast) {
+      // Deliberately not `/api/v1/stream/file/...?strategy=HLS_COPY`. That
+      // redirect starts a session with no offset argument and returns no
+      // session id, so a resume position could never be honored and
+      // `_adoptHlsSession` could never end what it started. The mutation
+      // gives both. `/api/v1/hls/...` sits behind `media_api_auth`, whose
+      // `MediaAuth` plug accepts `?token=`, which a receiver needs because it
+      // cannot send an Authorization header.
+      final session = await streamingSessions.start(
+        fileId: fileId,
+        transcode: forceTranscode,
+        startPosition: startPosition,
+      );
+
+      return CastRoute(
+        mediaUrl:
+            '$server/api/v1/hls/${session.sessionId}/index.m3u8?token=$token',
+        kind: CastRouteKind.directServer,
+        mediaKind: mediaKind,
+        subtitlesSupported: true,
+        mediaToken: token,
+        hlsSessionId: session.sessionId,
+        startOffset: session.startOffset,
+      );
+    }
+
+    // Only a progressive receiver reaches here, so the file endpoint is only
+    // ever asked for whole-file bytes. [forceTranscode] is the escalation
+    // after a receiver rejects the media outright, which is nearly always an
+    // unsupported codec.
     return CastRoute(
       mediaUrl: StreamingStrategyService.buildStreamUrl(
         serverUrl: server,
         fileId: fileId,
-        strategy: strategy,
+        strategy: forceTranscode
+            ? StreamingStrategy.transcode
+            : StreamingStrategy.directPlay,
         mediaToken: token,
       ),
       kind: CastRouteKind.directServer,

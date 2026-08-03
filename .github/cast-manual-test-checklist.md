@@ -78,3 +78,26 @@ already implemented behind the same gate.
   unreachable case) and only escalates to a transcode if that also fails — a
   failing cast may take up to three attempts (direct → bridge → transcode)
   before reporting an error to the user.
+
+## Resume
+
+Automated coverage for the resume decision itself lives in
+`resume_decision_coverage_test.dart`, one widget test per playback source. It
+cannot reach real receivers, real elapsed time, or a real progress sync round
+trip to the server, so run this section by hand against actual hardware.
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | Watch 20 minutes of an episode locally, stop, choose a Chromecast from the detail screen, play | Resume prompt appears, then the receiver starts at 20 minutes |
+| 2 | Let it run past a progress sync (10 seconds), stop casting | **The server records roughly 20 minutes, not 0.** This is the progress-destruction guard |
+| 3 | Scrub the cast to 50 minutes | A brief reload, then playback at 50 minutes, not a snap back |
+| 4 | Scrub the cast back to 5 minutes, before the resume offset | A reload, then playback at 5 minutes |
+| 5 | Airplane mode, play a downloaded episode, watch 10 minutes, quit, replay | Resume prompt at 10 minutes |
+| 6 | Go back online | The server picks up the offline position within a few seconds |
+| 7 | Repeat case 1 against a DLNA renderer | Resume with no reload, since progressive routes seek directly |
+
+Case 2 is the one to check most carefully. A resume that looks correct on
+screen, receiver playing from the right spot and all, can still report
+position 0 back to the server if the sync fires before the resumed offset
+takes effect. That silently erases the user's real watch history for that
+title, with nothing on screen to suggest anything went wrong.

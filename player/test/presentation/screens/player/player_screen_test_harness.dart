@@ -11,7 +11,10 @@
 // core Flutter design. That is why `player_screen_key_handling_test.dart`
 // only ever tested an extracted free function instead of the widget itself.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
@@ -22,6 +25,9 @@ import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/playback/local_playback_progress.dart';
+import 'package:player/core/playback/playback_progress_providers.dart';
+import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -52,8 +58,12 @@ class FixedConnectionNotifier extends conn.ConnectionNotifier {
 }
 
 class FakeDownloadService extends Fake implements DownloadService {
+  FakeDownloadService({this.downloaded});
+
+  final DownloadedMedia? downloaded;
+
   @override
-  DownloadedMedia? getDownloadedMediaById(String mediaId) => null;
+  DownloadedMedia? getDownloadedMediaById(String mediaId) => downloaded;
 }
 
 /// Captures the [CastLaunchRequest] handed to `startCast` instead of routing
@@ -102,6 +112,73 @@ const testDevice = CastDevice(
   name: 'Living Room',
   protocol: CastProtocolKind.chromecast,
 );
+
+/// Mocks the path_provider platform channel so `getApplicationDocumentsDirectory`
+/// resolves instead of hanging.
+///
+/// `_resolveDownloadedFilePath` calls it as a fallback once the stored path
+/// misses. Under `testWidgets`, unlike plain `test()`, an unmocked platform
+/// channel does not fail fast with `MissingPluginException` — the awaiting
+/// Future simply never completes, even across repeated `tester.pump()`
+/// calls, so any test that exercises a non-null `downloaded` item hangs until
+/// the runner's watchdog kills it.
+///
+/// Register from `setUp`, not `setUpAll`: a handler registered before the
+/// per-test binding reset that precedes each `testWidgets` body does not
+/// survive into it.
+void mockPathProviderDocumentsDirectory() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('plugins.flutter.io/path_provider'),
+    (call) async => Directory.systemTemp.path,
+  );
+}
+
+/// A downloaded item pointing at [filePath].
+///
+/// `_resolveDownloadedFilePath` checks `file_utils.fileExists(filePath)`
+/// first, before it ever falls back to `path_provider`: pass a path to a
+/// file that actually exists on disk (e.g. a real temp file the caller
+/// creates and tears down) to drive the offline branch past its "downloaded
+/// file not found" bail-out and into the shared resume/start path this test
+/// suite cares about. Pass a path that does not exist — the default used to
+/// hardcode one — to exercise that bail-out instead.
+DownloadedMedia downloadedItem({
+  required String filePath,
+  int? runtimeMinutes,
+}) =>
+    DownloadedMedia(
+      id: 'dl-1',
+      mediaId: 'movie-1',
+      title: 'Arrival',
+      quality: '1080p',
+      filePath: filePath,
+      fileSize: 1,
+      mediaType: 'movie',
+      downloadedAt: DateTime(2026, 1, 1),
+      runtime: runtimeMinutes,
+    );
+
+/// Writes a local progress record into a container's store before the screen
+/// mounts, standing in for a previous playback session.
+Future<void> seedLocalProgress(
+  ProviderContainer container, {
+  String mediaId = 'movie-1',
+  String mediaType = 'movie',
+  int positionSeconds = 600,
+  int durationSeconds = 5400,
+  DateTime? updatedAt,
+}) async {
+  final store = await container.read(playbackProgressStoreProvider.future);
+  await store.save(LocalPlaybackProgress(
+    mediaId: mediaId,
+    mediaType: mediaType,
+    positionSeconds: positionSeconds,
+    durationSeconds: durationSeconds,
+    updatedAt: updatedAt ?? DateTime.utc(2026, 8, 2, 12),
+  ));
+}
 
 /// A well-formed `MovieDetail` response. All fields beyond the required ones
 /// (`id`, `title`, `monitored`, `addedAt`, `isFavorite`) are omitted deliberately
@@ -212,14 +289,16 @@ ProviderContainer buildPlayerScreenContainer({
   required conn.ConnectionState connectionState,
   required CapturingCastSessionManager castManager,
   required TrackingLocalProxyService proxyService,
+  DownloadedMedia? downloaded,
+  AuthStatus authStatus = AuthStatus.authenticated,
+  PlaybackProgressStore? progressStore,
 }) {
   return ProviderContainer(overrides: [
     authStateProvider.overrideWith(
-      () => FakeAuthNotifier(
-        const AsyncValue.data(AuthStatus.authenticated),
-      ),
+      () => FakeAuthNotifier(AsyncValue.data(authStatus)),
     ),
-    downloadManagerProvider.overrideWith((ref) async => FakeDownloadService()),
+    downloadManagerProvider.overrideWith(
+        (ref) async => FakeDownloadService(downloaded: downloaded)),
     asyncGraphqlClientProvider.overrideWith((ref) async => stubClient(link)),
     serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
     authTokenProvider.overrideWith((ref) async => 'tok'),
@@ -228,6 +307,8 @@ ProviderContainer buildPlayerScreenContainer({
     localProxyServiceProvider.overrideWithValue(proxyService),
     castSessionManagerProvider.overrideWith((ref) async => castManager),
     castSessionProvider.overrideWith((ref) => Stream.value(null)),
+    playbackProgressStoreProvider.overrideWith(
+        (ref) async => progressStore ?? InMemoryPlaybackProgressStore()),
   ]);
 }
 
@@ -264,5 +345,32 @@ Future<void> pumpUntil(
 }) async {
   for (var i = 0; i < maxTries && !condition(); i++) {
     await tester.pump(const Duration(milliseconds: 20));
+  }
+}
+
+/// Polls [condition] until it is satisfied or [ceiling] elapses, yielding to
+/// the real event loop between checks.
+///
+/// For tests whose `_initializePlayer` path depends on real asynchronous I/O
+/// — `dart:io` file checks, a `path_provider` platform-channel round trip
+/// (see [mockPathProviderDocumentsDirectory]'s doc comment for why those
+/// never resolve under plain `tester.pump()`) — a fixed pump-count budget is
+/// either wastefully long or, on a slower/loaded machine, flaky-short. This
+/// polls the actual outcome instead of guessing a duration, with a ceiling
+/// generous enough that hitting it means something is genuinely stuck, not
+/// just slow.
+///
+/// Must be called from inside `tester.runAsync(() async { ... })`: the real
+/// `Future.delayed` between pumps is what yields to the real event loop for
+/// pending I/O to complete, and that only takes effect inside `runAsync`.
+Future<void> pumpUntilReal(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration ceiling = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(ceiling);
+  while (!condition() && DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 20));
+    await Future.delayed(const Duration(milliseconds: 5));
   }
 }

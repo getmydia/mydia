@@ -93,8 +93,12 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(backend.connectedDevice, device);
-      expect(backend.loadedRequests.single.url,
-          startsWith('https://mydia.test/api/v1/stream/file/file-1'));
+      expect(
+        backend.loadedRequests.single.url,
+        startsWith(
+            'https://mydia.test/api/v1/hls/${sessions.started.single}/index.m3u8'),
+      );
+      expect(sessions.requestedFileIds.single, 'file-1');
       expect(backend.loadedRequests.single.kind, CastMediaKind.hls);
     });
 
@@ -298,7 +302,12 @@ void main() {
       // turns it on, discovers there is no LAN interface, and turns it
       // straight back off before escalating to TRANSCODE.
       expect(lanCalls, [true, false]);
-      expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
+      // The Chromecast escalation now rides on the server-side session rather
+      // than a `strategy=` query param, so the fake's transcode marker in the
+      // session id is where it shows.
+      expect(sessions.started.last, contains('transcode'));
+      expect(
+          backend.loadedRequests.single.url, contains(sessions.started.last));
     });
 
     test(
@@ -313,8 +322,10 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(backend.loadedRequests.single.url,
-          startsWith('https://mydia.test/api/v1/stream/file/file-1'));
-      expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
+          startsWith('https://mydia.test/api/v1/hls/'));
+      expect(sessions.started.last, contains('transcode'));
+      expect(
+          backend.loadedRequests.single.url, contains(sessions.started.last));
     });
 
     test('stops escalating after the TRANSCODE attempt and rethrows', () async {
@@ -714,6 +725,11 @@ void main() {
       expect(backend.loadedRequests, hasLength(1));
       expect(backend.loadedRequests.single.url,
           startsWith('http://192.168.1.20:5000/g/abcd/hls/'));
+      // The stored position is now asked of the server, so the rebuilt HLS
+      // session starts there rather than at the beginning.
+      expect(sessions.requestedStart, const Duration(minutes: 5));
+      // This fake echoes an offset of zero, i.e. an older server that ignored
+      // the request, so the whole position is still left to a receiver seek.
       expect(backend.loadedRequests.single.startPosition,
           const Duration(minutes: 5));
 
@@ -755,7 +771,9 @@ void main() {
 
       await manager.reconnectStoredSession();
 
-      expect(backend.loadedRequests.single.url, contains('file-1'));
+      // The URL is session-addressed now, so the file id only shows in what
+      // the route asked the server for.
+      expect(sessions.requestedFileIds.last, 'file-1');
       expect(backend.loadedRequests.single.title, 'Arrival');
     });
 
@@ -767,6 +785,143 @@ void main() {
         manager.reconnectStoredSession(),
         throwsA(isA<CastBackendException>()),
       );
+    });
+  });
+
+  group('seek', () {
+    // A resume offset baked into the numbers, matching the resume scenario
+    // in cast_resume_offset_test.dart: the server echoes back 2394s for a
+    // request at 2400s (it snapped to the nearest keyframe).
+    const launchWithPosition = CastLaunchRequest(
+      fileId: 'file-1',
+      mediaId: 'movie-1',
+      mediaType: 'movie',
+      title: 'Arrival',
+      startPosition: Duration(seconds: 2400),
+      duration: Duration(hours: 1),
+    );
+
+    test(
+        'seeks the receiver in place, translated to player coordinates, '
+        'when the target is within reach', () async {
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      await manager.seek(const Duration(seconds: 2410));
+
+      expect(backend.seeks, [const Duration(seconds: 16)],
+          reason: 'real target minus the offset the server actually used');
+      expect(backend.loadedRequests, hasLength(1),
+          reason: 'a reachable target seeks in place, no restart');
+      expect(sessions.started, hasLength(1));
+    });
+
+    test(
+        'restarts the session on the same item when the target is far '
+        'ahead of the current position', () async {
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      await manager.seek(const Duration(seconds: 3000));
+
+      expect(backend.seeks, isEmpty,
+          reason: 'the receiver was reloaded, not seeked in place');
+      expect(backend.loadedRequests, hasLength(2));
+      expect(sessions.requestedStart, const Duration(seconds: 3000));
+      expect(manager.persistedSession?.position, const Duration(seconds: 3000));
+      // The persisted session's own fields drive the restart, not some other
+      // item the caller might have on screen.
+      expect(sessions.requestedFileIds.last, 'file-1');
+      expect(backend.loadedRequests.last.title, 'Arrival');
+    });
+
+    test('restarts the session when the target is before the start offset',
+        () async {
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      await manager.seek(const Duration(seconds: 300));
+
+      expect(backend.seeks, isEmpty);
+      expect(backend.loadedRequests, hasLength(2));
+      expect(sessions.requestedStart, const Duration(seconds: 300));
+    });
+
+    test('a restart keeps the subtitles and artwork the cast was launched with',
+        () async {
+      // `PersistedCastSession` carries neither, because it exists to survive
+      // the app being killed and a cold restore cannot act on them. Rebuilding
+      // the restart request from it stripped subtitle tracks off the receiver
+      // for the rest of the session, on every forward scrub past the
+      // tolerance. The live request is what gets reused instead.
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'Arrival',
+          subtitleLabel: 'English',
+          imageUrl: 'https://mydia.test/poster.jpg',
+          startPosition: Duration(seconds: 2400),
+          duration: Duration(hours: 1),
+          subtitles: [
+            CastSubtitleTrack(
+              url: 'https://mydia.test/subs/en.vtt',
+              label: 'English',
+              language: 'en',
+            ),
+          ],
+        ),
+      );
+
+      expect(backend.loadedRequests.first.subtitles, hasLength(1),
+          reason: 'guard: the initial cast really did carry a subtitle track');
+
+      await manager.seek(const Duration(seconds: 3000));
+
+      expect(backend.loadedRequests, hasLength(2),
+          reason: 'guard: the seek really did restart rather than seek');
+      final reloaded = backend.loadedRequests.last;
+      expect(reloaded.subtitles, hasLength(1));
+      expect(reloaded.subtitles.single.language, 'en');
+      expect(reloaded.subtitle, 'English');
+      expect(reloaded.imageUrl, 'https://mydia.test/poster.jpg');
+    });
+
+    test(
+        'a seek that arrives while a restart is running is dropped, '
+        'not queued', () async {
+      // A user dragging the scrub bar (or double-tapping skip-forward) can
+      // fire a second `seek` before the first one's restart (`startCast`)
+      // has finished. `startCast` mutates shared state — `_persisted`,
+      // `_activeHlsSessionId` — across several `await` points, so two
+      // concurrent runs race: each call's `_adoptHlsSession` can decide the
+      // *other* call's just-loaded session is the stale one to tear down,
+      // killing whichever one actually ended up on the receiver.
+      sessions.echoedStartOffset = const Duration(seconds: 2394);
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launchWithPosition);
+
+      final first = manager.seek(const Duration(seconds: 3000));
+      final second = manager.seek(const Duration(seconds: 3100));
+      await first;
+      await second;
+
+      // One restart, not two: the initial cast plus exactly one reload.
+      expect(sessions.started, hasLength(2));
+      expect(backend.loadedRequests, hasLength(2));
     });
   });
 
@@ -783,18 +938,73 @@ void main() {
       expect(sessions.live, isEmpty);
     });
 
-    test('ends the session started for an abandoned bridge attempt', () async {
+    test('ends the direct route\'s session too, rather than leaking it',
+        () async {
+      // The direct Chromecast route used to redirect through
+      // /api/v1/stream/file/:id, which returns no session id — so
+      // `_adoptHlsSession` had nothing to end and the session it had started
+      // leaked until the server's inactivity timeout.
       final manager = build();
       addTearDown(manager.dispose);
-      // Direct fails, bridge is tried (starting a session) and fails too, then
-      // TRANSCODE back on the direct route succeeds — the bridge session is
-      // now orphaned on the server.
+      await manager.startCast(device: device, request: launch);
+
+      expect(sessions.live, hasLength(1));
+
+      await manager.stopCast();
+
+      expect(sessions.live, isEmpty);
+    });
+
+    test('ends the direct route\'s previous session when switching items',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+      final first = sessions.started.single;
+
+      await manager.startCast(
+        device: device,
+        request: const CastLaunchRequest(
+          fileId: 'file-2',
+          mediaId: 'movie-2',
+          mediaType: 'movie',
+          title: 'Contact',
+        ),
+      );
+
+      expect(sessions.ended, contains(first));
+      expect(sessions.live, hasLength(1));
+    });
+
+    test('a DLNA cast still opens no session at all', () async {
+      // Progressive routes are served straight from the file endpoint, so
+      // there is nothing to start and nothing to leak.
+      const dlna = CastDevice(
+        id: 'd2',
+        name: 'Bedroom TV',
+        protocol: CastProtocolKind.dlna,
+      );
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: dlna, request: launch);
+
+      expect(sessions.started, isEmpty);
+    });
+
+    test('ends the sessions started for abandoned attempts', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      // Direct fails, bridge is tried and fails too, then TRANSCODE back on
+      // the direct route succeeds. Every Chromecast route opens a session, so
+      // the two losing attempts are now orphaned on the server.
       backend.failNextLoad(CastFailureKind.mediaLoadFailed, times: 2);
 
       await manager.startCast(device: device, request: launch);
 
-      expect(sessions.started, isNotEmpty);
-      expect(sessions.live, isEmpty);
+      expect(sessions.started, hasLength(3));
+      expect(sessions.live, [sessions.started.last],
+          reason: 'only the attempt that actually loaded survives');
     });
 
     test('ends every session started by a wholly failed cast', () async {
@@ -843,7 +1053,9 @@ void main() {
 
       await manager.startCast(device: device, request: launch);
 
-      expect(backend.loadedRequests.single.url, contains('strategy=TRANSCODE'));
+      expect(sessions.started.last, contains('transcode'));
+      expect(
+          backend.loadedRequests.single.url, contains(sessions.started.last));
       expect(lanCalls, [true, false]);
     });
 

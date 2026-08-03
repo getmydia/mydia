@@ -194,7 +194,7 @@ This project uses [devenv.sh](https://devenv.sh) for local development, auto-loa
 - **Mix commands**: `./dev mix <args>` (e.g., `./dev mix test`, `./dev mix ecto.migrate`)
 - **Common shortcuts**: `./dev test`, `./dev format`, `./dev deps.get`, `./dev ecto.migrate`
 
-Prerequisites: Nix, devenv, and direnv (see `docs/development/setup.md`). Run `./dev` without arguments to see all available commands.
+Prerequisites: Nix, devenv, and direnv (see `docs/contributing/setup.md`). Run `./dev` without arguments to see all available commands.
 
 **Examples**:
 

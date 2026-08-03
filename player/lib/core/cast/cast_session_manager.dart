@@ -7,6 +7,7 @@ import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
 import 'cast_backend.dart';
 import 'cast_route_resolver.dart';
+import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
 
@@ -41,6 +42,24 @@ class CastLaunchRequest {
     this.subtitles = const [],
     this.duration,
   });
+
+  /// The same request, resumed from somewhere else.
+  ///
+  /// Only [startPosition] can be replaced, and passing null keeps the current
+  /// one. Everything else is carried across verbatim, which is the whole
+  /// point: a seek restart rebuilds the cast from this, and anything dropped
+  /// here disappears from the receiver for the rest of the session.
+  CastLaunchRequest copyWith({Duration? startPosition}) => CastLaunchRequest(
+        fileId: fileId,
+        mediaId: mediaId,
+        mediaType: mediaType,
+        title: title,
+        subtitleLabel: subtitleLabel,
+        imageUrl: imageUrl,
+        startPosition: startPosition ?? this.startPosition,
+        subtitles: subtitles,
+        duration: duration,
+      );
 }
 
 /// Owns the active cast session: routing, playback, progress and persistence.
@@ -62,12 +81,53 @@ class CastSessionManager {
 
   CastSession? _current;
   PersistedCastSession? _persisted;
+
+  /// The full request behind whatever is on the receiver right now.
+  ///
+  /// Kept alongside [_persisted] because the two answer different questions.
+  /// [PersistedCastSession] is what has to survive the app being killed, so
+  /// it carries only what a cold restore can act on; this carries everything
+  /// the *live* session was launched with — subtitle tracks, artwork, the
+  /// subtitle label. A seek restart rebuilds the cast from this rather than
+  /// from the persisted record, which would silently drop all three for the
+  /// rest of the session.
+  ///
+  /// Set wherever a cast actually loads ([_loadOnRoute], so every retry and
+  /// escalation included) and by [restoreSession] for the branch that adopts
+  /// a receiver already playing, so it is never out of step with
+  /// [_persisted].
+  CastLaunchRequest? _lastRequest;
+
   Duration _lastDuration = Duration.zero;
   DateTime? _lastProgressSync;
   bool _lanEnabled = false;
 
   /// Server-side HLS session backing the media currently on the receiver.
   String? _activeHlsSessionId;
+
+  /// True while a cast-seek restart (`startCast`) is running.
+  ///
+  /// `startCast` re-runs the whole route-resolution/load path and mutates
+  /// shared state — `_persisted`, `_activeHlsSessionId`, the backend
+  /// listeners re-armed by `_listenToBackend` — across several `await`
+  /// points. A user dragging a scrub bar fires `seek` faster than one
+  /// restart completes; without this guard a second call reads the same
+  /// stale `_persisted`/`_current` the first call already decided to act on,
+  /// so both restart concurrently, and whichever call's `_adoptHlsSession`
+  /// runs last tears down the session the other one just adopted — killing
+  /// whatever actually ended up loaded on the receiver. Mirrors
+  /// `_PlayerScreenState._isRestartingSession` in player_screen.dart, which
+  /// guards the equivalent local-playback restart the same way.
+  bool _isRestartingForSeek = false;
+
+  /// Maps receiver-reported positions onto real media positions.
+  ///
+  /// Non-zero offset whenever a cast was resumed mid-item on an HLS route:
+  /// the offset is baked into FFmpeg's `-ss`, so the receiver's zero is that
+  /// far into the media. Everything that reads a receiver position goes
+  /// through this, because a raw position reaching `_syncProgress` would
+  /// overwrite the user's real watch position with zero.
+  StreamTimeline _timeline = StreamTimeline.zero;
 
   /// How often receiver position is pushed to the server, matching the
   /// cadence local playback uses.
@@ -200,6 +260,7 @@ class CastSessionManager {
       protocol: device.protocol,
       forceBridge: forceBridge,
       forceTranscode: forceTranscode,
+      startPosition: request.startPosition ?? Duration.zero,
     );
 
     if (route == null) {
@@ -411,15 +472,26 @@ class CastSessionManager {
             .toList()
         : const <CastSubtitleTrack>[];
 
+    _useTimeline(StreamTimeline(
+      startOffset: route.startOffset,
+      totalDuration: request.duration,
+    ));
+
     await _backend.loadMedia(CastMediaRequest(
       url: route.mediaUrl,
       kind: route.mediaKind,
       title: request.title,
       subtitle: request.subtitleLabel,
       imageUrl: request.imageUrl,
-      startPosition: request.startPosition,
+      // Already baked into the stream on an HLS route, so asking the receiver
+      // to seek there as well would land at twice the offset. On a
+      // progressive route `startOffset` is zero and this is the whole
+      // position, which is a valid byte-range seek.
+      startPosition: _timeline.toPlayer(request.startPosition ?? Duration.zero),
       subtitles: subtitles,
     ));
+
+    _lastRequest = request;
 
     _persisted = PersistedCastSession(
       device: device,
@@ -448,6 +520,17 @@ class CastSessionManager {
         position: request.startPosition ?? Duration.zero,
       ),
     ));
+  }
+
+  /// Points this manager *and* the shared [ProgressService] at [timeline].
+  ///
+  /// One setter because the two must never disagree: the manager translates
+  /// receiver positions for the UI and for persistence, `resolveSync`
+  /// translates them for the server, and a stale value on either side writes
+  /// a wrong position into the user's watch history.
+  void _useTimeline(StreamTimeline timeline) {
+    _timeline = timeline;
+    _progressService.timeline = timeline;
   }
 
   Future<void> _enableLan() async {
@@ -487,9 +570,14 @@ class CastSessionManager {
     // the app), so its `timeline` must be re-pointed at whatever item is
     // cast now — the same duration authority `request.duration` already
     // gives the receiver's own scrub bar (see `CastLaunchRequest.duration`'s
-    // dartdoc). `startOffset` stays zero: casting a resume offset is Task 8's
-    // job, not this one.
-    _progressService.timeline = StreamTimeline(totalDuration: request.duration);
+    // dartdoc).
+    //
+    // No offset yet: which route will actually load, and therefore what
+    // offset the server baked in, is not known until `_loadOnRoute` runs.
+    // Starting from zero rather than leaving the previous item's offset in
+    // place is the safe default — an item cast after a resumed one must not
+    // inherit its offset.
+    _useTimeline(StreamTimeline(totalDuration: request.duration));
 
     _durationSub = _backend.durationStream.listen((duration) {
       // Non-positive is the receiver saying "I don't know" (Chromecast sends
@@ -504,7 +592,11 @@ class CastSessionManager {
     });
 
     _positionSub = _backend.positionStream.listen((position) {
-      _updateMediaInfo(position: position);
+      // Raw to `_syncProgress`: `ProgressService.resolveSync` applies
+      // `timeline.toReal` itself, and `_progressService.timeline` is the same
+      // offset timeline `_useTimeline` set. Translating here as well would
+      // add the offset twice.
+      _updateMediaInfo(position: _timeline.toReal(position));
       unawaited(_syncProgress(request, position));
     });
 
@@ -546,7 +638,14 @@ class CastSessionManager {
 
     final persisted = _persisted;
     if (persisted != null) {
-      _persisted = persisted.copyWith(position: position, savedAt: now);
+      // Translated, unlike the value handed to `_progressService` below:
+      // `reconnectStoredSession` feeds this straight back as `startPosition`,
+      // so a receiver-relative value would compound the offset on every
+      // reconnect.
+      _persisted = persisted.copyWith(
+        position: _timeline.toReal(position),
+        savedAt: now,
+      );
       await _store.save(_persisted!);
     }
 
@@ -577,7 +676,51 @@ class CastSessionManager {
 
   Future<void> play() => _backend.play();
   Future<void> pause() => _backend.pause();
-  Future<void> seek(Duration position) => _backend.seek(position);
+
+  /// Seeks to a real media position, restarting the session when the target
+  /// is outside what the receiver can reach.
+  ///
+  /// [position] is a real media position, matching what `mediaInfo` publishes
+  /// and what the scrub bar computes against `request.duration`.
+  Future<void> seek(Duration position) async {
+    // A restart already in flight is dropped outright, not queued: this
+    // call's target is superseded either way, and the machinery it would
+    // otherwise re-enter is not safe to run twice at once (see
+    // `_isRestartingForSeek`'s dartdoc).
+    if (_isRestartingForSeek) return;
+
+    final session = _persisted;
+    final request = _lastRequest;
+
+    if (session == null ||
+        request == null ||
+        !shouldRestartCastForSeek(
+          mediaKind: CastRouteResolver.mediaKindFor(session.device.protocol),
+          target: position,
+          currentPosition: _current?.mediaInfo?.position ?? Duration.zero,
+          startOffset: _timeline.startOffset,
+        )) {
+      return _backend.seek(_timeline.toPlayer(position));
+    }
+
+    // Out of reach in the current stream: start a new session at the target
+    // and reload the receiver on it. A visible blip, and strictly better than
+    // the silent snap-back the receiver would otherwise do.
+    //
+    // Rebuilt from the live request, not from `session`: the persisted record
+    // carries no subtitle tracks, subtitle label or artwork, so restarting
+    // from it would strip all three off the receiver for the rest of the
+    // session.
+    _isRestartingForSeek = true;
+    try {
+      await startCast(
+        device: session.device,
+        request: request.copyWith(startPosition: position),
+      );
+    } finally {
+      _isRestartingForSeek = false;
+    }
+  }
 
   /// Re-cast whatever the stored session was playing.
   ///
@@ -624,6 +767,7 @@ class CastSessionManager {
     await _disableLanQuietly();
 
     _persisted = null;
+    _lastRequest = null;
     _lastDuration = Duration.zero;
     _lastProgressSync = null;
     _publish(null);
@@ -678,6 +822,14 @@ class CastSessionManager {
       startPosition: stored.position,
       duration: stored.duration,
     );
+
+    // The bridge branch below reloads through `_loadOnRoute`, which sets this
+    // itself; the direct branch adopts a receiver that is already playing and
+    // never loads, so it has to be recorded here. Either way a later seek
+    // restart carries exactly what the restore had — no subtitles or artwork,
+    // because a record that survived an app restart never had them.
+    _lastRequest = request;
+
     _listenToBackend(request);
 
     if (stored.routeKind == CastRouteKind.localBridge) {
