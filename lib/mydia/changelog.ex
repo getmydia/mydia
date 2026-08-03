@@ -22,6 +22,12 @@ defmodule Mydia.Changelog do
     @external_resource path
   end
 
+  # The directory is tracked in addition to each file: a file ADDED after the
+  # first compile is covered by no per-file resource, so without this the module
+  # would not recompile and the new release's notes would silently vanish from
+  # the build. A directory's mtime changes when an entry is added or removed.
+  @external_resource @changelog_dir
+
   @entries @paths
            |> Enum.map(&Entry.from_file!/1)
            |> Enum.sort_by(& &1.version, {:desc, Version})
