@@ -44,6 +44,39 @@ class MediaSegment {
     return segments;
   }
 
+  /// Picks the segments for [fileId] out of a decoded segments-query payload.
+  ///
+  /// [root] is the query's root field, `movie` or `episode`.
+  ///
+  /// Reads the raw response map rather than a generated result class for two
+  /// reasons: the movie and episode queries generate distinct types for an
+  /// identical selection, so one code path here serves both; and a shape
+  /// surprise from an unfamiliar server yields an empty list rather than a
+  /// cast error, which is the whole point of this path being additive.
+  static List<MediaSegment> forFile(
+    Map<String, dynamic>? data, {
+    required String root,
+    required String fileId,
+  }) {
+    if (data == null) return const [];
+
+    final media = data[root];
+    if (media is! Map) return const [];
+
+    final files = media['files'];
+    if (files is! List) return const [];
+
+    for (final file in files) {
+      if (file is! Map) continue;
+      if (file['id'] != fileId) continue;
+      return listFromJson(file['segments'])
+          .where((segment) => segment.actionable)
+          .toList(growable: false);
+    }
+
+    return const [];
+  }
+
   final SegmentType type;
   final int startMs;
   final int endMs;

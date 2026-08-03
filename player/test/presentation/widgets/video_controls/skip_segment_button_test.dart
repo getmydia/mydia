@@ -71,6 +71,127 @@ void main() {
     });
   });
 
+  // `forFile` is what the player screen actually calls on the segments query
+  // response. It reads the raw payload rather than a generated result class,
+  // so every shape a strange or older server can produce has to land on an
+  // empty list instead of a cast error.
+  group('MediaSegment.forFile', () {
+    Map<String, dynamic> payload(Object? files) => {
+          '__typename': 'Query',
+          'movie': {
+            '__typename': 'Movie',
+            'id': 'movie-1',
+            'files': files,
+          },
+        };
+
+    Map<String, dynamic> file(String id, Object? segments) => {
+          '__typename': 'MediaFile',
+          'id': id,
+          'segments': segments,
+        };
+
+    const introJson = {
+      '__typename': 'MediaSegment',
+      'type': 'INTRO',
+      'startMs': 30000,
+      'endMs': 90000,
+    };
+
+    test('picks the segments belonging to the file being played', () {
+      final segments = MediaSegment.forFile(
+        payload([
+          file('other-file', const []),
+          file('file-1', const [introJson]),
+        ]),
+        root: 'movie',
+        fileId: 'file-1',
+      );
+
+      expect(segments, [intro]);
+    });
+
+    test('returns empty when no file matches', () {
+      expect(
+        MediaSegment.forFile(
+          payload([
+            file('other-file', const [introJson])
+          ]),
+          root: 'movie',
+          fileId: 'file-1',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('drops segments of an unrecognised type', () {
+      final segments = MediaSegment.forFile(
+        payload([
+          file('file-1', const [
+            {'type': 'RECAP', 'startMs': 0, 'endMs': 1000},
+            introJson,
+          ]),
+        ]),
+        root: 'movie',
+        fileId: 'file-1',
+      );
+
+      expect(segments, [intro]);
+    });
+
+    test('returns empty for a missing or malformed payload', () {
+      expect(
+        MediaSegment.forFile(null, root: 'movie', fileId: 'file-1'),
+        isEmpty,
+      );
+      expect(
+        MediaSegment.forFile(const {}, root: 'movie', fileId: 'file-1'),
+        isEmpty,
+      );
+      expect(
+        MediaSegment.forFile(
+          const {'movie': null},
+          root: 'movie',
+          fileId: 'file-1',
+        ),
+        isEmpty,
+      );
+      expect(
+        MediaSegment.forFile(payload(null), root: 'movie', fileId: 'file-1'),
+        isEmpty,
+      );
+      expect(
+        MediaSegment.forFile(
+          payload(const ['nonsense']),
+          root: 'movie',
+          fileId: 'file-1',
+        ),
+        isEmpty,
+      );
+      expect(
+        MediaSegment.forFile(
+          payload([file('file-1', 'nonsense')]),
+          root: 'movie',
+          fileId: 'file-1',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('returns empty when the root field is absent', () {
+      expect(
+        MediaSegment.forFile(
+          payload([
+            file('file-1', const [introJson])
+          ]),
+          root: 'episode',
+          fileId: 'file-1',
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('SegmentSkipTracker', () {
     test('permits a segment only once per session', () {
       final tracker = SegmentSkipTracker();

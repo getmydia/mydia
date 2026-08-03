@@ -45,6 +45,7 @@ import '../../../domain/models/cast_device.dart';
 import '../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
+import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
@@ -1021,8 +1022,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               DateTime.tryParse(movie?.progress?.lastWatchedAt ?? '');
           _runtimeMinutes = movie?.runtime;
 
-          // Extract subtitle tracks and skippable segments from files
-          _extractFileDetails(movie?.files);
+          // Extract subtitle tracks from files
+          _extractSubtitlesFromFiles(movie?.files);
         }
       } else if (widget.mediaType == 'episode') {
         // Fetch episode progress
@@ -1042,8 +1043,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               DateTime.tryParse(episode?.progress?.lastWatchedAt ?? '');
           _runtimeMinutes = episode?.runtime;
 
-          // Extract subtitle tracks and skippable segments from files
-          _extractFileDetails(episode?.files);
+          // Extract subtitle tracks from files
+          _extractSubtitlesFromFiles(episode?.files);
 
           // If we have show and season info, fetch episode list for navigation
           if (widget.showId != null && widget.seasonNumber != null) {
@@ -1054,11 +1055,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } catch (e) {
       debugPrint('Error fetching progress: $e');
     }
+
+    // Deliberately outside the block above: segments are their own query, and
+    // neither failure may take the other down with it.
+    await _fetchSegments(client);
   }
 
-  /// Extract subtitle tracks and skippable segments from media files returned
-  /// by GraphQL.
-  void _extractFileDetails(List<Fragment$MediaFileFragment?>? files) {
+  /// Extract subtitle tracks from media files returned by GraphQL
+  void _extractSubtitlesFromFiles(List<Fragment$MediaFileFragment?>? files) {
     if (files == null || files.isEmpty) return;
 
     // Find the file matching the current fileId
@@ -1074,7 +1078,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           debugPrint(
               'Extracted ${_subtitleTracks.length} subtitle tracks from GraphQL');
         }
-        _adoptSegments(file.segments);
         break;
       }
     }
@@ -1102,13 +1105,56 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _skipTracker.reset();
   }
 
-  /// Adopt the segments reported for the file now playing.
-  void _adoptSegments(List<Fragment$MediaFileFragment$segments> segments) {
-    _segments = MediaSegment.listFromJson(
-      segments.map((segment) => segment.toJson()).toList(),
-    ).where((segment) => segment.actionable).toList(growable: false);
+  /// Fetch the skippable segments for the file now playing.
+  ///
+  /// This is a **separate query on purpose, and has to stay that way.** An
+  /// unknown field is a document-level validation error in GraphQL, not a
+  /// field-level one, so a server predating the segments schema rejects the
+  /// whole query the selection appears in and returns no data at all. Folded
+  /// back into `MediaFileFragment` as a tidy-up, that would cost the resume
+  /// position and the external subtitle list on every episode and movie detail
+  /// view. Here it costs exactly one thing, the skip button.
+  ///
+  /// That is the common path rather than an edge case: the player auto-updates
+  /// from an app store while the operator upgrades the server by hand,
+  /// sometimes months later, so "newer player, older server" is the norm.
+  ///
+  /// Every failure lands on the same answer, no segments. Detection is
+  /// additive background work and must never surface as a playback error.
+  Future<void> _fetchSegments(GraphQLClient client) async {
+    final root = switch (widget.mediaType) {
+      'movie' => 'movie',
+      'episode' => 'episode',
+      _ => null,
+    };
+    if (root == null) return;
 
-    debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
+    try {
+      final result = await client.query(
+        QueryOptions(
+          document: root == 'movie'
+              ? documentNodeQueryMovieSegments
+              : documentNodeQueryEpisodeSegments,
+          variables: root == 'movie'
+              ? Variables$Query$MovieSegments(id: widget.mediaId).toJson()
+              : Variables$Query$EpisodeSegments(id: widget.mediaId).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint('[PlayerScreen] No segments available: ${result.exception}');
+        return;
+      }
+
+      _segments = MediaSegment.forFile(
+        result.data,
+        root: root,
+        fileId: widget.fileId,
+      );
+      debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error fetching segments: $e');
+    }
   }
 
   /// Detect available audio and subtitle tracks from the media_kit player

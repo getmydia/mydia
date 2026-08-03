@@ -1,0 +1,40 @@
+# Skippable intro/credits segments, deliberately fetched on their own.
+#
+# DO NOT fold these selections back into MediaFileFragment as a tidy-up. An
+# unknown field is a *document* validation error in GraphQL, not a field-level
+# one, so a server that predates the segments schema rejects the entire query
+# it appears in and returns no data at all. Inside MediaFileFragment that would
+# cost the resume position and the external subtitle list on every episode and
+# movie detail view.
+#
+# That is the common path, not an edge case: the player auto-updates from an
+# app store while the server is upgraded by hand by the operator, sometimes
+# months later. Keeping segments in their own document means an older server
+# costs exactly one thing, the skip button.
+query MovieSegments($id: ID!) {
+  movie(id: $id) {
+    id
+    files {
+      id
+      segments {
+        type
+        startMs
+        endMs
+      }
+    }
+  }
+}
+
+query EpisodeSegments($id: ID!) {
+  episode(id: $id) {
+    id
+    files {
+      id
+      segments {
+        type
+        startMs
+        endMs
+      }
+    }
+  }
+}
