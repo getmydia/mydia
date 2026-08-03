@@ -33,6 +33,7 @@ void main() {
     // candidates or progress queries this scenario never reaches.
     final link = StubLink.responses([
       movieDetailResponse(),
+      movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
