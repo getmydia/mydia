@@ -71,4 +71,22 @@ defmodule Mydia.ChangelogTest do
       assert Changelog.latest() == expected
     end
   end
+
+  describe "the bundled set" do
+    test "contains the backfilled release history" do
+      entries = Changelog.entries()
+
+      assert length(entries) >= 33,
+             "expected the full backfill, got #{length(entries)} entries"
+
+      assert Enum.all?(entries, &(&1.html != "")), "an entry rendered to empty HTML"
+    end
+
+    test "spans the oldest and newest backfilled releases" do
+      version_strings = Enum.map(Changelog.entries(), & &1.version_string)
+
+      assert "0.12.0" in version_strings
+      assert "0.2.0" in version_strings
+    end
+  end
 end
