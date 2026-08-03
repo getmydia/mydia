@@ -112,6 +112,70 @@ CastFailureKind failureKindFor(dc.CastException e) {
   return CastFailureKind.unknown;
 }
 
+/// EHOSTUNREACH on Darwin.
+///
+/// The same number is `ENOPKG` on Linux, where EHOSTUNREACH is 113. That
+/// collision is why [looksLikeLocalNetworkDenial] checks the platform before
+/// it looks at the errno.
+const int _ehostunreachDarwin = 65;
+
+/// Whether [address] sits on a network the OS treats as local, and is
+/// therefore subject to Apple's local-network permission gate.
+///
+/// Loopback is deliberately excluded: a receiver on loopback is nonsense, and
+/// loopback traffic is never permission-gated. Carrier-grade NAT
+/// (`100.64.0.0/10`) is excluded for the same kind of reason, being carrier
+/// space rather than a home LAN.
+bool isLocalNetworkAddress(InternetAddress address) {
+  final raw = address.rawAddress;
+
+  if (address.type == InternetAddressType.IPv4) {
+    if (raw.length != 4) return false;
+    if (raw[0] == 10) return true;
+    if (raw[0] == 172 && raw[1] >= 16 && raw[1] <= 31) return true;
+    if (raw[0] == 192 && raw[1] == 168) return true;
+    // RFC 3927 link-local, what a receiver falls back to with no DHCP.
+    if (raw[0] == 169 && raw[1] == 254) return true;
+    return false;
+  }
+
+  if (address.type == InternetAddressType.IPv6) {
+    if (raw.length != 16) return false;
+    if (raw[0] == 0xfe && (raw[1] & 0xc0) == 0x80) return true; // fe80::/10
+    if ((raw[0] & 0xfe) == 0xfc) return true; // fc00::/7
+    return false;
+  }
+
+  return false;
+}
+
+/// Whether a raw `connect()` error looks like Apple's local-network permission
+/// gate rather than a receiver that is genuinely absent.
+///
+/// This is a heuristic and is knowingly imperfect. macOS and iOS expose no
+/// public API for reading local-network authorization state, and ICMP would
+/// need raw sockets Dart cannot open unprivileged, so there is no way to
+/// confirm the receiver is actually alive. A denied permission and an
+/// unplugged Chromecast produce the same errno. The message this drives is
+/// hedged for exactly that reason: it names the permission as a likely cause
+/// without asserting it.
+///
+/// [applePlatform] is injected rather than read from `Platform.isMacOS` so
+/// this stays testable for every platform on one machine, following
+/// `PlatformFeatures.computeSupportsKeyboardShortcuts`.
+bool looksLikeLocalNetworkDenial({
+  required Object error,
+  required InternetAddress? target,
+  required bool applePlatform,
+}) {
+  // Must come first: see the note on [_ehostunreachDarwin].
+  if (!applePlatform) return false;
+  if (error is! SocketException) return false;
+  if (error.osError?.errorCode != _ehostunreachDarwin) return false;
+  if (target == null) return false;
+  return isLocalNetworkAddress(target);
+}
+
 /// Maps a stream of raw discovery exceptions to the app's failure
 /// vocabulary. Extracted from [DartCastBackend]'s constructor so the exact
 /// composition wiring [BonsoirChromecastDiscovery.failures] into
