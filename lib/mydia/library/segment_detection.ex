@@ -68,6 +68,16 @@ defmodule Mydia.Library.SegmentDetection do
   @segment_types ~w(intro credits)
 
   @doc """
+  How many times a file may fail detection before it is marked `failed`.
+
+  Exposed so the scheduler selects exactly the files this module will act on.
+  A second copy of the ceiling would drift into either jobs that find nothing
+  to do or files that are never retried.
+  """
+  @spec max_attempts() :: pos_integer()
+  def max_attempts, do: @max_attempts
+
+  @doc """
   Analyses one season and writes its segments.
 
   Always returns `:ok`. Per-file failures are recorded on the row rather than

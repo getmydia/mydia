@@ -30,8 +30,18 @@ defmodule Mydia.FingerprintStub do
     Agent.update(__MODULE__, &Map.put(&1, path, {:error, reason}))
   end
 
+  @doc """
+  Sets whether the stub reports fingerprinting as available.
+
+  Defaults to `true`, so only a test that cares about the missing-`fpcalc`
+  path has to say anything about it.
+  """
+  def put_available(available?) do
+    Agent.update(__MODULE__, &Map.put(&1, :available?, available?))
+  end
+
   @impl true
-  def available?, do: true
+  def available?, do: Agent.get(__MODULE__, &Map.get(&1, :available?, true))
 
   @impl true
   def fingerprint(path, _start_s, _length_s) do
