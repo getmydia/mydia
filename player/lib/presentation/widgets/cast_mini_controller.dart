@@ -92,9 +92,18 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
     final Widget? content;
     if (session == null) {
-      content = target == null ? null : _buildIdle(target);
+      // A remembered device with no session at all: a connect that failed.
+      content = target == null ? null : _buildOffline(target);
+    } else if (session.connectionState == CastConnectionState.connecting) {
+      content = _buildConnecting(session.device);
     } else if (session.isStale) {
-      content = _buildStale(session);
+      // The media reconnect re-casts what was playing. With no media there is
+      // nothing to re-cast, so a media-less drop gets a plain reconnect.
+      content = session.mediaInfo == null
+          ? _buildOffline(session.device)
+          : _buildStale(session);
+    } else if (session.mediaInfo == null) {
+      content = _buildIdle(session.device);
     } else {
       content = _buildPlaying(session);
     }
@@ -103,7 +112,12 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     return SafeArea(top: false, child: content);
   }
 
-  Widget _buildIdle(CastDevice device) {
+  /// Shared chrome for the three text-only rows.
+  Widget _barRow({
+    required Widget leading,
+    required String label,
+    required List<Widget> actions,
+  }) {
     return Material(
       elevation: 8,
       color: Theme.of(context).colorScheme.surface,
@@ -111,30 +125,112 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            const Icon(Icons.cast, color: Colors.blue, size: 24),
+            leading,
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Will play on ${device.name}',
+                label,
                 style: Theme.of(context).textTheme.bodyMedium,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            IconButton(
-              key: const Key('cast-bar-idle-clear'),
-              icon: const Icon(Icons.close),
-              // This bar is the only cast surface in the app, so an unlabelled
-              // icon here leaves a screen-reader user no route to the control
-              // at all — there is no longer a full-screen remote to fall back
-              // to. Same reasoning for every button below.
-              tooltip: 'Cancel casting to ${device.name}',
-              onPressed: () => ref.read(castTargetProvider.notifier).clear(),
-            ),
+            ...actions,
           ],
         ),
       ),
     );
+  }
+
+  /// Connected, nothing loaded. "Ready to play on" rather than "Will play on":
+  /// this is a statement about a connection that exists, not a promise about
+  /// the future.
+  Widget _buildIdle(CastDevice device) {
+    return _barRow(
+      leading: const Icon(Icons.cast_connected, color: Colors.blue, size: 24),
+      label: 'Ready to play on ${device.name}',
+      actions: [
+        IconButton(
+          key: const Key('cast-bar-idle-clear'),
+          icon: const Icon(Icons.close),
+          // This bar is the only cast surface in the app, so an unlabelled
+          // icon here leaves a screen-reader user no route to the control at
+          // all — there is no longer a full-screen remote to fall back to.
+          // Same reasoning for every button below.
+          tooltip: 'Stop casting to ${device.name}',
+          onPressed: _stopCasting,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConnecting(CastDevice device) {
+    return _barRow(
+      leading: const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+      ),
+      label: 'Connecting to ${device.name}…',
+      actions: [
+        IconButton(
+          key: const Key('cast-bar-connecting-cancel'),
+          icon: const Icon(Icons.close),
+          tooltip: 'Cancel connecting to ${device.name}',
+          // Tears down whatever the in-flight connect established rather than
+          // merely forgetting the device.
+          onPressed: _stopCasting,
+        ),
+      ],
+    );
+  }
+
+  /// A device is remembered but nothing is connected — a failed connect, or a
+  /// receiver that idle-timed-out while the user browsed.
+  Widget _buildOffline(CastDevice device) {
+    return _barRow(
+      leading: const Icon(Icons.cast, color: Colors.blue, size: 24),
+      label: '${device.name} — not connected',
+      actions: [
+        FilledButton(
+          key: const Key('cast-bar-offline-reconnect'),
+          onPressed: () => _reconnectIdle(device),
+          child: const Text('Reconnect'),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          key: const Key('cast-bar-offline-clear'),
+          icon: const Icon(Icons.close),
+          tooltip: 'Forget ${device.name}',
+          onPressed: _stopCasting,
+        ),
+      ],
+    );
+  }
+
+  /// Re-open a media-less connection.
+  ///
+  /// Deliberately not `_reconnectStaleSession`: that re-casts the stored
+  /// media, and this row exists precisely because there is none.
+  Future<void> _reconnectIdle(CastDevice device) async {
+    if (!mounted) return;
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.connectTo(device);
+    } on CastBackendException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(castErrorMessage(e, ref: ref)),
+        backgroundColor: Colors.red,
+      ));
+    } catch (e) {
+      debugPrint('[CastMiniController] Unexpected error reconnecting: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to connect: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 
   Widget _buildStale(CastSession session) {

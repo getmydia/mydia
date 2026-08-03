@@ -206,14 +206,14 @@ void main() {
         (tester) async {
       await _pumpLayer(tester, target: _device);
 
-      final clear = find.byKey(const Key('cast-bar-idle-clear'));
+      final clear = find.byKey(const Key('cast-bar-offline-clear'));
       expect(clear, findsOneWidget);
 
       await tester.longPress(clear);
       await tester.pump(const Duration(seconds: 1));
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Cancel casting to Cottage Chromecast'), findsOneWidget,
+      expect(find.text('Forget Cottage Chromecast'), findsOneWidget,
           reason: 'without an Overlay in the layer the tooltip asserts and '
               'renders as an error box instead');
     });
@@ -291,29 +291,37 @@ void main() {
     expect(find.textContaining('Cottage Chromecast'), findsNothing);
   });
 
-  testWidgets('renders the idle state for a target with no session',
+  testWidgets('renders the offline state for a target with no session at all',
       (tester) async {
     final container = await _pump(tester);
 
     container.read(castTargetProvider.notifier).set(_device);
     await tester.pump();
 
-    expect(find.textContaining('Will play on'), findsOneWidget);
-    expect(find.textContaining('Cottage Chromecast'), findsOneWidget);
+    expect(find.text('${_device.name} — not connected'), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-scrubber')), findsNothing);
   });
 
-  testWidgets('the idle clear button drops the target', (tester) async {
-    final container = await _pump(tester);
+  testWidgets('the offline clear button drops the target', (tester) async {
+    final harness = _buildManagerHarness();
+    addTearDown(harness.manager.dispose);
+
+    final container = await _pumpWithManager(
+      tester,
+      harness: harness,
+      sessionStream: Stream.value(null),
+    );
 
     container.read(castTargetProvider.notifier).set(_device);
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('cast-bar-idle-clear')));
-    await tester.pump();
+    await tester.tap(find.byKey(const Key('cast-bar-offline-clear')));
+    await tester.pumpAndSettle();
 
     expect(container.read(castTargetProvider), isNull);
-    expect(find.textContaining('Will play on'), findsNothing);
+    expect(find.textContaining('not connected'), findsNothing);
   });
 
   testWidgets(
@@ -438,5 +446,65 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(castTargetProvider), isNull);
+  });
+
+  testWidgets('an idle connection says it is ready, not that it will play',
+      (tester) async {
+    await _pump(
+      tester,
+      session: const CastSession(
+        device: _device,
+        playbackState: CastPlaybackState.idle,
+      ),
+    );
+
+    expect(find.text('Ready to play on ${_device.name}'), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-idle-clear')), findsOneWidget);
+  });
+
+  testWidgets('a connect in flight shows a connecting row', (tester) async {
+    await _pump(
+      tester,
+      session: const CastSession(
+        device: _device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.connecting,
+      ),
+    );
+
+    expect(find.text('Connecting to ${_device.name}…'), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-connecting-cancel')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('a lost connection with no media offers a plain reconnect',
+      (tester) async {
+    await _pump(
+      tester,
+      session: const CastSession(
+        device: _device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.lost,
+      ),
+    );
+
+    expect(find.text('${_device.name} — not connected'), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
+    expect(find.byKey(const Key('cast-stale-reconnect')), findsNothing,
+        reason: 'the media reconnect re-casts what was playing, and there is '
+            'nothing here to re-cast');
+  });
+
+  testWidgets('a lost connection with media keeps the existing stale row',
+      (tester) async {
+    await _pump(
+      tester,
+      session: _session(duration: const Duration(minutes: 44), isStale: true),
+    );
+
+    expect(find.byKey(const Key('cast-stale-reconnect')), findsOneWidget);
+    expect(find.byKey(const Key('cast-stale-stop')), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsNothing);
   });
 }
