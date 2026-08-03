@@ -8,14 +8,14 @@ defmodule Mydia.Library.SegmentDetection.CorrelatorTest do
   # with a different seed yields a different but reproducible stream. We avoid
   # :rand so tests never depend on global RNG state.
   defp noise(count, seed) do
-    Enum.map(1..count, fn i ->
+    Enum.map(1..count//1, fn i ->
       :erlang.phash2({seed, i}, 4_294_967_296)
     end)
   end
 
   # Flip `n` bits in the low 32 of an integer, deterministically.
   defp perturb(value, n) do
-    Enum.reduce(0..(n - 1), value, fn bit, acc ->
+    Enum.reduce(0..(n - 1)//1, value, fn bit, acc ->
       Bitwise.bxor(acc, Bitwise.bsl(1, bit))
     end)
   end
