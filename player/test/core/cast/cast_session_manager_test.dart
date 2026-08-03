@@ -1477,6 +1477,8 @@ void main() {
           reason: 'startCast must publish the media-bearing session it just '
               'loaded');
 
+      final disconnectCallsBeforeLateResolve = backend.disconnectCallCount;
+
       // Now let the stale connectTo's held connect finally resolve.
       backend.releaseConnect();
       await connecting;
@@ -1488,6 +1490,20 @@ void main() {
           manager.currentSession?.playbackState, isNot(CastPlaybackState.idle),
           reason: 'the late connectTo publishing over startCast\'s session '
               'would silently drop back to an idle state');
+      // The assertion that actually catches the bug: `currentSession` alone
+      // stays intact even when the stale connectTo's cleanup disconnects the
+      // socket startCast is using, because that cleanup never touches
+      // `_current` — it only calls `_backend.disconnect()`. A test that
+      // checks only the session, not the backend's actual connection, passes
+      // right over a published session with no live socket behind it.
+      expect(backend.connectedDevice, device,
+          reason: 'the stale connectTo must not tear down the connection '
+              'startCast adopted and is actively using, just because it '
+              'happens to be the same device the stale call itself was '
+              'connecting to');
+      expect(backend.disconnectCallCount, disconnectCallsBeforeLateResolve,
+          reason: 'the stale connectTo\'s cleanup must not disconnect a '
+              'socket a newer call now owns');
     });
   });
 }

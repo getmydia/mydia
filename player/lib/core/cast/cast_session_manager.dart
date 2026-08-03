@@ -323,21 +323,31 @@ class CastSessionManager {
     }
 
     if (generation != _connectGeneration) {
-      // Cancelled (`stopCast`) or superseded by a second `connectTo` while
-      // this one was in flight. The backend has just connected on our
-      // behalf regardless — undo that rather than publish a session nobody
-      // asked for anymore.
+      // Cancelled (`stopCast`) or superseded by a second `connectTo` (or a
+      // `startCast`) while this one was in flight. The backend has just
+      // connected on our behalf regardless — undo that rather than publish a
+      // session nobody asked for anymore.
       //
-      // Only torn down when the backend still holds *this* call's device:
-      // `_backend.disconnect()` closes whatever the backend currently holds,
-      // with no device argument to target. If a second `connectTo` resolved
-      // first and is already connected and published, an unconditional
-      // disconnect here would tear down that newer, wanted connection
-      // instead of this stale one — leaving a published "connected" session
-      // with no socket behind it, which nothing can ever recover because
-      // `disconnect()` also cancels the subscriptions `failureStream` needs
-      // to report the loss.
-      if (_backend.connectedDevice?.id == device.id) {
+      // Two independent checks guard the actual `disconnect()`:
+      //
+      // - Device match: `_backend.disconnect()` closes whatever the backend
+      //   currently holds, with no device argument to target. If a second
+      //   `connectTo` resolved first and is already connected to a
+      //   *different* device, an unconditional disconnect here would tear
+      //   down that newer, wanted connection instead of this stale one.
+      //
+      // - Not newer-owned: matching on device id alone is not enough,
+      //   because `startCast` can supersede this call and then connect to
+      //   *this same* device to load media on it — `_current` is that
+      //   newer session at this point, not this call's. Disconnecting here
+      //   would kill the very socket `startCast` just adopted and is
+      //   actively using, leaving a published session with real media over
+      //   a closed connection: the exact phantom-connected failure mode
+      //   this whole generation guard exists to eliminate. `stopCast`
+      //   publishes null before bumping past this call, so it never counts
+      //   as an owner and the disconnect it demands still happens.
+      final newerOwnsThisDevice = _current?.device.id == device.id;
+      if (_backend.connectedDevice?.id == device.id && !newerOwnsThisDevice) {
         await _backend.disconnect();
       }
       return;
