@@ -34,6 +34,7 @@ defmodule Mydia.Library.PhashGenerator do
 
   require Logger
 
+  alias Mydia.Library.Ffmpeg
   alias Mydia.Library.MediaFile
   alias Mydia.Library.ThumbnailGenerator
 
@@ -203,7 +204,10 @@ defmodule Mydia.Library.PhashGenerator do
       "-"
     ]
 
-    case run_ffmpeg(args) do
+    # stderr is kept out of the captured output here: ffmpeg writes the raw
+    # pixel bytes to stdout ("-"), so merging its banner/log text from
+    # stderr would corrupt the fixed-size payload checked below.
+    case Ffmpeg.run(args, stderr_to_stdout: false) do
       {:ok, output} when byte_size(output) == @hash_width * @hash_height ->
         {:ok, output}
 
@@ -300,21 +304,4 @@ defmodule Mydia.Library.PhashGenerator do
   end
 
   defp pad_number(n), do: String.pad_leading(to_string(n), 2, "0")
-
-  defp run_ffmpeg(args) do
-    ffmpeg = System.find_executable("ffmpeg")
-
-    if is_nil(ffmpeg) do
-      {:error, :ffmpeg_not_found}
-    else
-      case System.cmd(ffmpeg, args, stderr_to_stdout: false) do
-        {output, 0} ->
-          {:ok, output}
-
-        {output, exit_code} ->
-          Logger.debug("FFmpeg failed with exit code #{exit_code}")
-          {:error, {:ffmpeg_error, exit_code, output}}
-      end
-    end
-  end
 end

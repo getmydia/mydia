@@ -24,6 +24,7 @@ defmodule Mydia.Library.ThumbnailGenerator do
 
   require Logger
 
+  alias Mydia.Library.Ffmpeg
   alias Mydia.Library.GeneratedMedia
   alias Mydia.Library.MediaFile
 
@@ -436,7 +437,7 @@ defmodule Mydia.Library.ThumbnailGenerator do
   end
 
   defp run_and_verify(args, output_path) do
-    case run_ffmpeg(args) do
+    case Ffmpeg.run(args) do
       {:ok, _output} ->
         if File.exists?(output_path) do
           :ok
@@ -446,23 +447,6 @@ defmodule Mydia.Library.ThumbnailGenerator do
 
       {:error, reason} ->
         {:error, reason}
-    end
-  end
-
-  defp run_ffmpeg(args) do
-    ffmpeg = System.find_executable("ffmpeg")
-
-    if is_nil(ffmpeg) do
-      {:error, :ffmpeg_not_found}
-    else
-      case System.cmd(ffmpeg, args, stderr_to_stdout: true) do
-        {output, 0} ->
-          {:ok, output}
-
-        {output, exit_code} ->
-          Logger.debug("FFmpeg failed with exit code #{exit_code}: #{output}")
-          {:error, {:ffmpeg_error, exit_code, output}}
-      end
     end
   end
 
