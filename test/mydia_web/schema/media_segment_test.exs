@@ -85,11 +85,27 @@ defmodule MydiaWeb.Schema.MediaSegmentTest do
       assert visible_segments_for(media_file) == []
     end
 
-    test "chapter sourced segments are always exposed" do
+    test "exposes chapter sourced segments, which the pipeline writes at full confidence" do
       media_file = media_file_fixture()
       insert_segment(media_file, %{source: "chapters", confidence: 1.0})
 
       assert [_segment] = visible_segments_for(media_file)
+    end
+
+    test "applies the floor uniformly, without a bypass for chapter sourced segments" do
+      # The floor is deliberately a single condition on confidence, with no
+      # exception by source. A chapter hit clears it because the detection
+      # pipeline writes chapter matches at confidence 1.0, not because the
+      # resolver treats `source` specially.
+      #
+      # Keeping it uniform means a chapter segment that somehow lands below the
+      # floor disappears from the wire, which is the signal you want: it says
+      # something wrote it wrong. A source bypass would mask exactly that bug
+      # and split exposure across two rules.
+      media_file = media_file_fixture()
+      insert_segment(media_file, %{source: "chapters", confidence: 0.2})
+
+      assert visible_segments_for(media_file) == []
     end
 
     test "preloads segments when the association has not been loaded" do

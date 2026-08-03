@@ -321,6 +321,17 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   @doc """
   Filters persisted segments down to the ones trustworthy enough to show a viewer.
 
+  The floor is a single condition on `confidence`, with no exception by
+  `source`. Chapter-sourced segments clear it because the detection pipeline
+  writes chapter matches at confidence 1.0, not because this function treats
+  them specially.
+
+  That uniformity is deliberate. Exposure stays one rule in one place, which is
+  the same reason `confidence` and `source` never reach the player. And a
+  chapter segment that somehow lands below the floor vanishing from the wire is
+  the signal you want, because it means something wrote it wrong; a bypass on
+  `source` would mask precisely that.
+
   Public so the confidence floor can be exercised directly in tests.
   """
   @spec visible_segments(map()) :: [Library.MediaSegment.t()]
