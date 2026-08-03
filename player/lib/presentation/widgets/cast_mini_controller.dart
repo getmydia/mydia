@@ -332,10 +332,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await manager.reconnectStoredSession();
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(castErrorMessage(e, ref: ref)),
-        backgroundColor: Colors.red,
-      ));
+      showCastErrorSnackBar(context, e, ref: ref);
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting cast: $e');
       if (!mounted) return;

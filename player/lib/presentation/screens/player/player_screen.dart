@@ -342,12 +342,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
       castNotifier.clear();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e is CastBackendException
-              ? castErrorMessage(e, ref: ref)
-              : 'Failed to start casting: $e'),
-          backgroundColor: Colors.red,
-        ));
+        if (e is CastBackendException) {
+          showCastErrorSnackBar(context, e, ref: ref);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to start casting: $e'),
+            backgroundColor: Colors.red,
+          ));
+        }
       }
       return false;
     }
@@ -2245,10 +2247,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(castErrorMessage(e, ref: ref)),
-        backgroundColor: Colors.red,
-      ));
+      showCastErrorSnackBar(context, e, ref: ref);
     } catch (e) {
       // Anything that isn't a CastBackendException: the session manager
       // itself resolving (Hive, GraphQL client), or a non-typed failure from

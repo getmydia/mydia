@@ -556,4 +556,141 @@ void main() {
       expect(durations, [const Duration(minutes: 107)]);
     });
   });
+
+  group('isLocalNetworkAddress', () {
+    test('accepts every private and link-local IPv4 range', () {
+      for (final address in const [
+        '10.0.0.1',
+        '10.255.255.254',
+        '172.16.0.1',
+        '172.31.255.254',
+        '192.168.1.42',
+        '169.254.10.20',
+      ]) {
+        expect(isLocalNetworkAddress(InternetAddress(address)), isTrue,
+            reason: '$address should be treated as local');
+      }
+    });
+
+    test('rejects the 172.x addresses just outside the private block', () {
+      // 172.16/12 is the narrowest range and the easiest to get wrong.
+      expect(isLocalNetworkAddress(InternetAddress('172.15.0.1')), isFalse);
+      expect(isLocalNetworkAddress(InternetAddress('172.32.0.1')), isFalse);
+    });
+
+    test('rejects public, loopback and carrier-grade NAT addresses', () {
+      for (final address in const [
+        '8.8.8.8',
+        '1.1.1.1',
+        '127.0.0.1',
+        '100.64.0.1',
+      ]) {
+        expect(isLocalNetworkAddress(InternetAddress(address)), isFalse,
+            reason: '$address should not be treated as local');
+      }
+    });
+
+    test('accepts IPv6 link-local and unique-local addresses', () {
+      expect(isLocalNetworkAddress(InternetAddress('fe80::1')), isTrue);
+      expect(isLocalNetworkAddress(InternetAddress('fd00::1')), isTrue);
+    });
+
+    test('rejects IPv6 loopback and global unicast', () {
+      expect(isLocalNetworkAddress(InternetAddress('::1')), isFalse);
+      expect(isLocalNetworkAddress(InternetAddress('2001:4860:4860::8888')),
+          isFalse);
+    });
+  });
+
+  group('looksLikeLocalNetworkDenial', () {
+    const denial = SocketException(
+      'No route to host',
+      osError: OSError('No route to host', 65),
+    );
+
+    test('matches EHOSTUNREACH to a local address on an Apple platform', () {
+      expect(
+        looksLikeLocalNetworkDenial(
+          error: denial,
+          target: InternetAddress('192.168.1.42'),
+          applePlatform: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects the identical error off an Apple platform', () {
+      // errno 65 is EHOSTUNREACH on Darwin but ENOPKG on Linux, where
+      // EHOSTUNREACH is 113. Without the platform gate this would fire on
+      // an unrelated error on every non-Apple target.
+      expect(
+        looksLikeLocalNetworkDenial(
+          error: denial,
+          target: InternetAddress('192.168.1.42'),
+          applePlatform: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects other errnos', () {
+      for (final code in const [51, 61, 113]) {
+        expect(
+          looksLikeLocalNetworkDenial(
+            error: SocketException('nope', osError: OSError('nope', code)),
+            target: InternetAddress('192.168.1.42'),
+            applePlatform: true,
+          ),
+          isFalse,
+          reason: 'errno $code is not EHOSTUNREACH on Darwin',
+        );
+      }
+    });
+
+    test('rejects a SocketException carrying no OSError', () {
+      expect(
+        looksLikeLocalNetworkDenial(
+          error: const SocketException('bare'),
+          target: InternetAddress('192.168.1.42'),
+          applePlatform: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects errors that are not SocketExceptions', () {
+      expect(
+        looksLikeLocalNetworkDenial(
+          error: ArgumentError('malformed host'),
+          target: InternetAddress('192.168.1.42'),
+          applePlatform: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a public target', () {
+      expect(
+        looksLikeLocalNetworkDenial(
+          error: denial,
+          target: InternetAddress('93.184.216.34'),
+          applePlatform: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a null target', () {
+      // reconstructDartCastDevice threw before any connection was attempted,
+      // so there is nothing to blame the permission for.
+      expect(
+        looksLikeLocalNetworkDenial(
+          error: denial,
+          target: null,
+          applePlatform: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

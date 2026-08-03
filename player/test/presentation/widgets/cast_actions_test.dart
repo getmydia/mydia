@@ -28,6 +28,23 @@ void main() {
 
       expect(castErrorMessage(e), contains('local network'));
     });
+
+    test('hedges when a local network denial is suspected', () {
+      const e = CastBackendException(
+        'SocketException: No route to host, errno = 65',
+        CastFailureKind.localNetworkDenied,
+      );
+
+      final macMessage = castErrorMessage(e, isIOS: false);
+      expect(macMessage, contains('macOS'));
+      expect(macMessage, contains('local network'));
+      // Hedged, not asserted: the receiver really might just be off.
+      expect(macMessage, contains('may be'));
+      // The raw socket error is never user-facing.
+      expect(macMessage, isNot(contains('errno')));
+
+      expect(castErrorMessage(e, isIOS: true), contains('iOS'));
+    });
   });
 
   group('castErrorMessage covers every failure kind', () {
@@ -98,6 +115,82 @@ void main() {
         matching: find.byType(Icon),
       ));
       expect(icon.icon, Icons.cast_connected);
+    });
+  });
+
+  group('showCastErrorSnackBar', () {
+    Future<void> pumpAndShow(
+      WidgetTester tester,
+      CastFailureKind kind, {
+      bool canOpenSettings = true,
+    }) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showCastErrorSnackBar(
+                context,
+                CastBackendException('raw', kind),
+                canOpenSettings: canOpenSettings,
+              ),
+              child: const Text('go'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('go'));
+      await tester.pump();
+    }
+
+    testWidgets('offers a Settings action for a local network denial',
+        (tester) async {
+      await pumpAndShow(tester, CastFailureKind.localNetworkDenied);
+
+      expect(find.byType(SnackBarAction), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
+    });
+
+    testWidgets('offers a Settings action for denied discovery',
+        (tester) async {
+      await pumpAndShow(tester, CastFailureKind.discoveryDenied);
+
+      expect(find.byType(SnackBarAction), findsOneWidget);
+    });
+
+    testWidgets('offers no action for an unreachable receiver', (tester) async {
+      await pumpAndShow(tester, CastFailureKind.unreachable);
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(SnackBarAction), findsNothing);
+    });
+
+    testWidgets('offers no action for denied discovery off Apple platforms',
+        (tester) async {
+      // discoveryDenied also fires when Android cannot take the multicast
+      // lock. No Android pane fixes that, so the remedy is gated on the
+      // platform rather than on the failure kind alone.
+      await pumpAndShow(
+        tester,
+        CastFailureKind.discoveryDenied,
+        canOpenSettings: false,
+      );
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(SnackBarAction), findsNothing);
+    });
+
+    testWidgets('still explains the failure when no remedy is offered',
+        (tester) async {
+      // The message must survive the button being withheld, otherwise an
+      // Android user gets a bare snackbar with nothing actionable at all.
+      await pumpAndShow(
+        tester,
+        CastFailureKind.discoveryDenied,
+        canOpenSettings: false,
+      );
+
+      expect(find.textContaining('local network'), findsOneWidget);
     });
   });
 }
