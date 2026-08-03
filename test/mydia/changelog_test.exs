@@ -60,10 +60,15 @@ defmodule Mydia.ChangelogTest do
     end
 
     test "latest/0 agrees with the head of entries/0" do
-      case Changelog.entries() do
-        [] -> assert Changelog.latest() == nil
-        [head | _] -> assert Changelog.latest() == head.version_string
-      end
+      entries = Changelog.entries()
+
+      expected =
+        case List.first(entries) do
+          nil -> nil
+          %Entry{version_string: version_string} -> version_string
+        end
+
+      assert Changelog.latest() == expected
     end
   end
 end
