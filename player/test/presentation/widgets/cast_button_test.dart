@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
-import 'package:player/core/cast/cast_target.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_button.dart';
 
@@ -89,53 +88,110 @@ void main() {
     expect(button.tooltip, 'Cast to device');
   });
 
-  testWidgets(
-      'reflects a chosen-but-idle target as active, with a "will play on" tooltip',
-      (tester) async {
-    await pumpButton(tester, capabilities: const CastCapabilities.full());
+  /// Reads the single Icon inside the button. The connecting state nests its
+  /// icon in a Stack alongside a progress ring, so this deliberately finds a
+  /// descendant rather than the button's direct child.
+  Icon iconOf(WidgetTester tester) => tester.widget<Icon>(find.descendant(
+        of: find.byKey(const Key('cast-button')),
+        matching: find.byType(Icon),
+      ));
 
-    // Set the target after the provider is live, matching how pickCastDevice
-    // records an intent for the next playback.
-    final container = ProviderScope.containerOf(
-      tester.element(find.byKey(const Key('cast-button'))),
-    );
-    container.read(castTargetProvider.notifier).set(_device);
-    await tester.pump();
+  String? tooltipOf(WidgetTester tester) =>
+      tester.widget<IconButton>(find.byKey(const Key('cast-button'))).tooltip;
 
-    final icon = tester.widget<Icon>(find.descendant(
-      of: find.byKey(const Key('cast-button')),
-      matching: find.byType(Icon),
-    ));
-    expect(icon.icon, Icons.cast_connected);
-    expect(icon.color, Colors.blue);
-
-    final button = tester.widget<IconButton>(
-      find.byKey(const Key('cast-button')),
-    );
-    expect(button.tooltip, 'Will play on ${_device.name}');
-  });
-
-  testWidgets('an active cast session takes priority over the tooltip text',
+  testWidgets('a remembered device with no connection is not "connected"',
       (tester) async {
     await pumpButton(
       tester,
       capabilities: const CastCapabilities.full(),
       overrides: [
-        isCastingProvider.overrideWithValue(true),
-        currentCastDeviceProvider.overrideWithValue(_device),
+        castConnectionProvider.overrideWithValue(
+          CastConnection.chosenOffline,
+        ),
+        castDisplayDeviceProvider.overrideWithValue(_device),
       ],
     );
 
-    final icon = tester.widget<Icon>(find.descendant(
-      of: find.byKey(const Key('cast-button')),
-      matching: find.byType(Icon),
-    ));
-    expect(icon.icon, Icons.cast_connected);
-    expect(icon.color, Colors.blue);
+    expect(iconOf(tester).icon, Icons.cast,
+        reason: 'cast_connected is the platform glyph for owning a receiver; '
+            'a device nothing is connected to has not earned it');
+    expect(iconOf(tester).color, Colors.blue);
+    expect(tooltipOf(tester), '${_device.name} — not connected');
+  });
 
-    final button = tester.widget<IconButton>(
-      find.byKey(const Key('cast-button')),
+  testWidgets('shows a progress ring while connecting', (tester) async {
+    await pumpButton(
+      tester,
+      capabilities: const CastCapabilities.full(),
+      overrides: [
+        castConnectionProvider.overrideWithValue(CastConnection.connecting),
+        castDisplayDeviceProvider.overrideWithValue(_device),
+      ],
     );
-    expect(button.tooltip, 'Casting to ${_device.name}');
+
+    expect(iconOf(tester).icon, Icons.cast);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('cast-button')),
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    expect(tooltipOf(tester), 'Connecting to ${_device.name}…');
+  });
+
+  testWidgets('a live connection with no media shows cast_connected',
+      (tester) async {
+    await pumpButton(
+      tester,
+      capabilities: const CastCapabilities.full(),
+      overrides: [
+        castConnectionProvider.overrideWithValue(
+          CastConnection.connectedIdle,
+        ),
+        castDisplayDeviceProvider.overrideWithValue(_device),
+      ],
+    );
+
+    expect(iconOf(tester).icon, Icons.cast_connected);
+    expect(iconOf(tester).color, Colors.blue);
+    expect(tooltipOf(tester), 'Connected to ${_device.name}');
+  });
+
+  testWidgets('an active cast shows cast_connected and a casting tooltip',
+      (tester) async {
+    await pumpButton(
+      tester,
+      capabilities: const CastCapabilities.full(),
+      overrides: [
+        castConnectionProvider.overrideWithValue(CastConnection.casting),
+        castDisplayDeviceProvider.overrideWithValue(_device),
+      ],
+    );
+
+    expect(iconOf(tester).icon, Icons.cast_connected);
+    expect(iconOf(tester).color, Colors.blue);
+    expect(tooltipOf(tester), 'Casting to ${_device.name}');
+  });
+
+  testWidgets('cast_connected never appears without a live connection',
+      (tester) async {
+    for (final state in [
+      CastConnection.none,
+      CastConnection.connecting,
+      CastConnection.chosenOffline,
+    ]) {
+      await pumpButton(
+        tester,
+        capabilities: const CastCapabilities.full(),
+        overrides: [
+          castConnectionProvider.overrideWithValue(state),
+          castDisplayDeviceProvider.overrideWithValue(_device),
+        ],
+      );
+
+      expect(iconOf(tester).icon, isNot(Icons.cast_connected),
+          reason: '$state must not render the connected glyph');
+    }
   });
 }

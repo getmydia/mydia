@@ -82,7 +82,7 @@ void main() {
       expect(positioned.right, 12);
     });
 
-    testWidgets('reflects an idle target picked from elsewhere',
+    testWidgets('shows a remembered device as chosen, not connected',
         (tester) async {
       await tester.pumpWidget(host());
       await tester.pump();
@@ -97,7 +97,10 @@ void main() {
         of: find.byKey(const Key('cast-button')),
         matching: find.byType(Icon),
       ));
-      expect(icon.icon, Icons.cast_connected);
+      expect(icon.icon, Icons.cast,
+          reason: 'a remembered device with no live connection must not claim '
+              'the cast_connected glyph');
+      expect(icon.color, Colors.blue);
     });
   });
 }
