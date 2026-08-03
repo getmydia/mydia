@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_device_picker.dart';
 
@@ -172,6 +173,7 @@ void main() {
         find.byKey(Key('cast-device-${_chromecast.id}')),
       );
       expect((tile.leading as Icon).icon, Icons.cast_connected);
+      expect((tile.leading as Icon).color, AppColors.primary);
       expect(tile.trailing, isA<Icon>());
     });
 
@@ -193,6 +195,8 @@ void main() {
       );
       expect((tile.leading as Icon).icon, Icons.cast,
           reason: 'the row must not claim a connection the app does not have');
+      expect((tile.leading as Icon).color, AppColors.primary,
+          reason: 'chosen still gets the accent colour, even unconnected');
       expect(tile.trailing, isNull,
           reason: 'the check mark means connected, not merely chosen');
     });
@@ -213,6 +217,8 @@ void main() {
         find.byKey(Key('cast-device-${_otherChromecast.id}')),
       );
       expect((tile.leading as Icon).icon, Icons.cast);
+      expect((tile.leading as Icon).color, AppColors.textSecondary,
+          reason: 'only the chosen device gets the accent colour');
       expect(tile.trailing, isNull);
     });
   });
