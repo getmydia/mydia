@@ -1114,4 +1114,102 @@ void main() {
       expect(sessions.live, isEmpty);
     });
   });
+
+  group('connectTo', () {
+    test('connects with no media and publishes a connected session', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+
+      expect(backend.connectedDevice, device);
+      expect(manager.currentSession?.device, device);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+      expect(manager.currentSession?.mediaInfo, isNull);
+      expect(manager.currentSession?.isStale, isFalse);
+    });
+
+    test('publishes connecting before connected', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      final seen = <CastConnectionState?>[];
+      final sub = manager.sessionStream.listen(
+        (s) => seen.add(s?.connectionState),
+      );
+      addTearDown(sub.cancel);
+
+      await manager.connectTo(device);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, [
+        CastConnectionState.connecting,
+        CastConnectionState.connected,
+      ]);
+    });
+
+    test('loads no media and starts no streaming session', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+
+      expect(backend.loadedRequests, isEmpty);
+      expect(sessions.started, isEmpty,
+          reason: 'an idle connection resolves no route, so there is nothing '
+              'to serve and no HLS session to open');
+    });
+
+    test('never enables LAN access, even in p2p mode', () async {
+      // The bridge route is the only thing that enables LAN, and it is chosen
+      // during route resolution — which connectTo skips entirely. This is what
+      // keeps the "listener exists only while a cast is in progress" rule true
+      // by construction rather than by new gating.
+      final manager = build(isP2pMode: true);
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+
+      expect(lanCalls, isEmpty);
+    });
+
+    test('stores nothing', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+
+      expect(await store.load(), isNull);
+    });
+
+    test('clears the session and rethrows when the connect fails', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      backend.failNextConnect(CastFailureKind.unreachable);
+
+      await expectLater(
+        manager.connectTo(device),
+        throwsA(isA<CastBackendException>()),
+      );
+
+      expect(manager.currentSession, isNull);
+      expect(lanCalls, isEmpty);
+    });
+
+    test('marks the session lost when the receiver idle-times-out', () async {
+      // The Default Media Receiver drops the connection after a few minutes
+      // with nothing loaded. That has to reach the UI rather than leaving a
+      // blue icon pointed at a dead socket.
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+      backend.emitFailure(CastFailureKind.connectionLost);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(manager.currentSession?.connectionState, CastConnectionState.lost);
+      expect(manager.currentSession?.isStale, isTrue);
+    });
+  });
 }

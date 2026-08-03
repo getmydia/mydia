@@ -234,6 +234,67 @@ class CastSessionManager {
     }
   }
 
+  /// Connect to [device] with no media on it.
+  ///
+  /// This is what makes the cast icon's "connected" claim true before anything
+  /// plays, and it moves failure to the moment the user picks a device instead
+  /// of the moment they press play.
+  ///
+  /// Deliberately resolves **no route** and enables **no LAN access**: both
+  /// need a [CastLaunchRequest], and nothing is being served yet. That is also
+  /// what keeps the security rule — the LAN listener exists only while a cast
+  /// is in progress — true by construction here.
+  ///
+  /// On failure the session is cleared and the exception rethrown. The caller
+  /// keeps the chosen device, so the UI lands on "chosen, not connected" and
+  /// can offer a reconnect.
+  Future<void> connectTo(CastDevice device) async {
+    _publish(CastSession(
+      device: device,
+      playbackState: CastPlaybackState.idle,
+      connectionState: CastConnectionState.connecting,
+    ));
+
+    try {
+      await _backend.connect(device);
+    } catch (e) {
+      _publish(null);
+      rethrow;
+    }
+
+    _listenForConnectionLoss();
+
+    _publish(CastSession(
+      device: device,
+      playbackState: CastPlaybackState.idle,
+      connectionState: CastConnectionState.connected,
+    ));
+  }
+
+  /// Failure-only subscription for an idle connection.
+  ///
+  /// A media-less session has no positions or durations worth tracking, but it
+  /// must still notice the receiver going away: Google's Default Media Receiver
+  /// idle-times-out after a few minutes with nothing loaded, so this fires on
+  /// an ordinary browse session, not just on a network fault.
+  ///
+  /// `_listenToBackend` replaces this wholesale (it calls
+  /// `_cancelSubscriptions` first) when media is later loaded on the same
+  /// connection.
+  void _listenForConnectionLoss() {
+    _cancelSubscriptions();
+
+    _failureSub = _backend.failureStream.listen((failure) {
+      if (failure != CastFailureKind.connectionLost) return;
+
+      final current = _current;
+      if (current == null) return;
+
+      debugPrint('[CastSessionManager] Receiver lost while idle');
+      _publish(current.copyWith(connectionState: CastConnectionState.lost));
+    });
+  }
+
   /// Resolve a route, enabling LAN access first when the route will be a
   /// bridge one.
   ///

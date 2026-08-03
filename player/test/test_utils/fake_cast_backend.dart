@@ -16,6 +16,10 @@ class FakeCastBackend implements CastBackend {
   final List<CastMediaRequest> loadedRequests = [];
   final List<Duration> seeks = [];
 
+  /// Every `connect` call, so tests can prove an open connection is reused
+  /// rather than torn down and rebuilt.
+  final List<CastDevice> connectAttempts = [];
+
   CastDevice? _connected;
   final List<CastFailureKind> _queuedLoadFailures = [];
   CastFailureKind? _persistentLoadFailure;
@@ -73,6 +77,7 @@ class FakeCastBackend implements CastBackend {
       _pendingConnectFailure = null;
       throw CastBackendException('fake connect failure', failure);
     }
+    connectAttempts.add(device);
     _connected = device;
   }
 
