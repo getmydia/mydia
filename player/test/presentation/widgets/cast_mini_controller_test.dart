@@ -43,7 +43,8 @@ CastSession _session({
   return CastSession(
     device: _device,
     playbackState: CastPlaybackState.playing,
-    isStale: isStale,
+    connectionState:
+        isStale ? CastConnectionState.lost : CastConnectionState.connected,
     mediaInfo: CastMediaInfo(
       title: 'Silo - S02E01',
       duration: duration,

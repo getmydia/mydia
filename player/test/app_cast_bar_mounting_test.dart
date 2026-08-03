@@ -32,7 +32,6 @@ const _device = CastDevice(
 CastSession _playingSession() => const CastSession(
       device: _device,
       playbackState: CastPlaybackState.playing,
-      isStale: false,
       mediaInfo: CastMediaInfo(
         title: 'Silo - S02E01',
         duration: Duration(minutes: 44),

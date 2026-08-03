@@ -617,7 +617,7 @@ class CastSessionManager {
 
       debugPrint('[CastSessionManager] Receiver lost; marking session stale');
       _publish(current.copyWith(
-        isStale: true,
+        connectionState: CastConnectionState.lost,
         playbackState: CastPlaybackState.idle,
       ));
     });
