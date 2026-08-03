@@ -320,6 +320,48 @@ defmodule Mydia.Library.SegmentDetectionTest do
       end
     end
 
+    test "waits rather than closing out early episodes when only two files are ready" do
+      # Two ready files is one short of what consensus needs: it requires
+      # @min_agreeing partners that agree, and a target cannot partner with
+      # itself. Running anyway would write the terminal `not_found` that no
+      # later tick revisits, permanently closing out the early episodes of a
+      # season that was only still filling in.
+      {media_item, files} = season_fixture(5)
+      [_, _, {third, _}, {fourth, _}, {fifth, _}] = files
+
+      for file <- [third, fourth, fifth] do
+        file
+        |> Ecto.Changeset.change(%{analyzed_at: nil, metadata: %{"container" => "mkv"}})
+        |> Repo.update!()
+      end
+
+      assert :ok = SegmentDetection.analyze_season(media_item.id, 1)
+
+      for {file, _path} <- files do
+        reloaded = Repo.get!(MediaFile, file.id)
+        assert reloaded.segment_analysis_state == "pending"
+        assert reloaded.segment_analysis_attempts == 0
+      end
+    end
+
+    test "does not wait forever when the whole season is ready but too small" do
+      # The counterpart to the test above. Every file has a runtime, so there is
+      # nothing left to wait for, and a two-file season settles honestly on
+      # not_found rather than staying pending indefinitely.
+      {media_item, files} = season_fixture(2)
+
+      for {_media_file, path} <- files do
+        FingerprintStub.put(path, noise(600, :unshared))
+      end
+
+      assert :ok = SegmentDetection.analyze_season(media_item.id, 1)
+
+      for {file, _path} <- files do
+        reloaded = Repo.get!(MediaFile, file.id)
+        assert reloaded.segment_analysis_state == "not_found"
+      end
+    end
+
     test "counts an attempt and records the error when fingerprinting fails" do
       {media_item, files} = season_fixture(2)
 

@@ -92,9 +92,19 @@ defmodule Mydia.Library.SegmentDetection do
         Enum.each(targets, &analyze_chapters_only/1)
         :ok
 
-      length(ready) < 2 ->
-        # The season is big enough, but its other files have no runtime yet.
-        # Waiting is the right answer here; `not_found` would be terminal.
+      length(ready) < @min_agreeing + 1 and length(ready) < length(files) ->
+        # The season is big enough, but not enough of it has a runtime yet.
+        #
+        # The threshold is `@min_agreeing + 1`, not 2. Consensus needs
+        # `@min_agreeing` partners that agree, and a target cannot partner with
+        # itself, so fewer than `@min_agreeing + 1` ready files makes consensus
+        # arithmetically impossible. Running anyway would write `not_found`,
+        # which is terminal and no later tick revisits, permanently closing out
+        # early episodes of a season that was merely still filling in.
+        #
+        # The second clause is what keeps a genuinely small season from waiting
+        # forever: once every file is ready, there is nothing left to wait for,
+        # so a two-file season proceeds and settles on `not_found` honestly.
         :ok
 
       true ->
