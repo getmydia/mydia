@@ -350,13 +350,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// away, while still reaching the metadata fetch that populates
   /// `_totalDuration` on the streaming path.
   ///
-  /// `castNotifier` is read once, up front: `castTargetProvider` is a
-  /// keep-alive root provider, like `invalidatorProvider` (see
-  /// [_invalidator]), so the notifier itself stays valid to call even if this
-  /// widget is disposed while `startCast` is awaited. `ref.read` itself is
-  /// not safe to call again at that point, which is why the notifier is
-  /// captured before any `await` rather than re-read after one.
-  ///
   /// [plan] is resolved by the caller before this runs, on every branch that
   /// calls it — so the receiver starts where the user asked, instead of
   /// always at zero the way it did when each of the three call sites reached
@@ -364,8 +357,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<bool> _castToTargetIfSet(ResumePlan plan) async {
     final target = ref.read(castTargetProvider);
     if (target == null) return false;
-
-    final castNotifier = ref.read(castTargetProvider.notifier);
 
     // Downloaded media lives only on this device; the route resolver has no
     // server-side file to hand the receiver. Playing locally is the useful
@@ -392,16 +383,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           startPosition: plan.position,
         ),
       );
-      // The session now owns the device; currentCastDeviceProvider reports
-      // it from here on. Leaving the target set would make every future
-      // playback cast forever with no way to opt out.
-      castNotifier.clear();
+      // The target and the session coexist deliberately: the target is what
+      // the user chose, the session is what is connected. Clearing it here
+      // would drop the cast icon to white mid-cast. Opting out is the bar's ✕
+      // or Stop, both of which disconnect — and "every future playback casts"
+      // is the correct behaviour while the user is visibly connected to a TV.
       return true;
     } catch (e) {
-      // A dead screen is the one outcome worse than not casting: clear the
-      // target and fall through so the user still gets their episode.
+      // A dead screen is the one outcome worse than not casting: fall through
+      // so the user still gets their episode. The chosen device is kept, so
+      // the bar offers a reconnect rather than silently discarding it.
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
-      castNotifier.clear();
       if (mounted) {
         if (e is CastBackendException) {
           showCastErrorSnackBar(context, e, ref: ref);
@@ -2160,9 +2152,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
 
     final isCasting = ref.watch(isCastingProvider);
-    final castDevice = ref.watch(currentCastDeviceProvider);
-    Widget body = isCasting && castDevice != null
-        ? _buildCastPlaceholder(castDevice)
+    final castSession = ref.watch(castSessionProvider).value;
+    Widget body = isCasting && castSession != null
+        ? _buildCastPlaceholder(castSession)
         : _buildBody();
 
     // Wrap with keyboard listener wherever a physical keyboard exists
@@ -2482,7 +2474,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// mounted over this screen by `app.dart`. Duplicating them here is the
   /// confusion this replaced — two surfaces showing the same title, device,
   /// play/pause and stop, with the bar clipping the remote's stop button.
-  Widget _buildCastPlaceholder(CastDevice device) {
+  ///
+  /// [session] rather than just the device: `isCastingProvider` stays true for
+  /// a [CastSession] that has gone stale (its `mediaInfo` survives the drop —
+  /// see `CastSession.copyWith`), and this is the app's single largest
+  /// `Icons.cast_connected` glyph. Rendering it over a connection that no
+  /// longer exists is exactly the false "connected" claim this feature exists
+  /// to eliminate, so a stale session gets the same outline glyph and "Lost
+  /// connection" wording as `CastMiniController`'s stale row, not a claim of
+  /// a live cast.
+  Widget _buildCastPlaceholder(CastSession session) {
+    final device = session.device;
+    final isStale = session.isStale;
+
     return Stack(
       children: [
         Center(
@@ -2498,10 +2502,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.cast_connected, size: 96, color: Colors.blue),
+                Icon(
+                  isStale ? Icons.cast_outlined : Icons.cast_connected,
+                  size: 96,
+                  color: isStale ? Colors.grey : Colors.blue,
+                ),
                 const SizedBox(height: 24),
                 Text(
-                  'Playing on ${device.name}',
+                  isStale
+                      ? 'Lost connection to ${device.name}'
+                      : 'Playing on ${device.name}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Colors.white,
                       ),

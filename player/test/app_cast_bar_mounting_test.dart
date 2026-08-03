@@ -32,7 +32,6 @@ const _device = CastDevice(
 CastSession _playingSession() => const CastSession(
       device: _device,
       playbackState: CastPlaybackState.playing,
-      isStale: false,
       mediaInfo: CastMediaInfo(
         title: 'Silo - S02E01',
         duration: Duration(minutes: 44),
@@ -73,16 +72,20 @@ void main() {
     return container;
   }
 
-  testWidgets('the idle bar renders where app.dart mounts it', (tester) async {
+  testWidgets('the offline bar renders where app.dart mounts it',
+      (tester) async {
     final container = await pumpApp(tester);
 
+    // No session at all — a target with nothing behind it renders the
+    // offline row, not the idle one (idle now requires a live connection;
+    // see cast_mini_controller.dart's state dispatch).
     container.read(castTargetProvider.notifier).set(_device);
     await tester.pump();
 
     expect(tester.takeException(), isNull,
         reason: 'the cast bar must build in its real mounting point, not '
             'only under a Scaffold in a widget test');
-    expect(find.byKey(const Key('cast-bar-idle-clear')), findsOneWidget);
+    expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
   });
 
   testWidgets('stopping a cast can open its confirmation dialog',

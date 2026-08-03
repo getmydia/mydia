@@ -115,34 +115,46 @@ class CastMediaInfo {
   }
 }
 
-/// Represents an active casting session.
+/// How far the app has got with the *receiver*, independent of what is playing.
+///
+/// Distinct from [CastPlaybackState], which describes the media. A session can
+/// be [connected] with no media at all — that is exactly what choosing a device
+/// while nothing is playing produces, and it is what lets the cast icon claim
+/// "connected" honestly before playback starts.
+enum CastConnectionState { connecting, connected, lost }
+
+/// Represents a connection to a receiver, with or without media on it.
 class CastSession {
   final CastDevice device;
   final CastMediaInfo? mediaInfo;
   final CastPlaybackState playbackState;
-
-  /// True once the receiver has dropped off the network. The UI offers a
-  /// reconnect rather than showing controls that silently do nothing.
-  final bool isStale;
+  final CastConnectionState connectionState;
 
   const CastSession({
     required this.device,
     this.mediaInfo,
     required this.playbackState,
-    this.isStale = false,
+    this.connectionState = CastConnectionState.connected,
   });
+
+  /// True once the receiver has dropped off the network. The UI offers a
+  /// reconnect rather than showing controls that silently do nothing.
+  ///
+  /// Derived rather than stored so it can never disagree with
+  /// [connectionState].
+  bool get isStale => connectionState == CastConnectionState.lost;
 
   CastSession copyWith({
     CastDevice? device,
     CastMediaInfo? mediaInfo,
     CastPlaybackState? playbackState,
-    bool? isStale,
+    CastConnectionState? connectionState,
   }) {
     return CastSession(
       device: device ?? this.device,
       mediaInfo: mediaInfo ?? this.mediaInfo,
       playbackState: playbackState ?? this.playbackState,
-      isStale: isStale ?? this.isStale,
+      connectionState: connectionState ?? this.connectionState,
     );
   }
 }

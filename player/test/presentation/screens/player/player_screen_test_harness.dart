@@ -71,12 +71,21 @@ class FakeDownloadService extends Fake implements DownloadService {
 class CapturingCastSessionManager extends Fake implements CastSessionManager {
   CastLaunchRequest? capturedRequest;
 
+  /// When set, `startCast` throws this instead of succeeding — simulating an
+  /// unreachable receiver or a rejected codec, so a test can prove
+  /// `_castToTargetIfSet` falls through to local playback on failure without
+  /// clearing the chosen device (`castTargetProvider` stays set so the bar
+  /// can offer a reconnect).
+  Object? startCastError;
+
   @override
   Future<void> startCast({
     required CastDevice device,
     required CastLaunchRequest request,
   }) async {
     capturedRequest = request;
+    final error = startCastError;
+    if (error != null) throw error;
   }
 }
 

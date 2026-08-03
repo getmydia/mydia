@@ -14,6 +14,7 @@ import 'cast_route_resolver.dart';
 import 'cast_session_manager.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
+import 'cast_target.dart';
 import 'dart_cast_backend.dart';
 import 'multicast_lock.dart';
 
@@ -141,11 +142,74 @@ final castSessionProvider = StreamProvider<CastSession?>((ref) async* {
   yield* manager.sessionStream;
 });
 
+/// True only when media is actually loaded on the receiver.
+///
+/// Narrowed from `session != null` when idle connections arrived: an idle
+/// connection *is* a session, but nothing is playing on it. `PlayerScreen`
+/// swaps its whole body on this provider and restarts local playback when it
+/// goes false, so widening it back to "any session" would blank the player the
+/// moment a user chose a device.
 final isCastingProvider = Provider<bool>((ref) {
   return ref.watch(castSessionProvider).maybeWhen(
-        data: (session) => session != null,
+        data: (session) => session?.mediaInfo != null,
         orElse: () => false,
       );
+});
+
+/// What the user can currently be told about casting.
+///
+/// Derived from two orthogonal facts — which device was chosen
+/// ([castTargetProvider]) and what connection exists ([castSessionProvider]) —
+/// so that no widget re-derives them and they cannot drift apart. Before this
+/// existed, `CastButton` computed `isCasting || target != null` and showed the
+/// platform's "we own this receiver" glyph for a device nothing had contacted.
+enum CastConnection {
+  /// No device chosen.
+  none,
+
+  /// A connect is in flight.
+  connecting,
+
+  /// Connected to the receiver, nothing loaded on it.
+  connectedIdle,
+
+  /// Connected with media loaded.
+  casting,
+
+  /// A device is remembered but no connection is live. Reached by a failed
+  /// connect and by a receiver that idle-timed-out; named for what it is
+  /// rather than how it got there.
+  chosenOffline,
+}
+
+final castConnectionProvider = Provider<CastConnection>((ref) {
+  final target = ref.watch(castTargetProvider);
+  final session = ref.watch(castSessionProvider).value;
+
+  if (session != null && !session.isStale) {
+    if (session.connectionState == CastConnectionState.connecting) {
+      return CastConnection.connecting;
+    }
+    return session.mediaInfo == null
+        ? CastConnection.connectedIdle
+        : CastConnection.casting;
+  }
+
+  // No usable connection. A remembered device — or the device a lost session
+  // was using — is all that is left to name.
+  if (session != null || target != null) return CastConnection.chosenOffline;
+  return CastConnection.none;
+});
+
+/// The device the UI should name, connected or not.
+///
+/// The session's device wins when there is one, because it is the receiver
+/// actually being talked to; the chosen target is the fallback for every state
+/// with no session behind it.
+final castDisplayDeviceProvider = Provider<CastDevice?>((ref) {
+  final session = ref.watch(castSessionProvider).value;
+  if (session != null) return session.device;
+  return ref.watch(castTargetProvider);
 });
 
 final currentCastDeviceProvider = Provider<CastDevice?>((ref) {

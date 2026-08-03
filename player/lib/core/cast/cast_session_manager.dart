@@ -120,6 +120,23 @@ class CastSessionManager {
   /// guards the equivalent local-playback restart the same way.
   bool _isRestartingForSeek = false;
 
+  /// Bumped at the start of every [connectTo] and by [stopCast].
+  ///
+  /// `connectTo` awaits `_backend.connect(device)` with nothing else guarding
+  /// against a second call landing while the first is still in flight — the
+  /// cast button stays tappable while connecting, and a cancel
+  /// (`cast-bar-connecting-cancel`) is `stopCast`, not something that can
+  /// reach into a suspended `connectTo` and unwind it. Capturing this value at
+  /// entry and re-checking it after the await is what lets a superseded call
+  /// notice: if the generation has moved on — the user cancelled, or picked a
+  /// second device before the first connect resolved — the connection this
+  /// call just established is unwanted, so it is torn down instead of
+  /// published. Without this, cancelling mid-connect was a no-op (there was
+  /// no session yet for `stopCast`'s `disconnect()` to act on) and the
+  /// connect would resurrect the bar up to 15s later; a double-pick left
+  /// whichever connect resolved last in control with no way to stop it.
+  int _connectGeneration = 0;
+
   /// Maps receiver-reported positions onto real media positions.
   ///
   /// Non-zero offset whenever a cast was resumed mid-item on an HLS route:
@@ -161,6 +178,19 @@ class CastSessionManager {
     required CastDevice device,
     required CastLaunchRequest request,
   }) async {
+    // Invalidates any `connectTo` still awaiting `_backend.connect` — see
+    // `_connectGeneration`'s dartdoc. Must happen before anything else here,
+    // the same way `stopCast` bumps it first: a user can pick a device via
+    // `connectTo` and, before that connect resolves (up to 15s), immediately
+    // start playing something, landing here while the picker's `connectTo`
+    // is still in flight. Without this, that in-flight `connectTo` would
+    // resolve later, see itself *not* superseded, and publish a media-less
+    // idle session over the one this call is about to load — and
+    // `_listenForConnectionLoss`'s subscription setup would then tear down
+    // the progress/state subscriptions this call installs via
+    // `_listenToBackend`.
+    _connectGeneration++;
+
     final resolver = _resolverFactory();
 
     // Captured before any attempt so rollback can tell whether *this* call
@@ -190,11 +220,25 @@ class CastSessionManager {
       );
     }
 
-    try {
-      await _backend.connect(device);
-    } catch (e) {
-      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
-      rethrow;
+    // Reuse an open connection instead of rebuilding it. `connectTo` may
+    // already own this receiver because the user chose it while browsing, and
+    // `_backend.connect` sends LAUNCH again — evicting and relaunching the
+    // receiver app for no reason, which the user sees as a flicker on the TV
+    // and a slower start.
+    //
+    // The `connected` check matters as much as the device check: after a drop,
+    // `connectedDevice` still names the device (nothing called disconnect), so
+    // matching on the id alone would load onto a dead socket.
+    final reusable = _backend.connectedDevice?.id == device.id &&
+        _current?.connectionState == CastConnectionState.connected;
+
+    if (!reusable) {
+      try {
+        await _backend.connect(device);
+      } catch (e) {
+        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        rethrow;
+      }
     }
 
     _listenToBackend(request);
@@ -221,6 +265,13 @@ class CastSessionManager {
             '[CastSessionManager] Ignoring disconnect error during rollback: $e');
       }
       await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+      // The backend has just been disconnected, so leaving a session
+      // published — as `connectTo` may have done before this call, or a
+      // prior `startCast` on this same device — would claim a connection
+      // that no longer exists. That is exactly the stale "connected" state
+      // this project exists to eliminate, so clear it unconditionally here,
+      // not only when the connection was reused.
+      _publish(null);
       rethrow;
     }
 
@@ -232,6 +283,107 @@ class CastSessionManager {
     if (loaded.kind != CastRouteKind.localBridge && !lanEnabledBeforeCall) {
       await _disableLanQuietly();
     }
+  }
+
+  /// Connect to [device] with no media on it.
+  ///
+  /// This is what makes the cast icon's "connected" claim true before anything
+  /// plays, and it moves failure to the moment the user picks a device instead
+  /// of the moment they press play.
+  ///
+  /// Deliberately resolves **no route** and enables **no LAN access**: both
+  /// need a [CastLaunchRequest], and nothing is being served yet. That is also
+  /// what keeps the security rule — the LAN listener exists only while a cast
+  /// is in progress — true by construction here.
+  ///
+  /// On failure the session is cleared and the exception rethrown. The caller
+  /// keeps the chosen device, so the UI lands on "chosen, not connected" and
+  /// can offer a reconnect.
+  Future<void> connectTo(CastDevice device) async {
+    final generation = ++_connectGeneration;
+
+    _publish(CastSession(
+      device: device,
+      playbackState: CastPlaybackState.idle,
+      connectionState: CastConnectionState.connecting,
+    ));
+
+    try {
+      await _backend.connect(device);
+    } catch (e) {
+      // Only touch shared state if nothing superseded this call while it was
+      // awaiting: a stale failure racing behind a newer, already-published
+      // connectTo must not cancel that one's subscriptions or clobber its
+      // session with null.
+      if (generation == _connectGeneration) {
+        _cancelSubscriptions();
+        _publish(null);
+      }
+      rethrow;
+    }
+
+    if (generation != _connectGeneration) {
+      // Cancelled (`stopCast`) or superseded by a second `connectTo` (or a
+      // `startCast`) while this one was in flight. The backend has just
+      // connected on our behalf regardless — undo that rather than publish a
+      // session nobody asked for anymore.
+      //
+      // Two independent checks guard the actual `disconnect()`:
+      //
+      // - Device match: `_backend.disconnect()` closes whatever the backend
+      //   currently holds, with no device argument to target. If a second
+      //   `connectTo` resolved first and is already connected to a
+      //   *different* device, an unconditional disconnect here would tear
+      //   down that newer, wanted connection instead of this stale one.
+      //
+      // - Not newer-owned: matching on device id alone is not enough,
+      //   because `startCast` can supersede this call and then connect to
+      //   *this same* device to load media on it — `_current` is that
+      //   newer session at this point, not this call's. Disconnecting here
+      //   would kill the very socket `startCast` just adopted and is
+      //   actively using, leaving a published session with real media over
+      //   a closed connection: the exact phantom-connected failure mode
+      //   this whole generation guard exists to eliminate. `stopCast`
+      //   publishes null before bumping past this call, so it never counts
+      //   as an owner and the disconnect it demands still happens.
+      final newerOwnsThisDevice = _current?.device.id == device.id;
+      if (_backend.connectedDevice?.id == device.id && !newerOwnsThisDevice) {
+        await _backend.disconnect();
+      }
+      return;
+    }
+
+    _listenForConnectionLoss();
+
+    _publish(CastSession(
+      device: device,
+      playbackState: CastPlaybackState.idle,
+      connectionState: CastConnectionState.connected,
+    ));
+  }
+
+  /// Failure-only subscription for an idle connection.
+  ///
+  /// A media-less session has no positions or durations worth tracking, but it
+  /// must still notice the receiver going away: Google's Default Media Receiver
+  /// idle-times-out after a few minutes with nothing loaded, so this fires on
+  /// an ordinary browse session, not just on a network fault.
+  ///
+  /// `_listenToBackend` replaces this wholesale (it calls
+  /// `_cancelSubscriptions` first) when media is later loaded on the same
+  /// connection.
+  void _listenForConnectionLoss() {
+    _cancelSubscriptions();
+
+    _failureSub = _backend.failureStream.listen((failure) {
+      if (failure != CastFailureKind.connectionLost) return;
+
+      final current = _current;
+      if (current == null) return;
+
+      debugPrint('[CastSessionManager] Receiver lost while idle');
+      _publish(current.copyWith(connectionState: CastConnectionState.lost));
+    });
   }
 
   /// Resolve a route, enabling LAN access first when the route will be a
@@ -620,7 +772,7 @@ class CastSessionManager {
 
       debugPrint('[CastSessionManager] Receiver lost; marking session stale');
       _publish(current.copyWith(
-        isStale: true,
+        connectionState: CastConnectionState.lost,
         playbackState: CastPlaybackState.idle,
       ));
     });
@@ -752,6 +904,12 @@ class CastSessionManager {
   }
 
   Future<void> stopCast() async {
+    // Invalidates any `connectTo` still awaiting `_backend.connect` — see
+    // `_connectGeneration`'s dartdoc. Must happen before anything else here:
+    // the whole point is that the in-flight call's own generation check,
+    // running after this returns, sees a mismatch.
+    _connectGeneration++;
+
     _cancelSubscriptions();
 
     try {

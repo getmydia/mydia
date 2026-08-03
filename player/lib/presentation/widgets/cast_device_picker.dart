@@ -40,7 +40,13 @@ class CastDevicePickerDialog extends ConsumerWidget {
     final AsyncValue<List<CastDevice>> devicesAsync =
         debugDevicesOverride ?? ref.watch(castDiscoveryProvider);
     final capabilities = ref.watch(castCapabilitiesProvider);
-    final currentDevice = ref.watch(currentCastDeviceProvider);
+    // The chosen device, not merely the session device: a device picked while
+    // browsing has no session behind it yet, and leaving it unmarked here
+    // contradicted the toolbar icon.
+    final chosenDevice = ref.watch(castDisplayDeviceProvider);
+    final connection = ref.watch(castConnectionProvider);
+    final connected = connection == CastConnection.connectedIdle ||
+        connection == CastConnection.casting;
 
     return AlertDialog(
       title: const Row(
@@ -56,7 +62,8 @@ class CastDevicePickerDialog extends ConsumerWidget {
           data: (devices) => _DeviceList(
             devices: devices,
             capabilities: capabilities,
-            currentDeviceId: currentDevice?.id,
+            currentDeviceId: chosenDevice?.id,
+            connected: connected,
           ),
           // Same widget as the empty-data case: the discovery stream emits
           // nothing at all until the first device answers, so a distinct
@@ -65,7 +72,8 @@ class CastDevicePickerDialog extends ConsumerWidget {
           loading: () => _DeviceList(
             devices: const [],
             capabilities: capabilities,
-            currentDeviceId: currentDevice?.id,
+            currentDeviceId: chosenDevice?.id,
+            connected: connected,
           ),
           error: (error, _) => _DiscoveryError(
             error: error,
@@ -88,6 +96,10 @@ class _DeviceList extends StatefulWidget {
   final CastCapabilities capabilities;
   final String? currentDeviceId;
 
+  /// Whether the app actually holds a connection to [currentDeviceId], as
+  /// opposed to merely having it chosen.
+  final bool connected;
+
   /// How long an empty list keeps showing a spinner before admitting it found
   /// nothing. Matches `CastBackend.startDiscovery`'s default sweep timeout —
   /// past it the spinner is a lie, because nothing more is coming.
@@ -97,6 +109,7 @@ class _DeviceList extends StatefulWidget {
     required this.devices,
     required this.capabilities,
     required this.currentDeviceId,
+    required this.connected,
   });
 
   @override
@@ -141,6 +154,7 @@ class _DeviceListState extends State<_DeviceList> {
     final devices = widget.devices;
     final capabilities = widget.capabilities;
     final currentDeviceId = widget.currentDeviceId;
+    final connected = widget.connected;
 
     if (devices.isEmpty) {
       if (_searchExpired) {
@@ -197,6 +211,7 @@ class _DeviceListState extends State<_DeviceList> {
             label: 'Chromecast',
             devices: chromecast,
             currentDeviceId: currentDeviceId,
+            connected: connected,
           ),
         if (capabilities.dlna && dlna.isNotEmpty)
           _ProtocolGroup(
@@ -204,6 +219,7 @@ class _DeviceListState extends State<_DeviceList> {
             label: 'DLNA / UPnP',
             devices: dlna,
             currentDeviceId: currentDeviceId,
+            connected: connected,
           ),
       ],
     );
@@ -214,12 +230,14 @@ class _ProtocolGroup extends StatelessWidget {
   final String label;
   final List<CastDevice> devices;
   final String? currentDeviceId;
+  final bool connected;
 
   const _ProtocolGroup({
     super.key,
     required this.label,
     required this.devices,
     required this.currentDeviceId,
+    required this.connected,
   });
 
   @override
@@ -238,12 +256,16 @@ class _ProtocolGroup extends StatelessWidget {
           ),
         ),
         ...devices.map((device) {
-          final isConnected = currentDeviceId == device.id;
+          final isChosen = currentDeviceId == device.id;
+          // The check mark and the `cast_connected` glyph both mean "this app
+          // owns that receiver". A chosen device the app has not connected to
+          // gets the accent colour but neither of those.
+          final isConnected = isChosen && connected;
           return ListTile(
             key: Key('cast-device-${device.id}'),
             leading: Icon(
               isConnected ? Icons.cast_connected : Icons.cast,
-              color: isConnected ? AppColors.primary : AppColors.textSecondary,
+              color: isChosen ? AppColors.primary : AppColors.textSecondary,
             ),
             title: Text(device.name),
             subtitle: device.model != null ? Text(device.model!) : null,

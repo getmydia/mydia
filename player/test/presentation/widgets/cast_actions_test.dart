@@ -4,13 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/cast/cast_route_resolver.dart';
+import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
+import 'package:player/core/player/progress_service.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_actions.dart';
+
+import '../../core/cast/cast_session_manager_test.mocks.dart';
+import '../../test_utils/fake_cast_backend.dart';
+import '../../test_utils/fake_streaming_session_service.dart';
 
 const _device = CastDevice(
   id: 'device-1',
   name: 'Living Room TV',
+  protocol: CastProtocolKind.chromecast,
+);
+
+const _otherDevice = CastDevice(
+  id: 'device-2',
+  name: 'Bedroom TV',
   protocol: CastProtocolKind.chromecast,
 );
 
@@ -99,7 +113,7 @@ void main() {
       expect(positioned.right, 12);
     });
 
-    testWidgets('reflects an idle target picked from elsewhere',
+    testWidgets('shows a remembered device as chosen, not connected',
         (tester) async {
       await tester.pumpWidget(host());
       await tester.pump();
@@ -114,7 +128,179 @@ void main() {
         of: find.byKey(const Key('cast-button')),
         matching: find.byType(Icon),
       ));
-      expect(icon.icon, Icons.cast_connected);
+      expect(icon.icon, Icons.cast,
+          reason: 'a remembered device with no live connection must not claim '
+              'the cast_connected glyph');
+      expect(icon.color, Colors.blue);
+    });
+  });
+
+  group('pickCastDevice connects on select', () {
+    // Real widget-level coverage: drives `pickCastDevice` through an actual
+    // picker dialog tap rather than calling `CastSessionManager.connectTo`
+    // directly, so it proves the *wiring* this task adds, not just the
+    // manager method Task 3 already covers.
+    CastSessionManager buildManager(FakeCastBackend backend) {
+      return CastSessionManager(
+        backend: backend,
+        store: InMemoryCastSessionStore(),
+        progressService: ProgressService(MockGraphQLClient()),
+        streamingSessions: FakeStreamingSessionService(),
+        resolverFactory: () => CastRouteResolver(
+          isP2pMode: false,
+          serverUrl: 'https://mydia.test',
+          mediaToken: () async => 'tok',
+          lanBaseUrl: () => null,
+          streamingSessions: FakeStreamingSessionService(),
+        ),
+        setLanAccess: (_) async {},
+        clock: () => DateTime.utc(2026, 8, 3, 12),
+      );
+    }
+
+    /// Mounts a bare button whose `onPressed` calls `pickCastDevice` — the
+    /// same shape every real caller (`CastOverlayButton`, `CastButton`,
+    /// screen app bars) uses — with the manager and picker's device list
+    /// under test control.
+    Widget host({
+      required CastSessionManager manager,
+      required List<CastDevice> devices,
+    }) {
+      return ProviderScope(
+        overrides: [
+          castSessionManagerProvider.overrideWith((ref) async => manager),
+          castDiscoveryProvider.overrideWith((ref) => Stream.value(devices)),
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) => ElevatedButton(
+                key: const Key('pick-device-button'),
+                onPressed: () => pickCastDevice(context, ref),
+                child: const Text('Pick device'),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('a chosen device with no session connects immediately',
+        (tester) async {
+      // The behaviour this replaces set castTargetProvider and contacted
+      // nothing, while the icon claimed the receiver was connected.
+      final backend = FakeCastBackend();
+      final manager = buildManager(backend);
+      addTearDown(manager.dispose);
+
+      await tester.pumpWidget(host(manager: manager, devices: [_device]));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('pick-device-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(Key('cast-device-${_device.id}')), findsOneWidget);
+      await tester.tap(find.byKey(Key('cast-device-${_device.id}')));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('pick-device-button'))),
+      );
+
+      expect(backend.connectAttempts, contains(_device));
+      expect(container.read(castTargetProvider), _device);
+    });
+
+    testWidgets(
+        'an idle connection to a different device connects to the new one',
+        (tester) async {
+      // An idle connection has no persisted session behind it, so the
+      // live-media re-target path (which reads `persistedSession`) cannot
+      // apply here. Without this branch, picking a new device while idly
+      // connected to another would silently fall through to "set target
+      // only", leaving the old connection live while the UI pointed at the
+      // new device.
+      final backend = FakeCastBackend();
+      final manager = buildManager(backend);
+      addTearDown(manager.dispose);
+
+      // Establish the idle connection to the first device before the picker
+      // ever renders, matching a user who is already parked on a receiver
+      // with nothing playing.
+      await manager.connectTo(_device);
+
+      await tester.pumpWidget(
+        host(manager: manager, devices: [_otherDevice]),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('pick-device-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(Key('cast-device-${_otherDevice.id}')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(Key('cast-device-${_otherDevice.id}')));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('pick-device-button'))),
+      );
+
+      expect(backend.connectAttempts.last, _otherDevice);
+      expect(container.read(castTargetProvider), _otherDevice);
+    });
+
+    testWidgets(
+        'a stale connection to the same device reconnects rather than '
+        'being swallowed', (tester) async {
+      // Before `!session.isStale` was added to the early-return guard,
+      // re-picking a device whose connection had dropped matched
+      // `session.device.id == device.id` alone and returned immediately —
+      // a silent dead tap with no way to recover short of restarting the
+      // app.
+      final backend = FakeCastBackend();
+      final manager = buildManager(backend);
+      addTearDown(manager.dispose);
+
+      // Establish an idle connection, then drop it — mirrors the Default
+      // Media Receiver idle-timing out with nothing loaded.
+      await manager.connectTo(_device);
+      backend.emitFailure(CastFailureKind.connectionLost);
+      // Not `Future.delayed`: inside `testWidgets`, real timers are gated
+      // behind the test binding's own clock, so a bare `await
+      // Future.delayed(Duration.zero)` here never resolves — `tester.pump()`
+      // is what actually drains the microtask/timer queue and lets the
+      // failure-stream listener's `_publish` land before the next assert.
+      await tester.pump();
+      expect(manager.currentSession?.isStale, isTrue);
+      expect(manager.currentSession?.mediaInfo, isNull);
+
+      final attemptsBeforePick = backend.connectAttempts.length;
+
+      await tester.pumpWidget(host(manager: manager, devices: [_device]));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('pick-device-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(Key('cast-device-${_device.id}')), findsOneWidget);
+      await tester.tap(find.byKey(Key('cast-device-${_device.id}')));
+      // Not `pumpAndSettle` here either: picking the device drives a real
+      // `connectTo`, which publishes a `connecting` session — bounded pumps
+      // are enough to let the tap's callback and the (unheld) fake connect's
+      // microtasks run.
+      await tester.pump();
+      await tester.pump();
+
+      expect(backend.connectAttempts.length, attemptsBeforePick + 1,
+          reason: 'picking the same, now-stale device must attempt a fresh '
+              'connect rather than being swallowed by the early return');
+      expect(backend.connectAttempts.last, _device);
     });
   });
 

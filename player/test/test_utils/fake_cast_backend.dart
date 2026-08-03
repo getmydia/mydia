@@ -16,6 +16,10 @@ class FakeCastBackend implements CastBackend {
   final List<CastMediaRequest> loadedRequests = [];
   final List<Duration> seeks = [];
 
+  /// Every `connect` call, so tests can prove an open connection is reused
+  /// rather than torn down and rebuilt.
+  final List<CastDevice> connectAttempts = [];
+
   CastDevice? _connected;
   final List<CastFailureKind> _queuedLoadFailures = [];
   CastFailureKind? _persistentLoadFailure;
@@ -23,6 +27,38 @@ class FakeCastBackend implements CastBackend {
   bool discoveryStarted = false;
   bool discoveryStopped = false;
   CastSubtitleTrack? selectedSubtitle;
+
+  /// Held open by [holdNextConnect] until [releaseConnect] completes it, so a
+  /// test can observe state (a cancel, a second `connectTo`) while `connect`
+  /// is still in flight — mirroring `DartCastBackend.connect`, whose await on
+  /// the real transport is exactly the window a cancel or a double-pick races
+  /// against.
+  ///
+  /// Left in place (not nulled) once a `connect` call starts waiting on it:
+  /// [releaseConnect] has to be able to reach the same [Completer] a later
+  /// call, so the field itself can't be the "has this already been claimed"
+  /// flag — [_connectGateClaimed] is.
+  Completer<void>? _connectGate;
+  bool _connectGateClaimed = false;
+
+  /// How many times [disconnect] has actually been called, so a test can
+  /// prove a cancelled/superseded connect tore its connection down rather
+  /// than merely being ignored.
+  int disconnectCallCount = 0;
+
+  /// Makes the *next* [connect] call suspend until [releaseConnect] is
+  /// called, instead of resolving immediately. Only that one call waits —
+  /// any later `connect` (e.g. a second, winning `connectTo`) proceeds
+  /// normally even before [releaseConnect] runs.
+  void holdNextConnect() {
+    _connectGate = Completer<void>();
+    _connectGateClaimed = false;
+  }
+
+  /// Lets the [connect] call gated by [holdNextConnect] proceed.
+  void releaseConnect() {
+    _connectGate?.complete();
+  }
 
   /// What `probeReceiverContentUrl` reports. Null — the default, and what the
   /// real `DartCastBackend` always answers — means "cannot tell".
@@ -73,6 +109,17 @@ class FakeCastBackend implements CastBackend {
       _pendingConnectFailure = null;
       throw CastBackendException('fake connect failure', failure);
     }
+
+    // Claimed before awaiting so a later `connect` call sees the gate is
+    // already spoken for and proceeds without waiting — only the call that
+    // arrives while `holdNextConnect` is armed actually blocks.
+    final gate = _connectGate;
+    if (gate != null && !_connectGateClaimed) {
+      _connectGateClaimed = true;
+      await gate.future;
+    }
+
+    connectAttempts.add(device);
     _connected = device;
   }
 
@@ -83,7 +130,10 @@ class FakeCastBackend implements CastBackend {
   }
 
   @override
-  Future<void> disconnect() async => _connected = null;
+  Future<void> disconnect() async {
+    disconnectCallCount++;
+    _connected = null;
+  }
 
   @override
   Future<void> loadMedia(CastMediaRequest request) async {

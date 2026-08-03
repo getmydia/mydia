@@ -8,6 +8,7 @@ import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
+import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/cast/multicast_lock.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
@@ -313,6 +314,205 @@ void main() {
         container.read(castPlaybackStateProvider),
         CastPlaybackState.idle,
       );
+    });
+  });
+
+  group('castConnectionProvider', () {
+    const device = CastDevice(
+      id: 'd9',
+      name: 'Kitchen',
+      protocol: CastProtocolKind.chromecast,
+    );
+
+    ProviderContainer containerWith(CastSession? session) {
+      final c = ProviderContainer(overrides: [
+        castSessionProvider.overrideWith((ref) => Stream.value(session)),
+      ]);
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    test('is none with no target and no session', () async {
+      final c = containerWith(null);
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(castConnectionProvider), CastConnection.none);
+      expect(c.read(castDisplayDeviceProvider), isNull);
+    });
+
+    test('is chosenOffline with a target but no session', () async {
+      final c = containerWith(null);
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+      c.read(castTargetProvider.notifier).set(device);
+
+      expect(c.read(castConnectionProvider), CastConnection.chosenOffline);
+      expect(c.read(castDisplayDeviceProvider), device);
+    });
+
+    test('is connecting while the connect is in flight', () async {
+      final c = containerWith(const CastSession(
+        device: device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.connecting,
+      ));
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(castConnectionProvider), CastConnection.connecting);
+    });
+
+    test('is connectedIdle for a connected session with no media', () async {
+      final c = containerWith(const CastSession(
+        device: device,
+        playbackState: CastPlaybackState.idle,
+      ));
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(castConnectionProvider), CastConnection.connectedIdle);
+      expect(c.read(castDisplayDeviceProvider), device);
+    });
+
+    test('is casting once media is loaded', () async {
+      final c = containerWith(const CastSession(
+        device: device,
+        playbackState: CastPlaybackState.playing,
+        mediaInfo: CastMediaInfo(
+          title: 'Arrival',
+          duration: Duration(minutes: 116),
+          position: Duration.zero,
+        ),
+      ));
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(castConnectionProvider), CastConnection.casting);
+    });
+
+    test('is chosenOffline when the connection is lost', () async {
+      final c = containerWith(const CastSession(
+        device: device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.lost,
+      ));
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(castConnectionProvider), CastConnection.chosenOffline);
+      expect(c.read(castDisplayDeviceProvider), device);
+    });
+
+    test(
+        'castDisplayDeviceProvider names the lost session\'s device over a '
+        'newly chosen target', () async {
+      // The user picked a different device while the old session is still
+      // draining as lost. The session's device must still win — it is the
+      // receiver the stale bar's Reconnect acts on — not whatever the picker
+      // was most recently pointed at.
+      const otherDevice = CastDevice(
+        id: 'd10',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.chromecast,
+      );
+      final c = containerWith(const CastSession(
+        device: device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.lost,
+      ));
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+      c.read(castTargetProvider.notifier).set(otherDevice);
+
+      expect(c.read(castDisplayDeviceProvider), device);
+    });
+  });
+
+  group('isCastingProvider means media is loaded', () {
+    const device = CastDevice(
+      id: 'd9',
+      name: 'Kitchen',
+      protocol: CastProtocolKind.chromecast,
+    );
+
+    test('is false for a connected session with no media', () async {
+      final c = ProviderContainer(overrides: [
+        castSessionProvider.overrideWith((ref) => Stream.value(
+              const CastSession(
+                device: device,
+                playbackState: CastPlaybackState.idle,
+              ),
+            )),
+      ]);
+      addTearDown(c.dispose);
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(isCastingProvider), isFalse,
+          reason: 'an idle connection must not swap PlayerScreen into its '
+              'cast placeholder or trip _restartLocalPlayback');
+    });
+
+    test('is true once media is loaded', () async {
+      final c = ProviderContainer(overrides: [
+        castSessionProvider.overrideWith((ref) => Stream.value(
+              const CastSession(
+                device: device,
+                playbackState: CastPlaybackState.playing,
+                mediaInfo: CastMediaInfo(
+                  title: 'Arrival',
+                  duration: Duration(minutes: 116),
+                  position: Duration.zero,
+                ),
+              ),
+            )),
+      ]);
+      addTearDown(c.dispose);
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(isCastingProvider), isTrue);
+    });
+
+    test('stays true for a lost session that still carries media', () async {
+      // Pinning current behavior, not an oversight: a dropped cast keeps
+      // PlayerScreen in cast mode (showing the stale bar with Reconnect)
+      // rather than snapping back to local playback the instant the
+      // connection drops. Stop is the deliberate exit path out of cast mode;
+      // isCastingProvider going false on a mere disconnect would fight that
+      // by restarting local playback out from under the stale bar.
+      final c = ProviderContainer(overrides: [
+        castSessionProvider.overrideWith((ref) => Stream.value(
+              const CastSession(
+                device: device,
+                playbackState: CastPlaybackState.playing,
+                connectionState: CastConnectionState.lost,
+                mediaInfo: CastMediaInfo(
+                  title: 'Arrival',
+                  duration: Duration(minutes: 116),
+                  position: Duration.zero,
+                ),
+              ),
+            )),
+      ]);
+      addTearDown(c.dispose);
+      final sub = c.listen(castSessionProvider, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(castSessionProvider.future);
+
+      expect(c.read(isCastingProvider), isTrue,
+          reason: 'a lost session with media must keep the cast UI up so '
+              'Reconnect is meaningful; Stop is what tears it down');
     });
   });
 }
