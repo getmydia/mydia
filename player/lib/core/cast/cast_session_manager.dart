@@ -235,6 +235,13 @@ class CastSessionManager {
             '[CastSessionManager] Ignoring disconnect error during rollback: $e');
       }
       await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+      // The backend has just been disconnected, so leaving a session
+      // published — as `connectTo` may have done before this call, or a
+      // prior `startCast` on this same device — would claim a connection
+      // that no longer exists. That is exactly the stale "connected" state
+      // this project exists to eliminate, so clear it unconditionally here,
+      // not only when the connection was reused.
+      _publish(null);
       rethrow;
     }
 

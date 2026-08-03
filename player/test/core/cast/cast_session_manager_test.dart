@@ -1278,5 +1278,37 @@ void main() {
 
       expect(backend.connectAttempts, [device]);
     });
+
+    test('clears the session when a reused connection fails to load', () async {
+      // Rollback disconnects the backend, so `connectTo`'s idle session must
+      // not survive it — otherwise the UI keeps claiming a live connection
+      // over a socket that was just closed.
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.connectTo(device);
+      backend.failAllLoads(CastFailureKind.mediaLoadFailed);
+
+      await expectLater(
+        manager.startCast(device: device, request: launch),
+        throwsA(isA<CastBackendException>()),
+      );
+
+      expect(manager.currentSession, isNull);
+    });
+
+    test('clears the session when a fresh connection fails to load', () async {
+      // Pins that the rollback clears the session unconditionally, not only
+      // when the connection was reused.
+      final manager = build();
+      addTearDown(manager.dispose);
+      backend.failAllLoads(CastFailureKind.mediaLoadFailed);
+
+      await expectLater(
+        manager.startCast(device: device, request: launch),
+        throwsA(isA<CastBackendException>()),
+      );
+
+      expect(manager.currentSession, isNull);
+    });
   });
 }
