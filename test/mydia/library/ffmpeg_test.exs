@@ -13,7 +13,7 @@ defmodule Mydia.Library.FfmpegTest do
     :ok
   end
 
-  describe "run/1" do
+  describe "run/2" do
     test "returns the combined output on success" do
       assert {:ok, output} = Ffmpeg.run(["-version"])
       assert output =~ "ffmpeg version"
@@ -30,6 +30,16 @@ defmodule Mydia.Library.FfmpegTest do
 
     test "returns :ffmpeg_not_found when the binary is missing" do
       Application.put_env(:mydia, :ffmpeg_path, "/nonexistent/ffmpeg-binary")
+
+      assert {:error, :ffmpeg_not_found} = Ffmpeg.run(["-version"])
+    end
+
+    @tag :tmp_dir
+    test "returns :ffmpeg_not_found when the override is not executable", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "ffmpeg")
+      File.write!(path, "not a binary")
+      File.chmod!(path, 0o644)
+      Application.put_env(:mydia, :ffmpeg_path, path)
 
       assert {:error, :ffmpeg_not_found} = Ffmpeg.run(["-version"])
     end

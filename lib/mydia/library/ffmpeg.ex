@@ -7,7 +7,8 @@ defmodule Mydia.Library.Ffmpeg do
   `ThumbnailGenerator`. All four now delegate here.
 
   Both binaries can be overridden for tests via application env
-  (`:ffmpeg_path`, `:ffprobe_path`); otherwise they are resolved from PATH.
+  (`:ffmpeg_path`, `:ffprobe_path`), which must be absolute paths; otherwise
+  they are resolved from PATH.
   """
 
   @doc """
@@ -21,16 +22,23 @@ defmodule Mydia.Library.Ffmpeg do
   to stdout (for example piping raw frame data via `-f rawvideo ... -`), so
   ffmpeg's banner and log lines on stderr don't corrupt the payload. This
   matches `PhashGenerator`'s original behavior for its pixel-extraction call.
+
+  The output is typed `binary()` rather than `String.t()` because it is not
+  always text: `PhashGenerator` reads raw grayscale pixel bytes back through
+  this function.
   """
   @spec run([String.t()], keyword()) ::
-          {:ok, String.t()} | {:error, :ffmpeg_not_found | {:ffmpeg_error, integer(), String.t()}}
+          {:ok, binary()} | {:error, :ffmpeg_not_found | {:ffmpeg_error, integer(), binary()}}
   def run(args, opts \\ []) when is_list(args) do
     invoke(executable(:ffmpeg_path, "ffmpeg"), args, opts, :ffmpeg_not_found, :ffmpeg_error)
   end
 
+  @doc """
+  Runs `ffprobe` with `args` and returns the combined stdout/stderr output.
+  """
   @spec probe([String.t()]) ::
-          {:ok, String.t()}
-          | {:error, :ffprobe_not_found | {:ffprobe_error, integer(), String.t()}}
+          {:ok, binary()}
+          | {:error, :ffprobe_not_found | {:ffprobe_error, integer(), binary()}}
   def probe(args) when is_list(args) do
     invoke(executable(:ffprobe_path, "ffprobe"), args, [], :ffprobe_not_found, :ffprobe_error)
   end
@@ -46,11 +54,12 @@ defmodule Mydia.Library.Ffmpeg do
   @spec available?() :: boolean()
   def available?, do: not is_nil(executable(:ffmpeg_path, "ffmpeg"))
 
+  # An application-env override is resolved the same way as a bare name.
+  # System.find_executable/1 accepts an absolute path and returns nil unless it
+  # names something that is actually executable, so a stale or non-executable
+  # override surfaces as :ffmpeg_not_found instead of raising inside System.cmd/3.
   defp executable(env_key, default_name) do
-    case Application.get_env(:mydia, env_key) do
-      nil -> System.find_executable(default_name)
-      path -> if File.exists?(path), do: path, else: nil
-    end
+    System.find_executable(Application.get_env(:mydia, env_key) || default_name)
   end
 
   defp invoke(nil, _args, _opts, not_found_reason, _error_tag), do: {:error, not_found_reason}
