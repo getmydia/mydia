@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/player/window_drag_service.dart';
+import 'package:player/core/window/window_drag_service.dart';
 
 void main() {
   // Under `flutter test` there is no `runApp`, so no Flutter binding ever

@@ -9,7 +9,7 @@ import 'core/downloads/download_service.dart';
 import 'package:flutter/services.dart';
 
 import 'core/graphql/watch/fetch_log.dart';
-import 'core/player/window_drag_service.dart';
+import 'core/window/window_drag_service.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
 

@@ -5,7 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/stream_timeline.dart';
-import '../../../core/player/window_drag_service.dart';
+import '../../../core/window/window_drag_service.dart';
 import '../../../core/theme/depth_tokens.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';

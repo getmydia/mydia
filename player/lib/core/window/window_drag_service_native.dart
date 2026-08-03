@@ -28,7 +28,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'platform_features.dart';
+import '../player/platform_features.dart';
 
 Future<void> initWindowDrag() async {
   if (!PlatformFeatures.isDesktop) return;
