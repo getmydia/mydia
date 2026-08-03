@@ -6,8 +6,14 @@ defmodule Mydia.Library.GeneratedMediaFingerprintTest do
   @content "1234567,2345678,3456789"
 
   setup do
+    # System.unique_integer/1 is collision-free within the VM, unlike
+    # :rand.uniform/1, so a leftover directory from an earlier run or a
+    # concurrent test cannot collide with this one.
     test_dir =
-      Path.join([System.tmp_dir!(), "generated_media_fingerprint_test_#{:rand.uniform(100_000)}"])
+      Path.join([
+        System.tmp_dir!(),
+        "generated_media_fingerprint_test_#{System.unique_integer([:positive])}"
+      ])
 
     File.mkdir_p!(test_dir)
 

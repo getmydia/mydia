@@ -44,7 +44,10 @@ defmodule Mydia.Library.GeneratedMedia do
   # Single source of truth for the guards below. Previously each function
   # repeated this list inline, which made adding a type a six-site change and
   # any omission a runtime FunctionClauseError rather than a compile error.
-  @content_types [:cover, :sprite, :vtt, :preview, :fingerprint]
+  #
+  # Derived from @extensions rather than restated, so a new type cannot be added
+  # to one and forgotten in the other. Sorted for a stable compile-time value.
+  @content_types @extensions |> Map.keys() |> Enum.sort()
 
   @doc """
   Stores binary content and returns the checksum.
