@@ -237,5 +237,53 @@ void main() {
       expect(backend.connectAttempts.last, _otherDevice);
       expect(container.read(castTargetProvider), _otherDevice);
     });
+
+    testWidgets(
+        'a stale connection to the same device reconnects rather than '
+        'being swallowed', (tester) async {
+      // Before `!session.isStale` was added to the early-return guard,
+      // re-picking a device whose connection had dropped matched
+      // `session.device.id == device.id` alone and returned immediately —
+      // a silent dead tap with no way to recover short of restarting the
+      // app.
+      final backend = FakeCastBackend();
+      final manager = buildManager(backend);
+      addTearDown(manager.dispose);
+
+      // Establish an idle connection, then drop it — mirrors the Default
+      // Media Receiver idle-timing out with nothing loaded.
+      await manager.connectTo(_device);
+      backend.emitFailure(CastFailureKind.connectionLost);
+      // Not `Future.delayed`: inside `testWidgets`, real timers are gated
+      // behind the test binding's own clock, so a bare `await
+      // Future.delayed(Duration.zero)` here never resolves — `tester.pump()`
+      // is what actually drains the microtask/timer queue and lets the
+      // failure-stream listener's `_publish` land before the next assert.
+      await tester.pump();
+      expect(manager.currentSession?.isStale, isTrue);
+      expect(manager.currentSession?.mediaInfo, isNull);
+
+      final attemptsBeforePick = backend.connectAttempts.length;
+
+      await tester.pumpWidget(host(manager: manager, devices: [_device]));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('pick-device-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(Key('cast-device-${_device.id}')), findsOneWidget);
+      await tester.tap(find.byKey(Key('cast-device-${_device.id}')));
+      // Not `pumpAndSettle` here either: picking the device drives a real
+      // `connectTo`, which publishes a `connecting` session — bounded pumps
+      // are enough to let the tap's callback and the (unheld) fake connect's
+      // microtasks run.
+      await tester.pump();
+      await tester.pump();
+
+      expect(backend.connectAttempts.length, attemptsBeforePick + 1,
+          reason: 'picking the same, now-stale device must attempt a fresh '
+              'connect rather than being swallowed by the early return');
+      expect(backend.connectAttempts.last, _device);
+    });
   });
 }

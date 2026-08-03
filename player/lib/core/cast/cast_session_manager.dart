@@ -178,6 +178,19 @@ class CastSessionManager {
     required CastDevice device,
     required CastLaunchRequest request,
   }) async {
+    // Invalidates any `connectTo` still awaiting `_backend.connect` — see
+    // `_connectGeneration`'s dartdoc. Must happen before anything else here,
+    // the same way `stopCast` bumps it first: a user can pick a device via
+    // `connectTo` and, before that connect resolves (up to 15s), immediately
+    // start playing something, landing here while the picker's `connectTo`
+    // is still in flight. Without this, that in-flight `connectTo` would
+    // resolve later, see itself *not* superseded, and publish a media-less
+    // idle session over the one this call is about to load — and
+    // `_listenForConnectionLoss`'s subscription setup would then tear down
+    // the progress/state subscriptions this call installs via
+    // `_listenToBackend`.
+    _connectGeneration++;
+
     final resolver = _resolverFactory();
 
     // Captured before any attempt so rollback can tell whether *this* call
@@ -314,7 +327,19 @@ class CastSessionManager {
       // this one was in flight. The backend has just connected on our
       // behalf regardless — undo that rather than publish a session nobody
       // asked for anymore.
-      await _backend.disconnect();
+      //
+      // Only torn down when the backend still holds *this* call's device:
+      // `_backend.disconnect()` closes whatever the backend currently holds,
+      // with no device argument to target. If a second `connectTo` resolved
+      // first and is already connected and published, an unconditional
+      // disconnect here would tear down that newer, wanted connection
+      // instead of this stale one — leaving a published "connected" session
+      // with no socket behind it, which nothing can ever recover because
+      // `disconnect()` also cancels the subscriptions `failureStream` needs
+      // to report the loss.
+      if (_backend.connectedDevice?.id == device.id) {
+        await _backend.disconnect();
+      }
       return;
     }
 

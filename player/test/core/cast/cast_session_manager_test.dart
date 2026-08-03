@@ -1288,9 +1288,70 @@ void main() {
       expect(manager.currentSession?.device, other,
           reason: 'the superseded first connect must not clobber the '
               'session the second, winning connect published');
+      // Not `backend.connectedDevice` here: this fake (like the real
+      // `DartCastBackend`) has its own single connected-device slot
+      // unconditionally overwritten by *whichever* `connect()` call's own
+      // await resolves last — so the moment the held first connect is
+      // released, it stamps that slot back to `device` itself, before this
+      // test (or the manager's own cleanup) gets any chance to observe it
+      // still reading `other`. That makes `disconnectCallCount: 1` below
+      // correct — the backend genuinely is holding `device`'s connection at
+      // that point, and tearing it down is right — but it also means this
+      // particular interleaving cannot prove the backend's slot survives
+      // pointing at `other`. The test below this one constructs the
+      // interleaving where it can.
       expect(backend.disconnectCallCount, 1,
           reason: 'the superseded connect must tear itself down instead of '
               'being published');
+    });
+
+    test(
+        'a second connectTo whose connect finishes first leaves the backend '
+        'already moved on by the time the first connect resolves, and the '
+        'first must not disconnect it', () async {
+      // The reverse of the test above. There, the *first* call's own
+      // `_backend.connect` is what's held, so by the time it is released the
+      // backend still nominally reports *that* call's device (this fake
+      // overwrites `connectedDevice` unconditionally on every successful
+      // connect) — the disconnect guard still fires, just correctly, because
+      // the backend really is holding a connection this call itself just
+      // established.
+      //
+      // Here neither call is held: both `connectTo`s are started back to
+      // back with nothing awaited in between, so both reach
+      // `_backend.connect` before either's continuation runs. Because the
+      // second call's `connect` executes after the first's in that
+      // synchronous window, it is the second call that leaves
+      // `connectedDevice` pointing at `other` by the time any continuation
+      // resumes. The first call's superseded cleanup then runs against a
+      // backend that has already moved on to `other` — the guard must see
+      // that mismatch and skip the disconnect entirely, whereas the old
+      // unconditional `disconnect()` would tear `other`'s connection down
+      // regardless, exactly the "phantom connected" bug this project fixes.
+      const other = CastDevice(
+        id: 'd2',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.chromecast,
+      );
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      final first = manager.connectTo(device);
+      final second = manager.connectTo(other);
+
+      await first;
+      await second;
+
+      expect(manager.currentSession?.device, other);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+      expect(backend.connectedDevice, other,
+          reason: 'the winning connection must survive the superseded '
+              'first call\'s cleanup');
+      expect(backend.disconnectCallCount, 0,
+          reason: 'the backend never held the first call\'s device by the '
+              'time its cleanup ran, so there is nothing of its own left to '
+              'tear down');
     });
   });
 
@@ -1390,6 +1451,43 @@ void main() {
       );
 
       expect(manager.currentSession, isNull);
+    });
+  });
+
+  group('startCast invalidates an in-flight connectTo', () {
+    test(
+        'a connectTo suspended when startCast begins does not clobber the '
+        'media session startCast publishes', () async {
+      // The real-world shape: the user picks a device (connectTo starts,
+      // and its own `_backend.connect` can take up to 15s), then immediately
+      // opens something to play before that connect resolves. startCast must
+      // win regardless of when the stale connectTo eventually settles.
+      final manager = build();
+      addTearDown(manager.dispose);
+      backend.holdNextConnect();
+
+      final connecting = manager.connectTo(device);
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connecting);
+
+      await manager.startCast(device: device, request: launch);
+
+      expect(manager.currentSession?.mediaInfo, isNotNull,
+          reason: 'startCast must publish the media-bearing session it just '
+              'loaded');
+
+      // Now let the stale connectTo's held connect finally resolve.
+      backend.releaseConnect();
+      await connecting;
+
+      expect(manager.currentSession?.mediaInfo, isNotNull,
+          reason: 'the late-resolving connectTo must not clobber the media '
+              'session startCast published with an idle one');
+      expect(
+          manager.currentSession?.playbackState, isNot(CastPlaybackState.idle),
+          reason: 'the late connectTo publishing over startCast\'s session '
+              'would silently drop back to an idle state');
     });
   });
 }
