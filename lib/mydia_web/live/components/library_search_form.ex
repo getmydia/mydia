@@ -43,7 +43,9 @@ defmodule MydiaWeb.Live.Components.LibrarySearchForm do
               phx-value-title={item.title}
               phx-value-type={item.type}
             >
-              <% poster_path = get_in(item.metadata || %{}, [:poster_path]) %>
+              <%!-- MediaItem.metadata loads as a %MediaMetadata{}, which has no
+              Access implementation — get_in/bracket syntax raises here. --%>
+              <% poster_path = item.metadata && item.metadata.poster_path %>
               <%= if poster_path do %>
                 <img
                   src={ImageUrl.image_url(poster_path, "w92")}
