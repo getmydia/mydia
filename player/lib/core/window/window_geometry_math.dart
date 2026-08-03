@@ -91,3 +91,61 @@ Rect _centerIn(Size size, Rect area) => Rect.fromLTWH(
       size.width,
       size.height,
     );
+
+/// The display holding [window]'s centre, else the primary, else null.
+WorkArea? areaContaining(Rect window, List<WorkArea> areas) {
+  if (areas.isEmpty) return null;
+  final centre = window.center;
+  for (final area in areas) {
+    if (area.bounds.contains(centre)) return area;
+  }
+  return primaryArea(areas);
+}
+
+/// Reshapes [current] to [aspect], keeping its width and its centre point.
+///
+/// The centre is held rather than the top-left so the window grows and shrinks
+/// symmetrically instead of sliding down and to the right off the bottom of
+/// the screen.
+///
+/// [minSize] wins over the aspect: a window that would have to go below
+/// 720x480 to match a 2.39:1 film letterboxes instead of becoming unusable.
+Rect fitToAspect({
+  required Rect current,
+  required double aspect,
+  required Rect workArea,
+  Size minSize = kMinWindowSize,
+}) {
+  var width = current.width;
+  var height = width / aspect;
+
+  // Fit inside the display before applying the floor, so the floor is the last
+  // word and cannot be undone by a later clamp.
+  if (height > workArea.height) {
+    height = workArea.height;
+    width = height * aspect;
+  }
+  if (width > workArea.width) {
+    width = workArea.width;
+    height = width / aspect;
+  }
+
+  width = math.max(width, minSize.width);
+  height = math.max(height, minSize.height);
+
+  final centre = current.center;
+  var left = centre.dx - width / 2;
+  var top = centre.dy - height / 2;
+
+  // Slide, never resize: the aspect computed above must survive this step.
+  left = left.clamp(
+    workArea.left,
+    math.max(workArea.left, workArea.right - width),
+  );
+  top = top.clamp(
+    workArea.top,
+    math.max(workArea.top, workArea.bottom - height),
+  );
+
+  return Rect.fromLTWH(left, top, width, height);
+}
