@@ -22,6 +22,12 @@ const _device = CastDevice(
   protocol: CastProtocolKind.chromecast,
 );
 
+const _otherDevice = CastDevice(
+  id: 'device-2',
+  name: 'Bedroom TV',
+  protocol: CastProtocolKind.chromecast,
+);
+
 void main() {
   group('castErrorMessage', () {
     test('names the port for an unreachable receiver', () {
@@ -113,11 +119,12 @@ void main() {
   });
 
   group('pickCastDevice connects on select', () {
-    test('a chosen device with no session connects immediately', () async {
-      // The behaviour this replaces set castTargetProvider and contacted
-      // nothing, while the icon claimed the receiver was connected.
-      final backend = FakeCastBackend();
-      final manager = CastSessionManager(
+    // Real widget-level coverage: drives `pickCastDevice` through an actual
+    // picker dialog tap rather than calling `CastSessionManager.connectTo`
+    // directly, so it proves the *wiring* this task adds, not just the
+    // manager method Task 3 already covers.
+    CastSessionManager buildManager(FakeCastBackend backend) {
+      return CastSessionManager(
         backend: backend,
         store: InMemoryCastSessionStore(),
         progressService: ProgressService(MockGraphQLClient()),
@@ -132,12 +139,103 @@ void main() {
         setLanAccess: (_) async {},
         clock: () => DateTime.utc(2026, 8, 3, 12),
       );
+    }
+
+    /// Mounts a bare button whose `onPressed` calls `pickCastDevice` — the
+    /// same shape every real caller (`CastOverlayButton`, `CastButton`,
+    /// screen app bars) uses — with the manager and picker's device list
+    /// under test control.
+    Widget host({
+      required CastSessionManager manager,
+      required List<CastDevice> devices,
+    }) {
+      return ProviderScope(
+        overrides: [
+          castSessionManagerProvider.overrideWith((ref) async => manager),
+          castDiscoveryProvider.overrideWith((ref) => Stream.value(devices)),
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) => ElevatedButton(
+                key: const Key('pick-device-button'),
+                onPressed: () => pickCastDevice(context, ref),
+                child: const Text('Pick device'),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('a chosen device with no session connects immediately',
+        (tester) async {
+      // The behaviour this replaces set castTargetProvider and contacted
+      // nothing, while the icon claimed the receiver was connected.
+      final backend = FakeCastBackend();
+      final manager = buildManager(backend);
       addTearDown(manager.dispose);
 
+      await tester.pumpWidget(host(manager: manager, devices: [_device]));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('pick-device-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(Key('cast-device-${_device.id}')), findsOneWidget);
+      await tester.tap(find.byKey(Key('cast-device-${_device.id}')));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('pick-device-button'))),
+      );
+
+      expect(backend.connectAttempts, contains(_device));
+      expect(container.read(castTargetProvider), _device);
+    });
+
+    testWidgets(
+        'an idle connection to a different device connects to the new one',
+        (tester) async {
+      // An idle connection has no persisted session behind it, so the
+      // live-media re-target path (which reads `persistedSession`) cannot
+      // apply here. Without this branch, picking a new device while idly
+      // connected to another would silently fall through to "set target
+      // only", leaving the old connection live while the UI pointed at the
+      // new device.
+      final backend = FakeCastBackend();
+      final manager = buildManager(backend);
+      addTearDown(manager.dispose);
+
+      // Establish the idle connection to the first device before the picker
+      // ever renders, matching a user who is already parked on a receiver
+      // with nothing playing.
       await manager.connectTo(_device);
 
-      expect(backend.connectedDevice, _device);
-      expect(manager.currentSession?.mediaInfo, isNull);
+      await tester.pumpWidget(
+        host(manager: manager, devices: [_otherDevice]),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('pick-device-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(Key('cast-device-${_otherDevice.id}')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(Key('cast-device-${_otherDevice.id}')));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('pick-device-button'))),
+      );
+
+      expect(backend.connectAttempts.last, _otherDevice);
+      expect(container.read(castTargetProvider), _otherDevice);
     });
   });
 }
