@@ -175,6 +175,34 @@ defmodule Mydia.Library.SegmentDetection.ChaptersTest do
     test "returns an error on malformed json" do
       assert {:error, _reason} = Chapters.parse_chapters("not json at all")
     end
+
+    test "skips chapter entries that are not objects" do
+      # parse_chapters/1 is public and takes arbitrary JSON, so the array can
+      # legally hold non-objects. Access is not implemented for those, and
+      # reaching chapter["start_time"] on one would raise.
+      json = ~s({"chapters": [null, 42, "Opening", ["OP"], {"not": "a chapter"}]})
+
+      assert {:ok, %{}} = Chapters.parse_chapters(json)
+    end
+
+    test "mixes non-object entries alongside a usable chapter without losing it" do
+      json =
+        ~s({"chapters": [null, 42, ) <>
+          ~s({"start_time": "60.0", "end_time": "150.0", "tags": {"title": "OP"}}]})
+
+      assert {:ok, %{"intro" => {60_000, 150_000}}} = Chapters.parse_chapters(json)
+    end
+
+    test "rejects a timestamp with trailing garbage rather than trusting its prefix" do
+      # Float.parse/1 would happily return {12.3, "oops"}. Accepting that ships
+      # a skip button that jumps to the wrong place.
+      json =
+        ~s({"chapters": [{"start_time": "60.0oops", "end_time": "150.0", ) <>
+          ~s("tags": {"title": "OP"}}]})
+
+      assert {:ok, segments} = Chapters.parse_chapters(json)
+      refute Map.has_key?(segments, "intro")
+    end
   end
 
   describe "detect/1" do
@@ -212,9 +240,12 @@ defmodule Mydia.Library.SegmentDetection.ChaptersTest do
     args_path = Path.join(tmp_dir, "args")
     script_path = Path.join(tmp_dir, "ffprobe")
 
+    # args_path is quoted and written with printf: ExUnit derives :tmp_dir from
+    # the test name, and this project's test names routinely contain spaces and
+    # parentheses, so an unquoted redirection target would split or fail.
     File.write!(script_path, """
     #!/bin/sh
-    echo "$@" > #{args_path}
+    printf '%s\\n' "$*" > "#{args_path}"
     cat <<'FIXTURE'
     #{@sample_json}
     FIXTURE

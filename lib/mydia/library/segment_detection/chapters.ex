@@ -154,9 +154,16 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
   defp chapter_title(_chapter), do: nil
 
   defp to_ms(value) when is_binary(value) do
+    # Float.parse/1 accepts a partial parse, so "12.3oops" comes back as
+    # {12.3, "oops"}. Treat leftover text as malformed rather than silently
+    # trusting the prefix: a wrong timestamp is worse than no timestamp,
+    # because it ships a skip button that jumps to the wrong place.
     case Float.parse(value) do
-      {seconds, _rest} -> {:ok, round(seconds * 1000)}
-      :error -> :error
+      {seconds, rest} ->
+        if String.trim(rest) == "", do: {:ok, round(seconds * 1000)}, else: :error
+
+      :error ->
+        :error
     end
   end
 
