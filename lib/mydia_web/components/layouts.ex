@@ -55,6 +55,10 @@ defmodule MydiaWeb.Layouts do
   attr :show_feedback_modal, :boolean, default: false, doc: "whether the feedback modal is open"
   attr :feedback_form, :any, default: nil, doc: "feedback form state"
 
+  attr :changelog_notice, :map,
+    default: nil,
+    doc: "unread release notes, as %{version: String.t(), older_count: non_neg_integer()}"
+
   attr :current_path, :string,
     default: nil,
     doc: "the current request path for active nav highlighting"
@@ -87,6 +91,35 @@ defmodule MydiaWeb.Layouts do
 
         <!-- Main content area -->
         <main class="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 pb-20 lg:pb-8">
+          <div
+            :if={@changelog_notice}
+            id="changelog-banner"
+            class="alert alert-info mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center gap-3"
+          >
+            <div class="flex items-center gap-2 flex-1">
+              <.icon name="hero-sparkles" class="w-5 h-5 shrink-0" />
+              <span>
+                New in Mydia v{@changelog_notice.version}
+                <span :if={@changelog_notice.older_count > 0} class="opacity-70">
+                  {earlier_releases_label(@changelog_notice.older_count)}
+                </span>
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <.link navigate="/changelog" class="btn btn-sm btn-primary">
+                See what's new
+              </.link>
+              <button
+                id="changelog-dismiss"
+                type="button"
+                phx-click="dismiss_changelog"
+                class="btn btn-sm btn-ghost btn-square"
+                aria-label="Dismiss"
+              >
+                <.icon name="hero-x-mark" class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
           {render_slot(@inner_block)}
         </main>
         <.mobile_dock current_user={@current_user} current_path={@current_path} />
@@ -632,4 +665,7 @@ defmodule MydiaWeb.Layouts do
 
   defp nav_active?(current, path, false),
     do: current == path || String.starts_with?(current, path <> "/")
+
+  defp earlier_releases_label(1), do: "and 1 earlier release"
+  defp earlier_releases_label(count), do: "and #{count} earlier releases"
 end
