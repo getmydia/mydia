@@ -6,6 +6,7 @@ import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_session_manager.dart';
 import '../../core/cast/cast_target.dart';
 import '../../core/p2p/local_proxy_service.dart';
+import '../../core/player/platform_features.dart';
 import 'cast_button.dart';
 import 'cast_device_picker.dart';
 
@@ -22,7 +23,14 @@ import 'cast_device_picker.dart';
 /// should pass it; callers that don't (like this file's own tests) get the
 /// same message minus the port hint, matching what the original method did
 /// whenever the proxy wasn't LAN-accessible.
-String castErrorMessage(CastBackendException e, {WidgetRef? ref}) {
+///
+/// [isIOS] exists only so tests can pin both platform wordings; it defaults
+/// to the real platform when omitted.
+String castErrorMessage(
+  CastBackendException e, {
+  WidgetRef? ref,
+  bool? isIOS,
+}) {
   final proxy = ref?.read(localProxyServiceProvider);
 
   switch (e.kind) {
@@ -40,6 +48,12 @@ String castErrorMessage(CastBackendException e, {WidgetRef? ref}) {
       return 'Lost the connection to the device.';
     case CastFailureKind.discoveryDenied:
       return 'Mydia needs local network permission to find cast devices.';
+    case CastFailureKind.localNetworkDenied:
+      // Hedged on purpose. errno 65 to a local address is also what an
+      // unplugged receiver looks like, and there is no API to check which.
+      final os = (isIOS ?? PlatformFeatures.isIOS) ? 'iOS' : 'macOS';
+      return 'Mydia could not reach the device. If it is powered on, $os may '
+          'be blocking local network access for Mydia.';
     case CastFailureKind.unknown:
       return 'Casting failed: ${e.message}';
   }

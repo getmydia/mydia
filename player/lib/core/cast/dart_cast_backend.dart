@@ -5,6 +5,7 @@ import 'package:dart_cast/dart_cast.dart' as dc;
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/cast_device.dart';
+import '../player/platform_features.dart';
 import 'bonsoir_chromecast_discovery.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
@@ -330,9 +331,15 @@ class DartCastBackend implements CastBackend {
     // a corrupt stored session surfaces as a raw ArgumentError from
     // startCast (restoreSession happens to swallow arbitrary exceptions,
     // but startCast does not).
+    // Hoisted out of the try purely so the catch below can inspect the
+    // address we tried to reach. The *assignment* stays inside, because
+    // `InternetAddress(host)` throws a synchronous ArgumentError on a
+    // malformed persisted host and needs the same translation to
+    // CastBackendException everything else here gets.
+    dc.CastDevice? target;
+
     try {
-      final target =
-          _discovered[device.id] ?? reconstructDartCastDevice(device);
+      target = _discovered[device.id] ?? reconstructDartCastDevice(device);
       if (target == null) {
         throw const CastBackendException(
           'That device is no longer on the network.',
@@ -357,11 +364,27 @@ class DartCastBackend implements CastBackend {
       throw CastBackendException(e.toString(), failureKindFor(e));
     } catch (e) {
       // dart_cast also throws raw TimeoutException (ChromecastSession.connect
-      // after 15s with no RECEIVER_STATUS) and ArgumentError
+      // after 15s with no RECEIVER_STATUS), ArgumentError
       // (DlnaSession.fromDevice when the persisted metadata is missing a
-      // control URL, or InternetAddress() on a malformed persisted host) on
-      // this path — none of those are a CastException, so nothing here
-      // would otherwise be translated before reaching the UI.
+      // control URL, or InternetAddress() on a malformed persisted host) and
+      // SocketException on this path — none of those are a CastException, so
+      // nothing here would otherwise be translated before reaching the UI.
+      //
+      // The SocketException case is worth separating out: on macOS 15+ a
+      // denied local-network permission is indistinguishable from an
+      // ordinary unreachable host except by errno, and reporting it as
+      // `unknown` sent users to their router instead of to Settings.
+      if (looksLikeLocalNetworkDenial(
+        error: e,
+        target: target?.address,
+        applePlatform: PlatformFeatures.isMacOS || PlatformFeatures.isIOS,
+      )) {
+        throw CastBackendException(
+          e.toString(),
+          CastFailureKind.localNetworkDenied,
+        );
+      }
+
       throw CastBackendException(e.toString(), CastFailureKind.unknown);
     }
   }

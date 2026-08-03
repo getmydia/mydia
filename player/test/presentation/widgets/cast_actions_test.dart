@@ -28,6 +28,23 @@ void main() {
 
       expect(castErrorMessage(e), contains('local network'));
     });
+
+    test('hedges when a local network denial is suspected', () {
+      const e = CastBackendException(
+        'SocketException: No route to host, errno = 65',
+        CastFailureKind.localNetworkDenied,
+      );
+
+      final macMessage = castErrorMessage(e, isIOS: false);
+      expect(macMessage, contains('macOS'));
+      expect(macMessage, contains('local network'));
+      // Hedged, not asserted: the receiver really might just be off.
+      expect(macMessage, contains('may be'));
+      // The raw socket error is never user-facing.
+      expect(macMessage, isNot(contains('errno')));
+
+      expect(castErrorMessage(e, isIOS: true), contains('iOS'));
+    });
   });
 
   group('castErrorMessage covers every failure kind', () {
