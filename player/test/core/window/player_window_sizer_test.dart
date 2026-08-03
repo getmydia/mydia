@@ -382,6 +382,117 @@ void main() {
       expect(t.window.setBoundsCalls, isEmpty);
     });
   });
+
+  group('manual resize', () {
+    test('a user resize stops all later snapping', () async {
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await t.sizer.attach();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+
+      // The user drags an edge.
+      t.window.bounds = const Rect.fromLTWH(0, 0, 800, 600);
+      t.sizer.onWindowResize();
+      t.window.setBoundsCalls.clear();
+
+      params.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
+      await settle();
+
+      expect(t.window.setBoundsCalls, isEmpty);
+    });
+
+    test('the sizer does not mistake its own resize for the user', () async {
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await t.sizer.attach();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+
+      // The platform echoes our own resize back at us.
+      t.sizer.onWindowResize();
+      t.window.setBoundsCalls.clear();
+
+      params.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
+      await settle();
+
+      expect(t.window.setBoundsCalls, hasLength(1));
+    });
+
+    test('a sub-pixel rounding difference is not a user resize', () async {
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await t.sizer.attach();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+
+      // The platform applied 675.4 where we asked for 675.
+      t.window.bounds = Rect.fromLTWH(
+        t.window.bounds.left,
+        t.window.bounds.top,
+        t.window.bounds.width,
+        t.window.bounds.height + 0.4,
+      );
+      t.sizer.onWindowResize();
+      t.window.setBoundsCalls.clear();
+
+      params.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
+      await settle();
+
+      expect(t.window.setBoundsCalls, hasLength(1));
+    });
+
+    test('a user resize before any snap also stops snapping', () async {
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await t.sizer.attach();
+      t.window.bounds = const Rect.fromLTWH(0, 0, 800, 600);
+      t.sizer.onWindowResize();
+
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+
+      expect(t.window.setBoundsCalls, isEmpty);
+    });
+
+    test('a fresh attach forgets the previous manual resize', () async {
+      // The flag is per player session, so opening the player again starts
+      // from a clean slate.
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await t.sizer.attach();
+      t.window.bounds = const Rect.fromLTWH(0, 0, 800, 600);
+      t.sizer.onWindowResize();
+      await t.sizer.detach();
+
+      await t.sizer.attach();
+      t.window.setBoundsCalls.clear();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+
+      expect(t.window.setBoundsCalls, hasLength(1));
+    });
+  });
 }
 
 /// Records whether the geometry controller was already paused at the moment

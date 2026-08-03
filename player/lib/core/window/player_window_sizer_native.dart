@@ -3,17 +3,23 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'player_window_sizer.dart';
 import 'window_controller.dart';
 import 'window_geometry_controller.dart';
 import 'window_geometry_math.dart';
 
+/// How far the applied rect may drift from the requested one before we call it
+/// a user resize. Platforms round and constrain what they actually apply, so
+/// exact equality would report a manual resize on every snap.
+const double _kResizeTolerance = 2;
+
 /// Snaps the window to the video's aspect ratio while the player is mounted.
 ///
 /// Nothing here is allowed to throw: it runs from `PlayerScreen.initState` and
 /// `dispose`, where an exception would surface as a red screen mid-playback.
-class NativePlayerWindowSizer implements PlayerWindowSizer {
+class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   final WindowController _window;
   final WindowGeometryController _geometry;
   final WorkAreaReader _readWorkAreas;
@@ -28,6 +34,14 @@ class NativePlayerWindowSizer implements PlayerWindowSizer {
   /// stream does not cause a second identical resize.
   double? _appliedAspect;
 
+  /// The rect most recently asked for, so a resize event that does not match
+  /// it can be attributed to the user.
+  Rect? _expectedBounds;
+
+  /// Set once the user resizes the window by hand. Stops all further snapping
+  /// for this player session, including auto-played next episodes.
+  bool _userResized = false;
+
   NativePlayerWindowSizer({
     required WindowController window,
     required WindowGeometryController geometry,
@@ -40,6 +54,9 @@ class NativePlayerWindowSizer implements PlayerWindowSizer {
   Future<void> attach() async {
     if (_attached) return;
     _attached = true;
+    _userResized = false;
+    _expectedBounds = null;
+    _appliedAspect = null;
     // Pause first: a resize event already queued by the user must not land
     // after we start reshaping the window.
     _geometry.pause();
@@ -62,7 +79,7 @@ class NativePlayerWindowSizer implements PlayerWindowSizer {
   }
 
   Future<void> _onVideoParams(VideoParams params) async {
-    if (!_attached) return;
+    if (!_attached || _userResized) return;
 
     final aspect = _aspectOf(params);
     if (aspect == null) return;
@@ -87,9 +104,43 @@ class NativePlayerWindowSizer implements PlayerWindowSizer {
       );
 
       _appliedAspect = aspect;
+      _expectedBounds = target;
       await _window.setBounds(target);
     } catch (e) {
       debugPrint('[PlayerWindowSizer] Failed to fit window to video: $e');
+    }
+  }
+
+  @override
+  void onWindowResize() => _noticeResize();
+
+  // macOS and Windows also emit the "finished" variant; Linux does not. Both
+  // route to the same check, and a duplicate is harmless.
+  @override
+  void onWindowResized() => _noticeResize();
+
+  void _noticeResize() {
+    if (!_attached || _userResized) return;
+    unawaited(_checkForUserResize());
+  }
+
+  Future<void> _checkForUserResize() async {
+    try {
+      final actual = await _window.getBounds();
+      final expected = _expectedBounds;
+
+      // No snap has happened yet, so any resize is the user's.
+      if (expected == null) {
+        _userResized = true;
+        return;
+      }
+
+      final drifted =
+          (actual.width - expected.width).abs() > _kResizeTolerance ||
+              (actual.height - expected.height).abs() > _kResizeTolerance;
+      if (drifted) _userResized = true;
+    } catch (e) {
+      debugPrint('[PlayerWindowSizer] Failed to inspect window bounds: $e');
     }
   }
 
