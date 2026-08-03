@@ -22,6 +22,7 @@ defmodule Mydia.Library.GeneratedMedia do
   - `:sprite` - Sprite sheets for scrubber timeline (JPG)
   - `:vtt` - WebVTT files mapping timestamps to sprite coordinates
   - `:preview` - Preview video clips (MP4)
+  - `:fingerprint` - Cached Chromaprint audio fingerprints (FPR)
 
   ## Configuration
 
@@ -29,15 +30,21 @@ defmodule Mydia.Library.GeneratedMedia do
   Defaults to `/data/generated` in production (Docker) or `priv/generated` in dev.
   """
 
-  @type content_type :: :cover | :sprite | :vtt | :preview
+  @type content_type :: :cover | :sprite | :vtt | :preview | :fingerprint
   @type checksum :: String.t()
 
   @extensions %{
     cover: ".jpg",
     sprite: ".jpg",
     vtt: ".vtt",
-    preview: ".mp4"
+    preview: ".mp4",
+    fingerprint: ".fpr"
   }
+
+  # Single source of truth for the guards below. Previously each function
+  # repeated this list inline, which made adding a type a six-site change and
+  # any omission a runtime FunctionClauseError rather than a compile error.
+  @content_types [:cover, :sprite, :vtt, :preview, :fingerprint]
 
   @doc """
   Stores binary content and returns the checksum.
@@ -46,7 +53,7 @@ defmodule Mydia.Library.GeneratedMedia do
   structure, and writes the file. Returns the checksum on success.
 
   ## Parameters
-    - `type` - The content type (`:cover`, `:sprite`, `:vtt`, `:preview`)
+    - `type` - The content type (`:cover`, `:sprite`, `:vtt`, `:preview`, `:fingerprint`)
     - `content` - Binary content to store
 
   ## Returns
@@ -60,7 +67,7 @@ defmodule Mydia.Library.GeneratedMedia do
   """
   @spec store(content_type(), binary()) :: {:ok, checksum()} | {:error, term()}
   def store(type, content)
-      when type in [:cover, :sprite, :vtt, :preview] and is_binary(content) do
+      when type in @content_types and is_binary(content) do
     checksum = compute_checksum(content)
     path = build_path(type, checksum)
 
@@ -91,7 +98,7 @@ defmodule Mydia.Library.GeneratedMedia do
   """
   @spec store_file(content_type(), Path.t()) :: {:ok, checksum()} | {:error, term()}
   def store_file(type, source_path)
-      when type in [:cover, :sprite, :vtt, :preview] and is_binary(source_path) do
+      when type in @content_types and is_binary(source_path) do
     case File.read(source_path) do
       {:ok, content} ->
         store(type, content)
@@ -117,7 +124,7 @@ defmodule Mydia.Library.GeneratedMedia do
       "/data/generated/covers/ab/c1/abc123def456.jpg"
   """
   @spec get_path(content_type(), checksum()) :: Path.t()
-  def get_path(type, checksum) when type in [:cover, :sprite, :vtt, :preview] do
+  def get_path(type, checksum) when type in @content_types do
     build_path(type, checksum)
   end
 
@@ -132,7 +139,7 @@ defmodule Mydia.Library.GeneratedMedia do
     - `true` if the file exists, `false` otherwise
   """
   @spec exists?(content_type(), checksum()) :: boolean()
-  def exists?(type, checksum) when type in [:cover, :sprite, :vtt, :preview] do
+  def exists?(type, checksum) when type in @content_types do
     type
     |> get_path(checksum)
     |> File.exists?()
@@ -150,7 +157,7 @@ defmodule Mydia.Library.GeneratedMedia do
     - `{:error, reason}` on failure
   """
   @spec delete(content_type(), checksum()) :: :ok | {:error, term()}
-  def delete(type, checksum) when type in [:cover, :sprite, :vtt, :preview] do
+  def delete(type, checksum) when type in @content_types do
     path = get_path(type, checksum)
 
     case File.rm(path) do
@@ -186,7 +193,7 @@ defmodule Mydia.Library.GeneratedMedia do
     - The URL path (e.g., "/generated/covers/ab/c1/abc123.jpg")
   """
   @spec url_path(content_type(), checksum()) :: String.t()
-  def url_path(type, checksum) when type in [:cover, :sprite, :vtt, :preview] do
+  def url_path(type, checksum) when type in @content_types do
     ext = Map.fetch!(@extensions, type)
     {tier1, tier2} = split_checksum_tiers(checksum)
     type_dir = type_directory(type)
@@ -214,6 +221,7 @@ defmodule Mydia.Library.GeneratedMedia do
   defp type_directory(:sprite), do: "sprites"
   defp type_directory(:vtt), do: "vtt"
   defp type_directory(:preview), do: "previews"
+  defp type_directory(:fingerprint), do: "fingerprints"
 
   defp compute_checksum(content) do
     :crypto.hash(:md5, content)
