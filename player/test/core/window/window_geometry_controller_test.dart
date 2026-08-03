@@ -136,7 +136,7 @@ void main() {
       final window = FakeWindowController(
         bounds: const Rect.fromLTWH(10, 20, 900, 600),
       );
-      final store = InMemoryWindowGeometryStore();
+      final store = _CountingStore(InMemoryWindowGeometryStore());
       final controller = build(window: window, store: store);
       addTearDown(controller.dispose);
 
@@ -147,6 +147,12 @@ void main() {
       await settle();
 
       expect(store.get()!.bounds, const Rect.fromLTWH(10, 20, 900, 600));
+      expect(
+        store.saveCount,
+        1,
+        reason: '50 debounced events must land as one write, not 50 '
+            'identical ones',
+      );
     });
 
     test('saves after a move', () async {
@@ -271,6 +277,31 @@ void main() {
       expect(store.get(), isNull);
     });
 
+    test('pause stops a save already in flight from landing', () async {
+      // The player attaches mid-drag: pause() runs while a save from before
+      // it attached is suspended on the platform channel. That save must not
+      // persist once it resumes, even though its `if (_paused) return;` entry
+      // guard already passed before pause() ran.
+      final window = _SlowWindowController(
+        bounds: const Rect.fromLTWH(50, 50, 900, 600),
+        delay: const Duration(milliseconds: 30),
+      );
+      final store = InMemoryWindowGeometryStore();
+      final controller = build(window: window, store: store);
+      addTearDown(controller.dispose);
+
+      controller.onWindowResize();
+      // Let the 10ms debounce fire and _save() suspend on the slow
+      // getBounds(), which will not resolve for another ~20ms.
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      controller.pause();
+      // Simulate the player reshaping the window during the pause.
+      window.bounds = const Rect.fromLTWH(0, 0, 1920, 800);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+
+      expect(store.get(), isNull);
+    });
+
     test('resume restores tracking', () async {
       final window = FakeWindowController(
         bounds: const Rect.fromLTWH(5, 5, 800, 500),
@@ -340,4 +371,38 @@ class _ThrowingWindowController extends FakeWindowController {
   @override
   Future<void> setMinimumSize(Size size) async =>
       throw StateError('no platform channel');
+}
+
+/// Gives `getBounds()` real, awaitable latency — a real platform channel has
+/// millisecond-scale IPC latency, unlike [FakeWindowController]'s
+/// microtask-fast futures. Needed to prove `_save()` cannot resume after
+/// [WindowGeometryController.pause] and still write.
+class _SlowWindowController extends FakeWindowController {
+  _SlowWindowController({required super.bounds, required this.delay});
+
+  final Duration delay;
+
+  @override
+  Future<Rect> getBounds() async {
+    await Future<void>.delayed(delay);
+    return super.getBounds();
+  }
+}
+
+/// Counts writes so a test can assert the debounce coalesces rather than
+/// merely that the final stored value is right — 50 identical writes and one
+/// write leave the same state behind.
+class _CountingStore implements WindowGeometryStore {
+  _CountingStore(this._inner);
+  final WindowGeometryStore _inner;
+  int saveCount = 0;
+
+  @override
+  WindowGeometry? get() => _inner.get();
+
+  @override
+  Future<void> save(WindowGeometry geometry) {
+    saveCount++;
+    return _inner.save(geometry);
+  }
 }

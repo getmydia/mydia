@@ -25,6 +25,17 @@ class WindowGeometryController with WindowListener {
   Timer? _pending;
   bool _paused = false;
 
+  /// Bumped on every [pause]. `_save()` is asynchronous and can suspend on a
+  /// platform-channel `await` for the entire body — checking `_paused` only
+  /// at entry is not enough, because a save can resume *after* `pause()` has
+  /// already run (e.g. the player just reshaped the window) and would then
+  /// persist the player's geometry. Capturing the generation at the start of
+  /// a save and re-checking it before every write catches that case, whereas
+  /// a plain bool re-check would not distinguish "still the same pause" from
+  /// "paused, resumed, and paused again" — do not simplify this back to a
+  /// bool.
+  int _pauseGeneration = 0;
+
   WindowGeometryController({
     required WindowController window,
     required WindowGeometryStore store,
@@ -71,6 +82,7 @@ class WindowGeometryController with WindowListener {
   /// becomes the geometry the app relaunches into.
   void pause() {
     _paused = true;
+    _pauseGeneration++;
     _pending?.cancel();
     _pending = null;
   }
@@ -117,6 +129,7 @@ class WindowGeometryController with WindowListener {
 
   Future<void> _save() async {
     if (_paused) return;
+    final generation = _pauseGeneration;
 
     try {
       // Fullscreen bounds are the display. Neither worth storing nor safe to
@@ -128,19 +141,20 @@ class WindowGeometryController with WindowListener {
         // flag so the user's real window size survives.
         final stored = _store.get();
         if (stored == null || !stored.maximized) {
-          await _store.save(
-            (stored ??
-                    WindowGeometry(
-                        bounds: await _window.getBounds(), maximized: true))
-                .copyWith(maximized: true),
-          );
+          final geometry = (stored ??
+                  WindowGeometry(
+                      bounds: await _window.getBounds(), maximized: true))
+              .copyWith(maximized: true);
+          if (_paused || _pauseGeneration != generation) return;
+          await _store.save(geometry);
         }
         return;
       }
 
-      await _store.save(
-        WindowGeometry(bounds: await _window.getBounds(), maximized: false),
-      );
+      final geometry =
+          WindowGeometry(bounds: await _window.getBounds(), maximized: false);
+      if (_paused || _pauseGeneration != generation) return;
+      await _store.save(geometry);
     } catch (e) {
       debugPrint('[WindowGeometry] Failed to save window geometry: $e');
     }
