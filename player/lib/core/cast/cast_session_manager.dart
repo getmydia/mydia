@@ -602,6 +602,9 @@ class CastSessionManager {
 
       case CastFailureKind.connectionLost:
       case CastFailureKind.discoveryDenied:
+      // A block on our own side. No alternate media route reaches a receiver
+      // the OS will not let us open a socket to.
+      case CastFailureKind.localNetworkDenied:
       case CastFailureKind.unknown:
         return null;
     }

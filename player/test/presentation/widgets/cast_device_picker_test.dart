@@ -27,6 +27,7 @@ void main() {
     required AsyncValue<List<CastDevice>> devices,
     CastCapabilities capabilities = const CastCapabilities.full(),
     List<Override> overrides = const [],
+    bool? settingsAvailable,
   }) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
@@ -36,7 +37,10 @@ void main() {
       ],
       child: MaterialApp(
         home: Scaffold(
-          body: CastDevicePickerDialog(debugDevicesOverride: devices),
+          body: CastDevicePickerDialog(
+            debugDevicesOverride: devices,
+            debugSettingsAvailableOverride: settingsAvailable,
+          ),
         ),
       ),
     ));
@@ -143,6 +147,41 @@ void main() {
 
     expect(
         find.byKey(const Key('cast-picker-permission-denied')), findsOneWidget);
+  });
+
+  testWidgets('offers a settings button when discovery is denied on Apple',
+      (tester) async {
+    await pumpPicker(
+      tester,
+      devices: const AsyncValue.error(
+        CastBackendException('denied', CastFailureKind.discoveryDenied),
+        StackTrace.empty,
+      ),
+      settingsAvailable: true,
+    );
+
+    expect(
+        find.byKey(const Key('local-network-settings-button')), findsOneWidget);
+  });
+
+  testWidgets('withholds the settings button off Apple platforms',
+      (tester) async {
+    // discoveryDenied also covers Android's multicast lock failing. An
+    // Apple-only deep link there fails and then prints macOS instructions,
+    // so the panel keeps its explanation and drops the button.
+    await pumpPicker(
+      tester,
+      devices: const AsyncValue.error(
+        CastBackendException('denied', CastFailureKind.discoveryDenied),
+        StackTrace.empty,
+      ),
+      settingsAvailable: false,
+    );
+
+    expect(
+        find.byKey(const Key('cast-picker-permission-denied')), findsOneWidget);
+    expect(
+        find.byKey(const Key('local-network-settings-button')), findsNothing);
   });
 
   testWidgets('shows a generic error for other discovery failures',

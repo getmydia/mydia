@@ -6,9 +6,11 @@ import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_session_manager.dart';
 import '../../core/cast/cast_target.dart';
 import '../../core/p2p/local_proxy_service.dart';
+import '../../core/player/platform_features.dart';
 import '../../domain/models/cast_device.dart';
 import 'cast_button.dart';
 import 'cast_device_picker.dart';
+import 'local_network_settings_button.dart';
 
 /// Turn a cast failure into something the user can act on.
 ///
@@ -23,7 +25,14 @@ import 'cast_device_picker.dart';
 /// should pass it; callers that don't (like this file's own tests) get the
 /// same message minus the port hint, matching what the original method did
 /// whenever the proxy wasn't LAN-accessible.
-String castErrorMessage(CastBackendException e, {WidgetRef? ref}) {
+///
+/// [isIOS] exists only so tests can pin both platform wordings; it defaults
+/// to the real platform when omitted.
+String castErrorMessage(
+  CastBackendException e, {
+  WidgetRef? ref,
+  bool? isIOS,
+}) {
   final proxy = ref?.read(localProxyServiceProvider);
 
   switch (e.kind) {
@@ -41,9 +50,52 @@ String castErrorMessage(CastBackendException e, {WidgetRef? ref}) {
       return 'Lost the connection to the device.';
     case CastFailureKind.discoveryDenied:
       return 'Mydia needs local network permission to find cast devices.';
+    case CastFailureKind.localNetworkDenied:
+      // Hedged on purpose. errno 65 to a local address is also what an
+      // unplugged receiver looks like, and there is no API to check which.
+      final os = (isIOS ?? PlatformFeatures.isIOS) ? 'iOS' : 'macOS';
+      return 'Mydia could not reach the device. If it is powered on, $os may '
+          'be blocking local network access for Mydia.';
     case CastFailureKind.unknown:
       return 'Casting failed: ${e.message}';
   }
+}
+
+/// Show a cast failure, with a remedy attached when one exists.
+///
+/// Four call sites built a byte-identical red SnackBar before this existed.
+/// Collapsing them is what gives the permission failures a single place to
+/// hang their Settings action.
+///
+/// [canOpenSettings] overrides the platform check. Tests only.
+void showCastErrorSnackBar(
+  BuildContext context,
+  CastBackendException e, {
+  WidgetRef? ref,
+  bool? canOpenSettings,
+}) {
+  // Both kinds are the same OS permission with the same fix.
+  final permissionDenied = e.kind == CastFailureKind.localNetworkDenied ||
+      e.kind == CastFailureKind.discoveryDenied;
+
+  // `discoveryDenied` is not Apple-only — it also covers Android's multicast
+  // lock failing — and no Android settings pane fixes that, so the remedy is
+  // gated on the platform rather than on the failure kind alone.
+  final offerSettings =
+      permissionDenied && (canOpenSettings ?? localNetworkSettingsAvailable());
+
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(castErrorMessage(e, ref: ref)),
+    backgroundColor: Colors.red,
+    duration: Duration(seconds: permissionDenied ? 8 : 4),
+    action: offerSettings
+        ? SnackBarAction(
+            label: 'Settings',
+            textColor: Colors.white,
+            onPressed: () => openLocalNetworkSettings(context),
+          )
+        : null,
+  ));
 }
 
 /// The shared "user tapped a cast affordance" entry point, for every screen
@@ -112,10 +164,7 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     );
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(castErrorMessage(e, ref: ref)),
-      backgroundColor: Colors.red,
-    ));
+    showCastErrorSnackBar(context, e, ref: ref);
   } catch (e) {
     // Anything that isn't a CastBackendException: the session manager itself
     // resolving (Hive, GraphQL client), or a non-typed failure from
@@ -145,10 +194,12 @@ Future<void> _connectToDevice(
     await manager.connectTo(device);
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(castErrorMessage(e, ref: ref)),
-      backgroundColor: Colors.red,
-    ));
+    // Routed through the shared helper rather than a bare SnackBar so a
+    // denied local network permission still offers its Settings remedy.
+    // That matters most here: connecting on select is now the first moment
+    // the denial can surface at all, since choosing a device no longer
+    // defers contact until playback starts.
+    showCastErrorSnackBar(context, e, ref: ref);
   } catch (e) {
     debugPrint('[cast_actions] Unexpected error connecting to device: $e');
     if (!context.mounted) return;

@@ -5,11 +5,18 @@ class UserSettings {
   final String defaultQuality;
   final bool autoPlayNextEpisode;
 
+  /// Whether detected intros and credits are skipped without asking.
+  ///
+  /// Off by default. Each segment is still skipped at most once per playback,
+  /// so seeking back into an intro on purpose keeps working.
+  final bool autoSkipSegments;
+
   const UserSettings({
     required this.serverUrl,
     required this.username,
     this.defaultQuality = 'auto',
     this.autoPlayNextEpisode = true,
+    this.autoSkipSegments = false,
   });
 
   UserSettings copyWith({
@@ -17,12 +24,14 @@ class UserSettings {
     String? username,
     String? defaultQuality,
     bool? autoPlayNextEpisode,
+    bool? autoSkipSegments,
   }) {
     return UserSettings(
       serverUrl: serverUrl ?? this.serverUrl,
       username: username ?? this.username,
       defaultQuality: defaultQuality ?? this.defaultQuality,
       autoPlayNextEpisode: autoPlayNextEpisode ?? this.autoPlayNextEpisode,
+      autoSkipSegments: autoSkipSegments ?? this.autoSkipSegments,
     );
   }
 
@@ -32,6 +41,7 @@ class UserSettings {
       'username': username,
       'defaultQuality': defaultQuality,
       'autoPlayNextEpisode': autoPlayNextEpisode,
+      'autoSkipSegments': autoSkipSegments,
     };
   }
 
@@ -41,6 +51,7 @@ class UserSettings {
       username: json['username'] as String? ?? '',
       defaultQuality: json['defaultQuality'] as String? ?? 'auto',
       autoPlayNextEpisode: json['autoPlayNextEpisode'] as bool? ?? true,
+      autoSkipSegments: json['autoSkipSegments'] as bool? ?? false,
     );
   }
 }

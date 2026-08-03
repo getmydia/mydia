@@ -36,20 +36,26 @@ import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
+import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/up_next_overlay.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
+import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
+import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/window/desktop_window.dart';
+import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
+import '../settings/settings_controller.dart';
 
 export '../../../core/player/resume_plan.dart'
     show
@@ -229,12 +235,43 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Fullscreen state
   bool _isFullscreen = false;
 
+  /// Skippable intro/credits segments for the file being played, as reported
+  /// by the server. Empty whenever detection has not run, found nothing, or
+  /// the query failed: an older server has no `segments` field at all, and
+  /// that must degrade to "no skip button", never to a playback error.
+  List<MediaSegment> _segments = const [];
+
+  /// Once-per-playback record of automatic skips. Reset when the media
+  /// changes, not when a seek restarts the HLS session, so a restart mid-intro
+  /// cannot re-arm a skip the viewer already overrode.
+  final SegmentSkipTracker _skipTracker = SegmentSkipTracker();
+
+  /// Identifies the media [_skipTracker] is currently armed for. See
+  /// [_resetSegmentsIfMediaChanged].
+  String? _skipTrackerMediaKey;
+
+  /// Whether detected segments are skipped without asking. Off unless the
+  /// viewer opted in; loaded once in [initState] and deliberately not watched,
+  /// since flipping it mid-episode is not a case worth a rebuild.
+  bool _autoSkipSegments = false;
+
   // Auto-play next episode state
   bool _showUpNext = false;
   int _autoPlayCountdown = 10;
   bool _autoPlayCancelled = false;
   Timer? _upNextTimer;
   static const _autoPlayCountdownDuration = 10;
+
+  /// Reshapes the OS window to the video's aspect on desktop. A no-op
+  /// everywhere else, so no platform check is needed at the call sites.
+  ///
+  /// Nullable rather than `late final`: it is assigned in [initState] after
+  /// two `ref.read` calls and two `fireImmediately` listener callbacks, any
+  /// of which could throw first. `dispose()` always reaches
+  /// `_windowSizer?.detach()` regardless of how far `initState` got, and a
+  /// `late` field that was never assigned would throw
+  /// `LateInitializationError` there instead of letting `dispose` finish.
+  PlayerWindowSizer? _windowSizer;
 
   @override
   void initState() {
@@ -257,6 +294,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       fireImmediately: true,
     );
 
+    // Before `_initializePlayer`: attach pauses geometry persistence and
+    // snapshots the browse window, and the snapshot must be taken before
+    // anything reshapes the window.
+    final windowSizer = createPlayerWindowSizer();
+    _windowSizer = windowSizer;
+    unawaited(windowSizer.attach());
+
+    _loadAutoSkipPreference();
     _initializePlayer();
 
     // Force landscape orientation on mobile devices
@@ -270,6 +315,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Register beforeunload handler for web to terminate HLS session on tab close
     if (kIsWeb) {
       web_lifecycle.registerBeforeUnload(_terminateHlsSession);
+    }
+  }
+
+  /// Read the auto-skip preference once at mount.
+  ///
+  /// Failure is not propagated: secure storage being unreadable is no reason
+  /// to fail playback, and the safe answer is the default (skip nothing
+  /// automatically, leave the button).
+  Future<void> _loadAutoSkipPreference() async {
+    try {
+      final enabled =
+          await ref.read(settingsServiceProvider).getAutoSkipSegments();
+      if (!mounted) return;
+      _autoSkipSegments = enabled;
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not read auto-skip preference: $e');
     }
   }
 
@@ -334,18 +395,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // the bar offers a reconnect rather than silently discarding it.
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e is CastBackendException
-              ? castErrorMessage(e, ref: ref)
-              : 'Failed to start casting: $e'),
-          backgroundColor: Colors.red,
-        ));
+        if (e is CastBackendException) {
+          showCastErrorSnackBar(context, e, ref: ref);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to start casting: $e'),
+            backgroundColor: Colors.red,
+          ));
+        }
       }
       return false;
     }
   }
 
   Future<void> _initializePlayer() async {
+    _resetSegmentsIfMediaChanged();
+
     try {
       setState(() {
         _isLoading = true;
@@ -817,6 +882,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player = player;
     _videoController = VideoController(player);
 
+    // Re-bound whenever `_initializePlayer` runs again for this screen: a
+    // source switch, a session restart, or a fresh `PlayerScreen` state for
+    // a new queue item. It is *not* re-bound by navigating to the next
+    // episode of a season -- that reuses this same `PlayerScreen` state
+    // (go_router keys the page by route pattern, not the resolved path), so
+    // `initState` and this call do not run again then. The sizer cancels
+    // the previous subscription itself.
+    _windowSizer?.bindVideoParams(player.stream.videoParams);
+
     // Open media
     await player.open(
       Media(mediaSource, httpHeaders: httpHeaders),
@@ -1002,6 +1076,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } catch (e) {
       debugPrint('Error fetching progress: $e');
     }
+
+    // Deliberately outside the block above: segments are their own query, and
+    // neither failure may take the other down with it.
+    await _fetchSegments(client);
   }
 
   /// Extract subtitle tracks from media files returned by GraphQL
@@ -1023,6 +1101,85 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
         break;
       }
+    }
+  }
+
+  /// Drop the previous media's segments and re-arm the once-per-session skip
+  /// guard, but only when the media actually changed.
+  ///
+  /// The comparison, not the clearing, is the load-bearing half. This runs on
+  /// every [_initializePlayer] call, and a seek past the transcoded end
+  /// restarts the whole session for the *same* file. Resetting unconditionally
+  /// would let auto-skip fire a second time on a segment the viewer had
+  /// deliberately seeked back into, which is precisely what the guard exists
+  /// to prevent.
+  ///
+  /// The clearing half is insurance, not a live path. go_router derives the
+  /// page key for `/player/:type/:id` from the route *pattern* rather than the
+  /// resolved location, so a next-episode navigation updates this State in
+  /// place instead of building a new one, and `PlayerScreen` has no
+  /// `didUpdateWidget` to notice the new parameters. [_initializePlayer] is
+  /// therefore never re-entered on that path and neither is this. It is
+  /// written to be correct if that gap is ever closed, and until then the
+  /// media key only ever transitions from null on first mount.
+  void _resetSegmentsIfMediaChanged() {
+    final mediaKey = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
+    if (_skipTrackerMediaKey == mediaKey) return;
+
+    _skipTrackerMediaKey = mediaKey;
+    _segments = const [];
+    _skipTracker.reset();
+  }
+
+  /// Fetch the skippable segments for the file now playing.
+  ///
+  /// This is a **separate query on purpose, and has to stay that way.** An
+  /// unknown field is a document-level validation error in GraphQL, not a
+  /// field-level one, so a server predating the segments schema rejects the
+  /// whole query the selection appears in and returns no data at all. Folded
+  /// back into `MediaFileFragment` as a tidy-up, that would cost the resume
+  /// position and the external subtitle list on every episode and movie detail
+  /// view. Here it costs exactly one thing, the skip button.
+  ///
+  /// That is the common path rather than an edge case: the player auto-updates
+  /// from an app store while the operator upgrades the server by hand,
+  /// sometimes months later, so "newer player, older server" is the norm.
+  ///
+  /// Every failure lands on the same answer, no segments. Detection is
+  /// additive background work and must never surface as a playback error.
+  Future<void> _fetchSegments(GraphQLClient client) async {
+    final root = switch (widget.mediaType) {
+      'movie' => 'movie',
+      'episode' => 'episode',
+      _ => null,
+    };
+    if (root == null) return;
+
+    try {
+      final result = await client.query(
+        QueryOptions(
+          document: root == 'movie'
+              ? documentNodeQueryMovieSegments
+              : documentNodeQueryEpisodeSegments,
+          variables: root == 'movie'
+              ? Variables$Query$MovieSegments(id: widget.mediaId).toJson()
+              : Variables$Query$EpisodeSegments(id: widget.mediaId).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint('[PlayerScreen] No segments available: ${result.exception}');
+        return;
+      }
+
+      _segments = MediaSegment.forFile(
+        result.data,
+        root: root,
+        fileId: widget.fileId,
+      );
+      debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error fetching segments: $e');
     }
   }
 
@@ -1197,6 +1354,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = _player;
     if (player == null || !mounted) return;
 
+    _maybeAutoSkipSegment(player);
+
     // Check if video is near completion (90%)
     final isWatched = _progressService?.isWatched(player) == true;
     if (isWatched) {
@@ -1215,6 +1374,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _saveProgress().whenComplete(_invalidateAfterPlayback);
       }
     }
+  }
+
+  /// Seek past a detected segment the viewer opted into skipping.
+  ///
+  /// Runs on every position tick, so the once-per-session bookkeeping lives
+  /// inside [SegmentSkipTracker.takeAutoSkip] rather than here: a segment is
+  /// consumed by the same call that reports it, and seeking back into one that
+  /// has already been skipped does nothing.
+  void _maybeAutoSkipSegment(Player player) {
+    if (!_autoSkipSegments || _segments.isEmpty) return;
+
+    final position = _timeline.toReal(player.state.position);
+    final target = _skipTracker.takeAutoSkip(_segments, position);
+    if (target == null) return;
+
+    debugPrint('[PlayerScreen] Auto-skipping to ${target.end}');
+    unawaited(seekToReal(target.end));
+  }
+
+  /// The segment covering [position], or null when playback is between them.
+  MediaSegment? _segmentAt(Duration position) {
+    for (final segment in _segments) {
+      if (segment.containsPosition(position)) return segment;
+    }
+    return null;
   }
 
   /// Show the "Up Next" overlay if conditions are met.
@@ -1904,6 +2088,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       defaultExitNativeFullscreen();
     }
 
+    // Restores the window the user was browsing in and resumes geometry
+    // persistence. Fire-and-forget: `dispose` cannot await, and the sizer
+    // swallows its own failures. Null only if `initState` threw before the
+    // assignment ran, in which case there is nothing to detach.
+    final windowSizer = _windowSizer;
+    if (windowSizer != null) {
+      unawaited(windowSizer.detach());
+    }
+
     // Restore portrait orientation on mobile devices
     if (PlatformFeatures.isMobile) {
       SystemChrome.setPreferredOrientations([
@@ -2116,6 +2309,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return Stack(
       children: [
         videoPlayer,
+        // Skip Intro / Skip Credits. Driven by its own position stream rather
+        // than a setState per tick, and stood down while the up-next overlay
+        // is showing so the two do not stack in the same bottom-right corner.
+        if (player != null && _segments.isNotEmpty && !_showUpNext)
+          Positioned.fill(
+            child: StreamBuilder<Duration>(
+              stream: player.stream.position,
+              initialData: player.state.position,
+              builder: (context, snapshot) {
+                final position =
+                    _timeline.toReal(snapshot.data ?? Duration.zero);
+                final segment = _segmentAt(position);
+                if (segment == null) return const SizedBox.shrink();
+
+                return SkipSegmentButton(
+                  key: ValueKey(segment.key),
+                  segment: segment,
+                  position: position,
+                  onSkip: (target) => seekToReal(target.end),
+                );
+              },
+            ),
+          ),
         // Up Next overlay for auto-play (always interactive, not tied to controls)
         if (_showUpNext && _getNextEpisodeTitle() != null)
           UpNextOverlay(
@@ -2237,10 +2453,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(castErrorMessage(e, ref: ref)),
-        backgroundColor: Colors.red,
-      ));
+      showCastErrorSnackBar(context, e, ref: ref);
     } catch (e) {
       // Anything that isn't a CastBackendException: the session manager
       // itself resolving (Hive, GraphQL client), or a non-typed failure from

@@ -31,6 +31,7 @@ void main() {
 
     final link = StubLink.responses([
       movieDetailResponse(),
+      movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 

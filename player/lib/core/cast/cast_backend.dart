@@ -52,6 +52,14 @@ enum CastFailureKind {
   /// The OS refused discovery (iOS local network denied, multicast lock failed).
   discoveryDenied,
 
+  /// The OS refused this app access to the local network, so the receiver
+  /// cannot be reached even though it is on the network.
+  ///
+  /// Distinct from [unreachable], which means the *receiver* could not reach
+  /// our media. This one is a block on our own side, so no alternate media
+  /// route fixes it.
+  localNetworkDenied,
+
   unknown,
 }
 

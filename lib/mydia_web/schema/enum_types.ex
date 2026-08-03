@@ -78,4 +78,10 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:hls_copy, description: "HLS with stream copy")
     value(:transcode, description: "Full transcoding")
   end
+
+  @desc "A region of a media file a viewer may want to skip"
+  enum :segment_type do
+    value(:intro, description: "Opening theme")
+    value(:credits, description: "Closing credits")
+  end
 end

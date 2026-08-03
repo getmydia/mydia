@@ -34,7 +34,7 @@ if ! command -v devenv &> /dev/null; then
     echo "  1. Install Nix:    https://nixos.org/download"
     echo "  2. Install devenv: nix profile install nixpkgs#devenv"
     echo "  3. Install direnv: https://direnv.net  (then 'direnv allow' in this worktree)"
-    echo "See docs/development/setup.md for the full first-run guide."
+    echo "See docs/contributing/setup.md for the full first-run guide."
     exit 1
 fi
 

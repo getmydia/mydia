@@ -103,6 +103,9 @@ type RootMutationType {
   "Refresh a media access token before it expires"
   refreshMediaToken(token: String!): MediaToken
 
+  "Exchange a pairing device token for a fresh access token"
+  refreshAccessToken(deviceToken: String!): AccessToken
+
   "Generate a pairing claim code for device pairing (requires authentication)"
   generateClaimCode: ClaimCode
 
@@ -573,6 +576,27 @@ type MediaFile {
 
   "Available subtitle tracks (embedded and external)"
   subtitles: [SubtitleTrack]
+
+  "Skippable segments (intro, credits). Empty when detection has not run or found nothing."
+  segments: [MediaSegment!]!
+}
+
+"""
+A detected skippable segment.
+
+`source` and `confidence` are deliberately absent from the wire format. They
+are operator concerns, and keeping the confidence floor server side means it
+is enforced in one place rather than reimplemented in every client.
+"""
+type MediaSegment {
+  "Which kind of segment this is"
+  type: SegmentType!
+
+  "Segment start, milliseconds"
+  startMs: Int!
+
+  "Segment end, milliseconds"
+  endMs: Int!
 }
 
 "User playback progress on a media item or episode"
@@ -713,6 +737,15 @@ type MediaToken {
 
   "List of granted permissions"
   permissions: [String!]!
+}
+
+"Access token for authenticating GraphQL and API requests"
+type AccessToken {
+  "JWT access token"
+  token: String!
+
+  "Token expiration timestamp"
+  expiresAt: DateTime!
 }
 
 "API key for programmatic access"
@@ -1139,6 +1172,15 @@ enum StreamingCandidateStrategy {
 
   "Full transcoding"
   TRANSCODE
+}
+
+"A region of a media file a viewer may want to skip"
+enum SegmentType {
+  "Opening theme"
+  INTRO
+
+  "Closing credits"
+  CREDITS
 }
 
 """

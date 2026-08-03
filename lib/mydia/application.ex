@@ -28,6 +28,10 @@ defmodule Mydia.Application do
       [
         MydiaWeb.Telemetry,
         Mydia.Repo,
+        # Backs up the database before the migrator touches it. Needs a live Repo
+        # to ask whether migrations are pending, so it sits between the two, and
+        # returns :ignore once done rather than lingering as a process.
+        {Mydia.Release.MigrationBackup, skip: skip_migrations?()},
         {Ecto.Migrator,
          repos: Application.fetch_env!(:mydia, :ecto_repos), skip: skip_migrations?()},
         {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},

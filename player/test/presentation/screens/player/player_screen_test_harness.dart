@@ -220,6 +220,34 @@ Map<String, dynamic> movieDetailResponse({
   };
 }
 
+/// A well-formed `MovieSegments` response.
+///
+/// `_fetchProgressAndEpisodes` issues this immediately after the detail query
+/// and before streaming candidates, so an ordered `StubLink.responses` script
+/// has to carry it in that slot. Segments travel in their own document on
+/// purpose, not inside `MediaFileFragment` — see
+/// `player_screen_segments_isolation_test.dart` for why. The default is
+/// "detection found nothing", which is what every test that is not about
+/// segments wants.
+Map<String, dynamic> movieSegmentsResponse({
+  List<Map<String, dynamic>> segments = const [],
+}) {
+  return {
+    '__typename': 'Query',
+    'movie': {
+      '__typename': 'Movie',
+      'id': 'movie-1',
+      'files': [
+        {
+          '__typename': 'MediaFile',
+          'id': 'file-1',
+          'segments': segments,
+        },
+      ],
+    },
+  };
+}
+
 /// A well-formed `StreamingCandidates` response.
 ///
 /// Empty `candidates` (the default) forces the HLS/TRANSCODE path, because

@@ -34,6 +34,7 @@ void main() {
       final container = buildPlayerScreenContainer(
         link: StubLink.responses([
           movieDetailResponse(positionSeconds: 2700),
+          movieSegmentsResponse(),
           streamingCandidatesResponse(duration: 5400),
         ]),
         connectionState: conn.ConnectionState.direct(),
@@ -48,6 +49,7 @@ void main() {
       final container = buildPlayerScreenContainer(
         link: StubLink.responses([
           movieDetailResponse(positionSeconds: 2700),
+          movieSegmentsResponse(),
           streamingCandidatesResponse(duration: 5400, directPlay: true),
         ]),
         connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
@@ -62,6 +64,7 @@ void main() {
       final container = buildPlayerScreenContainer(
         link: StubLink.responses([
           movieDetailResponse(positionSeconds: 2700),
+          movieSegmentsResponse(),
           streamingCandidatesResponse(duration: 5400),
         ]),
         connectionState: conn.ConnectionState.direct(),

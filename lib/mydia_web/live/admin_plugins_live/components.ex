@@ -64,6 +64,20 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   defp join(values), do: Enum.join(values, ", ")
 
   @doc """
+  One-line, host-owned summary of a capability set, for the row-level warning on
+  a plugin whose manifest outgrew its grant. Same vocabulary as
+  `capability_label/2` so the row and the approval modal cannot drift apart.
+  """
+  @spec ungranted_summary(map()) :: String.t()
+  def ungranted_summary(capabilities) do
+    capabilities
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map_join("; ", fn {class, values} ->
+      capability_label(class, List.wrap(values))
+    end)
+  end
+
+  @doc """
   Renders the Plugins tab: header, installed summary rows, and the store catalog.
 
   Each installed plugin renders a compact summary row with provenance and
@@ -154,10 +168,26 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           >
             update available
           </span>
+          <span
+            :if={@plugin.needs_reapproval}
+            id={"reapproval-badge-#{@plugin.slug}"}
+            class="badge badge-sm badge-warning"
+          >
+            needs re-approval
+          </span>
         </div>
         <p :if={@plugin.network_hosts != []} class="text-xs text-base-content/60 mt-1">
           <.icon name="hero-globe-alt" class="w-3 h-3 inline" />
           Can contact: {Enum.join(@plugin.network_hosts, ", ")}
+        </p>
+        <p
+          :if={@plugin.needs_reapproval}
+          id={"reapproval-note-#{@plugin.slug}"}
+          class="text-xs text-warning mt-1"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-3 h-3 inline" />
+          This version asks for more than you approved: {ungranted_summary(@plugin.ungranted)}. Those
+          calls are denied until you re-approve it.
         </p>
       </div>
 
@@ -167,13 +197,13 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         </span>
 
         <.button
-          :if={not @plugin.read_only and @plugin.pending_approval}
+          :if={not @plugin.read_only and (@plugin.pending_approval or @plugin.needs_reapproval)}
           id={"approve-#{@plugin.slug}"}
           class="btn btn-warning btn-sm"
           phx-click="review_approve"
           phx-value-slug={@plugin.slug}
         >
-          Review &amp; approve
+          {if(@plugin.needs_reapproval, do: "Review & re-approve", else: "Review & approve")}
         </.button>
 
         <%!-- Always show the Settings button so its absence is never silently
@@ -314,14 +344,35 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     <div id="approval-modal" class="modal modal-open">
       <div class="modal-box max-w-lg">
         <h3 class="text-lg font-bold flex items-center gap-2">
-          <.icon name="hero-shield-check" class="w-5 h-5" /> Approve {@approval.name}
+          <.icon name="hero-shield-check" class="w-5 h-5" />
+          {if(@approval.ungranted == %{}, do: "Approve", else: "Re-approve")} {@approval.name}
         </h3>
-        <p class="text-sm text-base-content/70 mt-1">
+        <p :if={@approval.ungranted == %{}} class="text-sm text-base-content/70 mt-1">
           {@approval.name} (v{@approval.version}) is requesting the capabilities below.
           It cannot run until you approve them. Approval is all-or-nothing.
         </p>
+        <p :if={@approval.ungranted != %{}} class="text-sm text-base-content/70 mt-1">
+          {@approval.name} (v{@approval.version}) now requests more than you approved. It keeps
+          running on the older grant, and calls into anything new are denied until you re-approve.
+          Approval is all-or-nothing.
+        </p>
 
         <div class="my-4 space-y-2">
+          <div
+            :if={@approval.ungranted != %{}}
+            id="approval-new-capabilities"
+            class="rounded-lg p-3 bg-warning/10 space-y-2"
+          >
+            <p class="font-medium flex items-center gap-2">
+              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+              New since you last approved
+            </p>
+            <.capability_list id="approval-ungranted" capabilities={@approval.ungranted} />
+          </div>
+
+          <p :if={@approval.ungranted != %{}} class="text-sm font-medium">
+            Everything this plugin will be granted:
+          </p>
           <.capability_list id="approval-capabilities" capabilities={@approval.capabilities} />
           <.host_grant_note id="approval-host-grant" settings_schema={@approval.settings_schema} />
         </div>
@@ -370,6 +421,17 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             No capabilities granted.
           </p>
           <.host_grant_note id="detail-host-grant" settings_schema={@detail.settings_schema} />
+        </div>
+
+        <div :if={@detail.ungranted != %{}} id="detail-ungranted" class="mt-4">
+          <h4 class="font-semibold mb-2 flex items-center gap-2 text-warning">
+            <.icon name="hero-exclamation-triangle" class="w-4 h-4" /> Requested but not granted
+          </h4>
+          <.capability_list id="detail-ungranted-capabilities" capabilities={@detail.ungranted} />
+          <p class="text-xs text-base-content/60 mt-2">
+            This version's manifest asks for these. Calls into them are denied until you re-approve
+            the plugin from its row.
+          </p>
         </div>
 
         <div class="modal-action">

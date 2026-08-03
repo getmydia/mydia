@@ -2,14 +2,14 @@
 name = "mydia-plugin-sdk"
 version = "0.1.0"
 edition = "2021"
-description = "Mydia plugin authoring SDK: typed WASM component-model bindings and the #[mydia::plugin] macro for writing Mydia plugins in Rust."
+description = "Mydia plugin authoring SDK: typed WASM component-model bindings and the #[mydia_plugin_sdk::plugin] macro for writing Mydia plugins in Rust."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/getmydia/mydia"
 # examples/minimal is a standalone scaffold crate, not a cargo example target.
 autoexamples = false
 # Published for external (community-repo) plugin authors. The canonical contract
 # lives in wit/plugin.wit and is the single source of truth shared with the
-# Elixir host. wit-bindgen generation + the #[mydia::plugin] macro land in U5/U6.
+# Elixir host. wit-bindgen generation + the #[mydia_plugin_sdk::plugin] macro land in U5/U6.
 
 [lib]
 

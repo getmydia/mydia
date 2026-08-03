@@ -39,6 +39,7 @@ void main() {
     // dialog is the call site being gone.
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 2700),
+      movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 
@@ -78,6 +79,7 @@ void main() {
     // gated by `shouldOfferResume`, not shown unconditionally.
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 12),
+      movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 
