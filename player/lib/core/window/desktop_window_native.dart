@@ -59,7 +59,7 @@ Future<void> initDesktopWindow() async {
   final controller = WindowGeometryController(
     window: const WindowManagerController(),
     store: store,
-    readWorkAreas: readWorkAreas,
+    readWorkAreas: _readWorkAreas,
   );
 
   await controller.restore();
@@ -77,7 +77,7 @@ Future<void> initDesktopWindow() async {
 /// `visiblePosition` and `visibleSize` are the screen minus menu bars, docks
 /// and taskbars. A display reporting either as null is skipped rather than
 /// guessed at — a wrong rect here puts the window somewhere unreachable.
-Future<List<WorkArea>> readWorkAreas() async {
+Future<List<WorkArea>> _readWorkAreas() async {
   try {
     final displays = await screenRetriever.getAllDisplays();
     final primary = await screenRetriever.getPrimaryDisplay();
@@ -141,10 +141,18 @@ PlayerWindowSizer createPlayerWindowSizer() {
     return const NoopPlayerWindowSizer();
   }
 
-  final sizer = NativePlayerWindowSizer(
+  late final NativePlayerWindowSizer sizer;
+  sizer = NativePlayerWindowSizer(
     window: const WindowManagerController(),
     geometry: geometry,
-    readWorkAreas: readWorkAreas,
+    readWorkAreas: _readWorkAreas,
+    onDetached: () {
+      try {
+        windowManager.removeListener(sizer);
+      } catch (e) {
+        debugPrint('[DesktopWindow] Failed to unregister sizer: $e');
+      }
+    },
   );
 
   try {

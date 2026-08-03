@@ -24,7 +24,10 @@ void main() {
     FakeWindowController window,
     WindowGeometryController geometry,
     InMemoryWindowGeometryStore store,
-  }) build({Rect bounds = const Rect.fromLTWH(100, 100, 1200, 900)}) {
+  }) build({
+    Rect bounds = const Rect.fromLTWH(100, 100, 1200, 900),
+    void Function()? onDetached,
+  }) {
     final window = FakeWindowController(bounds: bounds);
     final store = InMemoryWindowGeometryStore();
     final geometry = WindowGeometryController(
@@ -38,6 +41,7 @@ void main() {
         window: window,
         geometry: geometry,
         readWorkAreas: oneDisplay,
+        onDetached: onDetached,
       ),
       window: window,
       geometry: geometry,
@@ -212,6 +216,40 @@ void main() {
         reason: 'resume() must run even though setBounds threw, or '
             'persistence silently stops for the rest of the session',
       );
+    });
+
+    test('onDetached fires exactly once on detach', () async {
+      var callCount = 0;
+      final t = build(onDetached: () => callCount++);
+      addTearDown(t.geometry.dispose);
+
+      await t.sizer.attach();
+      await t.sizer.detach();
+
+      expect(callCount, 1);
+
+      // A stray second detach() — e.g. a double dispose() — must not fire it
+      // again, or the facade would double-remove the sizer from
+      // windowManager's listener list.
+      await t.sizer.detach();
+
+      expect(callCount, 1);
+    });
+
+    test('onDetached fires even when restoring the snapshot throws', () async {
+      // A leak that only happens on the error path is still a leak: the
+      // facade's removeListener call must run regardless of whether
+      // setBounds succeeded.
+      var callCount = 0;
+      final t = build(onDetached: () => callCount++);
+      addTearDown(t.geometry.dispose);
+
+      await t.sizer.attach();
+      t.window.setBoundsError = StateError('platform channel gone');
+
+      await t.sizer.detach();
+
+      expect(callCount, 1);
     });
   });
 

@@ -6,7 +6,7 @@ import 'dart:ui';
 /// to this instead of the `windowManager` singleton, which lets their tests run
 /// with no Flutter binding. Reading the `windowManager` getter constructs a
 /// `WindowManager._()` that calls `setMethodCallHandler` before a binding may
-/// exist, which is an assertion failure — see `window_drag_service_native.dart`.
+/// exist, which is an assertion failure — see `desktop_window_native.dart`.
 abstract interface class WindowController {
   Future<Rect> getBounds();
   Future<void> setBounds(Rect bounds);

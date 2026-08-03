@@ -24,6 +24,13 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   final WindowGeometryController _geometry;
   final WorkAreaReader _readWorkAreas;
 
+  /// Invoked once at the end of [detach], after the controller is resumed.
+  /// The facade uses this to unregister the sizer from `windowManager`'s
+  /// listener list — the sizer itself must never touch that singleton, and a
+  /// sizer is built per player session, so without this every session would
+  /// leak a listener.
+  final void Function()? _onDetached;
+
   /// The window as it was before the player took over. Restored on detach.
   Rect? _snapshot;
   bool _attached = false;
@@ -42,13 +49,20 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   /// for this player session, including auto-played next episodes.
   bool _userResized = false;
 
+  /// Guards [_onDetached] so a stray second [detach] call cannot fire it —
+  /// and by extension cannot double-remove this sizer from a listener list —
+  /// twice.
+  bool _detachNotified = false;
+
   NativePlayerWindowSizer({
     required WindowController window,
     required WindowGeometryController geometry,
     required WorkAreaReader readWorkAreas,
+    void Function()? onDetached,
   })  : _window = window,
         _geometry = geometry,
-        _readWorkAreas = readWorkAreas;
+        _readWorkAreas = readWorkAreas,
+        _onDetached = onDetached;
 
   @override
   Future<void> attach() async {
@@ -186,6 +200,11 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
       // Always, on every path: leaving the controller paused would silently
       // stop persisting geometry for the rest of the session.
       _geometry.resume();
+    }
+
+    if (!_detachNotified) {
+      _detachNotified = true;
+      _onDetached?.call();
     }
   }
 }

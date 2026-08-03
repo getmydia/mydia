@@ -79,7 +79,7 @@ class PlatformFeatures {
   /// `UpNextOverlay` (autoplay-only, next-episode-only), and — before this
   /// fix — no keyboard fallback either, since [supportsKeyboardShortcuts]
   /// was false on web. `isDesktop` itself is left alone: its live consumers
-  /// are now `../window/window_drag_service_native.dart` (gating OS window dragging)
+  /// are now `../window/desktop_window_native.dart` (gating OS window dragging)
   /// and `playback_chrome.dart` (gating the window-drag and double-click
   /// fullscreen callbacks) — the double-click-to-fullscreen gating that used
   /// to live in `player_screen.dart` was removed from there by a later
