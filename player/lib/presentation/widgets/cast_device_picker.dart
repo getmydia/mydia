@@ -8,6 +8,7 @@ import '../../core/cast/cast_capabilities.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
+import 'local_network_settings_button.dart';
 
 /// Shows a dialog to pick a cast receiver.
 ///
@@ -269,11 +270,13 @@ class _DiscoveryError extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Enable local network access for Mydia in your system settings, '
-            'then try again.',
+            'Mydia cannot see cast devices until local network access is '
+            'enabled.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary),
           ),
+          const SizedBox(height: 8),
+          const LocalNetworkSettingsButton(),
         ],
       );
     }

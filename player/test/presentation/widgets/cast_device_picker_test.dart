@@ -34,8 +34,7 @@ void main() {
     expect(find.byKey(const Key('cast-picker-searching')), findsOneWidget);
   });
 
-  testWidgets('admits it found nothing once the sweep is over',
-      (tester) async {
+  testWidgets('admits it found nothing once the sweep is over', (tester) async {
     // Otherwise a network with no receivers spins forever with no terminal
     // state and nothing for the user to act on.
     await pumpPicker(tester, devices: const AsyncValue.data([]));
@@ -128,6 +127,20 @@ void main() {
 
     expect(
         find.byKey(const Key('cast-picker-permission-denied')), findsOneWidget);
+  });
+
+  testWidgets('offers a settings button when discovery is denied',
+      (tester) async {
+    await pumpPicker(
+      tester,
+      devices: const AsyncValue.error(
+        CastBackendException('denied', CastFailureKind.discoveryDenied),
+        StackTrace.empty,
+      ),
+    );
+
+    expect(
+        find.byKey(const Key('local-network-settings-button')), findsOneWidget);
   });
 
   testWidgets('shows a generic error for other discovery failures',
