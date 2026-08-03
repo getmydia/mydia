@@ -18,15 +18,19 @@ Mydia uses a decentralized **p2p** architecture for remote access.
 
 ### Key Components
 
-- **Core (Rust)**: The shared networking logic (Host, Swarm, DHT, mDNS) is implemented in a pure Rust crate (`native/mydia_p2p_core`). This ensures protocol parity between client and server.
-- **Backend (Elixir)**: The Phoenix app wraps the core crate using a Rustler NIF (`Mydia.P2p`). It acts as a permanent node in the mesh.
-- **Frontend (Flutter)**: The player app wraps the same core crate using `flutter_rust_bridge`. It connects to the backend via the p2p mesh for discovery and control.
+- **Core (Rust)**: The shared networking logic is implemented in a pure Rust crate (`native/mydia_p2p_core`) on top of [iroh](https://www.iroh.computer/). This ensures protocol parity between client and server.
+- **Backend (Elixir)**: The Phoenix app wraps the core crate using a Rustler NIF (`Mydia.P2p`). It acts as a permanent node.
+- **Frontend (Flutter)**: The player app wraps the same core crate using `flutter_rust_bridge`. It connects to the backend for discovery and control.
 
 ### Connectivity
 
-- **Discovery**: Nodes find each other via mDNS (local network) and Kademlia DHT (internet).
-- **Transport**: Connections are established over TCP or QUIC, secured with Noise encryption.
+- **Identity**: Every node has an Ed25519 keypair; the public key is its node ID.
+- **Discovery**: Nodes publish signed records mapping their key to their current addresses and relay, distributed over DNS by iroh's default discovery service.
+- **Transport**: QUIC over UDP, encrypted with TLS 1.3.
+- **Relay**: A relay introduces peers and carries traffic until hole punching succeeds, and stays in the data path when it fails (symmetric NAT, some corporate firewalls). Mydia operates one; iroh's public relays are the fallback.
 - **Media**: Media streams (HLS) are served over the p2p connection (via a local proxy in the client).
+
+There is no libp2p, no Kademlia DHT, no mDNS, no TCP, and no Noise handshake. An earlier revision of this file described that design; it was replaced by iroh. Check `native/mydia_p2p_core/Cargo.toml` before relying on any of this.
 
 ## Metadata Relay Service
 

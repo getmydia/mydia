@@ -112,7 +112,9 @@ deliver here.
 
 The cost side is straightforward and should be weighed honestly. PostgreSQL adds
 a service that must be running before Mydia starts, credentials to manage, its
-own backup procedure, and its own upgrade path. The database adapter is compiled
+own backup procedure, and its own upgrade path. It also gives up the automatic
+[pre-migration backup](../how-to/backup-restore.md): snapshotting one file is a
+thing Mydia can do for you, and dumping a database server is not. The database adapter is compiled
 into the image, so SQLite and PostgreSQL ship as separate images and cannot be
 swapped at runtime, and there is no automated migration between them. Moving from
 one to the other later is real work; it is worth deciding once, early, rather

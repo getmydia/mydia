@@ -380,7 +380,8 @@ defmodule Mydia.Plugins.HostFunctions do
   @spec http_request(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
   def http_request(%Plugin{} = plugin, request, opts \\ []) do
     with :ok <- require_capability(plugin, "net:http"),
-         {:ok, url} <- fetch_string(request, "url") do
+         {:ok, url} <- fetch_string(request, "url"),
+         :ok <- require_granted_host(plugin, url) do
       hosts = Plugin.granted_http_hosts(plugin)
 
       gate_opts =
@@ -398,6 +399,29 @@ defmodule Mydia.Plugins.HostFunctions do
       end
     end
   end
+
+  # A host the manifest declares but the grant does not hold is the stale-grant
+  # case again — the gate would deny it with a bare "not on the allowlist", which
+  # reads as a plugin bug rather than as pending re-approval. Every other host
+  # (including one the manifest never declared) falls through to the gate
+  # untouched, so this narrows nothing and only replaces the message.
+  defp require_granted_host(plugin, url) do
+    case URI.parse(url).host do
+      host when is_binary(host) and host != "" ->
+        host = String.downcase(host)
+        declared? = host in downcased(Map.get(plugin.capabilities, "net:http"))
+        granted? = host in downcased(Plugin.granted_http_hosts(plugin))
+
+        if declared? and not granted?,
+          do: {:error, denial(plugin, "net:http host #{host}", true)},
+          else: :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp downcased(hosts), do: hosts |> List.wrap() |> Enum.map(&String.downcase/1)
 
   defp http_response_map(%{status: status, body: body}) do
     base = %{"status" => status, "ok" => status in 200..299}
@@ -803,37 +827,42 @@ defmodule Mydia.Plugins.HostFunctions do
     if Plugin.granted?(plugin, class) do
       :ok
     else
-      {:error, Error.new(:capability_denied, "capability #{class} not granted to #{plugin.slug}")}
+      {:error, denial(plugin, "capability #{class}", Map.has_key?(plugin.capabilities, class))}
     end
   end
 
   defp require_data_namespace(plugin, namespace) do
-    granted = Map.get(plugin.granted_capabilities, "data:read", [])
-
-    if namespace in granted do
-      :ok
-    else
-      {:error,
-       Error.new(
-         :capability_denied,
-         "data:read namespace #{namespace} not granted to #{plugin.slug}"
-       )}
-    end
+    require_scoped(plugin, "data:read", namespace, "data:read namespace #{namespace}")
   end
 
   # surfaces:write is scoped to a value vocabulary (e.g. "playback:watched"),
   # like data:read namespaces — a plain class grant is not enough.
   defp require_surface(plugin, surface) do
-    granted = Map.get(plugin.granted_capabilities, "surfaces:write", [])
+    require_scoped(plugin, "surfaces:write", surface, "surfaces:write #{surface}")
+  end
 
-    if surface in granted do
+  defp require_scoped(plugin, class, value, label) do
+    if value in List.wrap(Map.get(plugin.granted_capabilities, class)) do
       :ok
     else
-      {:error,
-       Error.new(
-         :capability_denied,
-         "surfaces:write #{surface} not granted to #{plugin.slug}"
-       )}
+      {:error, denial(plugin, label, value in List.wrap(Map.get(plugin.capabilities, class)))}
+    end
+  end
+
+  # A denial where the plugin's own manifest declares what it asked for is a
+  # stale grant — the manifest was revised after approval and the operator has
+  # not re-approved — not a plugin asking for something it never declared. Saying
+  # so makes the message the guest, the dispatcher log, and the activity log all
+  # see actionable instead of a bare "not granted".
+  defp denial(plugin, what, declared?) do
+    if declared? do
+      Error.new(
+        :capability_denied,
+        "#{what} is requested by #{plugin.slug} but was never granted — re-approve the " <>
+          "plugin under Configuration > Plugins to grant its current capabilities"
+      )
+    else
+      Error.new(:capability_denied, "#{what} not granted to #{plugin.slug}")
     end
   end
 

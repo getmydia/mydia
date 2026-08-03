@@ -11,6 +11,7 @@ defmodule MydiaWeb.AdminSystemLive.Components do
   attr :library_paths_count, :integer, required: true
   attr :download_clients_count, :integer, required: true
   attr :indexers_count, :integer, required: true
+  attr :stuck_upgrades, :integer, required: true
   attr :active_sessions, :list, required: true
   attr :active_jobs, :list, required: true
   attr :recent_activity, :list, required: true
@@ -18,6 +19,31 @@ defmodule MydiaWeb.AdminSystemLive.Components do
   def status_tab(assigns) do
     ~H"""
     <div class="space-y-6 sm:space-y-8 p-4 sm:p-6">
+      <%!--
+      Stuck upgrades. Only rendered when there is something wrong: a zero here
+      is the normal state and would be pure noise on every visit.
+      --%>
+      <%= if @stuck_upgrades > 0 do %>
+        <div id="stuck-upgrades-alert" class="alert alert-warning shadow-sm">
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <div class="flex-1">
+            <div class="font-medium">
+              {@stuck_upgrades} {if @stuck_upgrades == 1,
+                do: "file is",
+                else: "files are"} stuck mid-upgrade
+            </div>
+            <div class="text-sm opacity-80">
+              Each one is holding its replacement and the copy it was meant to replace, so that
+              disk space stays spoken for until the upgrade finishes. This happens when the
+              finalize step never ran or failed after import. Look for failed
+              <span class="font-mono">UpgradeFinalize</span>
+              jobs.
+            </div>
+          </div>
+          <.link navigate={~p"/admin/jobs"} class="btn btn-sm">View jobs</.link>
+        </div>
+      <% end %>
+
       <%!-- Top Row: System Info + Database --%>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
         <%!-- System Information --%>

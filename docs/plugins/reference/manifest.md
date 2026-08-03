@@ -85,16 +85,17 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
     users, and `ensure-watched` is rejected for a user without an active
     connection.
 
-!!! warning "A manifest revision does not re-trigger approval"
-    Declaring a new capability class or a new `net:http` host in a revised
-    manifest does **not** return the plugin to unapproved. The stored grant is
-    left untouched, the plugin stays approved and enabled on its old grant, and
-    calls against the newly declared capability come back `Denied` at runtime
-    with no other signal.
+!!! warning "A manifest revision needs a re-approval"
+    Declaring a new capability class, a new `net:http` host, or a new subscribed
+    event in a revised manifest does **not** grant it. The stored grant is left
+    untouched, the plugin stays approved and enabled on its old grant, and calls
+    against anything newly declared come back `Denied`.
 
-    Nothing widens without an operator approving it, which is the guarantee that
-    matters, but the failure is quiet. After revising a manifest to request more,
-    re-approve the plugin so the new declaration is actually granted.
+    Mydia flags the state rather than leaving it quiet: the plugin is badged
+    **needs re-approval** in Configuration > Plugins, its row names the
+    capabilities it is asking for beyond what was approved, and **Review &
+    re-approve** grants the currently declared set. The host also logs a warning
+    naming them when such a plugin starts. Until you re-approve, nothing widens.
 
 !!! warning "`net:http` is an exact-host allowlist"
     List each host you contact (`discord.com`, `api.example.com`). Wildcard
