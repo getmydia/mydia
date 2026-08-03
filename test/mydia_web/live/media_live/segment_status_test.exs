@@ -3,12 +3,14 @@ defmodule MydiaWeb.MediaLive.SegmentStatusTest do
   # otherwise hides test rows from the mount process. The fingerprint
   # implementation is also swapped through Application env, which is global.
   use MydiaWeb.ConnCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
   import MydiaWeb.AuthHelpers
 
+  alias Mydia.Jobs.SegmentDetection, as: SegmentDetectionJob
   alias Mydia.Library.MediaFile
   alias Mydia.Library.MediaSegment
   alias Mydia.Repo
@@ -38,6 +40,12 @@ defmodule MydiaWeb.MediaLive.SegmentStatusTest do
   end
 
   setup %{conn: conn} do
+    # The app skips Oban in test (engine: false), so Oban.insert cannot be
+    # resolved from the LiveView process. Start an isolated, manual-mode
+    # instance so the re-analyze enqueue lands where assert_enqueued sees it.
+    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+    start_supervised!({Oban, repo: Repo, engine: engine, testing: :manual})
+
     # The row is a capability-gated view of real detection, so the host's
     # chromaprint install must not decide what the test sees.
     Application.put_env(:mydia, :fingerprint_impl, AvailableStub)
@@ -157,6 +165,42 @@ defmodule MydiaWeb.MediaLive.SegmentStatusTest do
     end
 
     assert has_element?(view, "#segment-state-season-1", "Pending")
+  end
+
+  test "re-analyze enqueues detection for that season straight away", %{conn: conn} do
+    {media_item, [first | _rest]} = show_with_season()
+
+    detect(first)
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    view |> element("#segment-reanalyze-season-1") |> render_click()
+
+    # Waiting for the scheduler's next tick would read as a broken button.
+    assert_enqueued(
+      worker: SegmentDetectionJob,
+      args: %{media_item_id: media_item.id, season_number: 1}
+    )
+
+    assert length(all_enqueued(worker: SegmentDetectionJob)) == 1
+  end
+
+  test "re-analyzing a season the scheduler already queued does not duplicate it", %{conn: conn} do
+    {media_item, _files} = show_with_season()
+
+    {:ok, _job} =
+      %{media_item_id: media_item.id, season_number: 1}
+      |> SegmentDetectionJob.new()
+      |> Oban.insert()
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    view |> element("#segment-reanalyze-season-1") |> render_click()
+
+    # The worker's unique guard makes this a no-op rather than an error, and
+    # the operator is told the season is queued either way, which it is.
+    assert length(all_enqueued(worker: SegmentDetectionJob)) == 1
+    assert render(view) =~ "queued for segment re-analysis"
   end
 
   test "shows one note and no rows when chromaprint is missing", %{conn: conn} do

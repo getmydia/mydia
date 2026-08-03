@@ -4,9 +4,12 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
+  alias Mydia.Jobs.SegmentDetection, as: SegmentDetectionJob
   alias Mydia.Library.SegmentDetection
   alias Mydia.Library.SegmentDetection.Fingerprint
   alias MydiaWeb.Live.Authorization
+
+  require Logger
 
   @doc """
   Assigns the per-season detection summary the show page renders.
@@ -28,8 +31,9 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
   Clears a season's detections and returns its files to the pending backlog.
 
   Cached fingerprints are kept, so the second pass does not re-decode any
-  audio. The files land back in the same `pending` state the detection
-  scheduler drains, which is what picks the season up again.
+  audio. The season is enqueued straight away rather than left for the
+  scheduler's next tick, because an operator who just clicked the button
+  should not wait five minutes to see anything happen.
   """
   def re_analyze(%{"season-number" => season_number_str}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
@@ -37,6 +41,7 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
       media_item = socket.assigns.media_item
 
       :ok = SegmentDetection.reset_season(media_item.id, season_number)
+      enqueue_detection(media_item.id, season_number)
 
       {:noreply,
        socket
@@ -44,6 +49,35 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
        |> put_flash(:info, "Season #{season_number} queued for segment re-analysis")}
     else
       {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # IMPORTANT: singular Oban.insert/1, never insert_all/1, which silently
+  # bypasses the worker's `unique:` option on the Basic and Lite engines this
+  # project runs. The scheduler carries the same warning.
+  #
+  # That uniqueness guard is also why a season the scheduler already queued is
+  # not an error here: Oban returns {:ok, job} with `conflict?` set and the
+  # existing job stands. The season gets analyzed, which is what was asked for.
+  defp enqueue_detection(media_item_id, season_number) do
+    %{media_item_id: media_item_id, season_number: season_number}
+    |> SegmentDetectionJob.new()
+    |> Oban.insert()
+    |> case do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        # Not worth alarming the operator over: the files are back in the
+        # pending backlog either way, so the scheduler picks the season up on
+        # its next tick.
+        Logger.warning("Failed to enqueue segment re-analysis",
+          media_item_id: media_item_id,
+          season_number: season_number,
+          reason: inspect(reason)
+        )
+
+        :error
     end
   end
 
