@@ -11,7 +11,7 @@ Releases are draft-first. You create a draft pinned to a commit, then dispatch
 the draft. **Never create a git tag yourself.** GitHub creates it when the
 workflow publishes the draft.
 
-Full reference: `docs/development/releasing.md`.
+Full reference: `docs/contributing/releasing.md`.
 
 ## 1. Analyze changes since the last release
 

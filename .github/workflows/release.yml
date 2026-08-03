@@ -1,7 +1,7 @@
 name: Release
 
 # Release procedure (Immutable Releases enabled on this repo).
-# Full docs: docs/development/releasing.md
+# Full docs: docs/contributing/releasing.md
 #
 #   1. SHA=$(git rev-parse origin/master)
 #      gh release create vX.Y.Z --target "$SHA" --draft --prerelease \
