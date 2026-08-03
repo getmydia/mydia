@@ -1,5 +1,6 @@
 defmodule Mydia.Library.SegmentDetection.BoundaryTest do
-  # refine_end/2 mutates Application env for the ffmpeg path, so serial.
+  # These tests set :ffmpeg_path in Application env to point refine_end/2 at a
+  # stub binary. That is global state, so the file runs serially.
   use ExUnit.Case, async: false
 
   alias Mydia.Library.Ffmpeg

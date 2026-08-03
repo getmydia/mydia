@@ -99,8 +99,11 @@ defmodule Mydia.Library.SegmentDetection.Boundary do
   interleaved with the rest of ffmpeg's logging and can be truncated partway
   through a line.
   """
-  @spec parse_black_intervals(String.t(), integer()) :: [integer()]
-  def parse_black_intervals(output, window_start_ms) when is_binary(output) do
+  # binary() rather than String.t(): this parses whatever `Ffmpeg.run/2` hands
+  # back, and that output is not guaranteed to be valid UTF-8.
+  @spec parse_black_intervals(binary(), integer()) :: [integer()]
+  def parse_black_intervals(output, window_start_ms)
+      when is_binary(output) and is_integer(window_start_ms) do
     ~r/black_start:([0-9]+(?:\.[0-9]+)?)/
     |> Regex.scan(output, capture: :all_but_first)
     |> Enum.flat_map(fn [value] ->
