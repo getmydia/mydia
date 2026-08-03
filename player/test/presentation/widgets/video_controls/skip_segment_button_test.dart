@@ -51,14 +51,26 @@ void main() {
           intro.containsPosition(const Duration(milliseconds: 90000)), isFalse);
     });
 
-    // A newer player regularly meets an older server with no segments field,
-    // which fails the whole query rather than returning null for that one
-    // selection. Every shape below has to mean "no skip buttons".
+    // Detection is additive background work, so no wire shape may become a
+    // playback error. Every one of these has to mean "no skip buttons".
     test('listFromJson yields an empty list for anything malformed', () {
       expect(MediaSegment.listFromJson(null), isEmpty);
       expect(MediaSegment.listFromJson('nope'), isEmpty);
       expect(MediaSegment.listFromJson(const [42, 'x']), isEmpty);
       expect(MediaSegment.listFromJson(const <dynamic>[]), isEmpty);
+    });
+
+    // Partial salvage is the documented behaviour, not an accident: a good
+    // segment sitting next to a bad entry still produces a working button.
+    test('listFromJson keeps the well-formed entries beside malformed ones',
+        () {
+      final segments = MediaSegment.listFromJson(const [
+        42,
+        {'type': 'INTRO', 'startMs': 30000, 'endMs': 90000},
+        'nonsense',
+      ]);
+
+      expect(segments, [intro]);
     });
 
     test('listFromJson parses a well-formed list', () {

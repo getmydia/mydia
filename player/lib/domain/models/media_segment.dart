@@ -29,9 +29,11 @@ class MediaSegment {
 
   /// Parses a `segments` collection out of a decoded GraphQL payload.
   ///
-  /// Anything that is not a well-formed list of maps yields an empty list, so
-  /// an older server that answered the whole query with a field error lands on
-  /// the same result as a season nothing was detected in.
+  /// A value that is not a list yields an empty list. Within a list, entries
+  /// that are not maps are skipped and the well-formed ones are still
+  /// returned. Partial salvage is deliberate: the cost of keeping a good
+  /// segment out of a half-malformed payload is one skip button that works,
+  /// and the cost of discarding it is a feature that silently does nothing.
   static List<MediaSegment> listFromJson(dynamic raw) {
     final segments = <MediaSegment>[];
     if (raw is List) {

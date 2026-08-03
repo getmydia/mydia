@@ -1086,16 +1086,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Drop the previous media's segments and re-arm the once-per-session skip
   /// guard, but only when the media actually changed.
   ///
-  /// Keyed on the media rather than reset on every [_initializePlayer] run,
-  /// because a seek past the transcoded end restarts the whole session for the
-  /// *same* file. Resetting there would let auto-skip fire a second time on a
-  /// segment the viewer had deliberately seeked back into, which is the exact
-  /// behaviour the guard exists to prevent.
+  /// The comparison, not the clearing, is the load-bearing half. This runs on
+  /// every [_initializePlayer] call, and a seek past the transcoded end
+  /// restarts the whole session for the *same* file. Resetting unconditionally
+  /// would let auto-skip fire a second time on a segment the viewer had
+  /// deliberately seeked back into, which is precisely what the guard exists
+  /// to prevent.
   ///
-  /// Clearing [_segments] here rather than only on a successful fetch matters
-  /// because go_router reuses this State across episodes: a next-episode
-  /// navigation whose detail query then fails would otherwise keep offering the
-  /// previous episode's skip button at the previous episode's timestamps.
+  /// The clearing half is insurance, not a live path. go_router derives the
+  /// page key for `/player/:type/:id` from the route *pattern* rather than the
+  /// resolved location, so a next-episode navigation updates this State in
+  /// place instead of building a new one, and `PlayerScreen` has no
+  /// `didUpdateWidget` to notice the new parameters. [_initializePlayer] is
+  /// therefore never re-entered on that path and neither is this. It is
+  /// written to be correct if that gap is ever closed, and until then the
+  /// media key only ever transitions from null on first mount.
   void _resetSegmentsIfMediaChanged() {
     final mediaKey = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
     if (_skipTrackerMediaKey == mediaKey) return;
