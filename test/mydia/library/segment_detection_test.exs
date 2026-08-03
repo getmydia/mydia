@@ -168,6 +168,79 @@ defmodule Mydia.Library.SegmentDetectionTest do
     end
   end
 
+  # Installs a fake ffmpeg that reports one black transition at `at_seconds`
+  # into whatever window blackdetect is pointed at. Boundary shells out through
+  # Mydia.Library.Ffmpeg, which honours the :ffmpeg_path override.
+  defp stub_blackdetect(at_seconds) do
+    dir = Path.join(System.tmp_dir!(), "segdet_ffmpeg_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    script = Path.join(dir, "ffmpeg")
+
+    File.write!(script, """
+    #!/bin/sh
+    echo "[Parsed_blackdetect_0 @ 0x1] black_start:#{at_seconds} black_end:#{at_seconds} black_duration:0.125" >&2
+    """)
+
+    File.chmod!(script, 0o755)
+    Application.put_env(:mydia, :ffmpeg_path, script)
+
+    on_exit(fn ->
+      Application.delete_env(:mydia, :ffmpeg_path)
+      File.rm_rf!(dir)
+    end)
+  end
+
+  # A season whose only shared audio is exactly the 20s minimum credits run,
+  # placed 100 frames into the credits window. With duration 1500.0 that window
+  # starts at 1_050_000ms, so the run is 1_060_000 -> 1_080_000.
+  defp minimum_credits_season do
+    {media_item, files} = season_fixture(4)
+    theme = noise(200, :ending)
+
+    for {{_media_file, path}, index} <- Enum.with_index(files, 1) do
+      FingerprintStub.put(path, noise(100, {:body, index}) ++ theme ++ noise(200, {:tail, index}))
+    end
+
+    {media_item, files}
+  end
+
+  describe "credits boundary refinement" do
+    test "keeps the unrefined end when refinement would cross the segment start" do
+      # black_start:0 puts the refined end at the very beginning of the +/-20s
+      # search window, which for a 20s segment is exactly its start. Persisting
+      # that would fail MediaSegment's end > start validation while the type was
+      # still recorded as detected, leaving a detected file with no segment.
+      stub_blackdetect(0)
+      {media_item, files} = minimum_credits_season()
+
+      assert :ok = SegmentDetection.analyze_season(media_item.id, 1)
+
+      {media_file, _path} = hd(files)
+      reloaded = Repo.preload(Repo.get!(MediaFile, media_file.id), :segments)
+      credits = Enum.find(reloaded.segments, &(&1.type == "credits"))
+
+      assert credits, "credits segment should survive a refinement that would cross the start"
+      assert credits.start_ms == 1_060_000
+      assert credits.end_ms == 1_080_000
+    end
+
+    test "applies refinement that lands after the segment start" do
+      # 15s into the window is 1_075_000 absolute, comfortably past the start,
+      # so the snap is taken and the end moves earlier by 5s.
+      stub_blackdetect(15)
+      {media_item, files} = minimum_credits_season()
+
+      assert :ok = SegmentDetection.analyze_season(media_item.id, 1)
+
+      {media_file, _path} = hd(files)
+      reloaded = Repo.preload(Repo.get!(MediaFile, media_file.id), :segments)
+      credits = Enum.find(reloaded.segments, &(&1.type == "credits"))
+
+      assert credits.start_ms == 1_060_000
+      assert credits.end_ms == 1_075_000
+    end
+  end
+
   describe "analyze_season/2" do
     test "detects a shared intro and persists it for every episode" do
       {media_item, files} = season_fixture(4)

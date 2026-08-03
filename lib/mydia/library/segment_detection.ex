@@ -337,7 +337,7 @@ defmodule Mydia.Library.SegmentDetection do
 
     case consensus(matches, max(length(candidates), 1)) do
       {:ok, result} ->
-        end_ms = maybe_refine(file, type, result.end_ms)
+        end_ms = maybe_refine(file, type, result.start_ms, result.end_ms)
         upsert_segment(file, type, result.start_ms, end_ms, "fingerprint", result.confidence)
         {:ok, true}
 
@@ -371,14 +371,26 @@ defmodule Mydia.Library.SegmentDetection do
   defp min_seconds("intro"), do: @min_intro_s
   defp min_seconds("credits"), do: @min_credits_s
 
-  defp maybe_refine(file, "credits", end_ms) do
+  defp maybe_refine(file, "credits", start_ms, end_ms) do
     case MediaFile.absolute_path(file) do
-      nil -> end_ms
-      path -> Boundary.refine_end(path, end_ms)
+      nil ->
+        end_ms
+
+      path ->
+        refined = Boundary.refine_end(path, end_ms)
+
+        # refine_end/2 snaps to the last black transition inside a window that
+        # extends both sides of end_ms, so it can move the end EARLIER as well
+        # as later. At the minimum credits run of 20s, a full backward snap
+        # puts the end at or before the start. MediaSegment.changeset/2 rejects
+        # that, and the caller would still record the type as detected, leaving
+        # a file marked detected with nothing persisted. An unrefined end beats
+        # a segment that cannot be written.
+        if refined > start_ms, do: refined, else: end_ms
     end
   end
 
-  defp maybe_refine(_file, _type, end_ms), do: end_ms
+  defp maybe_refine(_file, _type, _start_ms, end_ms), do: end_ms
 
   # -- fingerprints ---------------------------------------------------------
 
@@ -479,8 +491,17 @@ defmodule Mydia.Library.SegmentDetection do
     attempts = file.segment_analysis_attempts + 1
     state = if attempts >= @max_attempts, do: "failed", else: "pending"
 
+    # Guarded on the attempt count as well as the state, so the write is a
+    # compare-and-set. Deriving `attempts` from the in-memory struct means two
+    # writers holding the same stale count would both store the same value, and
+    # the file would quietly get more than @max_attempts tries. Matching on the
+    # value we read makes the second write a no-op instead.
     Repo.update_all(
-      from(mf in MediaFile, where: mf.id == ^file.id and mf.segment_analysis_state == "pending"),
+      from(mf in MediaFile,
+        where:
+          mf.id == ^file.id and mf.segment_analysis_state == "pending" and
+            mf.segment_analysis_attempts == ^file.segment_analysis_attempts
+      ),
       set: [
         segment_analysis_state: state,
         segment_analysis_attempts: attempts,
