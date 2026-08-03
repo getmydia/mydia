@@ -9,6 +9,7 @@ import '../../core/p2p/local_proxy_service.dart';
 import '../../core/player/platform_features.dart';
 import 'cast_button.dart';
 import 'cast_device_picker.dart';
+import 'local_network_settings_button.dart';
 
 /// Turn a cast failure into something the user can act on.
 ///
@@ -59,6 +60,34 @@ String castErrorMessage(
   }
 }
 
+/// Show a cast failure, with a remedy attached when one exists.
+///
+/// Four call sites built a byte-identical red SnackBar before this existed.
+/// Collapsing them is what gives the permission failures a single place to
+/// hang their Settings action.
+void showCastErrorSnackBar(
+  BuildContext context,
+  CastBackendException e, {
+  WidgetRef? ref,
+}) {
+  // Both kinds are the same OS permission with the same fix.
+  final permissionDenied = e.kind == CastFailureKind.localNetworkDenied ||
+      e.kind == CastFailureKind.discoveryDenied;
+
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(castErrorMessage(e, ref: ref)),
+    backgroundColor: Colors.red,
+    duration: Duration(seconds: permissionDenied ? 8 : 4),
+    action: permissionDenied
+        ? SnackBarAction(
+            label: 'Settings',
+            textColor: Colors.white,
+            onPressed: () => openLocalNetworkSettings(context),
+          )
+        : null,
+  ));
+}
+
 /// The shared "user tapped a cast affordance" entry point, for every screen
 /// except the player.
 ///
@@ -107,10 +136,7 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     );
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(castErrorMessage(e, ref: ref)),
-      backgroundColor: Colors.red,
-    ));
+    showCastErrorSnackBar(context, e, ref: ref);
   } catch (e) {
     // Anything that isn't a CastBackendException: the session manager
     // itself resolving (Hive, GraphQL client), or a non-typed failure from

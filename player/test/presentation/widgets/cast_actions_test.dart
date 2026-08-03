@@ -117,4 +117,50 @@ void main() {
       expect(icon.icon, Icons.cast_connected);
     });
   });
+
+  group('showCastErrorSnackBar', () {
+    Future<void> pumpAndShow(
+      WidgetTester tester,
+      CastFailureKind kind,
+    ) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showCastErrorSnackBar(
+                context,
+                CastBackendException('raw', kind),
+              ),
+              child: const Text('go'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('go'));
+      await tester.pump();
+    }
+
+    testWidgets('offers a Settings action for a local network denial',
+        (tester) async {
+      await pumpAndShow(tester, CastFailureKind.localNetworkDenied);
+
+      expect(find.byType(SnackBarAction), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
+    });
+
+    testWidgets('offers a Settings action for denied discovery',
+        (tester) async {
+      await pumpAndShow(tester, CastFailureKind.discoveryDenied);
+
+      expect(find.byType(SnackBarAction), findsOneWidget);
+    });
+
+    testWidgets('offers no action for an unreachable receiver', (tester) async {
+      await pumpAndShow(tester, CastFailureKind.unreachable);
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(SnackBarAction), findsNothing);
+    });
+  });
 }
