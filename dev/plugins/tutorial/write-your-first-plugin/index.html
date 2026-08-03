@@ -10,29 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://docs.mydia.dev/dev/">
+        <link rel="canonical" href="https://docs.mydia.dev/dev/plugins/tutorial/write-your-first-plugin/">
       
       
+        <link rel="prev" href="../../">
       
-        <link rel="next" href="using/tutorials/">
+      
+        <link rel="next" href="../../how-to/notifications/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
     
     
       
-        <title>Mydia Documentation</title>
+        <title>Write Your First Plugin - Mydia Documentation</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.618322db.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -83,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mydia" class="md-skip">
+        <a href="#write-your-first-plugin" class="md-skip">
           Skip to content
         </a>
       
@@ -101,7 +103,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="Mydia Documentation" class="md-header__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+    <a href="../../.." title="Mydia Documentation" class="md-header__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -121,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Write Your First Plugin
             
           </span>
         </div>
@@ -232,11 +234,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="." class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
         
   
   
@@ -264,7 +264,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="using/tutorials/" class="md-tabs__link">
+        <a href="../../../using/tutorials/" class="md-tabs__link">
           
   
   
@@ -285,11 +285,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="plugins/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -311,7 +313,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="contributing/setup/" class="md-tabs__link">
+        <a href="../../../contributing/setup/" class="md-tabs__link">
           
   
   
@@ -347,7 +349,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="Mydia Documentation" class="md-nav__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+    <a href="../../.." title="Mydia Documentation" class="md-nav__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -374,37 +376,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -420,81 +395,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-to-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where to Start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#screenshots" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Screenshots
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#getting-help" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Getting Help
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tech Stack
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -595,7 +495,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/tutorials/" class="md-nav__link ">
+            <a href="../../../using/tutorials/" class="md-nav__link ">
               
   
   
@@ -639,7 +539,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/tutorials/get-mydia-running/" class="md-nav__link">
+      <a href="../../../using/tutorials/get-mydia-running/" class="md-nav__link">
         
   
   
@@ -667,7 +567,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/tutorials/first-library-import/" class="md-nav__link">
+      <a href="../../../using/tutorials/first-library-import/" class="md-nav__link">
         
   
   
@@ -762,7 +662,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/how-to/" class="md-nav__link ">
+            <a href="../../../using/how-to/" class="md-nav__link ">
               
   
   
@@ -806,7 +706,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/install-docker-compose/" class="md-nav__link">
+      <a href="../../../using/how-to/install-docker-compose/" class="md-nav__link">
         
   
   
@@ -834,7 +734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/connect-download-client/" class="md-nav__link">
+      <a href="../../../using/how-to/connect-download-client/" class="md-nav__link">
         
   
   
@@ -862,7 +762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/connect-indexer/" class="md-nav__link">
+      <a href="../../../using/how-to/connect-indexer/" class="md-nav__link">
         
   
   
@@ -890,7 +790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/cardigann-indexers/" class="md-nav__link">
+      <a href="../../../using/how-to/cardigann-indexers/" class="md-nav__link">
         
   
   
@@ -918,7 +818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/manage-libraries/" class="md-nav__link">
+      <a href="../../../using/how-to/manage-libraries/" class="md-nav__link">
         
   
   
@@ -946,7 +846,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/add-media/" class="md-nav__link">
+      <a href="../../../using/how-to/add-media/" class="md-nav__link">
         
   
   
@@ -974,7 +874,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/import-existing-collection/" class="md-nav__link">
+      <a href="../../../using/how-to/import-existing-collection/" class="md-nav__link">
         
   
   
@@ -1002,7 +902,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/quality-profiles/" class="md-nav__link">
+      <a href="../../../using/how-to/quality-profiles/" class="md-nav__link">
         
   
   
@@ -1030,7 +930,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/automatic-quality-upgrades/" class="md-nav__link">
+      <a href="../../../using/how-to/automatic-quality-upgrades/" class="md-nav__link">
         
   
   
@@ -1058,7 +958,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/manage-users/" class="md-nav__link">
+      <a href="../../../using/how-to/manage-users/" class="md-nav__link">
         
   
   
@@ -1086,7 +986,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/sso-oidc/" class="md-nav__link">
+      <a href="../../../using/how-to/sso-oidc/" class="md-nav__link">
         
   
   
@@ -1114,7 +1014,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/postgresql/" class="md-nav__link">
+      <a href="../../../using/how-to/postgresql/" class="md-nav__link">
         
   
   
@@ -1142,7 +1042,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/reverse-proxy/" class="md-nav__link">
+      <a href="../../../using/how-to/reverse-proxy/" class="md-nav__link">
         
   
   
@@ -1170,7 +1070,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/backup-restore/" class="md-nav__link">
+      <a href="../../../using/how-to/backup-restore/" class="md-nav__link">
         
   
   
@@ -1198,7 +1098,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/update-mydia/" class="md-nav__link">
+      <a href="../../../using/how-to/update-mydia/" class="md-nav__link">
         
   
   
@@ -1226,7 +1126,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/monitor-and-logs/" class="md-nav__link">
+      <a href="../../../using/how-to/monitor-and-logs/" class="md-nav__link">
         
   
   
@@ -1254,7 +1154,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/nixos/" class="md-nav__link">
+      <a href="../../../using/how-to/nixos/" class="md-nav__link">
         
   
   
@@ -1282,7 +1182,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/remote-access/" class="md-nav__link">
+      <a href="../../../using/how-to/remote-access/" class="md-nav__link">
         
   
   
@@ -1357,7 +1257,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/reference/" class="md-nav__link ">
+            <a href="../../../using/reference/" class="md-nav__link ">
               
   
   
@@ -1401,7 +1301,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/environment-variables/" class="md-nav__link">
+      <a href="../../../using/reference/environment-variables/" class="md-nav__link">
         
   
   
@@ -1429,7 +1329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/configuration/" class="md-nav__link">
+      <a href="../../../using/reference/configuration/" class="md-nav__link">
         
   
   
@@ -1457,7 +1357,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/library-types/" class="md-nav__link">
+      <a href="../../../using/reference/library-types/" class="md-nav__link">
         
   
   
@@ -1485,7 +1385,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/download-clients/" class="md-nav__link">
+      <a href="../../../using/reference/download-clients/" class="md-nav__link">
         
   
   
@@ -1513,7 +1413,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/indexers/" class="md-nav__link">
+      <a href="../../../using/reference/indexers/" class="md-nav__link">
         
   
   
@@ -1541,7 +1441,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/quality-profiles/" class="md-nav__link">
+      <a href="../../../using/reference/quality-profiles/" class="md-nav__link">
         
   
   
@@ -1569,7 +1469,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/database/" class="md-nav__link">
+      <a href="../../../using/reference/database/" class="md-nav__link">
         
   
   
@@ -1597,7 +1497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/api/" class="md-nav__link">
+      <a href="../../../using/reference/api/" class="md-nav__link">
         
   
   
@@ -1668,7 +1568,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/explanation/" class="md-nav__link ">
+            <a href="../../../using/explanation/" class="md-nav__link ">
               
   
   
@@ -1712,7 +1612,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/configuration-model/" class="md-nav__link">
+      <a href="../../../using/explanation/configuration-model/" class="md-nav__link">
         
   
   
@@ -1740,7 +1640,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/media-pipeline/" class="md-nav__link">
+      <a href="../../../using/explanation/media-pipeline/" class="md-nav__link">
         
   
   
@@ -1768,7 +1668,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/quality-decisions/" class="md-nav__link">
+      <a href="../../../using/explanation/quality-decisions/" class="md-nav__link">
         
   
   
@@ -1796,7 +1696,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/remote-access/" class="md-nav__link">
+      <a href="../../../using/explanation/remote-access/" class="md-nav__link">
         
   
   
@@ -1824,7 +1724,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/how-mydia-runs/" class="md-nav__link">
+      <a href="../../../using/explanation/how-mydia-runs/" class="md-nav__link">
         
   
   
@@ -1852,7 +1752,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/vs-radarr-sonarr/" class="md-nav__link">
+      <a href="../../../using/explanation/vs-radarr-sonarr/" class="md-nav__link">
         
   
   
@@ -1892,6 +1792,8 @@
       
   
   
+    
+  
   
   
     
@@ -1913,20 +1815,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="plugins/" class="md-nav__link ">
+            <a href="../../" class="md-nav__link ">
               
   
   
@@ -1944,13 +1849,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1967,8 +1872,10 @@
                 
   
   
+    
   
   
+  
     
     
       
@@ -1979,18 +1886,21 @@
     
       
       
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
         
           
-          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="">
             
   
   
@@ -2008,7 +1918,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2023,10 +1933,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="plugins/tutorial/write-your-first-plugin/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Write Your First Plugin
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2042,6 +1979,103 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-create-the-crate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Create the Crate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-write-the-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Write the Handler
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-build-the-component" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Build the Component
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-ship-a-manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Ship a Manifest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-load-it-and-watch-it-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Load It and Watch It Run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-just-did" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What You Just Did
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2078,17 +2112,20 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
         
           
-          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="">
             
   
   
@@ -2124,7 +2161,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/notifications/" class="md-nav__link">
+      <a href="../../how-to/notifications/" class="md-nav__link">
         
   
   
@@ -2152,7 +2189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/media-data/" class="md-nav__link">
+      <a href="../../how-to/media-data/" class="md-nav__link">
         
   
   
@@ -2180,7 +2217,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/two-way-sync/" class="md-nav__link">
+      <a href="../../how-to/two-way-sync/" class="md-nav__link">
         
   
   
@@ -2208,7 +2245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/test-and-iterate/" class="md-nav__link">
+      <a href="../../how-to/test-and-iterate/" class="md-nav__link">
         
   
   
@@ -2256,17 +2293,20 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
         
           
-          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="">
             
   
   
@@ -2302,7 +2342,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/reference/manifest/" class="md-nav__link">
+      <a href="../../reference/manifest/" class="md-nav__link">
         
   
   
@@ -2330,7 +2370,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/reference/host-api/" class="md-nav__link">
+      <a href="../../reference/host-api/" class="md-nav__link">
         
   
   
@@ -2376,17 +2416,20 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" >
         
           
-          <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="">
             
   
   
@@ -2422,7 +2465,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/explanation/plugin-model/" class="md-nav__link">
+      <a href="../../explanation/plugin-model/" class="md-nav__link">
         
   
   
@@ -2531,7 +2574,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/setup/" class="md-nav__link">
+      <a href="../../../contributing/setup/" class="md-nav__link">
         
   
   
@@ -2559,7 +2602,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/testing/" class="md-nav__link">
+      <a href="../../../contributing/testing/" class="md-nav__link">
         
   
   
@@ -2587,7 +2630,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/e2e-testing/" class="md-nav__link">
+      <a href="../../../contributing/e2e-testing/" class="md-nav__link">
         
   
   
@@ -2615,7 +2658,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/architecture/" class="md-nav__link">
+      <a href="../../../contributing/architecture/" class="md-nav__link">
         
   
   
@@ -2643,7 +2686,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/ci-artifacts/" class="md-nav__link">
+      <a href="../../../contributing/ci-artifacts/" class="md-nav__link">
         
   
   
@@ -2671,7 +2714,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/releasing/" class="md-nav__link">
+      <a href="../../../contributing/releasing/" class="md-nav__link">
         
   
   
@@ -2726,10 +2769,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
+  <a href="#prerequisites" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Features
+        Prerequisites
       
     </span>
   </a>
@@ -2737,10 +2780,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-to-start" class="md-nav__link">
+  <a href="#step-1-create-the-crate" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where to Start
+        Step 1: Create the Crate
       
     </span>
   </a>
@@ -2748,10 +2791,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#screenshots" class="md-nav__link">
+  <a href="#step-2-write-the-handler" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Screenshots
+        Step 2: Write the Handler
       
     </span>
   </a>
@@ -2759,10 +2802,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#getting-help" class="md-nav__link">
+  <a href="#step-3-build-the-component" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Getting Help
+        Step 3: Build the Component
       
     </span>
   </a>
@@ -2770,10 +2813,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
+  <a href="#step-4-ship-a-manifest" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tech Stack
+        Step 4: Ship a Manifest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-load-it-and-watch-it-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Load It and Watch It Run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-just-did" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What You Just Did
       
     </span>
   </a>
@@ -2800,99 +2865,138 @@
   
 
 
-<h1 id="mydia">Mydia</h1>
-<p><strong>Your personal media companion, built with Phoenix LiveView</strong></p>
-<p>A modern, self-hosted media management platform for tracking, organizing, and monitoring your media library.</p>
+<h1 id="write-your-first-plugin">Write Your First Plugin</h1>
+<p>By the end of this tutorial you'll have a plugin that logs a message every
+time media is added to your library, built as a WebAssembly component and
+running inside a real Mydia instance. It takes about 10 minutes.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>A local Mydia checkout with the <a href="../../../contributing/setup/">devenv shell</a>
+  working (<code>./dev shell</code> or <code>direnv allow</code>). Building the plugin needs the
+  <code>wasm32-wasip2</code> Rust target, which only the devenv/nix path provides, not
+  a plain Docker setup. If you're building outside the repo, add the target
+  yourself: <code>rustup target add wasm32-wasip2</code>, matching the Rust toolchain
+  Mydia pins (1.96.0, see <a href="../../../contributing/setup/">Development Setup</a>) so
+  the component's WASI ABI stays compatible with the host.</li>
+<li>A running Mydia instance you can activate plugins on (<code>./dev up</code>).</li>
+</ul>
+<h2 id="step-1-create-the-crate">Step 1: Create the Crate</h2>
+<p>A plugin is a <code>cdylib</code> crate that depends on <code>mydia-plugin-sdk</code>, which lives in
+the Mydia repository and is consumed as a git dependency rather than from
+crates.io.
+The starter at <code>native/mydia_plugin_sdk/examples/minimal</code> is exactly this
+layout if you want to copy it instead of typing it out.</p>
+<p><code>Cargo.toml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[package]</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;my_plugin&quot;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="k">[lib]</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">crate-type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;cdylib&quot;</span><span class="p">]</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="k">[dependencies]</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">mydia-plugin-sdk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/getmydia/mydia&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;v0.13.0-beta.1&quot;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="k">[profile.release]</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">opt-level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;z&quot;</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">lto</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="n">strip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="n">panic</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;abort&quot;</span>
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Pin the SDK to a tag, not a branch</p>
+<p>The SDK is not on crates.io, so it is consumed as a git dependency. Pin it
+to the release tag matching the Mydia host you are targeting, and bump it
+deliberately when you move to a newer host. Tracking <code>branch = "master"</code>
+instead means your build silently follows unreleased host changes, so a
+rebuild months later can produce a component built against a different
+contract than the one your host implements. See
+<a href="../../reference/host-api/#host-version-floor">Host-version floor</a> for how a
+plugin declares the oldest host it supports.</p>
+</div>
 <div class="admonition warning">
-<p class="admonition-title">Early Development</p>
-<p>Mydia is still in version 0.x.x and is subject to major changes from version to version. Feedback is welcome! Expect bugs and please open <a href="https://github.com/getmydia/mydia/issues">issues</a> or <a href="https://github.com/getmydia/mydia/issues/new">feature requests</a>.</p>
+<p class="admonition-title">Always set <code>panic = \"abort\"</code></p>
+<p>The sandbox denies stdio. A guest that panics and tries to print to stderr
+on its way down trips a host-side limitation and times out instead of
+failing cleanly. <code>panic = "abort"</code> traps immediately with no stderr write.</p>
 </div>
-<h2 id="features">Features</h2>
+<h2 id="step-2-write-the-handler">Step 2: Write the Handler</h2>
+<p><code>src/lib.rs</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">use</span><span class="w"> </span><span class="n">mydia_plugin_sdk</span><span class="p">::</span><span class="n">types</span><span class="p">::</span><span class="n">Event</span><span class="p">;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="cp">#[mydia_plugin_sdk::plugin]</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_event</span><span class="p">(</span><span class="n">evt</span><span class="p">:</span><span class="w"> </span><span class="nc">Event</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;{{</span><span class="se">\&quot;</span><span class="s">handled</span><span class="se">\&quot;</span><span class="s">:</span><span class="se">\&quot;</span><span class="s">{}</span><span class="se">\&quot;</span><span class="s">}}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">evt</span><span class="p">.</span><span class="n">event</span><span class="p">))</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">}</span>
+</code></pre></div>
+<p>That is a complete plugin. The <code>#[mydia_plugin_sdk::plugin]</code> macro adapts your
+plain function onto the component's exported handler, so you never touch the
+generated bindings. The handler takes a typed
+<a href="../../how-to/media-data/#act-on-only-the-events-you-care-about"><code>Event</code></a> and
+returns a short JSON result string on success, or an error string the host
+records as a plugin error.</p>
+<p>Because it's plain Rust, you can unit-test <code>on_event</code> directly with <code>cargo
+test</code>, no Wasm build and no running host required. See
+<a href="../../how-to/test-and-iterate/#test-without-a-host">Test without a host</a> once
+you're ready to go deeper on that.</p>
+<h2 id="step-3-build-the-component">Step 3: Build the Component</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release<span class="w"> </span>--target<span class="w"> </span>wasm32-wasip2
+</code></pre></div>
+<p>The component lands at <code>target/wasm32-wasip2/release/my_plugin.wasm</code>. The
+SDK's <code>wit-bindgen</code> dependency generates the component bindings, so no system
+binding generator is required.</p>
+<h2 id="step-4-ship-a-manifest">Step 4: Ship a Manifest</h2>
+<p>A plugin needs a JSON manifest declaring its identity, the events it
+subscribes to, and the capabilities it wants. The smallest useful one:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&quot;slug&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-plugin&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;My Plugin&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">&quot;events:subscribe&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;media_item.added&quot;</span><span class="p">]</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">}</span>
+</code></pre></div>
+<p>Save it as <code>priv/plugins/my-plugin.json</code> in your Mydia checkout. Mydia
+discovers every manifest under <code>priv/plugins/</code> and seeds it as a disabled,
+unapproved plugin the next time the app boots, or the next time you open the
+admin Plugins page, whichever comes first: it's the same mechanism the
+bundled webhook notifier and Simkl plugins use to register themselves, and
+for local development it's the natural way to get a brand-new manifest known
+to the host without a remote plugin index. See the full field reference in
+<a href="../../reference/manifest/">Manifest &amp; Settings</a> when you need more than the
+basics.</p>
+<h2 id="step-5-load-it-and-watch-it-run">Step 5: Load It and Watch It Run</h2>
+<p>Point Mydia's plugin override directory at your build and drop the component
+in, named after the manifest slug (export this in the same environment the
+Phoenix server runs in, before the next step, so the bytes are there the
+first time Mydia looks for them):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">PLUGINS_OVERRIDE_DIR</span><span class="o">=</span>/path/mydia/reads
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>cp<span class="w"> </span>target/wasm32-wasip2/release/my_plugin.wasm<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PLUGINS_OVERRIDE_DIR</span><span class="s2">/my-plugin.wasm&quot;</span>
+</code></pre></div>
+<p>Open <strong>Admin &gt; Configuration &gt; Plugins</strong>. Your plugin shows up in the installed list, pending
+approval. Approve it: this grants the capabilities it declared and activates
+it, resolving the Wasm bytes you just dropped in.</p>
+<p>Now add or import a movie or show. Open the plugin's activity log: you'll see
+the <code>on_event</code> result recorded for the <code>media_item.added</code> event you just
+triggered.</p>
+<p>That's the whole loop: build, install once, drop in new bytes, reload, test.
+For the repeatable version of this, plus the <code>sideload.sh</code> shortcut for repo
+contributors, see <a href="../../how-to/test-and-iterate/">Test and iterate</a>.</p>
+<h2 id="what-you-just-did">What You Just Did</h2>
+<p>You built a Wasm component from a single typed handler function, declared what
+it wants to react to in a manifest, and watched Mydia run it against a real
+event with no host restart in between. Everything past this point is the same
+shape: subscribe to more events, request more capabilities, reach for host
+functions to read data or make calls.</p>
 <ul>
-<li><strong>Unified Media Management</strong> - Track both movies and TV shows with rich metadata from TMDB/TVDB</li>
-<li><strong>Automated Downloads</strong> - Background search and download with quality profiles and smart release ranking</li>
-<li><strong>Automatic Quality Upgrades</strong> - A bounded daily sweep replaces files scoring below your profile's cutoff, and re-checks the replacement before trashing anything</li>
-<li><strong>Download Clients</strong> - qBittorrent, Transmission, SABnzbd, and NZBGet support</li>
-<li><strong>Indexer Integration</strong> - Search via Prowlarr and Jackett for finding releases</li>
-<li><strong>Built-in Indexer Library</strong> - Native Cardigann support (experimental, limited testing)</li>
-<li><strong>Multi-User System</strong> - Built-in admin/guest roles with request approval workflow</li>
-<li><strong>SSO Support</strong> - Local authentication plus OIDC/OpenID Connect integration</li>
-<li><strong>Release Calendar</strong> - Track upcoming releases and monitor episodes</li>
-<li><strong>Import Lists</strong> - Sync external lists from TMDB (watchlists, popular, trending) to auto-add content (experimental)</li>
-<li><strong>Remote Access</strong> - P2P connectivity for the Flutter player via iroh (experimental)</li>
-<li><strong>Media Playback</strong> - HLS streaming with on-the-fly transcoding (experimental)</li>
-<li><strong>Trakt.tv Integration</strong> - Scrobbling and library sync</li>
-<li><strong>Modern Real-Time UI</strong> - Phoenix LiveView with instant updates and responsive design</li>
-</ul>
-<h2 id="where-to-start">Where to Start</h2>
-<div class="grid cards">
-<ul>
-<li>
-<p><strong>New to Mydia</strong></p>
-<p>Follow the <a href="using/tutorials/get-mydia-running/">Get Mydia running</a> tutorial
-and have a working instance with an admin account in about 10 minutes.</p>
-</li>
-<li>
-<p><strong>Have a specific task</strong></p>
-<p>The <a href="using/how-to/">how-to guides</a> cover installation, connecting
-clients and indexers, deployment, and everything else you do once Mydia is
-running.</p>
-</li>
-<li>
-<p><strong>Looking something up</strong></p>
-<p>The <a href="using/reference/">reference</a> section lists environment
-variables, configuration options, and schemas.</p>
-</li>
-<li>
-<p><strong>Want to know why</strong></p>
-<p><a href="using/explanation/">Explanation</a> covers why Mydia works the way it
-does, including how it compares to Radarr and Sonarr.</p>
-</li>
-<li>
-<p><strong>Building a plugin</strong></p>
-<p><a href="plugins/">Building Plugins</a> covers the plugin sandbox, the event
-model, and how to write, test, and ship one.</p>
-</li>
-<li>
-<p><strong>Contributing to Mydia</strong></p>
-<p><a href="contributing/setup/">Contributing</a> covers the development environment,
-testing, and the codebase's architecture.</p>
-</li>
-</ul>
-</div>
-<h2 id="screenshots">Screenshots</h2>
-<div class="grid cards">
-<ul>
-<li>
-<p><strong>Dashboard</strong></p>
-<p><img alt="Dashboard" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/homepage.png" /></p>
-</li>
-<li>
-<p><strong>Movies</strong></p>
-<p><img alt="Movies" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/movies.png" /></p>
-</li>
-<li>
-<p><strong>TV Shows</strong></p>
-<p><img alt="TV Shows" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/tv-shows.png" /></p>
-</li>
-<li>
-<p><strong>Calendar</strong></p>
-<p><img alt="Calendar" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/calendar.png" /></p>
-</li>
-</ul>
-</div>
-<h2 id="getting-help">Getting Help</h2>
-<ul>
-<li><a href="https://github.com/getmydia/mydia/issues">GitHub Issues</a> - Bug reports and feature requests</li>
-<li><a href="https://docs.mydia.dev">Documentation</a> - Full documentation</li>
-</ul>
-<h2 id="tech-stack">Tech Stack</h2>
-<ul>
-<li>Phoenix 1.8 + LiveView</li>
-<li>Ecto + SQLite/PostgreSQL</li>
-<li>Oban (background jobs)</li>
-<li>Tailwind CSS + DaisyUI</li>
-<li>Req (HTTP client)</li>
+<li>For task-by-task recipes (notifications, reading media data, two-way sync),
+  see the <a href="../../how-to/notifications/">how-to guides</a>.</li>
+<li>For the full event, capability, and manifest contract, see the
+  <a href="../../reference/host-api/">reference</a>.</li>
+<li>For why the platform is shaped this way, see
+  <a href="../../explanation/plugin-model/">The plugin model</a>.</li>
 </ul>
 
 
@@ -2930,15 +3034,31 @@ testing, and the codebase's architecture.</p>
       
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
+          
+          <a href="../../" class="md-footer__link md-footer__link--prev" aria-label="Previous: Building Plugins">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Building Plugins
+              </div>
+            </div>
+          </a>
+        
         
           
-          <a href="using/tutorials/" class="md-footer__link md-footer__link--next" aria-label="Next: Tutorials">
+          <a href="../../how-to/notifications/" class="md-footer__link md-footer__link--next" aria-label="Next: Send Notifications">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Tutorials
+                Send Notifications
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2991,10 +3111,10 @@ testing, and the codebase's architecture.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.e71a0d61.min.js"></script>
       
     
   </body>

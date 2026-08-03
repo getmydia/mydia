@@ -10,29 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://docs.mydia.dev/dev/">
+        <link rel="canonical" href="https://docs.mydia.dev/dev/using/how-to/reverse-proxy/">
       
       
+        <link rel="prev" href="../postgresql/">
       
-        <link rel="next" href="using/tutorials/">
+      
+        <link rel="next" href="../backup-restore/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
     
     
       
-        <title>Mydia Documentation</title>
+        <title>Putting Mydia Behind a Reverse Proxy - Mydia Documentation</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.618322db.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -83,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mydia" class="md-skip">
+        <a href="#putting-mydia-behind-a-reverse-proxy" class="md-skip">
           Skip to content
         </a>
       
@@ -101,7 +103,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="Mydia Documentation" class="md-header__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+    <a href="../../.." title="Mydia Documentation" class="md-header__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -121,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Putting Mydia Behind a Reverse Proxy
             
           </span>
         </div>
@@ -232,11 +234,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="." class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
         
   
   
@@ -253,6 +253,8 @@
   
   
   
+    
+  
   
     
     
@@ -260,11 +262,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="using/tutorials/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../tutorials/" class="md-tabs__link">
           
   
   
@@ -289,7 +293,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="plugins/" class="md-tabs__link">
+        <a href="../../../plugins/" class="md-tabs__link">
           
   
   
@@ -311,7 +315,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="contributing/setup/" class="md-tabs__link">
+        <a href="../../../contributing/setup/" class="md-tabs__link">
           
   
   
@@ -347,7 +351,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="Mydia Documentation" class="md-nav__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+    <a href="../../.." title="Mydia Documentation" class="md-nav__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -374,37 +378,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -420,81 +397,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-to-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where to Start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#screenshots" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Screenshots
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#getting-help" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Getting Help
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tech Stack
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -503,8 +405,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -520,19 +424,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
             
   
   
@@ -550,7 +457,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -584,10 +491,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -595,7 +505,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/tutorials/" class="md-nav__link ">
+            <a href="../../tutorials/" class="md-nav__link ">
               
   
   
@@ -613,7 +523,7 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_1" id="__nav_2_1_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
@@ -639,7 +549,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/tutorials/get-mydia-running/" class="md-nav__link">
+      <a href="../../tutorials/get-mydia-running/" class="md-nav__link">
         
   
   
@@ -667,7 +577,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/tutorials/first-library-import/" class="md-nav__link">
+      <a href="../../tutorials/first-library-import/" class="md-nav__link">
         
   
   
@@ -700,6 +610,8 @@
                 
   
   
+    
+  
   
   
     
@@ -751,18 +663,21 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/how-to/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -780,13 +695,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -806,7 +721,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/install-docker-compose/" class="md-nav__link">
+      <a href="../install-docker-compose/" class="md-nav__link">
         
   
   
@@ -834,7 +749,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/connect-download-client/" class="md-nav__link">
+      <a href="../connect-download-client/" class="md-nav__link">
         
   
   
@@ -862,7 +777,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/connect-indexer/" class="md-nav__link">
+      <a href="../connect-indexer/" class="md-nav__link">
         
   
   
@@ -890,7 +805,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/cardigann-indexers/" class="md-nav__link">
+      <a href="../cardigann-indexers/" class="md-nav__link">
         
   
   
@@ -918,7 +833,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/manage-libraries/" class="md-nav__link">
+      <a href="../manage-libraries/" class="md-nav__link">
         
   
   
@@ -946,7 +861,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/add-media/" class="md-nav__link">
+      <a href="../add-media/" class="md-nav__link">
         
   
   
@@ -974,7 +889,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/import-existing-collection/" class="md-nav__link">
+      <a href="../import-existing-collection/" class="md-nav__link">
         
   
   
@@ -1002,7 +917,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/quality-profiles/" class="md-nav__link">
+      <a href="../quality-profiles/" class="md-nav__link">
         
   
   
@@ -1030,7 +945,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/automatic-quality-upgrades/" class="md-nav__link">
+      <a href="../automatic-quality-upgrades/" class="md-nav__link">
         
   
   
@@ -1058,7 +973,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/manage-users/" class="md-nav__link">
+      <a href="../manage-users/" class="md-nav__link">
         
   
   
@@ -1086,7 +1001,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/sso-oidc/" class="md-nav__link">
+      <a href="../sso-oidc/" class="md-nav__link">
         
   
   
@@ -1114,7 +1029,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/postgresql/" class="md-nav__link">
+      <a href="../postgresql/" class="md-nav__link">
         
   
   
@@ -1139,10 +1054,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="using/how-to/reverse-proxy/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Putting Mydia Behind a Reverse Proxy
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1158,6 +1100,159 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reverse-proxy-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reverse Proxy Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reverse Proxy Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nginx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nginx
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#traefik" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Traefik
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caddy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#https-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTPS Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#websocket-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebSocket Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#origin-checking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Origin Checking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-note-on-load-balancing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A Note on Load Balancing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1170,7 +1265,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/backup-restore/" class="md-nav__link">
+      <a href="../backup-restore/" class="md-nav__link">
         
   
   
@@ -1198,7 +1293,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/update-mydia/" class="md-nav__link">
+      <a href="../update-mydia/" class="md-nav__link">
         
   
   
@@ -1226,7 +1321,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/monitor-and-logs/" class="md-nav__link">
+      <a href="../monitor-and-logs/" class="md-nav__link">
         
   
   
@@ -1254,7 +1349,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/nixos/" class="md-nav__link">
+      <a href="../nixos/" class="md-nav__link">
         
   
   
@@ -1282,7 +1377,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/remote-access/" class="md-nav__link">
+      <a href="../remote-access/" class="md-nav__link">
         
   
   
@@ -1346,10 +1441,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1357,7 +1455,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/reference/" class="md-nav__link ">
+            <a href="../../reference/" class="md-nav__link ">
               
   
   
@@ -1375,7 +1473,7 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_3" id="__nav_2_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_3" id="__nav_2_3_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
@@ -1401,7 +1499,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/environment-variables/" class="md-nav__link">
+      <a href="../../reference/environment-variables/" class="md-nav__link">
         
   
   
@@ -1429,7 +1527,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/configuration/" class="md-nav__link">
+      <a href="../../reference/configuration/" class="md-nav__link">
         
   
   
@@ -1457,7 +1555,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/library-types/" class="md-nav__link">
+      <a href="../../reference/library-types/" class="md-nav__link">
         
   
   
@@ -1485,7 +1583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/download-clients/" class="md-nav__link">
+      <a href="../../reference/download-clients/" class="md-nav__link">
         
   
   
@@ -1513,7 +1611,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/indexers/" class="md-nav__link">
+      <a href="../../reference/indexers/" class="md-nav__link">
         
   
   
@@ -1541,7 +1639,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/quality-profiles/" class="md-nav__link">
+      <a href="../../reference/quality-profiles/" class="md-nav__link">
         
   
   
@@ -1569,7 +1667,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/database/" class="md-nav__link">
+      <a href="../../reference/database/" class="md-nav__link">
         
   
   
@@ -1597,7 +1695,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/api/" class="md-nav__link">
+      <a href="../../reference/api/" class="md-nav__link">
         
   
   
@@ -1657,10 +1755,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1668,7 +1769,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/explanation/" class="md-nav__link ">
+            <a href="../../explanation/" class="md-nav__link ">
               
   
   
@@ -1686,7 +1787,7 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_4" id="__nav_2_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_4" id="__nav_2_4_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
@@ -1712,7 +1813,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/configuration-model/" class="md-nav__link">
+      <a href="../../explanation/configuration-model/" class="md-nav__link">
         
   
   
@@ -1740,7 +1841,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/media-pipeline/" class="md-nav__link">
+      <a href="../../explanation/media-pipeline/" class="md-nav__link">
         
   
   
@@ -1768,7 +1869,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/quality-decisions/" class="md-nav__link">
+      <a href="../../explanation/quality-decisions/" class="md-nav__link">
         
   
   
@@ -1796,7 +1897,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/remote-access/" class="md-nav__link">
+      <a href="../../explanation/remote-access/" class="md-nav__link">
         
   
   
@@ -1824,7 +1925,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/how-mydia-runs/" class="md-nav__link">
+      <a href="../../explanation/how-mydia-runs/" class="md-nav__link">
         
   
   
@@ -1852,7 +1953,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/vs-radarr-sonarr/" class="md-nav__link">
+      <a href="../../explanation/vs-radarr-sonarr/" class="md-nav__link">
         
   
   
@@ -1926,7 +2027,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="plugins/" class="md-nav__link ">
+            <a href="../../../plugins/" class="md-nav__link ">
               
   
   
@@ -2026,7 +2127,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/tutorial/write-your-first-plugin/" class="md-nav__link">
+      <a href="../../../plugins/tutorial/write-your-first-plugin/" class="md-nav__link">
         
   
   
@@ -2124,7 +2225,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/notifications/" class="md-nav__link">
+      <a href="../../../plugins/how-to/notifications/" class="md-nav__link">
         
   
   
@@ -2152,7 +2253,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/media-data/" class="md-nav__link">
+      <a href="../../../plugins/how-to/media-data/" class="md-nav__link">
         
   
   
@@ -2180,7 +2281,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/two-way-sync/" class="md-nav__link">
+      <a href="../../../plugins/how-to/two-way-sync/" class="md-nav__link">
         
   
   
@@ -2208,7 +2309,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/test-and-iterate/" class="md-nav__link">
+      <a href="../../../plugins/how-to/test-and-iterate/" class="md-nav__link">
         
   
   
@@ -2302,7 +2403,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/reference/manifest/" class="md-nav__link">
+      <a href="../../../plugins/reference/manifest/" class="md-nav__link">
         
   
   
@@ -2330,7 +2431,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/reference/host-api/" class="md-nav__link">
+      <a href="../../../plugins/reference/host-api/" class="md-nav__link">
         
   
   
@@ -2422,7 +2523,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/explanation/plugin-model/" class="md-nav__link">
+      <a href="../../../plugins/explanation/plugin-model/" class="md-nav__link">
         
   
   
@@ -2531,7 +2632,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/setup/" class="md-nav__link">
+      <a href="../../../contributing/setup/" class="md-nav__link">
         
   
   
@@ -2559,7 +2660,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/testing/" class="md-nav__link">
+      <a href="../../../contributing/testing/" class="md-nav__link">
         
   
   
@@ -2587,7 +2688,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/e2e-testing/" class="md-nav__link">
+      <a href="../../../contributing/e2e-testing/" class="md-nav__link">
         
   
   
@@ -2615,7 +2716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/architecture/" class="md-nav__link">
+      <a href="../../../contributing/architecture/" class="md-nav__link">
         
   
   
@@ -2643,7 +2744,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/ci-artifacts/" class="md-nav__link">
+      <a href="../../../contributing/ci-artifacts/" class="md-nav__link">
         
   
   
@@ -2671,7 +2772,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/releasing/" class="md-nav__link">
+      <a href="../../../contributing/releasing/" class="md-nav__link">
         
   
   
@@ -2726,10 +2827,60 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
+  <a href="#reverse-proxy-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Features
+        Reverse Proxy Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reverse Proxy Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nginx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nginx
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#traefik" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Traefik
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caddy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#https-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTPS Configuration
       
     </span>
   </a>
@@ -2737,10 +2888,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-to-start" class="md-nav__link">
+  <a href="#websocket-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where to Start
+        WebSocket Configuration
       
     </span>
   </a>
@@ -2748,10 +2899,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#screenshots" class="md-nav__link">
+  <a href="#origin-checking" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Screenshots
+        Origin Checking
       
     </span>
   </a>
@@ -2759,10 +2910,38 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#getting-help" class="md-nav__link">
+  <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Getting Help
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-note-on-load-balancing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A Note on Load Balancing
       
     </span>
   </a>
@@ -2770,10 +2949,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tech Stack
+        Next Steps
       
     </span>
   </a>
@@ -2800,99 +2979,87 @@
   
 
 
-<h1 id="mydia">Mydia</h1>
-<p><strong>Your personal media companion, built with Phoenix LiveView</strong></p>
-<p>A modern, self-hosted media management platform for tracking, organizing, and monitoring your media library.</p>
+<h1 id="putting-mydia-behind-a-reverse-proxy">Putting Mydia Behind a Reverse Proxy</h1>
+<p>This guide covers configuring Nginx, Traefik, or Caddy in front of Mydia, including the HTTPS, WebSocket, and origin-checking settings a reverse proxy needs.</p>
+<h2 id="reverse-proxy-configuration">Reverse Proxy Configuration</h2>
+<h3 id="nginx">Nginx</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="kn">listen</span><span class="w"> </span><span class="mi">80</span><span class="p">;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="kn">server_name</span><span class="w"> </span><span class="s">mydia.example.com</span><span class="p">;</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">        </span><span class="kn">proxy_pass</span><span class="w"> </span><span class="s">http://localhost:4000</span><span class="p">;</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">        </span><span class="kn">proxy_http_version</span><span class="w"> </span><span class="mi">1</span><span class="s">.1</span><span class="p">;</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Upgrade</span><span class="w"> </span><span class="nv">$http_upgrade</span><span class="p">;</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Connection</span><span class="w"> </span><span class="s">&quot;upgrade&quot;</span><span class="p">;</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Host</span><span class="w"> </span><span class="nv">$host</span><span class="p">;</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Real-IP</span><span class="w"> </span><span class="nv">$remote_addr</span><span class="p">;</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-For</span><span class="w"> </span><span class="nv">$proxy_add_x_forwarded_for</span><span class="p">;</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-Proto</span><span class="w"> </span><span class="nv">$scheme</span><span class="p">;</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="traefik">Traefik</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">labels</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.enable=true&quot;</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.http.routers.mydia.rule=Host(`mydia.example.com`)&quot;</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.http.routers.mydia.entrypoints=websecure&quot;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.http.routers.mydia.tls.certresolver=letsencrypt&quot;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;traefik.http.services.mydia.loadbalancer.server.port=4000&quot;</span>
+</code></pre></div>
+<h3 id="caddy">Caddy</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mydia.example.com {
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    reverse_proxy localhost:4000
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>}
+</code></pre></div>
+<h2 id="https-configuration">HTTPS Configuration</h2>
+<p>Set your public hostname. SSL termination is handled by your reverse proxy.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">PHX_HOST</span><span class="o">=</span>mydia.example.com
+</code></pre></div>
 <div class="admonition warning">
-<p class="admonition-title">Early Development</p>
-<p>Mydia is still in version 0.x.x and is subject to major changes from version to version. Feedback is welcome! Expect bugs and please open <a href="https://github.com/getmydia/mydia/issues">issues</a> or <a href="https://github.com/getmydia/mydia/issues/new">feature requests</a>.</p>
+<p class="admonition-title">Mydia always generates https:// links</p>
+<p>A release build hardcodes its external URL to <code>https://{PHX_HOST}</code> on port 443.
+Every absolute URL it generates uses that, including the OIDC redirect URI.</p>
+<p><code>URL_SCHEME</code> is accepted and stored, but nothing in a release reads it. Setting
+<code>URL_SCHEME=http</code> does not produce <code>http://</code> links.</p>
+<p>Terminate TLS at your proxy and serve Mydia over https on your public hostname.
+That is the only configuration in which generated links are correct.</p>
+<p>If you must serve Mydia over plain http, absolute links will point at <code>https://</code>
+and break. The one place this is fatal rather than cosmetic is OIDC login: see
+<a href="../sso-oidc/#redirect-uri">SSO / OIDC</a> for the workaround.</p>
 </div>
-<h2 id="features">Features</h2>
+<h2 id="websocket-configuration">WebSocket Configuration</h2>
+<p>For LiveView real-time features to work through a reverse proxy, ensure WebSocket connections are properly proxied:</p>
 <ul>
-<li><strong>Unified Media Management</strong> - Track both movies and TV shows with rich metadata from TMDB/TVDB</li>
-<li><strong>Automated Downloads</strong> - Background search and download with quality profiles and smart release ranking</li>
-<li><strong>Automatic Quality Upgrades</strong> - A bounded daily sweep replaces files scoring below your profile's cutoff, and re-checks the replacement before trashing anything</li>
-<li><strong>Download Clients</strong> - qBittorrent, Transmission, SABnzbd, and NZBGet support</li>
-<li><strong>Indexer Integration</strong> - Search via Prowlarr and Jackett for finding releases</li>
-<li><strong>Built-in Indexer Library</strong> - Native Cardigann support (experimental, limited testing)</li>
-<li><strong>Multi-User System</strong> - Built-in admin/guest roles with request approval workflow</li>
-<li><strong>SSO Support</strong> - Local authentication plus OIDC/OpenID Connect integration</li>
-<li><strong>Release Calendar</strong> - Track upcoming releases and monitor episodes</li>
-<li><strong>Import Lists</strong> - Sync external lists from TMDB (watchlists, popular, trending) to auto-add content (experimental)</li>
-<li><strong>Remote Access</strong> - P2P connectivity for the Flutter player via iroh (experimental)</li>
-<li><strong>Media Playback</strong> - HLS streaming with on-the-fly transcoding (experimental)</li>
-<li><strong>Trakt.tv Integration</strong> - Scrobbling and library sync</li>
-<li><strong>Modern Real-Time UI</strong> - Phoenix LiveView with instant updates and responsive design</li>
+<li>Nginx: Include <code>proxy_set_header Upgrade</code> and <code>Connection "upgrade"</code></li>
+<li>Traefik: Automatic WebSocket support</li>
+<li>Caddy: Automatic WebSocket support</li>
 </ul>
-<h2 id="where-to-start">Where to Start</h2>
-<div class="grid cards">
+<h2 id="origin-checking">Origin Checking</h2>
+<p>By default, Mydia checks WebSocket origins for security. Configure as needed:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Allow all origins (for IP-based access)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">PHX_CHECK_ORIGIN</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Allow specific origins</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nv">PHX_CHECK_ORIGIN</span><span class="o">=</span>https://mydia.example.com,http://192.168.1.100:4000
+</code></pre></div>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="connection-issues">Connection Issues</h3>
+<ol>
+<li>Verify port mapping</li>
+<li>Check firewall rules</li>
+<li>Test with <code>curl http://localhost:4000</code></li>
+</ol>
+<h2 id="a-note-on-load-balancing">A Note on Load Balancing</h2>
+<p>Put a reverse proxy in front of <em>one</em> Mydia instance. Running several instances
+behind a load balancer is not supported: background work would be duplicated,
+in-memory rate limiting would be split across processes, and real-time updates
+would not reach pages served by a different instance. See
+<a href="../../explanation/how-mydia-runs/#one-instance-on-purpose">How Mydia Runs</a>.</p>
+<h2 id="next-steps">Next Steps</h2>
 <ul>
-<li>
-<p><strong>New to Mydia</strong></p>
-<p>Follow the <a href="using/tutorials/get-mydia-running/">Get Mydia running</a> tutorial
-and have a working instance with an admin account in about 10 minutes.</p>
-</li>
-<li>
-<p><strong>Have a specific task</strong></p>
-<p>The <a href="using/how-to/">how-to guides</a> cover installation, connecting
-clients and indexers, deployment, and everything else you do once Mydia is
-running.</p>
-</li>
-<li>
-<p><strong>Looking something up</strong></p>
-<p>The <a href="using/reference/">reference</a> section lists environment
-variables, configuration options, and schemas.</p>
-</li>
-<li>
-<p><strong>Want to know why</strong></p>
-<p><a href="using/explanation/">Explanation</a> covers why Mydia works the way it
-does, including how it compares to Radarr and Sonarr.</p>
-</li>
-<li>
-<p><strong>Building a plugin</strong></p>
-<p><a href="plugins/">Building Plugins</a> covers the plugin sandbox, the event
-model, and how to write, test, and ship one.</p>
-</li>
-<li>
-<p><strong>Contributing to Mydia</strong></p>
-<p><a href="contributing/setup/">Contributing</a> covers the development environment,
-testing, and the codebase's architecture.</p>
-</li>
-</ul>
-</div>
-<h2 id="screenshots">Screenshots</h2>
-<div class="grid cards">
-<ul>
-<li>
-<p><strong>Dashboard</strong></p>
-<p><img alt="Dashboard" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/homepage.png" /></p>
-</li>
-<li>
-<p><strong>Movies</strong></p>
-<p><img alt="Movies" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/movies.png" /></p>
-</li>
-<li>
-<p><strong>TV Shows</strong></p>
-<p><img alt="TV Shows" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/tv-shows.png" /></p>
-</li>
-<li>
-<p><strong>Calendar</strong></p>
-<p><img alt="Calendar" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/calendar.png" /></p>
-</li>
-</ul>
-</div>
-<h2 id="getting-help">Getting Help</h2>
-<ul>
-<li><a href="https://github.com/getmydia/mydia/issues">GitHub Issues</a> - Bug reports and feature requests</li>
-<li><a href="https://docs.mydia.dev">Documentation</a> - Full documentation</li>
-</ul>
-<h2 id="tech-stack">Tech Stack</h2>
-<ul>
-<li>Phoenix 1.8 + LiveView</li>
-<li>Ecto + SQLite/PostgreSQL</li>
-<li>Oban (background jobs)</li>
-<li>Tailwind CSS + DaisyUI</li>
-<li>Req (HTTP client)</li>
+<li><a href="../backup-restore/">Backing Up and Restoring Mydia</a> - Mydia's actual availability story</li>
+<li><a href="../../explanation/how-mydia-runs/">How Mydia Runs</a> - The single-instance design and how to size it</li>
 </ul>
 
 
@@ -2930,15 +3097,31 @@ testing, and the codebase's architecture.</p>
       
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
+          
+          <a href="../postgresql/" class="md-footer__link md-footer__link--prev" aria-label="Previous: PostgreSQL Support">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                PostgreSQL Support
+              </div>
+            </div>
+          </a>
+        
         
           
-          <a href="using/tutorials/" class="md-footer__link md-footer__link--next" aria-label="Next: Tutorials">
+          <a href="../backup-restore/" class="md-footer__link md-footer__link--next" aria-label="Next: Backing Up and Restoring Mydia">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Tutorials
+                Backing Up and Restoring Mydia
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2991,10 +3174,10 @@ testing, and the codebase's architecture.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.e71a0d61.min.js"></script>
       
     
   </body>

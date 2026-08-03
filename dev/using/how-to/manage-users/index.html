@@ -10,29 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://docs.mydia.dev/dev/">
+        <link rel="canonical" href="https://docs.mydia.dev/dev/using/how-to/manage-users/">
       
       
+        <link rel="prev" href="../automatic-quality-upgrades/">
       
-        <link rel="next" href="using/tutorials/">
+      
+        <link rel="next" href="../sso-oidc/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
     
     
       
-        <title>Mydia Documentation</title>
+        <title>User Management - Mydia Documentation</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.618322db.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -83,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mydia" class="md-skip">
+        <a href="#user-management" class="md-skip">
           Skip to content
         </a>
       
@@ -101,7 +103,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="Mydia Documentation" class="md-header__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+    <a href="../../.." title="Mydia Documentation" class="md-header__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -121,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              User Management
             
           </span>
         </div>
@@ -232,11 +234,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="." class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
         
   
   
@@ -253,6 +253,8 @@
   
   
   
+    
+  
   
     
     
@@ -260,11 +262,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="using/tutorials/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../tutorials/" class="md-tabs__link">
           
   
   
@@ -289,7 +293,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="plugins/" class="md-tabs__link">
+        <a href="../../../plugins/" class="md-tabs__link">
           
   
   
@@ -311,7 +315,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="contributing/setup/" class="md-tabs__link">
+        <a href="../../../contributing/setup/" class="md-tabs__link">
           
   
   
@@ -347,7 +351,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="Mydia Documentation" class="md-nav__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
+    <a href="../../.." title="Mydia Documentation" class="md-nav__button md-logo" aria-label="Mydia Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -374,37 +378,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -420,81 +397,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-to-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where to Start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#screenshots" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Screenshots
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#getting-help" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Getting Help
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tech Stack
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -503,8 +405,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -520,19 +424,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
             
   
   
@@ -550,7 +457,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -584,10 +491,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -595,7 +505,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/tutorials/" class="md-nav__link ">
+            <a href="../../tutorials/" class="md-nav__link ">
               
   
   
@@ -613,7 +523,7 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_1" id="__nav_2_1_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
@@ -639,7 +549,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/tutorials/get-mydia-running/" class="md-nav__link">
+      <a href="../../tutorials/get-mydia-running/" class="md-nav__link">
         
   
   
@@ -667,7 +577,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/tutorials/first-library-import/" class="md-nav__link">
+      <a href="../../tutorials/first-library-import/" class="md-nav__link">
         
   
   
@@ -700,6 +610,8 @@
                 
   
   
+    
+  
   
   
     
@@ -751,18 +663,21 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/how-to/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -780,13 +695,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -806,7 +721,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/install-docker-compose/" class="md-nav__link">
+      <a href="../install-docker-compose/" class="md-nav__link">
         
   
   
@@ -834,7 +749,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/connect-download-client/" class="md-nav__link">
+      <a href="../connect-download-client/" class="md-nav__link">
         
   
   
@@ -862,7 +777,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/connect-indexer/" class="md-nav__link">
+      <a href="../connect-indexer/" class="md-nav__link">
         
   
   
@@ -890,7 +805,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/cardigann-indexers/" class="md-nav__link">
+      <a href="../cardigann-indexers/" class="md-nav__link">
         
   
   
@@ -918,7 +833,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/manage-libraries/" class="md-nav__link">
+      <a href="../manage-libraries/" class="md-nav__link">
         
   
   
@@ -946,7 +861,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/add-media/" class="md-nav__link">
+      <a href="../add-media/" class="md-nav__link">
         
   
   
@@ -974,7 +889,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/import-existing-collection/" class="md-nav__link">
+      <a href="../import-existing-collection/" class="md-nav__link">
         
   
   
@@ -1002,7 +917,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/quality-profiles/" class="md-nav__link">
+      <a href="../quality-profiles/" class="md-nav__link">
         
   
   
@@ -1030,7 +945,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/automatic-quality-upgrades/" class="md-nav__link">
+      <a href="../automatic-quality-upgrades/" class="md-nav__link">
         
   
   
@@ -1055,10 +970,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="using/how-to/manage-users/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Management
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1074,6 +1016,137 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#user-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User Roles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#first-user-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First User Setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Authentication
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Local Authentication">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#request-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request System
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Request System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#managing-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managing Requests
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disabling-authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disabling Authentication
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1086,7 +1159,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/sso-oidc/" class="md-nav__link">
+      <a href="../sso-oidc/" class="md-nav__link">
         
   
   
@@ -1114,7 +1187,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/postgresql/" class="md-nav__link">
+      <a href="../postgresql/" class="md-nav__link">
         
   
   
@@ -1142,7 +1215,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/reverse-proxy/" class="md-nav__link">
+      <a href="../reverse-proxy/" class="md-nav__link">
         
   
   
@@ -1170,7 +1243,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/backup-restore/" class="md-nav__link">
+      <a href="../backup-restore/" class="md-nav__link">
         
   
   
@@ -1198,7 +1271,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/update-mydia/" class="md-nav__link">
+      <a href="../update-mydia/" class="md-nav__link">
         
   
   
@@ -1226,7 +1299,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/monitor-and-logs/" class="md-nav__link">
+      <a href="../monitor-and-logs/" class="md-nav__link">
         
   
   
@@ -1254,7 +1327,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/nixos/" class="md-nav__link">
+      <a href="../nixos/" class="md-nav__link">
         
   
   
@@ -1282,7 +1355,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/how-to/remote-access/" class="md-nav__link">
+      <a href="../remote-access/" class="md-nav__link">
         
   
   
@@ -1346,10 +1419,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1357,7 +1433,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/reference/" class="md-nav__link ">
+            <a href="../../reference/" class="md-nav__link ">
               
   
   
@@ -1375,7 +1451,7 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_3" id="__nav_2_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_3" id="__nav_2_3_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
@@ -1401,7 +1477,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/environment-variables/" class="md-nav__link">
+      <a href="../../reference/environment-variables/" class="md-nav__link">
         
   
   
@@ -1429,7 +1505,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/configuration/" class="md-nav__link">
+      <a href="../../reference/configuration/" class="md-nav__link">
         
   
   
@@ -1457,7 +1533,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/library-types/" class="md-nav__link">
+      <a href="../../reference/library-types/" class="md-nav__link">
         
   
   
@@ -1485,7 +1561,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/download-clients/" class="md-nav__link">
+      <a href="../../reference/download-clients/" class="md-nav__link">
         
   
   
@@ -1513,7 +1589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/indexers/" class="md-nav__link">
+      <a href="../../reference/indexers/" class="md-nav__link">
         
   
   
@@ -1541,7 +1617,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/quality-profiles/" class="md-nav__link">
+      <a href="../../reference/quality-profiles/" class="md-nav__link">
         
   
   
@@ -1569,7 +1645,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/database/" class="md-nav__link">
+      <a href="../../reference/database/" class="md-nav__link">
         
   
   
@@ -1597,7 +1673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/reference/api/" class="md-nav__link">
+      <a href="../../reference/api/" class="md-nav__link">
         
   
   
@@ -1657,10 +1733,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1668,7 +1747,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="using/explanation/" class="md-nav__link ">
+            <a href="../../explanation/" class="md-nav__link ">
               
   
   
@@ -1686,7 +1765,7 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2_4" id="__nav_2_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2_4" id="__nav_2_4_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
@@ -1712,7 +1791,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/configuration-model/" class="md-nav__link">
+      <a href="../../explanation/configuration-model/" class="md-nav__link">
         
   
   
@@ -1740,7 +1819,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/media-pipeline/" class="md-nav__link">
+      <a href="../../explanation/media-pipeline/" class="md-nav__link">
         
   
   
@@ -1768,7 +1847,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/quality-decisions/" class="md-nav__link">
+      <a href="../../explanation/quality-decisions/" class="md-nav__link">
         
   
   
@@ -1796,7 +1875,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/remote-access/" class="md-nav__link">
+      <a href="../../explanation/remote-access/" class="md-nav__link">
         
   
   
@@ -1824,7 +1903,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/how-mydia-runs/" class="md-nav__link">
+      <a href="../../explanation/how-mydia-runs/" class="md-nav__link">
         
   
   
@@ -1852,7 +1931,7 @@
   
   
     <li class="md-nav__item">
-      <a href="using/explanation/vs-radarr-sonarr/" class="md-nav__link">
+      <a href="../../explanation/vs-radarr-sonarr/" class="md-nav__link">
         
   
   
@@ -1926,7 +2005,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="plugins/" class="md-nav__link ">
+            <a href="../../../plugins/" class="md-nav__link ">
               
   
   
@@ -2026,7 +2105,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/tutorial/write-your-first-plugin/" class="md-nav__link">
+      <a href="../../../plugins/tutorial/write-your-first-plugin/" class="md-nav__link">
         
   
   
@@ -2124,7 +2203,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/notifications/" class="md-nav__link">
+      <a href="../../../plugins/how-to/notifications/" class="md-nav__link">
         
   
   
@@ -2152,7 +2231,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/media-data/" class="md-nav__link">
+      <a href="../../../plugins/how-to/media-data/" class="md-nav__link">
         
   
   
@@ -2180,7 +2259,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/two-way-sync/" class="md-nav__link">
+      <a href="../../../plugins/how-to/two-way-sync/" class="md-nav__link">
         
   
   
@@ -2208,7 +2287,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/how-to/test-and-iterate/" class="md-nav__link">
+      <a href="../../../plugins/how-to/test-and-iterate/" class="md-nav__link">
         
   
   
@@ -2302,7 +2381,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/reference/manifest/" class="md-nav__link">
+      <a href="../../../plugins/reference/manifest/" class="md-nav__link">
         
   
   
@@ -2330,7 +2409,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/reference/host-api/" class="md-nav__link">
+      <a href="../../../plugins/reference/host-api/" class="md-nav__link">
         
   
   
@@ -2422,7 +2501,7 @@
   
   
     <li class="md-nav__item">
-      <a href="plugins/explanation/plugin-model/" class="md-nav__link">
+      <a href="../../../plugins/explanation/plugin-model/" class="md-nav__link">
         
   
   
@@ -2531,7 +2610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/setup/" class="md-nav__link">
+      <a href="../../../contributing/setup/" class="md-nav__link">
         
   
   
@@ -2559,7 +2638,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/testing/" class="md-nav__link">
+      <a href="../../../contributing/testing/" class="md-nav__link">
         
   
   
@@ -2587,7 +2666,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/e2e-testing/" class="md-nav__link">
+      <a href="../../../contributing/e2e-testing/" class="md-nav__link">
         
   
   
@@ -2615,7 +2694,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/architecture/" class="md-nav__link">
+      <a href="../../../contributing/architecture/" class="md-nav__link">
         
   
   
@@ -2643,7 +2722,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/ci-artifacts/" class="md-nav__link">
+      <a href="../../../contributing/ci-artifacts/" class="md-nav__link">
         
   
   
@@ -2671,7 +2750,7 @@
   
   
     <li class="md-nav__item">
-      <a href="contributing/releasing/" class="md-nav__link">
+      <a href="../../../contributing/releasing/" class="md-nav__link">
         
   
   
@@ -2726,10 +2805,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
+  <a href="#user-roles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Features
+        User Roles
       
     </span>
   </a>
@@ -2737,10 +2816,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-to-start" class="md-nav__link">
+  <a href="#first-user-setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where to Start
+        First User Setup
       
     </span>
   </a>
@@ -2748,10 +2827,77 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#screenshots" class="md-nav__link">
+  <a href="#local-authentication" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Screenshots
+        Local Authentication
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Local Authentication">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-users" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating Users
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#request-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request System
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Request System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#managing-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managing Requests
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disabling-authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disabling Authentication
       
     </span>
   </a>
@@ -2759,21 +2905,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#getting-help" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Getting Help
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tech Stack
+        Next Steps
       
     </span>
   </a>
@@ -2800,99 +2935,109 @@
   
 
 
-<h1 id="mydia">Mydia</h1>
-<p><strong>Your personal media companion, built with Phoenix LiveView</strong></p>
-<p>A modern, self-hosted media management platform for tracking, organizing, and monitoring your media library.</p>
+<h1 id="user-management">User Management</h1>
+<p>Mydia includes a built-in multi-user system with role-based access control.</p>
+<h2 id="user-roles">User Roles</h2>
+<p>Mydia has four roles, ranked. Each one can do everything the role below it can,
+with one deliberate exception noted below.</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Can do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Admin</strong></td>
+<td>Everything. The only role that reaches <code>/admin</code>: configuration, indexers, download clients, libraries, users, jobs, and approving or rejecting requests.</td>
+</tr>
+<tr>
+<td><strong>User</strong></td>
+<td>Browse the library, and add, edit, or delete media. Cannot reach any admin page.</td>
+</tr>
+<tr>
+<td><strong>Read Only</strong></td>
+<td>Browse the library. Cannot add, edit, or delete anything.</td>
+</tr>
+<tr>
+<td><strong>Guest</strong></td>
+<td>Browse the library, and submit requests for an admin to approve.</td>
+</tr>
+</tbody>
+</table>
+<p>New users default to <strong>Guest</strong>.</p>
+<div class="admonition note">
+<p class="admonition-title">Only guests can submit requests</p>
+<p>The request flow is not additive. <code>can_submit_request?</code> returns true for
+guests and false for everyone else, including admins, because a user or admin
+is expected to add the media directly rather than ask for it. So a Read Only
+user can neither add media nor request it.</p>
+</div>
+<h2 id="first-user-setup">First User Setup</h2>
+<p>When you first access Mydia:</p>
+<ol>
+<li>You're guided through creating the initial admin user</li>
+<li>Choose to set a custom password or generate a secure random one</li>
+<li>After creation, you're automatically logged in</li>
+</ol>
+<h2 id="local-authentication">Local Authentication</h2>
+<p>By default, Mydia uses local username/password authentication.</p>
+<h3 id="configuration">Configuration</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">LOCAL_AUTH_ENABLED</span><span class="o">=</span><span class="nb">true</span>
+</code></pre></div>
+<h3 id="creating-users">Creating Users</h3>
+<p>Admins can create users through the Admin UI:</p>
+<ol>
+<li>Navigate to <strong>Admin &gt; Users</strong></li>
+<li>Click <strong>Create Local User</strong></li>
+<li>Enter username and email</li>
+<li>Select a role: Guest, Read Only, User, or Admin</li>
+<li>Either set a password or let Mydia generate a random one</li>
+<li>Save</li>
+</ol>
+<p>You can change an existing user's role later from the same page, using the edit
+icon on their row.</p>
+<p>Mydia also supports single sign-on via OpenID Connect (OIDC), including auto-promotion of the first OIDC user to admin. See <a href="../sso-oidc/">SSO/OIDC Configuration</a> for supported providers, setup, and role assignment.</p>
+<h2 id="request-system">Request System</h2>
+<p>Guest users can request media:</p>
+<ol>
+<li><strong>Guest searches</strong> for a movie or TV show</li>
+<li><strong>Guest clicks Request</strong> on the search result</li>
+<li><strong>The request lands in the admin queue</strong> as pending</li>
+<li><strong>Admin reviews</strong> and approves or rejects</li>
+<li><strong>If approved</strong>, media is added to library and download begins</li>
+<li><strong>The guest sees the outcome</strong> on their own requests page</li>
+</ol>
 <div class="admonition warning">
-<p class="admonition-title">Early Development</p>
-<p>Mydia is still in version 0.x.x and is subject to major changes from version to version. Feedback is welcome! Expect bugs and please open <a href="https://github.com/getmydia/mydia/issues">issues</a> or <a href="https://github.com/getmydia/mydia/issues/new">feature requests</a>.</p>
+<p class="admonition-title">There are no notifications</p>
+<p>Mydia does not email, push, or otherwise notify anyone about requests. Nothing
+tells an admin that a request arrived, and nothing tells the guest it was
+approved or rejected. Both sides find out by looking. Admins should check
+<strong>Admin &gt; Requests</strong> periodically, and guests can watch <strong>My Requests</strong>.</p>
 </div>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Unified Media Management</strong> - Track both movies and TV shows with rich metadata from TMDB/TVDB</li>
-<li><strong>Automated Downloads</strong> - Background search and download with quality profiles and smart release ranking</li>
-<li><strong>Automatic Quality Upgrades</strong> - A bounded daily sweep replaces files scoring below your profile's cutoff, and re-checks the replacement before trashing anything</li>
-<li><strong>Download Clients</strong> - qBittorrent, Transmission, SABnzbd, and NZBGet support</li>
-<li><strong>Indexer Integration</strong> - Search via Prowlarr and Jackett for finding releases</li>
-<li><strong>Built-in Indexer Library</strong> - Native Cardigann support (experimental, limited testing)</li>
-<li><strong>Multi-User System</strong> - Built-in admin/guest roles with request approval workflow</li>
-<li><strong>SSO Support</strong> - Local authentication plus OIDC/OpenID Connect integration</li>
-<li><strong>Release Calendar</strong> - Track upcoming releases and monitor episodes</li>
-<li><strong>Import Lists</strong> - Sync external lists from TMDB (watchlists, popular, trending) to auto-add content (experimental)</li>
-<li><strong>Remote Access</strong> - P2P connectivity for the Flutter player via iroh (experimental)</li>
-<li><strong>Media Playback</strong> - HLS streaming with on-the-fly transcoding (experimental)</li>
-<li><strong>Trakt.tv Integration</strong> - Scrobbling and library sync</li>
-<li><strong>Modern Real-Time UI</strong> - Phoenix LiveView with instant updates and responsive design</li>
-</ul>
-<h2 id="where-to-start">Where to Start</h2>
-<div class="grid cards">
-<ul>
-<li>
-<p><strong>New to Mydia</strong></p>
-<p>Follow the <a href="using/tutorials/get-mydia-running/">Get Mydia running</a> tutorial
-and have a working instance with an admin account in about 10 minutes.</p>
-</li>
-<li>
-<p><strong>Have a specific task</strong></p>
-<p>The <a href="using/how-to/">how-to guides</a> cover installation, connecting
-clients and indexers, deployment, and everything else you do once Mydia is
-running.</p>
-</li>
-<li>
-<p><strong>Looking something up</strong></p>
-<p>The <a href="using/reference/">reference</a> section lists environment
-variables, configuration options, and schemas.</p>
-</li>
-<li>
-<p><strong>Want to know why</strong></p>
-<p><a href="using/explanation/">Explanation</a> covers why Mydia works the way it
-does, including how it compares to Radarr and Sonarr.</p>
-</li>
-<li>
-<p><strong>Building a plugin</strong></p>
-<p><a href="plugins/">Building Plugins</a> covers the plugin sandbox, the event
-model, and how to write, test, and ship one.</p>
-</li>
-<li>
-<p><strong>Contributing to Mydia</strong></p>
-<p><a href="contributing/setup/">Contributing</a> covers the development environment,
-testing, and the codebase's architecture.</p>
-</li>
-</ul>
+<h3 id="managing-requests">Managing Requests</h3>
+<p>Admins can view and manage requests:</p>
+<ol>
+<li>Navigate to <strong>Admin &gt; Requests</strong></li>
+<li>View pending requests</li>
+<li>Approve or reject each request</li>
+<li>A rejection requires a reason, which the requester can see</li>
+</ol>
+<h2 id="disabling-authentication">Disabling Authentication</h2>
+<div class="admonition danger">
+<p class="admonition-title">Security Warning</p>
+<p>Disabling authentication is not recommended for production deployments.</p>
 </div>
-<h2 id="screenshots">Screenshots</h2>
-<div class="grid cards">
+<p>For local/testing environments, you can disable local auth when using OIDC:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">LOCAL_AUTH_ENABLED</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
+</code></pre></div>
+<h2 id="next-steps">Next Steps</h2>
 <ul>
-<li>
-<p><strong>Dashboard</strong></p>
-<p><img alt="Dashboard" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/homepage.png" /></p>
-</li>
-<li>
-<p><strong>Movies</strong></p>
-<p><img alt="Movies" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/movies.png" /></p>
-</li>
-<li>
-<p><strong>TV Shows</strong></p>
-<p><img alt="TV Shows" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/tv-shows.png" /></p>
-</li>
-<li>
-<p><strong>Calendar</strong></p>
-<p><img alt="Calendar" src="https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/calendar.png" /></p>
-</li>
-</ul>
-</div>
-<h2 id="getting-help">Getting Help</h2>
-<ul>
-<li><a href="https://github.com/getmydia/mydia/issues">GitHub Issues</a> - Bug reports and feature requests</li>
-<li><a href="https://docs.mydia.dev">Documentation</a> - Full documentation</li>
-</ul>
-<h2 id="tech-stack">Tech Stack</h2>
-<ul>
-<li>Phoenix 1.8 + LiveView</li>
-<li>Ecto + SQLite/PostgreSQL</li>
-<li>Oban (background jobs)</li>
-<li>Tailwind CSS + DaisyUI</li>
-<li>Req (HTTP client)</li>
+<li><a href="../add-media/">Adding Media</a> - How guests search for media to request</li>
+<li><a href="../sso-oidc/">SSO/OIDC</a> - Detailed OIDC configuration</li>
+<li><a href="../../reference/environment-variables/">Environment Variables</a> - All auth options</li>
 </ul>
 
 
@@ -2930,15 +3075,31 @@ testing, and the codebase's architecture.</p>
       
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
+          
+          <a href="../automatic-quality-upgrades/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Automatic Quality Upgrades">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Automatic Quality Upgrades
+              </div>
+            </div>
+          </a>
+        
         
           
-          <a href="using/tutorials/" class="md-footer__link md-footer__link--next" aria-label="Next: Tutorials">
+          <a href="../sso-oidc/" class="md-footer__link md-footer__link--next" aria-label="Next: SSO/OIDC Configuration">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Tutorials
+                SSO/OIDC Configuration
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2991,10 +3152,10 @@ testing, and the codebase's architecture.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.e71a0d61.min.js"></script>
       
     
   </body>
