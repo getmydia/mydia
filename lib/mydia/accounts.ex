@@ -328,14 +328,20 @@ defmodule Mydia.Accounts do
     end
   end
 
-  defp changelog_version_newer?(nil, _new), do: true
-
+  # An unparseable NEW version is never written. It would clobber a valid stored
+  # value, and because Changelog.unseen/1 reports nothing unseen for a value it
+  # cannot parse, the user's banner would be suppressed from then on rather than
+  # replayed.
   defp changelog_version_newer?(current, new) do
-    with {:ok, current_version} <- Version.parse(current),
-         {:ok, new_version} <- Version.parse(new) do
-      Version.compare(new_version, current_version) == :gt
-    else
-      _ -> true
+    case Version.parse(new) do
+      :error ->
+        false
+
+      {:ok, new_version} ->
+        case current && Version.parse(current) do
+          {:ok, current_version} -> Version.compare(new_version, current_version) == :gt
+          _ -> true
+        end
     end
   end
 

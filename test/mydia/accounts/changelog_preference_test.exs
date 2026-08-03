@@ -77,5 +77,25 @@ defmodule Mydia.Accounts.ChangelogPreferenceTest do
       assert preferences["theme"] == "dark"
       assert preferences["last_seen_changelog_version"] == "0.13.0"
     end
+
+    test "an unparseable new version leaves a valid stored value untouched" do
+      user = user_fixture()
+      {:ok, _} = Accounts.mark_changelog_seen(user, "0.13.0")
+      {:ok, _} = Accounts.mark_changelog_seen(user, "not-a-version")
+      assert Accounts.last_seen_changelog_version(user) == "0.13.0"
+    end
+
+    test "an unparseable new version stores nothing for a user who has none" do
+      user = user_fixture()
+      {:ok, _} = Accounts.mark_changelog_seen(user, "not-a-version")
+      assert Accounts.last_seen_changelog_version(user) == nil
+    end
+
+    test "a prerelease is not newer than its stable release" do
+      user = user_fixture()
+      {:ok, _} = Accounts.mark_changelog_seen(user, "0.13.0")
+      {:ok, _} = Accounts.mark_changelog_seen(user, "0.13.0-beta.1")
+      assert Accounts.last_seen_changelog_version(user) == "0.13.0"
+    end
   end
 end
