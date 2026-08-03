@@ -36,5 +36,9 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Mydia needs local network access to find Chromecast and DLNA devices to cast to.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_googlecast._tcp</string>
+	</array>
 </dict>
 </plist>

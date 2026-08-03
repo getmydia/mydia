@@ -26,17 +26,21 @@ void main() {
       expect(pbxproj, isNot(contains('Runner.entitlements')));
     });
 
-    test('macOS Info.plist declares local network usage', () {
+    test('macOS Info.plist declares local network usage and Bonjour service',
+        () {
       final plist = File('macos/Runner/Info.plist').readAsStringSync();
 
       expect(plist, contains('NSLocalNetworkUsageDescription'));
+      expect(plist, contains('NSBonjourServices'));
+      expect(plist, contains('_googlecast._tcp'));
     });
 
     test('Android manifest requests multicast permission', () {
       final manifest =
           File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
 
-      expect(manifest, contains('android.permission.CHANGE_WIFI_MULTICAST_STATE'));
+      expect(
+          manifest, contains('android.permission.CHANGE_WIFI_MULTICAST_STATE'));
     });
 
     test('flutter_chrome_cast is no longer a dependency', () {
