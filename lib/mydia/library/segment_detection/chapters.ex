@@ -42,7 +42,17 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
 
   alias Mydia.Library.Ffmpeg
 
-  @typedoc "Segment type key (intro or credits) mapped to a {start_ms, end_ms} tuple."
+  @typedoc """
+  Detected segments, keyed by type, each mapped to a `{start_ms, end_ms}` tuple.
+
+  The only keys ever produced are `"intro"` and `"credits"`, and either may be
+  absent since each type resolves independently. The spec cannot say so:
+  Elixir has no singleton string literal type, so every key is `String.t()` to
+  the type system. The narrow contract is pinned on `classify/1`, which returns
+  `:intro | :credits | :unknown`; these keys are `Atom.to_string/1` of that.
+  Strings rather than atoms because the key crosses into the
+  `media_segments.type` column and out through GraphQL.
+  """
   @type segments :: %{optional(String.t()) => {non_neg_integer(), non_neg_integer()}}
 
   # Normalised (lowercase, unaccented, punctuation-free) whole titles.
