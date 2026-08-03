@@ -434,23 +434,58 @@ defmodule Mydia.Library.SegmentDetectionTest do
       {media_item, files} = season_fixture(2)
 
       for {media_file, _path} <- files do
-        %MediaSegment{}
-        |> MediaSegment.changeset(%{
-          media_file_id: media_file.id,
-          type: "intro",
-          start_ms: 20_000,
-          end_ms: 50_000,
-          source: "chapters",
-          confidence: 1.0
-        })
-        |> Repo.insert!()
+        insert_segment(media_file, start_ms: 20_000, end_ms: 50_000, source: "chapters")
       end
 
       status = SegmentDetection.season_status(media_item.id, 1)
 
       assert status.state == :detected
-      assert status.source == "chapters"
-      assert status.segments["intro"].start_ms == 20_000
+      assert status.sources == ["chapters"]
+      assert status.files == 2
+      assert status.segments["intro"] == %{start_ms: 20_000, end_ms: 50_000, files: 2}
+    end
+
+    test "takes the median offset across every file carrying the type" do
+      {media_item, [{first, _}, {second, _}, {third, _}]} = season_fixture(3)
+
+      insert_segment(first, start_ms: 10_000, end_ms: 40_000)
+      insert_segment(second, start_ms: 20_000, end_ms: 50_000)
+      insert_segment(third, start_ms: 90_000, end_ms: 120_000)
+
+      status = SegmentDetection.season_status(media_item.id, 1)
+
+      assert status.segments["intro"] == %{start_ms: 20_000, end_ms: 50_000, files: 3}
+    end
+
+    test "reports a type found on only some files rather than dropping it" do
+      {media_item, [{first, _}, {second, _}]} = season_fixture(2)
+
+      insert_segment(first, type: "intro", start_ms: 20_000, end_ms: 50_000)
+
+      insert_segment(second,
+        type: "credits",
+        start_ms: 1_400_000,
+        end_ms: 1_490_000,
+        source: "chapters"
+      )
+
+      status = SegmentDetection.season_status(media_item.id, 1)
+
+      # Sampling one file used to report whichever type that file happened to
+      # carry and call the other one missing.
+      assert status.segments["intro"].files == 1
+      assert status.segments["credits"].files == 1
+      assert status.files == 2
+    end
+
+    test "reports every provenance a mixed season used, sorted" do
+      {media_item, [{first, _}, {second, _}]} = season_fixture(2)
+
+      insert_segment(first, source: "fingerprint")
+      insert_segment(second, source: "chapters")
+
+      assert SegmentDetection.season_status(media_item.id, 1).sources ==
+               ["chapters", "fingerprint"]
     end
 
     test "reports partial when only some files resolved" do
@@ -469,5 +504,46 @@ defmodule Mydia.Library.SegmentDetectionTest do
 
       assert SegmentDetection.season_status(media_item.id, 1).state == :partial
     end
+  end
+
+  describe "season_statuses/1" do
+    test "summarises every season of a show in one pass" do
+      {media_item, [{first, _}, _second]} = season_fixture(2)
+
+      insert_segment(first)
+
+      second_season_episode =
+        episode_fixture(%{media_item_id: media_item.id, season_number: 2, episode_number: 1})
+
+      second_season_file = media_file_fixture(%{episode_id: second_season_episode.id})
+      insert_segment(second_season_file, start_ms: 30_000, end_ms: 60_000, source: "chapters")
+
+      statuses = SegmentDetection.season_statuses(media_item.id)
+
+      assert Map.keys(statuses) |> Enum.sort() == [1, 2]
+      assert statuses[1].state == :partial
+      assert statuses[1].files == 2
+      assert statuses[2].state == :detected
+      assert statuses[2].segments["intro"] == %{start_ms: 30_000, end_ms: 60_000, files: 1}
+    end
+
+    test "returns an empty map for a show with no files" do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      assert SegmentDetection.season_statuses(media_item.id) == %{}
+    end
+  end
+
+  defp insert_segment(media_file, opts \\ []) do
+    %MediaSegment{}
+    |> MediaSegment.changeset(%{
+      media_file_id: media_file.id,
+      type: Keyword.get(opts, :type, "intro"),
+      start_ms: Keyword.get(opts, :start_ms, 20_000),
+      end_ms: Keyword.get(opts, :end_ms, 50_000),
+      source: Keyword.get(opts, :source, "fingerprint"),
+      confidence: Keyword.get(opts, :confidence, 1.0)
+    })
+    |> Repo.insert!()
   end
 end
