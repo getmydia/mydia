@@ -15,6 +15,10 @@ class FakeWindowController implements WindowController {
 
   int maximizeCalls = 0;
 
+  /// When set, [setBounds] throws this instead of recording the call. Lets a
+  /// test drive the failure path of code that must still clean up afterwards.
+  Object? setBoundsError;
+
   /// Ordered log of mutating calls, so tests can assert call *sequence*, not
   /// just call counts. `setBoundsCalls`/`maximizeCalls` record what and how
   /// many; this records when relative to each other.
@@ -31,6 +35,8 @@ class FakeWindowController implements WindowController {
 
   @override
   Future<void> setBounds(Rect newBounds) async {
+    final error = setBoundsError;
+    if (error != null) throw error;
     setBoundsCalls.add(newBounds);
     callLog.add('setBounds');
     bounds = newBounds;

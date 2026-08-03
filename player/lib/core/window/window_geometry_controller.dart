@@ -48,6 +48,10 @@ class WindowGeometryController with WindowListener {
 
   Duration get debounce => _debounce;
 
+  /// Whether tracking is currently suspended. Read-only; the sizer owns the
+  /// transitions via [pause]/[resume].
+  bool get isPaused => _paused;
+
   /// Applies the stored geometry, or a centered default on a first launch.
   Future<void> restore() async {
     try {

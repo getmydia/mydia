@@ -154,5 +154,80 @@ void main() {
 
       await expectLater(t.sizer.detach(), completes);
     });
+
+    test('attach pauses before it snapshots', () async {
+      // Every other test awaits attach() to completion before probing
+      // anything, so both orderings ("pause then snapshot" vs "snapshot then
+      // pause") look identical afterwards. This test observes the paused
+      // state at the exact moment the snapshot read happens, which is the
+      // only place the ordering is externally visible: a resize event the
+      // user already queued must not land after the snapshot is taken.
+      final window = _PauseObservingWindowController(
+        bounds: const Rect.fromLTWH(100, 100, 1200, 900),
+      );
+      final geometry = WindowGeometryController(
+        window: window,
+        store: InMemoryWindowGeometryStore(),
+        readWorkAreas: oneDisplay,
+        debounce: const Duration(milliseconds: 10),
+      );
+      window.geometry = geometry;
+      addTearDown(geometry.dispose);
+
+      final sizer = NativePlayerWindowSizer(
+        window: window,
+        geometry: geometry,
+        readWorkAreas: oneDisplay,
+      );
+
+      await sizer.attach();
+
+      expect(
+        window.pausedAtSnapshot,
+        isTrue,
+        reason: 'attach() must pause before reading the window bounds, or a '
+            'resize event already queued by the user could land after the '
+            'snapshot is taken',
+      );
+    });
+
+    test('detach resumes persistence even when restoring the snapshot throws',
+        () async {
+      final t = build();
+      addTearDown(t.geometry.dispose);
+
+      await t.sizer.attach();
+      t.window.setBoundsError = StateError('platform channel gone');
+
+      await expectLater(t.sizer.detach(), completes);
+
+      t.window.setBoundsError = null;
+      t.window.bounds = const Rect.fromLTWH(70, 70, 1000, 700);
+      t.geometry.onWindowResize();
+      await settle();
+
+      expect(
+        t.store.get()!.bounds,
+        const Rect.fromLTWH(70, 70, 1000, 700),
+        reason: 'resume() must run even though setBounds threw, or '
+            'persistence silently stops for the rest of the session',
+      );
+    });
   });
+}
+
+/// Records whether the geometry controller was already paused at the moment
+/// attach() read the window bounds. [geometry] is assigned after
+/// construction because it needs this very controller to build.
+class _PauseObservingWindowController extends FakeWindowController {
+  _PauseObservingWindowController({required super.bounds});
+
+  WindowGeometryController? geometry;
+  bool? pausedAtSnapshot;
+
+  @override
+  Future<Rect> getBounds() async {
+    pausedAtSnapshot ??= geometry?.isPaused;
+    return super.getBounds();
+  }
 }
