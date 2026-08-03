@@ -49,6 +49,8 @@ import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/window/desktop_window.dart';
+import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
 
 export '../../../core/player/resume_plan.dart'
@@ -236,6 +238,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Timer? _upNextTimer;
   static const _autoPlayCountdownDuration = 10;
 
+  /// Reshapes the OS window to the video's aspect on desktop. A no-op
+  /// everywhere else, so no platform check is needed at the call sites.
+  late final PlayerWindowSizer _windowSizer;
+
   @override
   void initState() {
     super.initState();
@@ -256,6 +262,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       (previous, next) => next.whenData((client) => _graphqlClient = client),
       fireImmediately: true,
     );
+
+    // Before `_initializePlayer`: attach pauses geometry persistence and
+    // snapshots the browse window, and the snapshot must be taken before
+    // anything reshapes the window.
+    _windowSizer = createPlayerWindowSizer();
+    unawaited(_windowSizer.attach());
 
     _initializePlayer();
 
@@ -824,6 +836,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = Player();
     _player = player;
     _videoController = VideoController(player);
+
+    // Re-bound on every source switch and next episode, since each builds a
+    // fresh `Player`. The sizer cancels the previous subscription itself.
+    _windowSizer.bindVideoParams(player.stream.videoParams);
 
     // Open media
     await player.open(
@@ -1911,6 +1927,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_isFullscreen) {
       defaultExitNativeFullscreen();
     }
+
+    // Restores the window the user was browsing in and resumes geometry
+    // persistence. Fire-and-forget: `dispose` cannot await, and the sizer
+    // swallows its own failures.
+    unawaited(_windowSizer.detach());
 
     // Restore portrait orientation on mobile devices
     if (PlatformFeatures.isMobile) {
