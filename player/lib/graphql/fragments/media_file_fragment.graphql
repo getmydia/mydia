@@ -17,4 +17,9 @@ fragment MediaFileFragment on MediaFile {
     embedded
     url(format: VTT)
   }
+  segments {
+    type
+    startMs
+    endMs
+  }
 }

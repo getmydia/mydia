@@ -122,6 +122,20 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const Divider(),
 
+            // Playback section
+            const _SectionHeader(title: 'Playback'),
+            SwitchListTile(
+              key: const Key('auto-skip-segments-switch'),
+              secondary: const Icon(Icons.fast_forward),
+              title: const Text('Automatically skip intros and credits'),
+              subtitle: const Text('When off, a skip button appears instead.'),
+              value: settings.autoSkipSegments,
+              onChanged: (value) => ref
+                  .read(settingsControllerProvider.notifier)
+                  .setAutoSkipSegments(value),
+            ),
+            const Divider(),
+
             // Connection section
             const _SectionHeader(title: 'Connection'),
             const ConnectionStatusTile(),
