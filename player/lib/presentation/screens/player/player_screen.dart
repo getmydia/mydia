@@ -289,13 +289,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// away, while still reaching the metadata fetch that populates
   /// `_totalDuration` on the streaming path.
   ///
-  /// `castNotifier` is read once, up front: `castTargetProvider` is a
-  /// keep-alive root provider, like `invalidatorProvider` (see
-  /// [_invalidator]), so the notifier itself stays valid to call even if this
-  /// widget is disposed while `startCast` is awaited. `ref.read` itself is
-  /// not safe to call again at that point, which is why the notifier is
-  /// captured before any `await` rather than re-read after one.
-  ///
   /// [plan] is resolved by the caller before this runs, on every branch that
   /// calls it — so the receiver starts where the user asked, instead of
   /// always at zero the way it did when each of the three call sites reached
@@ -303,8 +296,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<bool> _castToTargetIfSet(ResumePlan plan) async {
     final target = ref.read(castTargetProvider);
     if (target == null) return false;
-
-    final castNotifier = ref.read(castTargetProvider.notifier);
 
     // Downloaded media lives only on this device; the route resolver has no
     // server-side file to hand the receiver. Playing locally is the useful
@@ -331,16 +322,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           startPosition: plan.position,
         ),
       );
-      // The session now owns the device; currentCastDeviceProvider reports
-      // it from here on. Leaving the target set would make every future
-      // playback cast forever with no way to opt out.
-      castNotifier.clear();
+      // The target and the session coexist deliberately: the target is what
+      // the user chose, the session is what is connected. Clearing it here
+      // would drop the cast icon to white mid-cast. Opting out is the bar's ✕
+      // or Stop, both of which disconnect — and "every future playback casts"
+      // is the correct behaviour while the user is visibly connected to a TV.
       return true;
     } catch (e) {
-      // A dead screen is the one outcome worse than not casting: clear the
-      // target and fall through so the user still gets their episode.
+      // A dead screen is the one outcome worse than not casting: fall through
+      // so the user still gets their episode. The chosen device is kept, so
+      // the bar offers a reconnect rather than silently discarding it.
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
-      castNotifier.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(e is CastBackendException

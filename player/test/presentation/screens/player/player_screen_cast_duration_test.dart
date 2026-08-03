@@ -60,4 +60,32 @@ void main() {
           'exists.',
     );
   });
+
+  testWidgets('a successful cast leaves the chosen device set', (tester) async {
+    // Clearing it here would drop the cast icon to white while the cast is
+    // running — the reported bug, inverted. Opting out is the bar's ✕ or
+    // Stop, both of which disconnect.
+    final castManager = CapturingCastSessionManager();
+    final proxyService = TrackingLocalProxyService();
+
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      streamingCandidatesResponse(duration: 5400),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: castManager,
+      proxyService: proxyService,
+    );
+    addTearDown(container.dispose);
+
+    container.read(castTargetProvider.notifier).set(testDevice);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntil(tester, () => castManager.capturedRequest != null);
+
+    expect(container.read(castTargetProvider), testDevice);
+  });
 }
