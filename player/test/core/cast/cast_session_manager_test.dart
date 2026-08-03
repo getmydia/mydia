@@ -1212,4 +1212,71 @@ void main() {
       expect(manager.currentSession?.isStale, isTrue);
     });
   });
+
+  group('startCast reuses an open connection', () {
+    test('does not reconnect when already connected to that device', () async {
+      // Reconnecting would send LAUNCH again, evicting and relaunching the
+      // receiver app the user is already looking at.
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+      await manager.startCast(device: device, request: launch);
+
+      expect(backend.connectAttempts, [device]);
+      expect(backend.loadedRequests, hasLength(1));
+    });
+
+    test('publishes media on the reused connection', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+      await manager.startCast(device: device, request: launch);
+
+      expect(manager.currentSession?.mediaInfo?.title, 'Arrival');
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+    });
+
+    test('does connect when the chosen device is a different one', () async {
+      const other = CastDevice(
+        id: 'd2',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.chromecast,
+      );
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+      await manager.startCast(device: other, request: launch);
+
+      expect(backend.connectAttempts, [device, other]);
+      expect(backend.connectedDevice, other);
+    });
+
+    test('reconnects when the idle connection was lost', () async {
+      // `connectedDevice` still names the device after a drop, because nothing
+      // called disconnect. Reusing on that alone would load onto a dead socket.
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(device);
+      backend.emitFailure(CastFailureKind.connectionLost);
+      await Future<void>.delayed(Duration.zero);
+
+      await manager.startCast(device: device, request: launch);
+
+      expect(backend.connectAttempts, [device, device]);
+    });
+
+    test('still connects when nothing was connected first', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launch);
+
+      expect(backend.connectAttempts, [device]);
+    });
+  });
 }

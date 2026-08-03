@@ -190,11 +190,25 @@ class CastSessionManager {
       );
     }
 
-    try {
-      await _backend.connect(device);
-    } catch (e) {
-      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
-      rethrow;
+    // Reuse an open connection instead of rebuilding it. `connectTo` may
+    // already own this receiver because the user chose it while browsing, and
+    // `_backend.connect` sends LAUNCH again — evicting and relaunching the
+    // receiver app for no reason, which the user sees as a flicker on the TV
+    // and a slower start.
+    //
+    // The `connected` check matters as much as the device check: after a drop,
+    // `connectedDevice` still names the device (nothing called disconnect), so
+    // matching on the id alone would load onto a dead socket.
+    final reusable = _backend.connectedDevice?.id == device.id &&
+        _current?.connectionState == CastConnectionState.connected;
+
+    if (!reusable) {
+      try {
+        await _backend.connect(device);
+      } catch (e) {
+        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        rethrow;
+      }
     }
 
     _listenToBackend(request);
