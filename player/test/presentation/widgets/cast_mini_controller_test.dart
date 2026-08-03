@@ -507,4 +507,123 @@ void main() {
     expect(find.byKey(const Key('cast-stale-stop')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsNothing);
   });
+
+  group('cast bar buttons actually drive the manager, not just the target', () {
+    // Each of these taps a button and asserts on real `CastSessionManager`/
+    // `FakeCastBackend` state, not merely that the button exists — a suite
+    // that only asserted `findsOneWidget` on these keys stayed green through
+    // regressions that gutted what the button actually did.
+
+    testWidgets(
+        'the idle clear button runs the manager\'s real stopCast, not merely '
+        'clears the target', (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+      await harness.manager.connectTo(_device);
+
+      final container = await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(harness.manager.currentSession),
+      );
+
+      container.read(castTargetProvider.notifier).set(_device);
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-bar-idle-clear')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-idle-clear')));
+      await tester.pumpAndSettle();
+
+      expect(harness.manager.currentSession, isNull,
+          reason: 'tapping idle-clear must run the manager\'s real '
+              'stopCast — reverting it to a bare castTargetProvider.clear() '
+              'would leave this non-null');
+      expect(harness.backend.connectedDevice, isNull,
+          reason: 'stopCast must disconnect the backend; a bare target '
+              'clear would leave the receiver connected with no way to '
+              'stop it from this bar');
+      expect(container.read(castTargetProvider), isNull);
+    });
+
+    testWidgets('the offline reconnect button calls the manager\'s connectTo',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+
+      final container = await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+      );
+
+      container.read(castTargetProvider.notifier).set(_device);
+      await tester.pump();
+
+      expect(
+          find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-offline-reconnect')));
+      await tester.pumpAndSettle();
+
+      expect(harness.backend.connectAttempts, [_device],
+          reason: 'gutting _reconnectIdle\'s body would leave this empty');
+    });
+
+    testWidgets(
+        'the connecting cancel button tears down the in-flight connect '
+        'instead of leaving it to resurrect a connected session',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+      harness.backend.holdNextConnect();
+
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+      );
+
+      // Drive the manager's real connectTo, held mid-flight by the gate —
+      // this is what a tap on a device in the picker starts for real.
+      final connecting = harness.manager.connectTo(_device);
+
+      // Mirror what the manager itself would have published for this state,
+      // decoupled from `harness.manager.sessionStream` so the test can drive
+      // the widget without `CircularProgressIndicator`'s perpetual animation
+      // forcing `pumpAndSettle` to hang.
+      sessionController.add(const CastSession(
+        device: _device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.connecting,
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+          find.byKey(const Key('cast-bar-connecting-cancel')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-connecting-cancel')));
+      await tester.pump();
+      await tester.pump();
+
+      // The tap must have run the manager's real stopCast.
+      expect(harness.manager.currentSession, isNull);
+
+      // Now let the connect the cancel raced against finally resolve.
+      harness.backend.releaseConnect();
+      await connecting;
+
+      expect(harness.manager.currentSession, isNull,
+          reason: 'the connect that resolved after the cancel must not '
+              'resurrect a "connected" session');
+      expect(harness.backend.connectedDevice, isNull,
+          reason: 'cancelling mid-connect must tear down whatever the '
+              'in-flight connect established on the TV, not merely forget '
+              'the device');
+    });
+  });
 }

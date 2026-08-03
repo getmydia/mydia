@@ -1959,9 +1959,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
 
     final isCasting = ref.watch(isCastingProvider);
-    final castDevice = ref.watch(currentCastDeviceProvider);
-    Widget body = isCasting && castDevice != null
-        ? _buildCastPlaceholder(castDevice)
+    final castSession = ref.watch(castSessionProvider).value;
+    Widget body = isCasting && castSession != null
+        ? _buildCastPlaceholder(castSession)
         : _buildBody();
 
     // Wrap with keyboard listener wherever a physical keyboard exists
@@ -2261,7 +2261,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// mounted over this screen by `app.dart`. Duplicating them here is the
   /// confusion this replaced — two surfaces showing the same title, device,
   /// play/pause and stop, with the bar clipping the remote's stop button.
-  Widget _buildCastPlaceholder(CastDevice device) {
+  ///
+  /// [session] rather than just the device: `isCastingProvider` stays true for
+  /// a [CastSession] that has gone stale (its `mediaInfo` survives the drop —
+  /// see `CastSession.copyWith`), and this is the app's single largest
+  /// `Icons.cast_connected` glyph. Rendering it over a connection that no
+  /// longer exists is exactly the false "connected" claim this feature exists
+  /// to eliminate, so a stale session gets the same outline glyph and "Lost
+  /// connection" wording as `CastMiniController`'s stale row, not a claim of
+  /// a live cast.
+  Widget _buildCastPlaceholder(CastSession session) {
+    final device = session.device;
+    final isStale = session.isStale;
+
     return Stack(
       children: [
         Center(
@@ -2277,10 +2289,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.cast_connected, size: 96, color: Colors.blue),
+                Icon(
+                  isStale ? Icons.cast_outlined : Icons.cast_connected,
+                  size: 96,
+                  color: isStale ? Colors.grey : Colors.blue,
+                ),
                 const SizedBox(height: 24),
                 Text(
-                  'Playing on ${device.name}',
+                  isStale
+                      ? 'Lost connection to ${device.name}'
+                      : 'Playing on ${device.name}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Colors.white,
                       ),

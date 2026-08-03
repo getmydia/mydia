@@ -1213,6 +1213,87 @@ void main() {
     });
   });
 
+  group('connectTo cancellation', () {
+    // Design spec §5: "Cancelling mid-connect must tear down whatever the
+    // in-flight `_backend.connect` established, not merely forget the
+    // device." `DartCastBackend.connect` assigns its session only *after*
+    // the transport's own connect resolves, and `disconnect()` is a
+    // null-safe no-op on nothing — so before the generation-token guard, a
+    // `stopCast()` fired while a `connectTo` was still awaiting the backend
+    // had nothing to tear down, and the connect resurrected a "connected"
+    // session once it finally resolved.
+    test(
+        'a cancel that lands while connect is still in flight tears down the '
+        'connection the backend just established, and never republishes it',
+        () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      backend.holdNextConnect();
+
+      final connecting = manager.connectTo(device);
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connecting);
+
+      // The cancel: `stopCast` runs to completion — including its own
+      // unconditional `disconnect()` — entirely before the backend's
+      // `connect` resolves.
+      await manager.stopCast();
+      expect(manager.currentSession, isNull);
+
+      // Now let the in-flight connect finally resolve.
+      backend.releaseConnect();
+      await connecting;
+
+      expect(manager.currentSession, isNull,
+          reason: 'the connect that resolved after the cancel must not '
+              'resurrect a "connected" session');
+      expect(backend.connectedDevice, isNull,
+          reason: 'the superseded connect must disconnect what it just '
+              'established rather than leaving a live receiver session '
+              'nothing can stop');
+      // stopCast's own unconditional disconnect, plus the superseded
+      // connect's cleanup disconnect.
+      expect(backend.disconnectCallCount, 2);
+    });
+
+    test(
+        'a second connectTo before the first resolves keeps only the '
+        'second\'s session, and disconnects the first instead of publishing it',
+        () async {
+      const other = CastDevice(
+        id: 'd2',
+        name: 'Bedroom',
+        protocol: CastProtocolKind.chromecast,
+      );
+      final manager = build();
+      addTearDown(manager.dispose);
+      backend.holdNextConnect();
+
+      final first = manager.connectTo(device);
+      await Future<void>.delayed(Duration.zero);
+
+      // The user picked a different device before the first connect
+      // resolved — the cast button stays tappable while "Connecting…" shows.
+      final second = manager.connectTo(other);
+      await second;
+
+      expect(manager.currentSession?.device, other);
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+
+      backend.releaseConnect();
+      await first;
+
+      expect(manager.currentSession?.device, other,
+          reason: 'the superseded first connect must not clobber the '
+              'session the second, winning connect published');
+      expect(backend.disconnectCallCount, 1,
+          reason: 'the superseded connect must tear itself down instead of '
+              'being published');
+    });
+  });
+
   group('startCast reuses an open connection', () {
     test('does not reconnect when already connected to that device', () async {
       // Reconnecting would send LAUNCH again, evicting and relaunching the

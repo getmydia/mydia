@@ -2,15 +2,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/cast_device.dart';
 
-/// The device the user has chosen to cast to, before anything is playing.
+/// The device the user has chosen to cast to.
 ///
-/// Deliberately *not* a connection. Setting a target contacts nothing and
-/// launches no receiver app — it only records an intent, which `PlayerScreen`
-/// reads when playback starts so the media opens on the receiver instead of
-/// locally. Modelling it this way keeps `CastSessionManager` owning exactly
-/// one concept (an active session with media) rather than growing a
-/// media-less idle state that the session store, LAN gating and the progress
-/// pump would all have to learn.
+/// Distinct from the session (`castSessionProvider`/`CastSessionManager`),
+/// which is what is actually connected right now. Selecting a device opens a
+/// real, media-less connection immediately (`CastSessionManager.connectTo`)
+/// and that connection is what the session describes — but the target
+/// outlives it: it persists across a lost or dropped connection, and
+/// `PlayerScreen` still reads it to decide where the next playback should
+/// open. So a target with no live session behind it is a normal, expected
+/// state (a failed connect, an idle-timed-out receiver), not an error —
+/// `CastMiniController`'s offline row and `CastConnection.chosenOffline`
+/// exist specifically to name it.
 class CastTargetNotifier extends Notifier<CastDevice?> {
   @override
   CastDevice? build() => null;

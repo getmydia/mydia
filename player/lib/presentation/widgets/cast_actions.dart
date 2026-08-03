@@ -69,9 +69,13 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     return;
   }
 
-  // Already on that receiver — picking it again should do nothing rather than
-  // tear down and rebuild what the user is watching.
-  if (session.device.id == device.id) return;
+  // Already on that receiver *and still connected* — picking it again should
+  // do nothing rather than tear down and rebuild what the user is watching.
+  // A stale session (the receiver idle-timed-out or dropped) falls through to
+  // the connect branch below instead: there is nothing live to leave alone,
+  // and the picker showing this device with no check mark looks tappable
+  // because it is meant to be.
+  if (session.device.id == device.id && !session.isStale) return;
 
   // An idle connection has no media to move and nothing persisted behind it,
   // so the re-target path below cannot apply. Connect to the newly chosen

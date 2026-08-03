@@ -120,6 +120,23 @@ class CastSessionManager {
   /// guards the equivalent local-playback restart the same way.
   bool _isRestartingForSeek = false;
 
+  /// Bumped at the start of every [connectTo] and by [stopCast].
+  ///
+  /// `connectTo` awaits `_backend.connect(device)` with nothing else guarding
+  /// against a second call landing while the first is still in flight — the
+  /// cast button stays tappable while connecting, and a cancel
+  /// (`cast-bar-connecting-cancel`) is `stopCast`, not something that can
+  /// reach into a suspended `connectTo` and unwind it. Capturing this value at
+  /// entry and re-checking it after the await is what lets a superseded call
+  /// notice: if the generation has moved on — the user cancelled, or picked a
+  /// second device before the first connect resolved — the connection this
+  /// call just established is unwanted, so it is torn down instead of
+  /// published. Without this, cancelling mid-connect was a no-op (there was
+  /// no session yet for `stopCast`'s `disconnect()` to act on) and the
+  /// connect would resurrect the bar up to 15s later; a double-pick left
+  /// whichever connect resolved last in control with no way to stop it.
+  int _connectGeneration = 0;
+
   /// Maps receiver-reported positions onto real media positions.
   ///
   /// Non-zero offset whenever a cast was resumed mid-item on an HLS route:
@@ -270,6 +287,8 @@ class CastSessionManager {
   /// keeps the chosen device, so the UI lands on "chosen, not connected" and
   /// can offer a reconnect.
   Future<void> connectTo(CastDevice device) async {
+    final generation = ++_connectGeneration;
+
     _publish(CastSession(
       device: device,
       playbackState: CastPlaybackState.idle,
@@ -279,8 +298,24 @@ class CastSessionManager {
     try {
       await _backend.connect(device);
     } catch (e) {
-      _publish(null);
+      // Only touch shared state if nothing superseded this call while it was
+      // awaiting: a stale failure racing behind a newer, already-published
+      // connectTo must not cancel that one's subscriptions or clobber its
+      // session with null.
+      if (generation == _connectGeneration) {
+        _cancelSubscriptions();
+        _publish(null);
+      }
       rethrow;
+    }
+
+    if (generation != _connectGeneration) {
+      // Cancelled (`stopCast`) or superseded by a second `connectTo` while
+      // this one was in flight. The backend has just connected on our
+      // behalf regardless — undo that rather than publish a session nobody
+      // asked for anymore.
+      await _backend.disconnect();
+      return;
     }
 
     _listenForConnectionLoss();
@@ -831,6 +866,12 @@ class CastSessionManager {
   }
 
   Future<void> stopCast() async {
+    // Invalidates any `connectTo` still awaiting `_backend.connect` — see
+    // `_connectGeneration`'s dartdoc. Must happen before anything else here:
+    // the whole point is that the in-flight call's own generation check,
+    // running after this returns, sees a mismatch.
+    _connectGeneration++;
+
     _cancelSubscriptions();
 
     try {

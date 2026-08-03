@@ -51,10 +51,13 @@ class CastBarLayer extends StatelessWidget {
 /// The sole cast control surface, shown at the bottom of every screen.
 ///
 /// Displays the currently playing media title, a draggable scrubber, skip
-/// and play/pause/stop controls, an idle state (a target picked before
-/// anything is playing — see `castTargetProvider`) and the stale-session
-/// state (the receiver dropped off the network). There is no separate
-/// full-screen remote: everything the user can do while casting lives here.
+/// and play/pause/stop controls, an idle state (connected to a receiver with
+/// no media loaded on it yet — see `CastConnectionState.connected` with a
+/// null `mediaInfo`) and the stale-session state (the receiver dropped off
+/// the network). The offline row — a target set (`castTargetProvider`) with
+/// no session behind it at all — is a separate state from idle; see
+/// `_buildOffline`. There is no separate full-screen remote: everything the
+/// user can do while casting lives here.
 class CastMiniController extends ConsumerStatefulWidget {
   const CastMiniController({super.key});
 
