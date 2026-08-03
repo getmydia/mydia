@@ -171,10 +171,24 @@ class WindowGeometryController with WindowListener {
         // flag so the user's real window size survives.
         final stored = _store.get();
         if (stored == null || !stored.maximized) {
-          final geometry = (stored ??
-                  WindowGeometry(
-                      bounds: await _window.getBounds(), maximized: true))
-              .copyWith(maximized: true);
+          // With nothing stored yet — the user maximized before this install
+          // ever persisted an un-maximized rect — there is no real size to
+          // preserve. Record the centered default rather than getBounds(),
+          // which is the maximized frame: storing that would make the
+          // maximized size the thing the user sees when they later unmaximize,
+          // which is the exact loss this branch exists to prevent.
+          final WindowGeometry? geometry;
+          if (stored != null) {
+            geometry = stored.copyWith(maximized: true);
+          } else {
+            final fallback = defaultWindowRect(await _readWorkAreas());
+            // No readable display means no sensible rect to invent. Skip the
+            // write entirely; the flag alone is not worth a fabricated size.
+            geometry = fallback == null
+                ? null
+                : WindowGeometry(bounds: fallback, maximized: true);
+          }
+          if (geometry == null) return;
           if (_paused || _pauseGeneration != generation) return;
           await _store.save(geometry);
         }

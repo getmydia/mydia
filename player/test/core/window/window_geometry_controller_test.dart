@@ -235,6 +235,54 @@ void main() {
       expect(store.get()!.bounds, const Rect.fromLTWH(100, 100, 900, 600));
     });
 
+    test('a first-ever maximize never stores the maximized frame', () async {
+      // Nothing persisted yet and the user maximizes. getBounds() returns the
+      // maximized frame, so storing it would make the maximized size the thing
+      // they see when they later unmaximize — the exact loss the maximized
+      // branch exists to prevent. Record the centered default instead.
+      final window = FakeWindowController(
+        bounds: const Rect.fromLTWH(0, 25, 1920, 1055),
+        maximized: true,
+      );
+      final store = InMemoryWindowGeometryStore();
+      final controller = build(window: window, store: store);
+      addTearDown(controller.dispose);
+
+      controller.onWindowMaximize();
+      await settle();
+
+      expect(store.get()!.maximized, isTrue);
+      expect(
+        store.get()!.bounds,
+        const Rect.fromLTWH(320, 152.5, 1280, 800),
+        reason: 'should be the centered default, not the maximized frame',
+      );
+      expect(
+        store.get()!.bounds,
+        isNot(const Rect.fromLTWH(0, 25, 1920, 1055)),
+        reason: 'storing the maximized frame is the bug this pins',
+      );
+    });
+
+    test('a first-ever maximize with no readable display writes nothing',
+        () async {
+      // No display means no sensible rect to invent, and the flag alone is not
+      // worth a fabricated size.
+      final window = FakeWindowController(maximized: true);
+      final store = InMemoryWindowGeometryStore();
+      final controller = build(
+        window: window,
+        store: store,
+        readWorkAreas: noDisplays,
+      );
+      addTearDown(controller.dispose);
+
+      controller.onWindowMaximize();
+      await settle();
+
+      expect(store.get(), isNull);
+    });
+
     test('writes nothing while fullscreen', () async {
       // Fullscreen bounds are the whole display, which is neither worth
       // storing nor safe to restore into.
