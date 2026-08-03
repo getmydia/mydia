@@ -3,6 +3,17 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/player/platform_features.dart';
 
+/// Whether this platform has a local-network permission pane worth linking to.
+///
+/// Only macOS and iOS gate local network access behind a user-visible switch.
+/// `CastFailureKind.discoveryDenied` also fires on Android when the multicast
+/// lock cannot be acquired — which no settings pane fixes — so the affordance
+/// must not follow that failure onto other platforms. Without this, an
+/// Android discovery failure offered a button that deep-linked to an Apple
+/// URL and then printed macOS instructions on a phone.
+bool localNetworkSettingsAvailable() =>
+    PlatformFeatures.isMacOS || PlatformFeatures.isIOS;
+
 /// Deep link to the OS pane that grants local-network access.
 ///
 /// The macOS anchor is version-sensitive. Apple has renamed panes before, and
@@ -30,6 +41,15 @@ String localNetworkSettingsFallback({required bool isIOS}) => isIOS
 /// Shared by [LocalNetworkSettingsButton] and by the cast error snackbar's
 /// action, so the deep link and its fallback have exactly one implementation.
 Future<void> openLocalNetworkSettings(BuildContext context) async {
+  // Defence in depth. Nothing should offer this on a platform with no such
+  // pane — both call sites check [localNetworkSettingsAvailable] first — but
+  // firing an Apple-only URL scheme on Android would fail and then print
+  // macOS instructions, which is worse than doing nothing.
+  if (!localNetworkSettingsAvailable()) {
+    debugPrint('[LocalNetworkSettings] No settings pane on this platform.');
+    return;
+  }
+
   final isIOS = PlatformFeatures.isIOS;
   var launched = false;
 
@@ -51,11 +71,23 @@ Future<void> openLocalNetworkSettings(BuildContext context) async {
 }
 
 /// Button form of [openLocalNetworkSettings], for surfaces with room for one.
+///
+/// Renders nothing on platforms with no local-network pane, so the surfaces
+/// that show it for `discoveryDenied` — which is not Apple-only — do not have
+/// to branch themselves.
 class LocalNetworkSettingsButton extends StatelessWidget {
-  const LocalNetworkSettingsButton({super.key});
+  /// Overrides the platform check. Tests only; production reads the real
+  /// platform, which a `flutter test` host can never report as Apple.
+  final bool? available;
+
+  const LocalNetworkSettingsButton({super.key, this.available});
 
   @override
   Widget build(BuildContext context) {
+    if (!(available ?? localNetworkSettingsAvailable())) {
+      return const SizedBox.shrink();
+    }
+
     return TextButton.icon(
       key: const Key('local-network-settings-button'),
       onPressed: () => openLocalNetworkSettings(context),

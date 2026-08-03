@@ -65,20 +65,29 @@ String castErrorMessage(
 /// Four call sites built a byte-identical red SnackBar before this existed.
 /// Collapsing them is what gives the permission failures a single place to
 /// hang their Settings action.
+///
+/// [canOpenSettings] overrides the platform check. Tests only.
 void showCastErrorSnackBar(
   BuildContext context,
   CastBackendException e, {
   WidgetRef? ref,
+  bool? canOpenSettings,
 }) {
   // Both kinds are the same OS permission with the same fix.
   final permissionDenied = e.kind == CastFailureKind.localNetworkDenied ||
       e.kind == CastFailureKind.discoveryDenied;
 
+  // `discoveryDenied` is not Apple-only — it also covers Android's multicast
+  // lock failing — and no Android settings pane fixes that, so the remedy is
+  // gated on the platform rather than on the failure kind alone.
+  final offerSettings =
+      permissionDenied && (canOpenSettings ?? localNetworkSettingsAvailable());
+
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Text(castErrorMessage(e, ref: ref)),
     backgroundColor: Colors.red,
     duration: Duration(seconds: permissionDenied ? 8 : 4),
-    action: permissionDenied
+    action: offerSettings
         ? SnackBarAction(
             label: 'Settings',
             textColor: Colors.white,

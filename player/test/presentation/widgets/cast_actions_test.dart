@@ -121,8 +121,9 @@ void main() {
   group('showCastErrorSnackBar', () {
     Future<void> pumpAndShow(
       WidgetTester tester,
-      CastFailureKind kind,
-    ) async {
+      CastFailureKind kind, {
+      bool canOpenSettings = true,
+    }) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Builder(
@@ -130,6 +131,7 @@ void main() {
               onPressed: () => showCastErrorSnackBar(
                 context,
                 CastBackendException('raw', kind),
+                canOpenSettings: canOpenSettings,
               ),
               child: const Text('go'),
             ),
@@ -161,6 +163,34 @@ void main() {
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(find.byType(SnackBarAction), findsNothing);
+    });
+
+    testWidgets('offers no action for denied discovery off Apple platforms',
+        (tester) async {
+      // discoveryDenied also fires when Android cannot take the multicast
+      // lock. No Android pane fixes that, so the remedy is gated on the
+      // platform rather than on the failure kind alone.
+      await pumpAndShow(
+        tester,
+        CastFailureKind.discoveryDenied,
+        canOpenSettings: false,
+      );
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(SnackBarAction), findsNothing);
+    });
+
+    testWidgets('still explains the failure when no remedy is offered',
+        (tester) async {
+      // The message must survive the button being withheld, otherwise an
+      // Android user gets a bare snackbar with nothing actionable at all.
+      await pumpAndShow(
+        tester,
+        CastFailureKind.discoveryDenied,
+        canOpenSettings: false,
+      );
+
+      expect(find.textContaining('local network'), findsOneWidget);
     });
   });
 }

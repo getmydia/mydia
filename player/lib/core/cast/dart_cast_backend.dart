@@ -324,18 +324,14 @@ class DartCastBackend implements CastBackend {
     // `CastSessionManager.restoreSession` takes right after a fresh app
     // launch, before any discovery sweep has run.
     //
-    // reconstructDartCastDevice is called *inside* the try below, not out
-    // here: `InternetAddress(host)` throws a synchronous ArgumentError on a
+    // The declaration is hoisted out of the try so the catch below can
+    // inspect the address we tried to reach. The *assignment* stays inside:
+    // `InternetAddress(host)` throws a synchronous ArgumentError on a
     // malformed persisted host, and that needs the same translation to
     // CastBackendException everything else in this method gets — otherwise
     // a corrupt stored session surfaces as a raw ArgumentError from
     // startCast (restoreSession happens to swallow arbitrary exceptions,
     // but startCast does not).
-    // Hoisted out of the try purely so the catch below can inspect the
-    // address we tried to reach. The *assignment* stays inside, because
-    // `InternetAddress(host)` throws a synchronous ArgumentError on a
-    // malformed persisted host and needs the same translation to
-    // CastBackendException everything else here gets.
     dc.CastDevice? target;
 
     try {
