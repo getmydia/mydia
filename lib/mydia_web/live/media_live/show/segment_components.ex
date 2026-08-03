@@ -12,7 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
   use MydiaWeb, :html
 
   # What a season shows before detection has reported anything for it.
-  @empty_status %{state: :pending, segments: %{}, source: nil}
+  @empty_status %{state: :pending, files: 0, segments: %{}, sources: []}
 
   @doc """
   Compact status row for one season's detected segments.
@@ -38,14 +38,14 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
       </span>
 
       <span id={"segment-intro-season-#{@season_number}"} class="text-base-content/60">
-        Intro {format_span(@status.segments["intro"])}
+        Intro {format_span(@status.segments["intro"], @status.files)}
       </span>
 
       <span id={"segment-credits-season-#{@season_number}"} class="text-base-content/60">
-        Credits {format_span(@status.segments["credits"])}
+        Credits {format_span(@status.segments["credits"], @status.files)}
       </span>
 
-      <span :if={@status.source} class="badge badge-ghost badge-sm">{@status.source}</span>
+      <span :for={source <- @status.sources} class="badge badge-ghost badge-sm">{source}</span>
 
       <div class="tooltip tooltip-bottom ml-auto" data-tip="Re-analyze skip segments">
         <button
@@ -92,10 +92,21 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
   defp state_class(:failed), do: "badge-error"
   defp state_class(_other), do: "badge-ghost"
 
-  defp format_span(nil), do: "-"
+  defp format_span(nil, _total), do: "-"
 
-  defp format_span(segment) do
-    "#{format_ms(segment.start_ms)} to #{format_ms(segment.end_ms)}"
+  defp format_span(%{files: files} = summary, total) when files >= total do
+    span(summary)
+  end
+
+  # The offsets are medians over the files that carry this type, so a season
+  # where only some episodes have one says so rather than implying the whole
+  # season shares it.
+  defp format_span(summary, total) do
+    "#{span(summary)} (#{summary.files} of #{total})"
+  end
+
+  defp span(summary) do
+    "#{format_ms(summary.start_ms)} to #{format_ms(summary.end_ms)}"
   end
 
   defp format_ms(ms) do

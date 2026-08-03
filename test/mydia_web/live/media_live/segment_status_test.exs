@@ -93,7 +93,7 @@ defmodule MydiaWeb.MediaLive.SegmentStatusTest do
     assert has_element?(view, "#segment-status-season-1", "fingerprint")
   end
 
-  test "shows a partial badge when only some files resolved", %{conn: conn} do
+  test "shows a partial badge and says how many files carry the segment", %{conn: conn} do
     {media_item, [first | _rest]} = show_with_season()
 
     detect(first)
@@ -101,6 +101,22 @@ defmodule MydiaWeb.MediaLive.SegmentStatusTest do
     {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
 
     assert has_element?(view, "#segment-state-season-1", "Partial")
+    # The offset belongs to one episode of two, and the row has to say so
+    # rather than implying the whole season shares it.
+    assert has_element?(view, "#segment-intro-season-1", "1 of 2")
+    assert has_element?(view, "#segment-credits-season-1", "-")
+  end
+
+  test "shows every provenance a mixed season used", %{conn: conn} do
+    {media_item, [first, second]} = show_with_season()
+
+    detect(first, source: "fingerprint")
+    detect(second, source: "chapters")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    assert has_element?(view, "#segment-status-season-1", "chapters")
+    assert has_element?(view, "#segment-status-season-1", "fingerprint")
   end
 
   test "shows a pending badge before detection has run", %{conn: conn} do

@@ -210,31 +210,86 @@ defmodule Mydia.Library.SegmentDetection do
     :ok
   end
 
+  @typedoc """
+  One segment type reduced across a whole season.
+
+  `:files` is how many of the season's files carry this type, and it is what
+  keeps the offsets honest: an intro that two episodes share is not the same
+  claim as one the whole season shares. `:start_ms` and `:end_ms` are medians
+  over those files, the same summary the consensus step uses.
+  """
+  @type segment_summary :: %{
+          start_ms: integer(),
+          end_ms: integer(),
+          files: non_neg_integer()
+        }
+
+  @typedoc "A season reduced to what the admin row renders."
+  @type season_summary :: %{
+          state: atom(),
+          files: non_neg_integer(),
+          segments: %{optional(String.t()) => segment_summary()},
+          sources: [String.t()]
+        }
+
   @doc """
-  Summarises a season for the admin UI.
+  Summarises every season of a show at once, keyed by season number.
+
+  The admin page renders one row per season, so asking season by season would
+  scale queries with season count. Files and their segments are loaded once
+  and grouped in memory instead.
+  """
+  @spec season_statuses(binary()) :: %{optional(integer()) => season_summary()}
+  def season_statuses(media_item_id) do
+    media_item_id
+    |> show_files_by_season()
+    |> Map.new(fn {season_number, files} -> {season_number, summarise(files)} end)
+  end
+
+  @doc """
+  Summarises one season for the admin UI.
 
   `:state` is derived: `:detected` when every file resolved with at least one
   segment, `:partial` when some did, and otherwise the dominant file state.
   """
-  @spec season_status(binary(), integer()) :: %{
-          state: atom(),
-          segments: %{optional(String.t()) => MediaSegment.t()},
-          source: String.t() | nil
-        }
+  @spec season_status(binary(), integer()) :: season_summary()
   def season_status(media_item_id, season_number) do
-    files =
-      media_item_id
-      |> season_files(season_number)
-      |> Repo.preload(:segments)
+    media_item_id
+    |> season_files(season_number)
+    |> Repo.preload(:segments)
+    |> summarise()
+  end
 
+  # Every file with segments contributes. Sampling one file instead made both
+  # the offsets and the provenance depend on whichever file and segment came
+  # back first, which is neither stable across page loads nor true of a season
+  # whose episodes disagree: an intro found on one episode and credits on
+  # another would have reported the credits as missing.
+  defp summarise(files) do
     with_segments = Enum.filter(files, &(&1.segments != []))
-    sample = List.first(with_segments)
+    segments = Enum.flat_map(with_segments, & &1.segments)
 
     %{
       state: derive_state(files, with_segments),
-      segments: sample_segments(sample),
-      source: sample_source(sample)
+      files: length(files),
+      segments: summarise_segments(segments),
+      sources: segments |> Enum.map(& &1.source) |> Enum.uniq() |> Enum.sort()
     }
+  end
+
+  # One segment per type per file is guaranteed by the unique index, so the
+  # count of segments of a type is the count of files carrying it.
+  defp summarise_segments(segments) do
+    segments
+    |> Enum.group_by(& &1.type)
+    |> Map.new(fn {type, of_type} ->
+      {type,
+       %{
+         start_ms: median(Enum.map(of_type, & &1.start_ms)),
+         end_ms: median(Enum.map(of_type, & &1.end_ms)),
+         files: length(of_type)
+       }}
+    end)
   end
 
   defp derive_state(files, with_segments) do
@@ -247,12 +302,6 @@ defmodule Mydia.Library.SegmentDetection do
       true -> :pending
     end
   end
-
-  defp sample_segments(nil), do: %{}
-  defp sample_segments(file), do: Map.new(file.segments, &{&1.type, &1})
-
-  defp sample_source(nil), do: nil
-  defp sample_source(file), do: file.segments |> List.first() |> Map.fetch!(:source)
 
   # -- season loading -------------------------------------------------------
 
@@ -268,6 +317,27 @@ defmodule Mydia.Library.SegmentDetection do
         preload: :library_path
       )
     )
+  end
+
+  # Two queries for the whole show, whatever the season count: one join for the
+  # files, one preload for their segments.
+  defp show_files_by_season(media_item_id) do
+    rows =
+      Repo.all(
+        from(mf in MediaFile,
+          join: e in Episode,
+          on: e.id == mf.episode_id,
+          where: e.media_item_id == ^media_item_id and is_nil(mf.trashed_at),
+          order_by: [asc: e.season_number, asc: e.episode_number],
+          select: {e.season_number, mf}
+        )
+      )
+
+    {season_numbers, files} = Enum.unzip(rows)
+
+    season_numbers
+    |> Enum.zip(Repo.preload(files, :segments))
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 
   defp pending?(%MediaFile{segment_analysis_state: "pending", segment_analysis_attempts: n}),

@@ -49,14 +49,8 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
 
   defp season_statuses(_media_item, false), do: %{}
 
-  defp season_statuses(%{type: "tv_show"} = media_item, true) do
-    media_item.episodes
-    |> Enum.map(& &1.season_number)
-    |> Enum.uniq()
-    |> Map.new(fn season_number ->
-      {season_number, SegmentDetection.season_status(media_item.id, season_number)}
-    end)
-  end
+  defp season_statuses(%{type: "tv_show"} = media_item, true),
+    do: SegmentDetection.season_statuses(media_item.id)
 
   defp season_statuses(_media_item, true), do: %{}
 end
