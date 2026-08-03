@@ -76,6 +76,12 @@ void main() {
 
       expect(window.setBoundsCalls, [const Rect.fromLTWH(200, 100, 1400, 900)]);
       expect(window.maximizeCalls, 1);
+      expect(
+        window.callLog,
+        ['setMinimumSize', 'setBounds', 'maximize'],
+        reason: 'maximizing first would make the maximized frame what the user '
+            'sees on a later unmaximize, not the bounds that were stored',
+      );
     });
 
     test('recovers bounds saved on a display that is now gone', () async {

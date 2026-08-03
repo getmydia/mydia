@@ -15,6 +15,11 @@ class FakeWindowController implements WindowController {
 
   int maximizeCalls = 0;
 
+  /// Ordered log of mutating calls, so tests can assert call *sequence*, not
+  /// just call counts. `setBoundsCalls`/`maximizeCalls` record what and how
+  /// many; this records when relative to each other.
+  final List<String> callLog = [];
+
   FakeWindowController({
     this.bounds = const Rect.fromLTWH(0, 0, 1280, 800),
     this.maximized = false,
@@ -27,6 +32,7 @@ class FakeWindowController implements WindowController {
   @override
   Future<void> setBounds(Rect newBounds) async {
     setBoundsCalls.add(newBounds);
+    callLog.add('setBounds');
     bounds = newBounds;
   }
 
@@ -39,9 +45,13 @@ class FakeWindowController implements WindowController {
   @override
   Future<void> maximize() async {
     maximizeCalls++;
+    callLog.add('maximize');
     maximized = true;
   }
 
   @override
-  Future<void> setMinimumSize(Size size) async => minimumSize = size;
+  Future<void> setMinimumSize(Size size) async {
+    minimumSize = size;
+    callLog.add('setMinimumSize');
+  }
 }
