@@ -27,6 +27,11 @@ defmodule Mydia.Library.MediaFile do
           vtt_blob: String.t() | nil,
           preview_blob: String.t() | nil,
           phash: String.t() | nil,
+          segment_analysis_state: String.t(),
+          segments_analyzed_at: DateTime.t() | nil,
+          segment_analysis_attempts: integer(),
+          last_segment_analysis_error: String.t() | nil,
+          fingerprint_blob: String.t() | nil,
           generated_at: DateTime.t() | nil,
           trashed_at: DateTime.t() | nil,
           relative_path: String.t() | nil,
@@ -62,6 +67,14 @@ defmodule Mydia.Library.MediaFile do
     field :phash, :string
     field :generated_at, :utc_datetime
 
+    # Intro/credits segment detection state, mirroring the analyzed_at /
+    # analysis_attempts / last_analysis_error triple used by FileAnalysis.
+    field :segment_analysis_state, :string, default: "pending"
+    field :segments_analyzed_at, :utc_datetime
+    field :segment_analysis_attempts, :integer, default: 0
+    field :last_segment_analysis_error, :string
+    field :fingerprint_blob, :string
+
     # Soft-delete: files missing from disk are trashed for 30 days before permanent deletion
     field :trashed_at, :utc_datetime
 
@@ -72,6 +85,7 @@ defmodule Mydia.Library.MediaFile do
     belongs_to :media_item, Mydia.Media.MediaItem
     belongs_to :episode, Mydia.Media.Episode
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
+    has_many :segments, Mydia.Library.MediaSegment, on_replace: :delete
     belongs_to :supersedes_media_file, __MODULE__, foreign_key: :supersedes_media_file_id
 
     timestamps(type: :utc_datetime)
@@ -142,6 +156,11 @@ defmodule Mydia.Library.MediaFile do
       :vtt_blob,
       :preview_blob,
       :phash,
+      :segment_analysis_state,
+      :segments_analyzed_at,
+      :segment_analysis_attempts,
+      :last_segment_analysis_error,
+      :fingerprint_blob,
       :generated_at,
       :trashed_at,
       :supersedes_media_file_id
@@ -191,6 +210,11 @@ defmodule Mydia.Library.MediaFile do
       :vtt_blob,
       :preview_blob,
       :phash,
+      :segment_analysis_state,
+      :segments_analyzed_at,
+      :segment_analysis_attempts,
+      :last_segment_analysis_error,
+      :fingerprint_blob,
       :generated_at,
       :trashed_at
     ])
