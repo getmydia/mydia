@@ -14,10 +14,22 @@ defmodule Mydia.Plugins do
   approved; `revoke/1` clears them and deactivates. The runtime `Registry` holds
   only *active* (approved + enabled) descriptors — the set the dispatcher fans
   events to — while the DB holds every installed plugin for the admin UI.
+
+  ## Manifest revisions never widen a grant
+
+  A revised manifest (a built-in upgrade, a reinstalled index package) re-stores
+  what the plugin *declares* but leaves the grant exactly as approved, so nothing
+  is ever silently widened. The cost is that an approved plugin can end up asking
+  for more than it holds and failing `Denied` at the one call site that needed
+  the new capability. `needs_reapproval?/1` and `ungranted_capabilities/1` detect
+  that state (see `Mydia.Plugins.Capabilities` for the comparison), `activate/1`
+  warns about it when the plugin starts, the admin UI badges it, and `approve/2`
+  is the way out: it grants the currently requested set.
   """
 
   require Logger
 
+  alias Mydia.Plugins.Capabilities
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
@@ -426,25 +438,75 @@ defmodule Mydia.Plugins do
   end
 
   @doc """
+  Returns the capabilities a plugin's stored manifest requests that its grant
+  does not cover, as `%{class => [uncovered values]}` (`%{}` when the grant still
+  covers everything).
+
+  This is the manifest-revision drift described in the module doc: the comparison
+  itself lives in `Mydia.Plugins.Capabilities`, which handles both a wholly new
+  class and a widened payload (a new event, a new `net:http` host). A config with
+  no stored manifest — an env-sourced row, whose declared set *is* its grant —
+  reports nothing.
+  """
+  @spec ungranted_capabilities(Settings.PluginConfig.t() | String.t()) :: Capabilities.set()
+  def ungranted_capabilities(%Settings.PluginConfig{} = config) do
+    Capabilities.ungranted(declared_capabilities(config), config.granted_capabilities || %{})
+  end
+
+  def ungranted_capabilities(slug) when is_binary(slug) do
+    case Settings.get_plugin_config_by_slug(slug) do
+      nil -> %{}
+      config -> ungranted_capabilities(config)
+    end
+  end
+
+  @doc """
+  True when an already-approved plugin's manifest now requests more than it was
+  granted, so the operator must re-approve it for the new capabilities to work.
+
+  A plugin holding no grant at all is *pending* approval, not awaiting a
+  re-approval, so it is never reported here.
+  """
+  @spec needs_reapproval?(Settings.PluginConfig.t() | String.t()) :: boolean()
+  def needs_reapproval?(%Settings.PluginConfig{} = config) do
+    (config.granted_capabilities || %{}) != %{} and ungranted_capabilities(config) != %{}
+  end
+
+  def needs_reapproval?(slug) when is_binary(slug) do
+    case Settings.get_plugin_config_by_slug(slug) do
+      nil -> false
+      config -> needs_reapproval?(config)
+    end
+  end
+
+  defp declared_capabilities(%{manifest: %{"capabilities" => caps}}) when is_map(caps), do: caps
+  defp declared_capabilities(_config), do: %{}
+
+  @doc """
   Updates a plugin's operator-editable settings and recomputes its effective
   `net:http` host grant from the new values (host-granting settings — KTD1/KTD2).
 
   The effective allowlist is a **full replacement**
-  (`manifest static hosts ∪ host(host-granting setting values)`), so changing a
-  configured URL drops the previously granted host — no stale-host accumulation.
-  Recomputation only touches `net:http` when it was already granted (approved);
-  an unapproved plugin keeps its empty grant and derives hosts at approve time,
-  preserving deny-by-default. When the plugin is enabled the live registry
-  descriptor is re-registered so the gate enforces the new hosts on the next
-  call, without restarting the running pool.
+  (`already-granted static hosts ∪ host(host-granting setting values)`), so
+  changing a configured URL drops the previously granted host — no stale-host
+  accumulation. Recomputation only touches `net:http` when it was already granted
+  (approved); an unapproved plugin keeps its empty grant and derives hosts at
+  approve time, preserving deny-by-default. When the plugin is enabled the live
+  registry descriptor is re-registered so the gate enforces the new hosts on the
+  next call, without restarting the running pool.
+
+  The static side is taken from the **grant**, not from the current manifest: a
+  manifest revised to declare new hosts must not have them granted as a side
+  effect of saving unrelated settings (that would widen a grant the operator
+  never approved, and would clear the needs-re-approval state without them ever
+  seeing the new host).
   """
   @spec update_settings(String.t(), map()) ::
           {:ok, Settings.PluginConfig.t()} | {:error, Error.t()}
   def update_settings(slug, settings) when is_map(settings) do
     with {:ok, config} <- fetch_config(slug),
          merged = Map.merge(config.settings || %{}, settings),
-         granted =
-           put_effective_http(config.granted_capabilities || %{}, config.manifest, merged),
+         granted = recompute_http_grant(config, merged),
          {:ok, updated} <-
            Settings.update_plugin_config(config, %{
              settings: merged,
@@ -643,6 +705,8 @@ defmodule Mydia.Plugins do
           delivery: delivery_for(config)
         )
 
+      warn_stale_grant(descriptor)
+
       case Host.start_plugin(config.slug, wasm, imports: HostFunctions.imports_for(config.slug)) do
         {:ok, _pid} ->
           Registry.register(config.slug, descriptor)
@@ -666,6 +730,28 @@ defmodule Mydia.Plugins do
 
       {:error, _} = err ->
         err
+    end
+  end
+
+  # Warns once per activation when a plugin is about to run on a grant narrower
+  # than its manifest — the operator-actionable form of the `Denied` errors those
+  # calls will otherwise produce with no other signal.
+  #
+  # Deliberately *not* logged per denied call: a denial can fire in a hot loop
+  # (an event-driven handler retrying every event), and the condition is a
+  # property of the install, not of any one call. Activation is where it becomes
+  # live and is bounded — once per plugin per boot, plus once per enable/approve.
+  defp warn_stale_grant(%Plugin{} = descriptor) do
+    case Capabilities.ungranted(descriptor.capabilities, descriptor.granted_capabilities) do
+      ungranted when ungranted == %{} ->
+        :ok
+
+      ungranted ->
+        Logger.warning(
+          "plugin #{descriptor.slug} requests capabilities it was not granted: " <>
+            "#{Capabilities.summary(ungranted)}. Calls into those are denied until you " <>
+            "re-approve the plugin under Configuration > Plugins."
+        )
     end
   end
 
@@ -828,10 +914,35 @@ defmodule Mydia.Plugins do
     end
   end
 
+  # Recomputes the granted `net:http` for a settings change (never for approval,
+  # which goes through put_effective_http/3 on the manifest set). The result is
+  # everything already granted except the hosts derived from the *previous*
+  # setting values, plus the hosts derived from the new ones — so the operator's
+  # old URL drops out while every other granted host, static or not, survives. No
+  # host the operator has not already approved can enter the grant this way.
+  defp recompute_http_grant(config, new_settings) do
+    granted = config.granted_capabilities || %{}
+
+    case Map.fetch(granted, "net:http") do
+      :error ->
+        granted
+
+      {:ok, hosts} ->
+        hosts = List.wrap(hosts)
+        stale = derived_hosts(config.manifest, config.settings) -- static_hosts(config.manifest)
+        kept = hosts -- stale
+
+        Map.put(
+          granted,
+          "net:http",
+          Enum.uniq(kept ++ derived_hosts(config.manifest, new_settings))
+        )
+    end
+  end
+
   # Replaces a capability map's `net:http` with the effective host set, but only
   # when `net:http` is already present — so this never grants a capability the
-  # admin did not approve. Used for both the manifest set (at approve) and the
-  # granted set (at settings-save).
+  # admin did not approve. Used for the manifest set at approve time.
   defp put_effective_http(map, manifest_map, settings) do
     if Map.has_key?(map, "net:http") do
       Map.put(map, "net:http", effective_http_hosts(manifest_map, settings))
@@ -843,9 +954,14 @@ defmodule Mydia.Plugins do
   # Full-replacement effective allowlist: the manifest's static hosts unioned
   # with the hosts of the operator's host-granting setting values (KTD1).
   defp effective_http_hosts(manifest_map, settings) do
-    static = get_in(manifest_map, ["capabilities", "net:http"]) || []
-    Enum.uniq(static ++ derived_hosts(manifest_map, settings))
+    Enum.uniq(static_hosts(manifest_map) ++ derived_hosts(manifest_map, settings))
   end
+
+  defp static_hosts(manifest_map) when is_map(manifest_map) do
+    List.wrap(get_in(manifest_map, ["capabilities", "net:http"]))
+  end
+
+  defp static_hosts(_manifest_map), do: []
 
   defp derived_hosts(manifest_map, settings) when is_map(manifest_map) do
     manifest_map

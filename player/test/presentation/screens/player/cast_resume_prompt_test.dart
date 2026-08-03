@@ -20,6 +20,7 @@ void main() {
     // 45 minutes into a 90 minute movie.
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 2700),
+      movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -58,6 +59,7 @@ void main() {
 
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 2700),
+      movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -87,6 +89,7 @@ void main() {
     // 12 seconds in, below kMinResumeThresholdSeconds.
     final link = StubLink.responses([
       movieDetailResponse(positionSeconds: 12),
+      movieSegmentsResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 

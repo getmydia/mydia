@@ -21,6 +21,16 @@ defmodule Mydia.Settings.QualityProfilePresetsTest do
       assert Map.has_key?(first_preset, :profile_data)
     end
 
+    # `get_preset/1` returns the first match, so a duplicate id would leave the
+    # later preset permanently unreachable while still rendering its own row in
+    # the admin preset gallery: two rows an operator cannot tell apart, only one
+    # of which can ever be imported.
+    test "every preset id is unique" do
+      ids = Enum.map(QualityProfilePresets.list_presets(), & &1.id)
+
+      assert ids -- Enum.uniq(ids) == []
+    end
+
     test "all presets have valid profile data" do
       presets = QualityProfilePresets.list_presets()
 

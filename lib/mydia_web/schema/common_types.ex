@@ -48,6 +48,28 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :subtitles, list_of(:subtitle_track) do
       resolve(&MydiaWeb.Schema.Resolvers.SubtitleResolver.list_subtitles/3)
     end
+
+    @desc "Skippable segments (intro, credits). Empty when detection has not run or found nothing."
+    field :segments, non_null(list_of(non_null(:media_segment))) do
+      resolve(&MydiaWeb.Schema.Resolvers.MediaResolver.segments/3)
+    end
+  end
+
+  @desc """
+  A detected skippable segment.
+
+  `source` and `confidence` are deliberately absent from the wire format. They
+  are operator concerns, and keeping the confidence floor server side means it
+  is enforced in one place rather than reimplemented in every client.
+  """
+  object :media_segment do
+    @desc "Which kind of segment this is"
+    field :type, non_null(:segment_type) do
+      resolve(fn segment, _args, _info -> {:ok, String.to_existing_atom(segment.type)} end)
+    end
+
+    field :start_ms, non_null(:integer), description: "Segment start, milliseconds"
+    field :end_ms, non_null(:integer), description: "Segment end, milliseconds"
   end
 
   @desc "User playback progress on a media item or episode"

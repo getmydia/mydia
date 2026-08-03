@@ -7,6 +7,16 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
+  alias Mydia.Repo
+
+  # Detections below this floor are persisted, so the operator can see and
+  # diagnose them, but are not shown to players. 0.4 is exactly 2 agreeing
+  # partners out of 5 attempted, the lowest value the detection acceptance rule
+  # can produce, so the floor admits every accepted detection while still
+  # leaving room to raise it from field reports without re-analyzing anything.
+  # A 0.5 floor would discard every minimum-consensus detection and make the
+  # acceptance rule unreachable in practice.
+  @segment_confidence_floor 0.4
 
   # Movie and TVShow field resolvers
 
@@ -297,4 +307,43 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
         {:ok, Media.is_favorite?(user.id, media_item_id)}
     end
   end
+
+  # Skippable segments
+
+  @doc """
+  Resolves the skippable segments of a media file.
+  """
+  @spec segments(map(), map(), Absinthe.Resolution.t()) :: {:ok, [Library.MediaSegment.t()]}
+  def segments(media_file, _args, _info) do
+    {:ok, visible_segments(media_file)}
+  end
+
+  @doc """
+  Filters persisted segments down to the ones trustworthy enough to show a viewer.
+
+  The floor is a single condition on `confidence`, with no exception by
+  `source`. Chapter-sourced segments clear it because the detection pipeline
+  writes chapter matches at confidence 1.0, not because this function treats
+  them specially.
+
+  That uniformity is deliberate. Exposure stays one rule in one place, which is
+  the same reason `confidence` and `source` never reach the player. And a
+  chapter segment that somehow lands below the floor vanishing from the wire is
+  the signal you want, because it means something wrote it wrong; a bypass on
+  `source` would mask precisely that.
+
+  Public so the confidence floor can be exercised directly in tests.
+  """
+  @spec visible_segments(map()) :: [Library.MediaSegment.t()]
+  def visible_segments(%{segments: %Ecto.Association.NotLoaded{}} = media_file) do
+    media_file |> Repo.preload(:segments) |> visible_segments()
+  end
+
+  def visible_segments(%{segments: segments}) when is_list(segments) do
+    segments
+    |> Enum.filter(&(&1.confidence >= @segment_confidence_floor))
+    |> Enum.sort_by(& &1.start_ms)
+  end
+
+  def visible_segments(_media_file), do: []
 end

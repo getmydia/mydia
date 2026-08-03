@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.DB
+  alias Mydia.Health
   alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Streaming
@@ -104,11 +105,17 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   ## Private Helpers
 
   defp load_data(socket) do
-    # Load summary counts for status overview (not full lists)
+    # Load summary counts for status overview (not full lists).
+    #
+    # `upgrade_health/0` is a counting query over an indexed column, but it
+    # belongs here rather than in `load_system_data/1` on purpose: a wedged
+    # upgrade is a condition that lasts hours, so re-counting it every five
+    # seconds alongside the memory and uptime readouts would buy nothing.
     socket
     |> assign(:library_paths_count, length(Settings.list_library_paths()))
     |> assign(:download_clients_count, length(Settings.list_download_client_configs()))
     |> assign(:indexers_count, length(Settings.list_indexer_configs()))
+    |> assign(:stuck_upgrades, Health.upgrade_health().stuck_upgrades)
   end
 
   defp load_system_data(socket) do

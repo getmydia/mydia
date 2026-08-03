@@ -61,6 +61,60 @@ defmodule Mydia.Plugins.HostFunctionsTest do
     end
   end
 
+  describe "stale-grant denials (a manifest revised after approval)" do
+    defp declared_plugin(declared, granted) do
+      %Plugin{
+        slug: "tester",
+        name: "Tester",
+        capabilities: declared,
+        granted_capabilities: granted,
+        enabled: true
+      }
+    end
+
+    test "a class the manifest declares but the grant lacks points at re-approval" do
+      p = declared_plugin(%{"state:kv" => []}, %{"events:subscribe" => ["media_item.added"]})
+
+      assert {:error, %Error{type: :capability_denied, message: msg}} =
+               HostFunctions.kv_get(p, "k")
+
+      assert msg =~ "re-approve"
+    end
+
+    test "a host the manifest declares but the grant lacks points at re-approval" do
+      p = declared_plugin(%{"net:http" => ["api.example.com"]}, %{"net:http" => ["discord.com"]})
+
+      assert {:error, %Error{type: :capability_denied, message: msg}} =
+               HostFunctions.http_request(p, %{"url" => "https://api.example.com/x"},
+                 resolver: loopback_resolver()
+               )
+
+      assert msg =~ "re-approve"
+    end
+
+    test "a host the manifest never declared still reads as an allowlist denial" do
+      p = declared_plugin(%{"net:http" => ["discord.com"]}, %{"net:http" => ["discord.com"]})
+
+      assert {:error, %Error{type: :capability_denied, message: msg}} =
+               HostFunctions.http_request(p, %{"url" => "https://evil.test/"},
+                 resolver: loopback_resolver()
+               )
+
+      assert msg =~ "allowlist"
+      refute msg =~ "re-approve"
+    end
+
+    test "a namespace the manifest declares but the grant lacks points at re-approval" do
+      item = media_item_fixture()
+      p = declared_plugin(%{"data:read" => ["media_item"]}, %{"data:read" => []})
+
+      assert {:error, %Error{type: :capability_denied, message: msg}} =
+               HostFunctions.data_read(p, %{"resource" => "media_item", "id" => item.id})
+
+      assert msg =~ "re-approve"
+    end
+  end
+
   describe "data_read/2 (data:read grant)" do
     test "returns a curated projection for a granted namespace" do
       item = media_item_fixture(%{title: "Dune", year: 2021, type: "movie"})

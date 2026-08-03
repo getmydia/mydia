@@ -234,6 +234,110 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     end
   end
 
+  describe "manifest outgrew its grant (re-approval)" do
+    # Seeds an approved, enabled plugin whose stored manifest asks for more than
+    # was granted — exactly the state a built-in upgrade leaves behind.
+    defp seed_stale_grant(slug, name) do
+      manifest =
+        Map.put(manifest_map(slug, name), "capabilities", %{
+          "events:subscribe" => ["media_item.added", "download.completed"],
+          "net:http" => ["discord.com"],
+          "data:read" => ["media_item"]
+        })
+
+      {:ok, config} =
+        Settings.create_plugin_config(%{
+          slug: slug,
+          name: name,
+          version: "1.0.0",
+          manifest: manifest,
+          wasm_module: guest_wasm(),
+          granted_capabilities: %{
+            "events:subscribe" => ["media_item.added"],
+            "net:http" => ["discord.com"]
+          },
+          enabled: true
+        })
+
+      config
+    end
+
+    test "the row is visually distinct and names what it needs", %{conn: conn} do
+      seed_stale_grant("notifier", "Notifier")
+      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+
+      assert has_element?(view, "#reapproval-badge-notifier")
+      assert has_element?(view, "#reapproval-note-notifier")
+
+      html = render(view)
+      assert html =~ "needs re-approval"
+      # Host-owned plain language for the ungranted values, not raw class names.
+      assert html =~ "download.completed"
+      assert html =~ "media_item"
+    end
+
+    test "a normally approved plugin carries no re-approval treatment", %{conn: conn} do
+      seed_plugin("notifier", "Notifier",
+        enabled: true,
+        granted: %{
+          "events:subscribe" => ["media_item.added"],
+          "net:http" => ["discord.com"]
+        }
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+
+      refute has_element?(view, "#reapproval-badge-notifier")
+      refute has_element?(view, "#approve-notifier")
+    end
+
+    test "re-approving is reachable from the row and grants the requested set", %{conn: conn} do
+      seed_stale_grant("notifier", "Notifier")
+      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+
+      # The row keeps its normal lifecycle actions and gains a re-approve action.
+      assert has_element?(view, "#toggle-notifier")
+      assert has_element?(view, "#approve-notifier")
+
+      view |> element("#approve-notifier") |> render_click()
+      assert has_element?(view, "#approval-modal")
+      # The modal separates what is new from the full set being granted.
+      assert has_element?(view, "#approval-new-capabilities")
+      assert has_element?(view, "#approval-ungranted")
+
+      view |> element("#confirm-approval") |> render_click()
+
+      refute has_element?(view, "#approval-modal")
+      refute has_element?(view, "#reapproval-badge-notifier")
+
+      config = Settings.get_plugin_config_by_slug("notifier")
+      assert config.granted_capabilities["data:read"] == ["media_item"]
+      assert "download.completed" in config.granted_capabilities["events:subscribe"]
+    end
+
+    test "opening the row's details lists what is requested but not granted", %{conn: conn} do
+      seed_stale_grant("notifier", "Notifier")
+      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+
+      view |> element("#details-notifier") |> render_click()
+
+      assert has_element?(view, "#detail-ungranted")
+      assert has_element?(view, "#detail-ungranted-capabilities")
+    end
+
+    test "declining leaves the grant untouched", %{conn: conn} do
+      seed_stale_grant("notifier", "Notifier")
+      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+
+      view |> element("#approve-notifier") |> render_click()
+      view |> element("#decline-approval") |> render_click()
+
+      config = Settings.get_plugin_config_by_slug("notifier")
+      refute Map.has_key?(config.granted_capabilities, "data:read")
+      assert config.granted_capabilities["events:subscribe"] == ["media_item.added"]
+    end
+  end
+
   describe "lifecycle (R14)" do
     test "remove deletes the plugin row", %{conn: conn} do
       seed_plugin("notifier", "Notifier",

@@ -251,7 +251,7 @@ interface host {
       -> result<outbound-response, host-error>;
 }
 
-/// The guest's handlers. The SDK's #[mydia::plugin] macro implements this from a
+/// The guest's handlers. The SDK's #[mydia_plugin_sdk::plugin] macro implements this from a
 /// plain author-written function (plus an optional schedule handler).
 interface handler {
   use types.{event, schedule-tick};

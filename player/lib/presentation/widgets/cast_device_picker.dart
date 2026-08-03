@@ -8,6 +8,7 @@ import '../../core/cast/cast_capabilities.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
+import 'local_network_settings_button.dart';
 
 /// Shows a dialog to pick a cast receiver.
 ///
@@ -23,7 +24,16 @@ class CastDevicePickerDialog extends ConsumerWidget {
   /// Test seam: lets widget tests drive every async state directly.
   final AsyncValue<List<CastDevice>>? debugDevicesOverride;
 
-  const CastDevicePickerDialog({super.key, this.debugDevicesOverride});
+  /// Test seam: forces the local-network settings affordance on or off. A
+  /// `flutter test` host is never macOS or iOS as far as [PlatformFeatures]
+  /// is concerned, so the Apple branch is unreachable without this.
+  final bool? debugSettingsAvailableOverride;
+
+  const CastDevicePickerDialog({
+    super.key,
+    this.debugDevicesOverride,
+    this.debugSettingsAvailableOverride,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,7 +67,10 @@ class CastDevicePickerDialog extends ConsumerWidget {
             capabilities: capabilities,
             currentDeviceId: currentDevice?.id,
           ),
-          error: (error, _) => _DiscoveryError(error: error),
+          error: (error, _) => _DiscoveryError(
+            error: error,
+            settingsAvailable: debugSettingsAvailableOverride,
+          ),
         ),
       ),
       actions: [
@@ -248,7 +261,9 @@ class _ProtocolGroup extends StatelessWidget {
 class _DiscoveryError extends StatelessWidget {
   final Object error;
 
-  const _DiscoveryError({required this.error});
+  final bool? settingsAvailable;
+
+  const _DiscoveryError({required this.error, this.settingsAvailable});
 
   @override
   Widget build(BuildContext context) {
@@ -269,11 +284,13 @@ class _DiscoveryError extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Enable local network access for Mydia in your system settings, '
-            'then try again.',
+            'Mydia cannot see cast devices until local network access is '
+            'enabled.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary),
           ),
+          const SizedBox(height: 8),
+          LocalNetworkSettingsButton(available: settingsAvailable),
         ],
       );
     }

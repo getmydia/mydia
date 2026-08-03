@@ -6,6 +6,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   import MydiaWeb.MediaLive.Show.Formatters
   import MydiaWeb.MediaLive.Show.Helpers
 
+  alias MydiaWeb.MediaLive.Show.SegmentComponents
+
   @doc """
   Hero section with backdrop image, poster, and quick action buttons.
   """
@@ -489,6 +491,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :auto_searching_episode, :any, default: nil
   attr :playback_enabled, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
+  attr :segment_statuses, :map, default: %{}
+  attr :segment_detection_available, :boolean, default: true
 
   def episodes_section(assigns) do
     ~H"""
@@ -512,6 +516,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               <span>{length(@media_item.episodes)} total</span>
             </div>
           </div>
+          <SegmentComponents.segment_unavailable_note :if={!@segment_detection_available} />
         </div>
 
         <%!-- All seasons in one container --%>
@@ -597,6 +602,12 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   </div>
                 </div>
               </div>
+
+              <SegmentComponents.segment_status_row
+                :if={@segment_detection_available}
+                season_number={season_num}
+                status={Map.get(@segment_statuses, season_num)}
+              />
 
               <%!-- Episodes list --%>
               <div class="bg-base-100 rounded-lg divide-y divide-base-200">

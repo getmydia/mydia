@@ -78,12 +78,11 @@ New builds reach testers automatically as they ship.
 
 Full documentation available at **[docs.mydia.dev](https://docs.mydia.dev)**
 
-- [Installation Guide](https://docs.mydia.dev/latest/getting-started/installation/)
-- [Configuration Reference](https://docs.mydia.dev/latest/reference/environment-variables/)
-- [Download Clients Setup](https://docs.mydia.dev/latest/user-guide/download-clients/)
-- [SSO/OIDC Setup](https://docs.mydia.dev/latest/advanced/oidc/)
-- [PostgreSQL Support](https://docs.mydia.dev/latest/advanced/postgresql/)
-- [Development Guide](https://docs.mydia.dev/latest/development/setup/)
+- [Tutorials](https://docs.mydia.dev/latest/using/tutorials/) - get Mydia running from scratch
+- [How-to guides](https://docs.mydia.dev/latest/using/how-to/) - install, connect clients and indexers, deploy
+- [Reference](https://docs.mydia.dev/latest/using/reference/) - environment variables, configuration, database, API
+- [Explanation](https://docs.mydia.dev/latest/using/explanation/) - how Mydia works and why
+- [Contributing](https://docs.mydia.dev/latest/contributing/setup/) - development setup
 
 ## Screenshots
 
@@ -100,7 +99,7 @@ Full documentation available at **[docs.mydia.dev](https://docs.mydia.dev)**
 ./dev mix precommit      # Run all checks
 ```
 
-See the [Development Guide](https://docs.mydia.dev/latest/development/setup/) for details.
+See the [Development Guide](https://docs.mydia.dev/latest/contributing/setup/) for details.
 
 ### Documentation
 

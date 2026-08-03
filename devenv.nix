@@ -143,6 +143,8 @@ in
 
     # Media processing
     ffmpeg
+    # fpcalc, the audio fingerprinter behind intro/credits segment detection
+    chromaprint
 
     # Build tools for NIFs (bcrypt_elixir, argon2_elixir, membrane, exqlite)
     gnumake
@@ -217,7 +219,7 @@ in
   # ── Postgres service (R4) ───────────────────────────────────────────────────
   # Data dir lives under the per-worktree .devenv/state/postgres automatically.
   # NOTE: initialDatabases only runs on first init — to change it later, delete
-  # .devenv/state/postgres (documented in docs/development/setup.md).
+  # .devenv/state/postgres (documented in docs/contributing/setup.md).
   services.postgres = lib.mkIf usePostgres {
     enable = true;
     listen_addresses = "127.0.0.1";
