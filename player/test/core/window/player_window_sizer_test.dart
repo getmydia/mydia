@@ -359,8 +359,10 @@ void main() {
       await settle();
       t.window.setBoundsCalls.clear();
 
-      // Same aspect from a different resolution — an HLS rendition switch.
-      params.add(const VideoParams(w: 1280, h: 720, dw: 1280, dh: 720));
+      // A slightly different resolution whose aspect falls inside the 0.01
+      // dedup threshold -- an HLS rendition switch, not a true shape change.
+      // 1920/1080 = 1.7778, 1919/1080 = 1.7769: a 0.0009 difference.
+      params.add(const VideoParams(w: 1919, h: 1080, dw: 1919, dh: 1080));
       await settle();
 
       expect(t.window.setBoundsCalls, isEmpty);
@@ -530,6 +532,146 @@ void main() {
 
       expect(t.window.setBoundsCalls, hasLength(1));
     });
+
+    test('a user resize that lands mid-snap still stops the snap', () async {
+      // `_onVideoParams` checks `_userResized` once at the top, then awaits
+      // isMaximized(), isFullScreen(), getBounds(), and readWorkAreas()
+      // before calling setBounds(). If the user grabs an edge during one of
+      // those round trips, `_checkForUserResize` latches `_userResized` --
+      // but only a re-check right before the write stops the in-flight snap
+      // from stomping it anyway.
+      final window = _SlowFullScreenCheckController(
+        bounds: const Rect.fromLTWH(0, 0, 1200, 900),
+        delay: const Duration(milliseconds: 30),
+      );
+      final geometry = WindowGeometryController(
+        window: window,
+        store: InMemoryWindowGeometryStore(),
+        readWorkAreas: oneDisplay,
+        debounce: const Duration(milliseconds: 10),
+      );
+      addTearDown(geometry.dispose);
+      final sizer = NativePlayerWindowSizer(
+        window: window,
+        geometry: geometry,
+        readWorkAreas: oneDisplay,
+      );
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await sizer.attach();
+      sizer.bindVideoParams(params.stream);
+      // No snap has happened yet, so this suspends on the slow
+      // isFullScreen() check with `_expectedBounds` still null.
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+
+      // While that check is in flight, the user grabs an edge. With
+      // `_expectedBounds` still null, `_checkForUserResize` latches
+      // `_userResized` as soon as its own (fast) getBounds() resolves --
+      // well before the 30ms delay above elapses.
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      sizer.onWindowResize();
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(window.setBoundsCalls, isEmpty);
+    });
+  });
+
+  group('fullscreen exit race', () {
+    test(
+        'a leave-fullscreen event after detach restores the snapshot and '
+        'resumes geometry', () async {
+      // Regression for the fullscreen-exit race: `isFullScreen()` still
+      // reports true when `detach()` first checks it, because
+      // `defaultExitNativeFullscreen()`'s animated exit has not finished.
+      // `detach()` must wait for the real exit before deciding anything.
+      final t = build(bounds: const Rect.fromLTWH(100, 100, 1200, 900));
+      addTearDown(t.geometry.dispose);
+
+      await t.sizer.attach();
+      // Stand in for whatever the aspect snap did.
+      await t.window.setBounds(const Rect.fromLTWH(0, 0, 2000, 838));
+      t.window.fullScreen = true;
+
+      // detach() must return promptly even though the window is still
+      // reported fullscreen -- it must not block on the exit. It resolves
+      // as soon as it hands off to the fullscreen wait, well before that
+      // wait itself is done, so awaiting it here proves promptness without
+      // proving anything about the restore yet.
+      await t.sizer.detach();
+      expect(
+        t.window.bounds,
+        const Rect.fromLTWH(0, 0, 2000, 838),
+        reason: 'nothing must be restored until the real exit is observed',
+      );
+
+      // The OS finishes the animated exit.
+      t.window.fullScreen = false;
+      t.sizer.onWindowLeaveFullScreen();
+      await settle();
+
+      expect(t.window.bounds, const Rect.fromLTWH(100, 100, 1200, 900));
+
+      // Geometry persistence must be resumed too.
+      t.window.bounds = const Rect.fromLTWH(50, 50, 1000, 700);
+      t.geometry.onWindowResize();
+      await settle();
+      expect(t.store.get()!.bounds, const Rect.fromLTWH(50, 50, 1000, 700));
+    });
+
+    test('the timeout also restores the snapshot and resumes geometry',
+        () async {
+      // If the leave-fullscreen event never arrives (window destroyed
+      // mid-animation, or a platform quirk), the wait must not stall
+      // forever -- a bounded timeout completes detach() anyway.
+      final window = FakeWindowController(
+        bounds: const Rect.fromLTWH(100, 100, 1200, 900),
+      );
+      final store = InMemoryWindowGeometryStore();
+      final geometry = WindowGeometryController(
+        window: window,
+        store: store,
+        readWorkAreas: oneDisplay,
+        debounce: const Duration(milliseconds: 10),
+      );
+      addTearDown(geometry.dispose);
+      final sizer = NativePlayerWindowSizer(
+        window: window,
+        geometry: geometry,
+        readWorkAreas: oneDisplay,
+        fullscreenExitTimeout: const Duration(milliseconds: 20),
+      );
+
+      await sizer.attach();
+      await window.setBounds(const Rect.fromLTWH(0, 0, 2000, 838));
+      window.fullScreen = true;
+
+      await sizer.detach();
+      // No onWindowLeaveFullScreen() call: only the timeout can complete
+      // this. The window also happens to still report fullscreen once the
+      // timeout fires, so nothing should be restored.
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(
+        window.bounds,
+        const Rect.fromLTWH(0, 0, 2000, 838),
+        reason: 'still fullscreen when the timeout fired -- restoring would '
+            'fight that state',
+      );
+
+      window.fullScreen = false;
+      window.bounds = const Rect.fromLTWH(60, 60, 1000, 700);
+      geometry.onWindowResize();
+      await settle();
+
+      expect(
+        store.get()!.bounds,
+        const Rect.fromLTWH(60, 60, 1000, 700),
+        reason: 'the timeout path must resume geometry persistence just '
+            'like the event path does',
+      );
+    });
   });
 }
 
@@ -546,5 +688,20 @@ class _PauseObservingWindowController extends FakeWindowController {
   Future<Rect> getBounds() async {
     pausedAtSnapshot ??= geometry?.isPaused;
     return super.getBounds();
+  }
+}
+
+/// Gives `isFullScreen()` real, awaitable latency, standing in for a real
+/// platform channel's millisecond-scale IPC. Used to prove that a user
+/// resize landing while `_onVideoParams` is mid-flight still stops the snap.
+class _SlowFullScreenCheckController extends FakeWindowController {
+  _SlowFullScreenCheckController({required super.bounds, required this.delay});
+
+  final Duration delay;
+
+  @override
+  Future<bool> isFullScreen() async {
+    await Future<void>.delayed(delay);
+    return super.isFullScreen();
   }
 }

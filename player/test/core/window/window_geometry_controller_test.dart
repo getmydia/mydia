@@ -310,12 +310,39 @@ void main() {
       final controller = build(window: window, store: store);
       addTearDown(controller.dispose);
 
-      controller.pause();
-      controller.resume();
+      final owner = controller.pause();
+      controller.resume(owner);
       controller.onWindowResize();
       await settle();
 
       expect(store.get()!.bounds, const Rect.fromLTWH(5, 5, 800, 500));
+    });
+
+    test('a stale resume from a superseded owner does not un-pause it',
+        () async {
+      // Guards against a stale detach() (e.g. from a previous player
+      // session) resuming a controller a *different*, still-live owner
+      // paused after it.
+      final window = FakeWindowController(
+        bounds: const Rect.fromLTWH(5, 5, 800, 500),
+      );
+      final store = InMemoryWindowGeometryStore();
+      final controller = build(window: window, store: store);
+      addTearDown(controller.dispose);
+
+      final firstOwner = controller.pause();
+      controller.pause(); // A second owner takes over.
+
+      controller.resume(firstOwner);
+      controller.onWindowResize();
+      await settle();
+
+      expect(
+        store.get(),
+        isNull,
+        reason: 'the second owner still holds the pause; a stale resume '
+            'from the first owner must not un-pause it',
+      );
     });
 
     test('close writes the pending change without waiting', () async {

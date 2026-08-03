@@ -10,9 +10,13 @@ abstract interface class PlayerWindowSizer {
 
   /// Watches [params] for the video's display dimensions.
   ///
-  /// `PlayerScreen._initializePlayer` builds a fresh `Player` on every source
-  /// switch and next episode, so this is called again each time with the new
-  /// player's stream. Any previous subscription is cancelled.
+  /// `PlayerScreen._initializePlayer` builds a fresh `Player` -- and this is
+  /// called again with its stream -- on a source switch, a session restart,
+  /// and a fresh `PlayerScreen` state for a new queue item. It is *not*
+  /// re-run by navigating to the next episode of a season: that reuses the
+  /// same `PlayerScreen` state, because go_router keys the page by route
+  /// pattern rather than the resolved path. Any previous subscription is
+  /// cancelled.
   void bindVideoParams(Stream<VideoParams> params);
 
   /// Restores the snapshot and hands the window back.

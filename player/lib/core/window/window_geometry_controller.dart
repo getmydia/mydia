@@ -25,6 +25,18 @@ class WindowGeometryController with WindowListener {
   Timer? _pending;
   bool _paused = false;
 
+  /// Identifies whichever [pause] call is currently in effect. `null` when
+  /// nothing has paused the controller.
+  ///
+  /// Without this, pause/resume is a plain boolean shared by every caller,
+  /// so a stale `resume()` from one owner could un-pause a controller a
+  /// *different* owner still holds -- e.g. a previous player session's
+  /// `detach()` finishing after a new session's `attach()` already paused
+  /// tracking again. Latent today (nothing remounts a `PlayerScreen` while
+  /// another is still attached), but cheap enough to make structural rather
+  /// than coincidental. See [pause] and [resume].
+  Object? _owner;
+
   /// Bumped on every [pause]. `_save()` is asynchronous and can suspend on a
   /// platform-channel `await` for the entire body — checking `_paused` only
   /// at entry is not enough, because a save can resume *after* `pause()` has
@@ -84,14 +96,28 @@ class WindowGeometryController with WindowListener {
   /// The player owns the window while it is mounted, and its aspect-driven
   /// resizes must never reach the store — otherwise a 2.39:1 letterbox window
   /// becomes the geometry the app relaunches into.
-  void pause() {
+  ///
+  /// Returns an opaque token identifying this pause. Pass it back to
+  /// [resume] -- a controller only un-pauses for the owner that currently
+  /// holds it.
+  Object pause() {
+    final owner = Object();
+    _owner = owner;
     _paused = true;
     _pauseGeneration++;
     _pending?.cancel();
     _pending = null;
+    return owner;
   }
 
-  void resume() => _paused = false;
+  /// Resumes tracking, but only if [owner] is the token returned by the
+  /// [pause] call currently in effect. A stale token -- one from a pause
+  /// that a later [pause] has since superseded -- is a no-op instead of
+  /// un-pausing a controller a different owner still holds.
+  void resume(Object? owner) {
+    if (owner != _owner) return;
+    _paused = false;
+  }
 
   void dispose() {
     _pending?.cancel();
