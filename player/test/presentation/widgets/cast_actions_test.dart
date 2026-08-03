@@ -4,9 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/cast/cast_route_resolver.dart';
+import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
+import 'package:player/core/player/progress_service.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_actions.dart';
+
+import '../../core/cast/cast_session_manager_test.mocks.dart';
+import '../../test_utils/fake_cast_backend.dart';
+import '../../test_utils/fake_streaming_session_service.dart';
 
 const _device = CastDevice(
   id: 'device-1',
@@ -101,6 +109,35 @@ void main() {
           reason: 'a remembered device with no live connection must not claim '
               'the cast_connected glyph');
       expect(icon.color, Colors.blue);
+    });
+  });
+
+  group('pickCastDevice connects on select', () {
+    test('a chosen device with no session connects immediately', () async {
+      // The behaviour this replaces set castTargetProvider and contacted
+      // nothing, while the icon claimed the receiver was connected.
+      final backend = FakeCastBackend();
+      final manager = CastSessionManager(
+        backend: backend,
+        store: InMemoryCastSessionStore(),
+        progressService: ProgressService(MockGraphQLClient()),
+        streamingSessions: FakeStreamingSessionService(),
+        resolverFactory: () => CastRouteResolver(
+          isP2pMode: false,
+          serverUrl: 'https://mydia.test',
+          mediaToken: () async => 'tok',
+          lanBaseUrl: () => null,
+          streamingSessions: FakeStreamingSessionService(),
+        ),
+        setLanAccess: (_) async {},
+        clock: () => DateTime.utc(2026, 8, 3, 12),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(_device);
+
+      expect(backend.connectedDevice, _device);
+      expect(manager.currentSession?.mediaInfo, isNull);
     });
   });
 }
