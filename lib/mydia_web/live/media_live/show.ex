@@ -13,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
   alias MydiaWeb.MediaLive.Show.SearchEvents
+  alias MydiaWeb.MediaLive.Show.SegmentEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
 
   # Import helper modules
@@ -161,6 +162,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_trailer_modal, false)
      # Collection state
      |> CollectionEvents.load_collection_data(media_item)
+     |> SegmentEvents.assign_segment_status(media_item)
      |> FranchiseEvents.maybe_load()
      |> stream_configure(:search_results, dom_id: &generate_positioned_id/1)
      |> stream(:search_results, [])}
@@ -208,6 +210,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("rescan_movie", params, socket),
     do: FileEvents.rescan_movie(params, socket)
+
+  def handle_event("re_analyze_segments", params, socket),
+    do: SegmentEvents.re_analyze(params, socket)
 
   def handle_event("show_delete_confirm", params, socket),
     do: MediaItemEvents.show_delete_confirm(params, socket)
