@@ -266,18 +266,24 @@ defmodule Mydia.Accounts do
 
   def get_user_preference!(user_id) when is_binary(user_id) do
     case Repo.get_by(UserPreference, user_id: user_id) do
-      nil ->
-        # Create default preferences
-        {:ok, pref} =
-          %UserPreference{}
-          |> UserPreference.changeset(%{preferences: UserPreference.defaults()})
-          |> Ecto.Changeset.put_change(:user_id, user_id)
-          |> Repo.insert()
+      nil -> insert_default_preference!(user_id)
+      pref -> pref
+    end
+  end
 
-        pref
-
-      pref ->
-        pref
+  # Two mounts racing the same user's first page load after an upgrade would
+  # otherwise both see no row and both insert. `on_conflict: :nothing` makes the
+  # loser a no-op instead of an Ecto.ConstraintError; it returns a struct with a
+  # nil id, so the row is re-read in that case.
+  defp insert_default_preference!(user_id) do
+    %UserPreference{}
+    |> UserPreference.changeset(%{preferences: UserPreference.defaults()})
+    |> Ecto.Changeset.put_change(:user_id, user_id)
+    |> Repo.insert(on_conflict: :nothing, conflict_target: :user_id)
+    |> case do
+      {:ok, %UserPreference{id: nil}} -> Repo.get_by!(UserPreference, user_id: user_id)
+      {:ok, pref} -> pref
+      {:error, _changeset} -> Repo.get_by!(UserPreference, user_id: user_id)
     end
   end
 
