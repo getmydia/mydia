@@ -13,6 +13,14 @@
 # created.
 set -eu
 
+# /tmp is the container's ordinary writable layer, not a tmpfs mount, and the
+# mydia service has no restart policy, so a stopped-then-started container
+# (compose reusing it rather than recreating it, e.g. after a Ctrl-C that
+# skipped the trailing `down -v`) keeps whatever this file held last time.
+# Clear it before the health poll can even start, so its presence can only
+# ever mean "seeding succeeded during this run."
+rm -f /tmp/e2e-seeded
+
 (
     attempt=0
     while [ "$attempt" -lt 60 ]; do
