@@ -38,6 +38,7 @@ defmodule Mydia.Jobs.MediaImport do
   alias Mydia.Library.{FileNamer, FileOrganizer, SampleDetector}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.ReleaseParser.TargetContext
+  alias Mydia.Media.Episode
   alias Mydia.Indexers.QualityParser
   alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
   alias Mydia.Metadata.NfoWriter
@@ -858,11 +859,14 @@ defmodule Mydia.Jobs.MediaImport do
           end
         end)
 
-      # Separate results into imported, unresolved, and errors
+      # Separate results into imported, unresolved, and errors. Skipped files
+      # (season pack entries for episodes that already have a file) belong to
+      # none of the three: they are a deliberate no-op, not a failure.
       {imported, unresolved, errors} =
         Enum.reduce(results, {[], [], []}, fn
           {:ok, media_file}, {imp, unr, err} -> {[media_file | imp], unr, err}
           {:unresolved, file_info}, {imp, unr, err} -> {imp, [file_info | unr], err}
+          {:skipped, _info}, {imp, unr, err} -> {imp, unr, err}
           {:error, _} = error, {imp, unr, err} -> {imp, unr, [error | err]}
         end)
 
@@ -1388,8 +1392,39 @@ defmodule Mydia.Jobs.MediaImport do
         {:unresolved, file_info}
 
       {episode, dest_dir} ->
-        import_file_to_destination(file, episode, dest_dir, download, library_path, args)
+        if skip_already_filed_episode?(episode, download) do
+          Logger.info("Skipping season pack file - episode already has a media file",
+            download_id: download.id,
+            file: file.name,
+            episode_id: episode.id
+          )
+
+          {:skipped, %{name: file.name, episode_id: episode.id}}
+        else
+          import_file_to_destination(file, episode, dest_dir, download, library_path, args)
+        end
     end
+  end
+
+  # A season pack legitimately contains episodes the library already has, now
+  # that the grab guard only blocks a pack whose every targeted episode is on
+  # disk. Importing those files would create a second non-trashed media_files
+  # row for the episode: the importer's only existence check is on the
+  # destination path, and there is no unique index on media_files.episode_id.
+  #
+  # Upgrades are exempt. An upgrade pack targets episodes that already have
+  # files by definition, and its per-episode supersede pointer (see
+  # supersede_target/3) is what trashes the loser after the margin gate.
+  defp skip_already_filed_episode?(%Episode{id: episode_id}, download) do
+    get_in(download.metadata, ["season_pack"]) == true and
+      not upgrade_download?(download) and
+      Library.episode_has_media_file?(episode_id)
+  end
+
+  defp skip_already_filed_episode?(_episode, _download), do: false
+
+  defp upgrade_download?(download) do
+    match?(%{"upgrade_target_media_file_id" => id} when is_binary(id), download.metadata)
   end
 
   defp import_file_to_destination(file, episode, dest_dir, download, library_path, args) do

@@ -1213,6 +1213,140 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
+  describe "season pack containing episodes that already have files" do
+    @tag :tmp_dir
+    test "skips the overlapping file, imports the missing one, no partial_pack",
+         %{tmp_dir: tmp_dir} do
+      # A pack legitimately contains episodes we already have, now that the grab
+      # guard only blocks a pack whose every targeted episode is on disk.
+      # Importing the overlap would leave two live media_files rows for one
+      # episode, with no quality gate to reconcile them: the importer's only
+      # existence check is on the destination path.
+      _library_path = create_test_library_path(tmp_dir, :series)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+
+      for name <- ["Overlap.Show.S03E01.mkv", "Overlap.Show.S03E02.mkv"] do
+        File.write!(Path.join(download_dir, name), "fake video")
+      end
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Overlap Show"})
+
+      ep1 = episode_fixture(%{media_item_id: media_item.id, season_number: 3, episode_number: 1})
+      ep2 = episode_fixture(%{media_item_id: media_item.id, season_number: 3, episode_number: 2})
+
+      # E01 is already on disk. E02 is the one the pack was grabbed for.
+      media_file_fixture(%{episode_id: ep1.id})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "OverlapClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "OverlapClient",
+          download_client_id: "overlap-1",
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 3,
+            # episode_count is the count of MISSING episodes the search wanted,
+            # not the season total. Only E02 was missing.
+            "episode_count" => 1,
+            "episode_ids" => [ep2.id]
+          }
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      files_by_episode =
+        Library.list_media_files()
+        |> Enum.filter(&(&1.episode_id in [ep1.id, ep2.id]))
+        |> Enum.group_by(& &1.episode_id)
+
+      assert length(Map.get(files_by_episode, ep1.id, [])) == 1,
+             "E01 already had a file; the pack's copy must be skipped, not added"
+
+      assert length(Map.get(files_by_episode, ep2.id, [])) == 1,
+             "E02 was missing and must be imported"
+
+      updated = Mydia.Downloads.get_download!(download.id)
+
+      refute updated.match_status == "partial_pack",
+             "1 imported vs episode_count 1 must not read as a short pack"
+    end
+
+    @tag :tmp_dir
+    test "an upgrade pack still imports over an episode that already has a file",
+         %{tmp_dir: tmp_dir} do
+      # Upgrades target episodes that already have files by definition, so the
+      # skip must not apply or UpgradeSweep breaks entirely.
+      _library_path = create_test_library_path(tmp_dir, :series)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Upgrade.Show.S03E01.mkv"), "fake video")
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Upgrade Show"})
+      ep1 = episode_fixture(%{media_item_id: media_item.id, season_number: 3, episode_number: 1})
+      existing = media_file_fixture(%{episode_id: ep1.id})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "UpgradeClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "UpgradeClient",
+          download_client_id: "upgrade-1",
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 3,
+            "episode_count" => 1,
+            # The discriminator supersede_target/3 keys on.
+            "upgrade_target_media_file_id" => existing.id
+          }
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      count = Library.list_media_files() |> Enum.count(&(&1.episode_id == ep1.id))
+
+      assert count == 2,
+             "an upgrade must import alongside the file it supersedes, not be skipped"
+    end
+  end
+
   # Regression for the partial-import retry loop (Bug C).
   #
   # When a season-pack import resolves some files but flags others as
@@ -1468,13 +1602,14 @@ defmodule Mydia.Jobs.MediaImportTest do
       File.write!(dest_file, "existing video")
       relative_path = Path.relative_to(dest_file, library_path.path)
 
-      for _ <- 1..2 do
-        media_file_fixture(%{
-          library_path_id: library_path.id,
-          episode_id: ep_s1e1.id,
-          relative_path: relative_path
-        })
-      end
+      existing_files =
+        for _ <- 1..2 do
+          media_file_fixture(%{
+            library_path_id: library_path.id,
+            episode_id: ep_s1e1.id,
+            relative_path: relative_path
+          })
+        end
 
       {:ok, _} =
         Settings.create_download_client_config(%{
@@ -1495,7 +1630,16 @@ defmodule Mydia.Jobs.MediaImportTest do
           completed_at: DateTime.utc_now(),
           download_client: "PartialErrorClient",
           download_client_id: "partial-error-1",
-          metadata: %{"season_pack" => true, "season_number" => 1}
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            # Marked as an upgrade so the already-filed-episode skip does not
+            # intercept this file. Upgrades are exempt from that skip by design,
+            # since they target episodes that already have files, which makes
+            # this the path where a duplicate-row Repo.one crash is still
+            # reachable and therefore still worth surfacing properly.
+            "upgrade_target_media_file_id" => hd(existing_files).id
+          }
         })
 
       {download, download_dir}
