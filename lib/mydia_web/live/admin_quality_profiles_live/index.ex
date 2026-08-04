@@ -444,10 +444,11 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
               "preferred_audio_channels",
               "preferred_resolutions",
               "preferred_sources",
+              "excluded_sources",
               "hdr_formats"
             ] do
     case value do
-      list when is_list(list) -> list
+      list when is_list(list) -> Enum.reject(list, &(&1 == ""))
       str when is_binary(str) -> String.split(str, ",") |> Enum.map(&String.trim/1)
       _ -> nil
     end
