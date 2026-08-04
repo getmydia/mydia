@@ -214,6 +214,14 @@ in
   // lib.optionalAttrs pkgs.stdenv.isLinux {
     CHROME_PATH = "${pkgs.chromium}/bin/chromium";
     CHROMEDRIVER_PATH = "${pkgs.chromedriver}/bin/chromedriver";
+  }
+  # :database_adapter is a compile-time env entry, so a _build compiled for
+  # SQLite and reused under DATABASE_TYPE=postgres fails Mix's compile-env
+  # validation on every boot, restart-looping phoenix with nothing in its log
+  # but that error. Give Postgres its own build root. SQLite keeps the default
+  # `_build`, so no existing worktree pays a recompile.
+  // lib.optionalAttrs usePostgres {
+    MIX_BUILD_ROOT = "_build/postgres";
   };
 
   # ── Postgres service (R4) ───────────────────────────────────────────────────
@@ -229,6 +237,13 @@ in
 
   # ── Long-running processes (R5) ─────────────────────────────────────────────
   processes.phoenix.exec = "mix phx.server";
+
+  # The dev database is created and migrated by mydia:ecto, which is deliberately
+  # NOT a shell-entry task (see below). Nothing else migrates it: skip_migrations?/0
+  # in Mydia.Application returns true whenever RELEASE_NAME is unset, so the
+  # supervision tree's Ecto.Migrator never runs under mix. Booting against an
+  # unmigrated database dies in ClientHealth.init/1, so wait for the task.
+  processes.phoenix.after = [ "mydia:ecto@succeeded" ];
 
   # build_runner watch performs GraphQL/Riverpod codegen for the player. This is
   # distinct from MydiaWeb.FlutterWatcher (config/dev.exs), which runs
@@ -257,15 +272,63 @@ in
       after = [ "mydia:hex" ];
     };
 
+    # Deliberately NOT a shell-entry task. Entering a devenv shell must never
+    # boot the OTP application and must never start a service; this task does
+    # both by necessity, so it belongs to the process graph
+    # (processes.phoenix.after) and to `./dev db.setup`.
     "mydia:ecto" = {
-      # backup_before_migrate self-skips when no migrations are pending, so it
-      # is a cheap no-op except right before a migration actually runs — keeping
-      # the dev-DB safety net the retired docker-entrypoint.sh provided.
-      exec = "mix ecto.create --quiet && mix mydia.backup_before_migrate && mix ecto.migrate";
-      # Re-run when a migration is added/changed (idempotent otherwise).
-      execIfModified = [ "priv/repo/migrations" ];
-      before = onEnterShell;
-      after = [ "mydia:deps" ] ++ lib.optional usePostgres "devenv:processes:postgres@ready";
+      # backup_before_migrate self-skips when nothing is pending AND when the
+      # database has no applied migrations at all, so it is a cheap no-op except
+      # right before a migration actually runs, keeping the dev-DB safety net
+      # the retired docker-entrypoint.sh provided.
+      exec = ''
+        ${lib.optionalString usePostgres ''
+          # Poll for Postgres instead of adding the postgres process as an
+          # `after` dependency (its "devenv:processes:postgres@ready" suffix).
+          # A task dependency like that makes devenv START Postgres whenever
+          # this task runs, which collided with the postmaster already owned
+          # by `./dev up -d` ("lock file postmaster.pid already exists", six
+          # attempts in 87ms). Polling only ever observes, so the process
+          # daemon stays the single owner.
+          echo "Waiting for Postgres on $DATABASE_HOST:$DATABASE_PORT…" >&2
+          for _ in $(seq 1 60); do
+            pg_isready -q -h "$DATABASE_HOST" -p "$DATABASE_PORT" && break
+            sleep 0.5
+          done
+
+          if ! pg_isready -q -h "$DATABASE_HOST" -p "$DATABASE_PORT"; then
+            echo "Postgres is not accepting connections on $DATABASE_HOST:$DATABASE_PORT." >&2
+            echo "Start it with './dev up -d'." >&2
+            exit 1
+          fi
+        ''}
+        mix do ecto.create --quiet + mydia.backup_before_migrate + ecto.migrate
+      '';
+      # Deliberately NO execIfModified, overriding this file's original R6
+      # caching design (it shipped `execIfModified = [ "priv/repo/migrations" ]`
+      # here). Caching this task made devenv report a cached run as
+      # "succeeded" without checking whether the database still existed:
+      # `./dev db.setup` silently no-op'd against a missing/corrupt database,
+      # and `./dev iex`, `./dev phx.server`, and processes.phoenix.after all
+      # sailed past a Skipped-but-"succeeded" task into exactly the crash it
+      # exists to prevent. The original rationale for caching — keeping shell
+      # entry cheap — no longer applies: this task is off shell entry
+      # entirely, so every remaining caller (db.setup, iex, phx.server, the
+      # process graph) wants it to actually verify state, not skip. Running
+      # it unconditionally is safe and cheap: `mix ecto.create --quiet`
+      # no-ops on an existing database, `mix mydia.backup_before_migrate`
+      # returns `:no_migrations` immediately when nothing is pending, and
+      # `mix ecto.migrate` no-ops when the schema is current. The three
+      # commands run as one `mix do a + b + c` invocation rather than three
+      # separate `mix` processes chained with `&&`, so the added cost is one
+      # BEAM boot (~2-3s) on commands that are already starting a BEAM or a
+      # whole stack, not three. `mix do` aborts the chain the same way `&&`
+      # does: `mydia.backup_before_migrate` calls `exit({:shutdown, 1})` on a
+      # failed backup, which terminates the `mix do` process outright (Mix's
+      # `do` task has no rescue/catch around each step) before `ecto.migrate`
+      # ever runs — verified empirically against this pinned Elixir 1.19.5
+      # with a throwaway two-task `mix do`, not just read off the docs.
+      after = [ "mydia:deps" ];
     };
 
     "mydia:assets" = {

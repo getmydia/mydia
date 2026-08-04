@@ -122,6 +122,51 @@ jobs:
           fi
           exit "$FAIL"
 
+      # This task runs from devenv's mydia:ecto against a database that may have
+      # no tables yet. Booting the supervision tree there is fatal, because
+      # ClientHealth.init/1 queries download_client_configs synchronously, and
+      # the failure leaves fresh worktrees unmigrated forever rather than
+      # retrying. It needs the repo and nothing else.
+      # Both guards below strip full-line comments before matching. Matching the
+      # raw source has already caused two defects during this branch's
+      # implementation: a guard regex that matched the explanatory comment
+      # sitting next to the code it described, and a guard search string that
+      # appeared verbatim in a comment inside the block it scans. Both would
+      # have made CI permanently red, and the workaround each time — contorting
+      # the prose to dodge the guard — is backwards, and narrowing a guard's
+      # regex to avoid a comment also opens an evasion gap in the code match.
+      - name: Guard the pre-migration backup task
+        run: |
+          set -euo pipefail
+          if grep -vE '^[[:space:]]*#' lib/mix/tasks/mydia.backup_before_migrate.ex | grep -nE 'app\.start'; then
+            echo "::error::mydia.backup_before_migrate must not start the application; use Ecto.Migrator.with_repo/2"
+            exit 1
+          fi
+
+      # Shell entry must not boot the app or start a service. mydia:ecto does
+      # both: it runs the backup task and, under Postgres, needs a live server.
+      # Attaching it to enterShell is what made every fresh worktree fail on
+      # entry and what spawned a second postmaster beside `./dev up -d`. It
+      # belongs to processes.phoenix.after and `./dev db.setup` — and nothing
+      # else stops someone deleting that `after`, which would silently restore
+      # the original crash (phoenix booting against an unmigrated database)
+      # with CI green, so the positive invariant is guarded too.
+      - name: Guard shell-entry purity
+        run: |
+          set -euo pipefail
+          BLOCK=$(awk '/"mydia:ecto" = \{/,/^    \};/' devenv.nix | grep -vE '^[[:space:]]*#')
+          [ -n "$BLOCK" ] || { echo "::error::guard could not locate the mydia:ecto block in devenv.nix"; exit 1; }
+          if echo "$BLOCK" | grep -n 'before = onEnterShell'; then
+            echo "::error::mydia:ecto must not run on shell entry; it belongs to processes.phoenix.after"
+            exit 1
+          fi
+          if echo "$BLOCK" | grep -n 'devenv:processes:postgres'; then
+            echo "::error::mydia:ecto must not depend on the postgres process; a task dependency starts a second postmaster"
+            exit 1
+          fi
+          grep -q 'processes\.phoenix\.after = \[ "mydia:ecto@succeeded" \]' devenv.nix || {
+            echo "::error::phoenix must wait for mydia:ecto@succeeded, or it boots against an unmigrated database"; exit 1; }
+
       - name: Test (SQLite) under devenv
         run: |
           devenv shell -- bash <<'DEVENV'

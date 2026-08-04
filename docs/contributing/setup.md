@@ -36,8 +36,12 @@ git clone https://github.com/getmydia/mydia.git
 cd mydia
 
 # Authorize direnv for this worktree (one time). This builds the toolchain and
-# runs first-run setup (deps.get, ecto.create/migrate, asset npm install,
-# flutter pub get). The first build downloads the toolchain and can take a while.
+# runs first-run setup (deps.get, asset npm install, flutter pub get). The first
+# build downloads the toolchain and can take a while.
+#
+# Shell entry deliberately does NOT touch the development database: it must not
+# boot the app or start a service. `./dev up` sets the database up before
+# starting Phoenix, and `./dev db.setup` does it on demand.
 direnv allow
 
 # Start the stack (Phoenix + Flutter codegen watcher)
@@ -83,6 +87,12 @@ port and creates `mydia_dev` / `mydia_test`.
 > `initialDatabases` only runs on first init. To change it later, delete
 > `.devenv/state/postgres` and re-enter the shell.
 
+`DATABASE_TYPE` is read when devenv evaluates, so export it *before* entering
+the shell. Postgres builds into `_build/postgres` rather than `_build`, because
+the Ecto adapter is a compile-time setting and sharing one build root between
+adapters makes Phoenix restart-loop on a compile-env mismatch. Switching back
+and forth costs no recompile.
+
 ## The `./dev` Script
 
 `./dev` is a thin wrapper over devenv that preserves the historical command
@@ -114,8 +124,13 @@ vocabulary. Run `./dev` with no arguments to see everything.
 ./dev test         # Run tests
 ./dev format       # Format code
 ./dev deps.get     # Fetch dependencies
+./dev db.setup     # Create and migrate the development database
 ./dev ecto.migrate # Run migrations
 ```
+
+`./dev up`, `./dev iex`, and `./dev phx.server` run `db.setup` for you. `./dev
+test` and `./dev mix` do not need it: the `test` alias builds and migrates its
+own database, and formatting, Credo, and compilation never open one.
 
 ## Code Quality
 

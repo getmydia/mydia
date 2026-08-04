@@ -83,17 +83,23 @@ defmodule Mydia.Release do
     * `:pending_migrations?` - override the pending-migration check. Defaults to
       `pending_migrations?/0`. Exists so the boot path and its tests can decide
       migration status without a live migration being pending.
+    * `:schema?` - override the applied-migrations check. Defaults to
+      `schema?/0`. Exists so the boot path and its tests can decide schema
+      status without a live database.
 
   ## Returns
 
     * `{:ok, backup_path}` - a backup was written
     * `{:ok, :no_migrations}` - nothing is pending, so nothing was backed up
+    * `{:ok, :no_schema}` - the database has no applied migrations, so it holds
+      nothing worth backing up
     * `{:ok, :skipped}` - `SKIP_BACKUPS` is set
     * `{:ok, :unsupported_adapter}` - PostgreSQL, operator warned
     * `{:error, reason}` - the backup was attempted and failed
   """
   @spec backup_before_migrations(keyword()) ::
-          {:ok, String.t() | :no_migrations | :skipped | :unsupported_adapter} | {:error, term()}
+          {:ok, String.t() | :no_migrations | :no_schema | :skipped | :unsupported_adapter}
+          | {:error, term()}
   def backup_before_migrations(opts \\ []) do
     cond do
       skip_backups?() ->
@@ -107,6 +113,10 @@ defmodule Mydia.Release do
       not Keyword.get_lazy(opts, :pending_migrations?, &pending_migrations?/0) ->
         Logger.info("No pending migrations detected, skipping backup")
         {:ok, :no_migrations}
+
+      not Keyword.get_lazy(opts, :schema?, &schema?/0) ->
+        Logger.info("Database has no applied migrations yet, so there is nothing to back up")
+        {:ok, :no_schema}
 
       DB.sqlite?() ->
         create_backup()
@@ -139,6 +149,21 @@ defmodule Mydia.Release do
         status == :down
       end)
     end)
+  end
+
+  @doc """
+  Returns true when at least one migration has been applied to the database.
+
+  A database with zero applied versions was created moments ago and holds no
+  rows, so a pre-migration snapshot of it protects nothing. Distinguishing this
+  from "migrations are pending" matters because a brand-new database reports
+  *every* migration as pending.
+  """
+  @spec schema?() :: boolean()
+  def schema? do
+    @app
+    |> Application.get_env(:ecto_repos, [])
+    |> Enum.any?(fn repo -> Ecto.Migrator.migrated_versions(repo) != [] end)
   end
 
   @doc """

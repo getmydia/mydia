@@ -65,6 +65,31 @@ in_player() {
     devenv shell -- bash -c 'cd player && exec "$@"' _ "$@"
 }
 
+# Create and migrate the development database.
+#
+# Under Postgres this asks the process daemon to start the server FIRST, so the
+# daemon stays the single owner of the postmaster. Letting devenv start Postgres
+# as a task dependency instead is what produced "lock file postmaster.pid
+# already exists" alongside a running `./dev up -d`.
+#
+# `devenv processes start` talks to the process daemon over its native socket,
+# which does not exist until some daemon is already running — so on a cold
+# worktree (no `./dev up -d` yet) it errors immediately. Fall back to
+# `devenv up -d postgres`, which starts just that one process detached with no
+# daemon required. Both forms are tolerated failing: if Postgres genuinely
+# cannot start, the mydia:ecto task's own readiness poll reports it with a
+# better message than devenv does, and it names the host and port.
+ensure_dev_db() {
+    case "${DATABASE_TYPE:-}" in
+        postgres|postgresql)
+            devenv processes start postgres 2>/dev/null \
+                || devenv up -d postgres \
+                || true
+            ;;
+    esac
+    devenv tasks run mydia:ecto
+}
+
 # Show help if no arguments provided
 if [ $# -eq 0 ]; then
     cat <<EOF
@@ -99,6 +124,7 @@ ${YELLOW}Development Commands:${NC}
   feature-test [args]  Run Wallaby browser tests (uses in-shell chromedriver)
   format               Format code (mix format)
   deps.get             Install dependencies
+  db.setup             Create and migrate the development database
   ecto.migrate         Run database migrations
   ecto.reset           Reset database
   phx.server           Start the Phoenix server (foreground)
@@ -293,6 +319,9 @@ case "$COMMAND" in
         ;;
     iex)
         echo -e "${GREEN}Starting IEx...${NC}"
+        # An IEx session against an unmigrated dev database is useless, and this
+        # is the common command that needs one without going through `./dev up`.
+        ensure_dev_db
         if [ $# -gt 0 ]; then
             in_shell iex "$@"
         else
@@ -341,8 +370,15 @@ case "$COMMAND" in
         echo -e "${GREEN}Resetting database...${NC}"
         in_shell mix ecto.reset
         ;;
+    db.setup)
+        echo -e "${GREEN}Setting up the development database...${NC}"
+        ensure_dev_db
+        ;;
     phx.server)
         echo -e "${GREEN}Starting Phoenix server...${NC}"
+        # `./dev up` gets this ordering from processes.phoenix.after; the
+        # foreground shortcut bypasses the process graph, so do it by hand.
+        ensure_dev_db
         in_shell mix phx.server
         ;;
 
@@ -353,6 +389,11 @@ case "$COMMAND" in
             echo "Usage: ./dev user <list|add|delete|reset-password> [args...]"
             exit 1
         fi
+        # mix mydia.user boots the full supervision tree (Mix.Task.run("app.start")),
+        # which dies in ClientHealth.init/1 against an unmigrated database. This is
+        # the documented dev user-management path, so it needs the same guard as
+        # iex/phx.server rather than assuming `./dev up` already ran.
+        ensure_dev_db
         in_shell mix mydia.user "$@"
         ;;
 
