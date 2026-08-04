@@ -1045,4 +1045,38 @@ defmodule Mydia.EventsTest do
       assert length(Events.list_events()) == 2
     end
   end
+
+  describe "format_for_timeline/1" do
+    test "returns a plain map with the four keys the timeline template reads" do
+      formatted =
+        Events.format_for_timeline(%Event{
+          type: "download.completed",
+          severity: :info,
+          metadata: %{"title" => "Arrival"}
+        })
+
+      refute is_struct(formatted)
+      assert %{icon: _, color: _, title: _, description: _} = formatted
+      assert map_size(formatted) == 4
+    end
+
+    test "labels a type the old map never covered" do
+      formatted =
+        Events.format_for_timeline(%Event{
+          type: "download.stalled",
+          severity: :warning,
+          metadata: %{"title" => "Arrival", "message" => "no progress for 2h"}
+        })
+
+      assert formatted.title == "Download stalled"
+      assert formatted.description == "Arrival (no progress for 2h)"
+    end
+
+    test "keeps the historical fallback description for an unregistered type" do
+      formatted =
+        Events.format_for_timeline(%Event{type: "legacy.gone", severity: :info, metadata: %{}})
+
+      assert formatted.description == "Event occurred"
+    end
+  end
 end
