@@ -22,7 +22,6 @@ import '../../../core/theme/colors.dart';
 import '../../../domain/models/show_next_up.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
-import '../../widgets/next_up_labels.dart';
 import '../../widgets/smart_play_button.dart';
 
 class ShowDetailScreen extends ConsumerWidget {
@@ -384,7 +383,7 @@ class ShowDetailScreen extends ConsumerWidget {
                         return SmartPlayButton(
                           files: episode.files,
                           state: nextUp.state,
-                          cueLine: nextUpCueLine(episode, nextUp.state),
+                          episode: episode,
                           onFileSelected: (file) {
                             final title =
                                 '${show.title} - ${episode.episodeCode}';

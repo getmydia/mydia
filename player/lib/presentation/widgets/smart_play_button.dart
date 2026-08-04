@@ -23,23 +23,29 @@ const double kPillCollapseWidth = 380;
 /// modal for manual override.
 ///
 /// When [state] is supplied, the button renders as a labelled pill
-/// (e.g. "Continue Watching") with an optional [cueLine] underneath,
-/// collapsing to the plain icon form below [kPillCollapseWidth]. When
-/// [state] is null, the widget renders exactly as it always has: the
+/// (e.g. "Continue Watching") with a cue line underneath describing
+/// [episode], collapsing to the plain icon form below [kPillCollapseWidth].
+/// When [state] is null, the widget renders exactly as it always has: the
 /// plain icon form with no label or cue line, so existing call sites
 /// (movie/episode detail) are unaffected.
 class SmartPlayButton extends StatefulWidget {
   final List<MediaFile> files;
   final void Function(MediaFile) onFileSelected;
   final NextUpState? state;
-  final String? cueLine;
+
+  /// Episode the cue line describes, supplied alongside [state].
+  ///
+  /// The cue line is composed here rather than by the caller because it names
+  /// the resolution of the file that will actually play, and only this widget
+  /// knows which file it picked.
+  final NextUpEpisode? episode;
 
   const SmartPlayButton({
     super.key,
     required this.files,
     required this.onFileSelected,
     this.state,
-    this.cueLine,
+    this.episode,
   });
 
   @override
@@ -75,22 +81,34 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.state == null) return _buildIconForm(context);
+    final state = widget.state;
+    if (state == null) return _buildIconForm(context);
+
+    final episode = widget.episode;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < kPillCollapseWidth;
+        // The icon form already prints the resolution next to the play
+        // circle, so the compact cue line leaves it out. In the pill form the
+        // cue line is the only place the resolution appears.
+        final cueLine = episode == null
+            ? null
+            : nextUpCueLine(
+                episode,
+                state,
+                resolution: compact ? null : _selectedFile?.resolution,
+              );
+
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             compact ? _buildIconForm(context) : _buildPillForm(context),
-            if (widget.cueLine != null) ...[
+            if (cueLine != null) ...[
               const SizedBox(height: 6),
               Text(
-                compact
-                    ? '${nextUpShortLabel(widget.state!)} · ${widget.cueLine!}'
-                    : widget.cueLine!,
+                compact ? '${nextUpShortLabel(state)} · $cueLine' : cueLine,
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,

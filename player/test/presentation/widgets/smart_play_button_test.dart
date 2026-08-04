@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_file.dart';
+import 'package:player/domain/models/progress.dart';
 import 'package:player/domain/models/show_next_up.dart';
 import 'package:player/presentation/widgets/smart_play_button.dart';
 
@@ -9,6 +10,21 @@ MediaFile _file(String id, String resolution) => MediaFile(
       resolution: resolution,
       directPlaySupported: true,
     );
+
+/// Half-watched S02E05: 2700 - 600 seconds left, i.e. "35 min left".
+const _partlyWatched = NextUpEpisode(
+  id: 'e1',
+  seasonNumber: 2,
+  episodeNumber: 5,
+  progress: Progress(
+    positionSeconds: 600,
+    durationSeconds: 2700,
+    percentage: 22.2,
+    watched: false,
+  ),
+);
+
+const _unwatched = NextUpEpisode(id: 'e2', seasonNumber: 1, episodeNumber: 1);
 
 Widget _host(Widget child, double width) => MaterialApp(
       home: Scaffold(
@@ -67,12 +83,14 @@ void main() {
       const MediaFile(id: 'f1', resolution: '1080p', directPlaySupported: true),
     ];
 
-    testWidgets('wide layout shows the full label', (tester) async {
+    testWidgets(
+        'wide layout shows the full label and a cue line naming the '
+        'resolution of the file it picked', (tester) async {
       await tester.pumpWidget(_host(
         SmartPlayButton(
           files: files,
           state: NextUpState.continueWatching,
-          cueLine: 'S02E05 · 1080p · 35 min left',
+          episode: _partlyWatched,
           onFileSelected: (_) {},
         ),
         600,
@@ -80,6 +98,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Continue Watching'), findsOneWidget);
+      // The resolution comes from the selected MediaFile, not from the
+      // caller: the pill form prints no quality label of its own, so if the
+      // widget stopped feeding its selection into the cue line the quality
+      // would vanish from the hero entirely.
       expect(find.text('S02E05 · 1080p · 35 min left'), findsOneWidget);
     });
 
@@ -90,7 +112,7 @@ void main() {
         SmartPlayButton(
           files: files,
           state: NextUpState.continueWatching,
-          cueLine: 'S02E05 · 1080p · 35 min left',
+          episode: _partlyWatched,
           onFileSelected: (_) {},
         ),
         200,
@@ -99,12 +121,14 @@ void main() {
 
       // The full pill label is gone. Without the "min left" suffix (which
       // only nextUpCueLine's continueWatching branch adds), a bare cue like
-      // "S01E01 · 1080p" cannot distinguish resume/next/start on its own —
-      // the short state word restores that distinction once the pill label
-      // is dropped.
+      // "S01E01" cannot distinguish resume/next/start on its own, so the
+      // short state word restores that distinction once the pill label is
+      // dropped. The resolution moves out of the cue line here because the
+      // icon form prints it beside the play circle.
       expect(find.text('Continue Watching'), findsNothing);
+      expect(find.text('1080p'), findsOneWidget);
       expect(
-        find.text('Continue · S02E05 · 1080p · 35 min left'),
+        find.text('Continue · S02E05 · 35 min left'),
         findsOneWidget,
       );
     });
@@ -119,6 +143,22 @@ void main() {
 
       expect(find.text('Continue Watching'), findsNothing);
       expect(find.text('1080p'), findsOneWidget);
+    });
+
+    testWidgets('a state without an episode renders the pill with no cue line',
+        (tester) async {
+      await tester.pumpWidget(_host(
+        SmartPlayButton(
+          files: files,
+          state: NextUpState.start,
+          onFileSelected: (_) {},
+        ),
+        600,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start Watching'), findsOneWidget);
+      expect(find.textContaining('S0'), findsNothing);
     });
 
     testWidgets(
@@ -148,7 +188,7 @@ void main() {
                       child: SmartPlayButton(
                         files: files,
                         state: NextUpState.continueWatching,
-                        cueLine: 'S02E05 · 1080p · 35 min left',
+                        episode: _partlyWatched,
                         onFileSelected: (_) {},
                       ),
                     ),
@@ -167,7 +207,7 @@ void main() {
       // compact cue line (with its state-word prefix) is what remains.
       expect(find.text('Continue Watching'), findsNothing);
       expect(
-        find.text('Continue · S02E05 · 1080p · 35 min left'),
+        find.text('Continue · S02E05 · 35 min left'),
         findsOneWidget,
       );
     });
@@ -178,7 +218,7 @@ void main() {
         SmartPlayButton(
           files: files,
           state: NextUpState.start,
-          cueLine: 'S01E01 · 1080p',
+          episode: _unwatched,
           onFileSelected: (f) => picked = f,
         ),
         600,
