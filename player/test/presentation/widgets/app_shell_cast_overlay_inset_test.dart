@@ -4,15 +4,15 @@
 // `MediaQuery.padding.top`. A call site that *also* folds that same ambient
 // padding into `topInset` pushes the button down twice on macOS windowed.
 //
-// Mirrors the shell's exact Stack children (see app_shell_cast_overlay_test
-// .dart for the sibling test covering the routing predicate) rather than
-// mounting the full `AppShell`, which needs a Riverpod graph, router
-// location and GraphQL client — no existing shell test does that.
-//
-// Keep the `topInset` expressions below in sync with
-// `lib/presentation/widgets/app_shell.dart`'s two `CastOverlayButton` call
-// sites: this test does not exercise that source file directly, so a future
-// edit to either site needs its mirror updated here too.
+// This exercises `AppShell.castOverlay` directly — the same
+// `@visibleForTesting` seam both the desktop and mobile branches build their
+// overlay from (see app_shell.dart) — rather than mounting the full
+// `AppShell`, which needs a Riverpod graph, router location and GraphQL
+// client (see app_shell_cast_overlay_test.dart for the sibling test covering
+// the routing predicate, `hasOwnCastButton`, the same way). Because the test
+// calls the real seam instead of re-declaring its `topInset` arithmetic, a
+// regression at either call site is caught here without any mirror to keep
+// in sync by hand.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
-import 'package:player/presentation/widgets/cast_actions.dart';
+import 'package:player/presentation/widgets/app_shell.dart';
 
 void main() {
   group('the shell cast overlay under the macOS title bar strip', () {
@@ -49,9 +49,7 @@ void main() {
         'existed (12 below the safe area), not 12 below double the strip',
         (tester) async {
       await tester.pumpWidget(
-        shellStackChild(
-          const CastOverlayButton(topInset: 12),
-        ),
+        shellStackChild(AppShell.castOverlay(isDesktop: true)),
       );
       await tester.pump();
 
@@ -66,9 +64,7 @@ void main() {
         '(kToolbarHeight + 8 below the safe area), not double the strip',
         (tester) async {
       await tester.pumpWidget(
-        shellStackChild(
-          const CastOverlayButton(topInset: kToolbarHeight + 8),
-        ),
+        shellStackChild(AppShell.castOverlay(isDesktop: false)),
       );
       await tester.pump();
 

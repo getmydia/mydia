@@ -187,6 +187,24 @@ class AppShell extends ConsumerStatefulWidget {
       location.startsWith('/settings') ||
       location.startsWith('/search');
 
+  /// Builds the shell's cast overlay for the desktop or mobile branch.
+  ///
+  /// [CastOverlayButton] wraps its child in its own `SafeArea`, which already
+  /// consumes whatever the ambient `MediaQuery.padding.top` carries (the
+  /// macOS title bar strip, on macOS windowed). `topInset` must therefore be
+  /// the plain pre-strip offset — 12 below the desktop content, or below the
+  /// mobile app bar — never `MediaQuery.paddingOf(context).top` folded in on
+  /// top of that, or the button sits under the strip twice.
+  ///
+  /// Public (rather than inlined at each call site) and annotated
+  /// `@visibleForTesting` so a test can exercise the exact value this shell
+  /// computes for each branch directly, instead of re-declaring the numbers
+  /// in a mirror that can silently drift from the real call sites.
+  @visibleForTesting
+  static Widget castOverlay({required bool isDesktop}) => CastOverlayButton(
+        topInset: isDesktop ? 12 : kToolbarHeight + 8,
+      );
+
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
 }
@@ -449,7 +467,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
               ],
             ),
-            if (showCastOverlay) const CastOverlayButton(topInset: 12),
+            if (showCastOverlay) AppShell.castOverlay(isDesktop: true),
           ],
         ),
       );
@@ -488,8 +506,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               ],
             ),
           ),
-          if (showCastOverlay)
-            const CastOverlayButton(topInset: kToolbarHeight + 8),
+          if (showCastOverlay) AppShell.castOverlay(isDesktop: false),
         ],
       ),
       bottomNavigationBar: _ModernBottomNav(
