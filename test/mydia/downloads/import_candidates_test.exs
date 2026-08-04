@@ -96,18 +96,31 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
     end
 
     test "skips a listed entry that cannot be stat'd instead of crashing", %{tmp_dir: tmp_dir} do
-      # The real bug is a TOCTOU race: `Path.wildcard/2` returns a path, and
-      # by the time the code gets around to stat-ing it, the file has been
-      # deleted or renamed out from under it — plausible in a self-hosted
+      # The bug this fixes is a TOCTOU race: the old implementation checked
+      # `File.regular?/1` in one pass, then called `File.stat!/1` on the
+      # survivors in a second pass — two separate filesystem checks on the
+      # same path, with a window between them where the file could be
+      # deleted or renamed out from under it (plausible in a self-hosted
       # deployment where the operator or the download client can be
-      # touching the same folder while the modal is open. That exact
-      # interleaving needs real concurrency to reproduce deterministically,
-      # which would make this test flaky, so a broken symlink is used
-      # instead: `Path.wildcard/2` lists it (a directory listing does not
-      # resolve symlink targets), but `File.stat/1` (which follows
-      # symlinks) cannot resolve it, exactly the "entry the listing found
-      # but stat can't confirm" shape the fix has to handle. Before the fix
-      # this crashed the modal open via `File.stat!/1`.
+      # touching the same folder while the modal is open). `File.stat!/1`
+      # raises if that happens, crashing the modal open. The fix collapses
+      # both checks into a single `File.stat/1` call, which structurally
+      # eliminates the window rather than narrowing it.
+      #
+      # That two-syscall race needs real concurrency to reproduce
+      # deterministically (something deleting the file at the exact moment
+      # `list_recursive/1` is between its two filesystem calls), so it is
+      # not what this test proves and no attempt is made to simulate it
+      # here. Instead, this pins the narrower property the fix also
+      # guarantees on the same code path: an entry the directory listing
+      # surfaces that `File.stat/1` cannot confirm is skipped rather than
+      # raising. A broken symlink stands in for that: `Path.wildcard/2`
+      # lists it (a directory listing does not resolve symlink targets),
+      # but `File.stat/1` (which follows symlinks) cannot resolve it. Note
+      # this particular case was already handled by the old code too —
+      # `File.regular?/1` also follows symlinks, so it already returned
+      # `false` and filtered the broken symlink out before `File.stat!/1`
+      # ever ran on it. This is not a regression test for the TOCTOU race.
       dir = Path.join(tmp_dir, "live")
       File.mkdir_p!(dir)
       File.write!(Path.join(dir, "keep.mkv"), "x")
