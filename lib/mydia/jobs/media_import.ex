@@ -382,21 +382,15 @@ defmodule Mydia.Jobs.MediaImport do
     end
   end
 
-  # True when the reported save_path is the client's configured download
-  # directory rather than a per-download subfolder. Compared after path
-  # mapping so a remote root and its local mount both match.
-  defp shared_download_root?(save_path, %{download_directory: root})
-       when is_binary(save_path) and save_path != "" and is_binary(root) and root != "" do
-    same_dir?(save_path, root) or
-      same_dir?(mapped_path_quiet(save_path), mapped_path_quiet(root))
+  # Delegates to `ImportCandidates.shared_download_root?/2`, the single
+  # source of truth for "is the reported save_path the client's configured
+  # download directory rather than a per-download subfolder." The manual
+  # file matching modal's read path (`ImportCandidates.load/1`) relies on
+  # the exact same check before offering a live re-listing, so the two can
+  # never silently disagree about what is safe to enumerate.
+  defp shared_download_root?(save_path, client_info) do
+    ImportCandidates.shared_download_root?(save_path, Map.get(client_info, :download_directory))
   end
-
-  defp shared_download_root?(_save_path, _client_info), do: false
-
-  defp same_dir?(a, b) when is_binary(a) and a != "" and is_binary(b) and b != "",
-    do: Path.expand(a) == Path.expand(b)
-
-  defp same_dir?(_a, _b), do: false
 
   defp process_import(download, files, args) do
     library_path = determine_library_path(download)
@@ -759,13 +753,6 @@ defmodule Mydia.Jobs.MediaImport do
         mapped
     end
   end
-
-  # Same rewrite without the log line, for comparisons that are not about to
-  # touch the filesystem.
-  defp mapped_path_quiet(path) when is_binary(path),
-    do: Mydia.Library.PathMapping.rewrite(path)
-
-  defp mapped_path_quiet(path), do: path
 
   defp list_files_in_path(path) do
     path_stat = File.stat(path)

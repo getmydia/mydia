@@ -72,8 +72,15 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
       File.mkdir_p!(dir)
       File.write!(Path.join(dir, "extra.mkv"), "x")
 
+      # A resolvable client whose download_directory is provably NOT `dir`
+      # is required here: `shared_download_root?/2` now fails closed, so
+      # without a client that positively rules out `dir` as the shared
+      # root, this would fall back to the snapshot instead of listing live.
+      client = client_with_unrelated_root(tmp_dir)
+
       download =
         download_fixture(%{
+          download_client: client.name,
           metadata: %{
             "save_path" => dir,
             "import_candidates" => [
@@ -88,8 +95,11 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
     end
 
     test "falls back to the snapshot when the folder is gone", %{tmp_dir: tmp_dir} do
+      client = client_with_unrelated_root(tmp_dir)
+
       download =
         download_fixture(%{
+          download_client: client.name,
           metadata: %{
             "save_path" => Path.join(tmp_dir, "gone"),
             "import_candidates" => [
@@ -197,5 +207,105 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
       assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
       assert candidate["name"] == "Silo.S01E01.mkv"
     end
+
+    test "fails closed when the download's client cannot be resolved", %{tmp_dir: tmp_dir} do
+      # No DownloadClientConfig exists under this name (a renamed or deleted
+      # client, entirely plausible in a self-hosted deployment reconfigured
+      # by env vars, and these failed downloads can sit for weeks before
+      # anyone opens the modal). We cannot prove save_path differs from
+      # that client's shared root, so this must not enumerate it even
+      # though save_path genuinely IS a shared directory with an unrelated
+      # file in it.
+      root = Path.join(tmp_dir, "shared")
+      File.mkdir_p!(root)
+      File.write!(Path.join(root, "Some.Other.Show.S01E01.mkv"), "unrelated")
+      File.write!(Path.join(root, "Silo.S01E01.mkv"), "silo")
+
+      download =
+        download_fixture(%{
+          download_client: "renamed-or-deleted-client-#{System.unique_integer([:positive])}",
+          metadata: %{
+            "save_path" => root,
+            "import_candidates" => [
+              %{
+                "path" => Path.join(root, "Silo.S01E01.mkv"),
+                "name" => "Silo.S01E01.mkv",
+                "size" => 4
+              }
+            ]
+          }
+        })
+
+      assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "Silo.S01E01.mkv"
+    end
+
+    test "does not probe on the live listing, even for a large non-video file",
+         %{tmp_dir: tmp_dir} do
+      dir = Path.join(tmp_dir, "live")
+      File.mkdir_p!(dir)
+      big = ImportCandidates.probe_size_floor() + 1
+      File.write!(Path.join(dir, "payload.exe"), :binary.copy(<<0>>, big))
+
+      client = client_with_unrelated_root(tmp_dir)
+
+      download =
+        download_fixture(%{
+          download_client: client.name,
+          metadata: %{
+            "save_path" => dir,
+            "import_candidates" => [
+              %{"path" => Path.join(dir, "old.exe"), "name" => "old.exe", "size" => 1}
+            ]
+          }
+        })
+
+      assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "payload.exe"
+      assert candidate["skip_reason"] == "not_video_extension"
+      # If the live path probed (as `build/3` normally does), this would be
+      # a freshly computed verdict. There is no snapshot probe for this
+      # path to restore, so its absence proves probing did not run.
+      refute Map.has_key?(candidate, "probe")
+    end
+
+    test "restores a snapshot's stashed probe verdict on the live listing instead of recomputing",
+         %{tmp_dir: tmp_dir} do
+      dir = Path.join(tmp_dir, "live")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "payload.exe"), "x")
+
+      stashed_probe = %{"status" => "video", "note" => "stashed"}
+      client = client_with_unrelated_root(tmp_dir)
+
+      download =
+        download_fixture(%{
+          download_client: client.name,
+          metadata: %{
+            "save_path" => dir,
+            "import_candidates" => [
+              %{
+                "path" => Path.join(dir, "payload.exe"),
+                "name" => "payload.exe",
+                "size" => 1,
+                "probe" => stashed_probe
+              }
+            ]
+          }
+        })
+
+      assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
+      assert candidate["probe"] == stashed_probe
+    end
+  end
+
+  ## Helpers
+
+  # A resolvable download client config whose download_directory is
+  # deliberately NOT under the caller's test directory, so
+  # `shared_download_root?/2` can positively rule it out and a live listing
+  # proceeds instead of failing closed.
+  defp client_with_unrelated_root(tmp_dir) do
+    download_client_config_fixture(%{download_directory: Path.join(tmp_dir, "elsewhere")})
   end
 end

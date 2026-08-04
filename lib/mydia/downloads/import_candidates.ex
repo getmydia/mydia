@@ -41,8 +41,17 @@ defmodule Mydia.Downloads.ImportCandidates do
   @spec build([map()], atom(), keyword()) :: [map()]
   def build(files, library_type, parser_opts) when is_list(files) do
     files
-    |> Enum.map(&candidate(&1, library_type, parser_opts))
+    |> build_candidates(library_type, parser_opts)
     |> add_probes()
+  end
+
+  # Candidate construction without probing, factored out so `merge/3` (the
+  # live-listing path of `load/1`) can reuse it without paying for
+  # `add_probes/1`'s ffprobe subprocesses on every modal open. `build/3`
+  # itself is unchanged: it always probes, which is what the failure-time
+  # snapshot (Task 4) wants.
+  defp build_candidates(files, library_type, parser_opts) do
+    Enum.map(files, &candidate(&1, library_type, parser_opts))
   end
 
   defp candidate(file, library_type, parser_opts) do
@@ -135,12 +144,21 @@ defmodule Mydia.Downloads.ImportCandidates do
   folder would otherwise have every *other* download sharing that folder
   enumerated and offered up for import here.
 
+  This fails closed: a live listing only happens when the download's
+  client resolves to a *known* `download_directory` that is provably
+  different from `save_path`. A client that no longer resolves (renamed or
+  deleted — plausible in a self-hosted deployment reconfigured by env
+  vars, and a failed download can sit for weeks before anyone opens this
+  modal) means there is no way to prove `save_path` is not that client's
+  shared root, so it is treated the same as if it were.
+
   Falls back to the snapshot captured at failure time whenever a live
-  listing isn't possible or safe: no `save_path`, a `save_path` that is the
-  shared root, a folder that no longer exists, or one that comes back
-  empty. In the fallback case each recorded path is individually re-stat'd
-  rather than the directory being walked, so files that vanished are still
-  caught without ever enumerating unrelated downloads.
+  listing isn't possible or safe: no `save_path`, an unresolvable client,
+  a `save_path` that is the shared root, a folder that no longer exists,
+  or one that comes back empty. In the fallback case each recorded path is
+  individually re-stat'd rather than the directory being walked, so files
+  that vanished are still caught without ever enumerating unrelated
+  downloads.
 
   Every returned candidate carries `"missing"`, true when the path is no
   longer on disk.
@@ -179,39 +197,71 @@ defmodule Mydia.Downloads.ImportCandidates do
   end
 
   # Only a `save_path` explicitly present on the download's own metadata is
-  # eligible for a live re-listing, and only when it isn't the download
-  # client's shared root. There is deliberately no fallback to
-  # `Path.dirname/1` of a snapshot path here: in production, downloads
-  # sometimes sit directly inside the client's shared download root, and
-  # `Path.dirname/1` of a file in that root IS the root, so recursively
-  # listing it would surface every unrelated torrent's files as if they
-  # belonged to this download.
+  # eligible for a live re-listing, and only when it can be *proven* not to
+  # be the download client's shared root. There is deliberately no
+  # fallback to `Path.dirname/1` of a snapshot path here: in production,
+  # downloads sometimes sit directly inside the client's shared download
+  # root, and `Path.dirname/1` of a file in that root IS the root, so
+  # recursively listing it would surface every unrelated torrent's files as
+  # if they belonged to this download.
   defp listable_save_path(metadata, download) do
     case Map.get(metadata, "save_path") do
       path when is_binary(path) and path != "" ->
-        if shared_download_root?(path, download), do: nil, else: path
+        safe_to_list?(path, download)
 
       _other ->
         nil
     end
   end
 
-  # Mirrors `Mydia.Jobs.MediaImport`'s guard of the same name, which exists
-  # for the same reason: refusing to recursively walk a save_path that is
-  # actually the client's shared download root, not a folder specific to
-  # this download. Duplicated here (rather than shared) because that
-  # function is private to the import job and takes the job's full
-  # `client_info` map; this only needs the configured `download_directory`.
-  defp shared_download_root?(save_path, download) do
+  # Fails closed. This only returns `save_path` (making it eligible for a
+  # live listing) when the download's client resolves to a known,
+  # non-blank `download_directory` that `shared_download_root?/2` can
+  # positively rule out as the same directory. An unresolvable client, or
+  # one with no `download_directory` configured, means there is nothing to
+  # compare `save_path` against — "unknown" must mean "don't enumerate",
+  # not "assume it's safe".
+  defp safe_to_list?(save_path, download) do
     case client_download_directory(download) do
       root when is_binary(root) and root != "" ->
-        same_dir?(save_path, root) or
-          same_dir?(PathMapping.rewrite(save_path), PathMapping.rewrite(root))
+        if shared_download_root?(save_path, root), do: nil, else: save_path
 
-      _no_root ->
-        false
+      _unresolved ->
+        nil
     end
   end
+
+  @doc """
+  True when `save_path` and `download_root` name the same directory on
+  disk, tolerant of any configured path-mapping rewrite applying to either
+  side.
+
+  This is the single source of truth for "is this path actually a download
+  client's shared download root, not a folder specific to one download."
+  `Mydia.Jobs.MediaImport` delegates to this before its own save_path
+  fallback, and `load/1` delegates to it before offering a live
+  re-listing, so the two can never silently disagree about what is safe to
+  recursively enumerate.
+
+  Returns `false` (not proven shared) whenever either argument is missing
+  or blank — callers that need "unknown" to mean "assume shared" must
+  apply that policy themselves, since what counts as an acceptable
+  assumption differs: the importer already refuses to run at all when it
+  cannot resolve a client, so it only reaches this check with a resolved
+  one; `load/1` has no such upstream gate and fails closed itself before
+  calling this.
+  """
+  @spec shared_download_root?(String.t() | nil, String.t() | nil) :: boolean()
+  def shared_download_root?(save_path, download_root)
+
+  def shared_download_root?(save_path, download_root)
+      when is_binary(save_path) and save_path != "" and
+             is_binary(download_root) and download_root != "" do
+    same_dir?(save_path, download_root) or
+      same_dir?(PathMapping.rewrite(save_path), PathMapping.rewrite(download_root))
+  end
+
+  def shared_download_root?(_save_path, _download_root), do: false
 
   defp client_download_directory(%{download_client: name})
        when is_binary(name) and name != "" do
@@ -241,8 +291,13 @@ defmodule Mydia.Downloads.ImportCandidates do
   end
 
   # Re-derive skip reasons from the live listing, but keep any probe verdict
-  # already computed for the same path so the modal does not re-probe on
-  # open.
+  # already computed for the same path so the modal does not spawn a fresh
+  # ffprobe subprocess (up to `probe_cap/0` of them, each with its own
+  # timeout) on every open. Calls `build_candidates/3` rather than
+  # `build/3` deliberately: the latter always probes, which is correct for
+  # the failure-time snapshot but far too slow for a synchronous
+  # modal-open re-listing whose accurate verdicts are already sitting in
+  # the snapshot to restore.
   defp merge(files, snapshot, download) do
     probes =
       snapshot
@@ -250,7 +305,7 @@ defmodule Mydia.Downloads.ImportCandidates do
       |> Map.new(&{&1["path"], &1["probe"]})
 
     files
-    |> build(library_type_for(download), [])
+    |> build_candidates(library_type_for(download), [])
     |> Enum.map(fn candidate ->
       candidate
       |> maybe_restore_probe(probes)
