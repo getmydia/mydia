@@ -1,5 +1,4 @@
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -148,11 +147,6 @@ class _PulsingDotState extends State<_PulsingDot>
   }
 }
 
-/// Extra top padding on macOS to clear the traffic light window controls
-/// when using fullSizeContentView.
-final double _macOSTitleBarPadding =
-    !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS ? 28.0 : 0.0;
-
 /// Modern app shell with adaptive navigation.
 /// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
 class AppShell extends ConsumerStatefulWidget {
@@ -192,6 +186,44 @@ class AppShell extends ConsumerStatefulWidget {
       location.startsWith('/downloads') ||
       location.startsWith('/settings') ||
       location.startsWith('/search');
+
+  /// Builds the shell's cast overlay for the desktop or mobile branch.
+  ///
+  /// [CastOverlayButton] wraps its child in its own `SafeArea`, which already
+  /// consumes whatever the ambient `MediaQuery.padding.top` carries (the
+  /// macOS title bar strip, on macOS windowed). `topInset` must therefore be
+  /// the plain pre-strip offset — 12 below the desktop content, or below the
+  /// mobile app bar — never `MediaQuery.paddingOf(context).top` folded in on
+  /// top of that, or the button sits under the strip twice.
+  ///
+  /// Public (rather than inlined at each call site) and annotated
+  /// `@visibleForTesting` so a test can exercise the exact value this shell
+  /// computes for each branch directly, instead of re-declaring the numbers
+  /// in a mirror that can silently drift from the real call sites.
+  @visibleForTesting
+  static Widget castOverlay({required bool isDesktop}) => CastOverlayButton(
+        topInset: isDesktop ? 12 : kToolbarHeight + 8,
+      );
+
+  /// The gutter both the desktop and mobile branches wrap their main content
+  /// column in: a `SafeArea` that consumes the ambient `MediaQuery.padding`
+  /// on top only, leaving the sidebar/drawer chrome and bottom nav to handle
+  /// their own edges.
+  ///
+  /// Public (rather than inlined at each call site) and annotated
+  /// `@visibleForTesting`, mirroring [castOverlay], so a test can exercise
+  /// the exact widget both branches build directly, instead of hand-rolling
+  /// a `SafeArea` that can silently drift out of sync with the real call
+  /// sites — the shell's actual gutter could lose its `SafeArea` entirely
+  /// and a mirror-based test would stay green.
+  @visibleForTesting
+  static Widget contentGutter({required Widget child}) => SafeArea(
+        top: true,
+        bottom: false,
+        left: false,
+        right: false,
+        child: child,
+      );
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -440,18 +472,18 @@ class _AppShellState extends ConsumerState<AppShell> {
                   isOffline: isOffline,
                 ),
                 Expanded(
-                  child: Column(
-                    children: [
-                      SizedBox(height: _macOSTitleBarPadding),
-                      if (isOffline) const OfflineBanner(),
-                      Expanded(child: widget.child),
-                    ],
+                  child: AppShell.contentGutter(
+                    child: Column(
+                      children: [
+                        if (isOffline) const OfflineBanner(),
+                        Expanded(child: widget.child),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-            if (showCastOverlay)
-              CastOverlayButton(topInset: _macOSTitleBarPadding + 12),
+            if (showCastOverlay) AppShell.castOverlay(isDesktop: true),
           ],
         ),
       );
@@ -478,14 +510,15 @@ class _AppShellState extends ConsumerState<AppShell> {
       body: Stack(
         children: [
           Positioned.fill(child: backdrop),
-          Column(
-            children: [
-              if (isOffline) const OfflineBanner(),
-              Expanded(child: widget.child),
-            ],
+          AppShell.contentGutter(
+            child: Column(
+              children: [
+                if (isOffline) const OfflineBanner(),
+                Expanded(child: widget.child),
+              ],
+            ),
           ),
-          if (showCastOverlay)
-            const CastOverlayButton(topInset: kToolbarHeight + 8),
+          if (showCastOverlay) AppShell.castOverlay(isDesktop: false),
         ],
       ),
       bottomNavigationBar: _ModernBottomNav(
@@ -586,7 +619,6 @@ class SidebarContent extends StatelessWidget {
   final VoidCallback onToggleHome;
   final VoidCallback onToggleLibrary;
   final bool isOffline;
-  final double topPadding;
   final Widget? backToMydiaWidget;
 
   const SidebarContent({
@@ -598,7 +630,6 @@ class SidebarContent extends StatelessWidget {
     required this.onToggleHome,
     required this.onToggleLibrary,
     required this.isOffline,
-    this.topPadding = 0,
     this.backToMydiaWidget,
   });
 
@@ -608,7 +639,6 @@ class SidebarContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: topPadding),
         // Back to Mydia link (shown in embed mode)
         if (hasBackWidget)
           Padding(
@@ -796,7 +826,7 @@ class _DesktopSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return GlassSidebarPanel(
       child: SafeArea(
-        top: false,
+        top: true,
         child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
@@ -805,7 +835,6 @@ class _DesktopSidebar extends StatelessWidget {
           onToggleHome: onToggleHome,
           onToggleLibrary: onToggleLibrary,
           isOffline: isOffline,
-          topPadding: _macOSTitleBarPadding,
           backToMydiaWidget:
               showBackToMydia ? const _BackToMydiaButton() : null,
         ),

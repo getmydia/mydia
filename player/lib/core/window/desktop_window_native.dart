@@ -33,6 +33,7 @@ import '../player/platform_features.dart';
 import 'player_window_sizer.dart';
 import 'player_window_sizer_native.dart';
 import 'window_controller_native.dart';
+import 'window_fullscreen_controller.dart';
 import 'window_geometry_controller.dart';
 import 'window_geometry_math.dart';
 import 'window_geometry_store.dart';
@@ -69,6 +70,19 @@ Future<void> initDesktopWindow() async {
     _geometry = controller;
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to track window geometry: $e');
+  }
+
+  // Separate try from the geometry listener above: a failure to track
+  // fullscreen costs a 28pt inset in fullscreen, which must not also cost
+  // geometry persistence, and vice versa.
+  try {
+    final fullscreen = WindowFullscreenController(
+      window: const WindowManagerController(),
+    );
+    await fullscreen.seed();
+    windowManager.addListener(fullscreen);
+  } catch (e) {
+    debugPrint('[DesktopWindow] Failed to track fullscreen state: $e');
   }
 }
 

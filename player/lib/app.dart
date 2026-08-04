@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/auth/auth_status.dart';
+import 'core/layout/window_chrome_inset.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/providers.dart';
 import 'core/graphql/graphql_provider.dart';
@@ -166,8 +167,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       routerConfig: router,
       // Float the cast mini controller above every route. `CastBarLayer`
       // documents what mounting it out here costs the bar.
-      builder: (context, child) =>
-          CastBarLayer(child: child ?? const SizedBox.shrink()),
+      //
+      // `WindowChromeInset` wraps it rather than the reverse: the cast bar is
+      // itself a route-level overlay, so it has to sit inside the reserved
+      // window chrome like everything else.
+      builder: (context, child) => WindowChromeInset(
+        child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }
