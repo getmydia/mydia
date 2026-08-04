@@ -38,6 +38,8 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
   }
 
   Future<void> _detectBestFile() async {
+    if (widget.files.isEmpty) return;
+
     final best = await pickBestFile(
       widget.files,
       MediaQuery.sizeOf(context).width,
