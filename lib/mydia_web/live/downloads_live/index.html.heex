@@ -256,7 +256,7 @@
                   )}
                 </span>
                 <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
-                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_size(
+                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{Components.format_size(
                     download.size
                   )}
                 </span>
@@ -286,7 +286,7 @@
                   )}
                 </span>
                 <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
-                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_size(
+                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{Components.format_size(
                     download.size
                   )}
                 </span>
@@ -554,7 +554,7 @@
                             {file["name"] || Path.basename(file["path"])}
                           </div>
                           <div class="text-xs text-base-content/50">
-                            {format_size(file["size"] || 0)}
+                            {Components.format_size(file["size"] || 0)}
                             <%= if file["parsed_season"] do %>
                               <span>
                                 • S{String.pad_leading("#{file["parsed_season"]}", 2, "0")}
@@ -774,6 +774,17 @@
                 <% end %>
                 <button
                   type="button"
+                  id={"match-files-#{download.id}"}
+                  class="btn btn-sm btn-outline"
+                  phx-click="open_match_files"
+                  phx-value-id={download.id}
+                  title="See what this download contains and match files by hand"
+                >
+                  <.icon name="hero-document-magnifying-glass" class="size-4" />
+                  <span class="hidden sm:inline">Match files…</span>
+                </button>
+                <button
+                  type="button"
                   class="btn btn-square btn-ghost btn-sm"
                   phx-click="dismiss_download"
                   phx-value-id={download.id}
@@ -979,5 +990,12 @@
         </button>
       </:actions>
     </.modal>
+
+    <%!-- Match files modal (manual file matching on import failure) --%>
+    <Components.match_files_modal
+      :if={@match_files_modal}
+      modal={@match_files_modal}
+      error={@match_files_error}
+    />
   </div>
 </Layouts.app>

@@ -2,12 +2,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
   alias Mydia.Downloads.ExternalTorrents
+  alias Mydia.Downloads.ImportCandidates
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Library
   alias Mydia.Media
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.DownloadsLive.Components
   import MydiaWeb.Formatters
 
   require Logger
@@ -94,6 +96,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:clearable_count, 0)
      # Issues tab state
      |> assign(:issues_counts, %{unmatched: 0, unresolved: 0, other: 0})
+     # Match files modal state (manual matching of a failed import's file listing)
+     |> assign(:match_files_modal, nil)
+     |> assign(:match_files_error, nil)
      # Derived view of client torrents Mydia does not manage. Read from the
      # ExternalTorrents cache, never from the database.
      |> assign(:scan, ExternalTorrents.get())
@@ -709,6 +714,84 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("match_modal_pick_episode", %{"episode_id" => episode_id}, socket) do
     %{selected: %{id: media_item_id}} = socket.assigns.match_modal
     submit_match(socket, media_item_id, episode_id)
+  end
+
+  # --- Match files modal (manual file matching on import failure) ---
+
+  def handle_event("open_match_files", %{"id" => id}, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      download = Downloads.get_download!(id, preload: [:media_item])
+
+      case ImportCandidates.load(download) do
+        {:ok, source, candidates} ->
+          episodes =
+            if download.media_item && download.media_item.type == "tv_show" do
+              Media.list_episodes(download.media_item.id)
+            else
+              []
+            end
+
+          {:noreply,
+           socket
+           |> assign(:match_files_error, nil)
+           |> assign(:match_files_modal, %{
+             download: download,
+             source: source,
+             candidates: candidates,
+             episodes: episodes
+           })}
+
+        {:error, :unavailable} ->
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             "Mydia could not read this download's folder and has no recorded listing for it."
+           )}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("close_match_files", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:match_files_modal, nil)
+     |> assign(:match_files_error, nil)}
+  end
+
+  def handle_event("match_files_import", params, socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      %{download: download} = socket.assigns.match_files_modal
+
+      mappings =
+        params
+        |> Map.get("target", %{})
+        |> Enum.reject(fn {_path, target} -> target in [nil, ""] end)
+        |> Enum.map(fn {path, target} ->
+          %{"path" => path, "episode_id" => if(target == "movie", do: nil, else: target)}
+        end)
+
+      if mappings == [] do
+        {:noreply, assign(socket, :match_files_error, "Select at least one file to import.")}
+      else
+        case Downloads.resolve_file_mappings(download, mappings) do
+          {:ok, _updated} ->
+            {:noreply,
+             socket
+             |> assign(:match_files_modal, nil)
+             |> assign(:match_files_error, nil)
+             |> put_flash(:info, "Import queued for #{length(mappings)} file(s)")
+             |> load_downloads()}
+
+          {:error, _reason} ->
+            {:noreply, assign(socket, :match_files_error, "Failed to queue the import.")}
+        end
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
   end
 
   def handle_event("resolve_files", %{"download_id" => download_id} = params, socket) do
@@ -1328,18 +1411,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       true ->
         "#{bytes_per_second} B/s"
-    end
-  end
-
-  defp format_size(nil), do: "—"
-
-  defp format_size(bytes) when is_integer(bytes) do
-    cond do
-      bytes >= 1_099_511_627_776 -> "#{Float.round(bytes / 1_099_511_627_776, 2)} TB"
-      bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
-      bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 2)} MB"
-      bytes >= 1024 -> "#{Float.round(bytes / 1024, 2)} KB"
-      true -> "#{bytes} B"
     end
   end
 
