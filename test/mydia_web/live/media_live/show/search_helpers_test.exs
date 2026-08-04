@@ -266,6 +266,68 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     end
   end
 
+  describe "sort_search_results_with_opts/3 does not apply source exclusion (R8)" do
+    test "an excluded release survives manual quality-sort routing, unlike the automatic path" do
+      profile = %QualityProfile{
+        name: "Excludes telesync",
+        quality_standards: %{excluded_sources: ["Telesync"]}
+      }
+
+      telesync_title = "The.Odyssey.2026.1080p.TELESYNC.HEVC.AAC2.0-SLH"
+
+      results = [
+        build_result(%{
+          title: telesync_title,
+          download_url: "magnet:?xt=urn:btih:manual-telesync",
+          seeders: 500,
+          quality: QualityParser.parse(telesync_title)
+        })
+      ]
+
+      opts = RankingOptions.build(%{quality_profile: profile, media_type: :movie})
+
+      # Sanity check: the same profile/opts DO drop this release on the
+      # automatic path (ReleaseRanker.rank_all/2 called directly, where
+      # apply_source_exclusion defaults to true). This proves the manual-path
+      # assertion below is a genuine divergence and not a fixture that was
+      # never going to be filtered in the first place.
+      assert ReleaseRanker.rank_all(results, opts) == []
+
+      # The manual search dialog routes quality-sorted results through
+      # sort_search_results_with_opts/3, which internally passes
+      # apply_source_exclusion: false (see quality_sort_via_ranker/2). Per
+      # spec R8, manual search/grab is the operator's explicit escape hatch
+      # and must not silently drop this release the way the automatic path
+      # does above.
+      sorted = SearchHelpers.sort_search_results_with_opts(results, :quality, opts)
+
+      assert length(sorted) == 1
+      assert List.first(sorted).download_url == "magnet:?xt=urn:btih:manual-telesync"
+    end
+
+    test "sort_search_results/5 (the back-compat manual entry point) also does not exclude" do
+      profile = %QualityProfile{
+        name: "Excludes telesync",
+        quality_standards: %{excluded_sources: ["Telesync"]}
+      }
+
+      telesync_title = "The.Odyssey.2026.1080p.TELESYNC.HEVC.AAC2.0-SLH"
+
+      results = [
+        build_result(%{
+          title: telesync_title,
+          download_url: "magnet:?xt=urn:btih:manual-telesync-5arity",
+          seeders: 500,
+          quality: QualityParser.parse(telesync_title)
+        })
+      ]
+
+      sorted = SearchHelpers.sort_search_results(results, :quality, profile, :movie, nil)
+
+      assert length(sorted) == 1
+    end
+  end
+
   describe "profile_score_breakdown/2 unified breakdown (U6)" do
     test "returns a ScoreBreakdown struct with a real 0-10 title_match" do
       profile = build_quality_profile()

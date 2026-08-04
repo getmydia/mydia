@@ -36,6 +36,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrade_until_score: 95,
         description: "Any quality, no size limits. Maximizes availability.",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           preferred_resolutions: ["360p", "480p", "576p", "720p", "1080p", "2160p"]
         }
       },
@@ -45,6 +46,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrade_until_score: 45,
         description: "Standard Definition up to 480p/DVD quality. Limited to 2GB.",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           max_resolution: "576p",
           preferred_resolutions: ["480p", "576p"],
           preferred_sources: ["DVD", "DVDRip", "SDTV"],
@@ -57,6 +59,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrades_allowed: false,
         description: "720p HD content. Balanced quality and file size (1-5GB).",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           min_resolution: "720p",
           max_resolution: "720p",
           preferred_resolutions: ["720p"],
@@ -73,6 +76,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrades_allowed: false,
         description: "1080p Full HD content. Standard high quality (2-15GB).",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           min_resolution: "1080p",
           max_resolution: "1080p",
           preferred_resolutions: ["1080p"],
@@ -89,6 +93,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrades_allowed: false,
         description: "Strict 1080p with high-quality sources only (4-20GB).",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           min_resolution: "1080p",
           max_resolution: "1080p",
           preferred_resolutions: ["1080p"],
@@ -105,6 +110,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrades_allowed: false,
         description: "Lossless 1080p REMUX releases. Premium quality (20-40GB).",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           min_resolution: "1080p",
           max_resolution: "1080p",
           preferred_resolutions: ["1080p"],
@@ -122,6 +128,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrades_allowed: false,
         description: "Ultra HD 2160p/4K content. Maximum quality (15-80GB).",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           min_resolution: "2160p",
           max_resolution: "2160p",
           preferred_resolutions: ["2160p"],
@@ -140,6 +147,7 @@ defmodule Mydia.Settings.DefaultQualityProfiles do
         upgrades_allowed: false,
         description: "Lossless 4K REMUX releases. Ultimate quality (40-100GB).",
         quality_standards: %{
+          excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
           min_resolution: "2160p",
           max_resolution: "2160p",
           preferred_resolutions: ["2160p"],

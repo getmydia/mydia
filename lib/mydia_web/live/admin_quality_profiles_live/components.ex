@@ -264,6 +264,15 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           >
             Quality Standards
           </button>
+          <button
+            type="button"
+            role="tab"
+            class={["tab", @quality_profile_active_tab == "exclude" && "tab-active"]}
+            phx-click="change_quality_profile_tab"
+            phx-value-tab="exclude"
+          >
+            Exclude
+          </button>
         </div>
 
         <.form
@@ -280,6 +289,11 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           <%!-- Quality Standards Tab - Always rendered, hidden when not active --%>
           <div class={if @quality_profile_active_tab != "standards", do: "hidden"}>
             <.quality_profile_standards_tab form={@quality_profile_form} />
+          </div>
+
+          <%!-- Exclude Tab - Always rendered, hidden when not active --%>
+          <div class={if @quality_profile_active_tab != "exclude", do: "hidden"}>
+            <.quality_profile_exclude_tab form={@quality_profile_form} />
           </div>
 
           <div class="modal-action">
@@ -541,7 +555,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           <span class="label-text-alt text-xs">In priority order</span>
         </label>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-          <%= for source <- ["BluRay", "REMUX", "WEB-DL", "WEBRip", "HDTV", "SDTV", "DVD", "DVDRip", "BDRip"] do %>
+          <%= for source <- ["BluRay", "BDRip", "REMUX", "WEB-DL", "WEBRip", "HDTV", "SDTV", "DVD", "DVDRip"] do %>
             <label class="label cursor-pointer justify-start gap-2">
               <input
                 type="checkbox"
@@ -945,6 +959,63 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           <button type="button" class="btn" phx-click="close_browse_presets_modal">
             Close
           </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the Exclude tab: release types this profile will never grab.
+
+  The hidden input before the checkbox group matters. Browsers omit unchecked
+  checkboxes entirely, so without it, clearing every box would submit no key at
+  all, `cast` would see no change, and the previous list would silently persist
+  with no way for the operator to turn the exclusion off.
+  """
+  attr :form, :any, required: true
+
+  def quality_profile_exclude_tab(assigns) do
+    assigns = assign(assigns, :cam_tier, Mydia.Quality.Sources.cam_tier())
+
+    ~H"""
+    <div class="space-y-4">
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text font-semibold">Never Grab These Release Types</span>
+          <span class="label-text-alt text-xs">Dropped before ranking, even if nothing else is available</span>
+        </label>
+
+        <p class="text-sm opacity-70 mb-3">
+          Camcorder and pre-release captures. When a film is still in cinemas these are
+          often the only releases that exist, so without this list Mydia will download one
+          rather than wait for a proper release.
+        </p>
+
+        <input
+          type="hidden"
+          name="quality_profile[quality_standards][excluded_sources][]"
+          value=""
+        />
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <%= for source <- @cam_tier do %>
+            <label class="label cursor-pointer justify-start gap-2">
+              <input
+                type="checkbox"
+                name="quality_profile[quality_standards][excluded_sources][]"
+                value={source}
+                checked={
+                  source in (get_in(
+                               Ecto.Changeset.get_field(@form.source, :quality_standards, %{}),
+                               [:excluded_sources]
+                             ) || [])
+                }
+                class="checkbox checkbox-sm checkbox-primary"
+              />
+              <span class="label-text text-sm">{source}</span>
+            </label>
+          <% end %>
         </div>
       </div>
     </div>

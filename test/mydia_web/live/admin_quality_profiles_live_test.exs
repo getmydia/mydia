@@ -174,4 +174,92 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
              )
     end
   end
+
+  describe "Exclude tab" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+
+      # The tabs only exist inside the profile modal.
+      view |> element("button[phx-click='new_quality_profile']") |> render_click()
+
+      %{conn: conn, view: view}
+    end
+
+    test "renders a checkbox for every cam-tier source", %{view: view} do
+      view |> element("button[phx-value-tab='exclude']") |> render_click()
+
+      for source <- Mydia.Quality.Sources.cam_tier() do
+        assert has_element?(
+                 view,
+                 "input[name='quality_profile[quality_standards][excluded_sources][]'][value='#{source}']"
+               )
+      end
+    end
+
+    test "carries a hidden empty input so unchecking every box clears the list", %{view: view} do
+      assert has_element?(
+               view,
+               "input[type='hidden'][name='quality_profile[quality_standards][excluded_sources][]']"
+             )
+    end
+  end
+
+  describe "Exclude tab - clearing a saved exclusion list" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      {:ok, profile} =
+        Settings.create_quality_profile(%{
+          name: "Excludes-#{System.unique_integer([:positive])}",
+          quality_standards: %{
+            preferred_resolutions: ["1080p"],
+            excluded_sources: ["CAM", "Telesync"]
+          }
+        })
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+
+      %{conn: conn, view: view, profile: profile}
+    end
+
+    test "unchecking every box clears a previously saved exclusion list", %{
+      view: view,
+      profile: profile
+    } do
+      view
+      |> element(~s{button[phx-click="edit_quality_profile"][phx-value-id="#{profile.id}"]})
+      |> render_click()
+
+      view |> element("button[phx-value-tab='exclude']") |> render_click()
+
+      view
+      |> form("#quality-profile-form",
+        quality_profile: %{
+          "name" => profile.name,
+          "quality_standards" => %{
+            "preferred_resolutions" => ["1080p"],
+            "excluded_sources" => [""]
+          }
+        }
+      )
+      |> render_submit()
+
+      updated = Settings.get_quality_profile!(profile.id)
+      assert updated.quality_standards[:excluded_sources] == []
+    end
+  end
 end

@@ -132,6 +132,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "TRaSH Guides: High-quality HD encodes for Blu-ray and streaming sources (6-15 GB)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "720p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -163,6 +164,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 95,
           description: "TRaSH Guides: Ultra HD 4K encodes with HDR support (20-60 GB)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "2160p",
             max_resolution: "2160p",
             preferred_resolutions: ["2160p"],
@@ -195,6 +197,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 85,
           description: "TRaSH Guides: 1080p with lossless audio (20-40 GB)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "1080p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -226,6 +229,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 95,
           description: "TRaSH Guides: 4K with lossless audio and HDR (40-100 GB)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "2160p",
             max_resolution: "2160p",
             preferred_resolutions: ["2160p"],
@@ -258,6 +262,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 85,
           description: "TRaSH Guides: Web releases optimized for TV shows (1-3 GB per episode)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "720p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -290,6 +295,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "TRaSH Guides: 4K web releases with HDR for TV shows (5-15 GB per episode)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "2160p",
             max_resolution: "2160p",
             preferred_resolutions: ["2160p"],
@@ -331,6 +337,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Transparent x264 720p encodes using GPPI scoring (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "720p",
             preferred_resolutions: ["720p"],
@@ -364,6 +371,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Transparent x264 1080p encodes using GPPI scoring (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -397,6 +405,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Transparent x265 HDR 1080p encodes using GPPI scoring (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -431,6 +440,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Consistent 1080p WEB-DLs with streaming source prioritization (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -465,6 +475,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Efficient 1080p x265 WEB-DLs for smaller file sizes (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -498,6 +509,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Compact 1080p x265 encodes for maximum storage efficiency (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -532,6 +544,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Lossless 1080p Remux with premium audio (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -567,6 +580,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Transparent x265 4K encodes using EEI scoring (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "2160p",
             preferred_resolutions: ["2160p", "1080p"],
@@ -601,6 +615,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Consistent 2160p WEB-DLs with streaming source prioritization (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "2160p",
             preferred_resolutions: ["2160p", "1080p"],
@@ -637,6 +652,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Efficient 2160p HEVC WEB-DLs for smaller 4K file sizes (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "2160p",
             preferred_resolutions: ["2160p", "1080p"],
@@ -672,6 +688,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Profilarr: Lossless 4K UHD Remux with premium audio and HDR (original language only)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "480p",
             max_resolution: "2160p",
             preferred_resolutions: ["2160p", "1080p"],
@@ -712,6 +729,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           description:
             "Compact file sizes for limited storage (1-4 GB movies, 300-800 MB episodes)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             max_resolution: "1080p",
             preferred_resolutions: ["720p", "1080p"],
             preferred_sources: ["WEB-DL", "WEBRip"],
@@ -742,6 +760,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 85,
           description: "Balanced quality and size (4-10 GB movies, 800-2 GB episodes)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "720p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p"],
@@ -773,6 +792,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 95,
           description: "Maximum quality for archival (30-80 GB movies)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "1080p",
             preferred_resolutions: ["2160p", "1080p"],
             preferred_sources: ["REMUX", "BluRay"],
@@ -810,6 +830,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 85,
           description: "Optimized for streaming (2-8 GB movies)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "720p",
             max_resolution: "1080p",
             preferred_resolutions: ["1080p", "720p"],
@@ -841,6 +862,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrade_until_score: 95,
           description: "High quality for local playback (10-40 GB movies)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             min_resolution: "1080p",
             preferred_resolutions: ["1080p", "2160p"],
             preferred_sources: ["BluRay", "REMUX"],
@@ -868,6 +890,7 @@ defmodule Mydia.Settings.QualityProfilePresets do
           upgrades_allowed: false,
           description: "Mobile-friendly sizes and codecs (500 MB-2 GB movies)",
           quality_standards: %{
+            excluded_sources: ["CAM", "Telesync", "Telecine", "Screener", "Workprint"],
             max_resolution: "720p",
             preferred_resolutions: ["720p", "480p"],
             preferred_sources: ["WEB-DL", "WEBRip"],

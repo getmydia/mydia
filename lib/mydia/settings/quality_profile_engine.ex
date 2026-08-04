@@ -40,6 +40,7 @@ defmodule Mydia.Settings.QualityProfileEngine do
 
   require Logger
   import Ecto.Query
+  alias Mydia.Quality.Sources
   alias Mydia.Repo
   alias Mydia.Settings.QualityProfile
   alias Mydia.Library.MediaFile
@@ -472,36 +473,19 @@ defmodule Mydia.Settings.QualityProfileEngine do
     end
   end
 
-  # Infers source type from filename patterns
-  defp infer_source_from_filename(filename) do
-    filename_lower = String.downcase(filename)
+  @doc """
+  Infers the source type from a media file's relative path.
 
-    cond do
-      String.contains?(filename_lower, "bluray") or String.contains?(filename_lower, "blu-ray") ->
-        "BluRay"
-
-      String.contains?(filename_lower, "remux") ->
-        "REMUX"
-
-      String.contains?(filename_lower, "web-dl") or String.contains?(filename_lower, "webdl") ->
-        "WEB-DL"
-
-      String.contains?(filename_lower, "webrip") ->
-        "WEBRip"
-
-      String.contains?(filename_lower, "hdtv") ->
-        "HDTV"
-
-      String.contains?(filename_lower, "dvdrip") ->
-        "DVDRip"
-
-      String.contains?(filename_lower, "bdrip") ->
-        "BDRip"
-
-      true ->
-        nil
-    end
+  Public so the source vocabulary can be tested directly against real on-disk
+  paths. Delegates to `Mydia.Quality.Sources` so the on-disk path and the
+  indexer search path agree on what a release is.
+  """
+  @spec infer_source_from_filename(String.t()) :: String.t() | nil
+  def infer_source_from_filename(filename) when is_binary(filename) do
+    Sources.detect(filename)
   end
+
+  def infer_source_from_filename(_), do: nil
 
   # Generates upgrade recommendations based on scoring results
   defp generate_recommendations(profile, media_attrs, scoring_result) do
