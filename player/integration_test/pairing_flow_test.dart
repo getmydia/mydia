@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:media_kit/media_kit.dart';
 
 import 'package:player/app.dart';
-import 'package:player/native/frb_generated.dart'
-    if (dart.library.js_interop) 'package:player/native/frb_stub.dart';
+import 'helpers/test_bootstrap.dart';
 
 /// E2E integration tests for the device pairing flow.
 ///
@@ -25,16 +22,9 @@ void main() {
   // any other Flutter binding initialization
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  // Set up the app once before all tests
-  setUpAll(() async {
-    await RustLib.init();
-
-    // Initialize media_kit for video playback
-    MediaKit.ensureInitialized();
-
-    // Initialize GraphQL Hive cache for offline support
-    await initHiveForFlutter();
-  });
+  // Set up the app once before all tests. Shared with the other integration
+  // test files so all_tests.dart can run them in one process.
+  setUpAll(ensureTestBootstrap);
 
   // Get the pre-generated claim code from dart-define
   const claimCode = String.fromEnvironment('E2E_CLAIM_CODE');
@@ -42,7 +32,8 @@ void main() {
   /// Wait for the login screen to appear (auth state to resolve).
   /// Uses pump() instead of pumpAndSettle() because the loading screen
   /// has an infinite CircularProgressIndicator animation.
-  Future<void> waitForLoginScreen(WidgetTester tester, {int maxSeconds = 30}) async {
+  Future<void> waitForLoginScreen(WidgetTester tester,
+      {int maxSeconds = 30}) async {
     debugPrint('[Test] Waiting for login screen to appear...');
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
@@ -59,7 +50,8 @@ void main() {
 
   /// Wait for the app to navigate away from the login screen after pairing.
   /// Uses a longer timeout (120s) to account for Flutter web startup time.
-  Future<bool> waitForPairingComplete(WidgetTester tester, {int maxSeconds = 120}) async {
+  Future<bool> waitForPairingComplete(WidgetTester tester,
+      {int maxSeconds = 120}) async {
     debugPrint('[Test] Waiting for pairing to complete...');
     bool sawError = false;
     for (var i = 0; i < maxSeconds; i++) {
@@ -72,7 +64,8 @@ void main() {
       // Log error message if present but don't fail immediately - give time for recovery
       final errorIcon = find.byIcon(Icons.error_outline_rounded);
       if (errorIcon.evaluate().isNotEmpty && !sawError) {
-        debugPrint('[Test] Error message found after $i seconds - continuing to wait...');
+        debugPrint(
+            '[Test] Error message found after $i seconds - continuing to wait...');
         sawError = true;
         // Print all text in the UI to see the error message
         final allText = tester.widgetList<Text>(find.byType(Text));
@@ -94,7 +87,8 @@ void main() {
         }
       }
     }
-    debugPrint('[Test] Still on login screen after $maxSeconds seconds (sawError: $sawError)');
+    debugPrint(
+        '[Test] Still on login screen after $maxSeconds seconds (sawError: $sawError)');
     // Print final state
     final allText = tester.widgetList<Text>(find.byType(Text));
     for (final text in allText) {
@@ -213,8 +207,8 @@ void main() {
       );
 
       debugPrint('Invalid claim code test passed!');
-    // Skip: Tests share app state, so after the first test successfully pairs,
-    // the app remains authenticated. This test needs its own isolated test run.
+      // Skip: Tests share app state, so after the first test successfully pairs,
+      // the app remains authenticated. This test needs its own isolated test run.
     }, skip: true);
 
     // Skip test: Requires waiting for claim code expiration (5 minutes)

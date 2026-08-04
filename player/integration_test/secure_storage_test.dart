@@ -4,6 +4,7 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/storage/secure_storage_options.dart';
+import 'helpers/test_bootstrap.dart';
 
 /// Regression tests for the "have to re-pair on every launch" bug.
 ///
@@ -21,6 +22,10 @@ import 'package:player/core/storage/secure_storage_options.dart';
 /// completely broken keychain, because the memory map satisfies it.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  // Set up the app once before all tests. Shared with the other integration
+  // test files so all_tests.dart can run them in one process.
+  setUpAll(ensureTestBootstrap);
 
   const raw = FlutterSecureStorage(
     aOptions: kAndroidSecureStorageOptions,
