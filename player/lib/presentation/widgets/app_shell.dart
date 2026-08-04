@@ -1,5 +1,4 @@
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -147,11 +146,6 @@ class _PulsingDotState extends State<_PulsingDot>
     );
   }
 }
-
-/// Extra top padding on macOS to clear the traffic light window controls
-/// when using fullSizeContentView.
-final double _macOSTitleBarPadding =
-    !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS ? 28.0 : 0.0;
 
 /// Modern app shell with adaptive navigation.
 /// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
@@ -440,18 +434,25 @@ class _AppShellState extends ConsumerState<AppShell> {
                   isOffline: isOffline,
                 ),
                 Expanded(
-                  child: Column(
-                    children: [
-                      SizedBox(height: _macOSTitleBarPadding),
-                      if (isOffline) const OfflineBanner(),
-                      Expanded(child: widget.child),
-                    ],
+                  child: SafeArea(
+                    top: true,
+                    bottom: false,
+                    left: false,
+                    right: false,
+                    child: Column(
+                      children: [
+                        if (isOffline) const OfflineBanner(),
+                        Expanded(child: widget.child),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
             if (showCastOverlay)
-              CastOverlayButton(topInset: _macOSTitleBarPadding + 12),
+              CastOverlayButton(
+                topInset: MediaQuery.paddingOf(context).top + 12,
+              ),
           ],
         ),
       );
@@ -478,14 +479,22 @@ class _AppShellState extends ConsumerState<AppShell> {
       body: Stack(
         children: [
           Positioned.fill(child: backdrop),
-          Column(
-            children: [
-              if (isOffline) const OfflineBanner(),
-              Expanded(child: widget.child),
-            ],
+          SafeArea(
+            top: true,
+            bottom: false,
+            left: false,
+            right: false,
+            child: Column(
+              children: [
+                if (isOffline) const OfflineBanner(),
+                Expanded(child: widget.child),
+              ],
+            ),
           ),
           if (showCastOverlay)
-            const CastOverlayButton(topInset: kToolbarHeight + 8),
+            CastOverlayButton(
+              topInset: MediaQuery.paddingOf(context).top + kToolbarHeight + 8,
+            ),
         ],
       ),
       bottomNavigationBar: _ModernBottomNav(
@@ -796,7 +805,7 @@ class _DesktopSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return GlassSidebarPanel(
       child: SafeArea(
-        top: false,
+        top: true,
         child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
@@ -805,7 +814,7 @@ class _DesktopSidebar extends StatelessWidget {
           onToggleHome: onToggleHome,
           onToggleLibrary: onToggleLibrary,
           isOffline: isOffline,
-          topPadding: _macOSTitleBarPadding,
+          topPadding: 0,
           backToMydiaWidget:
               showBackToMydia ? const _BackToMydiaButton() : null,
         ),
