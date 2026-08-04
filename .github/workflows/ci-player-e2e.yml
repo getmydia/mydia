@@ -14,7 +14,11 @@ jobs:
   test-player-e2e:
     name: Test / Player E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The build is uncached and routinely spends ~20 minutes in the player test
+    # image's apt layer alone, which left almost no margin at 30 and timed the
+    # job out mid-install without running a single test. This is headroom for a
+    # slow-mirror day, not a fix; the build genuinely wants layer caching.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -67,6 +71,14 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v3
 
+      # Keep this a sequential `docker compose build`. Switching it to
+      # `docker buildx bake` to gain layer caching was tried and reverted: bake
+      # builds every target in parallel, and three heavy images (Elixir release,
+      # Rust p2p NIF, and the GTK/mpv/Flutter desktop toolchain) competing for a
+      # two-core runner starved the apt layer from ~20 minutes to over 56, which
+      # is worse than the problem it was meant to fix. Layer caching here also
+      # cannot bootstrap: a cold build that cannot finish inside the job budget
+      # never exports a cache, so every run stays cold.
       - name: Build E2E images
         if: steps.should.outputs.run == 'true'
         run: DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build

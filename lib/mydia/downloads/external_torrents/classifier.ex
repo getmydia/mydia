@@ -75,6 +75,12 @@ defmodule Mydia.Downloads.ExternalTorrents.Classifier do
     TorrentMatcher.find_top_candidates_in(pool, parsed, max_results: @max_suggestions)
   rescue
     e ->
+      # Report, do not just log. This rescue silently swallowed the nil-title
+      # scoring crash for as long as it has existed: the same defect that
+      # aborted DownloadMonitor through the untracked-matching path was
+      # invisible here. Degrading to no suggestions is the right behaviour;
+      # doing it without a report is not.
+      ErrorTracker.report(e, __STACKTRACE__, %{parsed_title: parsed.title})
       Logger.warning("Failed to find match candidates: #{inspect(e)}")
       []
   end
