@@ -4,10 +4,21 @@
 // `playback_chrome.dart`'s shape — a full-bleed surface behind a
 // `SafeArea`-wrapped chrome stack — rather than mounting the real player
 // screen, which needs a live player controller and platform channels this
-// suite does not construct. That means this file proves the contract
-// `SafeArea` already honours, not that `playback_chrome.dart`'s own tree
-// still matches this shape; a widget test that mounts it directly would be
-// needed to catch that kind of drift.
+// suite does not construct.
+//
+// IMPORTANT: `_host`'s stand-in surface sits directly under the strip, with
+// no outer `SafeArea` above it. Production is not shaped that way:
+// `PlayerScreen.build` wraps its whole body — this chrome included — in
+// `PlayerScreen.playerFrame`'s own `SafeArea(top: false, ...)` first. That
+// means this file proves the contract `SafeArea` already honours in
+// isolation — that a full-bleed layer outside a `SafeArea` is unaffected by
+// a reserved strip, and that the chrome inside one is pushed clear of it —
+// not that `playback_chrome.dart`'s real position inside `PlayerScreen`
+// still matches this shape. It would stay green even if `playerFrame` regressed
+// to a bare `SafeArea` and letterboxed every video, because `_host` never
+// reproduces that outer frame. `player_screen_frame_inset_test.dart` is the
+// test that actually guards production: it exercises `PlayerScreen
+// .playerFrame` itself and would fail on that regression.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,9 +75,10 @@ void main() {
     });
 
     testWidgets(
-        'the video surface stays full-bleed, because it sits outside the '
-        'SafeArea; a change that inset it would letterbox every video',
-        (tester) async {
+        'CONTROL: the stand-in surface stays full-bleed within this shape, '
+        'because it sits outside the SafeArea — but see the file header: '
+        'this does not prove playback_chrome.dart is actually positioned '
+        'this way inside the real PlayerScreen frame', (tester) async {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(

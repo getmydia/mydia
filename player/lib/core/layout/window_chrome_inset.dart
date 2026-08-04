@@ -41,17 +41,26 @@ class WindowChromeInset extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Web is checked first: `defaultTargetPlatform` reports macOS for Safari
-    // and Chrome on a Mac, where there is no frameless window and no traffic
-    // lights to clear.
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS) return child;
+    final isWeb = kIsWeb;
+    final platform = defaultTargetPlatform;
+
+    // Short-circuits before ever subscribing to the fullscreen signal: off
+    // macOS (and on web, where `defaultTargetPlatform` reports macOS for
+    // Safari/Chrome on a Mac but there is no frameless window to clear)
+    // fullscreen can never flip this decision, so there is no reason to
+    // rebuild on it.
+    if (isWeb || platform != TargetPlatform.macOS) return child;
 
     return ValueListenableBuilder<bool>(
       valueListenable: _fullscreen ?? windowFullscreen,
       builder: (context, isFullscreen, child) {
-        // macOS auto-hides the traffic lights in fullscreen, so reserving the
-        // strip there would only letterbox the video.
-        if (isFullscreen) return child!;
+        if (!shouldReserveTitleBar(
+          isWeb: isWeb,
+          platform: platform,
+          isFullscreen: isFullscreen,
+        )) {
+          return child!;
+        }
 
         final media = MediaQuery.of(context);
         return MediaQuery(
@@ -67,3 +76,27 @@ class WindowChromeInset extends StatelessWidget {
     );
   }
 }
+
+/// Pure predicate behind [WindowChromeInset.build], exposed separately so it
+/// can be unit-tested for every input combination without actually running
+/// on each platform.
+///
+/// `kIsWeb` is a compile-time constant baked in per build target — it is
+/// always `false` under `flutter test`, so a regression that deleted the web
+/// check from [WindowChromeInset.build] would pass every test unless the
+/// underlying boolean logic is tested independently of the real `kIsWeb`
+/// value. Mirrors `PlatformFeatures.computeSupportsKeyboardShortcuts` in
+/// `platform_features.dart`, which exists for exactly the same reason.
+///
+/// Web is checked first: `defaultTargetPlatform` reports macOS for Safari
+/// and Chrome on a Mac, where there is no frameless window and no traffic
+/// lights to clear. Fullscreen is checked last: macOS auto-hides the
+/// traffic lights there, so reserving the strip would only letterbox the
+/// video.
+@visibleForTesting
+bool shouldReserveTitleBar({
+  required bool isWeb,
+  required TargetPlatform platform,
+  required bool isFullscreen,
+}) =>
+    !isWeb && platform == TargetPlatform.macOS && !isFullscreen;

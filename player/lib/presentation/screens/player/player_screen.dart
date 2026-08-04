@@ -100,6 +100,34 @@ class PlayerScreen extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
+
+  /// The player's outer frame: a black [Scaffold] with a [SafeArea] that
+  /// only insets the sides and bottom, never the top.
+  ///
+  /// `top: false` is deliberate on every platform, not just macOS. On macOS
+  /// windowed, `WindowChromeInset` folds `kMacTitleBarOverlap` into
+  /// `MediaQuery.padding.top` app-wide so `SafeArea`/`AppBar` clear the
+  /// traffic lights for free; a bare `SafeArea` here would consume that same
+  /// strip a second time, pushing the media_kit `Video` down by 28pt and
+  /// putting a black band above every video — `NativePlayerWindowSizer` then
+  /// snaps the window to the video's aspect ratio *without* that 28pt, so
+  /// media_kit adds side pillars too. `playback_chrome.dart`'s own
+  /// `SafeArea` is what insets the on-screen chrome (back pill, transport)
+  /// instead; it is unaffected by this.
+  ///
+  /// On iOS this also puts the video full-bleed under the notch, which is
+  /// intentional, not a side effect: this is an immersive video player, the
+  /// controls keep their own `SafeArea`, and edge-to-edge video is what
+  /// video players do.
+  ///
+  /// Public and `@visibleForTesting` so a test can assert the seam directly
+  /// (see `player_screen_frame_inset_test.dart`) without mounting the full
+  /// screen, which needs a live player controller and platform channels.
+  @visibleForTesting
+  static Widget playerFrame({required Widget child}) => Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(top: false, child: child),
+      );
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
@@ -2168,12 +2196,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: body,
-      ),
-    );
+    return PlayerScreen.playerFrame(child: body);
   }
 
   /// Tear the local player down and rebuild it from scratch.

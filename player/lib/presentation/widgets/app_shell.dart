@@ -205,6 +205,26 @@ class AppShell extends ConsumerStatefulWidget {
         topInset: isDesktop ? 12 : kToolbarHeight + 8,
       );
 
+  /// The gutter both the desktop and mobile branches wrap their main content
+  /// column in: a `SafeArea` that consumes the ambient `MediaQuery.padding`
+  /// on top only, leaving the sidebar/drawer chrome and bottom nav to handle
+  /// their own edges.
+  ///
+  /// Public (rather than inlined at each call site) and annotated
+  /// `@visibleForTesting`, mirroring [castOverlay], so a test can exercise
+  /// the exact widget both branches build directly, instead of hand-rolling
+  /// a `SafeArea` that can silently drift out of sync with the real call
+  /// sites — the shell's actual gutter could lose its `SafeArea` entirely
+  /// and a mirror-based test would stay green.
+  @visibleForTesting
+  static Widget contentGutter({required Widget child}) => SafeArea(
+        top: true,
+        bottom: false,
+        left: false,
+        right: false,
+        child: child,
+      );
+
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
 }
@@ -452,11 +472,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   isOffline: isOffline,
                 ),
                 Expanded(
-                  child: SafeArea(
-                    top: true,
-                    bottom: false,
-                    left: false,
-                    right: false,
+                  child: AppShell.contentGutter(
                     child: Column(
                       children: [
                         if (isOffline) const OfflineBanner(),
@@ -494,11 +510,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       body: Stack(
         children: [
           Positioned.fill(child: backdrop),
-          SafeArea(
-            top: true,
-            bottom: false,
-            left: false,
-            right: false,
+          AppShell.contentGutter(
             child: Column(
               children: [
                 if (isOffline) const OfflineBanner(),
@@ -607,7 +619,6 @@ class SidebarContent extends StatelessWidget {
   final VoidCallback onToggleHome;
   final VoidCallback onToggleLibrary;
   final bool isOffline;
-  final double topPadding;
   final Widget? backToMydiaWidget;
 
   const SidebarContent({
@@ -619,7 +630,6 @@ class SidebarContent extends StatelessWidget {
     required this.onToggleHome,
     required this.onToggleLibrary,
     required this.isOffline,
-    this.topPadding = 0,
     this.backToMydiaWidget,
   });
 
@@ -629,7 +639,6 @@ class SidebarContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: topPadding),
         // Back to Mydia link (shown in embed mode)
         if (hasBackWidget)
           Padding(
@@ -826,7 +835,6 @@ class _DesktopSidebar extends StatelessWidget {
           onToggleHome: onToggleHome,
           onToggleLibrary: onToggleLibrary,
           isOffline: isOffline,
-          topPadding: 0,
           backToMydiaWidget:
               showBackToMydia ? const _BackToMydiaButton() : null,
         ),
