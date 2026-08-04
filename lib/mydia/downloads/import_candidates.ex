@@ -331,13 +331,26 @@ defmodule Mydia.Downloads.ImportCandidates do
 
   defp same_dir?(_a, _b), do: false
 
+  # Uses `File.stat/1` rather than `File.regular?/1` + `File.stat!/1`: a file
+  # can be deleted or renamed between the wildcard expansion and the stat
+  # call (a real race in a self-hosted deployment where the operator or the
+  # download client can be touching the same folder), and `File.stat!/1`
+  # raises on a path that no longer resolves. That would crash the modal
+  # open instead of just showing the files still there. An entry that can't
+  # be stat'd, or isn't a regular file, is silently skipped rather than
+  # raising.
   defp list_recursive(dir) do
     dir
     |> Path.join("**/*")
     |> Path.wildcard(match_dot: false)
-    |> Enum.filter(&File.regular?/1)
-    |> Enum.map(fn path ->
-      %{path: path, name: Path.basename(path), size: File.stat!(path).size}
+    |> Enum.flat_map(fn path ->
+      case File.stat(path) do
+        {:ok, %File.Stat{type: :regular, size: size}} ->
+          [%{path: path, name: Path.basename(path), size: size}]
+
+        _not_a_stable_regular_file ->
+          []
+      end
     end)
   end
 
@@ -355,11 +368,14 @@ defmodule Mydia.Downloads.ImportCandidates do
       |> Enum.filter(&Map.has_key?(&1, "probe"))
       |> Map.new(&{&1["path"], &1["probe"]})
 
+    parsed = Map.new(snapshot, &{&1["path"], {&1["parsed_season"], &1["parsed_episode"]}})
+
     files
     |> build_candidates(resolved_library_type(download), [])
     |> Enum.map(fn candidate ->
       candidate
       |> maybe_restore_probe(probes)
+      |> maybe_restore_parsed(parsed)
       |> Map.put("missing", false)
     end)
   end
@@ -368,6 +384,32 @@ defmodule Mydia.Downloads.ImportCandidates do
     case Map.fetch(probes, candidate["path"]) do
       {:ok, probe} -> Map.put(candidate, "probe", probe)
       :error -> candidate
+    end
+  end
+
+  # Restores the failure-time snapshot's `parsed_season`/`parsed_episode` for
+  # any path also present in the snapshot, rather than trusting a fresh
+  # re-parse of the live listing. `merge/3` reparses every live candidate
+  # with `parser_opts: []` (no `TargetContext`), while the snapshot was built
+  # by `MediaImport.snapshot_candidates_on_failure/4` with the real parser
+  # opts for the download's bound media item (see `parser_opts_for/1` and
+  # `target_context_for/1` in `Mydia.Jobs.MediaImport`). Without this, the
+  # same file can show a different prefilled episode target depending on
+  # whether the modal happened to get a live listing or fell back to the
+  # snapshot, with nothing telling the operator why.
+  #
+  # A path that only exists in the live listing (genuinely new on disk,
+  # never seen at failure time) has nothing to restore and keeps its
+  # re-parsed guess, since that is the best information available for it.
+  defp maybe_restore_parsed(candidate, parsed) do
+    case Map.fetch(parsed, candidate["path"]) do
+      {:ok, {season, episode}} ->
+        candidate
+        |> Map.put("parsed_season", season)
+        |> Map.put("parsed_episode", episode)
+
+      :error ->
+        candidate
     end
   end
 

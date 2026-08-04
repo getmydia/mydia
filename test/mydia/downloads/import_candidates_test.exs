@@ -95,6 +95,41 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
       assert candidate["missing"] == false
     end
 
+    test "skips a listed entry that cannot be stat'd instead of crashing", %{tmp_dir: tmp_dir} do
+      # The real bug is a TOCTOU race: `Path.wildcard/2` returns a path, and
+      # by the time the code gets around to stat-ing it, the file has been
+      # deleted or renamed out from under it — plausible in a self-hosted
+      # deployment where the operator or the download client can be
+      # touching the same folder while the modal is open. That exact
+      # interleaving needs real concurrency to reproduce deterministically,
+      # which would make this test flaky, so a broken symlink is used
+      # instead: `Path.wildcard/2` lists it (a directory listing does not
+      # resolve symlink targets), but `File.stat/1` (which follows
+      # symlinks) cannot resolve it, exactly the "entry the listing found
+      # but stat can't confirm" shape the fix has to handle. Before the fix
+      # this crashed the modal open via `File.stat!/1`.
+      dir = Path.join(tmp_dir, "live")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "keep.mkv"), "x")
+      File.ln_s!(Path.join(dir, "does-not-exist.mkv"), Path.join(dir, "ghost.mkv"))
+
+      client = client_with_unrelated_root(tmp_dir)
+
+      download =
+        download_fixture(%{
+          download_client: client.name,
+          metadata: %{
+            "save_path" => dir,
+            "import_candidates" => [
+              %{"path" => Path.join(dir, "old.mkv"), "name" => "old.mkv", "size" => 1}
+            ]
+          }
+        })
+
+      assert {:ok, :live, candidates} = ImportCandidates.load(download)
+      assert Enum.map(candidates, & &1["name"]) == ["keep.mkv"]
+    end
+
     test "falls back to the snapshot when the folder is gone", %{tmp_dir: tmp_dir} do
       client = client_with_unrelated_root(tmp_dir)
 
@@ -361,6 +396,59 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
 
       assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
       assert candidate["probe"] == stashed_probe
+    end
+
+    test "restores the snapshot's parsed season/episode on the live listing instead of a bare re-parse",
+         %{tmp_dir: tmp_dir} do
+      # A bare re-parse (the `parser_opts: []` `merge/3` always uses for a
+      # live listing) of this name yields season 3, episode 6 — see "leaves
+      # an importable file unflagged and records the parser guess" above.
+      # The failure-time snapshot was parsed by `MediaImport` with the
+      # download's real parser opts (a `TargetContext` built from its bound
+      # media item) and landed on season 1, episode 1 instead — a
+      # legitimate difference, e.g. for an absolute-numbered release the
+      # TargetContext maps against the show's actual episode list. Without
+      # restoring the snapshot's values, the operator would see a different
+      # prefilled episode for the same file depending on whether the modal
+      # happened to get a live listing or fell back to the snapshot.
+      dir = Path.join(tmp_dir, "live")
+      File.mkdir_p!(dir)
+      known_name = "Some.Show.S03E06.1080p.WEB-DL.mkv"
+      File.write!(Path.join(dir, known_name), "x")
+
+      # Genuinely new on disk since the failure, so absent from the
+      # snapshot — there is nothing to restore, and it must keep its fresh
+      # re-parse rather than being blanked out.
+      new_name = "Some.Show.S02E04.1080p.WEB-DL.mkv"
+      File.write!(Path.join(dir, new_name), "y")
+
+      client = client_with_unrelated_root(tmp_dir)
+
+      download =
+        download_fixture(%{
+          download_client: client.name,
+          metadata: %{
+            "save_path" => dir,
+            "import_candidates" => [
+              %{
+                "path" => Path.join(dir, known_name),
+                "name" => known_name,
+                "size" => 1,
+                "parsed_season" => 1,
+                "parsed_episode" => 1
+              }
+            ]
+          }
+        })
+
+      assert {:ok, :live, candidates} = ImportCandidates.load(download)
+      by_name = Map.new(candidates, &{&1["name"], &1})
+
+      assert by_name[known_name]["parsed_season"] == 1
+      assert by_name[known_name]["parsed_episode"] == 1
+
+      assert by_name[new_name]["parsed_season"] == 2
+      assert by_name[new_name]["parsed_episode"] == 4
     end
 
     test "falls back to metadata[\"unresolved_files\"] when there is no import_candidates snapshot",

@@ -185,7 +185,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
     end
   end
 
-  defp skip_label("not_video_extension"), do: "not a video extension"
+  defp skip_label("not_video_extension"), do: "unsupported file type for this library"
   defp skip_label(reason) when is_binary(reason), do: reason
   defp skip_label(_reason), do: nil
 
