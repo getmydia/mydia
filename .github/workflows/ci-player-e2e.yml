@@ -47,7 +47,18 @@ jobs:
   test-player-e2e:
     name: Test / Player E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Runaway guard only, not a performance mechanism: speed comes from the
+    # pull-by-default design (prebuilt images pulled from the registry), not
+    # from this cap. A worst-case cold run (empty cache, all three images
+    # built from source) must fit inside it, or a timed-out run blocks
+    # publish-toolbox/publish-relay (needs: test-player-e2e) from ever
+    # populating the registry tag or cache, which would keep every following
+    # push in the same cold-start state. See cache-to below for the other
+    # half of that fix.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - name: Checkout
@@ -66,6 +77,11 @@ jobs:
               - 'metadata-relay/**'
               - 'config/**'
               - 'priv/**'
+              - 'assets/**'
+              - 'plugins/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - 'Dockerfile'
               - 'scripts/e2e/**'
               - 'compose.player-e2e.yml'
               - '.github/workflows/ci-player-e2e.yml'
@@ -166,23 +182,68 @@ jobs:
         id: aux
         run: |
           set -euo pipefail
+
+          # cache-to here is a deliberate, narrow exception to the
+          # cache-from-only rule that governs this workflow everywhere else.
+          # That rule exists so this workflow never writes to ci-docker.yml's
+          # docker-sqlite scope: the GHA cache is capped at 10 GB with LRU
+          # eviction, and docker-sqlite is populated by a different workflow,
+          # so writing to it here would evict entries that workflow depends
+          # on. player-toolbox and relay-master are different: only jobs in
+          # this file ever write to them, so there is no cross-workflow
+          # contention. Populating them on non-PR builds means even a
+          # timed-out first run (see timeout-minutes above) leaves a warm
+          # cache behind, so the next push is fast instead of repeating the
+          # same cold build. Restricted to non-PR events to match the two
+          # registry tags themselves, which publish-toolbox and ci-relay.yml
+          # only ever push on push events; a PR build's layers are not
+          # something master's cache should be seeded from.
+          TOOLBOX_CACHE_TO=()
+          RELAY_CACHE_TO=()
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            TOOLBOX_CACHE_TO=(--cache-to type=gha,mode=max,scope=player-toolbox)
+            RELAY_CACHE_TO=(--cache-to type=gha,mode=max,scope=relay-master)
+          fi
+
           TOOLBOX=ghcr.io/${{ github.repository }}/player-e2e-toolbox:master
-          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.toolbox }}" = "true" ] || ! docker pull "$TOOLBOX"; then
-            echo "::notice::Building the player toolbox image."
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.toolbox }}" = "true" ]; then
+            echo "::notice::Not a pull request, or toolbox paths changed; building the player toolbox image."
+            BUILD_TOOLBOX=1
+          elif docker pull "$TOOLBOX"; then
+            echo "::notice::Using prebuilt toolbox image $TOOLBOX"
+            BUILD_TOOLBOX=0
+          else
+            echo "::warning::Could not pull $TOOLBOX; building from source instead."
+            BUILD_TOOLBOX=1
+          fi
+
+          if [ "$BUILD_TOOLBOX" = "1" ]; then
             TOOLBOX=player-e2e-toolbox:pr
             docker buildx build \
               --file player/Dockerfile.test \
               --cache-from type=gha,scope=player-toolbox \
+              "${TOOLBOX_CACHE_TO[@]}" \
               --load --tag "$TOOLBOX" .
           fi
 
           RELAY=ghcr.io/${{ github.repository }}/metadata-relay:master
-          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relay }}" = "true" ] || ! docker pull "$RELAY"; then
-            echo "::notice::Building the relay image."
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relay }}" = "true" ]; then
+            echo "::notice::Not a pull request, or relay paths changed; building the relay image."
+            BUILD_RELAY=1
+          elif docker pull "$RELAY"; then
+            echo "::notice::Using prebuilt relay image $RELAY"
+            BUILD_RELAY=0
+          else
+            echo "::warning::Could not pull $RELAY; building from source instead."
+            BUILD_RELAY=1
+          fi
+
+          if [ "$BUILD_RELAY" = "1" ]; then
             RELAY=metadata-relay:pr
             docker buildx build \
               --file metadata-relay/Dockerfile \
               --cache-from type=gha,scope=relay-master \
+              "${RELAY_CACHE_TO[@]}" \
               --load --tag "$RELAY" .
           fi
 
