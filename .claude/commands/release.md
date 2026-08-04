@@ -33,7 +33,11 @@ beta tags for that version and increment N.
 The version comes from the tag. `mix.exs` reads `BUILD_VERSION` at compile
 time, so there is nothing to edit and no commit to make.
 
-## 3. Write the release notes
+## 3. Write the release notes into the repository
+
+Open a PR adding `priv/changelog/X.Y.Z.md`. This must be the last thing merged
+before you pin a commit in step 4, because the draft targets a SHA and the
+image is built from it.
 
 Categorize into these sections, skipping any that are empty:
 
@@ -45,9 +49,15 @@ Categorize into these sections, skipping any that are empty:
 Keep bullets to one line each. End with:
 `**Full Changelog**: https://github.com/getmydia/mydia/compare/vOLD...vNEW`
 
-**A patch release carries the preceding minor's notes as well as its own.**
-Someone upgrading from v0.11.x to v0.12.1 reads the v0.12.1 page and needs to
-see what v0.12.0 changed.
+Write only what changed in this release; do not carry forward the previous
+version's content. The app stacks bundled files itself for anyone who skipped
+one.
+
+**A patch release's GitHub notes carry the preceding minor's notes as well**,
+so someone upgrading from v0.11.x to v0.12.1 sees the whole story on the
+release page. The bundled file still holds only the patch's own changes;
+concatenate the two files into the draft's notes instead of duplicating
+content in `priv/changelog/`. See step 4.
 
 ## 4. Create the draft, pinned to a commit
 
@@ -59,14 +69,34 @@ gh release create vX.Y.Z \
   --repo getmydia/mydia \
   --target "$SHA" \
   --draft \
-  --notes-file notes.md
+  --notes-file priv/changelog/X.Y.Z.md
 ```
 
-Add `--prerelease` for beta and rc.
+For a patch release, concatenate the patch's bundled notes with the preceding
+minor's before creating the draft, so the GitHub page carries both while the
+bundled file itself stays patch-only:
+
+```bash
+cat priv/changelog/X.Y.Z.md priv/changelog/X.Y.0.md > /tmp/notes.md
+
+gh release create vX.Y.Z \
+  --repo getmydia/mydia \
+  --target "$SHA" \
+  --draft \
+  --notes-file /tmp/notes.md
+```
+
+Add `--prerelease` for beta and rc; prereleases keep hand-written notes in a
+scratch file instead of `priv/changelog/`.
 
 `--target` must be a full commit SHA. The workflow rejects a draft targeting a
 branch, because a branch is resolved once at build time and again when the tag
 is created, which lets the tag land on code that was never built.
+
+The `prepare` job also refuses to build a stable release whose
+`priv/changelog/<version>.md` is missing at the pinned commit, before any
+platform build starts. Merge the PR from step 3 first. Prereleases are exempt,
+since they ship no bundled file.
 
 ## 5. Dispatch the workflow
 
