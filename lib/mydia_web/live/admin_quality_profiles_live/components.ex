@@ -555,7 +555,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           <span class="label-text-alt text-xs">In priority order</span>
         </label>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-          <%= for source <- ["BluRay", "REMUX", "WEB-DL", "WEBRip", "HDTV", "SDTV", "DVD", "DVDRip"] do %>
+          <%= for source <- ["BluRay", "BDRip", "REMUX", "WEB-DL", "WEBRip", "HDTV", "SDTV", "DVD", "DVDRip"] do %>
             <label class="label cursor-pointer justify-start gap-2">
               <input
                 type="checkbox"

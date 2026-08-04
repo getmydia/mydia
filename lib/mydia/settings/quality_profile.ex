@@ -55,12 +55,14 @@ defmodule Mydia.Settings.QualityProfile do
   ]
   @valid_audio_channels ["1.0", "2.0", "2.1", "5.1", "6.1", "7.1", "7.1.2", "7.1.4"]
   @valid_resolutions ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"]
-  # "BDRip" is deliberately absent: Mydia.Quality.Sources.detect/1 folds it
-  # into "BluRay" (the BluRay pattern matches `bdrip`), so no release can
-  # ever be detected as the literal "BDRip" any more. Listing it here would
-  # let an operator select a preference no release will ever match.
+  # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" for the
+  # indexer search/grab path, but the V3 release parser
+  # (priv/release_parser/sources.exs) still emits canonical "BDRip" for
+  # on-disk files, and that value flows through Mydia.Upgrades.Attrs into
+  # scoring. So "BDRip" remains a meaningful, selectable preference here.
   @valid_sources [
     "BluRay",
+    "BDRip",
     "REMUX",
     "WEB-DL",
     "WEBRip",
