@@ -355,7 +355,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   # filter the result out. Best-effort: rescue all errors so a failing
   # blacklist write never blocks the rest of failure handling.
   defp record_blacklist_entry(download, failure_reason) do
-    case extract_blacklist_key(download) do
+    case Blacklists.extract_key(download) do
       {:ok, indexer, guid} ->
         try do
           case Blacklists.add(indexer, guid, download.title || "", failure_reason) do
@@ -396,20 +396,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
         )
 
         :ok
-    end
-  end
-
-  # Returns `{:ok, indexer, guid}` when both are present on the download.
-  # The `indexer` and `guid` should have been plumbed in at download
-  # creation time (see `Mydia.Downloads.Queue.create_download_record/4`).
-  defp extract_blacklist_key(download) do
-    indexer = download.indexer || get_in(download.metadata || %{}, ["indexer"])
-    guid = get_in(download.metadata || %{}, ["guid"])
-
-    cond do
-      is_nil(indexer) or indexer == "" -> {:error, :no_indexer}
-      is_nil(guid) or guid == "" -> {:error, :no_guid}
-      true -> {:ok, indexer, guid}
     end
   end
 
