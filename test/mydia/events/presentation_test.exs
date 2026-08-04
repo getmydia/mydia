@@ -244,4 +244,65 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Severance, kept 2160p over 1080p"
     end
   end
+
+  describe "detail/1 download.*" do
+    test "stalled carries the stall message" do
+      assert Presentation.detail(
+               event(
+                 type: "download.stalled",
+                 severity: :warning,
+                 metadata: %{"title" => "Arrival 2160p", "message" => "no progress for 2h"}
+               )
+             ) == "Arrival 2160p (no progress for 2h)"
+    end
+
+    test "stalled degrades to the title when no message is recorded" do
+      assert Presentation.detail(
+               event(type: "download.stalled", metadata: %{"title" => "Arrival 2160p"})
+             ) == "Arrival 2160p"
+    end
+
+    test "the plain lifecycle events are just the title" do
+      for type <- ~w(download.initiated download.completed download.cancelled
+                     download.paused download.resumed download.unstalled) do
+        assert Presentation.detail(event(type: type, metadata: %{"title" => "Arrival"})) ==
+                 "Arrival",
+               "#{type} did not render its title"
+      end
+    end
+
+    test "cleared names the download client" do
+      assert Presentation.detail(
+               event(
+                 type: "download.cleared",
+                 metadata: %{"title" => "Arrival", "download_client" => "transmission"}
+               )
+             ) == "Arrival (transmission)"
+    end
+
+    test "failed carries the selected release and the error" do
+      assert Presentation.detail(
+               event(
+                 type: "download.failed",
+                 severity: :error,
+                 metadata: %{
+                   "title" => "Severance",
+                   "season_number" => 1,
+                   "episode_number" => 2,
+                   "selected_release" => "Severance.S01E02.2160p",
+                   "error_message" => "no seeds"
+                 }
+               )
+             ) == "Severance S01E02: Severance.S01E02.2160p (no seeds)"
+    end
+
+    test "failed without a selected release still reports the error" do
+      assert Presentation.detail(
+               event(
+                 type: "download.failed",
+                 metadata: %{"title" => "Arrival", "error_message" => "disk full"}
+               )
+             ) == "Arrival (disk full)"
+    end
+  end
 end

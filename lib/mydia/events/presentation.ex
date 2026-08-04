@@ -348,6 +348,38 @@ defmodule Mydia.Events.Presentation do
     if metadata["blacklisted"], do: "#{base}, release blacklisted", else: base
   end
 
+  @plain_download_types ~w(
+    download.initiated download.completed download.cancelled
+    download.paused download.resumed download.unstalled
+  )
+
+  def detail(%Event{type: type, metadata: metadata}) when type in @plain_download_types,
+    do: title_of(metadata)
+
+  def detail(%Event{type: "download.stalled", metadata: metadata}) do
+    case metadata["message"] do
+      nil -> title_of(metadata)
+      message -> "#{title_of(metadata)} (#{message})"
+    end
+  end
+
+  def detail(%Event{type: "download.cleared", metadata: metadata}) do
+    case metadata["download_client"] do
+      nil -> title_of(metadata)
+      client -> "#{title_of(metadata)} (#{client})"
+    end
+  end
+
+  def detail(%Event{type: "download.failed", metadata: metadata}) do
+    subject = title_of(metadata) <> episode_part(metadata)
+    error = metadata["error_message"] || "Unknown error"
+
+    case metadata["selected_release"] do
+      nil -> "#{subject} (#{error})"
+      release -> "#{subject}: #{release} (#{error})"
+    end
+  end
+
   def detail(%Event{} = event) do
     metadata = event.metadata || %{}
     metadata["title"] || metadata["description"]
@@ -409,4 +441,23 @@ defmodule Mydia.Events.Presentation do
   defp field_name(%{"field" => field}), do: field
   defp field_name(field) when is_binary(field), do: field
   defp field_name(_), do: "field"
+
+  # Renders " S01E02" or " S01" when the metadata carries season and episode.
+  defp episode_part(metadata) do
+    season = metadata["season_number"]
+    episode = metadata["episode_number"]
+
+    cond do
+      season && episode ->
+        " S#{pad(season)}E#{pad(episode)}"
+
+      season ->
+        " S#{pad(season)}"
+
+      true ->
+        ""
+    end
+  end
+
+  defp pad(number), do: String.pad_leading("#{number}", 2, "0")
 end
