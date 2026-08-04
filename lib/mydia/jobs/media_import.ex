@@ -431,21 +431,35 @@ defmodule Mydia.Jobs.MediaImport do
     # paths) already wrote its own metadata to the row by the time this runs.
     # Merging onto the stale in-memory struct would blindly overwrite that
     # write instead of layering on top of it.
-    current = Downloads.get_download!(download.id)
+    #
+    # The row can also be gone by now — an operator dismissing the download
+    # while a large import is still copying files, for example — so this
+    # mirrors `fetch_download/1`'s rescue rather than letting a raised
+    # `Ecto.NoResultsError` crash the job. There is nothing left to attach a
+    # candidate listing to, so skip the snapshot and hand back the original
+    # result untouched; the job still fails/succeeds exactly as it would have
+    # without this snapshot step.
+    case fetch_current_download(download.id) do
+      {:ok, current} ->
+        metadata =
+          (current.metadata || %{})
+          |> Map.put("import_candidates", candidates)
+          |> Map.put("import_candidates_at", DateTime.utc_now() |> DateTime.to_iso8601())
 
-    metadata =
-      (current.metadata || %{})
-      |> Map.put("import_candidates", candidates)
-      |> Map.put("import_candidates_at", DateTime.utc_now() |> DateTime.to_iso8601())
+        case Downloads.update_download(current, %{metadata: metadata}) do
+          {:ok, _updated} ->
+            :ok
 
-    case Downloads.update_download(current, %{metadata: metadata}) do
-      {:ok, _updated} ->
-        :ok
+          {:error, changeset} ->
+            Logger.warning("Failed to store import candidates",
+              download_id: download.id,
+              errors: inspect(changeset.errors)
+            )
+        end
 
-      {:error, changeset} ->
-        Logger.warning("Failed to store import candidates",
-          download_id: download.id,
-          errors: inspect(changeset.errors)
+      :not_found ->
+        Logger.info("Skipping import candidate snapshot: download row no longer exists",
+          download_id: download.id
         )
     end
 
@@ -453,6 +467,12 @@ defmodule Mydia.Jobs.MediaImport do
   end
 
   defp snapshot_candidates_on_failure(result, _download, _files, _library_path), do: result
+
+  defp fetch_current_download(download_id) do
+    {:ok, Downloads.get_download!(download_id)}
+  rescue
+    Ecto.NoResultsError -> :not_found
+  end
 
   defp do_process_import(download, files, library_path, args) do
     case organize_and_import_files(download, files, library_path, args) do
@@ -1895,7 +1915,7 @@ defmodule Mydia.Jobs.MediaImport do
       import_failed_at: import_failed_at
     }
 
-    case Downloads.update_download(download, attrs) do
+    case update_retry_metadata(download, attrs) do
       {:ok, _updated} ->
         if terminal? do
           Logger.warning("Import failed terminally — no further retries",
@@ -1921,7 +1941,26 @@ defmodule Mydia.Jobs.MediaImport do
         )
 
         :ok
+
+      :not_found ->
+        # The row this whole job is about was deleted while the job was
+        # running (e.g. an operator dismissed it mid-import). `Repo.update/1`
+        # raises `Ecto.StaleEntryError` when the struct's primary key no
+        # longer matches any row — there is no retry metadata left to
+        # attach it to, and the job already self-heals next attempt via
+        # `fetch_download/1`'s `:not_found` guard, so skip rather than crash.
+        Logger.info("Skipping retry-metadata update: download row no longer exists",
+          download_id: download.id
+        )
+
+        :ok
     end
+  end
+
+  defp update_retry_metadata(download, attrs) do
+    Downloads.update_download(download, attrs)
+  rescue
+    Ecto.StaleEntryError -> :not_found
   end
 
   # Structured failure classification persisted alongside the human message, so

@@ -2079,4 +2079,77 @@ defmodule Mydia.Jobs.MediaImportTest do
       refute Repo.reload!(download).metadata["import_candidates"]
     end
   end
+
+  describe "import candidate snapshot resilience" do
+    test "returns the original failure without crashing when the download row is deleted mid-job",
+         %{tmp_dir: tmp_dir} do
+      # Regression: the snapshot reloads the download (see the comment on
+      # `fetch_current_download/1` in media_import.ex) so it merges onto the
+      # freshest metadata instead of the stale struct captured before
+      # `do_process_import/4` ran. If an operator dismisses the download
+      # while a large import is still copying files, that reload can find
+      # the row gone. `Downloads.get_download!/1` is `Repo.get!`, which
+      # raises `Ecto.NoResultsError` on a missing row — unguarded, that
+      # would crash the Oban job outright instead of returning the failure
+      # tuple the job would have returned before this task's refactor.
+      #
+      # No library path is configured, so this reaches the cheapest
+      # snapshot-triggering failure (`:no_library_path`) without touching
+      # the filesystem-heavy `organize_and_import_files/4` path. A
+      # telemetry handler on the repo's query event deletes the download
+      # row the moment `determine_library_path/1` issues its
+      # `library_paths` SELECT — the last DB read before the snapshot's own
+      # reload — guaranteeing the row is gone by the time that reload runs.
+      download_dir = Path.join(tmp_dir, "download")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Mystery.Show.S01E01.mkv"), "fake video content")
+
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "VanishingRowClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "VanishingRowClient",
+          download_client_id: "vanish-1"
+        })
+
+      handler_id = {__MODULE__, :delete_download_before_snapshot_reload, download.id}
+
+      :telemetry.attach(
+        handler_id,
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          if metadata.source == "library_paths" do
+            :telemetry.detach(handler_id)
+            {:ok, _} = Mydia.Downloads.delete_download(download)
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:error, :no_library_path} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      assert_raise Ecto.NoResultsError, fn -> Mydia.Downloads.get_download!(download.id) end
+    end
+  end
 end
