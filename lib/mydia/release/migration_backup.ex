@@ -52,10 +52,16 @@ defmodule Mydia.Release.MigrationBackup do
       nothing to back up. Mirrors `Ecto.Migrator`'s option of the same name.
     * `:pending_migrations?` - forwarded to
       `Mydia.Release.backup_before_migrations/1`.
+    * `:schema?` - forwarded to `Mydia.Release.backup_before_migrations/1`.
   """
   @spec run(keyword()) ::
           {:ok,
-           String.t() | :no_migrations | :skipped | :unsupported_adapter | :migrations_skipped}
+           String.t()
+           | :no_migrations
+           | :no_schema
+           | :skipped
+           | :unsupported_adapter
+           | :migrations_skipped}
           | {:error, term()}
   def run(opts \\ []) do
     if Keyword.get(opts, :skip, false) do

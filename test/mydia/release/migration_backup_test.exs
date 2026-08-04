@@ -117,6 +117,40 @@ defmodule Mydia.Release.MigrationBackupTest do
     end
   end
 
+  describe "run/1 on a database with no applied migrations" do
+    test "takes no backup, because there is nothing to protect", %{db_path: db_path} do
+      force_adapter(Ecto.Adapters.SQLite3)
+
+      assert {:ok, :no_schema} =
+               MigrationBackup.run(pending_migrations?: true, schema?: false)
+
+      assert backups(db_path) == []
+    end
+
+    test "still backs up once the database has applied migrations", %{db_path: db_path} do
+      force_adapter(Ecto.Adapters.SQLite3)
+
+      assert {:ok, backup_path} =
+               MigrationBackup.run(pending_migrations?: true, schema?: true)
+
+      assert File.exists?(backup_path)
+      assert Path.dirname(backup_path) == Path.dirname(db_path)
+    end
+
+    test "skips ahead of the adapter branch on PostgreSQL", %{db_path: db_path} do
+      force_adapter(Ecto.Adapters.Postgres)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, :no_schema} =
+                   MigrationBackup.run(pending_migrations?: true, schema?: false)
+        end)
+
+      assert backups(db_path) == []
+      refute log =~ "NO BACKUP WAS TAKEN"
+    end
+  end
+
   describe "SKIP_BACKUPS" do
     setup do
       force_adapter(Ecto.Adapters.SQLite3)
