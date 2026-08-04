@@ -434,6 +434,11 @@ defmodule MydiaWeb.Layouts do
                     <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
                   </a>
                 </li>
+                <li>
+                  <.link navigate="/changelog">
+                    <.icon name="hero-sparkles" class="w-4 h-4" /> What's new
+                  </.link>
+                </li>
                 <li class="mt-2 border-t border-base-300 pt-2">
                   <a href="/auth/logout" class="text-error">
                     <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Logout
