@@ -93,6 +93,7 @@ defmodule Mydia.Events do
   ## Options
     - `:category` - Filter by event category
     - `:type` - Filter by event type
+    - `:exclude_types` - Filter out a list of event types
     - `:actor_type` - Filter by actor type (:user, :system, :job)
     - `:actor_id` - Filter by actor ID (requires actor_type)
     - `:resource_type` - Filter by resource type
@@ -201,6 +202,13 @@ defmodule Mydia.Events do
 
   defp filter_by_exclude_types(query, types) when is_list(types),
     do: where(query, [e], e.type not in ^types)
+
+  defp filter_by_exclude_types(_query, other),
+    do:
+      raise(
+        ArgumentError,
+        "expected :exclude_types to be a list of strings, got: #{inspect(other)}"
+      )
 
   defp filter_by_actor(query, nil, _), do: query
 

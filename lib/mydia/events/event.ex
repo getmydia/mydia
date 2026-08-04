@@ -64,7 +64,9 @@ defmodule Mydia.Events.Event do
     |> validate_required([:category, :type])
     |> validate_format(:category, ~r/^[a-z_]+$/, message: "must be lowercase with underscores")
     |> validate_format(:type, ~r/^[a-z_]+\.[a-z_]+$/, message: "must be format: category.action")
-    |> validate_inclusion(:type, Presentation.known_types())
+    |> validate_inclusion(:type, Presentation.known_types(),
+      message: "is not a registered event type; add it to Mydia.Events.Presentation"
+    )
     |> validate_actor_id()
   end
 

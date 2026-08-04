@@ -993,7 +993,10 @@ defmodule Mydia.EventsTest do
       changeset = Event.changeset(%Event{}, %{category: "downloads", type: "download.invented"})
 
       refute changeset.valid?
-      assert "is invalid" in errors_on(changeset).type
+
+      assert "is not a registered event type; add it to Mydia.Events.Presentation" in errors_on(
+               changeset
+             ).type
     end
 
     test "still reports the format error for a malformed type" do
@@ -1043,6 +1046,12 @@ defmodule Mydia.EventsTest do
 
     test "omitting the option excludes nothing" do
       assert length(Events.list_events()) == 2
+    end
+
+    test "a non-list value raises instead of crashing deep in query building" do
+      assert_raise ArgumentError, ~r/exclude_types/, fn ->
+        Events.list_events(exclude_types: "plugin.http_request")
+      end
     end
   end
 

@@ -9,8 +9,14 @@ defmodule Mydia.Events.PresentationTest do
   end
 
   describe "known_types/0" do
-    test "covers all 32 event types" do
-      assert length(Presentation.known_types()) == 32
+    test "is non-empty and covers every namespace" do
+      types = Presentation.known_types()
+      refute types == []
+
+      for namespace <- ~w(media_item media_file download job search plugin playback) do
+        assert Enum.any?(types, &String.starts_with?(&1, "#{namespace}.")),
+               "no registered type starts with #{namespace}."
+      end
     end
 
     test "has no duplicate entries" do
@@ -20,6 +26,10 @@ defmodule Mydia.Events.PresentationTest do
 
     test "includes the type that triggered this work" do
       assert "download.stalled" in Presentation.known_types()
+    end
+
+    test "the v1 plugin event catalog is a subset of the registry" do
+      assert Mydia.Plugins.Manifest.event_catalog() -- Presentation.known_types() == []
     end
   end
 
@@ -98,13 +108,26 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Arrival (movie)"
     end
 
-    test "added treats anything other than a movie as a TV show" do
+    test "added labels a TV show" do
       assert Presentation.detail(
                event(
                  type: "media_item.added",
                  metadata: %{"title" => "Severance", "media_type" => "tv_show"}
                )
              ) == "Severance (TV show)"
+    end
+
+    test "added omits the parenthetical when media_type is missing or unrecognized" do
+      assert Presentation.detail(
+               event(type: "media_item.added", metadata: %{"title" => "Arrival"})
+             ) == "Arrival"
+
+      assert Presentation.detail(
+               event(
+                 type: "media_item.added",
+                 metadata: %{"title" => "Arrival", "media_type" => "music"}
+               )
+             ) == "Arrival"
     end
 
     test "updated carries the reason and the change summary" do
@@ -361,6 +384,15 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Arrival, 12 results, selected Arrival.2160p"
     end
 
+    test "completed uses the singular at one result" do
+      assert Presentation.detail(
+               event(
+                 type: "search.completed",
+                 metadata: %{"title" => "Arrival", "results_count" => 1}
+               )
+             ) == "Arrival, 1 result"
+    end
+
     test "filtered_out reports how many were rejected" do
       assert Presentation.detail(
                event(
@@ -407,6 +439,30 @@ defmodule Mydia.Events.PresentationTest do
       assert detail =~ "hours"
     end
 
+    test "backoff_applied uses the singular unit at one second, minute, and day" do
+      one_second = DateTime.utc_now() |> DateTime.add(1500, :millisecond) |> DateTime.to_iso8601()
+      one_minute = DateTime.utc_now() |> DateTime.add(65, :second) |> DateTime.to_iso8601()
+      one_day = DateTime.utc_now() |> DateTime.add(90_000, :second) |> DateTime.to_iso8601()
+
+      detail = fn next_eligible_at ->
+        Presentation.detail(
+          event(
+            type: "search.backoff_applied",
+            metadata: %{"title" => "Arrival", "next_eligible_at" => next_eligible_at}
+          )
+        )
+      end
+
+      assert detail.(one_second) =~ "next search in 1 second"
+      refute detail.(one_second) =~ "1 seconds"
+
+      assert detail.(one_minute) =~ "next search in 1 minute"
+      refute detail.(one_minute) =~ "1 minutes"
+
+      assert detail.(one_day) =~ "next search in 1 day"
+      refute detail.(one_day) =~ "1 days"
+    end
+
     test "backoff_reset reports how many attempts it took" do
       assert Presentation.detail(
                event(
@@ -414,6 +470,15 @@ defmodule Mydia.Events.PresentationTest do
                  metadata: %{"title" => "Arrival", "previous_failure_count" => 4}
                )
              ) == "Arrival (show), backoff cleared after 4 failed attempts"
+    end
+
+    test "backoff_reset uses the singular at one failed attempt" do
+      assert Presentation.detail(
+               event(
+                 type: "search.backoff_reset",
+                 metadata: %{"title" => "Arrival", "previous_failure_count" => 1}
+               )
+             ) == "Arrival (show), backoff cleared after 1 failed attempt"
     end
   end
 

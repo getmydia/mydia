@@ -30,7 +30,13 @@ defmodule Mydia.Events.Presentation do
         }
 
   # A `color` of nil means "derive from severity at render time". Only
-  # plugin.http_request uses it, because its severity varies per outcome.
+  # plugin.http_request uses it, because its severity varies per outcome. It
+  # still needs an entry here because every recorded type must be registered
+  # (see `Event.changeset/2`), but nothing renders it through this module
+  # today: the admin plugins logs modal's Network tab (`net_row/1` in
+  # `MydiaWeb.AdminPluginsLive.Components`) renders its own columns straight
+  # from `event.metadata` and derives its row class from `event.severity`
+  # directly, without calling `for_event/1`.
   #
   # Entries are plain maps, not %__MODULE__{} structs, because Elixir cannot
   # construct a struct literal of the module currently being compiled inside
@@ -291,8 +297,10 @@ defmodule Mydia.Events.Presentation do
   """
   @spec detail(Event.t()) :: String.t() | nil
   def detail(%Event{type: "media_item.added", metadata: metadata}) do
-    label = if metadata["media_type"] == "movie", do: "movie", else: "TV show"
-    "#{title_of(metadata)} (#{label})"
+    case media_type_label(metadata["media_type"]) do
+      nil -> title_of(metadata)
+      label -> "#{title_of(metadata)} (#{label})"
+    end
   end
 
   def detail(%Event{type: "media_item.updated", metadata: metadata}) do
@@ -402,7 +410,9 @@ defmodule Mydia.Events.Presentation do
       do: search_subject(metadata)
 
   def detail(%Event{type: "search.completed", metadata: metadata}) do
-    base = "#{search_subject(metadata)}, #{metadata["results_count"] || 0} results"
+    count = metadata["results_count"] || 0
+    suffix = if count == 1, do: "result", else: "results"
+    base = "#{search_subject(metadata)}, #{count} #{suffix}"
 
     case metadata["selected_release"] do
       nil -> base
@@ -425,8 +435,11 @@ defmodule Mydia.Events.Presentation do
   end
 
   def detail(%Event{type: "search.backoff_reset", metadata: metadata}) do
+    count = metadata["previous_failure_count"] || 0
+    suffix = if count == 1, do: "attempt", else: "attempts"
+
     "#{search_subject(metadata)} (#{backoff_resource_type(metadata)}), " <>
-      "backoff cleared after #{metadata["previous_failure_count"] || 0} failed attempts"
+      "backoff cleared after #{count} failed #{suffix}"
   end
 
   def detail(%Event{type: "plugin.http_request", metadata: metadata}) do
@@ -487,6 +500,12 @@ defmodule Mydia.Events.Presentation do
   end
 
   defp title_of(metadata), do: metadata["title"] || "Unknown"
+
+  # A missing or unrecognized media_type (nil, or a deprecated type like
+  # music/books) produces no parenthetical rather than guessing "TV show".
+  defp media_type_label("movie"), do: "movie"
+  defp media_type_label("tv_show"), do: "TV show"
+  defp media_type_label(_), do: nil
 
   defp resolution_of(metadata, prefix), do: metadata["#{prefix}_resolution"] || "unknown"
 
@@ -583,10 +602,15 @@ defmodule Mydia.Events.Presentation do
 
     cond do
       diff_seconds <= 0 -> "now"
-      diff_seconds < 60 -> "in #{diff_seconds} seconds"
-      diff_seconds < 3600 -> "in #{div(diff_seconds, 60)} minutes"
+      diff_seconds < 60 -> "in #{pluralize_unit(diff_seconds, "second")}"
+      diff_seconds < 3600 -> "in #{pluralize_unit(div(diff_seconds, 60), "minute")}"
+      # A float always reads naturally as plural ("1.0 hours"), so no singular
+      # branch is needed here.
       diff_seconds < 86_400 -> "in #{Float.round(diff_seconds / 3600, 1)} hours"
-      true -> "in #{div(diff_seconds, 86_400)} days"
+      true -> "in #{pluralize_unit(div(diff_seconds, 86_400), "day")}"
     end
   end
+
+  defp pluralize_unit(1, unit), do: "1 #{unit}"
+  defp pluralize_unit(count, unit), do: "#{count} #{unit}s"
 end
