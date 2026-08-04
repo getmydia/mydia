@@ -53,9 +53,8 @@ services:
   # Mydia Main Application
   # ============================================
   mydia:
-    build:
-      context: .
-      dockerfile: Dockerfile.e2e
+    image: ${MYDIA_E2E_IMAGE:-ghcr.io/getmydia/mydia:master}
+    entrypoint: ["/e2e/server-entrypoint.sh"]
     container_name: e2e_mydia
     environment:
       # Phoenix config
@@ -90,6 +89,7 @@ services:
     volumes:
       - mydia_config:/config
       - mydia_data:/data
+      - ./scripts/e2e:/e2e:ro
     ports:
       - "14000:4000"
       - "14443:4443"
