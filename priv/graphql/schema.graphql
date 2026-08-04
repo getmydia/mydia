@@ -269,6 +269,9 @@ type ContinueWatchingItem {
 
   progress: Progress!
 
+  "Playable files for this item, used to start playback straight from the rail"
+  files: [MediaFile]
+
   "For episodes, includes show context"
   showId: ID
 
@@ -368,6 +371,14 @@ type Movie implements Node {
   isFavorite: Boolean!
 }
 
+"The episode this user should play next, with the state that selected it"
+type ShowNextUp {
+  episode: Episode!
+
+  "One of: continue, next, start"
+  progressState: String!
+}
+
 "A TV show"
 type TvShow implements Node {
   id: ID!
@@ -427,6 +438,9 @@ type TvShow implements Node {
 
   "Next episode to watch for the current user"
   nextEpisode: Episode
+
+  "Next episode to watch, with the state that selected it"
+  nextUp: ShowNextUp
 
   "Whether this item is in user favorites"
   isFavorite: Boolean!
