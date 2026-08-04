@@ -89,6 +89,32 @@ void main() {
       expect(item.isEpisode, isTrue);
     });
 
+    test('zero-pads the episode code in displayTitle', () {
+      final item = ContinueWatchingItem.fromJson({
+        'id': 'e2',
+        'type': 'episode',
+        'title': 'Half Loop',
+        'showTitle': 'Severance',
+        'seasonNumber': 2,
+        'episodeNumber': 6,
+      });
+
+      // displayTitle becomes the player title for this rail, so an unpadded
+      // "S2E6" would make the same episode read differently depending on
+      // whether it was launched from here or from the show detail hero.
+      expect(item.displayTitle, 'Severance - S02E06');
+    });
+
+    test('falls back to the plain title for a movie', () {
+      final item = ContinueWatchingItem.fromJson({
+        'id': 'm1',
+        'type': 'movie',
+        'title': 'Arrival',
+      });
+
+      expect(item.displayTitle, 'Arrival');
+    });
+
     test('defaults files to empty when absent', () {
       final item = ContinueWatchingItem.fromJson({
         'id': 'm1',

@@ -53,11 +53,18 @@ class ContinueWatchingItem {
   bool get isMovie => type.toLowerCase() == 'movie';
 
   String get displayTitle {
-    if (isEpisode &&
-        showTitle != null &&
-        seasonNumber != null &&
-        episodeNumber != null) {
-      return '$showTitle - S${seasonNumber}E${episodeNumber}';
+    final show = showTitle;
+    final season = seasonNumber;
+    final episode = episodeNumber;
+
+    if (isEpisode && show != null && season != null && episode != null) {
+      // Zero-padded to match NextUpEpisode, NextEpisode, Episode and
+      // EpisodeDetail. This string becomes the player title, so an unpadded
+      // form here would show the same episode as S2E5 from this rail and
+      // S02E05 from the show detail hero.
+      final code = 'S${season.toString().padLeft(2, '0')}'
+          'E${episode.toString().padLeft(2, '0')}';
+      return '$show - $code';
     }
     return title;
   }
