@@ -395,12 +395,18 @@ defmodule Mydia.Accounts do
   @doc """
   Verifies an API key and returns the associated user and API key.
   Returns {:error, reason} if the key is invalid, expired, or revoked.
+
+  The candidate set is narrowed by the indexed `key_prefix` column, which is
+  derived from the presented key. A key whose prefix matches no row costs zero
+  Argon2 passes, which keeps this endpoint from amplifying CPU under a brute
+  force attempt. Keys predating the key_prefix column have a NULL prefix, match
+  nothing, and are revoked by the RevokePrefixlessApiKeys migration.
   """
   def verify_api_key(key) when is_binary(key) do
-    # Find all API keys and verify against them
-    # This is not ideal for performance but works for small numbers of keys
-    # For production, consider using a more efficient lookup mechanism
+    prefix = extract_key_prefix(key)
+
     ApiKey
+    |> where([k], k.key_prefix == ^prefix)
     |> preload(:user)
     |> Repo.all()
     |> Enum.find(fn api_key ->

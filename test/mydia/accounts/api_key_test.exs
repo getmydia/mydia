@@ -153,6 +153,20 @@ defmodule Mydia.Accounts.ApiKeyTest do
 
       assert {:error, :invalid_key} = Accounts.verify_api_key(plain_key)
     end
+
+    test "rejects a key whose stored prefix is NULL", %{plain_key: plain_key, api_key: api_key} do
+      Mydia.Repo.update_all(
+        from(k in Mydia.Accounts.ApiKey, where: k.id == ^api_key.id),
+        set: [key_prefix: nil]
+      )
+
+      assert {:error, :invalid_key} = Accounts.verify_api_key(plain_key)
+    end
+
+    test "rejects a well-formed key whose prefix matches no row" do
+      unknown = "mydia_ak_" <> String.duplicate("Z", 32)
+      assert {:error, :invalid_key} = Accounts.verify_api_key(unknown)
+    end
   end
 
   describe "revoke_api_key/1" do
