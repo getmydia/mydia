@@ -1992,4 +1992,91 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert is_nil(new_file.supersedes_media_file_id)
     end
   end
+
+  describe "import candidate snapshot" do
+    setup %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :series)
+      %{library_path: library_path}
+    end
+
+    test "records every file with its skip reason when nothing is importable",
+         %{tmp_dir: tmp_dir} do
+      download_dir = Path.join(tmp_dir, "download")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "payload.exe"), :binary.copy(<<0>>, 4096))
+      File.write!(Path.join(download_dir, "release.nfo"), "info")
+
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "SnapshotClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "SnapshotClient",
+          download_client_id: "snapshot-1"
+        })
+
+      assert {:cancel, :no_importable_files} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      candidates = Repo.reload!(download).metadata["import_candidates"]
+
+      assert length(candidates) == 2
+      assert Enum.all?(candidates, &(&1["skip_reason"] == "not_video_extension"))
+      assert Enum.find(candidates, &(&1["name"] == "payload.exe"))
+      assert Repo.reload!(download).metadata["import_candidates_at"]
+    end
+
+    test "writes no snapshot when the download path does not exist", %{tmp_dir: tmp_dir} do
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "MissingPathClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "MissingPathClient",
+          download_client_id: "missing-1"
+        })
+
+      # A save_path that never existed fails before the file listing succeeds
+      # (`:path_not_found`), so this must never reach `process_import/3` and
+      # never write a snapshot.
+      assert {:error, {:path_not_found, _}} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.join(tmp_dir, "missing")
+               })
+
+      refute Repo.reload!(download).metadata["import_candidates"]
+    end
+  end
 end
