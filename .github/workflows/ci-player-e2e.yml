@@ -69,6 +69,17 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
+          # Invariant: `relevant` must be a superset of the union of
+          # `server`, `toolbox`, and `relay`. `relevant` gates whether this
+          # job runs at all and is consulted first; the per-image filters
+          # below only decide whether their image builds or pulls, and never
+          # run if `relevant` said no. A path that can trigger one of those
+          # builds but is missing from `relevant` is unreachable on a PR that
+          # touches only that path, which has been the root cause of two
+          # separate bugs here (the production Dockerfile, then
+          # rust-toolchain.toml). player/pubspec.lock and
+          # player/Dockerfile.test don't need their own entries: 'player/**'
+          # already covers them.
           filters: |
             relevant:
               - 'player/**'
@@ -82,6 +93,7 @@ jobs:
               - 'mix.exs'
               - 'mix.lock'
               - 'Dockerfile'
+              - 'rust-toolchain.toml'
               - 'scripts/e2e/**'
               - 'compose.player-e2e.yml'
               - '.github/workflows/ci-player-e2e.yml'
