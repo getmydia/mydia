@@ -191,6 +191,12 @@ defmodule Mydia.ReleaseTest do
     end
   end
 
+  describe "schema?/0" do
+    test "is true against the migrated test repo" do
+      assert Release.schema?() == true
+    end
+  end
+
   defp align_to_second_boundary do
     Process.sleep(1000 - rem(System.os_time(:millisecond), 1000))
   end

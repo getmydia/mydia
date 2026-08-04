@@ -284,12 +284,13 @@ in
       exec = ''
         ${lib.optionalString usePostgres ''
           # Poll for Postgres instead of adding the postgres process as an
-          # `after` dependency (e.g. its "@ready" suffix). A task dependency
-          # like that makes devenv START Postgres whenever this task runs,
-          # which collided with the postmaster already owned by `./dev up -d`
-          # ("lock file postmaster.pid already exists", six attempts in 87ms).
-          # Polling only ever observes, so the process daemon stays the single
-          # owner.
+          # `after` dependency (its "devenv:processes:postgres@ready" suffix).
+          # A task dependency like that makes devenv START Postgres whenever
+          # this task runs, which collided with the postmaster already owned
+          # by `./dev up -d` ("lock file postmaster.pid already exists", six
+          # attempts in 87ms). Polling only ever observes, so the process
+          # daemon stays the single owner.
+          echo "Waiting for Postgres on $DATABASE_HOST:$DATABASE_PORT…" >&2
           for _ in $(seq 1 60); do
             pg_isready -q -h "$DATABASE_HOST" -p "$DATABASE_PORT" && break
             sleep 0.5
@@ -297,14 +298,14 @@ in
 
           if ! pg_isready -q -h "$DATABASE_HOST" -p "$DATABASE_PORT"; then
             echo "Postgres is not accepting connections on $DATABASE_HOST:$DATABASE_PORT." >&2
-            echo "Start it with './dev up -d', or run './dev db.setup'." >&2
+            echo "Start it with './dev up -d'." >&2
             exit 1
           fi
         ''}
-        mix ecto.create --quiet && mix mydia.backup_before_migrate && mix ecto.migrate
+        mix do ecto.create --quiet + mydia.backup_before_migrate + ecto.migrate
       '';
       # Deliberately NO execIfModified, overriding this file's original R6
-      # design (Task 3 shipped `execIfModified = [ "priv/repo/migrations" ]`
+      # caching design (it shipped `execIfModified = [ "priv/repo/migrations" ]`
       # here). Caching this task made devenv report a cached run as
       # "succeeded" without checking whether the database still existed:
       # `./dev db.setup` silently no-op'd against a missing/corrupt database,
@@ -317,9 +318,16 @@ in
       # it unconditionally is safe and cheap: `mix ecto.create --quiet`
       # no-ops on an existing database, `mix mydia.backup_before_migrate`
       # returns `:no_migrations` immediately when nothing is pending, and
-      # `mix ecto.migrate` no-ops when the schema is current. The added cost
-      # is one BEAM boot (~2-3s) on commands that are already starting a BEAM
-      # or a whole stack.
+      # `mix ecto.migrate` no-ops when the schema is current. The three
+      # commands run as one `mix do a + b + c` invocation rather than three
+      # separate `mix` processes chained with `&&`, so the added cost is one
+      # BEAM boot (~2-3s) on commands that are already starting a BEAM or a
+      # whole stack, not three. `mix do` aborts the chain the same way `&&`
+      # does: `mydia.backup_before_migrate` calls `exit({:shutdown, 1})` on a
+      # failed backup, which terminates the `mix do` process outright (Mix's
+      # `do` task has no rescue/catch around each step) before `ecto.migrate`
+      # ever runs — verified empirically against this pinned Elixir 1.19.5
+      # with a throwaway two-task `mix do`, not just read off the docs.
       after = [ "mydia:deps" ];
     };
 
