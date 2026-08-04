@@ -17,7 +17,19 @@ instead.
 
 ### Cutting a release
 
-**1. Pin a commit and create the draft.**
+**1. Write the release notes into the repository.**
+
+Open a PR adding `priv/changelog/0.13.0.md`, containing only what changed in
+this release. Do not carry forward the previous version's content; the app
+stacks releases itself for anyone who skipped one.
+
+This must be the last thing merged before you pin a commit, because the draft
+targets a SHA and the image is built from it. The workflow refuses to publish a
+stable release whose notes file is missing at the pinned commit.
+
+Prereleases are exempt. They keep hand-written notes and ship no bundled file.
+
+**2. Pin a commit and create the draft.**
 
 ```bash
 git fetch origin
@@ -27,7 +39,7 @@ gh release create v0.13.0 \
   --repo getmydia/mydia \
   --target "$SHA" \
   --draft \
-  --notes-file notes.md
+  --notes-file priv/changelog/0.13.0.md
 ```
 
 Add `--prerelease` for a beta or rc.
@@ -41,7 +53,7 @@ Pinning also fixes what the release contains. Anything merged to master after
 this point is simply not in the release, which is what you want, and the
 workflow tells you about it rather than absorbing it silently.
 
-**2. Dispatch the workflow.**
+**3. Dispatch the workflow.**
 
 ```bash
 gh workflow run release.yml --repo getmydia/mydia -f version=v0.13.0
@@ -62,6 +74,23 @@ the docs deploy.
 | `dry_run` | `false` | Build, sign and notarize everything without publishing, pushing images, or uploading to stores. |
 | `accept_drift` | `false` | Proceed even though master has moved past the commit the draft targets. |
 | `allow_missing` | `""` | Comma-separated platforms whose failure must not block publish: `android`, `ios`, `macos`, `windows`, `linux`, `docker`. |
+
+### Patch releases
+
+A patch release's GitHub notes carry the preceding minor's notes as well, so
+someone reading the release page sees the whole story. The bundled file still
+holds only the patch's own changes, so the app never shows the same content
+twice. Concatenate at release time:
+
+```bash
+cat priv/changelog/0.13.1.md priv/changelog/0.13.0.md > /tmp/notes.md
+
+gh release create v0.13.1 \
+  --repo getmydia/mydia \
+  --target "$SHA" \
+  --draft \
+  --notes-file /tmp/notes.md
+```
 
 ### Rehearsing
 

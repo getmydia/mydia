@@ -160,6 +160,20 @@ jobs:
             else
               IS_PRERELEASE=false
             fi
+
+            # Bundled release notes. The app compiles priv/changelog/<version>.md
+            # into the image and shows it to users after they upgrade, so a
+            # stable release without one ships a version nobody can read about.
+            # Checked against the pinned SHA rather than the checkout, because
+            # the draft may target an older commit than the default branch.
+            if [ "$IS_PRERELEASE" != "true" ]; then
+              NOTES_PATH="priv/changelog/${VERSION_NUM}.md"
+              if ! git cat-file -e "${SHA}:${NOTES_PATH}" 2>/dev/null; then
+                echo "::error::$TAG has no bundled release notes at ${NOTES_PATH} in commit ${SHA:0:12}. Add the file, merge it, re-pin the draft, and dispatch again." >&2
+                exit 1
+              fi
+              echo "Bundled release notes found at ${NOTES_PATH}."
+            fi
           fi
 
           {
