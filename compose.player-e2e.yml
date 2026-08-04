@@ -115,8 +115,9 @@ services:
   # ============================================
   # Flutter Integration Test Runner
   # ============================================
-  # The test container includes Chrome and runs tests using
-  # `flutter test -d chrome`, which manages Chrome directly.
+  # The test container is a Flutter toolbox image with the repo bind-mounted
+  # at runtime; it runs tests natively with `flutter test -d linux` under
+  # xvfb, not Chrome.
   test:
     image: ${PLAYER_E2E_TOOLBOX_IMAGE:-ghcr.io/getmydia/mydia/player-e2e-toolbox:master}
     entrypoint: ["/e2e/run-tests.sh"]

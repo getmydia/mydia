@@ -6,7 +6,9 @@
 # so tests exercise the same iroh P2P code path used by real devices.
 #
 # NOTE: This Dockerfile expects the build context to be the project root
-# (not the player directory) so it can access priv/graphql/schema.graphql
+# (not the player directory) so it can access player/pubspec.yaml and
+# player/pubspec.lock below. player/lib/graphql/schema.graphql resolves at
+# runtime through its real symlink once compose bind-mounts the repo root.
 #
 # Build with: DOCKER_BUILDKIT=1 docker build -f player/Dockerfile.test .
 #
@@ -60,6 +62,12 @@ RUN flutter config --enable-linux-desktop
 # runtime by compose, which is why nothing else is copied here.
 WORKDIR /warm
 COPY player/pubspec.yaml player/pubspec.lock ./
+# This is expected to fail: mydia_player_p2p is a path dependency
+# (rust_builder/), and only the pubspec files are present here, not the
+# package itself, so pub cannot resolve it. `|| true` masks only that
+# anticipated failure. The network fetch of every hosted (pub.dev)
+# dependency still happens and populates /root/.pub-cache before the
+# resolver gives up, which is the entire point of this layer.
 RUN flutter pub get || true
 
 # jq is used by scripts/e2e/run-tests.sh to parse GraphQL responses.

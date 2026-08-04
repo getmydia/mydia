@@ -69,7 +69,7 @@ LOGIN_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \
                 "platform": "linux"
             }
         }
-    }' 2>&1)
+    }' 2>&1) || true
 
 AUTH_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.data.login.token // empty')
 if [ -z "$AUTH_TOKEN" ]; then
@@ -86,7 +86,7 @@ while [ "$claim_attempt" -lt 30 ]; do
     CLAIM_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $AUTH_TOKEN" \
-        -d '{"query": "mutation { generateClaimCode { code expiresAt } }"}' 2>&1)
+        -d '{"query": "mutation { generateClaimCode { code expiresAt } }"}' 2>&1) || true
 
     CLAIM_CODE=$(echo "$CLAIM_RESPONSE" | jq -r '.data.generateClaimCode.code // empty')
     [ -n "$CLAIM_CODE" ] && break
