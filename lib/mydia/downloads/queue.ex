@@ -12,6 +12,7 @@ defmodule Mydia.Downloads.Queue do
   alias Mydia.Downloads.Priority
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Downloads.Structs.ExternalTorrent
+  alias Mydia.Downloads.TorrentHash
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Settings
@@ -1139,19 +1140,30 @@ defmodule Mydia.Downloads.Queue do
   end
 
   defp prepare_torrent_input(url, indexer_name) do
-    cond do
-      # Magnet links can be used directly
-      String.starts_with?(url, "magnet:") ->
-        {:ok, {:magnet, url}}
+    result =
+      cond do
+        # Magnet links can be used directly
+        String.starts_with?(url, "magnet:") ->
+          {:ok, {:magnet, url}}
 
-      # For HTTP(S) URLs, download the torrent file content
-      # This avoids redirect issues that download clients can't handle
-      String.starts_with?(url, "http://") or String.starts_with?(url, "https://") ->
-        download_torrent_file(url, indexer_name)
+        # For HTTP(S) URLs, download the torrent file content
+        # This avoids redirect issues that download clients can't handle
+        String.starts_with?(url, "http://") or String.starts_with?(url, "https://") ->
+          download_torrent_file(url, indexer_name)
 
-      # Unknown format, try as URL
-      true ->
-        {:ok, {:url, url}}
+        # Unknown format, try as URL
+        true ->
+          {:ok, {:url, url}}
+      end
+
+    # Every magnet-producing path funnels back through here: the direct link
+    # above, a redirect to a magnet, a response body that *is* a magnet, and a
+    # magnet scraped out of an HTML page. Enriching once at the exit keeps a
+    # trackerless magnet from reaching the client with DHT as its only peer
+    # source. See `TorrentHash.ensure_trackers/1`.
+    case result do
+      {:ok, {:magnet, magnet}} -> {:ok, {:magnet, TorrentHash.ensure_trackers(magnet)}}
+      other -> other
     end
   end
 

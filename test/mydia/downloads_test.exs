@@ -30,13 +30,22 @@ defmodule Mydia.DownloadsTest do
       {:ok, %{version: "1.0.0", api_version: "1.0"}}
     end
 
+    # Prefix matches: a trackerless magnet is enriched with the public tracker
+    # list on its way to the client, so the string the client sees is longer
+    # than the one the search result carried.
     @impl true
-    def add_torrent(_config, {:magnet, "magnet:?xt=valid"}, _opts) do
+    def add_torrent(_config, {:magnet, "magnet:?xt=valid" <> _}, _opts) do
       {:ok, "mock-client-id-123"}
     end
 
-    def add_torrent(_config, {:magnet, "magnet:?xt=error"}, _opts) do
+    def add_torrent(_config, {:magnet, "magnet:?xt=error" <> _}, _opts) do
       {:error, Error.invalid_torrent("Invalid magnet link")}
+    end
+
+    # Reports back whether the magnet arrived with trackers attached.
+    def add_torrent(_config, {:magnet, "magnet:?xt=trackers" <> rest}, _opts) do
+      {:ok,
+       if(String.contains?(rest, "&tr="), do: "mock-with-trackers", else: "mock-no-trackers")}
     end
 
     def add_torrent(_config, {:url, url}, _opts) do
@@ -327,6 +336,29 @@ defmodule Mydia.DownloadsTest do
                Downloads.initiate_download(search_result, client_name: disabled_client.name)
 
       assert client_name == disabled_client.name
+    end
+
+    test "hands the client a trackerless magnet with trackers attached", %{client1: _client1} do
+      # Regression: Bitmagnet (and Prowlarr, when /download redirects to a
+      # magnet) emit a bare magnet with no tr= parameter. Forwarding that
+      # verbatim leaves the client with DHT as its only peer source, which
+      # downloads exactly zero bytes on any client whose DHT can't reach the
+      # swarm.
+      bare_magnet = %SearchResult{
+        title: "Trackerless Release",
+        size: 1000,
+        seeders: 5,
+        leechers: 0,
+        download_url: "magnet:?xt=trackers&dn=Trackerless.Release",
+        indexer: "Test"
+      }
+
+      assert {:ok, download} = Downloads.initiate_download(bare_magnet)
+      assert download.download_client_id == "mock-with-trackers"
+
+      # The stored URL stays exactly as the indexer gave it, so history and
+      # duplicate detection keep working off the original release.
+      assert download.download_url == bare_magnet.download_url
     end
 
     test "returns error when client rejects torrent", %{client1: _client1} do
