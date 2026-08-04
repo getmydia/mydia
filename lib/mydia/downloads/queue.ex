@@ -393,12 +393,16 @@ defmodule Mydia.Downloads.Queue do
             episode_id: episode_id
           )
 
-          {:error, :duplicate_download}
+          {:error, :already_have_files}
         else
           :ok
         end
 
-      # For season packs, check if any episodes in the season already have media files
+      # A pack is grabbed to fill a specific set of episodes, so it is only
+      # redundant when every one of them is already on disk. The old rule
+      # rejected the pack if ANY episode in the season had a file, which made a
+      # partially-complete season permanently unfillable: one stray episode
+      # blocked every future pack for that season.
       media_item_id &&
           match?(
             %SearchResultMetadata{season_pack: true, season_number: _},
@@ -406,33 +410,18 @@ defmodule Mydia.Downloads.Queue do
           ) ->
         season_number = search_result.metadata.season_number
 
-        # Get all episodes for this season
-        episodes_query =
-          from(e in Episode,
-            where: e.media_item_id == ^media_item_id and e.season_number == ^season_number,
-            select: e.id
+        targeted_ids = targeted_episode_ids(search_result.metadata, media_item_id, season_number)
+
+        if targeted_ids != [] and all_episodes_have_files?(targeted_ids) do
+          Logger.info(
+            "Skipping download - every episode this season pack targets already has a file",
+            media_item_id: media_item_id,
+            season_number: season_number,
+            targeted_episodes: length(targeted_ids)
           )
 
-        episode_ids = Repo.all(episodes_query)
-
-        if episode_ids != [] do
-          # Check if any of these episodes have media files
-          media_files_query =
-            from(f in MediaFile, where: f.episode_id in ^episode_ids and is_nil(f.trashed_at))
-
-          if Repo.exists?(media_files_query) do
-            Logger.info(
-              "Skipping download - media files already exist for some episodes in season",
-              media_item_id: media_item_id,
-              season_number: season_number
-            )
-
-            {:error, :duplicate_download}
-          else
-            :ok
-          end
+          {:error, :already_have_files}
         else
-          # No episodes found for this season yet - allow download
           :ok
         end
 
@@ -463,7 +452,7 @@ defmodule Mydia.Downloads.Queue do
                 media_item_id: media_item_id
               )
 
-              {:error, :duplicate_download}
+              {:error, :already_have_files}
             else
               :ok
             end
@@ -481,6 +470,37 @@ defmodule Mydia.Downloads.Queue do
       true ->
         :ok
     end
+  end
+
+  # The search records the episodes a pack was grabbed for in `episode_ids`.
+  # Manual grabs and rows predating that field carry none, so fall back to the
+  # season's full episode list, which makes the rule "block only if the whole
+  # season is already on disk".
+  defp targeted_episode_ids(%SearchResultMetadata{episode_ids: ids}, _media_item_id, _season)
+       when is_list(ids) and ids != [],
+       do: ids
+
+  defp targeted_episode_ids(_metadata, media_item_id, season_number) do
+    Repo.all(
+      from(e in Episode,
+        where: e.media_item_id == ^media_item_id and e.season_number == ^season_number,
+        select: e.id
+      )
+    )
+  end
+
+  defp all_episodes_have_files?(episode_ids) do
+    wanted = episode_ids |> Enum.uniq() |> length()
+
+    filed =
+      Repo.one(
+        from(f in MediaFile,
+          where: f.episode_id in ^episode_ids and is_nil(f.trashed_at),
+          select: count(f.episode_id, :distinct)
+        )
+      )
+
+    filed == wanted
   end
 
   # --- Issues Tab Functions ---

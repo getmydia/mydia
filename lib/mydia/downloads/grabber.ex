@@ -96,7 +96,7 @@ defmodule Mydia.Downloads.Grabber do
       |> Keyword.put(:download_type, search_result.download_protocol)
 
     case Queue.check_for_duplicate_download(search_result, opts) do
-      {:error, :duplicate_download} ->
+      {:error, reason} when reason in [:duplicate_download, :already_have_files] ->
         History.delete_download(download)
         broadcast({:grab_duplicate, %{download_url: download.download_url}})
         :duplicate
