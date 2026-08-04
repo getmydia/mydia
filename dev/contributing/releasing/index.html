@@ -2668,6 +2668,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#patch-releases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patch releases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rehearsing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2815,6 +2826,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#patch-releases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patch releases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rehearsing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2918,7 +2940,16 @@ GitHub Actions silently drops the <code>release: created</code> event for drafts
 workflow cannot trigger on the release itself and is dispatched manually
 instead.</p>
 <h3 id="cutting-a-release">Cutting a release</h3>
-<p><strong>1. Pin a commit and create the draft.</strong></p>
+<p><strong>1. Write the release notes into the repository.</strong></p>
+<p>Open a PR adding <code>priv/changelog/0.13.0.md</code>, containing only what changed in
+this release. Do not carry forward the previous version's content; the app
+stacks releases itself for anyone who skipped one.</p>
+<p>This must be the last thing merged before you pin a commit, because the draft
+targets a SHA and the image is built from it. The workflow refuses to build a
+stable release whose notes file is missing at the pinned commit, failing in
+<code>prepare</code> before any platform build starts.</p>
+<p>Prereleases are exempt. They keep hand-written notes and ship no bundled file.</p>
+<p><strong>2. Pin a commit and create the draft.</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>fetch<span class="w"> </span>origin
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">SHA</span><span class="o">=</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
@@ -2926,7 +2957,7 @@ instead.</p>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--target<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$SHA</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>--draft<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span>--notes-file<span class="w"> </span>notes.md
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span>--notes-file<span class="w"> </span>priv/changelog/0.13.0.md
 </code></pre></div>
 <p>Add <code>--prerelease</code> for a beta or rc.</p>
 <p><code>--target</code> must be a full commit SHA. A branch name is resolved once when the
@@ -2936,7 +2967,7 @@ branch.</p>
 <p>Pinning also fixes what the release contains. Anything merged to master after
 this point is simply not in the release, which is what you want, and the
 workflow tells you about it rather than absorbing it silently.</p>
-<p><strong>2. Dispatch the workflow.</strong></p>
+<p><strong>3. Dispatch the workflow.</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0
 </code></pre></div>
 <p>The workflow builds Docker images for both database variants on both
@@ -2976,11 +3007,24 @@ the docs deploy.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="patch-releases">Patch releases</h3>
+<p>A patch release's GitHub notes carry the preceding minor's notes as well, so
+someone reading the release page sees the whole story. The bundled file still
+holds only the patch's own changes, so the app never shows the same content
+twice. Concatenate at release time:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>cat<span class="w"> </span>priv/changelog/0.13.1.md<span class="w"> </span>priv/changelog/0.13.0.md<span class="w"> </span>&gt;<span class="w"> </span>/tmp/notes.md
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>gh<span class="w"> </span>release<span class="w"> </span>create<span class="w"> </span>v0.13.1<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--target<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$SHA</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--draft<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>--notes-file<span class="w"> </span>/tmp/notes.md
+</code></pre></div>
 <h3 id="rehearsing">Rehearsing</h3>
 <p>Signing, notarization, the Sparkle appcast, and the Windows installer only
 execute during a release, which historically meant discovering breakage while
 shipping. A rehearsal runs all of it against master without side effects:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
 </code></pre></div>
 <p>A rehearsal builds every image without pushing to ghcr, builds and signs and
 notarizes every player artifact, and generates and validates the appcast. It
@@ -2994,16 +3038,23 @@ during a real release.</p>
 <h3 id="when-the-workflow-refuses">When the workflow refuses</h3>
 <p><strong>"Draft targets 'master', which is a branch, not a commit."</strong></p>
 <p>The draft was created without <code>--target &lt;sha&gt;</code>. Pin it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">&quot;</span>
 </code></pre></div>
 <p><strong>"N commit(s) landed on master after this draft was cut."</strong></p>
 <p>Someone merged while the release was being prepared, so the notes no longer
 describe what would ship. The run summary lists the commits. Either fold them in:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">&quot;</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># then update the notes to cover the new commits</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">&quot;</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># then update the notes to cover the new commits</span>
 </code></pre></div>
 <p>Or ship the pinned commit as-is and leave the rest for the next release:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">accept_drift</span><span class="o">=</span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">accept_drift</span><span class="o">=</span><span class="nb">true</span>
+</code></pre></div>
+<p><strong>"v0.13.0 has no bundled release notes at priv/changelog/0.13.0.md in commit ab12cd34ef56."</strong></p>
+<p>The notes PR from step 1 never got merged, or was merged after this draft was
+already pinned. Write <code>priv/changelog/0.13.0.md</code>, merge it, then re-pin the
+draft to the new commit and dispatch again:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">&quot;</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0
 </code></pre></div>
 <p><strong>"Refusing to publish: windows (failure) did not succeed."</strong></p>
 <p>A platform build failed. The release stays a draft and nothing was published.
@@ -3011,7 +3062,7 @@ Re-run the failed jobs from the Actions UI, which reuses the same run and
 therefore the same build number.</p>
 <p>If the failure is external and you need to ship without that platform, name it
 explicitly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">allow_missing</span><span class="o">=</span>windows
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">allow_missing</span><span class="o">=</span>windows
 </code></pre></div>
 <p>The published release then carries a note saying which assets are absent.</p>
 <h3 id="recovering-from-a-failed-release">Recovering from a failed release</h3>
@@ -3063,16 +3114,19 @@ is the SQLite build.</p>
 v0.12.0 applies <code>0.11.2</code> and <code>0.11</code>, and leaves <code>latest</code> and <code>0</code> pointing at
 v0.12.0.</p>
 <h2 id="release-notes">Release notes</h2>
-<p>Notes are written by hand into the draft. There is no CHANGELOG and nothing is
-generated from the commit range.</p>
-<p>A patch release carries the preceding minor's notes as well as its own. Someone
-upgrading from v0.11.x to v0.12.1 reads the v0.12.1 page and needs to see what
-v0.12.0 changed.</p>
+<p>Notes are authored into <code>priv/changelog/&lt;version&gt;.md</code> and tracked in the
+repository. The app compiles that file into the image, and the draft's
+GitHub notes are produced from it too. Nothing is generated from the commit
+range.</p>
+<p>A patch release's GitHub notes carry the preceding minor's notes as well as
+its own, produced by concatenating the two bundled files. The bundled file
+itself holds only the patch's own changes, since the app stacks releases
+itself for anyone who skipped one.</p>
 <h2 id="metadata-relay">Metadata relay</h2>
 <p>The relay releases on a pushed tag rather than a dispatched draft.
 <code>deploy-relay.yml</code> triggers on tags matching <code>metadata-relay-v*</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Metadata Relay v0.12.0&quot;</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Metadata Relay v0.12.0&quot;</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
 </code></pre></div>
 <p>The relay lives in this repository at <code>metadata-relay/</code> but deploys entirely
 separately, so its version is independent of mydia's.</p>
