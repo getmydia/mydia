@@ -425,7 +425,7 @@ defmodule Mydia.Playback do
     in_progress_episode =
       Enum.find(episodes, fn episode ->
         case Map.get(progress_map, episode.id) do
-          %Progress{completion_percentage: pct} when pct < 90.0 -> true
+          %Progress{watched: false, completion_percentage: pct} when pct < 90.0 -> true
           _ -> false
         end
       end)

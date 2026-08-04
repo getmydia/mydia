@@ -92,6 +92,14 @@ defmodule MydiaWeb.Schema.MediaTypes do
     end
   end
 
+  @desc "The episode this user should play next, with the state that selected it"
+  object :show_next_up do
+    field :episode, non_null(:episode)
+
+    @desc "One of: continue, next, start"
+    field :progress_state, non_null(:string)
+  end
+
   @desc "A TV show"
   object :tv_show do
     interface(:node)
@@ -179,6 +187,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "Next episode to watch for the current user"
     field :next_episode, :episode do
       resolve(&MediaResolver.resolve_next_episode/3)
+    end
+
+    @desc "Next episode to watch, with the state that selected it"
+    field :next_up, :show_next_up do
+      resolve(&MediaResolver.resolve_next_up/3)
     end
 
     @desc "Whether this item is in user favorites"
