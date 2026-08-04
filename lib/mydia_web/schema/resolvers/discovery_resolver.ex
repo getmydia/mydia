@@ -213,13 +213,14 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       [] ->
         nil
 
-      _files ->
+      files ->
         %{
           id: media_item.id,
           type: String.to_existing_atom(media_item.type),
           title: media_item.title,
           artwork: build_artwork(media_item),
           progress: format_progress(progress),
+          files: files,
           show_title: nil,
           season_number: nil,
           episode_number: nil
@@ -237,7 +238,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       [] ->
         nil
 
-      _files ->
+      files ->
         show = Media.get_media_item!(episode.media_item_id)
 
         %{
@@ -246,6 +247,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
           title: episode.title || "Episode #{episode.episode_number}",
           artwork: build_episode_artwork(episode, show),
           progress: format_progress(progress),
+          files: files,
           show_id: show.id,
           show_title: show.title,
           season_number: episode.season_number,

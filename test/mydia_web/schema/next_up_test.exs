@@ -143,6 +143,57 @@ defmodule MydiaWeb.Schema.NextUpTest do
     end
   end
 
+  describe "continueWatching.files" do
+    @continue_watching_query """
+    query ContinueWatching {
+      continueWatching(first: 10) {
+        id
+        type
+        showId
+        files { id }
+      }
+    }
+    """
+
+    test "an in-progress episode exposes its files and showId", ctx do
+      [e1 | _] = ctx.episodes
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [episode_id: e1.id],
+          %{position_seconds: 300, duration_seconds: 2400}
+        )
+
+      assert {:ok, %{data: %{"continueWatching" => items}}} =
+               run_query(@continue_watching_query, %{}, ctx.user)
+
+      item = Enum.find(items, &(&1["id"] == e1.id))
+      refute item == nil
+      assert item["showId"] == ctx.show.id
+      assert length(item["files"]) >= 1
+    end
+
+    test "an in-progress movie exposes its files", ctx do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [media_item_id: movie.id],
+          %{position_seconds: 300, duration_seconds: 7200}
+        )
+
+      assert {:ok, %{data: %{"continueWatching" => items}}} =
+               run_query(@continue_watching_query, %{}, ctx.user)
+
+      item = Enum.find(items, &(&1["id"] == movie.id))
+      refute item == nil
+      assert length(item["files"]) >= 1
+    end
+  end
+
   defp run_query(query, variables, user \\ nil) do
     context = if user, do: %{current_user: user}, else: %{}
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
