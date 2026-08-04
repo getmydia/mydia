@@ -105,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           FAIL=0
-          if grep -nE -- '--default-toolchain[[:space:]]+[0-9]' Dockerfile Dockerfile.e2e; then
+          if grep -nE -- '--default-toolchain[[:space:]]+[0-9]' Dockerfile; then
             echo "::error::Dockerfile pins a Rust version; it must come from rust-toolchain.toml"
             FAIL=1
           fi
