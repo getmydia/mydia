@@ -719,7 +719,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   def handle_event("open_match_files", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(id, preload: [:media_item])
+      download = Downloads.get_download!(id, preload: [:media_item, :library_path])
 
       case ImportCandidates.load(download) do
         {:ok, source, candidates} ->
@@ -762,25 +762,41 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   def handle_event("match_files_import", params, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      %{download: download, candidates: candidates} = socket.assigns.match_files_modal
+      %{download: modal_download, candidates: candidates} = socket.assigns.match_files_modal
+
+      # Re-read the download at submit time rather than trusting the assign
+      # captured when the modal opened. The modal has no way to notice a
+      # re-bind: the separate match/re-match modal can rebind this download to
+      # a different show while this one stays open, and process_targeted_import/3
+      # must build destinations from the CURRENT media_item — trusting the
+      # stale struct would link an episode from the OLD show onto files
+      # imported under the NEW one.
+      download = Downloads.get_download!(modal_download.id, preload: [:media_item])
 
       # Defense in depth: a disabled <select> only stops a normal browser. Never
       # trust a submitted path or target purely from client state — re-derive
       # what's actually allowed from the socket's own candidate list and the
-      # download's authoritative media type before building mappings.
+      # download's authoritative (freshly reloaded) media type before building
+      # mappings.
       #
+      # - Submitted targets arrive keyed by candidate INDEX, with the path
+      #   carried separately as a same-indexed hidden input value. Plug's form
+      #   decoder splits a bracketed field NAME on "][", so a path like
+      #   ".../[Bluray-1080p][Opus 2.0]/ep01.mkv" used as a form key would
+      #   decode into nested garbage. Values are never split that way, so the
+      #   path travels safely as one.
       # - `valid_paths` drops any path that was never a candidate for this
       #   download, or that is flagged "missing" (gone from disk since the
       #   modal opened): resolve_file_mappings/2 does no path validation of
       #   its own, and existence is only checked much later inside the Oban
       #   job.
       # - `movie?` rejects a "movie" target (episode_id: nil) unless the bound
-      #   media item really is a movie. Without this, a crafted or stale
-      #   submission against a TV show would reach
-      #   MediaImport.process_targeted_import/3 with episode_id: nil, which
-      #   places the file at the show's root folder instead of a season
-      #   folder — an orphaned show-level file reported back as a successful
-      #   import.
+      #   media item really is a movie, and every episode target is checked
+      #   against the download's ACTUAL episode list. Without this, a crafted
+      #   or stale submission could link an episode belonging to a different
+      #   show onto this download's files — MediaImport.process_targeted_import/3
+      #   trusts the submitted episode_id outright and never checks it belongs
+      #   to the media item it builds the destination path from.
       valid_paths =
         candidates
         |> Enum.reject(& &1["missing"])
@@ -788,31 +804,65 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       movie? = download.media_item && download.media_item.type == "movie"
 
-      mappings =
+      valid_episode_ids =
+        case download.media_item do
+          %{type: "tv_show", id: media_item_id} ->
+            media_item_id |> Media.list_episodes() |> MapSet.new(& &1.id)
+
+          _other ->
+            MapSet.new()
+        end
+
+      path_by_index = Map.get(params, "target_path", %{})
+
+      targets =
         params
         |> Map.get("target", %{})
+        |> Enum.map(fn {index, target} -> {Map.get(path_by_index, index), target} end)
         |> Enum.reject(fn {_path, target} -> target in [nil, ""] end)
-        |> Enum.filter(fn {path, _target} -> MapSet.member?(valid_paths, path) end)
-        |> Enum.map(fn {path, target} ->
-          %{"path" => path, "episode_id" => if(target == "movie", do: nil, else: target)}
+        |> Enum.filter(fn {path, _target} ->
+          is_binary(path) and MapSet.member?(valid_paths, path)
         end)
-        |> Enum.reject(fn mapping -> is_nil(mapping["episode_id"]) and not movie? end)
 
-      if mappings == [] do
-        {:noreply, assign(socket, :match_files_error, "Select at least one file to import.")}
-      else
-        case Downloads.resolve_file_mappings(download, mappings) do
-          {:ok, _updated} ->
-            {:noreply,
-             socket
-             |> assign(:match_files_modal, nil)
-             |> assign(:match_files_error, nil)
-             |> put_flash(:info, "Import queued for #{length(mappings)} file(s)")
-             |> load_downloads()}
+      invalid_target? =
+        Enum.any?(targets, fn {_path, target} ->
+          if target == "movie" do
+            not movie?
+          else
+            not MapSet.member?(valid_episode_ids, target)
+          end
+        end)
 
-          {:error, _reason} ->
-            {:noreply, assign(socket, :match_files_error, "Failed to queue the import.")}
-        end
+      cond do
+        invalid_target? ->
+          {:noreply,
+           assign(
+             socket,
+             :match_files_error,
+             "One or more selected targets are no longer valid for this download. Close and reopen Match files, then try again."
+           )}
+
+        targets == [] ->
+          {:noreply, assign(socket, :match_files_error, "Select at least one file to import.")}
+
+        true ->
+          mappings =
+            Enum.map(targets, fn {path, target} ->
+              %{"path" => path, "episode_id" => if(target == "movie", do: nil, else: target)}
+            end)
+
+          case Downloads.resolve_file_mappings(download, mappings) do
+            {:ok, _updated} ->
+              {:noreply,
+               socket
+               |> assign(:match_files_modal, nil)
+               |> assign(:match_files_error, nil)
+               |> put_flash(:info, "Import queued for #{length(mappings)} file(s)")
+               |> load_downloads()}
+
+            {:error, _reason} ->
+              {:noreply, assign(socket, :match_files_error, "Failed to queue the import.")}
+          end
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}

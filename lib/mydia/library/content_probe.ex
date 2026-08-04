@@ -119,7 +119,12 @@ defmodule Mydia.Library.ContentProbe do
     System.cmd("kill", ["-KILL", to_string(os_pid)], stderr_to_stdout: true)
     :ok
   rescue
-    _ -> :ok
+    exception ->
+      Logger.warning(
+        "Content probe could not kill timed-out ffprobe process #{os_pid}: #{Exception.message(exception)}"
+      )
+
+      :ok
   end
 
   defp close_port(port) do

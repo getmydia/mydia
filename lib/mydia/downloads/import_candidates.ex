@@ -287,12 +287,20 @@ defmodule Mydia.Downloads.ImportCandidates do
   recursively enumerate.
 
   Returns `false` (not proven shared) whenever either argument is missing
-  or blank — callers that need "unknown" to mean "assume shared" must
-  apply that policy themselves, since what counts as an acceptable
-  assumption differs: the importer already refuses to run at all when it
-  cannot resolve a client, so it only reaches this check with a resolved
-  one; `load/1` has no such upstream gate and fails closed itself before
-  calling this.
+  or blank — callers that need "unknown" to mean "assume shared" must apply
+  that policy themselves, and the two current callers differ:
+
+  `load/1` fails closed itself (see `safe_to_list?/2`) before ever calling
+  this, so a `false` here only reaches it once a live listing has already
+  been ruled unsafe for other reasons.
+
+  `Mydia.Jobs.MediaImport`'s `save_path_fallback/4` does NOT fail closed on
+  a `false` here. It only reaches this check once the download's client has
+  resolved, but a resolved client can still have no `download_directory`
+  configured — there is then nothing to compare `save_path` against, this
+  returns `false`, and the importer proceeds with the fallback listing
+  anyway. Only a `save_path` *provably equal* to the client's configured
+  directory is refused.
   """
   @spec shared_download_root?(String.t() | nil, String.t() | nil) :: boolean()
   def shared_download_root?(save_path, download_root)
@@ -348,7 +356,7 @@ defmodule Mydia.Downloads.ImportCandidates do
       |> Map.new(&{&1["path"], &1["probe"]})
 
     files
-    |> build_candidates(library_type_for(download), [])
+    |> build_candidates(resolved_library_type(download), [])
     |> Enum.map(fn candidate ->
       candidate
       |> maybe_restore_probe(probes)
@@ -363,12 +371,30 @@ defmodule Mydia.Downloads.ImportCandidates do
     end
   end
 
-  # This is a display-only guess (the actual library type used at import
-  # time comes from the resolved library path, not the media item), so a
-  # mismatch is cosmetic. `media_item` may be an unloaded association when
-  # the caller didn't preload it: Elixir's map pattern matching falls
-  # through to the next clause rather than raising when a key is absent, so
-  # `%Ecto.Association.NotLoaded{}` safely falls to the :series guess below.
+  # Prefers the download's actually-resolved `library_path.type` — the type
+  # `MediaImport.organize_and_import_files/4` really filtered against — over
+  # the movie/series guess below. A failed download was routed through
+  # `determine_library_path/1` at least once, so when the caller preloaded
+  # `:library_path` this is authoritative, not cosmetic: it's what makes the
+  # live-listing's `skip_reason` agree with the reason the file was actually
+  # dropped for non-movies/series types (`:music`, `:books`, `:adult`),
+  # which `library_type_for/1` can never guess since it only ever returns
+  # `:movies` or `:series`.
+  #
+  # Falls back to the guess when `library_path` isn't preloaded, isn't set
+  # (a download whose failure never got as far as resolving one), or is a
+  # different struct entirely: `%LibraryPath{type: type}` simply fails to
+  # match `%Ecto.Association.NotLoaded{}` or `nil`, so this never raises.
+  defp resolved_library_type(%{library_path: %Mydia.Settings.LibraryPath{type: type}}), do: type
+  defp resolved_library_type(download), do: library_type_for(download)
+
+  # Display-only guess for when the resolved library path isn't available: a
+  # mismatch here is cosmetic (the actual library type used at import time
+  # comes from the resolved library path, not the media item). `media_item`
+  # may be an unloaded association when the caller didn't preload it:
+  # Elixir's map pattern matching falls through to the next clause rather
+  # than raising when a key is absent, so `%Ecto.Association.NotLoaded{}`
+  # safely falls to the :series guess below.
   defp library_type_for(%{media_item: %{type: "movie"}}), do: :movies
   defp library_type_for(_download), do: :series
 

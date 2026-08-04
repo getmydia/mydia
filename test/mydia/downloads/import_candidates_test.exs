@@ -2,6 +2,7 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
   use Mydia.DataCase, async: true
 
   import Mydia.DownloadsFixtures
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   alias Mydia.Downloads.ImportCandidates
@@ -238,6 +239,70 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
 
       assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
       assert candidate["name"] == "Silo.S01E01.mkv"
+    end
+
+    test "uses the download's resolved library_path type over the media_item guess",
+         %{tmp_dir: tmp_dir} do
+      dir = Path.join(tmp_dir, "live")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "track.mkv"), "x")
+
+      client = client_with_unrelated_root(tmp_dir)
+      # `library_type_for/1`'s guess only ever returns :movies or :series from
+      # `media_item.type`, and a "tv_show" media_item guesses :series — under
+      # which a `.mkv` file passes the extension filter (skip_reason nil).
+      # Resolving the real, non-guessable `:music` library type instead makes
+      # the SAME file fail it, proving the resolved type won.
+      library_path = library_path_fixture(%{type: "music"})
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: client.name,
+          library_path_id: library_path.id,
+          metadata: %{
+            "save_path" => dir,
+            "import_candidates" => [
+              %{"path" => Path.join(dir, "old.mkv"), "name" => "old.mkv", "size" => 1}
+            ]
+          }
+        })
+        |> Repo.preload(:library_path)
+
+      assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "track.mkv"
+      assert candidate["skip_reason"] == "not_video_extension"
+    end
+
+    test "falls back to the media_item guess when library_path isn't preloaded",
+         %{tmp_dir: tmp_dir} do
+      dir = Path.join(tmp_dir, "live")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "track.mkv"), "x")
+
+      client = client_with_unrelated_root(tmp_dir)
+      library_path = library_path_fixture(%{type: "music"})
+      media_item = media_item_fixture(%{type: "tv_show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: client.name,
+          library_path_id: library_path.id,
+          metadata: %{
+            "save_path" => dir,
+            "import_candidates" => [
+              %{"path" => Path.join(dir, "old.mkv"), "name" => "old.mkv", "size" => 1}
+            ]
+          }
+        })
+
+      # No `Repo.preload(:library_path)`: an unloaded association must fall
+      # back to the guess rather than raise `FunctionClauseError`.
+      assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "track.mkv"
+      assert candidate["skip_reason"] == nil
     end
 
     test "does not probe on the live listing, even for a large non-video file",

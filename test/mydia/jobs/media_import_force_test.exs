@@ -80,6 +80,13 @@ defmodule Mydia.Jobs.MediaImportForceTest do
 
     assert Repo.reload!(download).imported_at
     assert [_media_file] = Library.list_media_files(episode_id: episode.id)
+
+    # The hand-matched success must clear the failure-time candidate listing
+    # too, not just "unresolved_files" — otherwise a resolved download keeps
+    # carrying a stale file listing (and probe verdicts) forever.
+    metadata = Repo.reload!(download).metadata
+    refute Map.has_key?(metadata, "import_candidates")
+    refute Map.has_key?(metadata, "import_candidates_at")
   end
 
   defp create_test_library_path(base_path, type) do

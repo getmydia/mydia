@@ -620,9 +620,18 @@ defmodule Mydia.Jobs.MediaImport do
       errors = Enum.filter(results, &match?({:error, _}, &1))
 
       if errors == [] do
-        # All targeted files imported — clear match_status and unresolved_files metadata
+        # All targeted files imported — clear match_status and the stale
+        # candidate/unresolved-file listings. Without dropping
+        # "import_candidates" and "import_candidates_at" too, a hand-matched
+        # download would keep carrying the listing (and probe verdicts) from
+        # the failure this import just resolved, forever.
         current_metadata = download.metadata || %{}
-        cleaned_metadata = Map.delete(current_metadata, "unresolved_files")
+
+        cleaned_metadata =
+          current_metadata
+          |> Map.delete("unresolved_files")
+          |> Map.delete("import_candidates")
+          |> Map.delete("import_candidates_at")
 
         Downloads.update_download(download, %{
           imported_at: DateTime.utc_now(),

@@ -47,9 +47,21 @@ defmodule MydiaWeb.DownloadsLive.Components do
 
       <form id="match-files-form" phx-submit="match_files_import" class="mt-4 space-y-2">
         <div
-          :for={candidate <- @modal.candidates}
+          :for={{candidate, index} <- Enum.with_index(@modal.candidates)}
           class="flex items-start gap-3 bg-base-200 rounded-lg px-3 py-2"
         >
+          <%!--
+            The path travels as a hidden input's VALUE, never as part of a
+            form field NAME. Plug's query decoder splits a bracketed field
+            name on "][", so a name built from a path like
+            ".../[Bluray-1080p][Opus 2.0]/ep01.mkv" (the normal shape of an
+            anime release) would decode into nested garbage instead of a
+            flat map, and the operator's selection would silently vanish.
+            Keying everything on the candidate's index sidesteps that
+            entirely — see MydiaWeb.DownloadsLive.Index.match_files_import
+            for the server-side reassembly.
+          --%>
+          <input type="hidden" name={"target_path[#{index}]"} value={candidate["path"]} />
           <div class="flex-1 min-w-0">
             <div
               class={[
@@ -73,7 +85,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
           <%= case @target_kind do %>
             <% :movie -> %>
               <select
-                name={"target[#{candidate["path"]}]"}
+                name={"target[#{index}]"}
                 disabled={candidate["missing"]}
                 class="select select-bordered select-sm w-56"
               >
@@ -82,7 +94,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
               </select>
             <% :tv_show -> %>
               <select
-                name={"target[#{candidate["path"]}]"}
+                name={"target[#{index}]"}
                 disabled={candidate["missing"]}
                 class="select select-bordered select-sm w-56"
               >
@@ -115,7 +127,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
           phx-value-id={@modal.download.id}
           disabled={not rejectable?(@modal.download)}
           title={reject_hint(@modal.download)}
-          data-confirm="Blacklist this release, delete it and its files, and search again?"
+          data-confirm="Blacklist this release, remove the download and its data from the download client, and search again. Files already imported to the library are kept."
         >
           Reject release
         </button>
