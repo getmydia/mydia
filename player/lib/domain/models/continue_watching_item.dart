@@ -1,4 +1,5 @@
 import 'artwork.dart';
+import 'media_file.dart';
 import 'progress.dart';
 
 class ContinueWatchingItem {
@@ -11,6 +12,7 @@ class ContinueWatchingItem {
   final String? showTitle;
   final int? seasonNumber;
   final int? episodeNumber;
+  final List<MediaFile> files;
 
   const ContinueWatchingItem({
     required this.id,
@@ -22,6 +24,7 @@ class ContinueWatchingItem {
     this.showTitle,
     this.seasonNumber,
     this.episodeNumber,
+    this.files = const [],
   });
 
   factory ContinueWatchingItem.fromJson(Map<String, dynamic> json) {
@@ -39,6 +42,10 @@ class ContinueWatchingItem {
       showTitle: json['showTitle'] as String?,
       seasonNumber: json['seasonNumber'] as int?,
       episodeNumber: json['episodeNumber'] as int?,
+      files: (json['files'] as List<dynamic>?)
+              ?.map((e) => MediaFile.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
     );
   }
 
@@ -46,7 +53,10 @@ class ContinueWatchingItem {
   bool get isMovie => type.toLowerCase() == 'movie';
 
   String get displayTitle {
-    if (isEpisode && showTitle != null && seasonNumber != null && episodeNumber != null) {
+    if (isEpisode &&
+        showTitle != null &&
+        seasonNumber != null &&
+        episodeNumber != null) {
       return '$showTitle - S${seasonNumber}E${episodeNumber}';
     }
     return title;
