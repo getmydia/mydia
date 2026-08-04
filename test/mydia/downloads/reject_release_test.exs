@@ -75,5 +75,36 @@ defmodule Mydia.Downloads.RejectReleaseTest do
       assert {:error, :no_guid} = Downloads.reject_release(download)
       assert Repo.get(Mydia.Downloads.Download, download.id)
     end
+
+    test "refuses and changes nothing when the indexer is missing" do
+      download = download_fixture(%{indexer: nil, metadata: %{"guid" => "abc"}})
+
+      assert {:error, :no_indexer} = Downloads.reject_release(download)
+      assert Repo.get(Mydia.Downloads.Download, download.id)
+    end
+
+    # Ordering-adjacent coverage: extract_key/1 and Blacklists.add/4 are the
+    # gate a real order-inversion bug would still have to pass through
+    # (neither has any way to fail given the inputs reject_release/2 always
+    # supplies — see the fix report for why a genuine Blacklists.add/4
+    # failure can't be forced here without mocking). This proves the
+    # blacklist-then-delete sequence completes correctly even when the
+    # optional search step is a no-op, so nothing downstream of the gate is
+    # silently skipped or reordered around a missing media item.
+    test "still blacklists and deletes the row when there is no media item to search for" do
+      download =
+        download_fixture(%{
+          media_item_id: nil,
+          indexer: "1337x",
+          metadata: %{"guid" => "no-media-item-guid"}
+        })
+
+      assert {:ok, :rejected} = Downloads.reject_release(download)
+
+      assert Blacklists.blacklisted?("1337x", "no-media-item-guid")
+      refute Repo.get(Mydia.Downloads.Download, download.id)
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch)
+    end
   end
 end

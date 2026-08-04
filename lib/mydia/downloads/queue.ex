@@ -788,6 +788,21 @@ defmodule Mydia.Downloads.Queue do
       )
 
       :ok
+  catch
+    # The debrid adapter's remove_torrent/3 terminates any running Fetcher
+    # first via DynamicSupervisor.terminate_child/2 — a GenServer.call that
+    # emits an :exit signal (not an Elixir exception) if the supervisor isn't
+    # alive, same hazard documented on
+    # Mydia.Downloads.Client.Debrid.RateLimiter.acquire/3. `rescue` alone
+    # would not catch it, and a client that will not answer must not block
+    # rejecting a bad release.
+    :exit, reason ->
+      Logger.warning("Could not remove rejected release from client (process exit)",
+        download_id: download.id,
+        reason: inspect(reason)
+      )
+
+      :ok
   end
 
   # Returns an Oban changeset, or nil when there is nothing sensible to search
