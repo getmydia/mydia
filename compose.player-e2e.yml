@@ -118,10 +118,23 @@ services:
   # The test container includes Chrome and runs tests using
   # `flutter test -d chrome`, which manages Chrome directly.
   test:
-    build:
-      context: .
-      dockerfile: player/Dockerfile.test
+    image: ${PLAYER_E2E_TOOLBOX_IMAGE:-ghcr.io/getmydia/mydia/player-e2e-toolbox:master}
+    entrypoint: ["/e2e/run-tests.sh"]
+    working_dir: /workspace/player
     container_name: e2e_test
+    volumes:
+      # The repo root, so player/lib/graphql/schema.graphql resolves through
+      # its real symlink and native/mydia_p2p_core resolves at its natural
+      # relative path. Both hacks in the old Dockerfile go away.
+      - .:/workspace
+      - ./scripts/e2e:/e2e:ro
+      # Anonymous volumes masking host build output. Without these the
+      # container sees host-built artifacts containing host paths, which is
+      # what the old entrypoint's manual rm -rf calls were working around.
+      - /workspace/player/build
+      - /workspace/player/.dart_tool
+      - /workspace/player/linux/flutter/ephemeral
+      - /workspace/player/rust_builder/target
     environment:
       # Backend service URLs (test container is on the e2e network)
       MYDIA_URL: "http://mydia:4000"
