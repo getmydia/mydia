@@ -313,6 +313,27 @@ defmodule Mydia.Library.SegmentDetection.ChaptersTest do
       refute Map.has_key?(segments, "intro")
     end
 
+    test "refuses a negative runtime rather than deriving a bound from it" do
+      # The spec says non_neg_integer. A negative runtime is a caller bug, and
+      # silently bounding against it would produce a negative ceiling that
+      # rejects every intro.
+      assert_raise FunctionClauseError, fn ->
+        Chapters.parse_chapters(~s({"chapters": []}), -1)
+      end
+    end
+
+    test "falls back to the absolute bound when runtime is zero" do
+      json = """
+      {"chapters": [
+        {"id": 0, "start_time": "0.000000", "end_time": "90.000000",
+         "tags": {"title": "Opening"}}
+      ]}
+      """
+
+      assert {:ok, segments} = Chapters.parse_chapters(json, 0)
+      assert segments["intro"] == {0, 90_000}
+    end
+
     test "bounds the intro absolutely on long-form content" do
       # 25% of a 90 minute runtime is 22 minutes, which is no one's opening.
       json = """

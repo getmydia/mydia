@@ -133,7 +133,8 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
   `{:ok, %{}}`, which is a successful result and not an error.
   """
   @spec detect(String.t(), non_neg_integer()) :: {:ok, segments()} | {:error, term()}
-  def detect(path, runtime_ms) when is_binary(path) and is_integer(runtime_ms) do
+  def detect(path, runtime_ms)
+      when is_binary(path) and is_integer(runtime_ms) and runtime_ms >= 0 do
     args = ["-v", "quiet", "-print_format", "json", "-show_chapters", path]
 
     case Ffmpeg.probe(args) do
@@ -152,10 +153,12 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
   the first of them is implausible it is describing something else entirely.
   """
   @spec parse_chapters(String.t(), non_neg_integer()) :: {:ok, segments()} | {:error, term()}
-  def parse_chapters(json, runtime_ms) when is_binary(json) and is_integer(runtime_ms) do
+  def parse_chapters(json, runtime_ms)
+      when is_binary(json) and is_integer(runtime_ms) and runtime_ms >= 0 do
     case Jason.decode(json) do
       {:ok, %{"chapters" => chapters}} when is_list(chapters) ->
-        {:ok, Enum.reduce(chapters, %{}, &collect(&1, &2, max_intro_ms(runtime_ms)))}
+        max_intro_ms = max_intro_ms(runtime_ms)
+        {:ok, Enum.reduce(chapters, %{}, &collect(&1, &2, max_intro_ms))}
 
       {:ok, _without_chapters} ->
         {:ok, %{}}
@@ -203,14 +206,16 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
   defp plausible?(:credits, _span_ms, _max_intro_ms), do: true
 
   # The longest span a chapter-derived intro may claim for a file of this
-  # runtime. A non-positive runtime falls back to the absolute bound; callers
-  # in this app always have a real one, since `analyze_season/2` filters to
-  # files with a known duration before any chapter read happens.
-  defp max_intro_ms(runtime_ms) when is_integer(runtime_ms) and runtime_ms > 0 do
+  # runtime. The public guards reject anything negative, so the only value that
+  # reaches the second clause is a zero runtime, which falls back to the
+  # absolute bound rather than collapsing it to nothing. Callers in this app
+  # always have a real duration: `analyze_season/2` filters to files with a
+  # known one before any chapter read happens.
+  defp max_intro_ms(runtime_ms) when runtime_ms > 0 do
     min(@max_intro_ms, round(runtime_ms * @max_intro_fraction))
   end
 
-  defp max_intro_ms(_unknown_runtime), do: @max_intro_ms
+  defp max_intro_ms(_zero_runtime), do: @max_intro_ms
 
   defp chapter_title(%{"tags" => %{"title" => title}}) when is_binary(title), do: title
   defp chapter_title(_chapter), do: nil
