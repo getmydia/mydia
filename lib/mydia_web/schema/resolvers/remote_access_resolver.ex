@@ -67,18 +67,15 @@ defmodule MydiaWeb.Schema.Resolvers.RemoteAccessResolver do
   end
 
   def refresh_media_token(_parent, %{token: token}, _context) do
-    case MediaToken.refresh_token(token) do
-      {:ok, new_token, claims} ->
-        expires_at = DateTime.from_unix!(claims["exp"])
-        permissions = Map.get(claims, "permissions", [])
-
-        {:ok,
-         %{
-           token: new_token,
-           expires_at: expires_at,
-           permissions: permissions
-         }}
-
+    with {:ok, new_token, claims} <- MediaToken.refresh_token(token),
+         {:ok, expires_at} <- expires_at_from_claims(claims) do
+      {:ok,
+       %{
+         token: new_token,
+         expires_at: expires_at,
+         permissions: Map.get(claims, "permissions", [])
+       }}
+    else
       {:error, :token_expired} ->
         {:error, "Token has expired"}
 
@@ -90,6 +87,9 @@ defmodule MydiaWeb.Schema.Resolvers.RemoteAccessResolver do
 
       {:error, :device_revoked} ->
         {:error, "Device has been revoked"}
+
+      {:error, :missing_expiry} ->
+        {:error, "Failed to refresh token: missing expiry"}
 
       {:error, reason} ->
         {:error, "Failed to refresh token: #{inspect(reason)}"}
