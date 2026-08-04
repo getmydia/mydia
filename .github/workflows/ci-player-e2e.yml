@@ -8,13 +8,14 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   publish-toolbox:
     name: Publish / Toolbox
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    needs: test-player-e2e
     permissions:
       contents: read
       packages: write
@@ -46,7 +47,7 @@ jobs:
   test-player-e2e:
     name: Test / Player E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -64,9 +65,26 @@ jobs:
               - 'native/**'
               - 'metadata-relay/**'
               - 'config/**'
-              - 'Dockerfile.e2e'
+              - 'priv/**'
+              - 'scripts/e2e/**'
               - 'compose.player-e2e.yml'
               - '.github/workflows/ci-player-e2e.yml'
+            server:
+              - 'lib/**'
+              - 'native/**'
+              - 'config/**'
+              - 'priv/**'
+              - 'assets/**'
+              - 'plugins/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - 'Dockerfile'
+            toolbox:
+              - 'player/pubspec.lock'
+              - 'player/Dockerfile.test'
+              - 'rust-toolchain.toml'
+            relay:
+              - 'metadata-relay/**'
 
       - name: Decide whether to run
         id: should
@@ -79,14 +97,14 @@ jobs:
           fi
 
       - name: Free up disk space
-        if: steps.should.outputs.run == 'true'
+        if: steps.should.outputs.run == 'true' && steps.filter.outputs.server == 'true'
         run: |
           echo "Disk before cleanup:"
           df -h /
-          # The E2E build runs entirely in Docker (the Android emulator is built
-          # inside the container from Dockerfile.e2e), so the host's preinstalled
-          # toolchains are unused. Remove them to avoid "No space left on device"
-          # while compiling the Rust p2p NIF + Android image.
+          # This step only runs when the server image is being built from source
+          # (server paths changed). The host's preinstalled toolchains are unused
+          # in that build, so remove them to avoid "No space left on device" while
+          # compiling the Rust p2p NIF and the Elixir release.
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
             /usr/local/share/powershell /usr/local/share/chromium \
@@ -99,9 +117,77 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Build E2E images
+      - name: Log in to registry
         if: steps.should.outputs.run == 'true'
-        run: DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build
+        uses: docker/login-action@v3
+        continue-on-error: true
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve server image
+        if: steps.should.outputs.run == 'true'
+        id: server
+        run: |
+          set -euo pipefail
+          IMAGE=ghcr.io/${{ github.repository }}:master
+          if [ "${{ steps.filter.outputs.server }}" = "true" ]; then
+            echo "::notice::Backend paths changed; building the server from this PR."
+            BUILD=1
+          elif docker pull "$IMAGE"; then
+            echo "::notice::Using prebuilt server image $IMAGE"
+            BUILD=0
+          else
+            echo "::warning::Could not pull $IMAGE; building from source instead."
+            BUILD=1
+          fi
+
+          if [ "$BUILD" = "1" ]; then
+            IMAGE=mydia-e2e:pr
+            docker buildx build \
+              --file Dockerfile \
+              --build-arg DATABASE_TYPE=sqlite \
+              --build-arg BUILD_COMMIT=${{ github.sha }} \
+              --cache-from type=gha,scope=docker-sqlite \
+              --load \
+              --tag "$IMAGE" \
+              .
+          fi
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Server image: $IMAGE"
+          docker image inspect "$IMAGE" --format 'digest: {{index .RepoDigests 0}}' || true
+
+      - name: Resolve toolbox and relay images
+        if: steps.should.outputs.run == 'true'
+        id: aux
+        run: |
+          set -euo pipefail
+          TOOLBOX=ghcr.io/${{ github.repository }}/player-e2e-toolbox:master
+          if [ "${{ steps.filter.outputs.toolbox }}" = "true" ] || ! docker pull "$TOOLBOX"; then
+            echo "::notice::Building the player toolbox image."
+            TOOLBOX=player-e2e-toolbox:pr
+            docker buildx build \
+              --file player/Dockerfile.test \
+              --cache-from type=gha,scope=player-toolbox \
+              --load --tag "$TOOLBOX" .
+          fi
+
+          RELAY=ghcr.io/${{ github.repository }}/metadata-relay:master
+          if [ "${{ steps.filter.outputs.relay }}" = "true" ] || ! docker pull "$RELAY"; then
+            echo "::notice::Building the relay image."
+            RELAY=metadata-relay:pr
+            docker buildx build \
+              --file metadata-relay/Dockerfile \
+              --cache-from type=gha,scope=relay-master \
+              --load --tag "$RELAY" .
+          fi
+
+          echo "toolbox=$TOOLBOX" >> "$GITHUB_OUTPUT"
+          echo "relay=$RELAY" >> "$GITHUB_OUTPUT"
+          echo "Toolbox image: $TOOLBOX"
+          echo "Relay image: $RELAY"
 
       - name: Run player E2E tests
         if: steps.should.outputs.run == 'true'
@@ -111,6 +197,9 @@ jobs:
             --exit-code-from test
         env:
           E2E_TEST_TARGET: integration_test/pairing_flow_test.dart
+          MYDIA_E2E_IMAGE: ${{ steps.server.outputs.image }}
+          PLAYER_E2E_TOOLBOX_IMAGE: ${{ steps.aux.outputs.toolbox }}
+          RELAY_E2E_IMAGE: ${{ steps.aux.outputs.relay }}
 
       - name: Collect service logs
         if: failure() && steps.should.outputs.run == 'true'

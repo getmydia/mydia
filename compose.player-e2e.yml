@@ -24,9 +24,7 @@ services:
   # Metadata Relay Service
   # ============================================
   relay:
-    build:
-      context: .
-      dockerfile: metadata-relay/Dockerfile
+    image: ${RELAY_E2E_IMAGE:-ghcr.io/getmydia/mydia/metadata-relay:master}
     container_name: e2e_relay
     environment:
       PORT: "4001"
