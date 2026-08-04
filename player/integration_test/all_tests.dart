@@ -12,9 +12,12 @@ import 'simple_test.dart' as simple;
 /// per file. Each file's `main` only registers tests and setUpAll callbacks,
 /// so wrapping them in groups is safe.
 ///
-/// Order matters. Pairing runs first because it consumes the single-use
-/// E2E_CLAIM_CODE passed via --dart-define; the streaming tests mint their own
-/// codes through the API and so must come after the device is paired.
+/// Order matters, though only in part. `simple` runs first: it boots `MyApp`,
+/// which initializes P2P, so a real host starts and tears down before
+/// `pairing_flow` claims the device. `pairing_flow` runs next because it
+/// consumes the single-use E2E_CLAIM_CODE passed via --dart-define.
+/// `p2p_streaming` mints its own claim codes through the API, so it does not
+/// depend on `pairing_flow` having run first.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
