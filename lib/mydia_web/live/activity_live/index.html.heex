@@ -203,7 +203,7 @@
             <!-- Content -->
             <div class="flex-1 min-w-0">
               <div class="flex items-start justify-between gap-2">
-                <p class="font-medium">{format_event_description(event)}</p>
+                <p class="font-medium">{event_summary(event)}</p>
                 <%= if event.severity != :info do %>
                   <span class={[
                     "badge badge-sm flex-shrink-0",

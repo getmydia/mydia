@@ -4,6 +4,7 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
   alias Mydia.Events
+  alias Mydia.Events.Presentation
 
   describe "Activity feed" do
     setup %{conn: conn} do
@@ -117,7 +118,7 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
         Enum.reduce_while(1..10, nil, fn _attempt, _acc ->
           html = render(view)
 
-          if html =~ "New Movie" && html =~ "Added movie: New Movie" do
+          if html =~ "New Movie" && html =~ "Added to library: New Movie (movie)" do
             {:halt, html}
           else
             Process.sleep(50)
@@ -127,7 +128,7 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
 
       # The view should have received the update and re-rendered with the event
       assert html =~ "New Movie"
-      assert html =~ "Added movie: New Movie"
+      assert html =~ "Added to library: New Movie (movie)"
     end
 
     test "formats event descriptions correctly", %{conn: conn} do
@@ -165,9 +166,9 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       {:ok, _view, html} = live(conn, ~p"/activity")
 
       # Check formatted descriptions
-      assert html =~ "Added movie: Inception"
+      assert html =~ "Added to library: Inception (movie)"
       assert html =~ "Download completed: Test.File.mkv"
-      assert html =~ "Download failed for: Failed.File.mkv"
+      assert html =~ "Download failed: Failed.File.mkv"
       assert html =~ "Connection timeout"
     end
 
@@ -227,6 +228,46 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert has_element?(view, "button", "Search")
       assert has_element?(view, "button", "System")
       assert has_element?(view, "button", "Errors")
+    end
+
+    test "labels every feed-visible event type instead of printing its key", %{conn: conn} do
+      types = Presentation.known_types() -- Presentation.feed_hidden_types()
+
+      for type <- types do
+        [namespace, _action] = String.split(type, ".")
+
+        {:ok, _} =
+          Events.create_event(%{
+            category: namespace,
+            type: type,
+            actor_type: :system,
+            actor_id: "test",
+            metadata: %{"title" => "Fixture Title"}
+          })
+      end
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      for type <- types do
+        refute html =~ ">#{type}<", "#{type} rendered as a raw key"
+      end
+    end
+
+    test "renders a stalled download with a human label", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.stalled",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          severity: :warning,
+          metadata: %{"title" => "Arrival 2160p", "message" => "no progress for 2h"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Download stalled: Arrival 2160p (no progress for 2h)"
+      refute html =~ "download.stalled"
     end
   end
 end
