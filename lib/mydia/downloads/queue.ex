@@ -6,6 +6,7 @@ defmodule Mydia.Downloads.Queue do
   alias Mydia.Repo
   alias Mydia.Downloads.ContentType
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
@@ -127,6 +128,46 @@ defmodule Mydia.Downloads.Queue do
       {:error, reason} ->
         Logger.warning("Failed to cancel download: #{inspect(reason)}")
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Rejects a release the operator has judged unusable.
+
+  Blacklists `(indexer, guid)` so future searches filter it out, removes the
+  torrent and its data from the client, deletes the download row, and queues a
+  fresh search for the bound episode or movie.
+
+  The blacklist write happens first: if a later step fails, the release must
+  still not be re-grabbed. Client removal is best effort, since the torrent may
+  already be gone.
+  """
+  @spec reject_release(Download.t(), keyword()) ::
+          {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
+  def reject_release(%Download{} = download, opts \\ []) do
+    with {:ok, indexer, guid} <- Blacklists.extract_key(download),
+         {:ok, _row} <-
+           Blacklists.add(indexer, guid, download.title || "Unknown release", "rejected_by_user") do
+      # Computed before deletion: it reads through the media_item association.
+      search = replacement_search(download)
+
+      remove_from_client(download)
+
+      case History.delete_download(download) do
+        {:ok, _deleted} ->
+          enqueue_search(search)
+
+          Events.download_cancelled(
+            download,
+            Keyword.get(opts, :actor_type, :user),
+            Keyword.get(opts, :actor_id, "unknown")
+          )
+
+          {:ok, :rejected}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
@@ -722,6 +763,59 @@ defmodule Mydia.Downloads.Queue do
     )
     |> Repo.delete_all()
   end
+
+  # Best effort: a torrent the client no longer holds must not block the reject.
+  defp remove_from_client(%Download{download_client: nil}), do: :ok
+  defp remove_from_client(%Download{download_client_id: nil}), do: :ok
+
+  defp remove_from_client(download) do
+    with {:ok, client_config} <- find_client_config(download.download_client),
+         {:ok, adapter} <- get_adapter_for_client(client_config) do
+      Client.remove_download(
+        adapter,
+        config_to_map(client_config),
+        download.download_client_id,
+        delete_files: true
+      )
+    end
+
+    :ok
+  rescue
+    exception ->
+      Logger.warning("Could not remove rejected release from client",
+        download_id: download.id,
+        error: Exception.message(exception)
+      )
+
+      :ok
+  end
+
+  # Returns an Oban changeset, or nil when there is nothing sensible to search
+  # for. `Media` exposes only the raising `get_media_item!/1`, so this reads the
+  # association instead: a deleted media item yields nil rather than raising in
+  # the middle of a cleanup path.
+  defp replacement_search(%Download{episode_id: episode_id}) when is_binary(episode_id) do
+    Mydia.Jobs.TVShowSearch.new(%{"mode" => "specific", "episode_id" => episode_id})
+  end
+
+  defp replacement_search(%Download{media_item_id: media_item_id} = download)
+       when is_binary(media_item_id) do
+    case Repo.preload(download, :media_item).media_item do
+      %{type: "movie", id: id} ->
+        Mydia.Jobs.MovieSearch.new(%{"mode" => "specific", "media_item_id" => id})
+
+      %{type: "tv_show", id: id} ->
+        Mydia.Jobs.TVShowSearch.new(%{"mode" => "show", "media_item_id" => id})
+
+      _other ->
+        nil
+    end
+  end
+
+  defp replacement_search(_download), do: nil
+
+  defp enqueue_search(nil), do: :ok
+  defp enqueue_search(changeset), do: insert_job(changeset)
 
   ## Private Functions - Download Initiation
 
