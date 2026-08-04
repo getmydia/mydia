@@ -44,8 +44,13 @@ defmodule Mydia.Downloads.TorrentHashTest do
     end
 
     test "does not mistake a dn containing 'tr=' for a tracker parameter" do
-      magnet = "magnet:?xt=urn:btih:#{@hash}&dn=attr%3Dvalue"
+      # "attr=value" ends in the literal substring "tr=", so a naive
+      # String.contains?(magnet, "tr=") check would decide this magnet already
+      # has a tracker and skip enrichment. The parameter is matched per
+      # &-separated segment instead, and this segment starts with "dn=".
+      magnet = "magnet:?xt=urn:btih:#{@hash}&dn=Release.attr=value"
 
+      assert String.contains?(magnet, "tr=")
       assert TorrentHash.ensure_trackers(magnet) =~ "&tr=udp%3A%2F%2F"
     end
 
