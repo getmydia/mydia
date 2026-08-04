@@ -114,19 +114,6 @@ defmodule Mydia.P2p.PairingResponse do
         }
 end
 
-defmodule Mydia.P2p.ReadMediaRequest do
-  @moduledoc """
-  A request to read a media file chunk.
-  """
-  defstruct [:file_path, :offset, :length]
-
-  @type t :: %__MODULE__{
-          file_path: String.t(),
-          offset: non_neg_integer(),
-          length: non_neg_integer()
-        }
-end
-
 defmodule Mydia.P2p.NetworkStats do
   @moduledoc """
   Network statistics from the p2p host.

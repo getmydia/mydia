@@ -26,7 +26,6 @@ const ALPN: &[u8] = b"/mydia/1.0.0";
 pub enum MydiaRequest {
     Ping,
     Pairing(PairingRequest),
-    ReadMedia(ReadMediaRequest),
     GraphQL(GraphQLRequest),
     HlsStream(HlsRequest),
     Custom(Vec<u8>),
@@ -38,13 +37,6 @@ pub struct PairingRequest {
     pub device_name: String,
     pub device_type: String,
     pub device_os: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ReadMediaRequest {
-    pub file_path: String,
-    pub offset: u64,
-    pub length: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -110,14 +110,6 @@ struct ElixirPairingResponse {
 }
 
 #[derive(NifStruct)]
-#[module = "Mydia.P2p.ReadMediaRequest"]
-struct ElixirReadMediaRequest {
-    pub file_path: String,
-    pub offset: u64,
-    pub length: u32,
-}
-
-#[derive(NifStruct)]
 #[module = "Mydia.P2p.GraphQLRequest"]
 struct ElixirGraphQLRequest {
     pub query: String,
@@ -361,21 +353,6 @@ fn start_listening(
                                 atoms::ok(),
                                 "request_received",
                                 "pairing",
-                                request_id,
-                                elixir_req,
-                            )
-                                .encode(env)
-                        }
-                        MydiaRequest::ReadMedia(req) => {
-                            let elixir_req = ElixirReadMediaRequest {
-                                file_path: req.file_path,
-                                offset: req.offset,
-                                length: req.length,
-                            };
-                            (
-                                atoms::ok(),
-                                "request_received",
-                                "read_media",
                                 request_id,
                                 elixir_req,
                             )

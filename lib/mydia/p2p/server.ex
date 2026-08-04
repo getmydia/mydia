@@ -285,26 +285,6 @@ defmodule Mydia.P2p.Server do
     {:noreply, state}
   end
 
-  def handle_info({:ok, "request_received", "read_media", request_id, req}, state) do
-    # Validate file path exists
-    # SECURITY: In production, verify path is within allowed directories!
-    if File.exists?(req.file_path) do
-      # Use the optimized NIF to read chunk and respond
-      P2p.respond_with_file_chunk(
-        state.resource,
-        request_id,
-        req.file_path,
-        req.offset,
-        req.length
-      )
-    else
-      Logger.warning("Requested file not found: #{req.file_path}")
-      P2p.send_response(state.resource, request_id, {:error, "File not found"})
-    end
-
-    {:noreply, state}
-  end
-
   def handle_info({:ok, "request_received", "graphql", request_id, req}, state) do
     Logger.debug("P2P Request: GraphQL query")
 
