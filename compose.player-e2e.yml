@@ -24,6 +24,10 @@ services:
   # Metadata Relay Service
   # ============================================
   relay:
+    # Explicit image names: without them the tag is derived from the compose
+    # project (the checkout directory), so a git worktree and CI disagree, and
+    # the CI build step tags something `docker compose up` then does not find.
+    image: mydia-e2e-relay:latest
     build:
       context: .
       dockerfile: metadata-relay/Dockerfile
@@ -53,6 +57,7 @@ services:
   # Mydia Main Application
   # ============================================
   mydia:
+    image: mydia-e2e-app:latest
     build:
       context: .
       dockerfile: Dockerfile.e2e
@@ -111,6 +116,7 @@ services:
   # The test container includes Chrome and runs tests using
   # `flutter test -d chrome`, which manages Chrome directly.
   test:
+    image: mydia-e2e-test:latest
     build:
       context: .
       dockerfile: player/Dockerfile.test

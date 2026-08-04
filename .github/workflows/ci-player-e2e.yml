@@ -14,7 +14,10 @@ jobs:
   test-player-e2e:
     name: Test / Player E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A run that has to populate a cold layer cache still pays the full build
+    # cost, so this has to clear a cold build, not a warm one. 30 minutes did
+    # not, and the job died mid-`apt-get` without ever running a test.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -67,9 +70,27 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v3
 
+      # Built through bake rather than `docker compose build` so the layers can
+      # be cached across runs. The player test image installs the whole GTK /
+      # mpv / Flutter Linux desktop toolchain in one apt layer, which alone has
+      # taken ~20 of the job's 30 minutes and timed the job out before the tests
+      # ever ran. `type=gha` cache needs ACTIONS_CACHE_URL and
+      # ACTIONS_RUNTIME_TOKEN in the environment, which the Docker actions
+      # inject and a plain `run:` step does not, so this cannot be done as a
+      # shell step. Scopes are per-image so the three do not evict each other.
       - name: Build E2E images
         if: steps.should.outputs.run == 'true'
-        run: DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build
+        uses: docker/bake-action@v6
+        with:
+          files: compose.player-e2e.yml
+          load: true
+          set: |
+            relay.cache-from=type=gha,scope=player-e2e-relay
+            relay.cache-to=type=gha,mode=max,scope=player-e2e-relay
+            mydia.cache-from=type=gha,scope=player-e2e-mydia
+            mydia.cache-to=type=gha,mode=max,scope=player-e2e-mydia
+            test.cache-from=type=gha,scope=player-e2e-test
+            test.cache-to=type=gha,mode=max,scope=player-e2e-test
 
       - name: Run player E2E tests
         if: steps.should.outputs.run == 'true'
