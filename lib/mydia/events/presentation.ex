@@ -429,6 +429,43 @@ defmodule Mydia.Events.Presentation do
       "backoff cleared after #{metadata["previous_failure_count"] || 0} failed attempts"
   end
 
+  def detail(%Event{type: "plugin.http_request", metadata: metadata}) do
+    slug = metadata["slug"] || "unknown"
+    method = metadata["method"] || "GET"
+    host = metadata["host"] || "unknown host"
+
+    call = "#{slug}: #{method} #{host}"
+
+    case Enum.reject(
+           [metadata["status"], metadata["duration_ms"] && "#{metadata["duration_ms"]}ms"],
+           &is_nil/1
+         ) do
+      [] -> call
+      parts -> "#{call} (#{Enum.join(parts, ", ")})"
+    end
+  end
+
+  def detail(%Event{type: "plugin.update_available", metadata: metadata}) do
+    slug = metadata["slug"] || "unknown"
+    current = metadata["current_version"] || "unknown"
+    latest = metadata["latest_version"] || "unknown"
+    "#{slug} #{current} to #{latest}"
+  end
+
+  @playback_types ~w(playback.started playback.progressed playback.paused playback.finished)
+
+  def detail(%Event{type: type, metadata: metadata}) when type in @playback_types do
+    [
+      metadata["completion_percentage"] && "#{metadata["completion_percentage"]}% watched",
+      metadata["origin"] && "from #{metadata["origin"]}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
+      parts -> Enum.join(parts, ", ")
+    end
+  end
+
   def detail(%Event{} = event) do
     metadata = event.metadata || %{}
     metadata["title"] || metadata["description"]

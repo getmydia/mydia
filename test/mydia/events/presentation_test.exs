@@ -416,4 +416,83 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Arrival (show), backoff cleared after 4 failed attempts"
     end
   end
+
+  describe "detail/1 plugin.*" do
+    test "http_request summarizes the call" do
+      assert Presentation.detail(
+               event(
+                 type: "plugin.http_request",
+                 metadata: %{
+                   "slug" => "tmdb-art",
+                   "method" => "GET",
+                   "host" => "api.themoviedb.org",
+                   "status" => 200,
+                   "duration_ms" => 84
+                 }
+               )
+             ) == "tmdb-art: GET api.themoviedb.org (200, 84ms)"
+    end
+
+    test "http_request survives a failed call with no status" do
+      assert Presentation.detail(
+               event(
+                 type: "plugin.http_request",
+                 severity: :error,
+                 metadata: %{
+                   "slug" => "tmdb-art",
+                   "method" => "GET",
+                   "host" => "api.themoviedb.org",
+                   "duration_ms" => 5000
+                 }
+               )
+             ) == "tmdb-art: GET api.themoviedb.org (5000ms)"
+    end
+
+    test "update_available names both versions" do
+      assert Presentation.detail(
+               event(
+                 type: "plugin.update_available",
+                 metadata: %{
+                   "slug" => "tmdb-art",
+                   "current_version" => "1.0.0",
+                   "latest_version" => "1.2.0"
+                 }
+               )
+             ) == "tmdb-art 1.0.0 to 1.2.0"
+    end
+  end
+
+  describe "detail/1 playback.*" do
+    test "finished reports progress and origin" do
+      assert Presentation.detail(
+               event(
+                 type: "playback.finished",
+                 metadata: %{"completion_percentage" => 98, "origin" => "player"}
+               )
+             ) == "98% watched, from player"
+    end
+
+    test "started with only an origin reports the origin" do
+      assert Presentation.detail(
+               event(type: "playback.started", metadata: %{"origin" => "player"})
+             ) ==
+               "from player"
+    end
+
+    test "returns nil when playback metadata carries neither" do
+      assert Presentation.detail(event(type: "playback.paused", metadata: %{})) == nil
+    end
+  end
+
+  describe "detail/1 totality" do
+    test "never raises for any registered type, with metadata present or absent" do
+      for type <- Presentation.known_types() do
+        assert Presentation.detail(event(type: type, metadata: %{})) == nil or
+                 is_binary(Presentation.detail(event(type: type, metadata: %{})))
+
+        detail = Presentation.detail(event(type: type, metadata: %{"title" => "Fixture"}))
+        assert is_nil(detail) or is_binary(detail)
+      end
+    end
+  end
 end
