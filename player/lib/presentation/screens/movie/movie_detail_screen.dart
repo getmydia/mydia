@@ -12,6 +12,7 @@ import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
+import '../../../domain/models/movie_detail.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/movie_watched_controls.dart';
@@ -191,7 +192,7 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, movie) {
+  Widget _buildContent(BuildContext context, WidgetRef ref, MovieDetail movie) {
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, ref, movie),
@@ -247,7 +248,8 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, WidgetRef ref, movie) {
+  Widget _buildHeroSection(
+      BuildContext context, WidgetRef ref, MovieDetail movie) {
     return SliverAppBar(
       expandedHeight: 380,
       pinned: true,

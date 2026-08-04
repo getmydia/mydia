@@ -112,7 +112,13 @@ void main() {
       expect(result.progress?.lastWatchedAt, isNotNull);
     });
 
-    test('marking watched preserves an existing lastWatchedAt', () {
+    test('marking watched re-stamps an existing lastWatchedAt', () {
+      // The server's `Progress.changeset(%{watched: true})` never carries an
+      // explicit change to `last_watched_at`, so `set_last_watched_at/1`
+      // re-stamps it to now on every mark-watched, even when the row already
+      // held a value. The optimistic write must mirror that, or the badge
+      // shows the stale date until the invalidation refetch lands and then
+      // visibly jumps to today.
       final movie = _movie(
         progress: const Progress(
           positionSeconds: 600,
@@ -124,7 +130,7 @@ void main() {
 
       final result = MovieDetailController.applyOptimisticWatched(movie, true);
 
-      expect(result.progress?.lastWatchedAt, '2026-01-01T00:00:00Z');
+      expect(result.progress?.lastWatchedAt, isNot('2026-01-01T00:00:00Z'));
     });
 
     test('marking unwatched drops the progress row entirely', () {
@@ -158,12 +164,33 @@ void main() {
       Map<String, dynamic> seed, {
       bool mutationFails = false,
     }) {
+      // `setWatched` awaits `invalidator.invalidate`, which for a live
+      // watcher awaits a refetch. For the assertions below to test anything
+      // meaningful, that refetch must answer the way the real server would:
+      // reflecting whichever mutation just ran, not repeating the original
+      // seed. Track watched state locally and derive each `MovieDetail`
+      // response from it, mirroring `delete_progress` clearing the row on
+      // unwatched.
+      var watched =
+          (seed['progress'] as Map<String, dynamic>?)?['watched'] as bool? ??
+              false;
+
+      Map<String, dynamic> currentSeed() => {
+            ...seed,
+            'progress': watched
+                ? (seed['progress'] as Map<String, dynamic>? ??
+                    _progressJson(watched: true))
+                : null,
+          };
+
       link = StubLink((request, _) {
         final operation = _operationName(request);
         if (operation == 'MovieDetail') {
-          return {'__typename': 'Query', 'movie': seed};
+          return {'__typename': 'Query', 'movie': currentSeed()};
         }
         if (mutationFails) return graphqlErrorResponse('boom');
+        if (operation == 'MarkMovieWatched') watched = true;
+        if (operation == 'MarkMovieUnwatched') watched = false;
         return {
           '__typename': 'Mutation',
           operation!.substring(0, 1).toLowerCase() + operation.substring(1): {
