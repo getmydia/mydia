@@ -3060,12 +3060,16 @@ trusted user</code>, add yourself:</p>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>mydia
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Authorize direnv for this worktree (one time). This builds the toolchain and</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># runs first-run setup (deps.get, ecto.create/migrate, asset npm install,</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># flutter pub get). The first build downloads the toolchain and can take a while.</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>direnv<span class="w"> </span>allow
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># Start the stack (Phoenix + Flutter codegen watcher)</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>./dev<span class="w"> </span>up
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># runs first-run setup (deps.get, asset npm install, flutter pub get). The first</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># build downloads the toolchain and can take a while.</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1">#</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Shell entry deliberately does NOT touch the development database: it must not</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># boot the app or start a service. `./dev up` sets the database up before</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># starting Phoenix, and `./dev db.setup` does it on demand.</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>direnv<span class="w"> </span>allow
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># Start the stack (Phoenix + Flutter codegen watcher)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>./dev<span class="w"> </span>up
 </code></pre></div>
 <p>On shell entry devenv prints this worktree's assigned URL and ports, e.g.:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Mydia dev environment (devenv): /home/you/mydia
@@ -3095,6 +3099,11 @@ port and creates <code>mydia_dev</code> / <code>mydia_test</code>.</p>
 <p><code>initialDatabases</code> only runs on first init. To change it later, delete
 <code>.devenv/state/postgres</code> and re-enter the shell.</p>
 </blockquote>
+<p><code>DATABASE_TYPE</code> is read when devenv evaluates, so export it <em>before</em> entering
+the shell. Postgres builds into <code>_build/postgres</code> rather than <code>_build</code>, because
+the Ecto adapter is a compile-time setting and sharing one build root between
+adapters makes Phoenix restart-loop on a compile-env mismatch. Switching back
+and forth costs no recompile.</p>
 <h2 id="the-dev-script">The <code>./dev</code> Script</h2>
 <p><code>./dev</code> is a thin wrapper over devenv that preserves the historical command
 vocabulary. Run <code>./dev</code> with no arguments to see everything.</p>
@@ -3116,8 +3125,12 @@ vocabulary. Run <code>./dev</code> with no arguments to see everything.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>./dev<span class="w"> </span><span class="nb">test</span><span class="w">         </span><span class="c1"># Run tests</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>./dev<span class="w"> </span>format<span class="w">       </span><span class="c1"># Format code</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>./dev<span class="w"> </span>deps.get<span class="w">     </span><span class="c1"># Fetch dependencies</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>./dev<span class="w"> </span>ecto.migrate<span class="w"> </span><span class="c1"># Run migrations</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>./dev<span class="w"> </span>db.setup<span class="w">     </span><span class="c1"># Create and migrate the development database</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>./dev<span class="w"> </span>ecto.migrate<span class="w"> </span><span class="c1"># Run migrations</span>
 </code></pre></div>
+<p><code>./dev up</code>, <code>./dev iex</code>, and <code>./dev phx.server</code> run <code>db.setup</code> for you. <code>./dev
+test</code> and <code>./dev mix</code> do not need it: the <code>test</code> alias builds and migrates its
+own database, and formatting, Credo, and compilation never open one.</p>
 <h2 id="code-quality">Code Quality</h2>
 <h3 id="pre-commit-checks">Pre-commit checks</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>./dev<span class="w"> </span>mix<span class="w"> </span>precommit
