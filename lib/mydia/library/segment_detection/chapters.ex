@@ -166,19 +166,6 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
   end
 
   @doc """
-  The longest span a chapter-derived intro may claim for a file of `runtime_ms`.
-
-  Public so the backfill that clears already-stored bad spans applies the same
-  rule this module enforces, rather than a second copy that could drift.
-  """
-  @spec max_intro_ms(non_neg_integer()) :: non_neg_integer()
-  def max_intro_ms(runtime_ms) when is_integer(runtime_ms) and runtime_ms > 0 do
-    min(@max_intro_ms, round(runtime_ms * @max_intro_fraction))
-  end
-
-  def max_intro_ms(_unknown_runtime), do: @max_intro_ms
-
-  @doc """
   Classifies a chapter title as `:intro`, `:credits`, or `:unknown`.
 
   Comparison is against the whole normalised title. Accents and punctuation are
@@ -214,6 +201,16 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
 
   defp plausible?(:intro, span_ms, max_intro_ms), do: span_ms <= max_intro_ms
   defp plausible?(:credits, _span_ms, _max_intro_ms), do: true
+
+  # The longest span a chapter-derived intro may claim for a file of this
+  # runtime. A non-positive runtime falls back to the absolute bound; callers
+  # in this app always have a real one, since `analyze_season/2` filters to
+  # files with a known duration before any chapter read happens.
+  defp max_intro_ms(runtime_ms) when is_integer(runtime_ms) and runtime_ms > 0 do
+    min(@max_intro_ms, round(runtime_ms * @max_intro_fraction))
+  end
+
+  defp max_intro_ms(_unknown_runtime), do: @max_intro_ms
 
   defp chapter_title(%{"tags" => %{"title" => title}}) when is_binary(title), do: title
   defp chapter_title(_chapter), do: nil

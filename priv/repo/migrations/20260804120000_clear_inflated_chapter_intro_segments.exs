@@ -27,9 +27,7 @@ defmodule Mydia.Repo.Migrations.ClearInflatedChapterIntroSegments do
   # long enough to swallow an episode is far past 180s either way.
   @max_intro_ms 180_000
 
-  @condition """
-  source = 'chapters' AND type = 'intro' AND (end_ms - start_ms) > #{@max_intro_ms}
-  """
+  @condition "source = 'chapters' AND type = 'intro' AND (end_ms - start_ms) > #{@max_intro_ms}"
 
   def up do
     # The update runs first: it reads the subquery that the delete then empties.
