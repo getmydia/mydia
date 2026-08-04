@@ -51,9 +51,21 @@ RUN apt-get update -qq && \
         libgl1-mesa-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Rust toolchain is required for building the mydia_player_p2p plugin.
+# Rust toolchain is required for building the mydia_player_p2p plugin. This
+# installs rustup itself with a throwaway stable default; the toolchain
+# actually used at test time is pinned below.
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable
+
+# Bake the pinned toolchain from rust-toolchain.toml (channel 1.96.0, plus the
+# wasm32-wasip2 target) into the image instead of leaving it to be resolved at
+# runtime. Once compose bind-mounts the repo root over /workspace,
+# rust-toolchain.toml sits above every cargo invocation under it, so without
+# this rustup would install 1.96.0 (and a wasm target the player never uses)
+# from scratch into a layer that gets discarded, on every single run.
+WORKDIR /workspace
+COPY rust-toolchain.toml ./
+RUN rustup toolchain install
 
 RUN flutter config --enable-linux-desktop
 
