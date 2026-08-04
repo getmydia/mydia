@@ -46,7 +46,11 @@ defmodule Mydia.Changelog.Entry do
   end
 
   defp render!(markdown, path) do
-    case Earmark.as_html(markdown) do
+    # `escape: true` is already Earmark's default, but it is stated explicitly
+    # because the rendered HTML is inserted with `raw/1`. Pinning it here means a
+    # future change to that default cannot silently start emitting raw HTML from
+    # a notes file into the page.
+    case Earmark.as_html(markdown, %Earmark.Options{escape: true}) do
       {:ok, html, _messages} ->
         html
 

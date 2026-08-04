@@ -124,13 +124,19 @@ defmodule Mydia.Accounts.ChangelogPreferenceTest do
           # re-read after the insert; only the first SELECT per process is the
           # rendezvous point, so a process-local flag keeps that re-read from
           # blocking on the barrier a second time.
-          if metadata.source == "user_preferences" and String.starts_with?(query, "SELECT") and
+          # The handler is VM-global and runs in whichever process issued the
+          # query, so it must ignore anything that is not one of this test's two
+          # racers. Without the participant flag, a concurrently-running async
+          # test that touches user_preferences would consume a barrier slot and
+          # silently stop these two from rendezvousing at all.
+          if Process.get(:first_mount_race_participant) and
+               metadata.source == "user_preferences" and String.starts_with?(query, "SELECT") and
                is_nil(Process.get(:first_mount_race_synced)) do
             Process.put(:first_mount_race_synced, true)
             me = self()
 
             case Agent.get_and_update(barrier, fn arrived -> {[me | arrived], [me | arrived]} end) do
-              [_, _] = both -> Enum.each(both, &send(&1, :first_mount_race_go))
+              [_, _] = both -> Enum.each(both -- [me], &send(&1, :first_mount_race_go))
               [_one] -> receive(do: (:first_mount_race_go -> :ok))
             end
           end
@@ -144,6 +150,7 @@ defmodule Mydia.Accounts.ChangelogPreferenceTest do
         for _ <- 1..2 do
           Task.async(fn ->
             Ecto.Adapters.SQL.Sandbox.allow(Repo, test_pid, self())
+            Process.put(:first_mount_race_participant, true)
             Accounts.get_user_preference!(user)
           end)
         end

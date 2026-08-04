@@ -106,7 +106,7 @@ defmodule MydiaWeb.Layouts do
               </span>
             </div>
             <div class="flex items-center gap-2">
-              <.link navigate="/changelog" class="btn btn-sm btn-primary">
+              <.link navigate={~p"/changelog"} class="btn btn-sm btn-primary">
                 See what's new
               </.link>
               <button
@@ -435,7 +435,7 @@ defmodule MydiaWeb.Layouts do
                   </a>
                 </li>
                 <li>
-                  <.link navigate="/changelog">
+                  <.link navigate={~p"/changelog"}>
                     <.icon name="hero-sparkles" class="w-4 h-4" /> What's new
                   </.link>
                 </li>
