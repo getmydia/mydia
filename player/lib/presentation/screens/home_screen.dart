@@ -7,6 +7,7 @@ import '../../core/graphql/watch/query_key.dart';
 import '../../core/player/best_file.dart';
 import '../../core/player/resume_plan.dart';
 import '../../domain/models/continue_watching_item.dart';
+import '../../domain/models/media_file.dart';
 import '../../domain/models/show_next_up.dart';
 import '../../domain/models/up_next_item.dart';
 import '../widgets/ambient_backdrop_provider.dart';
@@ -98,12 +99,32 @@ class HomeScreen extends ConsumerWidget {
     }
   }
 
+  /// Picks the best file, or null when none is playable and also when the
+  /// selection itself fails.
+  ///
+  /// pickBestFile probes the device and network, so it can throw on a flaky
+  /// connection. An escaping error would leave the tap doing nothing at all,
+  /// so a failed probe is treated like "nothing playable" and lands the user
+  /// on the detail screen, where they can pick a version by hand.
+  Future<MediaFile?> _bestFileOrNull(
+    List<MediaFile> files,
+    double screenWidth,
+  ) async {
+    try {
+      return await pickBestFile(files, screenWidth);
+    } catch (error, stackTrace) {
+      debugPrint('Best-file selection failed, falling back to detail: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return null;
+    }
+  }
+
   Future<void> _handlePlay(BuildContext context, Object item) async {
     final router = GoRouter.of(context);
     final screenWidth = MediaQuery.sizeOf(context).width;
 
     if (item is UpNextItem) {
-      final file = await pickBestFile(item.episode.files, screenWidth);
+      final file = await _bestFileOrNull(item.episode.files, screenWidth);
       if (file == null) {
         // Nothing playable: fall back to detail rather than a dead tap.
         router.push('/episode/${item.episode.id}');
@@ -114,7 +135,7 @@ class HomeScreen extends ConsumerWidget {
     }
 
     if (item is ContinueWatchingItem) {
-      final file = await pickBestFile(item.files, screenWidth);
+      final file = await _bestFileOrNull(item.files, screenWidth);
       if (file == null) {
         router.push(item.isMovie ? '/movie/${item.id}' : '/episode/${item.id}');
         return;
