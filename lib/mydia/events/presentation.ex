@@ -290,6 +290,64 @@ defmodule Mydia.Events.Presentation do
   title-only.
   """
   @spec detail(Event.t()) :: String.t() | nil
+  def detail(%Event{type: "media_item.added", metadata: metadata}) do
+    label = if metadata["media_type"] == "movie", do: "movie", else: "TV show"
+    "#{title_of(metadata)} (#{label})"
+  end
+
+  def detail(%Event{type: "media_item.updated", metadata: metadata}) do
+    base =
+      case metadata["reason"] do
+        nil -> title_of(metadata)
+        reason -> "#{title_of(metadata)}, #{String.downcase(reason)}"
+      end
+
+    case changes_summary(metadata["changes"]) do
+      nil -> base
+      summary -> "#{base} (#{summary})"
+    end
+  end
+
+  def detail(%Event{type: "media_item.removed", metadata: metadata}), do: title_of(metadata)
+
+  def detail(%Event{type: "media_item.monitoring_changed", metadata: metadata}) do
+    state = if metadata["monitored"], do: "enabled", else: "disabled"
+    "#{title_of(metadata)}, monitoring #{state}"
+  end
+
+  def detail(%Event{type: "media_item.episodes_refreshed", metadata: metadata}) do
+    count = metadata["episode_count"] || 0
+    suffix = if count == 1, do: "episode", else: "episodes"
+    "#{title_of(metadata)}, #{count} #{suffix}"
+  end
+
+  def detail(%Event{type: "media_file.imported", metadata: metadata}) do
+    title = metadata["media_title"] || "Unknown"
+
+    case metadata["resolution"] || metadata["file_path"] do
+      nil -> title
+      "unknown" -> title
+      descriptor -> "#{title} #{descriptor}"
+    end
+  end
+
+  def detail(%Event{type: "media_file.upgraded", metadata: metadata}) do
+    base =
+      "#{title_of(metadata)}, #{resolution_of(metadata, "old")} to #{resolution_of(metadata, "new")}"
+
+    case metadata["delta"] do
+      nil -> base
+      delta -> "#{base} (score +#{delta})"
+    end
+  end
+
+  def detail(%Event{type: "media_file.upgrade_rejected", metadata: metadata}) do
+    base =
+      "#{title_of(metadata)}, kept #{resolution_of(metadata, "old")} over #{resolution_of(metadata, "new")}"
+
+    if metadata["blacklisted"], do: "#{base}, release blacklisted", else: base
+  end
+
   def detail(%Event{} = event) do
     metadata = event.metadata || %{}
     metadata["title"] || metadata["description"]
@@ -309,4 +367,46 @@ defmodule Mydia.Events.Presentation do
     |> String.replace("_", " ")
     |> String.capitalize()
   end
+
+  defp title_of(metadata), do: metadata["title"] || "Unknown"
+
+  defp resolution_of(metadata, prefix), do: metadata["#{prefix}_resolution"] || "unknown"
+
+  # Short summary of a media_item.updated changeset, for the one-line label.
+  # The expandable per-field breakdown stays in the LiveView.
+  defp changes_summary(nil), do: nil
+  defp changes_summary(changes) when changes == %{}, do: nil
+
+  defp changes_summary(changes) do
+    metadata_fields =
+      case Map.get(changes, "metadata_fields") do
+        fields when is_list(fields) -> summarize_fields(fields)
+        _ -> []
+      end
+
+    simple_fields =
+      changes
+      |> Map.take(["title", "original_title", "year"])
+      |> Map.keys()
+
+    case metadata_fields ++ simple_fields do
+      [] -> nil
+      parts -> Enum.join(parts, ", ")
+    end
+  end
+
+  defp summarize_fields(fields) do
+    names = fields |> Enum.take(3) |> Enum.map(&field_name/1)
+    remaining = length(fields) - 3
+
+    if remaining > 0 do
+      ["#{Enum.join(names, ", ")} +#{remaining} more"]
+    else
+      [Enum.join(names, ", ")]
+    end
+  end
+
+  defp field_name(%{"field" => field}), do: field
+  defp field_name(field) when is_binary(field), do: field
+  defp field_name(_), do: "field"
 end

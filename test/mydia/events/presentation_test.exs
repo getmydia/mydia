@@ -87,4 +87,161 @@ defmodule Mydia.Events.PresentationTest do
       assert Presentation.detail(event(type: "legacy.gone", metadata: %{})) == nil
     end
   end
+
+  describe "detail/1 media_item.*" do
+    test "added names the item and its media type" do
+      assert Presentation.detail(
+               event(
+                 type: "media_item.added",
+                 metadata: %{"title" => "Arrival", "media_type" => "movie"}
+               )
+             ) == "Arrival (movie)"
+    end
+
+    test "added treats anything other than a movie as a TV show" do
+      assert Presentation.detail(
+               event(
+                 type: "media_item.added",
+                 metadata: %{"title" => "Severance", "media_type" => "tv_show"}
+               )
+             ) == "Severance (TV show)"
+    end
+
+    test "updated carries the reason and the change summary" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Arrival",
+              "reason" => "Metadata refresh",
+              "changes" => %{"title" => %{"old" => "a", "new" => "b"}}
+            }
+          )
+        )
+
+      assert detail == "Arrival, metadata refresh (title)"
+    end
+
+    test "updated degrades to the title alone" do
+      assert Presentation.detail(
+               event(type: "media_item.updated", metadata: %{"title" => "Arrival"})
+             ) ==
+               "Arrival"
+    end
+
+    test "removed is just the title" do
+      assert Presentation.detail(
+               event(type: "media_item.removed", metadata: %{"title" => "Arrival"})
+             ) ==
+               "Arrival"
+    end
+
+    test "monitoring_changed states the new state" do
+      assert Presentation.detail(
+               event(
+                 type: "media_item.monitoring_changed",
+                 metadata: %{"title" => "Severance", "monitored" => true}
+               )
+             ) == "Severance, monitoring enabled"
+
+      assert Presentation.detail(
+               event(
+                 type: "media_item.monitoring_changed",
+                 metadata: %{"title" => "Severance", "monitored" => false}
+               )
+             ) == "Severance, monitoring disabled"
+    end
+
+    test "episodes_refreshed pluralizes the count" do
+      assert Presentation.detail(
+               event(
+                 type: "media_item.episodes_refreshed",
+                 metadata: %{"title" => "Severance", "episode_count" => 1}
+               )
+             ) == "Severance, 1 episode"
+
+      assert Presentation.detail(
+               event(
+                 type: "media_item.episodes_refreshed",
+                 metadata: %{"title" => "Severance", "episode_count" => 9}
+               )
+             ) == "Severance, 9 episodes"
+    end
+  end
+
+  describe "detail/1 media_file.*" do
+    test "imported prefers the resolution as the descriptor" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.imported",
+                 metadata: %{
+                   "media_title" => "Arrival",
+                   "file_path" => "Arrival.mkv",
+                   "resolution" => "2160p"
+                 }
+               )
+             ) == "Arrival 2160p"
+    end
+
+    test "imported falls back to the file path" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.imported",
+                 metadata: %{"media_title" => "Arrival", "file_path" => "Arrival.mkv"}
+               )
+             ) == "Arrival Arrival.mkv"
+    end
+
+    test "imported ignores an unknown file path" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.imported",
+                 metadata: %{"media_title" => "Arrival", "file_path" => "unknown"}
+               )
+             ) == "Arrival"
+    end
+
+    test "upgraded shows the resolution jump and score delta" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.upgraded",
+                 metadata: %{
+                   "title" => "Arrival",
+                   "old_resolution" => "1080p",
+                   "new_resolution" => "2160p",
+                   "delta" => 35
+                 }
+               )
+             ) == "Arrival, 1080p to 2160p (score +35)"
+    end
+
+    test "upgrade_rejected says what was kept and whether the release was blacklisted" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.upgrade_rejected",
+                 metadata: %{
+                   "title" => "Arrival",
+                   "old_resolution" => "2160p",
+                   "new_resolution" => "1080p",
+                   "blacklisted" => true
+                 }
+               )
+             ) == "Arrival, kept 2160p over 1080p, release blacklisted"
+    end
+
+    test "upgrade_rejected omits the blacklist note for season packs" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.upgrade_rejected",
+                 metadata: %{
+                   "title" => "Severance",
+                   "old_resolution" => "2160p",
+                   "new_resolution" => "1080p",
+                   "blacklisted" => false
+                 }
+               )
+             ) == "Severance, kept 2160p over 1080p"
+    end
+  end
 end
