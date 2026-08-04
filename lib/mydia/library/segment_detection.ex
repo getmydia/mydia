@@ -382,7 +382,8 @@ defmodule Mydia.Library.SegmentDetection do
   # can still answer, so the failure degrades to "no chapters".
   defp chapter_segments(file) do
     with path when is_binary(path) <- MediaFile.absolute_path(file),
-         {:ok, found} <- Chapters.detect(path) do
+         {:ok, duration} <- duration_seconds(file),
+         {:ok, found} <- Chapters.detect(path, round(duration * 1000)) do
       found
     else
       _no_chapters -> %{}
