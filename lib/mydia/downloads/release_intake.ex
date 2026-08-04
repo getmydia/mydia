@@ -64,6 +64,10 @@ defmodule Mydia.Downloads.ReleaseIntake do
     |> String.trim()
   end
 
+  # A release whose title did not parse cannot be title-matched against the
+  # library whatever type was inferred for it. ReleaseParser.infer_media_type/4
+  # returns :movie on a year or quality token alone, so a titleless :movie is
+  # reachable and previously fell through the catch-all clause into matching.
   defp classify_parse_result(%ParsedFileInfo{type: :unknown} = info) do
     if usable_title?(info.title) do
       {:ok, info}
@@ -72,7 +76,13 @@ defmodule Mydia.Downloads.ReleaseIntake do
     end
   end
 
-  defp classify_parse_result(%ParsedFileInfo{} = info), do: {:ok, info}
+  defp classify_parse_result(%ParsedFileInfo{} = info) do
+    if usable_title?(info.title) do
+      {:ok, info}
+    else
+      {:error, :missing_title}
+    end
+  end
 
   defp usable_title?(title) when is_binary(title), do: String.trim(title) != ""
   defp usable_title?(_), do: false
