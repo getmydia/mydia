@@ -128,11 +128,7 @@ defmodule Mydia.Downloads.TorrentHash do
     if Regex.match?(~r/^[a-f0-9]{40}$/, hash) or Regex.match?(~r/^[a-f0-9]{64}$/, hash) do
       encoded_title = URI.encode(title || "Unknown")
 
-      tracker_params =
-        @public_trackers
-        |> Enum.map_join(&("&tr=" <> URI.encode(&1)))
-
-      "magnet:?xt=urn:btih:#{hash}&dn=#{encoded_title}#{tracker_params}"
+      "magnet:?xt=urn:btih:#{hash}&dn=#{encoded_title}#{tracker_params()}"
     else
       Logger.warning("Invalid info hash format: #{inspect(info_hash)}")
       nil
@@ -141,7 +137,41 @@ defmodule Mydia.Downloads.TorrentHash do
 
   def build_magnet(_, _), do: nil
 
+  @doc """
+  Appends the public tracker list to a magnet URI that carries none.
+
+  Indexers hand us magnets in whatever shape they like, and several emit a bare
+  `magnet:?xt=urn:btih:HASH&dn=NAME` with no `tr=` parameter at all (Bitmagnet
+  always does; Prowlarr does whenever `/download` redirects to a magnet instead
+  of serving a `.torrent`). Such a magnet gives the download client no way to
+  find peers except DHT, so it sits at zero bytes forever on any client whose
+  DHT cannot reach the swarm, and is eventually escalated by the stall detector.
+
+  Magnets that already advertise a tracker are returned untouched, as is any
+  non-magnet input. The info hash is never altered, so client-side deduplication
+  keeps matching.
+  """
+  @spec ensure_trackers(String.t() | nil) :: String.t() | nil
+  def ensure_trackers("magnet:" <> _ = magnet) do
+    if tracker_param?(magnet), do: magnet, else: magnet <> tracker_params()
+  end
+
+  def ensure_trackers(other), do: other
+
   ## Private Functions
+
+  defp tracker_params do
+    Enum.map_join(@public_trackers, fn tracker ->
+      "&tr=" <> URI.encode(tracker, &URI.char_unreserved?/1)
+    end)
+  end
+
+  defp tracker_param?(magnet) do
+    case String.split(magnet, "?", parts: 2) do
+      [_, query] -> query |> String.split("&") |> Enum.any?(&String.starts_with?(&1, "tr="))
+      _ -> false
+    end
+  end
 
   defp format_hash(hash, opts) do
     case Keyword.get(opts, :case, :upper) do
