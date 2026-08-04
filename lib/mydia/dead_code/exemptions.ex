@@ -8,13 +8,34 @@ defmodule Mydia.DeadCode.Exemptions do
   reachable as a new predicate; do not add the module name.
   """
 
+  # Behaviours whose dispatcher holds no static reference anywhere in lib/.
+  #
+  # This is a list of dispatch CATEGORIES, not of findings. Add an entry only
+  # when you can name who dispatches the behaviour and why no lib/ call site
+  # exists. Task 5's audit is where new entries get justified.
+  #
+  # Deliberately NOT here: Phoenix.LiveView, GenServer, Plug, Ecto.Repo, and
+  # every other behaviour whose implementations are referenced from lib/. A
+  # wired LiveView is reachable through Router <- Endpoint <- Application, and
+  # a supervised GenServer through Application's child list. Exempting them
+  # would protect only the UNWIRED ones, which are precisely the dead modules
+  # this tool exists to find.
+  @dispatch_only_behaviours [
+    # Named in mix.exs under `mod:`. Without this the supervision tree has no
+    # root and the detector reports the entire application dead.
+    Application,
+    # Dispatched from serialised job rows and from cron entries in config/*.exs,
+    # neither of which the tracer sees.
+    Oban.Worker
+  ]
+
   @doc """
   True when `module` is reachable through a dispatcher the compiler cannot see.
   """
   @spec exempt?(module()) :: boolean()
   def exempt?(module) when is_atom(module) do
     mix_task?(module) or migration?(module) or protocol_impl?(module) or
-      oban_worker?(module) or behaviour_impl?(module)
+      dispatch_only_behaviour_impl?(module)
   end
 
   # Mix resolves `mix mydia.dead_code` to a module name at runtime.
@@ -32,16 +53,13 @@ defmodule Mydia.DeadCode.Exemptions do
     Code.ensure_loaded?(module) and function_exported?(module, :__impl__, 1)
   end
 
-  # Oban resolves workers from the serialised job row, not from a call site.
-  defp oban_worker?(module) do
-    Code.ensure_loaded?(module) and function_exported?(module, :__opts__, 0) and
-      behaviours(module) |> Enum.member?(Oban.Worker)
-  end
-
-  # Guardian, Plug, telemetry, and the app's own behaviours dispatch callbacks
-  # from the framework that owns the behaviour, so no call site exists in lib/.
-  defp behaviour_impl?(module) do
-    behaviours(module) != []
+  # Implementing a behaviour confers exemption only when that behaviour's
+  # dispatcher is invisible to the compiler graph. Declaring any behaviour at
+  # all does not, since most behaviour implementations are referenced normally.
+  defp dispatch_only_behaviour_impl?(module) do
+    module
+    |> behaviours()
+    |> Enum.any?(&(&1 in @dispatch_only_behaviours))
   end
 
   defp behaviours(module) do
