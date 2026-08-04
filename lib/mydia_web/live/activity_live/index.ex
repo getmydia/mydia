@@ -73,6 +73,10 @@ defmodule MydiaWeb.ActivityLive.Index do
     category_filter = socket.assigns.category_filter
     date_filter = socket.assigns.date_filter
 
+    # Types hidden from the feed have their own dedicated viewer elsewhere.
+    # This check must mirror build_filter_opts/2, which applies it in SQL.
+    feed_visible = event.type not in Presentation.feed_hidden_types()
+
     # Only add event if it matches current category filter
     matches_category =
       case category_filter do
@@ -85,7 +89,7 @@ defmodule MydiaWeb.ActivityLive.Index do
     matches_date = event_matches_date_filter?(event.inserted_at, date_filter)
 
     socket =
-      if matches_category && matches_date do
+      if feed_visible && matches_category && matches_date do
         socket
         |> assign(:events_empty?, false)
         |> stream_insert(:events, event, at: 0)
@@ -148,7 +152,7 @@ defmodule MydiaWeb.ActivityLive.Index do
 
     date_opts = date_filter_opts(date_filter)
 
-    category_opts ++ date_opts
+    category_opts ++ date_opts ++ [exclude_types: Presentation.feed_hidden_types()]
   end
 
   defp date_filter_opts("all"), do: []

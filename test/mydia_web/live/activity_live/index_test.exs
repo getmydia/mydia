@@ -269,5 +269,102 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert html =~ "Download stalled: Arrival 2160p (no progress for 2h)"
       refute html =~ "download.stalled"
     end
+
+    test "excludes the plugin request audit trail from the feed", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.http_request",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{
+            "slug" => "tmdb-art",
+            "method" => "GET",
+            "host" => "api.themoviedb.org",
+            "status" => 200
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "api.themoviedb.org"
+      assert html =~ "No events found"
+    end
+
+    test "excludes the plugin request audit trail from live inserts", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      {:ok, event} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.http_request",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{
+            "slug" => "tmdb-art",
+            "method" => "GET",
+            "host" => "api.themoviedb.org",
+            "status" => 200
+          }
+        })
+
+      send(view.pid, {:event_created, event})
+
+      refute render(view) =~ "api.themoviedb.org"
+    end
+
+    test "offers a playback filter chip that filters to playback events", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.finished",
+          actor_type: :user,
+          actor_id: "someone",
+          metadata: %{"completion_percentage" => 98, "origin" => "player"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "system",
+          metadata: %{"title" => "Arrival"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      html =
+        view
+        |> element("button[phx-value-category='playback']")
+        |> render_click()
+
+      assert html =~ "Playback finished"
+      refute html =~ "Arrival"
+    end
+
+    test "offers a plugins filter chip", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.update_available",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{
+            "slug" => "tmdb-art",
+            "current_version" => "1.0.0",
+            "latest_version" => "1.2.0"
+          }
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      html =
+        view
+        |> element("button[phx-value-category='plugin']")
+        |> render_click()
+
+      assert html =~ "Plugin update available: tmdb-art 1.0.0 to 1.2.0"
+    end
   end
 end
