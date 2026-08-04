@@ -171,7 +171,7 @@ defmodule MydiaWeb.Schema.NextUpTest do
       item = Enum.find(items, &(&1["id"] == e1.id))
       refute item == nil
       assert item["showId"] == ctx.show.id
-      assert length(item["files"]) >= 1
+      refute Enum.empty?(item["files"])
     end
 
     test "an in-progress movie exposes its files", ctx do
@@ -190,7 +190,7 @@ defmodule MydiaWeb.Schema.NextUpTest do
 
       item = Enum.find(items, &(&1["id"] == movie.id))
       refute item == nil
-      assert length(item["files"]) >= 1
+      refute Enum.empty?(item["files"])
     end
   end
 
