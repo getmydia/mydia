@@ -144,6 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           BLOCK=$(awk '/"mydia:ecto" = \{/,/^    \};/' devenv.nix)
+          [ -n "$BLOCK" ] || { echo "::error::guard could not locate the mydia:ecto block in devenv.nix"; exit 1; }
           if echo "$BLOCK" | grep -n 'before = onEnterShell'; then
             echo "::error::mydia:ecto must not run on shell entry; it belongs to processes.phoenix.after"
             exit 1
