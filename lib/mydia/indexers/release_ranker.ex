@@ -43,6 +43,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
     each result is parsed with `ReleaseParser` and rejected if the parsed title has a Jaro distance
     below 0.7 from the expected title. Unparseable releases pass through (fail-open).
     Ignored when `nil` or empty/whitespace-only. (default: `nil`)
+  - `:apply_source_exclusion` - Whether `:quality_profile`'s `:excluded_sources` list is enforced
+    as a hard removal (default: `true`). The automatic search jobs leave this at the default.
+    Manual search deliberately passes `false`: per spec R8, manual search and manual grab are the
+    operator's explicit escape hatch and must not silently drop a release the profile excludes.
   """
 
   require Logger
@@ -72,7 +76,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
           expected_season: non_neg_integer() | nil,
           expected_episode: non_neg_integer() | nil,
           min_post_age_minutes: non_neg_integer() | nil,
-          now: DateTime.t() | nil
+          now: DateTime.t() | nil,
+          apply_source_exclusion: boolean() | nil
         ]
 
   @default_min_seeders 0
@@ -248,13 +253,24 @@ defmodule Mydia.Indexers.ReleaseRanker do
     end
   end
 
+  # Resolves the effective excluded-sources list for this ranking pass. Reads
+  # :apply_source_exclusion (default true) *before* looking at the profile at
+  # all, so the opt-out is a positive flag the caller sets, never inferred
+  # from whether a profile happens to be present. Manual search passes a
+  # resolved profile (for scoring) and still must not filter — see the
+  # moduledoc and R8: manual search/grab is the operator's deliberate escape
+  # hatch from any exclusion the automatic path applies.
   defp excluded_sources(opts) do
-    case Keyword.get(opts, :quality_profile) do
-      %{quality_standards: standards} when is_map(standards) ->
-        Map.get(standards, :excluded_sources) || []
+    if Keyword.get(opts, :apply_source_exclusion, true) do
+      case Keyword.get(opts, :quality_profile) do
+        %{quality_standards: standards} when is_map(standards) ->
+          Map.get(standards, :excluded_sources) || []
 
-      _ ->
-        []
+        _ ->
+          []
+      end
+    else
+      []
     end
   end
 
