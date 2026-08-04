@@ -5,6 +5,12 @@
 # entrypoint in the foreground, so PID 1 semantics and the production startup
 # path (PUID handling, migrations) are exactly what ships. The former
 # Dockerfile.e2e entrypoint reimplemented migrations itself; this does not.
+#
+# A sentinel file marks seeding success. Written only when seed.sh returns 0,
+# never on failure. compose's healthcheck requires both the HTTP health
+# endpoint and this file, so a seeding failure keeps the container unhealthy
+# instead of letting dependents start against fixtures that were never
+# created.
 set -eu
 
 (
@@ -14,6 +20,7 @@ set -eu
             echo "E2E: server healthy, seeding"
             if sh /e2e/seed.sh; then
                 echo "E2E: seeding succeeded"
+                touch /tmp/e2e-seeded
             else
                 echo "E2E: SEEDING FAILED, tests will not have their fixtures" >&2
             fi

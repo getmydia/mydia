@@ -97,10 +97,17 @@ services:
       relay:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      # Gated on both the HTTP health endpoint and the seeding sentinel
+      # (scripts/e2e/server-entrypoint.sh), so dependents never start against
+      # a container whose seed step failed. start_period covers boot plus
+      # migrations plus seeding (ffmpeg generation and three separate
+      # `mydia rpc` calls, each of which boots its own BEAM node), measured
+      # around 16-17s end to end on a warm local image; 90s leaves a wide
+      # margin for slower CI runners.
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/health && test -f /tmp/e2e-seeded"]
       interval: 2s
       timeout: 2s
-      start_period: 15s
+      start_period: 90s
       retries: 20
     networks:
       - e2e
