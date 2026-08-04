@@ -198,7 +198,7 @@ jobs:
             --abort-on-container-exit \
             --exit-code-from test
         env:
-          E2E_TEST_TARGET: integration_test/pairing_flow_test.dart
+          E2E_TEST_TARGET: integration_test/all_tests.dart
           MYDIA_E2E_IMAGE: ${{ steps.server.outputs.image }}
           PLAYER_E2E_TOOLBOX_IMAGE: ${{ steps.aux.outputs.toolbox }}
           RELAY_E2E_IMAGE: ${{ steps.aux.outputs.relay }}

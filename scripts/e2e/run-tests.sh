@@ -119,4 +119,11 @@ if [ -n "${E2E_TEST_ARGS:-}" ]; then
     flutter_cmd+=("${extra_args[@]}")
 fi
 
-xvfb-run -a "${flutter_cmd[@]}"
+test_exit=0
+xvfb-run -a "${flutter_cmd[@]}" || test_exit=$?
+
+echo ""
+echo "Skipped tests in this run (quarantined, see each skip reason):"
+grep -rn "skip:" integration_test/ || echo "  none"
+
+exit "$test_exit"

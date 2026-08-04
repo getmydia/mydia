@@ -140,7 +140,7 @@ services:
       RELAY_URL: "http://relay:4001"
 
       # Test selection (set by ./dev player e2e --target/-- args)
-      E2E_TEST_TARGET: ${E2E_TEST_TARGET:-integration_test/pairing_flow_test.dart}
+      E2E_TEST_TARGET: ${E2E_TEST_TARGET:-integration_test/all_tests.dart}
       E2E_TEST_ARGS: ${E2E_TEST_ARGS:-}
 
       # Test admin credentials

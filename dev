@@ -442,7 +442,7 @@ case "$COMMAND" in
             e2e)
                 shift
                 rebuild_images=false
-                test_target="integration_test/pairing_flow_test.dart"
+                test_target="integration_test/all_tests.dart"
                 test_args=""
                 while [ $# -gt 0 ]; do
                     case "$1" in
