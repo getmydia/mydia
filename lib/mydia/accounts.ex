@@ -15,6 +15,8 @@ defmodule Mydia.Accounts do
   alias Mydia.Repo
   alias Mydia.Accounts.{User, ApiKey, UserPreference}
 
+  @changelog_key "last_seen_changelog_version"
+
   ## Users
 
   @doc """
@@ -264,18 +266,27 @@ defmodule Mydia.Accounts do
 
   def get_user_preference!(user_id) when is_binary(user_id) do
     case Repo.get_by(UserPreference, user_id: user_id) do
-      nil ->
-        # Create default preferences
-        {:ok, pref} =
-          %UserPreference{}
-          |> UserPreference.changeset(%{preferences: UserPreference.defaults()})
-          |> Ecto.Changeset.put_change(:user_id, user_id)
-          |> Repo.insert()
+      nil -> insert_default_preference!(user_id)
+      pref -> pref
+    end
+  end
 
-        pref
-
-      pref ->
-        pref
+  # Two mounts racing the same user's first page load after an upgrade would
+  # otherwise both see no row and both insert. `on_conflict: :nothing` makes
+  # the loser a no-op instead of an Ecto.ConstraintError. UserPreference's
+  # :binary_id primary key is generated client-side, so a successful-looking
+  # insert cannot be told apart from a swallowed conflict by inspecting the
+  # returned struct: both come back with the client-generated id populated.
+  # The row is therefore always re-read, whether this process won the race
+  # or lost it.
+  defp insert_default_preference!(user_id) do
+    %UserPreference{}
+    |> UserPreference.changeset(%{preferences: UserPreference.defaults()})
+    |> Ecto.Changeset.put_change(:user_id, user_id)
+    |> Repo.insert(on_conflict: :nothing, conflict_target: :user_id)
+    |> case do
+      {:ok, _inserted} -> Repo.get_by!(UserPreference, user_id: user_id)
+      {:error, _changeset} -> Repo.get_by!(UserPreference, user_id: user_id)
     end
   end
 
@@ -295,6 +306,65 @@ defmodule Mydia.Accounts do
   """
   def change_preference(%UserPreference{} = preference, attrs \\ %{}) do
     UserPreference.changeset(preference, attrs)
+  end
+
+  @doc """
+  The newest changelog version this user has seen, or `nil`.
+
+  `nil` means the user has never been shown the changelog, which includes every
+  user that existed before this feature shipped.
+  """
+  def last_seen_changelog_version(%User{} = user) do
+    pref = get_user_preference!(user)
+    Map.get(pref.preferences || %{}, @changelog_key)
+  end
+
+  @doc """
+  Records that the user has seen the changelog up to `version_string`.
+
+  Only ever moves the stored value forward, so rolling a deployment back and
+  upgrading again does not replay notes the user already read. An unparseable
+  stored value is treated as absent and overwritten.
+  """
+  def mark_changelog_seen(%User{} = user, version_string) when is_binary(version_string) do
+    pref = get_user_preference!(user)
+    current = Map.get(pref.preferences || %{}, @changelog_key)
+
+    if changelog_version_newer?(current, version_string) do
+      update_preference(pref, %{@changelog_key => version_string})
+    else
+      {:ok, pref}
+    end
+  end
+
+  @doc """
+  Marks the user as having seen every bundled release.
+
+  Centralises the policy shared by the changelog banner and the changelog page:
+  adopt the newest bundled version, and do nothing when no notes are bundled.
+  """
+  def mark_changelog_seen_at_latest(%User{} = user) do
+    case Mydia.Changelog.latest() do
+      nil -> :ok
+      latest -> mark_changelog_seen(user, latest)
+    end
+  end
+
+  # An unparseable NEW version is never written. It would clobber a valid stored
+  # value, and because Changelog.unseen/1 reports nothing unseen for a value it
+  # cannot parse, the user's banner would be suppressed from then on rather than
+  # replayed.
+  defp changelog_version_newer?(current, new) do
+    case Version.parse(new) do
+      :error ->
+        false
+
+      {:ok, new_version} ->
+        case current && Version.parse(current) do
+          {:ok, current_version} -> Version.compare(new_version, current_version) == :gt
+          _ -> true
+        end
+    end
   end
 
   ## API Keys

@@ -1,0 +1,41 @@
+<Layouts.app {assigns}>
+  <div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+      <h1 class="text-3xl font-bold">What's new</h1>
+      <p class="text-base-content/70 mt-1">
+        Release notes for the version of Mydia this server is running.
+      </p>
+    </div>
+
+    <div :if={@entries == []} class="alert">
+      <.icon name="hero-information-circle" class="w-5 h-5" />
+      <span>No release notes are bundled with this build.</span>
+    </div>
+
+    <div id="changelog-entries" class="space-y-3">
+      <div
+        :for={entry <- @entries}
+        id={entry_id(entry.version_string)}
+        class="card bg-base-100 shadow-sm"
+      >
+        <details
+          class="changelog-entry"
+          open={MapSet.member?(@unseen_versions, entry.version_string)}
+        >
+          <summary class="px-5 py-4 cursor-pointer flex items-center gap-3 list-none">
+            <.icon name="hero-chevron-right" class="w-4 h-4 shrink-0 opacity-60" />
+            <h2 class="text-xl font-semibold flex-1">v{entry.version_string}</h2>
+            <span
+              :if={MapSet.member?(@unseen_versions, entry.version_string)}
+              class="badge badge-primary"
+            >
+              New
+            </span>
+          </summary>
+          <%!-- Safe: compile-time repository content, never runtime input. See Mydia.Changelog. --%>
+          <div class="changelog-body px-5 pb-5">{raw(entry.html)}</div>
+        </details>
+      </div>
+    </div>
+  </div>
+</Layouts.app>

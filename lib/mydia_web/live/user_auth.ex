@@ -148,6 +148,8 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:feedback_enabled?, Mydia.Feedback.enabled?())
       |> assign(:show_feedback_modal, false)
       |> assign(:feedback_form, build_feedback_form(%{}))
+      |> assign_changelog_notice()
+      |> attach_hook(:changelog_hook, :handle_event, &handle_changelog_event/3)
       |> attach_hook(:jobs_status_hook, :handle_info, &handle_jobs_status/2)
       |> attach_hook(:feedback_hook, :handle_event, &handle_feedback_event/3)
 
@@ -240,6 +242,59 @@ defmodule MydiaWeb.Live.UserAuth do
   end
 
   defp handle_feedback_event(_event, _params, socket), do: {:cont, socket}
+
+  # Decide whether this user has unread release notes.
+  #
+  # A nil stored version means the user has never been shown the changelog,
+  # which is true of every user that existed before the feature shipped and of
+  # every newly created user. Those adopt the newest bundled version silently,
+  # so nobody is greeted by the entire project history.
+  defp assign_changelog_notice(socket) do
+    case socket.assigns do
+      %{current_user: %Mydia.Accounts.User{} = user} ->
+        assign(socket, :changelog_notice, changelog_notice_for(user, connected?(socket)))
+
+      _ ->
+        assign(socket, :changelog_notice, nil)
+    end
+  end
+
+  # The `connected` flag gates the adoption write only. `mount/3` runs twice, and
+  # writing during the dead render would burn a database write on every page load
+  # for no gain. The banner decision itself is identical in both renders.
+  #
+  # Note the parameter is named `connected`, not `connected?`: Elixir variable
+  # names cannot contain a question mark.
+  defp changelog_notice_for(user, connected) do
+    case Mydia.Accounts.last_seen_changelog_version(user) do
+      nil ->
+        if connected, do: Mydia.Accounts.mark_changelog_seen_at_latest(user)
+        nil
+
+      last_seen ->
+        case Mydia.Changelog.unseen(last_seen) do
+          [] ->
+            nil
+
+          [newest | older] ->
+            %{version: newest.version_string, older_count: length(older)}
+        end
+    end
+  end
+
+  defp handle_changelog_event("dismiss_changelog", _params, socket) do
+    case socket.assigns do
+      %{current_user: %Mydia.Accounts.User{} = user} ->
+        Mydia.Accounts.mark_changelog_seen_at_latest(user)
+
+      _ ->
+        :ok
+    end
+
+    {:halt, assign(socket, :changelog_notice, nil)}
+  end
+
+  defp handle_changelog_event(_event, _params, socket), do: {:cont, socket}
 
   defp build_feedback_form(params, action \\ nil) do
     params

@@ -55,7 +55,9 @@ defmodule MydiaWeb.AdminSystemLive.Components do
             <div class="stat p-3 sm:p-4 bg-base-200 rounded-lg">
               <div class="stat-title text-xs sm:text-sm">Version</div>
               <div class="stat-value text-base sm:text-xl">
-                {@system_info.app_version}
+                <.link navigate={~p"/changelog"} class="link link-hover">
+                  {@system_info.app_version}
+                </.link>
                 <%= if @system_info.dev_mode do %>
                   <span class="badge badge-warning badge-xs sm:badge-sm ml-1">dev</span>
                 <% end %>
