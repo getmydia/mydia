@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
 
   import Phoenix.LiveViewTest
   alias Mydia.Accounts
+  alias Mydia.RemoteAccess
 
   setup do
     unique_id = System.unique_integer([:positive])
@@ -51,6 +52,52 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
           # Feature may be disabled or route may redirect; this is acceptable
           :ok
       end
+    end
+  end
+
+  describe "Direct URL persistence" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      {:ok, _config} = RemoteAccess.initialize_keypair()
+      {:ok, _config} = RemoteAccess.toggle_remote_access(true)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "adding a direct URL through the admin UI persists it", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/config/remote-access")
+
+      url = "https://mydia-add-test.local:4000"
+
+      render_click(view, "open_add_url_modal", %{})
+      render_change(view, "update_new_url", %{"url" => url})
+      html = render_submit(view, "add_direct_url", %{})
+
+      assert html =~ "Direct URL added successfully"
+
+      persisted_config = RemoteAccess.get_config()
+      assert url in persisted_config.direct_urls
+    end
+
+    test "removing a direct URL through the admin UI persists the removal", %{conn: conn} do
+      url = "https://mydia-remove-test.local:4000"
+      {:ok, _config} = RemoteAccess.upsert_config(%{direct_urls: [url]})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/remote-access")
+
+      html = render_click(view, "remove_direct_url", %{"url" => url})
+
+      assert html =~ "Direct URL removed successfully"
+
+      persisted_config = RemoteAccess.get_config()
+      refute url in persisted_config.direct_urls
     end
   end
 end
