@@ -12,7 +12,10 @@ defmodule Mydia.Downloads.Grabber do
 
     * `{:grab_completed, %{download_id: id, download_url: url}}`
     * `{:grab_failed, %{download_id: id, download_url: url, reason: reason}}`
-    * `{:grab_duplicate, %{download_url: url}}`
+    * `{:grab_duplicate, %{download_url: url, reason: reason}}`
+
+  The duplicate `reason` is `:duplicate_download` when a download is already in
+  flight, or `:already_have_files` when the files are already on disk.
 
   A duplicate is benign: the optimistic record is deleted rather than failed.
   So is a task that never starts: the record is deleted and the caller gets
@@ -98,7 +101,13 @@ defmodule Mydia.Downloads.Grabber do
     case Queue.check_for_duplicate_download(search_result, opts) do
       {:error, reason} when reason in [:duplicate_download, :already_have_files] ->
         History.delete_download(download)
-        broadcast({:grab_duplicate, %{download_url: download.download_url}})
+
+        # Carry the reason the way :grab_failed already does. The two cases mean
+        # different things to an operator (something is in flight vs. we already
+        # have the files), and collapsing them is what made the original
+        # season-pack incident so hard to read.
+        broadcast({:grab_duplicate, %{download_url: download.download_url, reason: reason}})
+
         :duplicate
 
       :ok ->
