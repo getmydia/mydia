@@ -52,6 +52,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   alias Mydia.Indexers.Structs.{RankedResult, ScoreBreakdown}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
+  alias Mydia.Quality.Sources
   alias Mydia.Settings.QualityProfile
 
   @type ranked_result :: RankedResult.t()
@@ -141,6 +142,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       results
       |> reject_invalid_releases()
       |> filter_acceptable(opts)
+      |> reject_excluded_sources(opts)
       |> reject_title_mismatches(expected_title)
       |> Enum.map(fn result ->
         breakdown = calculate_score_breakdown(result, opts)
@@ -211,6 +213,54 @@ defmodule Mydia.Indexers.ReleaseRanker do
       end
     end)
   end
+
+  # Drops releases whose parsed source appears in the profile's
+  # :excluded_sources list. This is a hard removal, not a penalty: there is no
+  # minimum-score threshold before grabbing, so a down-scored release is still
+  # downloaded whenever it is the only survivor, which is precisely the
+  # theatrical-window case this exists to prevent.
+  #
+  # A nil profile, an absent key, an empty list, or an unparseable source all
+  # mean "no exclusion". Exclusion is opt-in per profile and never global.
+  defp reject_excluded_sources(results, opts) do
+    case excluded_sources(opts) do
+      [] ->
+        results
+
+      excluded ->
+        Enum.filter(results, fn result ->
+          case result_source(result) do
+            nil ->
+              true
+
+            source ->
+              if source in excluded do
+                Logger.info(
+                  "[ReleaseRanker] Filtered out (excluded source #{source}): #{result.title}"
+                )
+
+                false
+              else
+                true
+              end
+          end
+        end)
+    end
+  end
+
+  defp excluded_sources(opts) do
+    case Keyword.get(opts, :quality_profile) do
+      %{quality_standards: standards} when is_map(standards) ->
+        Map.get(standards, :excluded_sources) || []
+
+      _ ->
+        []
+    end
+  end
+
+  defp result_source(%SearchResult{quality: %{source: source}}) when is_binary(source), do: source
+  defp result_source(%SearchResult{title: title}) when is_binary(title), do: Sources.detect(title)
+  defp result_source(_), do: nil
 
   ## Private Functions - Filtering
 
@@ -584,7 +634,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       # Only hard removals are reported as rejections now; size/seeders/ratio
       # shortcomings are penalties on accepted results (mirrors filter_acceptable
       # and the identity penalty, which must stay in lockstep — see Risks).
-      case get_rejection_reason(result, blocked_tags, expected_title) do
+      case get_rejection_reason(result, blocked_tags, expected_title, excluded_sources(opts)) do
         nil ->
           # Accepted — record the full breakdown (including penalties) so the
           # Activity view can render the penalized-but-kept state.
@@ -698,13 +748,16 @@ defmodule Mydia.Indexers.ReleaseRanker do
   # removals are invalid releases (validator), blocked tags, and wrong-show
   # title mismatches. Size/seeders/ratio are no longer rejection reasons — they
   # are soft penalties on accepted results.
-  defp get_rejection_reason(result, blocked_tags, expected_title) do
+  defp get_rejection_reason(result, blocked_tags, expected_title, excluded) do
     cond do
       invalid_reason = invalid_release_reason(result) ->
         "invalid: #{invalid_reason}"
 
       blocked_tag = find_blocked_tag(result, blocked_tags) ->
         "blocked_tag: #{blocked_tag}"
+
+      (source = result_source(result)) && source in excluded ->
+        "excluded_source: #{source}"
 
       expected_title_mismatch?(result, expected_title) ->
         "title_mismatch"
