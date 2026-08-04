@@ -19,6 +19,8 @@ defmodule MydiaWeb.DownloadsLive.Components do
   attr :error, :string, default: nil
 
   def match_files_modal(assigns) do
+    assigns = assign(assigns, :target_kind, target_kind(assigns.modal))
+
     ~H"""
     <.modal id="match-files-modal" show={true} on_cancel="close_match_files">
       <:title>Match files</:title>
@@ -28,6 +30,15 @@ defmodule MydiaWeb.DownloadsLive.Components do
         <.icon name="hero-exclamation-triangle" class="size-4" />
         Mydia cannot read this download's folder right now, so this is the listing
         recorded when the import failed.
+      </p>
+
+      <p
+        :if={@target_kind in [:tv_show_no_episodes, :unmatched]}
+        id="match-files-blocked"
+        class="alert alert-warning mt-3 text-sm"
+      >
+        <.icon name="hero-exclamation-triangle" class="size-4" />
+        {blocked_reason(@target_kind)}
       </p>
 
       <p :if={@error} id="match-files-error" class="alert alert-error mt-3 text-sm">
@@ -59,23 +70,36 @@ defmodule MydiaWeb.DownloadsLive.Components do
               </span>
             </div>
           </div>
-          <select
-            name={"target[#{candidate["path"]}]"}
-            disabled={candidate["missing"]}
-            class="select select-bordered select-sm w-56"
-          >
-            <option value="">Ignore</option>
-            <option
-              :for={episode <- @modal.episodes}
-              value={episode.id}
-              selected={prefilled?(candidate, episode)}
-            >
-              {episode_label(episode)}
-            </option>
-            <option :if={@modal.episodes == []} value="movie">
-              Import as this movie
-            </option>
-          </select>
+          <%= case @target_kind do %>
+            <% :movie -> %>
+              <select
+                name={"target[#{candidate["path"]}]"}
+                disabled={candidate["missing"]}
+                class="select select-bordered select-sm w-56"
+              >
+                <option value="">Ignore</option>
+                <option value="movie">Import as this movie</option>
+              </select>
+            <% :tv_show -> %>
+              <select
+                name={"target[#{candidate["path"]}]"}
+                disabled={candidate["missing"]}
+                class="select select-bordered select-sm w-56"
+              >
+                <option value="">Ignore</option>
+                <option
+                  :for={episode <- @modal.episodes}
+                  value={episode.id}
+                  selected={prefilled?(candidate, episode)}
+                >
+                  {episode_label(episode)}
+                </option>
+              </select>
+            <% _blocked -> %>
+              <span class="select select-sm select-bordered w-56 flex items-center text-base-content/40 italic">
+                Can't match yet
+              </span>
+          <% end %>
         </div>
       </form>
 
@@ -100,6 +124,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
           form="match-files-form"
           id="match-files-import"
           class="btn btn-primary btn-sm"
+          disabled={@target_kind in [:tv_show_no_episodes, :unmatched]}
         >
           <.icon name="hero-arrow-down-tray" class="size-4" /> Import selected
         </button>
@@ -107,6 +132,30 @@ defmodule MydiaWeb.DownloadsLive.Components do
     </.modal>
     """
   end
+
+  # Whether the modal's candidates can target a movie destination, an episode,
+  # or neither. Deliberately keyed off `download.media_item.type` (authoritative)
+  # rather than `episodes == []` — an ordinary TV show whose episodes haven't
+  # been fetched yet also has an empty episode list, and treating that the same
+  # as "this is a movie" let a file get routed with `episode_id: nil`, which
+  # `MediaImport.process_targeted_import/3` places at the *show's* root folder
+  # instead of a season folder — an orphaned show-level file reported back to
+  # the operator as a successful import.
+  defp target_kind(%{download: %{media_item: %{type: "movie"}}}), do: :movie
+
+  defp target_kind(%{download: %{media_item: %{type: "tv_show"}}, episodes: []}),
+    do: :tv_show_no_episodes
+
+  defp target_kind(%{download: %{media_item: %{type: "tv_show"}}}), do: :tv_show
+
+  defp target_kind(_modal), do: :unmatched
+
+  defp blocked_reason(:tv_show_no_episodes),
+    do:
+      "This show's episodes have not been loaded yet, so these files cannot be matched to one. Refresh the show's episode list, then try again."
+
+  defp blocked_reason(:unmatched),
+    do: "This download has no matched title, so its files cannot be matched to a destination yet."
 
   defp prefilled?(candidate, episode) do
     candidate["parsed_season"] == episode.season_number and

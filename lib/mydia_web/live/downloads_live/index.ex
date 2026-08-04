@@ -763,15 +763,41 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   def handle_event("match_files_import", params, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      %{download: download} = socket.assigns.match_files_modal
+      %{download: download, candidates: candidates} = socket.assigns.match_files_modal
+
+      # Defense in depth: a disabled <select> only stops a normal browser. Never
+      # trust a submitted path or target purely from client state — re-derive
+      # what's actually allowed from the socket's own candidate list and the
+      # download's authoritative media type before building mappings.
+      #
+      # - `valid_paths` drops any path that was never a candidate for this
+      #   download, or that is flagged "missing" (gone from disk since the
+      #   modal opened): resolve_file_mappings/2 does no path validation of
+      #   its own, and existence is only checked much later inside the Oban
+      #   job.
+      # - `movie?` rejects a "movie" target (episode_id: nil) unless the bound
+      #   media item really is a movie. Without this, a crafted or stale
+      #   submission against a TV show would reach
+      #   MediaImport.process_targeted_import/3 with episode_id: nil, which
+      #   places the file at the show's root folder instead of a season
+      #   folder — an orphaned show-level file reported back as a successful
+      #   import.
+      valid_paths =
+        candidates
+        |> Enum.reject(& &1["missing"])
+        |> MapSet.new(& &1["path"])
+
+      movie? = download.media_item && download.media_item.type == "movie"
 
       mappings =
         params
         |> Map.get("target", %{})
         |> Enum.reject(fn {_path, target} -> target in [nil, ""] end)
+        |> Enum.filter(fn {path, _target} -> MapSet.member?(valid_paths, path) end)
         |> Enum.map(fn {path, target} ->
           %{"path" => path, "episode_id" => if(target == "movie", do: nil, else: target)}
         end)
+        |> Enum.reject(fn mapping -> is_nil(mapping["episode_id"]) and not movie? end)
 
       if mappings == [] do
         {:noreply, assign(socket, :match_files_error, "Select at least one file to import.")}
