@@ -45,7 +45,12 @@ class UpNextEpisode {
     );
   }
 
-  String get episodeCode => 'S${seasonNumber}E${episodeNumber}';
+  /// Zero-padded to match NextUpEpisode, NextEpisode, Episode and
+  /// EpisodeDetail, so the same episode reads identically whichever surface
+  /// launched it (this string reaches the player title via
+  /// `playerRouteForUpNext`).
+  String get episodeCode => 'S${seasonNumber.toString().padLeft(2, '0')}'
+      'E${episodeNumber.toString().padLeft(2, '0')}';
 }
 
 class UpNextShow {

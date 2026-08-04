@@ -50,6 +50,26 @@ void main() {
       expect(item.episode.files, isEmpty);
       expect(item.episode.progress, isNull);
     });
+
+    test('pads the episode code the way the other models do', () {
+      final item = UpNextItem.fromJson({
+        'progressState': 'next',
+        'episode': {
+          'id': '9',
+          'seasonNumber': 2,
+          'episodeNumber': 5,
+          'title': "Woe's Hollow",
+          'hasFile': true,
+        },
+        'show': {'id': 's1', 'title': 'Severance'},
+      });
+
+      // This string becomes the player title, so an unpadded "S2E5" here
+      // would make the same episode read differently depending on whether it
+      // was launched from the rail or from the show hero.
+      expect(item.episode.episodeCode, 'S02E05');
+      expect(item.displayTitle, 'Severance - S02E05');
+    });
   });
 
   group('ContinueWatchingItem', () {
