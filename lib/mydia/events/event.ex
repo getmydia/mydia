@@ -7,6 +7,8 @@ defmodule Mydia.Events.Event do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Events.Presentation
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -62,6 +64,7 @@ defmodule Mydia.Events.Event do
     |> validate_required([:category, :type])
     |> validate_format(:category, ~r/^[a-z_]+$/, message: "must be lowercase with underscores")
     |> validate_format(:type, ~r/^[a-z_]+\.[a-z_]+$/, message: "must be format: category.action")
+    |> validate_inclusion(:type, Presentation.known_types())
     |> validate_actor_id()
   end
 

@@ -975,4 +975,32 @@ defmodule Mydia.EventsTest do
       assert event.metadata["error_message"] == "boom"
     end
   end
+
+  describe "Event.changeset/2 type registration" do
+    test "accepts a registered type" do
+      changeset =
+        Event.changeset(%Event{}, %{
+          category: "downloads",
+          type: "download.stalled",
+          actor_type: :system,
+          actor_id: "download_monitor"
+        })
+
+      assert changeset.valid?
+    end
+
+    test "rejects a well-formed but unregistered type" do
+      changeset = Event.changeset(%Event{}, %{category: "downloads", type: "download.invented"})
+
+      refute changeset.valid?
+      assert "is invalid" in errors_on(changeset).type
+    end
+
+    test "still reports the format error for a malformed type" do
+      changeset = Event.changeset(%Event{}, %{category: "downloads", type: "nodot"})
+
+      refute changeset.valid?
+      assert "must be format: category.action" in errors_on(changeset).type
+    end
+  end
 end
