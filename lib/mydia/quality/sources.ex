@@ -1,10 +1,16 @@
 defmodule Mydia.Quality.Sources do
   @moduledoc """
-  The single source-detection vocabulary for release names.
+  The source-detection vocabulary for the indexer search/grab path.
 
-  Every consumer that needs to know whether a release is a BluRay, a WEB-DL, or
-  a camcorder recording goes through this module. Before it existed the project
-  had three independent implementations that disagreed with each other.
+  `QualityParser` uses this module to classify release names during search and
+  grab, and `QualityProfileEngine.infer_source_from_filename/1` uses it to
+  infer a source for on-disk files that lack stored metadata. It is not the
+  only source parser in the codebase: `Mydia.Library.FileParser`'s
+  `@source_pattern`, the V3 parser (`priv/release_parser/sources.exs`), and
+  `Mydia.Upgrades.Attrs`'s `@canonical_sources` each carry their own,
+  independently-maintained vocabularies for their respective pipelines.
+  Unifying those is separate follow-up work, not something this module
+  attempts.
 
   ## Why the short tokens are delimiter-anchored
 
