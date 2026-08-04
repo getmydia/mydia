@@ -105,6 +105,26 @@ void main() {
       expect(result.progress?.positionSeconds, 0);
       expect(result.progress?.percentage, 0);
       expect(result.progress?.durationSeconds, isNull);
+      // The backend stamps last_watched_at on every write that marks
+      // watched, including the synthetic create for a never-watched movie.
+      // The optimistic write must mirror that, or the watched badge's date
+      // pops in only once the refetch lands.
+      expect(result.progress?.lastWatchedAt, isNotNull);
+    });
+
+    test('marking watched preserves an existing lastWatchedAt', () {
+      final movie = _movie(
+        progress: const Progress(
+          positionSeconds: 600,
+          percentage: 38,
+          watched: false,
+          lastWatchedAt: '2026-01-01T00:00:00Z',
+        ),
+      );
+
+      final result = MovieDetailController.applyOptimisticWatched(movie, true);
+
+      expect(result.progress?.lastWatchedAt, '2026-01-01T00:00:00Z');
     });
 
     test('marking unwatched drops the progress row entirely', () {

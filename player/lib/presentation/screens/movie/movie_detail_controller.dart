@@ -198,7 +198,8 @@ class MovieDetailController extends _$MovieDetailController {
         durationSeconds: existing?.durationSeconds,
         percentage: existing?.percentage ?? 0,
         watched: true,
-        lastWatchedAt: existing?.lastWatchedAt,
+        lastWatchedAt:
+            existing?.lastWatchedAt ?? DateTime.now().toUtc().toIso8601String(),
       ),
     );
   }
