@@ -404,6 +404,20 @@ defmodule Mydia.Downloads do
   defdelegate resolve_file_mappings(download, mappings), to: Mydia.Downloads.Queue
 
   @doc """
+  Rejects a release the operator has judged unusable: blacklists
+  `(indexer, guid)`, removes it from the download client (best effort),
+  deletes the download row, and queues a fresh search. See
+  `Mydia.Downloads.Queue.reject_release/2` for details.
+
+  ## Options
+    - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :user
+    - `:actor_id` - The ID of the actor (user_id, job name, etc.)
+  """
+  @spec reject_release(Download.t(), keyword()) ::
+          {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
+  defdelegate reject_release(download, opts \\ []), to: Mydia.Downloads.Queue
+
+  @doc """
   Re-matches an already-imported download to a corrected movie or episode,
   enqueuing a MediaRematch job to move + relink the file. See
   `Mydia.Downloads.Queue.rematch_imported_download/3` for return values.

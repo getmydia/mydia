@@ -39,6 +39,25 @@ defmodule Mydia.Downloads.Blacklists do
         ]
 
   @doc """
+  Pulls the `(indexer, guid)` blacklist key off a download.
+
+  The indexer is read from the column first and falls back to the copy stored
+  in `metadata`, which is where older rows carry it.
+  """
+  @spec extract_key(Mydia.Downloads.Download.t()) ::
+          {:ok, String.t(), String.t()} | {:error, :no_indexer | :no_guid}
+  def extract_key(download) do
+    indexer = download.indexer || get_in(download.metadata || %{}, ["indexer"])
+    guid = get_in(download.metadata || %{}, ["guid"])
+
+    cond do
+      is_nil(indexer) or indexer == "" -> {:error, :no_indexer}
+      is_nil(guid) or guid == "" -> {:error, :no_guid}
+      true -> {:ok, indexer, guid}
+    end
+  end
+
+  @doc """
   Inserts a blacklist row, upserting on `(indexer, guid)` conflicts.
 
   Options:
