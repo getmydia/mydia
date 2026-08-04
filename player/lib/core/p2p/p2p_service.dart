@@ -154,6 +154,13 @@ class P2pService {
   int _autoReconnectAttempts = 0;
   Timer? _autoReconnectTimer;
 
+  // Subscription to the native host's event stream. Must be cancelled before
+  // the host is dropped or the status controllers are closed: the Rust host
+  // is only dropped when it is garbage collected, not synchronously on
+  // dispose, so without cancelling this explicitly a torn-down host can keep
+  // emitting events into an already-closed StreamController.
+  StreamSubscription<String>? _eventSubscription;
+
   // Stream of P2P status updates
   final _statusController = StreamController<P2pStatus>.broadcast();
   Stream<P2pStatus> get onStatusChanged => _statusController.stream;
@@ -262,7 +269,7 @@ class P2pService {
       debugPrint('[P2P] Host started with NodeID: $nodeId');
 
       // Start Event Stream
-      _host!.eventStream().listen((event) {
+      _eventSubscription = _host!.eventStream().listen((event) {
         debugPrint('[P2P] Event: $event');
 
         if (event.startsWith('connected:')) {
@@ -616,6 +623,8 @@ class P2pService {
     _autoReconnectTimer?.cancel();
     _autoReconnectAttempts = 0;
     _lastDialedEndpointAddr = null;
+    _eventSubscription?.cancel();
+    _eventSubscription = null;
     _host = null;
     _isInitialized = false;
     _isRelayConnected = false;
@@ -666,6 +675,11 @@ class P2pService {
 
   Future<void> dispose() async {
     _autoReconnectTimer?.cancel();
+    // Cancel before closing the controllers below: the Rust host is only
+    // dropped when it is garbage collected, not synchronously here, so a
+    // live subscription can otherwise still fire into a closed controller.
+    await _eventSubscription?.cancel();
+    _eventSubscription = null;
     // Rust host is dropped when P2PHost is garbage collected
     _host = null;
     _isInitialized = false;
