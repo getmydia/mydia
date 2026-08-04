@@ -7,6 +7,8 @@ import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../domain/models/movie_detail.dart';
+import '../../../domain/models/progress.dart';
+import '../../../graphql/mutations/mark_watched.graphql.dart';
 
 part 'movie_detail_controller.g.dart';
 
@@ -101,26 +103,7 @@ class MovieDetailController extends _$MovieDetailController {
 
     // Optimistically update UI
     state = AsyncValue.data(
-      MovieDetail(
-        id: currentState.id,
-        title: currentState.title,
-        originalTitle: currentState.originalTitle,
-        year: currentState.year,
-        overview: currentState.overview,
-        runtime: currentState.runtime,
-        genres: currentState.genres,
-        contentRating: currentState.contentRating,
-        rating: currentState.rating,
-        tmdbId: currentState.tmdbId,
-        imdbId: currentState.imdbId,
-        category: currentState.category,
-        monitored: currentState.monitored,
-        addedAt: currentState.addedAt,
-        artwork: currentState.artwork,
-        progress: currentState.progress,
-        files: currentState.files,
-        isFavorite: !currentState.isFavorite,
-      ),
+      currentState.copyWith(isFavorite: !currentState.isFavorite),
     );
 
     try {
@@ -149,6 +132,75 @@ class MovieDetailController extends _$MovieDetailController {
       state = AsyncValue.data(currentState);
       rethrow;
     }
+  }
+
+  /// Marks the movie watched or unwatched.
+  ///
+  /// Optimistic: the new state lands before the server answers and reverts
+  /// on failure, matching the episode-side watched actions.
+  Future<void> setWatched(bool watched) async {
+    final snapshot = state.value;
+    if (snapshot == null) return;
+
+    // Captured before the optimistic update for the same reason as
+    // toggleFavorite: this controller is auto-dispose, so reading `ref`
+    // after the mutation awaits would throw UnmountedRefException once the
+    // user navigates away, silently dropping the invalidation into the
+    // revert-on-error catch below.
+    final invalidator = ref.read(invalidatorProvider);
+
+    state = AsyncValue.data(applyOptimisticWatched(snapshot, watched));
+
+    try {
+      final client = await ref.read(asyncGraphqlClientProvider.future);
+      final result = await client.mutate(
+        watched
+            ? MutationOptions(
+                document: documentNodeMutationMarkMovieWatched,
+                variables: Variables$Mutation$MarkMovieWatched(
+                  movieId: snapshot.id,
+                ).toJson(),
+              )
+            : MutationOptions(
+                document: documentNodeMutationMarkMovieUnwatched,
+                variables: Variables$Mutation$MarkMovieUnwatched(
+                  movieId: snapshot.id,
+                ).toJson(),
+              ),
+      );
+
+      if (result.hasException) {
+        state = AsyncValue.data(snapshot);
+        throw result.exception!;
+      }
+
+      await invalidator.invalidate(
+        InvalidationRules.movieWatchedChanged(movieId: snapshot.id),
+      );
+    } catch (_) {
+      state = AsyncValue.data(snapshot);
+      rethrow;
+    }
+  }
+
+  /// Pure helper: returns a copy of [movie] with its watched state set.
+  ///
+  /// Marking watched preserves any existing position and percentage;
+  /// marking unwatched drops the progress row, mirroring the backend's
+  /// `delete_progress` semantics.
+  static MovieDetail applyOptimisticWatched(MovieDetail movie, bool watched) {
+    if (!watched) return movie.copyWith(clearProgress: true);
+
+    final existing = movie.progress;
+    return movie.copyWith(
+      progress: Progress(
+        positionSeconds: existing?.positionSeconds ?? 0,
+        durationSeconds: existing?.durationSeconds,
+        percentage: existing?.percentage ?? 0,
+        watched: true,
+        lastWatchedAt: DateTime.now().toUtc().toIso8601String(),
+      ),
+    );
   }
 
   Future<void> refresh() => _watcher.refetch();

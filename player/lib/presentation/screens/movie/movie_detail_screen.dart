@@ -12,8 +12,10 @@ import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
+import '../../../domain/models/movie_detail.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
+import '../../widgets/movie_watched_controls.dart';
 import '../../widgets/smart_play_button.dart';
 
 class MovieDetailScreen extends ConsumerWidget {
@@ -46,6 +48,27 @@ class MovieDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _toggleWatched(
+    BuildContext context,
+    WidgetRef ref,
+    bool currentlyWatched,
+  ) async {
+    try {
+      await ref
+          .read(movieDetailControllerProvider(id).notifier)
+          .setWatched(!currentlyWatched);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update watched status'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildLoadingState(BuildContext context) {
@@ -169,7 +192,7 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, movie) {
+  Widget _buildContent(BuildContext context, WidgetRef ref, MovieDetail movie) {
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, ref, movie),
@@ -178,9 +201,10 @@ class MovieDetailScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              if (movie.progress != null &&
-                  !movie.progress!.watched &&
-                  movie.progress!.percentage > 0) ...[
+              if (movie.isWatched) ...[
+                MovieWatchedLine(dateLabel: movie.watchedAtDisplay),
+                const SizedBox(height: 24),
+              ] else if (movie.hasResumableProgress) ...[
                 _buildProgressBar(context, movie),
                 const SizedBox(height: 24),
               ],
@@ -224,7 +248,8 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, WidgetRef ref, movie) {
+  Widget _buildHeroSection(
+      BuildContext context, WidgetRef ref, MovieDetail movie) {
     return SliverAppBar(
       expandedHeight: 380,
       pinned: true,
@@ -237,6 +262,13 @@ class MovieDetailScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(8),
             child: _buildAppBarDownloadButton(context, ref, movie),
           ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: MovieWatchedButton(
+            watched: movie.isWatched,
+            onPressed: () => _toggleWatched(context, ref, movie.isWatched),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.all(8),
           child: Material(
