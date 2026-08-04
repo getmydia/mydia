@@ -380,6 +380,55 @@ defmodule Mydia.Events.Presentation do
     end
   end
 
+  def detail(%Event{type: "job.executed", metadata: metadata}) do
+    job = metadata["job_name"] || "Unknown job"
+
+    [
+      job,
+      metadata["items_processed"] && "processed #{metadata["items_processed"]} items",
+      metadata["duration_ms"] && "in #{metadata["duration_ms"]}ms"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(", ")
+  end
+
+  def detail(%Event{type: "job.failed", metadata: metadata}) do
+    job = metadata["job_name"] || "Unknown job"
+    "#{job} (#{metadata["error_message"] || "Unknown error"})"
+  end
+
+  def detail(%Event{type: type, metadata: metadata})
+      when type in ["search.started", "search.no_results"],
+      do: search_subject(metadata)
+
+  def detail(%Event{type: "search.completed", metadata: metadata}) do
+    base = "#{search_subject(metadata)}, #{metadata["results_count"] || 0} results"
+
+    case metadata["selected_release"] do
+      nil -> base
+      release -> "#{base}, selected #{release}"
+    end
+  end
+
+  def detail(%Event{type: "search.filtered_out", metadata: metadata}) do
+    "#{search_subject(metadata)}, #{metadata["results_count"] || 0} rejected"
+  end
+
+  def detail(%Event{type: "search.error", metadata: metadata}) do
+    "#{search_subject(metadata)} (#{metadata["error_message"] || "Unknown error"})"
+  end
+
+  def detail(%Event{type: "search.backoff_applied", metadata: metadata}) do
+    "#{search_subject(metadata)} (#{backoff_resource_type(metadata)}), " <>
+      "#{backoff_reason(metadata["reason"])}, attempt ##{metadata["failure_count"] || 1}, " <>
+      "next search #{next_eligible(metadata["next_eligible_at"])}"
+  end
+
+  def detail(%Event{type: "search.backoff_reset", metadata: metadata}) do
+    "#{search_subject(metadata)} (#{backoff_resource_type(metadata)}), " <>
+      "backoff cleared after #{metadata["previous_failure_count"] || 0} failed attempts"
+  end
+
   def detail(%Event{} = event) do
     metadata = event.metadata || %{}
     metadata["title"] || metadata["description"]
@@ -460,4 +509,47 @@ defmodule Mydia.Events.Presentation do
   end
 
   defp pad(number), do: String.pad_leading("#{number}", 2, "0")
+
+  defp search_subject(metadata), do: title_of(metadata) <> episode_part(metadata)
+
+  defp backoff_reason("no_results"), do: "no results found"
+  defp backoff_reason("all_filtered"), do: "all results filtered out"
+  defp backoff_reason(reason) when is_binary(reason), do: reason
+  defp backoff_reason(_), do: "search failed"
+
+  defp backoff_resource_type(metadata) do
+    cond do
+      metadata["episode_id"] ->
+        "episode"
+
+      metadata["season_number"] && !metadata["episode_number"] ->
+        "season #{metadata["season_number"]}"
+
+      true ->
+        "show"
+    end
+  end
+
+  defp next_eligible(nil), do: "unknown"
+
+  defp next_eligible(iso_string) when is_binary(iso_string) do
+    case DateTime.from_iso8601(iso_string) do
+      {:ok, dt, _offset} -> relative_future_time(dt)
+      _ -> iso_string
+    end
+  end
+
+  defp next_eligible(_), do: "unknown"
+
+  defp relative_future_time(dt) do
+    diff_seconds = DateTime.diff(dt, DateTime.utc_now())
+
+    cond do
+      diff_seconds <= 0 -> "now"
+      diff_seconds < 60 -> "in #{diff_seconds} seconds"
+      diff_seconds < 3600 -> "in #{div(diff_seconds, 60)} minutes"
+      diff_seconds < 86_400 -> "in #{Float.round(diff_seconds / 3600, 1)} hours"
+      true -> "in #{div(diff_seconds, 86_400)} days"
+    end
+  end
 end

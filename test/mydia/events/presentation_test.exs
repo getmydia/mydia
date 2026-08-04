@@ -305,4 +305,115 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Arrival (disk full)"
     end
   end
+
+  describe "detail/1 job.*" do
+    test "executed reports throughput when the metadata has it" do
+      assert Presentation.detail(
+               event(
+                 type: "job.executed",
+                 metadata: %{
+                   "job_name" => "Library Scan",
+                   "items_processed" => 42,
+                   "duration_ms" => 1200
+                 }
+               )
+             ) == "Library Scan, processed 42 items, in 1200ms"
+    end
+
+    test "executed degrades to the job name" do
+      assert Presentation.detail(
+               event(type: "job.executed", metadata: %{"job_name" => "Library Scan"})
+             ) ==
+               "Library Scan"
+    end
+
+    test "failed carries the error" do
+      assert Presentation.detail(
+               event(
+                 type: "job.failed",
+                 severity: :error,
+                 metadata: %{"job_name" => "Metadata Sync", "error_message" => "timeout"}
+               )
+             ) == "Metadata Sync (timeout)"
+    end
+  end
+
+  describe "detail/1 search.*" do
+    test "started names the subject with its episode" do
+      assert Presentation.detail(
+               event(
+                 type: "search.started",
+                 metadata: %{"title" => "Severance", "season_number" => 1, "episode_number" => 2}
+               )
+             ) == "Severance S01E02"
+    end
+
+    test "completed reports the result count and selection" do
+      assert Presentation.detail(
+               event(
+                 type: "search.completed",
+                 metadata: %{
+                   "title" => "Arrival",
+                   "results_count" => 12,
+                   "selected_release" => "Arrival.2160p"
+                 }
+               )
+             ) == "Arrival, 12 results, selected Arrival.2160p"
+    end
+
+    test "filtered_out reports how many were rejected" do
+      assert Presentation.detail(
+               event(
+                 type: "search.filtered_out",
+                 metadata: %{"title" => "Arrival", "results_count" => 7}
+               )
+             ) == "Arrival, 7 rejected"
+    end
+
+    test "error carries the error message" do
+      assert Presentation.detail(
+               event(
+                 type: "search.error",
+                 severity: :error,
+                 metadata: %{"title" => "Arrival", "error_message" => "indexer down"}
+               )
+             ) == "Arrival (indexer down)"
+    end
+
+    test "backoff_applied spells out reason, attempt, and next eligible time" do
+      next = DateTime.utc_now() |> DateTime.add(7200, :second) |> DateTime.to_iso8601()
+
+      detail =
+        Presentation.detail(
+          event(
+            type: "search.backoff_applied",
+            severity: :warning,
+            metadata: %{
+              "title" => "Severance",
+              "season_number" => 1,
+              "episode_number" => 2,
+              "episode_id" => "abc",
+              "reason" => "no_results",
+              "failure_count" => 3,
+              "next_eligible_at" => next
+            }
+          )
+        )
+
+      assert detail =~ "Severance S01E02 (episode)"
+      assert detail =~ "no results found"
+      assert detail =~ "attempt #3"
+      assert detail =~ "next search in "
+      assert detail =~ "hours"
+    end
+
+    test "backoff_reset reports how many attempts it took" do
+      assert Presentation.detail(
+               event(
+                 type: "search.backoff_reset",
+                 metadata: %{"title" => "Arrival", "previous_failure_count" => 4}
+               )
+             ) == "Arrival (show), backoff cleared after 4 failed attempts"
+    end
+  end
 end
