@@ -1,6 +1,7 @@
 import 'artwork.dart';
 import 'season_info.dart';
 import 'next_episode.dart';
+import 'show_next_up.dart';
 
 class ShowDetail {
   final String id;
@@ -22,6 +23,7 @@ class ShowDetail {
   final Artwork artwork;
   final List<SeasonInfo> seasons;
   final NextEpisode? nextEpisode;
+  final ShowNextUp? nextUp;
   final bool isFavorite;
 
   const ShowDetail({
@@ -44,6 +46,7 @@ class ShowDetail {
     required this.artwork,
     this.seasons = const [],
     this.nextEpisode,
+    this.nextUp,
     required this.isFavorite,
   });
 
@@ -77,6 +80,9 @@ class ShowDetail {
           [],
       nextEpisode: json['nextEpisode'] != null
           ? NextEpisode.fromJson(json['nextEpisode'] as Map<String, dynamic>)
+          : null,
+      nextUp: json['nextUp'] != null
+          ? ShowNextUp.fromJson(json['nextUp'] as Map<String, dynamic>)
           : null,
       isFavorite: json['isFavorite'] as bool? ?? false,
     );

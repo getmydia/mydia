@@ -25,9 +25,22 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
       watched
       lastWatchedAt
     }
+    showId
     showTitle
     seasonNumber
     episodeNumber
+    files {
+      id
+      resolution
+      codec
+      audioCodec
+      hdrFormat
+      size
+      bitrate
+      directPlaySupported
+      streamUrl
+      directPlayUrl
+    }
   }
 
   recentlyAdded(first: $recentlyAddedLimit) {
@@ -53,6 +66,25 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
       airDate
       thumbnailUrl
       hasFile
+      files {
+        id
+        resolution
+        codec
+        audioCodec
+        hdrFormat
+        size
+        bitrate
+        directPlaySupported
+        streamUrl
+        directPlayUrl
+      }
+      progress {
+        positionSeconds
+        durationSeconds
+        percentage
+        watched
+        lastWatchedAt
+      }
     }
     show {
       id

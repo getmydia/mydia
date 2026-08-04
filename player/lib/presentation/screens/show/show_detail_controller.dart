@@ -47,6 +47,35 @@ query TvShowDetail($id: ID!) {
       title
       airDate
     }
+    nextUp {
+      progressState
+      episode {
+        id
+        seasonNumber
+        episodeNumber
+        title
+        runtime
+        files {
+          id
+          resolution
+          codec
+          audioCodec
+          hdrFormat
+          size
+          bitrate
+          directPlaySupported
+          streamUrl
+          directPlayUrl
+        }
+        progress {
+          positionSeconds
+          durationSeconds
+          percentage
+          watched
+          lastWatchedAt
+        }
+      }
+    }
     isFavorite
   }
 }
@@ -117,6 +146,7 @@ class ShowDetailController extends _$ShowDetailController {
         artwork: currentState.artwork,
         seasons: currentState.seasons,
         nextEpisode: currentState.nextEpisode,
+        nextUp: currentState.nextUp,
         isFavorite: !currentState.isFavorite,
       ),
     );

@@ -87,6 +87,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final String? title;
   final String? showId;
   final int? seasonNumber;
+  final int? resumeSeconds;
 
   const PlayerScreen({
     super.key,
@@ -96,6 +97,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.title,
     this.showId,
     this.seasonNumber,
+    this.resumeSeconds,
   });
 
   @override
@@ -211,6 +213,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// this position instead of re-asking about the saved progress position.
   int? _resumeOverrideSeconds;
 
+  /// Reads and clears the pending resume override.
+  ///
+  /// Consume-once matters: a seek-driven restart sets this field too, and a
+  /// value that survived would re-apply on every later re-initialization.
+  int? _consumeResumeOverride() {
+    final value = _resumeOverrideSeconds;
+    _resumeOverrideSeconds = null;
+    return value;
+  }
+
   /// True for the entire duration of [_restartSessionAt], including while it
   /// awaits — `_player` is not set to null until partway through that method,
   /// so [seekToReal] cannot rely on the null check alone to reject a seek
@@ -306,6 +318,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     super.initState();
     _invalidator = ref.read(invalidatorProvider);
     _localProxyService = ref.read(localProxyServiceProvider);
+
+    // Seeded here rather than read at each branch: an entry-point that already
+    // said "Continue" has answered the resume question, and all three
+    // initialization branches must honour that, not just the streaming one.
+    _resumeOverrideSeconds = widget.resumeSeconds;
 
     // Set up before `_initializePlayer` so both are live for the whole
     // widget lifetime, regardless of which playback branch runs (offline,
@@ -512,7 +529,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         final plan = await resolveResumePlan(
           savedPositionSeconds: _savedPositionSeconds,
           realDuration: _totalDuration,
-          resumeOverride: null,
+          resumeOverride: _consumeResumeOverride(),
           mounted: mounted,
           ask: (saved, total) async {
             if (!mounted) return null;
@@ -584,7 +601,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           final plan = await resolveResumePlan(
             savedPositionSeconds: _savedPositionSeconds,
             realDuration: _totalDuration,
-            resumeOverride: null,
+            resumeOverride: _consumeResumeOverride(),
             mounted: mounted,
             ask: (saved, total) async {
               if (!mounted) return null;
@@ -701,12 +718,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // HLS/direct fork further down. Every branch consumes this one value.
       // Keeping the decision inside the branches is what let three cast
       // exits and the offline path start at zero without ever asking.
-      final resumeOverride = _resumeOverrideSeconds;
-      _resumeOverrideSeconds = null;
       final plan = await resolveResumePlan(
         savedPositionSeconds: _savedPositionSeconds,
         realDuration: _totalDuration,
-        resumeOverride: resumeOverride,
+        resumeOverride: _consumeResumeOverride(),
         mounted: mounted,
         ask: (saved, total) async {
           if (!mounted) return null;

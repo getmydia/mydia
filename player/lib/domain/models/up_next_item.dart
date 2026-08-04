@@ -1,4 +1,7 @@
 import 'artwork.dart';
+import 'media_file.dart';
+import 'progress.dart';
+import 'show_next_up.dart';
 
 class UpNextEpisode {
   final String id;
@@ -8,6 +11,8 @@ class UpNextEpisode {
   final String? airDate;
   final String? thumbnailUrl;
   final bool hasFile;
+  final List<MediaFile> files;
+  final Progress? progress;
 
   const UpNextEpisode({
     required this.id,
@@ -17,6 +22,8 @@ class UpNextEpisode {
     this.airDate,
     this.thumbnailUrl,
     required this.hasFile,
+    this.files = const [],
+    this.progress,
   });
 
   factory UpNextEpisode.fromJson(Map<String, dynamic> json) {
@@ -28,10 +35,22 @@ class UpNextEpisode {
       airDate: json['airDate'] as String?,
       thumbnailUrl: json['thumbnailUrl'] as String?,
       hasFile: json['hasFile'] as bool,
+      files: (json['files'] as List<dynamic>?)
+              ?.map((e) => MediaFile.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      progress: json['progress'] != null
+          ? Progress.fromJson(json['progress'] as Map<String, dynamic>)
+          : null,
     );
   }
 
-  String get episodeCode => 'S${seasonNumber}E${episodeNumber}';
+  /// Zero-padded to match NextUpEpisode, NextEpisode, Episode and
+  /// EpisodeDetail, so the same episode reads identically whichever surface
+  /// launched it (this string reaches the player title via
+  /// `playerRouteForUpNext`).
+  String get episodeCode => 'S${seasonNumber.toString().padLeft(2, '0')}'
+      'E${episodeNumber.toString().padLeft(2, '0')}';
 }
 
 class UpNextShow {
@@ -76,6 +95,10 @@ class UpNextItem {
       show: UpNextShow.fromJson(json['show'] as Map<String, dynamic>),
     );
   }
+
+  /// Typed form of [progressState]. The raw string is kept because existing
+  /// consumers read it directly.
+  NextUpState get state => nextUpStateFromString(progressState);
 
   String get displayTitle => '${show.title} - ${episode.episodeCode}';
   String? get posterUrl => show.posterUrl;

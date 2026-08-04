@@ -4,6 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/graphql/watch/query_key.dart';
+import '../../core/player/best_file.dart';
+import '../../core/player/resume_plan.dart';
+import '../../domain/models/continue_watching_item.dart';
+import '../../domain/models/media_file.dart';
+import '../../domain/models/show_next_up.dart';
+import '../../domain/models/up_next_item.dart';
 import '../widgets/ambient_backdrop_provider.dart';
 import '../widgets/content_rail.dart';
 import '../widgets/freshness_header.dart';
@@ -13,6 +19,71 @@ import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
 import '../widgets/app_shell.dart';
 import 'home/home_controller.dart';
+
+String _resumeSuffix({
+  required bool isContinueState,
+  required int? positionSeconds,
+  required bool watched,
+}) {
+  final pass = shouldPassResume(
+    isContinueState: isContinueState,
+    positionSeconds: positionSeconds,
+    watched: watched,
+  );
+  return pass ? '&resume=$positionSeconds' : '';
+}
+
+/// Player route for an Up Next card.
+String playerRouteForUpNext(UpNextItem item, {required String fileId}) {
+  final episode = item.episode;
+  final progress = episode.progress;
+  final title = '${item.show.title} - ${episode.episodeCode}';
+
+  return '/player/episode/${episode.id}'
+      '?fileId=$fileId'
+      '&title=${Uri.encodeComponent(title)}'
+      '&showId=${item.show.id}'
+      '&seasonNumber=${episode.seasonNumber}'
+      '${_resumeSuffix(
+    isContinueState: item.state == NextUpState.continueWatching,
+    positionSeconds: progress?.positionSeconds,
+    watched: progress?.watched ?? false,
+  )}';
+}
+
+/// Player route for a Continue Watching card.
+///
+/// This rail carries movies as well as episodes, and by construction every
+/// item on it is mid-playback, so the resume gate only has to check position
+/// and watched state.
+String playerRouteForContinueWatching(
+  ContinueWatchingItem item, {
+  required String fileId,
+}) {
+  final progress = item.progress;
+  final resume = _resumeSuffix(
+    isContinueState: true,
+    positionSeconds: progress?.positionSeconds,
+    watched: progress?.watched ?? false,
+  );
+
+  if (item.isMovie) {
+    return '/player/movie/${item.id}'
+        '?fileId=$fileId'
+        '&title=${Uri.encodeComponent(item.title)}'
+        '$resume';
+  }
+
+  final showId = item.showId;
+  final seasonNumber = item.seasonNumber;
+
+  return '/player/episode/${item.id}'
+      '?fileId=$fileId'
+      '&title=${Uri.encodeComponent(item.displayTitle)}'
+      '${showId != null ? '&showId=$showId' : ''}'
+      '${seasonNumber != null ? '&seasonNumber=$seasonNumber' : ''}'
+      '$resume';
+}
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -25,6 +96,51 @@ class HomeScreen extends ConsumerWidget {
       context.push('/show/$id');
     } else if (normalizedType == 'episode') {
       context.push('/episode/$id');
+    }
+  }
+
+  /// Picks the best file, or null when none is playable and also when the
+  /// selection itself fails.
+  ///
+  /// pickBestFile probes the device and network, so it can throw on a flaky
+  /// connection. An escaping error would leave the tap doing nothing at all,
+  /// so a failed probe is treated like "nothing playable" and lands the user
+  /// on the detail screen, where they can pick a version by hand.
+  Future<MediaFile?> _bestFileOrNull(
+    List<MediaFile> files,
+    double screenWidth,
+  ) async {
+    try {
+      return await pickBestFile(files, screenWidth);
+    } catch (error, stackTrace) {
+      debugPrint('Best-file selection failed, falling back to detail: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return null;
+    }
+  }
+
+  Future<void> _handlePlay(BuildContext context, Object item) async {
+    final router = GoRouter.of(context);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+
+    if (item is UpNextItem) {
+      final file = await _bestFileOrNull(item.episode.files, screenWidth);
+      if (file == null) {
+        // Nothing playable: fall back to detail rather than a dead tap.
+        router.push('/episode/${item.episode.id}');
+        return;
+      }
+      router.push(playerRouteForUpNext(item, fileId: file.id));
+      return;
+    }
+
+    if (item is ContinueWatchingItem) {
+      final file = await _bestFileOrNull(item.files, screenWidth);
+      if (file == null) {
+        router.push(item.isMovie ? '/movie/${item.id}' : '/episode/${item.id}');
+        return;
+      }
+      router.push(playerRouteForContinueWatching(item, fileId: file.id));
     }
   }
 
@@ -127,6 +243,8 @@ class HomeScreen extends ConsumerWidget {
                               showProgress: true,
                               onItemTap: (id, type) =>
                                   _handleItemTap(context, id, type),
+                              onItemActivate: (item) =>
+                                  _handlePlay(context, item),
                             ),
                           if (data.recentlyAdded.isNotEmpty)
                             ContentRail(
@@ -152,6 +270,8 @@ class HomeScreen extends ConsumerWidget {
                               showEpisodeInfo: true,
                               onItemTap: (id, type) =>
                                   _handleItemTap(context, id, type),
+                              onItemActivate: (item) =>
+                                  _handlePlay(context, item),
                             ),
                           SizedBox(height: bottomPadding),
                         ]),

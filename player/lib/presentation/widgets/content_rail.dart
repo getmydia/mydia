@@ -14,6 +14,11 @@ class ContentRail extends StatefulWidget {
   final Function(String id, String type)? onItemTap;
   final VoidCallback? onSeeAllTap;
 
+  /// Called instead of [onItemTap] for cards that should start playback
+  /// directly. Passes the item itself, because choosing a file needs the
+  /// item's files and progress, which an (id, type) pair cannot carry.
+  final void Function(Object item)? onItemActivate;
+
   const ContentRail({
     super.key,
     required this.title,
@@ -22,6 +27,7 @@ class ContentRail extends StatefulWidget {
     this.showEpisodeInfo = false,
     this.onItemTap,
     this.onSeeAllTap,
+    this.onItemActivate,
   });
 
   @override
@@ -75,7 +81,8 @@ class _ContentRailState extends State<ContentRail> {
       children: [
         // Header
         Padding(
-          padding: EdgeInsets.fromLTRB(horizontalPadding, isDesktop ? 32 : 24, horizontalPadding, isDesktop ? 20 : 16),
+          padding: EdgeInsets.fromLTRB(horizontalPadding, isDesktop ? 32 : 24,
+              horizontalPadding, isDesktop ? 20 : 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -196,7 +203,9 @@ class _ContentRailState extends State<ContentRail> {
         progressPercentage: item.progress?.percentage,
         width: cardSize.width,
         height: cardSize.height,
-        onTap: () => widget.onItemTap?.call(item.id, item.type),
+        onTap: () => widget.onItemActivate != null
+            ? widget.onItemActivate!(item)
+            : widget.onItemTap?.call(item.id, item.type),
       );
     } else if (item is RecentlyAddedItem) {
       return MediaCard(
@@ -214,7 +223,9 @@ class _ContentRailState extends State<ContentRail> {
         subtitle: item.episode.episodeCode,
         width: cardSize.width,
         height: cardSize.height,
-        onTap: () => widget.onItemTap?.call(item.episode.id, 'episode'),
+        onTap: () => widget.onItemActivate != null
+            ? widget.onItemActivate!(item)
+            : widget.onItemTap?.call(item.episode.id, 'episode'),
       );
     }
     return const SizedBox.shrink();
