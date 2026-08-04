@@ -130,7 +130,7 @@ jobs:
       - name: Guard the pre-migration backup task
         run: |
           set -euo pipefail
-          if grep -nE 'Mix\.Task\.run\("app\.start"\)' lib/mix/tasks/mydia.backup_before_migrate.ex; then
+          if grep -nE 'Mix\.Task\.run\(\s*"app\.start"' lib/mix/tasks/mydia.backup_before_migrate.ex; then
             echo "::error::mydia.backup_before_migrate must not start the application; use Ecto.Migrator.with_repo/2"
             exit 1
           fi
