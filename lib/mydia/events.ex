@@ -182,6 +182,7 @@ defmodule Mydia.Events do
     query
     |> filter_by_category(opts[:category])
     |> filter_by_type(opts[:type])
+    |> filter_by_exclude_types(opts[:exclude_types])
     |> filter_by_actor(opts[:actor_type], opts[:actor_id])
     |> filter_by_resource(opts[:resource_type], opts[:resource_id])
     |> filter_by_severity(opts[:severity])
@@ -193,6 +194,12 @@ defmodule Mydia.Events do
 
   defp filter_by_type(query, nil), do: query
   defp filter_by_type(query, type), do: where(query, [e], e.type == ^type)
+
+  defp filter_by_exclude_types(query, nil), do: query
+  defp filter_by_exclude_types(query, []), do: query
+
+  defp filter_by_exclude_types(query, types) when is_list(types),
+    do: where(query, [e], e.type not in ^types)
 
   defp filter_by_actor(query, nil, _), do: query
 

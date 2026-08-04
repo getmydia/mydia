@@ -1003,4 +1003,46 @@ defmodule Mydia.EventsTest do
       assert "must be format: category.action" in errors_on(changeset).type
     end
   end
+
+  describe "list_events/1 exclude_types" do
+    setup do
+      {:ok, kept} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.update_available",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{"slug" => "tmdb-art"}
+        })
+
+      {:ok, excluded} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.http_request",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{"slug" => "tmdb-art"}
+        })
+
+      %{kept: kept, excluded: excluded}
+    end
+
+    test "omits the excluded types", %{kept: kept} do
+      ids =
+        [exclude_types: ["plugin.http_request"]]
+        |> Events.list_events()
+        |> Enum.map(& &1.id)
+
+      assert kept.id in ids
+      assert length(ids) == 1
+    end
+
+    test "an empty list excludes nothing" do
+      assert length(Events.list_events(exclude_types: [])) == 2
+    end
+
+    test "omitting the option excludes nothing" do
+      assert length(Events.list_events()) == 2
+    end
+  end
 end
