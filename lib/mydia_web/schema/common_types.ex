@@ -199,7 +199,7 @@ defmodule MydiaWeb.Schema.CommonTypes do
   object :api_key do
     field :id, non_null(:id), description: "API key ID"
     field :name, non_null(:string), description: "User-given name"
-    field :key_prefix, non_null(:string), description: "Key prefix for identification"
+    field :key_prefix, :string, description: "Key prefix for identification"
 
     field :permissions, non_null(list_of(non_null(:string))),
       description: "List of granted permissions"

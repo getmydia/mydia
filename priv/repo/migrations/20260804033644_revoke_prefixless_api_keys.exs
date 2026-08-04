@@ -4,7 +4,8 @@ defmodule Mydia.Repo.Migrations.RevokePrefixlessApiKeys do
   # API keys created before 20251226020220 added the key_prefix column have no
   # prefix, and it cannot be recovered from an Argon2 hash. Verification now
   # narrows by prefix, so these keys can no longer authenticate. Revoke them so
-  # the admin UI shows why, instead of leaving them to fail silently.
+  # the key's state is inspectable via the API and explicable in release notes,
+  # instead of the key silently failing.
   def up do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 

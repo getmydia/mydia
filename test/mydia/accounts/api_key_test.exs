@@ -218,10 +218,10 @@ defmodule Mydia.Accounts.ApiKeyTest do
 
       now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      Mydia.Repo.query!(
-        "UPDATE api_keys SET revoked_at = ? WHERE key_prefix IS NULL AND revoked_at IS NULL",
-        [now]
-      )
+      Mydia.Repo.query!("""
+      UPDATE api_keys SET revoked_at = '#{now}'
+      WHERE key_prefix IS NULL AND revoked_at IS NULL
+      """)
 
       assert Accounts.get_api_key!(legacy.id).revoked_at != nil
       assert Accounts.get_api_key!(modern.id).revoked_at == nil
@@ -239,10 +239,10 @@ defmodule Mydia.Accounts.ApiKeyTest do
 
       later = DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.truncate(:second)
 
-      Mydia.Repo.query!(
-        "UPDATE api_keys SET revoked_at = ? WHERE key_prefix IS NULL AND revoked_at IS NULL",
-        [later]
-      )
+      Mydia.Repo.query!("""
+      UPDATE api_keys SET revoked_at = '#{later}'
+      WHERE key_prefix IS NULL AND revoked_at IS NULL
+      """)
 
       assert Accounts.get_api_key!(legacy.id).revoked_at == original_revoked_at
     end
