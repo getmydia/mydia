@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/player/media_file_selector.dart';
+import '../../core/player/best_file.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/media_file.dart';
 import 'play_button.dart';
@@ -38,17 +38,10 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
   }
 
   Future<void> _detectBestFile() async {
-    if (widget.files.isEmpty) return;
-
-    if (widget.files.length == 1) {
-      if (mounted) setState(() => _selectedFile = widget.files.first);
-      return;
-    }
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final deviceContext = await DeviceContext.detect(screenWidth);
-    final best = MediaFileSelector.selectBest(widget.files, deviceContext);
-
+    final best = await pickBestFile(
+      widget.files,
+      MediaQuery.sizeOf(context).width,
+    );
     if (mounted) setState(() => _selectedFile = best);
   }
 
