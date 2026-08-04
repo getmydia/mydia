@@ -307,6 +307,19 @@ let
       beamDeps = [];
     };
 
+    earmark = buildMix rec {
+      name = "earmark";
+      version = "1.4.49";
+
+      src = fetchHex {
+        pkg = "earmark";
+        version = "${version}";
+        sha256 = "ffad0257b92ac342b236d1744f7f19793da77bbd7281f32ccdfb44c047a05bf2";
+      };
+
+      beamDeps = [];
+    };
+
     ecto = buildMix rec {
       name = "ecto";
       version = "3.14.1";
@@ -1115,12 +1128,12 @@ let
 
     tzdata = buildMix rec {
       name = "tzdata";
-      version = "1.1.3";
+      version = "1.1.4";
 
       src = fetchHex {
         pkg = "tzdata";
         version = "${version}";
-        sha256 = "d4ca85575a064d29d4e94253ee95912edfb165938743dbf002acdf0dcecb0c28";
+        sha256 = "ab48888699de8ff4a255522fd858abe81bac2e64690a375e6cb590112cf4a24e";
       };
 
       beamDeps = [ hackney ];
