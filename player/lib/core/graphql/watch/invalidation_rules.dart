@@ -37,6 +37,21 @@ abstract final class InvalidationRules {
           QueryKeys.seasonEpisodes(showId, seasonNumber),
       };
 
+  /// A movie's watched flag changed.
+  ///
+  /// [movieId] is the toggled movie's own id, included for the same
+  /// self-convergence reason as [favoriteToggled]'s [id]. `moviesList` is
+  /// here because `movies_list.graphql` pulls `ProgressFragment`, so the
+  /// library grid renders watched badges that would otherwise go stale.
+  /// [watchedChanged] cannot be reused: it requires a `showId` and returns
+  /// show and season keys.
+  static Set<QueryKey> movieWatchedChanged({required String movieId}) => {
+        QueryKeys.home,
+        QueryKeys.unwatched,
+        QueryKeys.moviesList,
+        QueryKeys.movieDetail(movieId),
+      };
+
   /// Playback stopped, or the 90% watched threshold was first crossed.
   ///
   /// [showId] is optional because only the episode player knows it. When it is

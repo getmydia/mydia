@@ -149,6 +149,24 @@ void main() {
       expect(keys, contains(QueryKeys.seasonEpisodes('7', 2)));
     });
 
+    test('marking a movie watched refreshes home, unwatched and the list', () {
+      final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
+
+      expect(keys, {
+        QueryKeys.home,
+        QueryKeys.unwatched,
+        QueryKeys.moviesList,
+        QueryKeys.movieDetail('m1'),
+      });
+    });
+
+    test('marking a movie watched touches no show keys', () {
+      final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
+
+      expect(keys, isNot(contains(QueryKeys.tvShowsList)));
+      expect(keys, isNot(contains(QueryKeys.showDetail('m1'))));
+    });
+
     test('progress sync invalidates nothing', () {
       // The 10s sync timer would otherwise refetch Home hundreds of times per
       // movie, over what may be a p2p relay.
