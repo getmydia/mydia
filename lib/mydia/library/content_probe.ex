@@ -25,12 +25,11 @@ defmodule Mydia.Library.ContentProbe do
   @spec probe(String.t()) :: verdict()
   def probe(path) when is_binary(path) do
     with {:ok, ffprobe} <- executable(),
-         true <- File.regular?(path) || {:error, :not_a_file} do
+         {:file, true} <- {:file, File.regular?(path)} do
       run(ffprobe, path)
     else
       {:error, :ffprobe_not_found} -> verdict("unknown", "ffprobe not installed")
-      {:error, :not_a_file} -> verdict("unknown", "file not found")
-      false -> verdict("unknown", "file not found")
+      {:file, false} -> verdict("unknown", "file not found")
     end
   end
 
@@ -41,6 +40,18 @@ defmodule Mydia.Library.ContentProbe do
     end
   end
 
+  # Runs ffprobe through a Port we own directly (no Task), for two reasons:
+  #
+  #   * A `Task.async` result is linked to this process, so a raise inside the
+  #     spawned function (e.g. ffprobe vanishing between `executable/0`'s check
+  #     and invocation) would exit this process via a linked EXIT before the
+  #     `rescue` below ever ran. A directly-opened port raises in this process,
+  #     where `rescue` can actually catch it.
+  #   * `Task.shutdown(:brutal_kill)` only kills the BEAM process that called
+  #     `System.cmd/3` — it does not touch the ffprobe OS process `System.cmd`
+  #     spawned, which survives, reparents to init, and keeps running. Opening
+  #     our own port lets us capture the OS pid via `Port.info/2` and send it
+  #     a real SIGKILL on timeout.
   defp run(ffprobe, path) do
     args = [
       "-v",
@@ -54,17 +65,75 @@ defmodule Mydia.Library.ContentProbe do
       path
     ]
 
-    task = Task.async(fn -> System.cmd(ffprobe, args, stderr_to_stdout: true) end)
+    port =
+      Port.open({:spawn_executable, ffprobe}, [
+        :binary,
+        :exit_status,
+        :hide,
+        :stderr_to_stdout,
+        args: args
+      ])
 
-    case Task.yield(task, @timeout_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {output, 0}} -> classify(output)
-      {:ok, {output, _code}} -> verdict("not_media", first_line(output))
-      nil -> verdict("unknown", "probe timed out")
-    end
+    collect(port, port_os_pid(port), "")
   rescue
     exception ->
-      Logger.debug("Content probe raised: #{Exception.message(exception)}")
+      Logger.warning("Content probe raised: #{Exception.message(exception)}")
       verdict("unknown", "probe failed")
+  end
+
+  defp port_os_pid(port) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, pid} -> pid
+      nil -> nil
+    end
+  end
+
+  defp collect(port, os_pid, acc) do
+    receive do
+      {^port, {:data, chunk}} -> collect(port, os_pid, acc <> chunk)
+      {^port, {:exit_status, 0}} -> classify(acc)
+      {^port, {:exit_status, _code}} -> verdict("not_media", first_line(acc))
+    after
+      @timeout_ms ->
+        kill_and_close(port, os_pid)
+        verdict("unknown", "probe timed out")
+    end
+  end
+
+  # `Port.close/1` alone does not guarantee the OS process dies: it only
+  # detaches Erlang's end of the stdio pipes. A process like ffprobe, which
+  # reads its input from a file path (not stdin) and only writes to stdout
+  # once done, never notices the pipe closing and keeps running as an orphan.
+  # Verified empirically: closing the port left the ffprobe process alive and
+  # still reading; sending SIGKILL to the OS pid from `Port.info/2` reliably
+  # killed it. So we signal the pid directly instead of relying on close.
+  defp kill_and_close(port, os_pid) do
+    send_kill(os_pid)
+    close_port(port)
+    flush_port_messages(port)
+  end
+
+  defp send_kill(nil), do: :ok
+
+  defp send_kill(os_pid) do
+    System.cmd("kill", ["-KILL", to_string(os_pid)], stderr_to_stdout: true)
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp close_port(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp flush_port_messages(port) do
+    receive do
+      {^port, _} -> flush_port_messages(port)
+    after
+      0 -> :ok
+    end
   end
 
   defp classify(output) do
