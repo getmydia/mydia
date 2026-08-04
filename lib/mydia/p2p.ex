@@ -46,13 +46,6 @@ defmodule Mydia.P2p do
   def send_response(_resource, _request_id, _response), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
-  Read a file chunk and send it as a response.
-  This is optimized to read and send directly from Rust.
-  """
-  def respond_with_file_chunk(_resource, _request_id, _file_path, _offset, _length),
-    do: :erlang.nif_error(:nif_not_loaded)
-
-  @doc """
   Get network statistics including connected peers and relay status.
   """
   def get_network_stats(_resource), do: :erlang.nif_error(:nif_not_loaded)

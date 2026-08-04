@@ -9,8 +9,6 @@ use mydia_p2p_core::{
 use rustler::{
     Binary, Encoder, Env, LocalPid, NifStruct, NifTaggedEnum, OwnedEnv, ResourceArc, Term,
 };
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
 use std::thread;
 
 mod atoms {
@@ -181,43 +179,6 @@ fn send_response(
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
-}
-
-/// Read a file chunk and send it as a response.
-/// This is done in a separate thread to avoid blocking the NIF.
-#[rustler::nif]
-fn respond_with_file_chunk(
-    resource: ResourceArc<HostResource>,
-    request_id: String,
-    file_path: String,
-    offset: u64,
-    length: u32,
-) -> Result<String, rustler::Error> {
-    let resource_clone = resource.clone();
-
-    thread::spawn(move || {
-        let response = match File::open(&file_path) {
-            Ok(mut file) => {
-                if file.seek(SeekFrom::Start(offset)).is_ok() {
-                    let mut buffer = vec![0; length as usize];
-                    match file.read(&mut buffer) {
-                        Ok(n) => {
-                            buffer.truncate(n);
-                            MydiaResponse::MediaChunk(buffer)
-                        }
-                        Err(e) => MydiaResponse::Error(format!("Read error: {}", e)),
-                    }
-                } else {
-                    MydiaResponse::Error("Seek error".to_string())
-                }
-            }
-            Err(e) => MydiaResponse::Error(format!("File open error: {}", e)),
-        };
-
-        let _ = resource_clone.host.send_response(request_id, response);
-    });
-
-    Ok("ok".to_string())
 }
 
 /// Send an HLS response header for a streaming request.
