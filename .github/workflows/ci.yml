@@ -135,6 +135,24 @@ jobs:
             exit 1
           fi
 
+      # Shell entry must not boot the app or start a service. mydia:ecto does
+      # both: it runs the backup task and, under Postgres, needs a live server.
+      # Attaching it to enterShell is what made every fresh worktree fail on
+      # entry and what spawned a second postmaster beside `./dev up -d`. It
+      # belongs to processes.phoenix.after and `./dev db.setup`.
+      - name: Guard shell-entry purity
+        run: |
+          set -euo pipefail
+          BLOCK=$(awk '/"mydia:ecto" = \{/,/^    \};/' devenv.nix)
+          if echo "$BLOCK" | grep -n 'before = onEnterShell'; then
+            echo "::error::mydia:ecto must not run on shell entry; it belongs to processes.phoenix.after"
+            exit 1
+          fi
+          if echo "$BLOCK" | grep -n 'devenv:processes:postgres'; then
+            echo "::error::mydia:ecto must not depend on the postgres process; a task dependency starts a second postmaster"
+            exit 1
+          fi
+
       - name: Test (SQLite) under devenv
         run: |
           devenv shell -- bash <<'DEVENV'

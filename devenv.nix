@@ -214,6 +214,14 @@ in
   // lib.optionalAttrs pkgs.stdenv.isLinux {
     CHROME_PATH = "${pkgs.chromium}/bin/chromium";
     CHROMEDRIVER_PATH = "${pkgs.chromedriver}/bin/chromedriver";
+  }
+  # :database_adapter is a compile-time env entry, so a _build compiled for
+  # SQLite and reused under DATABASE_TYPE=postgres fails Mix's compile-env
+  # validation on every boot, restart-looping phoenix with nothing in its log
+  # but that error. Give Postgres its own build root. SQLite keeps the default
+  # `_build`, so no existing worktree pays a recompile.
+  // lib.optionalAttrs usePostgres {
+    MIX_BUILD_ROOT = "_build/postgres";
   };
 
   # ── Postgres service (R4) ───────────────────────────────────────────────────
@@ -229,6 +237,13 @@ in
 
   # ── Long-running processes (R5) ─────────────────────────────────────────────
   processes.phoenix.exec = "mix phx.server";
+
+  # The dev database is created and migrated by mydia:ecto, which is deliberately
+  # NOT a shell-entry task (see below). Nothing else migrates it: skip_migrations?/0
+  # in Mydia.Application returns true whenever RELEASE_NAME is unset, so the
+  # supervision tree's Ecto.Migrator never runs under mix. Booting against an
+  # unmigrated database dies in ClientHealth.init/1, so wait for the task.
+  processes.phoenix.after = [ "mydia:ecto@succeeded" ];
 
   # build_runner watch performs GraphQL/Riverpod codegen for the player. This is
   # distinct from MydiaWeb.FlutterWatcher (config/dev.exs), which runs
@@ -257,15 +272,42 @@ in
       after = [ "mydia:hex" ];
     };
 
+    # Deliberately NOT a shell-entry task. Entering a devenv shell must never
+    # boot the OTP application and must never start a service; this task does
+    # both by necessity, so it belongs to the process graph
+    # (processes.phoenix.after) and to `./dev db.setup`.
     "mydia:ecto" = {
-      # backup_before_migrate self-skips when no migrations are pending, so it
-      # is a cheap no-op except right before a migration actually runs — keeping
-      # the dev-DB safety net the retired docker-entrypoint.sh provided.
-      exec = "mix ecto.create --quiet && mix mydia.backup_before_migrate && mix ecto.migrate";
-      # Re-run when a migration is added/changed (idempotent otherwise).
+      # backup_before_migrate self-skips when nothing is pending AND when the
+      # database has no applied migrations at all, so it is a cheap no-op except
+      # right before a migration actually runs, keeping the dev-DB safety net
+      # the retired docker-entrypoint.sh provided.
+      exec = ''
+        ${lib.optionalString usePostgres ''
+          # Poll for Postgres instead of adding the postgres process as an
+          # `after` dependency (e.g. its "@ready" suffix). A task dependency
+          # like that makes devenv START Postgres whenever this task runs,
+          # which collided with the postmaster already owned by `./dev up -d`
+          # ("lock file postmaster.pid already exists", six attempts in 87ms).
+          # Polling only ever observes, so the process daemon stays the single
+          # owner.
+          for _ in $(seq 1 60); do
+            pg_isready -q -h "$DATABASE_HOST" -p "$DATABASE_PORT" && break
+            sleep 0.5
+          done
+
+          if ! pg_isready -q -h "$DATABASE_HOST" -p "$DATABASE_PORT"; then
+            echo "Postgres is not accepting connections on $DATABASE_HOST:$DATABASE_PORT." >&2
+            echo "Start it with './dev up -d', or run './dev db.setup'." >&2
+            exit 1
+          fi
+        ''}
+        mix ecto.create --quiet && mix mydia.backup_before_migrate && mix ecto.migrate
+      '';
+      # Re-run when a migration is added or changed (idempotent otherwise). A
+      # failed run does not update the recorded hashes, so a worktree that broke
+      # here heals itself on the next run.
       execIfModified = [ "priv/repo/migrations" ];
-      before = onEnterShell;
-      after = [ "mydia:deps" ] ++ lib.optional usePostgres "devenv:processes:postgres@ready";
+      after = [ "mydia:deps" ];
     };
 
     "mydia:assets" = {
