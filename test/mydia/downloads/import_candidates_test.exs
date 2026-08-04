@@ -297,6 +297,77 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
       assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
       assert candidate["probe"] == stashed_probe
     end
+
+    test "falls back to metadata[\"unresolved_files\"] when there is no import_candidates snapshot",
+         %{tmp_dir: tmp_dir} do
+      # Every unresolved-files download that existed before the
+      # import_candidates snapshot shipped only has this key. There is
+      # deliberately no "save_path" here (and no resolvable client), so this
+      # exercises the pure snapshot fallback, not a live re-listing.
+      missing_path = Path.join(tmp_dir, "gone/Show.S01E02.mkv")
+
+      download =
+        download_fixture(%{
+          metadata: %{
+            "unresolved_files" => [
+              %{
+                "path" => missing_path,
+                "name" => "Show.S01E02.mkv",
+                "size" => 123,
+                "parsed_season" => 1,
+                "parsed_episode" => 2,
+                "assigned_episode_id" => nil
+              }
+            ]
+          }
+        })
+
+      assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
+      assert candidate["path"] == missing_path
+      assert candidate["name"] == "Show.S01E02.mkv"
+      assert candidate["size"] == 123
+      assert candidate["parsed_season"] == 1
+      assert candidate["parsed_episode"] == 2
+      assert candidate["skip_reason"] == nil
+      assert candidate["missing"] == true
+    end
+
+    test "derives a name from the path when unresolved_files omits it", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "Show.S01E02.mkv")
+      File.write!(path, "x")
+
+      download =
+        download_fixture(%{
+          metadata: %{"unresolved_files" => [%{"path" => path}]}
+        })
+
+      assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "Show.S01E02.mkv"
+      assert candidate["missing"] == false
+    end
+
+    test "prefers import_candidates over unresolved_files when both are present" do
+      download =
+        download_fixture(%{
+          metadata: %{
+            "import_candidates" => [
+              %{"path" => "/tmp/a.mkv", "name" => "a.mkv", "size" => 1}
+            ],
+            "unresolved_files" => [
+              %{"path" => "/tmp/b.mkv", "name" => "b.mkv", "size" => 2}
+            ]
+          }
+        })
+
+      assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "a.mkv"
+    end
+
+    test "still reports unavailable when neither key is present" do
+      download = download_fixture(%{metadata: %{"unresolved_files" => nil}})
+
+      assert {:error, :unavailable} = ImportCandidates.load(download)
+    end
   end
 
   ## Helpers

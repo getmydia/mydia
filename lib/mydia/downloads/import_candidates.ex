@@ -167,7 +167,7 @@ defmodule Mydia.Downloads.ImportCandidates do
           {:ok, :live | :snapshot, [map()]} | {:error, :unavailable}
   def load(download) do
     metadata = download.metadata || %{}
-    snapshot = Map.get(metadata, "import_candidates") || []
+    snapshot = candidate_snapshot(metadata)
 
     case live_listing(download, metadata) do
       {:ok, files} when files != [] ->
@@ -181,6 +181,49 @@ defmodule Mydia.Downloads.ImportCandidates do
         end
     end
   end
+
+  # Prefers the failure-time `"import_candidates"` snapshot (written by
+  # `MediaImport.snapshot_candidates_on_failure/4` on every import failure).
+  # Downloads flagged `unresolved_files` before that snapshot existed only
+  # carry `metadata["unresolved_files"]` (written by
+  # `MediaImport.flag_unresolved_files/2`), and in a self-hosted deployment
+  # those rows persist indefinitely until an operator resolves them. Falling
+  # back to normalizing that list keeps the modal usable for them instead of
+  # reporting "unavailable" and stranding an operator who relied on the
+  # inline picker this modal replaces.
+  defp candidate_snapshot(metadata) do
+    case Map.get(metadata, "import_candidates") do
+      candidates when is_list(candidates) and candidates != [] ->
+        candidates
+
+      _no_snapshot ->
+        metadata
+        |> Map.get("unresolved_files")
+        |> List.wrap()
+        |> Enum.map(&normalize_unresolved_file/1)
+    end
+  end
+
+  # `flag_unresolved_files/2` writes "path", "name", "size", "parsed_season",
+  # "parsed_episode", and "assigned_episode_id" — no "skip_reason" or
+  # "probe", since those only exist on the newer import-candidates path.
+  # Missing keys degrade gracefully: the modal template only renders a probe
+  # or skip-reason line when the key is present/truthy.
+  defp normalize_unresolved_file(file) do
+    path = file["path"]
+
+    %{
+      "path" => path,
+      "name" => file["name"] || basename(path),
+      "size" => file["size"],
+      "skip_reason" => nil,
+      "parsed_season" => file["parsed_season"],
+      "parsed_episode" => file["parsed_episode"]
+    }
+  end
+
+  defp basename(path) when is_binary(path) and path != "", do: Path.basename(path)
+  defp basename(_path), do: nil
 
   defp live_listing(download, metadata) do
     case listable_save_path(metadata, download) do

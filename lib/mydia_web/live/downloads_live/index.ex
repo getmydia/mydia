@@ -106,7 +106,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:search_open_for, nil)
      |> assign(:library_search_value, "")
      |> assign(:library_search_results, [])
-     |> assign(:episodes_by_media_item, %{})
      # Match / re-match modal state (in-flight correction + post-import re-match)
      |> assign(:match_modal, nil)
      # Initialize all streams
@@ -820,36 +819,29 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  def handle_event("resolve_files", %{"download_id" => download_id} = params, socket) do
+  def handle_event("reject_release", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      download = Downloads.get_download!(download_id, preload: [:media_item])
+      download = Downloads.get_download!(id)
 
-      # Collect episode assignments from form params
-      # Params come as "episode_<index>" => episode_id
-      unresolved_files = get_in(download.metadata || %{}, ["unresolved_files"]) || []
+      case Downloads.reject_release(download) do
+        {:ok, :rejected} ->
+          {:noreply,
+           socket
+           |> assign(:match_files_modal, nil)
+           |> assign(:match_files_error, nil)
+           |> put_flash(:info, "Release blacklisted and a new search was queued")
+           |> load_downloads()}
 
-      mappings =
-        unresolved_files
-        |> Enum.with_index()
-        |> Enum.map(fn {file, idx} ->
-          episode_id = Map.get(params, "episode_#{idx}")
-          %{"path" => file["path"], "episode_id" => episode_id}
-        end)
-        |> Enum.reject(fn m -> is_nil(m["episode_id"]) or m["episode_id"] == "" end)
+        {:error, reason} when reason in [:no_indexer, :no_guid] ->
+          {:noreply,
+           assign(
+             socket,
+             :match_files_error,
+             "This download has no indexer or release id recorded, so it cannot be blacklisted."
+           )}
 
-      if length(mappings) == length(unresolved_files) do
-        case Downloads.resolve_file_mappings(download, mappings) do
-          {:ok, _updated} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Files resolved and import queued")
-             |> load_downloads()}
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to resolve files")}
-        end
-      else
-        {:noreply, put_flash(socket, :error, "Please assign an episode to every file")}
+        {:error, _reason} ->
+          {:noreply, assign(socket, :match_files_error, "Failed to reject the release.")}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -1092,16 +1084,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       other: length(other)
     }
 
-    # Pre-fetch episodes for all unresolved downloads to avoid N+1 queries in template
-    episodes_by_media_item =
-      unresolved
-      |> Enum.filter(& &1.media_item)
-      |> Enum.map(& &1.media_item.id)
-      |> Enum.uniq()
-      |> Enum.into(%{}, fn media_item_id ->
-        {media_item_id, Media.list_episodes(media_item_id)}
-      end)
-
     all_empty = counts.unmatched == 0 and counts.unresolved == 0 and counts.other == 0
 
     socket
@@ -1110,7 +1092,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:issues_counts, counts)
     |> assign(:scan, scan)
     |> assign(:removed_client_groups, removed_client_groups())
-    |> assign(:episodes_by_media_item, episodes_by_media_item)
     |> stream(:needs_matching, needs_matching, reset: true)
     |> stream(:unresolved_downloads, unresolved, reset: true)
     |> stream(:other_issues, other, reset: true)
@@ -1725,9 +1706,5 @@ defmodule MydiaWeb.DownloadsLive.Index do
       diff < 86400 -> "in #{div(diff, 3600)}h"
       true -> "in #{div(diff, 86400)}d"
     end
-  end
-
-  defp get_episodes_for_media_item(episodes_by_media_item, media_item) do
-    Map.get(episodes_by_media_item, media_item.id, [])
   end
 end

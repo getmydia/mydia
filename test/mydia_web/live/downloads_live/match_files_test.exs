@@ -268,4 +268,144 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     assert html =~ "Select at least one file"
     refute_enqueued(worker: Mydia.Jobs.MediaImport)
   end
+
+  test "rejecting blacklists the release and removes the download", %{
+    conn: conn,
+    tmp_dir: tmp_dir
+  } do
+    %{download: download} = failed_download(tmp_dir)
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    render_click(view, "switch_tab", %{"tab" => "issues"})
+
+    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#match-files-reject") |> render_click()
+
+    assert Mydia.Downloads.Blacklists.blacklisted?("1337x", "abc")
+    refute Mydia.Repo.get(Mydia.Downloads.Download, download.id)
+  end
+
+  test "the reject button is disabled without a guid", %{conn: conn, tmp_dir: tmp_dir} do
+    dir = Path.join(tmp_dir, "noguid")
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "payload.exe"), "x")
+
+    media_item = media_item_fixture(%{type: "tv_show"})
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        indexer: "1337x",
+        import_failure_reason: "no_importable_files",
+        import_failed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        metadata: %{
+          # Deliberately no "guid" — that's what this test is about. A
+          # candidate snapshot is required too: the fixture's download_client
+          # ("test-client") never resolves to a DownloadClientConfig, so
+          # ImportCandidates.load/1 fails closed on the live listing (by
+          # design — see shared_download_root?/2) and, with no snapshot to
+          # fall back to, would return {:error, :unavailable} and never open
+          # the modal at all, which is a different failure than the one this
+          # test means to cover.
+          "save_path" => dir,
+          "import_candidates" => [
+            %{
+              "path" => Path.join(dir, "payload.exe"),
+              "name" => "payload.exe",
+              "size" => 1,
+              "skip_reason" => "not_video_extension",
+              "parsed_season" => nil,
+              "parsed_episode" => nil
+            }
+          ]
+        }
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    render_click(view, "switch_tab", %{"tab" => "issues"})
+
+    view |> element("#match-files-#{download.id}") |> render_click()
+
+    assert has_element?(view, "#match-files-reject[disabled]")
+  end
+
+  test "unresolved-file downloads open the same modal", %{conn: conn, tmp_dir: tmp_dir} do
+    dir = Path.join(tmp_dir, "unresolved")
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "Show.S01E02.mkv"), "x")
+
+    media_item = media_item_fixture(%{type: "tv_show"})
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        match_status: "unresolved_files",
+        metadata: %{
+          "save_path" => dir,
+          "unresolved_files" => [
+            %{"path" => Path.join(dir, "Show.S01E02.mkv"), "name" => "Show.S01E02.mkv"}
+          ]
+        }
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    render_click(view, "switch_tab", %{"tab" => "issues"})
+
+    html =
+      view
+      |> element("#match-files-#{download.id}")
+      |> render_click()
+
+    assert html =~ "Show.S01E02.mkv"
+    assert has_element?(view, "#match-files-modal")
+  end
+
+  # The regression this task exists to prevent: every unresolved download that
+  # existed before Task 4 shipped the import_candidates snapshot carries only
+  # `metadata["unresolved_files"]`. The now-removed inline picker was the only
+  # way to resolve those; this proves the modal's fallback keeps them
+  # resolvable, not just viewable.
+  test "unresolved-file downloads (no import_candidates) can be imported through the modal", %{
+    conn: conn,
+    tmp_dir: tmp_dir
+  } do
+    dir = Path.join(tmp_dir, "unresolved")
+    File.mkdir_p!(dir)
+    file_path = Path.join(dir, "Show.S01E02.mkv")
+    File.write!(file_path, "x")
+
+    media_item = media_item_fixture(%{type: "tv_show"})
+
+    episode =
+      episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 2})
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        match_status: "unresolved_files",
+        metadata: %{
+          "save_path" => dir,
+          "unresolved_files" => [
+            %{"path" => file_path, "name" => "Show.S01E02.mkv"}
+          ]
+        }
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    render_click(view, "switch_tab", %{"tab" => "issues"})
+
+    view |> element("#match-files-#{download.id}") |> render_click()
+
+    view
+    |> element("#match-files-form")
+    |> render_submit(%{"target" => %{file_path => episode.id}})
+
+    assert_enqueued(
+      worker: Mydia.Jobs.MediaImport,
+      args: %{
+        "download_id" => download.id,
+        "target_files" => [%{"path" => file_path, "episode_id" => episode.id}]
+      }
+    )
+  end
 end
