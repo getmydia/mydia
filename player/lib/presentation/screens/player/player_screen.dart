@@ -2557,17 +2557,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         Positioned(
           top: 8,
           left: 8,
-          child: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/');
-              }
-            },
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withValues(alpha: 0.5),
+          child: SafeArea(
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/');
+                }
+              },
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.5),
+              ),
             ),
           ),
         ),
