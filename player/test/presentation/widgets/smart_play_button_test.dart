@@ -83,8 +83,9 @@ void main() {
       expect(find.text('S02E05 · 1080p · 35 min left'), findsOneWidget);
     });
 
-    testWidgets('narrow layout drops the label but keeps the cue',
-        (tester) async {
+    testWidgets(
+        'narrow layout drops the label but keeps the cue, '
+        'prefixed with the state word', (tester) async {
       await tester.pumpWidget(_host(
         SmartPlayButton(
           files: files,
@@ -96,8 +97,16 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      // The full pill label is gone. Without the "min left" suffix (which
+      // only nextUpCueLine's continueWatching branch adds), a bare cue like
+      // "S01E01 · 1080p" cannot distinguish resume/next/start on its own —
+      // the short state word restores that distinction once the pill label
+      // is dropped.
       expect(find.text('Continue Watching'), findsNothing);
-      expect(find.text('S02E05 · 1080p · 35 min left'), findsOneWidget);
+      expect(
+        find.text('Continue · S02E05 · 1080p · 35 min left'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('without a state it renders the plain icon form',
@@ -110,6 +119,57 @@ void main() {
 
       expect(find.text('Continue Watching'), findsNothing);
       expect(find.text('1080p'), findsOneWidget);
+    });
+
+    testWidgets(
+        'collapses to the icon form without overflow inside a real Row '
+        'embedding (Expanded metadata sibling + Flexible-wrapped button)',
+        (tester) async {
+      // Reproduces how the show detail hero actually embeds this widget: a
+      // Row whose other child is Expanded (the title/metadata column) and
+      // whose SmartPlayButton is wrapped in Flexible. A bare (non-flex)
+      // trailing Row child gets UNBOUNDED main-axis constraints from Flutter,
+      // so SmartPlayButton's internal LayoutBuilder would see an effectively
+      // infinite maxWidth, "compact" would never trigger, and the full-width
+      // pill would overflow the narrow box below. Flexible is what gives the
+      // LayoutBuilder a bounded, real maxWidth to collapse against.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 340,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Expanded(child: Text('Show Title')),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: SmartPlayButton(
+                        files: files,
+                        state: NextUpState.continueWatching,
+                        cueLine: 'S02E05 · 1080p · 35 min left',
+                        onFileSelected: (_) {},
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // No RenderFlex overflow was thrown during layout.
+      expect(tester.takeException(), isNull);
+      // The pill collapsed to the icon form: the full label is gone, and the
+      // compact cue line (with its state-word prefix) is what remains.
+      expect(find.text('Continue Watching'), findsNothing);
+      expect(
+        find.text('Continue · S02E05 · 1080p · 35 min left'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('tapping reports the selected file', (tester) async {

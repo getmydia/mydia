@@ -88,7 +88,9 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
             if (widget.cueLine != null) ...[
               const SizedBox(height: 6),
               Text(
-                widget.cueLine!,
+                compact
+                    ? '${nextUpShortLabel(widget.state!)} · ${widget.cueLine!}'
+                    : widget.cueLine!,
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,

@@ -368,39 +368,48 @@ class ShowDetailScreen extends ConsumerWidget {
                   ),
                   const SizedBox(width: 12),
                   if (show.nextUp != null)
-                    Builder(builder: (context) {
-                      final nextUp = show.nextUp!;
-                      final episode = nextUp.episode;
-                      if (episode.files.isEmpty) return const SizedBox.shrink();
+                    // Flexible gives SmartPlayButton's internal LayoutBuilder a
+                    // bounded maxWidth to key its narrow-layout collapse off of.
+                    // Without it, a non-flex trailing Row child gets unbounded
+                    // main-axis constraints, so the pill never collapses and
+                    // can overflow on narrow screens.
+                    Flexible(
+                      child: Builder(builder: (context) {
+                        final nextUp = show.nextUp!;
+                        final episode = nextUp.episode;
+                        if (episode.files.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
 
-                      return SmartPlayButton(
-                        files: episode.files,
-                        state: nextUp.state,
-                        cueLine: nextUpCueLine(episode, nextUp.state),
-                        onFileSelected: (file) {
-                          final title =
-                              '${show.title} - ${episode.episodeCode}';
-                          final progress = episode.progress;
-                          final resume = shouldPassResume(
-                            isContinueState:
-                                nextUp.state == NextUpState.continueWatching,
-                            positionSeconds: progress?.positionSeconds,
-                            watched: progress?.watched ?? false,
-                          )
-                              ? '&resume=${progress!.positionSeconds}'
-                              : '';
+                        return SmartPlayButton(
+                          files: episode.files,
+                          state: nextUp.state,
+                          cueLine: nextUpCueLine(episode, nextUp.state),
+                          onFileSelected: (file) {
+                            final title =
+                                '${show.title} - ${episode.episodeCode}';
+                            final progress = episode.progress;
+                            final resume = shouldPassResume(
+                              isContinueState:
+                                  nextUp.state == NextUpState.continueWatching,
+                              positionSeconds: progress?.positionSeconds,
+                              watched: progress?.watched ?? false,
+                            )
+                                ? '&resume=${progress!.positionSeconds}'
+                                : '';
 
-                          context.push(
-                            '/player/episode/${episode.id}'
-                            '?fileId=${file.id}'
-                            '&title=${Uri.encodeComponent(title)}'
-                            '&showId=$id'
-                            '&seasonNumber=${episode.seasonNumber}'
-                            '$resume',
-                          );
-                        },
-                      );
-                    }),
+                            context.push(
+                              '/player/episode/${episode.id}'
+                              '?fileId=${file.id}'
+                              '&title=${Uri.encodeComponent(title)}'
+                              '&showId=$id'
+                              '&seasonNumber=${episode.seasonNumber}'
+                              '$resume',
+                            );
+                          },
+                        );
+                      }),
+                    ),
                 ],
               ),
             ),
