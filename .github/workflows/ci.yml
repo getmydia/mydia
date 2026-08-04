@@ -122,6 +122,19 @@ jobs:
           fi
           exit "$FAIL"
 
+      # This task runs from devenv's mydia:ecto against a database that may have
+      # no tables yet. Booting the supervision tree there is fatal, because
+      # ClientHealth.init/1 queries download_client_configs synchronously, and
+      # the failure leaves fresh worktrees unmigrated forever rather than
+      # retrying. It needs the repo and nothing else.
+      - name: Guard the pre-migration backup task
+        run: |
+          set -euo pipefail
+          if grep -nE 'Mix\.Task\.run\("app\.start"\)' lib/mix/tasks/mydia.backup_before_migrate.ex; then
+            echo "::error::mydia.backup_before_migrate must not start the application; use Ecto.Migrator.with_repo/2"
+            exit 1
+          fi
+
       - name: Test (SQLite) under devenv
         run: |
           devenv shell -- bash <<'DEVENV'
