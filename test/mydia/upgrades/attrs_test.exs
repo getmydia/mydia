@@ -210,4 +210,53 @@ defmodule Mydia.Upgrades.AttrsTest do
       assert attrs.source == nil
     end
   end
+
+  # from_media_file/2's metadata_source/1 (attrs.ex:191) reads metadata.source
+  # directly - it does not parse relative_path itself, as the "lifts source
+  # out of nested metadata" test above already establishes. So these fixtures
+  # pre-populate metadata.source with what Mydia.Quality.Sources.detect/1 (the
+  # same detector Task 3 wired into QualityProfileEngine.extract_source/1)
+  # would derive from the filename, rather than relying on from_media_file/2
+  # to parse relative_path itself - it doesn't. That keeps the assertion
+  # honest about what is actually under test: canonical_source/1's mapping,
+  # not filename inference (which from_media_file/2 does not perform).
+  describe "cam-tier sources survive normalization" do
+    test "a telesync file normalizes to a cam-tier source, not nil" do
+      # Without cam-tier in @canonical_sources this returns nil, the violation
+      # in collect_violations/2 requires is_binary(source), and the whole
+      # excluded-source mechanism silently no-ops on the upgrade path.
+      relative_path =
+        "The Odyssey (2026)/The Odyssey (2026) 1080p HQ HDTS - x264 - HQ Clean.mkv"
+
+      detected_source = Mydia.Quality.Sources.detect(relative_path)
+      assert detected_source == "Telesync"
+
+      file = %MediaFile{
+        relative_path: relative_path,
+        resolution: "1080p",
+        codec: "x264",
+        metadata: %FileMetadata{source: detected_source}
+      }
+
+      attrs = Attrs.from_media_file(file, :movie)
+
+      assert Mydia.Quality.Sources.cam_tier?(attrs.source),
+             "expected a cam-tier source, got #{inspect(attrs.source)}"
+    end
+
+    test "clean sources still normalize correctly" do
+      relative_path = "The Matrix (1999)/The.Matrix.1999.1080p.BluRay.x264.mkv"
+      detected_source = Mydia.Quality.Sources.detect(relative_path)
+      assert detected_source == "BluRay"
+
+      file = %MediaFile{
+        relative_path: relative_path,
+        resolution: "1080p",
+        codec: "x264",
+        metadata: %FileMetadata{source: detected_source}
+      }
+
+      assert Attrs.from_media_file(file, :movie).source == "BluRay"
+    end
+  end
 end

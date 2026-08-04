@@ -786,6 +786,22 @@ defmodule Mydia.Settings.QualityProfile do
           violations
       end
 
+    # Excluded sources are a hard violation, not a scoring penalty. A file whose
+    # source the profile refuses to grab should read as maximally upgradable so
+    # the upgrade path replaces it once a real release appears.
+    violations =
+      case {Map.get(standards, :excluded_sources), Map.get(media_attrs, :source)} do
+        {excluded, source} when is_list(excluded) and is_binary(source) ->
+          if source in excluded do
+            ["Source #{source} is excluded by this profile" | violations]
+          else
+            violations
+          end
+
+        _ ->
+          violations
+      end
+
     violations
   end
 

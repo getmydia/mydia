@@ -138,7 +138,8 @@ defmodule Mydia.Upgrades.Attrs do
     "hlg" => "hlg"
   }
 
-  @canonical_sources ~w(BluRay REMUX WEB-DL WEBRip HDTV SDTV DVD DVDRip BDRip)
+  @canonical_sources ~w(BluRay REMUX WEB-DL WEBRip HDTV SDTV DVD DVDRip BDRip) ++
+                       ["CAM", "Telesync", "Telecine", "Screener", "Workprint"]
 
   # Precedence for fused audio strings that carry two codec tokens, e.g.
   # FileAnalyzer's "TrueHD Atmos" or "DTS-HD MA". Atmos is a higher-tier

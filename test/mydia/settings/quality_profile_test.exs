@@ -90,4 +90,43 @@ defmodule Mydia.Settings.QualityProfileTest do
       refute changeset.valid?
     end
   end
+
+  describe "excluded sources as a hard violation" do
+    test "a file whose source is excluded scores zero and reports the violation" do
+      profile = %QualityProfile{
+        name: "Excl Violation",
+        quality_standards: %{excluded_sources: ["Telesync", "CAM"]}
+      }
+
+      result =
+        QualityProfile.score_media_file(profile, %{resolution: "1080p", source: "Telesync"})
+
+      assert result.score == 0.0
+      assert [violation] = result.violations
+      assert violation =~ "Telesync"
+    end
+
+    test "a file with an allowed source is unaffected" do
+      profile = %QualityProfile{
+        name: "Excl Allowed",
+        quality_standards: %{excluded_sources: ["Telesync", "CAM"]}
+      }
+
+      result = QualityProfile.score_media_file(profile, %{resolution: "1080p", source: "BluRay"})
+
+      assert result.violations == []
+      assert result.score > 0.0
+    end
+
+    test "a file with an unknown source is unaffected" do
+      profile = %QualityProfile{
+        name: "Excl Unknown Source",
+        quality_standards: %{excluded_sources: ["Telesync"]}
+      }
+
+      result = QualityProfile.score_media_file(profile, %{resolution: "1080p"})
+
+      assert result.violations == []
+    end
+  end
 end
