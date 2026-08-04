@@ -66,4 +66,37 @@ defmodule Mydia.Downloads.UntrackedMatcherTest do
       assert Repo.aggregate(Mydia.Downloads.Download, :count) == 0
     end
   end
+
+  # One malformed torrent must not abort the whole DownloadMonitor pass. Before
+  # this isolation, a raise here killed ExternalTorrents.refresh/0 and
+  # stuck-download detection on every run, and the torrent stayed in the client
+  # so the job failed permanently.
+  describe "per-torrent exception isolation" do
+    test "an exception during processing is contained instead of propagating" do
+      insert(:media_item, %{type: "movie", title: "The Matrix", year: 1999, monitored: true})
+
+      # Matches the library, so processing reaches create_download_record/3,
+      # which reads torrent.client_name. Dropping that key raises a KeyError
+      # deep in the call, which is what the rescue must contain.
+      malformed =
+        "The.Matrix.1999.1080p.BluRay.x264-GROUP"
+        |> torrent()
+        |> Map.delete(:client_name)
+
+      assert {:error, :match_exception} =
+               UntrackedMatcher.safe_process_untracked_torrent(malformed)
+    end
+
+    test "a well-formed torrent still succeeds through the same entry point" do
+      movie =
+        insert(:media_item, %{type: "movie", title: "The Matrix", year: 1999, monitored: true})
+
+      assert {:ok, download} =
+               UntrackedMatcher.safe_process_untracked_torrent(
+                 torrent("The.Matrix.1999.1080p.BluRay.x264-GROUP")
+               )
+
+      assert download.media_item_id == movie.id
+    end
+  end
 end
