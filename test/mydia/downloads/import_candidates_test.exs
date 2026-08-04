@@ -16,9 +16,29 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
     %{path: path, name: name, size: size}
   end
 
+  # Same contract as `file/3`, but produces a sparse file: `File.stat!/1`
+  # reports `size` bytes, while the actual disk blocks consumed are close to
+  # zero. Used by tests that only need to clear `probe_size_floor/0` — the
+  # bytes themselves are never read for content, only counted, so writing
+  # `size` real bytes to disk buys nothing but I/O pressure. Seeking to the
+  # last byte and writing it is what makes the file sparse: the filesystem
+  # only allocates blocks for ranges that were actually written, and the gap
+  # before that final byte is reported as zeros without being stored.
+  defp sparse_file(tmp_dir, name, size) do
+    path = Path.join(tmp_dir, name)
+    File.mkdir_p!(Path.dirname(path))
+
+    {:ok, fd} = :file.open(path, [:write, :binary])
+    {:ok, _} = :file.position(fd, size - 1)
+    :ok = :file.write(fd, <<0>>)
+    :ok = :file.close(fd)
+
+    %{path: path, name: name, size: size}
+  end
+
   test "flags a non-video extension and probes it", %{tmp_dir: tmp_dir} do
     big = ImportCandidates.probe_size_floor() + 1
-    files = [file(tmp_dir, "payload.exe", big)]
+    files = [sparse_file(tmp_dir, "payload.exe", big)]
 
     assert [candidate] = ImportCandidates.build(files, :series, [])
     assert candidate["name"] == "payload.exe"
@@ -58,7 +78,7 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
 
     files =
       for i <- 1..(ImportCandidates.probe_cap() + 3) do
-        file(tmp_dir, "payload#{i}.exe", big)
+        sparse_file(tmp_dir, "payload#{i}.exe", big)
       end
 
     candidates = ImportCandidates.build(files, :series, [])
@@ -358,7 +378,7 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
       dir = Path.join(tmp_dir, "live")
       File.mkdir_p!(dir)
       big = ImportCandidates.probe_size_floor() + 1
-      File.write!(Path.join(dir, "payload.exe"), :binary.copy(<<0>>, big))
+      sparse_file(dir, "payload.exe", big)
 
       client = client_with_unrelated_root(tmp_dir)
 
