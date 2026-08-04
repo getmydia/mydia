@@ -303,10 +303,23 @@ in
         ''}
         mix ecto.create --quiet && mix mydia.backup_before_migrate && mix ecto.migrate
       '';
-      # Re-run when a migration is added or changed (idempotent otherwise). A
-      # failed run does not update the recorded hashes, so a worktree that broke
-      # here heals itself on the next run.
-      execIfModified = [ "priv/repo/migrations" ];
+      # Deliberately NO execIfModified, overriding this file's original R6
+      # design (Task 3 shipped `execIfModified = [ "priv/repo/migrations" ]`
+      # here). Caching this task made devenv report a cached run as
+      # "succeeded" without checking whether the database still existed:
+      # `./dev db.setup` silently no-op'd against a missing/corrupt database,
+      # and `./dev iex`, `./dev phx.server`, and processes.phoenix.after all
+      # sailed past a Skipped-but-"succeeded" task into exactly the crash it
+      # exists to prevent. The original rationale for caching — keeping shell
+      # entry cheap — no longer applies: this task is off shell entry
+      # entirely, so every remaining caller (db.setup, iex, phx.server, the
+      # process graph) wants it to actually verify state, not skip. Running
+      # it unconditionally is safe and cheap: `mix ecto.create --quiet`
+      # no-ops on an existing database, `mix mydia.backup_before_migrate`
+      # returns `:no_migrations` immediately when nothing is pending, and
+      # `mix ecto.migrate` no-ops when the schema is current. The added cost
+      # is one BEAM boot (~2-3s) on commands that are already starting a BEAM
+      # or a whole stack.
       after = [ "mydia:deps" ];
     };
 
