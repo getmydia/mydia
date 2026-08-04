@@ -18,6 +18,16 @@ defmodule Mydia.Library.ReleaseParser.TitleAssembler do
     title-cased: first byte uppercased, rest lowercased.
   - Tokens are joined with a single space.
 
+  ## Parenthetical runs
+
+  A contiguous run of tokens tokenized out of `(...)` (tracked via
+  `Token.bracket_context == :paren`) is re-wrapped in parens once
+  rendered, e.g. `Ghosts (US)` rather than `Ghosts Us`. This only
+  applies to round parens — square-bracket runs are left bare, since
+  those are overwhelmingly noise (fansub group tags, site tags, hash
+  IDs; see `CORPUS_FAILURES.md`) that should not be dressed up as if it
+  were meaningful title content.
+
   ## Byte-safety
 
   Per the parser-wide rule, **no `String.slice/3` and no
@@ -42,11 +52,28 @@ defmodule Mydia.Library.ReleaseParser.TitleAssembler do
   def assemble(tokens, title_boundary) when is_list(tokens) do
     tokens
     |> Enum.filter(&within_title_zone?(&1, title_boundary))
+    |> Enum.chunk_by(& &1.bracket_context)
+    |> Enum.map(&render_chunk/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join(" ")
+    |> nil_if_empty()
+  end
+
+  defp render_chunk([%Token{bracket_context: :paren} | _] = chunk) do
+    case render_words(chunk) do
+      "" -> ""
+      words -> "(" <> words <> ")"
+    end
+  end
+
+  defp render_chunk(chunk), do: render_words(chunk)
+
+  defp render_words(chunk) do
+    chunk
     |> Enum.map(& &1.value)
     |> Enum.map(&strip_outer_punct/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.map_join(" ", &smart_capitalize/1)
-    |> nil_if_empty()
   end
 
   defp within_title_zone?(%Token{byte_offset: o}, :infinity), do: o >= 0

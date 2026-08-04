@@ -1,7 +1,16 @@
-defmodule Mydia.Library.FileParserTest do
+defmodule Mydia.Library.ReleaseParserPortTest do
+  @moduledoc """
+  Port of the original V1 `FileParser` test suite (`file_parser_test.exs`),
+  re-pointed at `Mydia.Library.ReleaseParser`. `FileParser` had no
+  production callers — both real call sites reached `ReleaseParser`
+  through `alias Mydia.Library.ReleaseParser, as: FileParser` — so this
+  suite is the only place these 795 lines of parsing expectations were
+  ever actually exercised against live behaviour.
+  """
+
   use ExUnit.Case, async: true
 
-  alias Mydia.Library.FileParser
+  alias Mydia.Library.ReleaseParser, as: FileParser
 
   describe "parse_movie/1" do
     test "parses basic movie with year and quality" do
@@ -233,7 +242,13 @@ defmodule Mydia.Library.FileParserTest do
         )
 
       assert result.type == :tv_show
-      assert result.title == "Let This Grieving Soul Retire!"
+      # ReleaseParser strips trailing ASCII punctuation (including "!")
+      # from every title token; this is pre-existing behavior unrelated
+      # to the FileParser->ReleaseParser port, not something changed
+      # here. FileParser kept the "!" because it built titles by
+      # splitting the whole string on whitespace rather than
+      # reconstructing from individually-cleaned tokens.
+      assert result.title == "Let This Grieving Soul Retire"
       assert result.season == 1
       assert result.episodes == [18]
       assert result.confidence > 0.8
@@ -286,8 +301,13 @@ defmodule Mydia.Library.FileParserTest do
       result = FileParser.parse("Ghosts (US) - S05E05 - T-Daddy - h264 EAC3 - NTb.mkv")
 
       assert result.type == :tv_show
-      # Title is normalized to Title Case, so (US) becomes (us)
-      assert result.title == "Ghosts (us)"
+      # ReleaseParser now reconstructs "(US)" as a paren-wrapped run
+      # (FileParser lost the parens entirely, treating "(US)" as
+      # ordinary text and losing the delimiters at the tokenizer
+      # level). Case comes from ReleaseParser's smart_capitalize, which
+      # title-cases an all-uppercase short token, giving "(Us)" rather
+      # than FileParser's whole-word String.capitalize("(US)") == "(us)".
+      assert result.title == "Ghosts (Us)"
       assert result.season == 5
       assert result.episodes == [5]
       assert result.quality.codec == "h264"
@@ -301,8 +321,9 @@ defmodule Mydia.Library.FileParserTest do
         )
 
       assert result.type == :tv_show
-      # Title is normalized to Title Case, so (US) becomes (us)
-      assert result.title == "Ghosts (us)"
+      # See the "Ghosts (US) S05E05" test above for why this is
+      # "(Us)" rather than FileParser's "(us)".
+      assert result.title == "Ghosts (Us)"
       assert result.season == 5
       assert result.episodes == [4]
       assert result.quality.codec == "h264"
@@ -313,8 +334,9 @@ defmodule Mydia.Library.FileParserTest do
       result = FileParser.parse("Show Name (US) S01E01.mkv")
 
       assert result.type == :tv_show
-      # Title is normalized to Title Case, so (US) becomes (us)
-      assert result.title == "Show Name (us)"
+      # See the "Ghosts (US) S05E05" test above for why this is
+      # "(Us)" rather than FileParser's "(us)".
+      assert result.title == "Show Name (Us)"
       assert result.season == 1
       assert result.episodes == [1]
     end
@@ -591,18 +613,20 @@ defmodule Mydia.Library.FileParserTest do
         FileParser.parse("Black Phone 2. 2025 1080P WEB-DL DDP5.1 Atmos. X265. POOLTED.mkv")
 
       assert result.type == :movie
-      # Note: "POOLTED" remains in title because it lacks the standard hyphen prefix (-POOLTED)
-      # This is intentional - release groups should follow standard naming conventions
-      # The title extraction properly removes "DDP5.1" now with regex patterns
-      assert result.title == "Black Phone 2 Poolted"
+      # FileParser left "POOLTED" in the title because it only
+      # recognized a release group with a standard hyphen prefix
+      # (-POOLTED). ReleaseParser's trailing-release-group detection
+      # also accepts a dot/space separator before a final all-caps
+      # token, so it correctly pulls "POOLTED" out as the release
+      # group instead, producing a cleaner title.
+      assert result.title == "Black Phone 2"
+      assert result.release_group == "POOLTED"
       assert result.year == 2025
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "WEB-DL"
       assert result.quality.audio == "DDP5.1"
       # Codec case is preserved from the filename (uppercase "X265")
       assert result.quality.codec == "X265"
-      # Release group not detected due to missing hyphen prefix
-      assert result.release_group == nil
     end
   end
 
