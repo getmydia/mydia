@@ -35,6 +35,7 @@ defmodule Mydia.Jobs.MediaImport do
   require Logger
   alias Mydia.{Downloads, Library, Media, Settings}
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.ImportCandidates
   alias Mydia.Library.{FileNamer, FileOrganizer, SampleDetector}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.ReleaseParser.TargetContext
@@ -1079,56 +1080,11 @@ defmodule Mydia.Jobs.MediaImport do
     |> String.trim()
   end
 
-  defp filter_video_files(files) do
-    video_extensions = ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .mpg .mpeg .m2ts)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in video_extensions
-    end)
-  end
-
-  # Filter files based on library type
-  defp filter_files_for_library_type(files, library_type)
-       when library_type in [:movies, :series, :mixed] do
-    # For video libraries, only import video files
-    filter_video_files(files)
-  end
-
-  defp filter_files_for_library_type(files, :music) do
-    # Music file extensions
-    music_extensions = ~w(.mp3 .flac .wav .aac .ogg .m4a .wma .opus .ape .alac .aiff)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in music_extensions
-    end)
-  end
-
-  defp filter_files_for_library_type(files, :books) do
-    # Ebook file extensions
-    book_extensions = ~w(.epub .pdf .mobi .azw .azw3 .cbr .cbz .djvu .fb2 .lit .txt .rtf)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in book_extensions
-    end)
-  end
-
-  defp filter_files_for_library_type(files, :adult) do
-    # Adult libraries can contain video and image files
-    media_extensions =
-      ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .jpg .jpeg .png .gif .webp .bmp .tiff)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in media_extensions
-    end)
-  end
-
-  defp filter_files_for_library_type(files, _unknown) do
-    # For unknown library types, import all files (fallback)
-    files
+  # The extension vocabulary lives in `ImportCandidates`, which also derives the
+  # skip reasons shown to the operator on a failed import. Keeping one copy means
+  # the two can never disagree.
+  defp filter_files_for_library_type(files, library_type) do
+    Enum.filter(files, &ImportCandidates.importable?(&1, library_type))
   end
 
   defp filter_extras_and_samples(files) do
