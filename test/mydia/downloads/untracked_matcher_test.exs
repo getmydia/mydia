@@ -87,6 +87,13 @@ defmodule Mydia.Downloads.UntrackedMatcherTest do
                UntrackedMatcher.safe_process_untracked_torrent(malformed)
     end
 
+    test "a torrent that is not a map is contained rather than raising in the rescue" do
+      # The rescue describes the torrent it failed on. If it reached for those
+      # keys with Map.get/2 it would raise BadMapError here and propagate,
+      # defeating the isolation.
+      assert {:error, :match_exception} = UntrackedMatcher.safe_process_untracked_torrent(nil)
+    end
+
     test "a well-formed torrent still succeeds through the same entry point" do
       movie =
         insert(:media_item, %{type: "movie", title: "The Matrix", year: 1999, monitored: true})

@@ -16,6 +16,10 @@ defmodule Mydia.Downloads.ReleaseIntake do
   - `:unknown` type with no usable title → `{:error, :unable_to_parse}`
   - `:unknown` type with a usable title → `{:ok, info}` so the matcher's
     title-similarity path can still produce a *suggestion*
+  - any other type with no usable title → `{:error, :missing_title}`.
+    `ReleaseParser.infer_media_type/4` types a release `:movie` on a year or
+    quality token alone without consulting the title, so a titleless `:movie`
+    is reachable and cannot be title-matched against the library.
   - otherwise → `{:ok, %ParsedFileInfo{}}`
 
   Downloads callers must use this function rather than calling

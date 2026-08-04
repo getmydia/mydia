@@ -152,10 +152,12 @@ defmodule Mydia.Downloads.UntrackedMatcher do
     process_untracked_torrent(torrent)
   rescue
     error ->
-      # Map.get, not dot access: the torrent map is what failed, so it may be
-      # missing the very keys used to describe it.
-      name = Map.get(torrent, :name)
-      client = Map.get(torrent, :client_name)
+      # The torrent is what failed, so it may be missing the very keys used to
+      # describe it, or not be a map at all. Dot access would raise on a missing
+      # key and Map.get/2 would raise BadMapError on a non-map, and a rescue
+      # that can itself raise defeats the isolation this function exists for.
+      name = torrent_field(torrent, :name)
+      client = torrent_field(torrent, :client_name)
 
       ErrorTracker.report(error, __STACKTRACE__, %{torrent_name: name, client: client})
 
@@ -167,6 +169,10 @@ defmodule Mydia.Downloads.UntrackedMatcher do
 
       {:error, :match_exception}
   end
+
+  # Total by construction so the rescue above can never raise a second time.
+  defp torrent_field(torrent, key) when is_map(torrent), do: Map.get(torrent, key)
+  defp torrent_field(_torrent, _key), do: nil
 
   @doc false
   # Public for testing the parse/match/route decision in isolation. Not part of
