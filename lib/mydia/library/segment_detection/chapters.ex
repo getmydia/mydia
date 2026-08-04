@@ -38,6 +38,31 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
       `The Credits Union Heist` contains the token `credits` but is a plot
       chapter, and `Opening Credits` has to resolve as an intro rather than as
       credits, which only the full sequence can decide.
+
+  ## Why an intro span is bounded but a credits span is not
+
+  A chapter's `end_time` is where the *next* chapter begins, not where the
+  named thing stops. Container chapters partition the whole timeline, so a
+  correct title carries no promise of a correct span, and the two failures are
+  not symmetric.
+
+  An intro is followed by the episode body. A release that marks only
+  structural points gives its opening chapter an end at the *next* marker, so
+  the span swallows everything the viewer came for. Bluey ships exactly two
+  chapters, `Intro` and `Credits`, which made every episode's intro 96% of its
+  runtime and a Skip Intro button that ended the episode.
+
+  Credits are the last thing in an episode. That same chapter runs to the next
+  marker or to EOF, and both are where the credits genuinely end: skipping to
+  either lands at the end of the file or at a post-credits scene. Across 389
+  chapter-derived credits rows in a production library, none had an implausible
+  span, against 128 of 402 intros. So only the intro is bounded, by 180 seconds
+  absolute and 25% of runtime, whichever is tighter.
+
+  Rejection is per chapter rather than per file, so a release whose first title
+  match is implausible can still resolve on a later one. Jujutsu Kaisen labels
+  its cold open `Intro` and its real 90-second theme `Opening`; bounding the
+  first lets the second win.
   """
 
   alias Mydia.Library.Ffmpeg
@@ -88,19 +113,31 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
     "creditos finales"
   ]
 
+  # Ceiling on a chapter-derived intro span. Measured real intros run 40 to 90
+  # seconds and the fingerprint engine has never produced one over 121s across
+  # 739 production rows, so 180s leaves half again as much headroom as anything
+  # observed. The fraction is what catches short-form content, where an
+  # episode-swallowing span is still well under the absolute bound.
+  @max_intro_ms 180_000
+  @max_intro_fraction 0.25
+
   @doc """
   Runs ffprobe against `path` and returns any recognisable chapter segments.
+
+  `runtime_ms` is the file's duration, used to bound the intro span. Callers
+  always have one: `analyze_season/2` filters to files with a known duration
+  before any chapter read happens.
 
   The returned map is keyed by segment type (`"intro"`, `"credits"`) with
   `{start_ms, end_ms}` values. A file with no recognisable chapters yields
   `{:ok, %{}}`, which is a successful result and not an error.
   """
-  @spec detect(String.t()) :: {:ok, segments()} | {:error, term()}
-  def detect(path) when is_binary(path) do
+  @spec detect(String.t(), non_neg_integer()) :: {:ok, segments()} | {:error, term()}
+  def detect(path, runtime_ms) when is_binary(path) and is_integer(runtime_ms) do
     args = ["-v", "quiet", "-print_format", "json", "-show_chapters", path]
 
     case Ffmpeg.probe(args) do
-      {:ok, output} -> parse_chapters(output)
+      {:ok, output} -> parse_chapters(output, runtime_ms)
       {:error, reason} -> {:error, reason}
     end
   end
@@ -108,16 +145,17 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
   @doc """
   Parses ffprobe `-show_chapters` JSON into recognisable segments.
 
-  Separated from `detect/1` so it can be tested against fixture JSON without
+  Separated from `detect/2` so it can be tested against fixture JSON without
   invoking ffprobe. Each segment type resolves independently, and the first
-  chapter matching a type wins: a release carrying both `Opening` and `Intro`
-  is describing the same thing twice.
+  chapter matching a type *with a plausible span* wins: a release carrying both
+  `Opening` and `Intro` is usually describing the same thing twice, but when
+  the first of them is implausible it is describing something else entirely.
   """
-  @spec parse_chapters(String.t()) :: {:ok, segments()} | {:error, term()}
-  def parse_chapters(json) when is_binary(json) do
+  @spec parse_chapters(String.t(), non_neg_integer()) :: {:ok, segments()} | {:error, term()}
+  def parse_chapters(json, runtime_ms) when is_binary(json) and is_integer(runtime_ms) do
     case Jason.decode(json) do
       {:ok, %{"chapters" => chapters}} when is_list(chapters) ->
-        {:ok, Enum.reduce(chapters, %{}, &collect/2)}
+        {:ok, Enum.reduce(chapters, %{}, &collect(&1, &2, max_intro_ms(runtime_ms)))}
 
       {:ok, _without_chapters} ->
         {:ok, %{}}
@@ -126,6 +164,19 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
         {:error, reason}
     end
   end
+
+  @doc """
+  The longest span a chapter-derived intro may claim for a file of `runtime_ms`.
+
+  Public so the backfill that clears already-stored bad spans applies the same
+  rule this module enforces, rather than a second copy that could drift.
+  """
+  @spec max_intro_ms(non_neg_integer()) :: non_neg_integer()
+  def max_intro_ms(runtime_ms) when is_integer(runtime_ms) and runtime_ms > 0 do
+    min(@max_intro_ms, round(runtime_ms * @max_intro_fraction))
+  end
+
+  def max_intro_ms(_unknown_runtime), do: @max_intro_ms
 
   @doc """
   Classifies a chapter title as `:intro`, `:credits`, or `:unknown`.
@@ -147,18 +198,22 @@ defmodule Mydia.Library.SegmentDetection.Chapters do
     end
   end
 
-  defp collect(chapter, acc) do
+  defp collect(chapter, acc, max_intro_ms) do
     with type when type != :unknown <- classify(chapter_title(chapter)),
          key = Atom.to_string(type),
          false <- Map.has_key?(acc, key),
          {:ok, start_ms} <- to_ms(chapter["start_time"]),
          {:ok, end_ms} <- to_ms(chapter["end_time"]),
-         true <- end_ms > start_ms do
+         true <- end_ms > start_ms,
+         true <- plausible?(type, end_ms - start_ms, max_intro_ms) do
       Map.put(acc, key, {start_ms, end_ms})
     else
       _no_usable_span -> acc
     end
   end
+
+  defp plausible?(:intro, span_ms, max_intro_ms), do: span_ms <= max_intro_ms
+  defp plausible?(:credits, _span_ms, _max_intro_ms), do: true
 
   defp chapter_title(%{"tags" => %{"title" => title}}) when is_binary(title), do: title
   defp chapter_title(_chapter), do: nil
