@@ -619,12 +619,25 @@ class P2pService {
 
   /// Reset the P2P host for re-initialization.
   /// This allows changing the relay URL by calling initialize() again.
+  ///
+  /// This method is intentionally void, not `Future<void>`, so it cannot
+  /// await the subscription cancellation below. Do not "fix" this into an
+  /// await; that does not compile in a void method, and reset() does not
+  /// need to be async because initialize() only checks _isInitialized,
+  /// which is cleared synchronously here regardless of when cancellation
+  /// finishes. Detach the subscription from the field before cancelling
+  /// it, so nothing can observe or act on a half-cancelled subscription,
+  /// and attach an error handler to the cancellation itself so a rejected
+  /// Future cannot surface as an unhandled async error.
   void reset() {
     _autoReconnectTimer?.cancel();
     _autoReconnectAttempts = 0;
     _lastDialedEndpointAddr = null;
-    _eventSubscription?.cancel();
+    final subscription = _eventSubscription;
     _eventSubscription = null;
+    unawaited(subscription?.cancel().catchError((Object e) {
+      debugPrint('[P2P] Error cancelling event subscription on reset: $e');
+    }));
     _host = null;
     _isInitialized = false;
     _isRelayConnected = false;
