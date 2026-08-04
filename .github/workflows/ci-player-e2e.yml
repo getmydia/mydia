@@ -97,14 +97,16 @@ jobs:
           fi
 
       - name: Free up disk space
-        if: steps.should.outputs.run == 'true' && steps.filter.outputs.server == 'true'
+        if: steps.should.outputs.run == 'true' && (github.event_name != 'pull_request' || steps.filter.outputs.server == 'true')
         run: |
           echo "Disk before cleanup:"
           df -h /
-          # This step only runs when the server image is being built from source
-          # (server paths changed). The host's preinstalled toolchains are unused
-          # in that build, so remove them to avoid "No space left on device" while
-          # compiling the Rust p2p NIF and the Elixir release.
+          # This step only runs when the server image is being built from source:
+          # on every push (master runs always build so they validate the real
+          # commit, not a stale pull) or on a pull request that touched server
+          # paths. The host's preinstalled toolchains are unused in that build,
+          # so remove them to avoid "No space left on device" while compiling
+          # the Rust p2p NIF and the Elixir release.
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
             /usr/local/share/powershell /usr/local/share/chromium \
@@ -132,8 +134,8 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE=ghcr.io/${{ github.repository }}:master
-          if [ "${{ steps.filter.outputs.server }}" = "true" ]; then
-            echo "::notice::Backend paths changed; building the server from this PR."
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.server }}" = "true" ]; then
+            echo "::notice::Not a pull request, or backend paths changed; building the server from source."
             BUILD=1
           elif docker pull "$IMAGE"; then
             echo "::notice::Using prebuilt server image $IMAGE"
@@ -165,7 +167,7 @@ jobs:
         run: |
           set -euo pipefail
           TOOLBOX=ghcr.io/${{ github.repository }}/player-e2e-toolbox:master
-          if [ "${{ steps.filter.outputs.toolbox }}" = "true" ] || ! docker pull "$TOOLBOX"; then
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.toolbox }}" = "true" ] || ! docker pull "$TOOLBOX"; then
             echo "::notice::Building the player toolbox image."
             TOOLBOX=player-e2e-toolbox:pr
             docker buildx build \
@@ -175,7 +177,7 @@ jobs:
           fi
 
           RELAY=ghcr.io/${{ github.repository }}/metadata-relay:master
-          if [ "${{ steps.filter.outputs.relay }}" = "true" ] || ! docker pull "$RELAY"; then
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relay }}" = "true" ] || ! docker pull "$RELAY"; then
             echo "::notice::Building the relay image."
             RELAY=metadata-relay:pr
             docker buildx build \
