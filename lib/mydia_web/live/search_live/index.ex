@@ -546,6 +546,13 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> put_flash(:info, "#{title} added to library. Download already in progress.")}
 
+      {:error, :already_have_files} ->
+        Logger.info("Skipping download - media files already exist")
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{title} added to library. You already have these files.")}
+
       {:error, :no_clients_configured} ->
         Logger.warning("Cannot initiate download - no download clients configured")
 
