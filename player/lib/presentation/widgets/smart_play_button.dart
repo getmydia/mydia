@@ -3,8 +3,15 @@ import 'package:flutter/material.dart';
 import '../../core/player/best_file.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/media_file.dart';
+import '../../domain/models/show_next_up.dart';
+import 'next_up_labels.dart';
 import 'play_button.dart';
 import 'quality_selector.dart';
+
+/// Below this many logical pixels of available width, the pill sheds its text.
+/// Measured against the button row's own constraints, not the screen: the
+/// poster and metadata column take a variable share of the hero.
+const double kPillCollapseWidth = 380;
 
 /// A composite play button that auto-selects the best file version
 /// based on device/network context.
@@ -14,14 +21,25 @@ import 'quality_selector.dart';
 /// The play button auto-selects the best file on mount. The dropdown
 /// button (shown when multiple files exist) opens the quality selector
 /// modal for manual override.
+///
+/// When [state] is supplied, the button renders as a labelled pill
+/// (e.g. "Continue Watching") with an optional [cueLine] underneath,
+/// collapsing to the plain icon form below [kPillCollapseWidth]. When
+/// [state] is null, the widget renders exactly as it always has: the
+/// plain icon form with no label or cue line, so existing call sites
+/// (movie/episode detail) are unaffected.
 class SmartPlayButton extends StatefulWidget {
   final List<MediaFile> files;
   final void Function(MediaFile) onFileSelected;
+  final NextUpState? state;
+  final String? cueLine;
 
   const SmartPlayButton({
     super.key,
     required this.files,
     required this.onFileSelected,
+    this.state,
+    this.cueLine,
   });
 
   @override
@@ -57,6 +75,33 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.state == null) return _buildIconForm(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < kPillCollapseWidth;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            compact ? _buildIconForm(context) : _buildPillForm(context),
+            if (widget.cueLine != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                widget.cueLine!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildIconForm(BuildContext context) {
     final hasMultiple = widget.files.length > 1;
 
     return Row(
@@ -82,6 +127,45 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
               : null,
         ),
         // Dropdown button (only when multiple files)
+        if (hasMultiple) ...[
+          const SizedBox(width: 6),
+          _DropdownButton(
+            onTap: () async {
+              final picked = await showQualitySelector(context, widget.files);
+              if (picked != null) {
+                setState(() => _selectedFile = picked);
+                widget.onFileSelected(picked);
+              }
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPillForm(BuildContext context) {
+    final hasMultiple = widget.files.length > 1;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FilledButton.icon(
+          onPressed: _selectedFile != null
+              ? () => widget.onFileSelected(_selectedFile!)
+              : null,
+          icon: const Icon(Icons.play_arrow_rounded, size: 20),
+          label: Text(nextUpLabel(widget.state!)),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            shape: const StadiumBorder(),
+            textStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
         if (hasMultiple) ...[
           const SizedBox(width: 6),
           _DropdownButton(

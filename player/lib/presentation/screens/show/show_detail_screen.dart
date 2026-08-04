@@ -17,9 +17,12 @@ import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/media_file_selector.dart';
+import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
+import '../../../domain/models/show_next_up.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
+import '../../widgets/next_up_labels.dart';
 import '../../widgets/smart_play_button.dart';
 
 class ShowDetailScreen extends ConsumerWidget {
@@ -364,17 +367,40 @@ class ShowDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  if (show.nextEpisode != null)
-                    SmartPlayButton(
-                      files: show.nextEpisode!.files,
-                      onFileSelected: (file) {
-                        final nextEp = show.nextEpisode!;
-                        final title = '${show.title} - ${nextEp.episodeCode}';
-                        context.push(
-                          '/player/episode/${nextEp.id}?fileId=${file.id}&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${nextEp.seasonNumber}',
-                        );
-                      },
-                    ),
+                  if (show.nextUp != null)
+                    Builder(builder: (context) {
+                      final nextUp = show.nextUp!;
+                      final episode = nextUp.episode;
+                      if (episode.files.isEmpty) return const SizedBox.shrink();
+
+                      return SmartPlayButton(
+                        files: episode.files,
+                        state: nextUp.state,
+                        cueLine: nextUpCueLine(episode, nextUp.state),
+                        onFileSelected: (file) {
+                          final title =
+                              '${show.title} - ${episode.episodeCode}';
+                          final progress = episode.progress;
+                          final resume = shouldPassResume(
+                            isContinueState:
+                                nextUp.state == NextUpState.continueWatching,
+                            positionSeconds: progress?.positionSeconds,
+                            watched: progress?.watched ?? false,
+                          )
+                              ? '&resume=${progress!.positionSeconds}'
+                              : '';
+
+                          context.push(
+                            '/player/episode/${episode.id}'
+                            '?fileId=${file.id}'
+                            '&title=${Uri.encodeComponent(title)}'
+                            '&showId=$id'
+                            '&seasonNumber=${episode.seasonNumber}'
+                            '$resume',
+                          );
+                        },
+                      );
+                    }),
                 ],
               ),
             ),
