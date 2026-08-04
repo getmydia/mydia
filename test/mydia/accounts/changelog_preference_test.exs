@@ -98,4 +98,69 @@ defmodule Mydia.Accounts.ChangelogPreferenceTest do
       assert Accounts.last_seen_changelog_version(user) == "0.13.0"
     end
   end
+
+  describe "get_user_preference!/1 racing a concurrent first-mount insert" do
+    test "both racers return an updatable row that points at the same id" do
+      user = user_fixture()
+      test_pid = self()
+
+      # Force the exact race two mounts hit on a user's first page load: both
+      # processes must see no row from `Repo.get_by/2` before either attempts
+      # the insert, so the second insert always lands on a real unique_index
+      # conflict instead of maybe finding the first process's row already
+      # committed. A telemetry handler on the repo's query event pauses each
+      # process right after its own `SELECT ... FROM "user_preferences"` and
+      # releases both together, once both have arrived.
+      {:ok, barrier} = Agent.start_link(fn -> [] end)
+      handler_id = {__MODULE__, :first_mount_race, test_pid}
+
+      :telemetry.attach(
+        handler_id,
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          query = String.trim_leading(metadata.query)
+
+          # get_user_preference!/1 issues a second, identical-shaped SELECT to
+          # re-read after the insert; only the first SELECT per process is the
+          # rendezvous point, so a process-local flag keeps that re-read from
+          # blocking on the barrier a second time.
+          if metadata.source == "user_preferences" and String.starts_with?(query, "SELECT") and
+               is_nil(Process.get(:first_mount_race_synced)) do
+            Process.put(:first_mount_race_synced, true)
+            me = self()
+
+            case Agent.get_and_update(barrier, fn arrived -> {[me | arrived], [me | arrived]} end) do
+              [_, _] = both -> Enum.each(both, &send(&1, :first_mount_race_go))
+              [_one] -> receive(do: (:first_mount_race_go -> :ok))
+            end
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      tasks =
+        for _ <- 1..2 do
+          Task.async(fn ->
+            Ecto.Adapters.SQL.Sandbox.allow(Repo, test_pid, self())
+            Accounts.get_user_preference!(user)
+          end)
+        end
+
+      [pref_a, pref_b] = Task.await_many(tasks, 2_000)
+
+      # Whichever process lost the race, get_user_preference!/1 must hand
+      # both callers the row that is actually in the database, not a
+      # struct describing the insert it thought it made. UserPreference's
+      # :binary_id primary key is generated client-side, so a losing
+      # Repo.insert/2 still returns {:ok, struct} with a populated id, one
+      # that names no row; the old code trusted that struct directly instead
+      # of re-reading, and update_preference/2 on it would raise
+      # Ecto.StaleEntryError.
+      assert pref_a.id == pref_b.id
+      assert {:ok, _} = Accounts.update_preference(pref_a, %{"theme" => "dark"})
+      assert {:ok, _} = Accounts.update_preference(pref_b, %{"theme" => "light"})
+    end
+  end
 end

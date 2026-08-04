@@ -272,17 +272,20 @@ defmodule Mydia.Accounts do
   end
 
   # Two mounts racing the same user's first page load after an upgrade would
-  # otherwise both see no row and both insert. `on_conflict: :nothing` makes the
-  # loser a no-op instead of an Ecto.ConstraintError; it returns a struct with a
-  # nil id, so the row is re-read in that case.
+  # otherwise both see no row and both insert. `on_conflict: :nothing` makes
+  # the loser a no-op instead of an Ecto.ConstraintError. UserPreference's
+  # :binary_id primary key is generated client-side, so a successful-looking
+  # insert cannot be told apart from a swallowed conflict by inspecting the
+  # returned struct: both come back with the client-generated id populated.
+  # The row is therefore always re-read, whether this process won the race
+  # or lost it.
   defp insert_default_preference!(user_id) do
     %UserPreference{}
     |> UserPreference.changeset(%{preferences: UserPreference.defaults()})
     |> Ecto.Changeset.put_change(:user_id, user_id)
     |> Repo.insert(on_conflict: :nothing, conflict_target: :user_id)
     |> case do
-      {:ok, %UserPreference{id: nil}} -> Repo.get_by!(UserPreference, user_id: user_id)
-      {:ok, pref} -> pref
+      {:ok, _inserted} -> Repo.get_by!(UserPreference, user_id: user_id)
       {:error, _changeset} -> Repo.get_by!(UserPreference, user_id: user_id)
     end
   end
