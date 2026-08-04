@@ -24,8 +24,9 @@ this release. Do not carry forward the previous version's content; the app
 stacks releases itself for anyone who skipped one.
 
 This must be the last thing merged before you pin a commit, because the draft
-targets a SHA and the image is built from it. The workflow refuses to publish a
-stable release whose notes file is missing at the pinned commit.
+targets a SHA and the image is built from it. The workflow refuses to build a
+stable release whose notes file is missing at the pinned commit, failing in
+`prepare` before any platform build starts.
 
 Prereleases are exempt. They keep hand-written notes and ship no bundled file.
 
@@ -140,6 +141,17 @@ Or ship the pinned commit as-is and leave the rest for the next release:
 gh workflow run release.yml --repo getmydia/mydia -f version=v0.13.0 -f accept_drift=true
 ```
 
+**"v0.13.0 has no bundled release notes at priv/changelog/0.13.0.md in commit ab12cd34ef56."**
+
+The notes PR from step 1 never got merged, or was merged after this draft was
+already pinned. Write `priv/changelog/0.13.0.md`, merge it, then re-pin the
+draft to the new commit and dispatch again:
+
+```bash
+gh release edit v0.13.0 --repo getmydia/mydia --target "$(git rev-parse origin/master)"
+gh workflow run release.yml --repo getmydia/mydia -f version=v0.13.0
+```
+
 **"Refusing to publish: windows (failure) did not succeed."**
 
 A platform build failed. The release stays a draft and nothing was published.
@@ -186,12 +198,15 @@ v0.12.0.
 
 ## Release notes
 
-Notes are written by hand into the draft. There is no CHANGELOG and nothing is
-generated from the commit range.
+Notes are authored into `priv/changelog/<version>.md` and tracked in the
+repository. The app compiles that file into the image, and the draft's
+GitHub notes are produced from it too. Nothing is generated from the commit
+range.
 
-A patch release carries the preceding minor's notes as well as its own. Someone
-upgrading from v0.11.x to v0.12.1 reads the v0.12.1 page and needs to see what
-v0.12.0 changed.
+A patch release's GitHub notes carry the preceding minor's notes as well as
+its own, produced by concatenating the two bundled files. The bundled file
+itself holds only the patch's own changes, since the app stacks releases
+itself for anyone who skipped one.
 
 ## Metadata relay
 
