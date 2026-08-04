@@ -123,7 +123,7 @@ test_exit=0
 xvfb-run -a "${flutter_cmd[@]}" || test_exit=$?
 
 echo ""
-echo "Skipped tests in this run (quarantined, see each skip reason):"
+echo "Skipped tests across all of integration_test/ (static grep, not scoped to E2E_TEST_TARGET; see each skip reason):"
 grep -rn "skip:" integration_test/ || echo "  none"
 
 exit "$test_exit"

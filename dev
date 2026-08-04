@@ -496,7 +496,13 @@ case "$COMMAND" in
                 DOCKER_BUILDKIT=1 docker build -f metadata-relay/Dockerfile \
                     -t metadata-relay:local .
                 echo -e "${GREEN}E2E images pre-built successfully!${NC}"
-                echo "Run with: MYDIA_E2E_IMAGE=mydia-e2e:local PLAYER_E2E_TOOLBOX_IMAGE=player-e2e-toolbox:local RELAY_E2E_IMAGE=metadata-relay:local ./dev player e2e"
+                # --build is required here: without it, 'player e2e' takes the
+                # pull branch, and :local tags can never be pulled from a
+                # registry, so the copy-pasted command would always print a
+                # spurious "could not pull" warning. --build re-runs the same
+                # docker build commands above, which is a fast no-op against
+                # Docker's layer cache when nothing changed since this run.
+                echo "Run with: ./dev player e2e --build"
                 ;;
             android)
                 # Android builds use the player's flake.nix (native, not devenv)
