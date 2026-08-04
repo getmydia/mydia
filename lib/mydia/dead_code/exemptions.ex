@@ -48,7 +48,13 @@ defmodule Mydia.DeadCode.Exemptions do
     module |> Atom.to_string() |> String.contains?(".Repo.Migrations.")
   end
 
-  # `defimpl` generates Protocol.Module names dispatched by the protocol.
+  # `defimpl` generates Protocol.Module names dispatched by the protocol at
+  # runtime, so no static call site exists.
+  #
+  # `lib/` contains no defimpl today, so this rule currently guards an empty
+  # category. It is kept because a protocol implementation genuinely has no
+  # reachable call site: the first one anyone writes would otherwise be
+  # reported dead. Its test uses a fixture protocol declared in the test file.
   defp protocol_impl?(module) do
     Code.ensure_loaded?(module) and function_exported?(module, :__impl__, 1)
   end

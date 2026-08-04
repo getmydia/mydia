@@ -1,3 +1,13 @@
+defprotocol Mydia.DeadCode.ExemptionsTest.Describable do
+  @moduledoc false
+  @fallback_to_any false
+  def describe(value)
+end
+
+defimpl Mydia.DeadCode.ExemptionsTest.Describable, for: Integer do
+  def describe(_value), do: "integer"
+end
+
 defmodule Mydia.DeadCode.ExemptionsTest do
   use ExUnit.Case, async: true
 
@@ -32,6 +42,12 @@ defmodule Mydia.DeadCode.ExemptionsTest do
     # Scheduler workers are named only in config/*.exs cron entries, which the
     # tracer never sees. Pick any module in the app that `use Oban.Worker`.
     assert Exemptions.exempt?(Mydia.Jobs.LibraryScanScheduler)
+  end
+
+  test "a protocol implementation is exempt because the protocol dispatches it" do
+    # Defined at the bottom of this file. `lib/` currently contains no defimpl,
+    # so a local fixture is the only way to exercise this predicate at all.
+    assert Exemptions.exempt?(Mydia.DeadCode.ExemptionsTest.Describable.Integer)
   end
 
   test "an ordinary application module is not exempt" do
