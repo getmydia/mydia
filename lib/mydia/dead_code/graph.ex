@@ -39,6 +39,8 @@ defmodule Mydia.DeadCode.Graph do
 
   @spec classify(definitions(), [edge()], (module() -> boolean())) :: Result.t()
   def classify(definitions, edges, exempt?) do
+    edges = attribute_to_defining_file(edges, definitions)
+
     # Index edges by the file that makes them, so expanding a live file is a
     # map lookup rather than a scan of every edge on each iteration.
     edges_by_caller =
@@ -98,4 +100,32 @@ defmodule Mydia.DeadCode.Graph do
 
   defp lib_file?(file), do: String.starts_with?(file, "lib/")
   defp test_file?(file), do: String.starts_with?(file, "test/")
+
+  # Templates compile into a sibling module but define no module of their own,
+  # so `definitions` never maps them, `live_files/2` can never mark them live,
+  # and every edge they contribute is silently dropped. Left unfixed, a
+  # component called only from `show.html.heex` reports as an orphan.
+  #
+  # Phoenix's convention makes the owner deterministic: `…/show.html.heex` is
+  # embedded by `…/show.ex`. An edge whose caller file defines no module is
+  # re-attributed to that sibling when the sibling actually defines something.
+  # Anything unattributable keeps its original file and simply never confers
+  # liveness, which is the safe direction.
+  defp attribute_to_defining_file(edges, definitions) do
+    defining_files = definitions |> Map.values() |> MapSet.new()
+
+    Enum.map(edges, fn {module, file} ->
+      if MapSet.member?(defining_files, file) do
+        {module, file}
+      else
+        {module, sibling_source(file, defining_files)}
+      end
+    end)
+  end
+
+  defp sibling_source(file, defining_files) do
+    candidate = (file |> Path.rootname() |> Path.rootname()) <> ".ex"
+
+    if MapSet.member?(defining_files, candidate), do: candidate, else: file
+  end
 end

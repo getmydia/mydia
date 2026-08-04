@@ -130,4 +130,51 @@ defmodule Mydia.DeadCode.GraphTest do
     assert Ring.B in result.live
     assert result.orphan == []
   end
+
+  test "an edge from a template is attributed to the module that embeds it" do
+    # show.html.heex defines no module, so without attribution its edge is
+    # dropped and Show.Components reports as an orphan. This is the 20-finding
+    # false-positive class from the Task 5 audit.
+    definitions = %{
+      App.Entry => "lib/app/entry.ex",
+      Web.Show => "lib/web/show.ex",
+      Web.Show.Components => "lib/web/show/components.ex"
+    }
+
+    edges = [
+      {Web.Show, "lib/app/entry.ex"},
+      {Web.Show.Components, "lib/web/show.html.heex"}
+    ]
+
+    result = Graph.classify(definitions, edges, only(App.Entry))
+
+    assert Web.Show.Components in result.live
+  end
+
+  test "a template belonging to a dead module does not confer liveness" do
+    # No root reaches Web.Dead, so its template must not resurrect the
+    # components it calls.
+    definitions = %{
+      Web.Dead => "lib/web/dead.ex",
+      Web.Dead.Components => "lib/web/dead/components.ex"
+    }
+
+    edges = [{Web.Dead.Components, "lib/web/dead.html.heex"}]
+
+    result = Graph.classify(definitions, edges, never_exempt())
+
+    assert Web.Dead.Components in result.orphan
+    assert result.live == []
+  end
+
+  test "an edge from an unattributable file is left alone" do
+    # No sibling .ex exists, so the edge keeps its original caller file and
+    # simply never confers liveness. It must not crash or be misattributed.
+    definitions = %{Lonely.Mod => "lib/lonely.ex"}
+    edges = [{Lonely.Mod, "lib/orphaned_template.html.heex"}]
+
+    result = Graph.classify(definitions, edges, never_exempt())
+
+    assert Lonely.Mod in result.orphan
+  end
 end
