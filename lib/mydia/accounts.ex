@@ -328,6 +328,19 @@ defmodule Mydia.Accounts do
     end
   end
 
+  @doc """
+  Marks the user as having seen every bundled release.
+
+  Centralises the policy shared by the changelog banner and the changelog page:
+  adopt the newest bundled version, and do nothing when no notes are bundled.
+  """
+  def mark_changelog_seen_at_latest(%User{} = user) do
+    case Mydia.Changelog.latest() do
+      nil -> :ok
+      latest -> mark_changelog_seen(user, latest)
+    end
+  end
+
   # An unparseable NEW version is never written. It would clobber a valid stored
   # value, and because Changelog.unseen/1 reports nothing unseen for a value it
   # cannot parse, the user's banner would be suppressed from then on rather than

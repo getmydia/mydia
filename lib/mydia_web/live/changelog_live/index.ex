@@ -26,10 +26,7 @@ defmodule MydiaWeb.ChangelogLive.Index do
       |> MapSet.new(& &1.version_string)
 
     if connected?(socket) do
-      case Changelog.latest() do
-        nil -> :ok
-        latest -> Accounts.mark_changelog_seen(user, latest)
-      end
+      Accounts.mark_changelog_seen_at_latest(user)
     end
 
     {:ok,

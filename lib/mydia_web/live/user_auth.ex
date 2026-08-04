@@ -268,7 +268,7 @@ defmodule MydiaWeb.Live.UserAuth do
   defp changelog_notice_for(user, connected) do
     case Mydia.Accounts.last_seen_changelog_version(user) do
       nil ->
-        if connected, do: adopt_latest_changelog_version(user)
+        if connected, do: Mydia.Accounts.mark_changelog_seen_at_latest(user)
         nil
 
       last_seen ->
@@ -282,19 +282,10 @@ defmodule MydiaWeb.Live.UserAuth do
     end
   end
 
-  # No-op when nothing is bundled, so a branch without the backfill does not
-  # attempt a write on every mount.
-  defp adopt_latest_changelog_version(user) do
-    case Mydia.Changelog.latest() do
-      nil -> :ok
-      latest -> Mydia.Accounts.mark_changelog_seen(user, latest)
-    end
-  end
-
   defp handle_changelog_event("dismiss_changelog", _params, socket) do
     case socket.assigns do
       %{current_user: %Mydia.Accounts.User{} = user} ->
-        adopt_latest_changelog_version(user)
+        Mydia.Accounts.mark_changelog_seen_at_latest(user)
 
       _ ->
         :ok
