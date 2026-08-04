@@ -669,6 +669,12 @@ defmodule Mydia.Downloads.TorrentMatcher do
 
   # Detects sequel/suffix markers in titles
   # Returns true if the title contains sequel markers like: II, 2, Part 2, Reloaded, etc.
+  # A release with no parsed title carries no sequel marker. Mirrors the
+  # `normalize_string(nil)` clause below: every other scoring path in this
+  # module already tolerates a nil title, and a raise here aborts the whole
+  # DownloadMonitor pass.
+  defp has_sequel_marker?(nil), do: false
+
   defp has_sequel_marker?(str) do
     normalized = String.downcase(str)
 
