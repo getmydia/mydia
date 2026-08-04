@@ -71,7 +71,7 @@ LOGIN_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \
         }
     }' 2>&1) || true
 
-AUTH_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.data.login.token // empty')
+AUTH_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.data.login.token // empty' 2>/dev/null || true)
 if [ -z "$AUTH_TOKEN" ]; then
     echo "ERROR: failed to login to Mydia" >&2
     echo "Response: $LOGIN_RESPONSE" >&2
@@ -88,11 +88,12 @@ while [ "$claim_attempt" -lt 30 ]; do
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -d '{"query": "mutation { generateClaimCode { code expiresAt } }"}' 2>&1) || true
 
-    CLAIM_CODE=$(echo "$CLAIM_RESPONSE" | jq -r '.data.generateClaimCode.code // empty')
+    CLAIM_CODE=$(echo "$CLAIM_RESPONSE" | jq -r '.data.generateClaimCode.code // empty' 2>/dev/null || true)
     [ -n "$CLAIM_CODE" ] && break
 
     claim_attempt=$((claim_attempt + 1))
-    echo "  Claim code attempt ${claim_attempt}/30 failed: $(echo "$CLAIM_RESPONSE" | jq -r '.errors[0].message // "unknown error"')"
+    claim_error=$(echo "$CLAIM_RESPONSE" | jq -r '.errors[0].message // "unknown error"' 2>/dev/null || true)
+    echo "  Claim code attempt ${claim_attempt}/30 failed: ${claim_error:-empty or unparseable response}"
     sleep 2
 done
 
