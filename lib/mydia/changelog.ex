@@ -59,7 +59,10 @@ defmodule Mydia.Changelog do
   def unseen(last_seen), do: unseen(@entries, last_seen)
 
   @doc """
-  Pure form of `unseen/1` taking an explicit entry list. Used by tests.
+  Pure form of `unseen/1` taking an explicit entry list.
+
+  `unseen/1` delegates here with the bundled entries; tests can drive this
+  directly with fixture entries instead.
   """
   @spec unseen([Entry.t()], String.t() | nil) :: [Entry.t()]
   def unseen(entries, last_seen) when is_binary(last_seen) do

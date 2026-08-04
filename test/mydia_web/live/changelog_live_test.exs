@@ -5,6 +5,7 @@ defmodule MydiaWeb.ChangelogLiveTest do
 
   alias Mydia.Accounts
   alias Mydia.Changelog
+  alias MydiaWeb.ChangelogLive
 
   setup %{conn: conn} do
     unique_id = System.unique_integer([:positive])
@@ -34,7 +35,7 @@ defmodule MydiaWeb.ChangelogLiveTest do
     assert has_element?(view, "#changelog-entries")
 
     for entry <- Enum.take(Changelog.entries(), 5) do
-      assert has_element?(view, "##{changelog_entry_id(entry.version_string)}")
+      assert has_element?(view, "##{ChangelogLive.Index.entry_id(entry.version_string)}")
     end
   end
 
@@ -59,16 +60,12 @@ defmodule MydiaWeb.ChangelogLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/changelog")
 
-    latest_id = changelog_entry_id(Changelog.latest())
+    latest_id = ChangelogLive.Index.entry_id(Changelog.latest())
     assert has_element?(view, "##{latest_id} .badge", "New")
   end
 
   test "requires authentication", %{} do
     conn = Phoenix.ConnTest.build_conn()
     assert {:error, {:redirect, %{to: "/auth/login"}}} = live(conn, ~p"/changelog")
-  end
-
-  defp changelog_entry_id(version_string) do
-    "changelog-entry-" <> String.replace(version_string, ".", "-")
   end
 end
