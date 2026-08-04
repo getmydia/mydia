@@ -91,6 +91,45 @@ defmodule Mydia.Settings.QualityProfileTest do
     end
   end
 
+  # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" - the BluRay
+  # pattern matches it - so no release can ever be detected as the literal
+  # "BDRip" any more. It must not be selectable as a preference.
+  describe "quality_standards preferred_sources validation" do
+    test "rejects BDRip: no release can ever be detected as that literal value" do
+      changeset =
+        QualityProfile.changeset(%QualityProfile{}, %{
+          name: "Preferred BDRip",
+          quality_standards: %{preferred_resolutions: ["1080p"], preferred_sources: ["BDRip"]}
+        })
+
+      refute changeset.valid?
+      assert %{quality_standards: [msg]} = errors_on(changeset)
+      assert msg =~ "BDRip"
+    end
+
+    test "accepts the remaining source vocabulary" do
+      changeset =
+        QualityProfile.changeset(%QualityProfile{}, %{
+          name: "Preferred Sources",
+          quality_standards: %{
+            preferred_resolutions: ["1080p"],
+            preferred_sources: [
+              "BluRay",
+              "REMUX",
+              "WEB-DL",
+              "WEBRip",
+              "HDTV",
+              "SDTV",
+              "DVD",
+              "DVDRip"
+            ]
+          }
+        })
+
+      assert changeset.valid?
+    end
+  end
+
   describe "excluded sources as a hard violation" do
     test "a file whose source is excluded scores zero and reports the violation" do
       profile = %QualityProfile{
