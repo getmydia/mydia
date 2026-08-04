@@ -39,11 +39,14 @@ void main() {
   group('remainingMinutes', () {
     test('prefers the duration recorded during playback', () {
       final episode = _episode(
-        runtimeMinutes: 45,
+        runtimeMinutes: 60,
         positionSeconds: 600,
         durationSeconds: 2700,
       );
-      // 2700 - 600 = 2100s = 35 min, not the 45 - 10 the metadata implies.
+      // The two sources deliberately disagree so precedence is observable:
+      // the recorded duration gives (2700 - 600) / 60 = 35, while provider
+      // runtime would give 60 - 10 = 50. Getting 35 proves the recorded
+      // duration wins.
       expect(remainingMinutes(episode), 35);
     });
 
