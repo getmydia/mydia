@@ -1,5 +1,8 @@
 defmodule Mydia.Downloads.ImportCandidatesTest do
-  use ExUnit.Case, async: true
+  use Mydia.DataCase, async: true
+
+  import Mydia.DownloadsFixtures
+  import Mydia.SettingsFixtures
 
   alias Mydia.Downloads.ImportCandidates
 
@@ -61,5 +64,138 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
 
     probed = Enum.count(candidates, &Map.has_key?(&1, "probe"))
     assert probed == ImportCandidates.probe_cap()
+  end
+
+  describe "load/1" do
+    test "returns the live listing when the folder is readable", %{tmp_dir: tmp_dir} do
+      dir = Path.join(tmp_dir, "live")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "extra.mkv"), "x")
+
+      download =
+        download_fixture(%{
+          metadata: %{
+            "save_path" => dir,
+            "import_candidates" => [
+              %{"path" => Path.join(dir, "old.exe"), "name" => "old.exe", "size" => 1}
+            ]
+          }
+        })
+
+      assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "extra.mkv"
+      assert candidate["missing"] == false
+    end
+
+    test "falls back to the snapshot when the folder is gone", %{tmp_dir: tmp_dir} do
+      download =
+        download_fixture(%{
+          metadata: %{
+            "save_path" => Path.join(tmp_dir, "gone"),
+            "import_candidates" => [
+              %{
+                "path" => Path.join(tmp_dir, "gone/payload.exe"),
+                "name" => "payload.exe",
+                "size" => 1,
+                "skip_reason" => "not_video_extension"
+              }
+            ]
+          }
+        })
+
+      assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "payload.exe"
+      assert candidate["missing"] == true
+    end
+
+    test "errors when there is neither a listing nor a snapshot" do
+      download = download_fixture(%{metadata: %{}})
+
+      assert {:error, :unavailable} = ImportCandidates.load(download)
+    end
+
+    test "falls back to the snapshot when there is no explicit save_path", %{tmp_dir: tmp_dir} do
+      # No "save_path" key at all: the old behaviour derived a directory to
+      # list from `Path.dirname/1` of the first snapshot path. That is the
+      # hazard this task fixes, so with no explicit save_path there must be
+      # no re-listing at all, live or otherwise.
+      dir = Path.join(tmp_dir, "implicit")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "payload.exe"), "x")
+      File.write!(Path.join(dir, "unrelated.mkv"), "y")
+
+      download =
+        download_fixture(%{
+          metadata: %{
+            "import_candidates" => [
+              %{"path" => Path.join(dir, "payload.exe"), "name" => "payload.exe", "size" => 1}
+            ]
+          }
+        })
+
+      assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "payload.exe"
+      assert candidate["missing"] == false
+    end
+
+    test "does not enumerate the client's shared download root", %{tmp_dir: tmp_dir} do
+      root = Path.join(tmp_dir, "shared")
+      File.mkdir_p!(root)
+      File.write!(Path.join(root, "Some.Other.Show.S01E01.mkv"), "unrelated")
+      File.write!(Path.join(root, "Silo.S01E01.mkv"), "silo")
+
+      client = download_client_config_fixture(%{download_directory: root})
+
+      download =
+        download_fixture(%{
+          download_client: client.name,
+          metadata: %{
+            "save_path" => root,
+            "import_candidates" => [
+              %{
+                "path" => Path.join(root, "Silo.S01E01.mkv"),
+                "name" => "Silo.S01E01.mkv",
+                "size" => 4
+              }
+            ]
+          }
+        })
+
+      # A live listing here would have surfaced both files. Getting the
+      # snapshot back with only the recorded candidate proves the shared
+      # root was never walked.
+      assert {:ok, :snapshot, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "Silo.S01E01.mkv"
+      assert candidate["missing"] == false
+    end
+
+    test "still re-lists a save_path that is a per-download subfolder of the shared root",
+         %{tmp_dir: tmp_dir} do
+      root = Path.join(tmp_dir, "shared")
+      own_dir = Path.join(root, "Silo.S01E01.1080p-GROUP")
+      File.mkdir_p!(own_dir)
+      File.write!(Path.join(own_dir, "Silo.S01E01.mkv"), "silo")
+      File.write!(Path.join(root, "Some.Other.Show.S01E01.mkv"), "unrelated")
+
+      client = download_client_config_fixture(%{download_directory: root})
+
+      download =
+        download_fixture(%{
+          download_client: client.name,
+          metadata: %{
+            "save_path" => own_dir,
+            "import_candidates" => [
+              %{
+                "path" => Path.join(own_dir, "Silo.S01E01.mkv"),
+                "name" => "Silo.S01E01.mkv",
+                "size" => 4
+              }
+            ]
+          }
+        })
+
+      assert {:ok, :live, [candidate]} = ImportCandidates.load(download)
+      assert candidate["name"] == "Silo.S01E01.mkv"
+    end
   end
 end
