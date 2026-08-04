@@ -10,11 +10,11 @@ void main() {
     testWidgets('a SafeArea gutter pushes the child clear of the strip',
         (tester) async {
       await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
+        const MediaQuery(
+          data: MediaQueryData(
             padding: EdgeInsets.only(top: kMacTitleBarOverlap),
           ),
-          child: const Directionality(
+          child: Directionality(
             textDirection: TextDirection.ltr,
             child: SafeArea(
               top: true,

@@ -449,10 +449,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
               ],
             ),
-            if (showCastOverlay)
-              CastOverlayButton(
-                topInset: MediaQuery.paddingOf(context).top + 12,
-              ),
+            if (showCastOverlay) const CastOverlayButton(topInset: 12),
           ],
         ),
       );
@@ -492,9 +489,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
           ),
           if (showCastOverlay)
-            CastOverlayButton(
-              topInset: MediaQuery.paddingOf(context).top + kToolbarHeight + 8,
-            ),
+            const CastOverlayButton(topInset: kToolbarHeight + 8),
         ],
       ),
       bottomNavigationBar: _ModernBottomNav(
