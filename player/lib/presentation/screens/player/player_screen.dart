@@ -36,6 +36,7 @@ import '../../widgets/gesture_controls.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
+import '../../widgets/video_controls/cast_chrome_icon.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/up_next_overlay.dart';

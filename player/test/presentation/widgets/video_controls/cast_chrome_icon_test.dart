@@ -6,10 +6,10 @@
 // draws. `CastChromeIcon` renders the glyph alone and lets the pill own the
 // surface, the tap target and the hover cursor.
 //
-// Both affordances read the same `castConnectionProvider` state machine
-// through one shared visuals helper, so the parity group at the bottom is the
-// guard that the two cannot drift into disagreeing about what a given
-// connection state looks like.
+// The two draw from different Material icon families on purpose — the chrome
+// is `_rounded` throughout (see icon_family_test.dart), app bars are not — so
+// the parity group below asserts they agree on *meaning* (connected-ness,
+// colour, wording) rather than on identical `IconData`.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +21,7 @@ import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_button.dart';
+import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart';
 
 const _device = CastDevice(
   id: 'device-1',
@@ -61,7 +62,7 @@ void main() {
         'the cast glyph matches the back chevron beside it', (tester) async {
       await pumpIcon(tester);
 
-      expect(iconOf(tester).icon, Icons.cast);
+      expect(iconOf(tester).icon, Icons.cast_rounded);
       expect(iconOf(tester).color, isNull,
           reason: 'a null colour is what makes Icon fall back to the '
               "surrounding IconTheme — CastButton's opaque white would read "
@@ -76,7 +77,7 @@ void main() {
         castDisplayDeviceProvider.overrideWithValue(_device),
       ]);
 
-      expect(iconOf(tester).icon, Icons.cast_connected);
+      expect(iconOf(tester).icon, Icons.cast_connected_rounded);
       expect(iconOf(tester).color, Colors.blue);
       expect(tooltipOf(tester), 'Casting to ${_device.name}');
     });
@@ -88,7 +89,7 @@ void main() {
         castDisplayDeviceProvider.overrideWithValue(_device),
       ]);
 
-      expect(iconOf(tester).icon, Icons.cast);
+      expect(iconOf(tester).icon, Icons.cast_rounded);
       expect(iconOf(tester).color, Colors.blue);
       expect(tooltipOf(tester), '${_device.name} — not connected');
     });
@@ -117,6 +118,24 @@ void main() {
         tester.getSize(find.byType(CircularProgressIndicator)).height,
         lessThanOrEqualTo(18),
       );
+    });
+
+    testWidgets('every glyph it can draw is from the _rounded family',
+        (tester) async {
+      // icon_family_test.dart scans this file's source for `Icons.*`, but only
+      // a render proves the branch actually selected a rounded glyph.
+      for (final connection in CastConnection.values) {
+        await pumpIcon(tester, overrides: [
+          castConnectionProvider.overrideWithValue(connection),
+          castDisplayDeviceProvider.overrideWithValue(_device),
+        ]);
+
+        expect(
+          iconOf(tester).icon,
+          anyOf(Icons.cast_rounded, Icons.cast_connected_rounded),
+          reason: '$connection drew a glyph outside the chrome icon family',
+        );
+      }
     });
   });
 
@@ -164,12 +183,19 @@ void main() {
   });
 
   group('parity with CastButton', () {
+    /// The chrome's rounded counterpart of a bare-family cast glyph.
+    IconData roundedCounterpart(IconData bare) {
+      if (bare == Icons.cast) return Icons.cast_rounded;
+      if (bare == Icons.cast_connected) return Icons.cast_connected_rounded;
+      fail('CastButton drew an unexpected cast glyph: $bare');
+    }
+
     // Both affordances render the same state machine. A glyph that agreed on
     // four states and disagreed on the fifth is exactly the drift the shared
     // visuals helper exists to prevent, and it would only ever be noticed on
     // whichever screen the reviewer happened not to be looking at.
     for (final connection in CastConnection.values) {
-      testWidgets('$connection renders the same glyph in both affordances',
+      testWidgets('$connection means the same thing in both affordances',
           (tester) async {
         final overrides = [
           castCapabilitiesProvider
@@ -200,7 +226,9 @@ void main() {
             ))
             .icon;
 
-        expect(chromeGlyph, buttonGlyph);
+        expect(chromeGlyph, roundedCounterpart(buttonGlyph!),
+            reason: 'the two families must stay in lockstep on whether this '
+                'state counts as connected');
         expect(chromeTooltip, button.tooltip);
       });
     }
