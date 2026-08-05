@@ -12,7 +12,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
 
   alias Mydia.Library.ReleaseParser, as: FileParser
 
-  describe "parse_movie/1" do
+  describe "parse/1 - movie filenames" do
     test "parses basic movie with year and quality" do
       result = FileParser.parse("Movie Title (2020) 1080p.mkv")
 
@@ -113,7 +113,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     end
   end
 
-  describe "parse_tv_show/1" do
+  describe "parse/1 - tv show filenames" do
     test "parses standard S01E01 format" do
       result = FileParser.parse("Show Name S01E05 720p.mkv")
 

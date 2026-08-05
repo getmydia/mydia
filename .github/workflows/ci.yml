@@ -187,7 +187,7 @@ jobs:
           # Guard against DEPRECATED markers surviving in lib/: deprecated
           # code must be deleted, not left behind under a marker. See
           # CONTRIBUTING.md.
-          if grep -rn "DEPRECATED" lib --include='*.ex'; then
+          if grep -rn "DEPRECATED" lib --include='*.ex' --include='*.heex'; then
             echo "::error::DEPRECATED: is not allowed in lib/. Delete the code, or mark it COMPAT: if it is load-bearing backward compatibility. See CONTRIBUTING.md."
             exit 1
           fi

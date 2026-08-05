@@ -45,7 +45,7 @@ defmodule Mydia.DeadCode.ExemptionsTest do
   end
 
   test "a protocol implementation is exempt because the protocol dispatches it" do
-    # Defined at the bottom of this file. `lib/` currently contains no defimpl,
+    # Defined at the top of this file. `lib/` currently contains no defimpl,
     # so a local fixture is the only way to exercise this predicate at all.
     assert Exemptions.exempt?(Mydia.DeadCode.ExemptionsTest.Describable.Integer)
   end
