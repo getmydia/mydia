@@ -440,7 +440,10 @@ defmodule Mydia.Events.PresentationTest do
     end
 
     test "backoff_applied uses the singular unit at one second, minute, and day" do
-      one_second = DateTime.utc_now() |> DateTime.add(1500, :millisecond) |> DateTime.to_iso8601()
+      # relative_future_time/1 truncates DateTime.diff/2 to whole seconds, so this
+      # offset doubles as the budget for however long the test takes to reach
+      # detail/1. 1900ms keeps diff_seconds at 1 for ~900ms; 1500ms allowed ~500ms.
+      one_second = DateTime.utc_now() |> DateTime.add(1900, :millisecond) |> DateTime.to_iso8601()
       one_minute = DateTime.utc_now() |> DateTime.add(65, :second) |> DateTime.to_iso8601()
       one_day = DateTime.utc_now() |> DateTime.add(90_000, :second) |> DateTime.to_iso8601()
 

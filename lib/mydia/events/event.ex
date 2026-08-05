@@ -64,10 +64,21 @@ defmodule Mydia.Events.Event do
     |> validate_required([:category, :type])
     |> validate_format(:category, ~r/^[a-z_]+$/, message: "must be lowercase with underscores")
     |> validate_format(:type, ~r/^[a-z_]+\.[a-z_]+$/, message: "must be format: category.action")
-    |> validate_inclusion(:type, Presentation.known_types(),
-      message: "is not a registered event type; add it to Mydia.Events.Presentation"
-    )
+    |> validate_registered_type()
     |> validate_actor_id()
+  end
+
+  # Only check registry membership once :type is present and well-formed. Running
+  # it unconditionally makes a malformed type report "not registered" alongside
+  # the format error, and create_event_async/1 logs the whole error list.
+  defp validate_registered_type(changeset) do
+    if Keyword.has_key?(changeset.errors, :type) do
+      changeset
+    else
+      validate_inclusion(changeset, :type, Presentation.known_types(),
+        message: "is not a registered event type; add it to Mydia.Events.Presentation"
+      )
+    end
   end
 
   # Validate that actor_id is provided when actor_type is present

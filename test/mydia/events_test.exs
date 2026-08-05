@@ -1004,6 +1004,10 @@ defmodule Mydia.EventsTest do
 
       refute changeset.valid?
       assert "must be format: category.action" in errors_on(changeset).type
+
+      refute "is not a registered event type; add it to Mydia.Events.Presentation" in errors_on(
+               changeset
+             ).type
     end
   end
 
