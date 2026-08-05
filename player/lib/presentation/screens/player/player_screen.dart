@@ -1829,15 +1829,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// inside [SegmentSkipTracker.takeAutoSkip] rather than here: a segment is
   /// consumed by the same call that reports it, and seeking back into one that
   /// has already been skipped does nothing.
-  void _maybeAutoSkipSegment(Player player) {
+  void _maybeAutoSkipSegment(Player player) =>
+      _maybeAutoSkipAt(_timeline.toReal(player.state.position), seekToReal);
+
+  /// The auto-skip decision itself, in real media coordinates.
+  ///
+  /// Shared by local playback and casting because only the two ends differ:
+  /// where a position comes from, and what a seek means. The preference, the
+  /// once-per-session tracker and the segment lookup are one rule, and a
+  /// second copy of it is the thing that would drift.
+  void _maybeAutoSkipAt(
+    Duration position,
+    Future<void> Function(Duration) seek,
+  ) {
     if (!_autoSkipSegments || _segments.isEmpty) return;
 
-    final position = _timeline.toReal(player.state.position);
     final target = _skipTracker.takeAutoSkip(_segments, position);
     if (target == null) return;
 
     debugPrint('[PlayerScreen] Auto-skipping to ${target.end}');
-    unawaited(seekToReal(target.end));
+    unawaited(seek(target.end));
+  }
+
+  /// Seek the receiver, in the same real coordinates [seekToReal] takes.
+  ///
+  /// `CastSessionManager.seek` owns both the mapping onto receiver coordinates
+  /// and the session restart for a target the running stream cannot reach, so
+  /// nothing here needs to know which of the two a given skip requires.
+  /// Skipping credits well past the start offset is squarely the second case.
+  Future<void> _castSeekToReal(Duration target) async {
+    final manager = await ref.read(castSessionManagerProvider.future);
+    await manager.seek(target);
   }
 
   /// The segment covering [position], or null when playback is between them.
@@ -2665,6 +2687,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     });
 
+    // Auto-skip while casting. Local playback rides the player's own position
+    // listener, which casting never builds, so the session stream stands in
+    // for it: `CastSessionManager` republishes the session on every receiver
+    // position tick, already mapped into real media coordinates.
+    //
+    // Only as reliable as the app being awake, which is the honest limit of
+    // driving this from the phone. A backgrounded player sails through the
+    // intro, and fixing that properly means a custom receiver.
+    ref.listen<AsyncValue<CastSession?>>(castSessionProvider, (_, next) {
+      final session = next.value;
+      final position = session?.mediaInfo?.position;
+      if (session == null || position == null || session.isStale) return;
+      _maybeAutoSkipAt(position, _castSeekToReal);
+    });
+
     final isCasting = ref.watch(isCastingProvider);
     final castSession = ref.watch(castSessionProvider).value;
     Widget body = isCasting && castSession != null
@@ -3008,6 +3045,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final device = session.device;
     final isStale = session.isStale;
 
+    // The one control this screen does own while casting. It is not the
+    // duplication the doc comment above warns about: `CastMiniController`
+    // has no skip, so there is no second copy to disagree with, and the
+    // alternative is the feature simply not existing on a TV.
+    //
+    // Withheld over a stale session for the reason the glyph goes outline —
+    // the receiver is gone, and a control that silently does nothing is that
+    // same false "connected" claim wearing a different hat.
+    final castPosition = session.mediaInfo?.position ?? Duration.zero;
+    final skipSegment = isStale ? null : _segmentAt(castPosition);
+
     return Stack(
       children: [
         Center(
@@ -3052,6 +3100,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             ),
           ),
         ),
+        // `Positioned.fill` for the same reason the local path uses it: the
+        // button aligns itself bottom-right, which needs the Stack's full
+        // constraints rather than the loose ones a bare child would get.
+        if (skipSegment != null)
+          Positioned.fill(
+            child: SkipSegmentButton(
+              key: ValueKey(skipSegment.key),
+              segment: skipSegment,
+              position: castPosition,
+              onSkip: (target) => _castSeekToReal(target.end),
+            ),
+          ),
         Positioned(
           top: 8,
           left: 8,

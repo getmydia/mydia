@@ -81,6 +81,14 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
   /// can offer a reconnect).
   Object? startCastError;
 
+  /// Every real-media position `seek` has been asked for, in order.
+  ///
+  /// Real positions, not receiver ones: `CastSessionManager.seek` is specified
+  /// in the same coordinates `mediaInfo` publishes, and it owns the mapping
+  /// (and the out-of-reach session restart) internally. A skip that recorded a
+  /// receiver-relative value here would be asserting against the wrong space.
+  final List<Duration> seekTargets = [];
+
   @override
   Future<void> startCast({
     required CastDevice device,
@@ -89,6 +97,11 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
     capturedRequest = request;
     final error = startCastError;
     if (error != null) throw error;
+  }
+
+  @override
+  Future<void> seek(Duration position) async {
+    seekTargets.add(position);
   }
 }
 
@@ -107,6 +120,7 @@ class FakeSettingsService extends Fake implements SettingsService {
     this.defaultQuality = 'auto',
     this.readError,
     this.writeError,
+    this.autoSkipSegments = false,
   });
 
   /// The persisted `default_quality` key. `auto` — the real service's own
@@ -141,8 +155,13 @@ class FakeSettingsService extends Fake implements SettingsService {
     defaultQuality = quality;
   }
 
+  /// Whether detected segments are skipped without asking. Off by default,
+  /// matching the real preference, so a test that never mentions auto-skip
+  /// exercises the manual button rather than racing against a seek.
+  final bool autoSkipSegments;
+
   @override
-  Future<bool> getAutoSkipSegments() async => false;
+  Future<bool> getAutoSkipSegments() async => autoSkipSegments;
 }
 
 /// Tracks whether `stop()` ran, without touching a real P2P/HTTP stack.
@@ -445,6 +464,7 @@ ProviderContainer buildPlayerScreenContainer({
   PlaybackProgressStore? progressStore,
   SettingsService? settingsService,
   GraphQLCache? cache,
+  Stream<CastSession?>? castSessionStream,
 }) {
   return ProviderContainer(overrides: [
     settingsServiceProvider
@@ -462,7 +482,13 @@ ProviderContainer buildPlayerScreenContainer({
         .overrideWith(() => FixedConnectionNotifier(connectionState)),
     localProxyServiceProvider.overrideWithValue(proxyService),
     castSessionManagerProvider.overrideWith((ref) async => castManager),
-    castSessionProvider.overrideWith((ref) => Stream.value(null)),
+    // Null by default: no receiver, so `isCastingProvider` stays false and the
+    // screen builds its local body. Pass a stream to stand in for a live cast,
+    // which is the only way to reach `_buildCastPlaceholder` — the real
+    // provider derives from `CastSessionManager`, and the fake above has no
+    // session machinery to drive it.
+    castSessionProvider
+        .overrideWith((ref) => castSessionStream ?? Stream.value(null)),
     playbackProgressStoreProvider.overrideWith(
         (ref) async => progressStore ?? InMemoryPlaybackProgressStore()),
   ]);
