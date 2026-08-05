@@ -653,7 +653,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     end
   end
 
-  # Builds the video scale filter, or nothing at all when no height is capped.
+  # Builds the video scale filter. Every encode gets one; only the ceiling is
+  # optional.
   #
   # `-2` keeps the width proportional to the source and divisible by two,
   # which H.264 requires; hardcoding both dimensions (the previous `-s
@@ -667,16 +668,24 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # to a port with no shell, so the quotes would arrive literally and the
   # filter would fail to parse.
   #
-  # `2*trunc(.../2)` rounds the clamped height down to an even number, and it
-  # is not decoration. Whenever the clamp picks `ih` — a source shorter than
-  # the cap — the height passes through untouched, and an odd `ih` then makes
-  # libx264 with `-pix_fmt yuv420p` refuse to open the encoder at all
-  # ("Could not open encoder before EOF"). The transcode dies before writing
-  # a playlist, so the client's playlist wait times out and the viewer gets a
-  # generic playback error. VP9 and AV1 both permit odd frame heights and are
-  # exactly the codecs this module force-transcodes, and the paths that cap a
-  # height without knowing the source — the relay clamp and the configured
-  # ceiling — reach any source at all. `-2` already guarantees an even width.
+  # `2*trunc(.../2)` rounds the height down to an even number, and it is the
+  # reason the uncapped clause emits a filter at all rather than nothing. An
+  # odd frame height makes libx264 with `-pix_fmt yuv420p` refuse to open the
+  # encoder outright ("height not divisible by 2", exit 187): the transcode
+  # dies before writing a playlist, the client's playlist wait times out, and
+  # the viewer gets a generic playback error with nothing in it pointing here.
+  #
+  # That is reachable on the DEFAULT path, not just under a cap. The old
+  # hardcoded `-s 1280x720` evened every transcode as a side effect; removing
+  # it (correctly, since it also squished everything that was not 16:9) took
+  # the evening with it. VP9 and AV1 both permit odd frame heights and are
+  # exactly the codecs this module force-transcodes, and ordinary rips like
+  # 720x405 and 848x477 are odd too. Rounding down rather than up is what
+  # keeps the no-upscale guarantee; `-2` then tracks the width to it, which is
+  # what preserves the aspect ratio.
+  #
+  # Only ever reached on the encode branch — a stream copy returns before
+  # this, so no filter can turn a copy into a transcode.
   defp scale_args(height) when is_integer(height) and height > 0 do
     ["-vf", "scale=-2:2*trunc(min(#{height}\\,ih)/2)"]
   end
@@ -684,18 +693,22 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # A zero or negative ceiling would scale to nothing. It can only arrive from
   # a misconfigured `streaming.max_transcode_height` (the schema rejects it,
   # but a stale cached runtime config could still carry one), so say so rather
-  # than silently encoding at native resolution and leaving the operator to
-  # wonder why their cap does nothing.
+  # than silently ignoring it and leaving the operator to wonder why their cap
+  # does nothing. The encode still gets the evening filter: a bad ceiling is
+  # no reason to hand libx264 an odd height.
   defp scale_args(height) when is_integer(height) do
     Logger.warning(
       "Ignoring a non-positive transcode height ceiling (#{height}); " <>
         "encoding at the source resolution"
     )
 
-    []
+    even_height_args()
   end
 
-  defp scale_args(_), do: []
+  defp scale_args(_), do: even_height_args()
+
+  # No ceiling: keep the source resolution, rounded down to an even height.
+  defp even_height_args, do: ["-vf", "scale=-2:2*trunc(ih/2)"]
 
   @doc """
   Composes a requested output height with the operator's configured ceiling

@@ -59,10 +59,13 @@ defmodule Mydia.Streaming.FfmpegScaleCapTest do
                "scale=-2:2*trunc(min(480\\,ih)/2)"
     end
 
-    test "defaults to unlimited so nothing scales unasked" do
+    test "defaults to unlimited so nothing downscales unasked" do
       put_cap(nil)
 
-      assert filter(video_codec: "libx264") == nil
+      # No ceiling still emits the evening filter, which cannot reduce a
+      # resolution — only round an odd height down by one line. "Unlimited"
+      # is about the ceiling, not about whether a filter exists.
+      assert filter(video_codec: "libx264") == "scale=-2:2*trunc(ih/2)"
     end
   end
 

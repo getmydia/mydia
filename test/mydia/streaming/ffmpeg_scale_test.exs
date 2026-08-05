@@ -14,10 +14,25 @@ defmodule Mydia.Streaming.FfmpegScaleTest do
   defp filter(args), do: Enum.at(args, index_of(args, "-vf") + 1)
 
   describe "build_ffmpeg_args/3 scaling" do
-    test "emits no scale filter when no height is requested" do
+    test "still evens the height when no ceiling is requested" do
       # Native resolution is the correct default: a forced transcode caused by
       # an incompatible codec should not also silently downgrade resolution.
-      refute "-vf" in args(video_codec: "libx264")
+      # But "no ceiling" cannot mean "no filter": an odd source height then
+      # reaches libx264 untouched and kills the encode. This is the DEFAULT
+      # path — direct connection, Original rung, no configured ceiling — so it
+      # is the one most worth pinning.
+      assert filter(args(video_codec: "libx264")) == "scale=-2:2*trunc(ih/2)"
+    end
+
+    test "the uncapped filter cannot downscale" do
+      # `2*trunc(ih/2)` is at most `ih` and never below `ih - 1`, so the only
+      # thing it can do to an even source is nothing at all. Anything that
+      # clamped here would be a silent resolution downgrade on every
+      # transcode, which is the behaviour this branch exists to remove.
+      result = filter(args(video_codec: "libx264"))
+
+      refute String.contains?(result, "min(")
+      refute result =~ ~r/\d{3,}/
     end
 
     test "never emits the old fixed -s geometry" do
@@ -51,15 +66,20 @@ defmodule Mydia.Streaming.FfmpegScaleTest do
       assert filter(args(video_codec: "libx264", max_height: 720)) =~ "2*trunc("
     end
 
-    test "ignores a non-positive height rather than scaling to nothing" do
+    test "ignores a non-positive ceiling but still evens the height" do
       # Only reachable through a misconfigured streaming.max_transcode_height;
       # the config schema rejects it, but a stale cached runtime config could
-      # still carry one. Silently encoding at native resolution would leave
-      # the operator wondering why their ceiling does nothing, so it logs.
+      # still carry one. Silently ignoring it would leave the operator
+      # wondering why their ceiling does nothing, so it logs — and the encode
+      # still gets the evening filter, since a bad ceiling is no reason to
+      # hand libx264 an odd height.
       log =
         capture_log(fn ->
-          refute "-vf" in args(video_codec: "libx264", max_height: 0)
-          refute "-vf" in args(video_codec: "libx264", max_height: -720)
+          assert filter(args(video_codec: "libx264", max_height: 0)) ==
+                   "scale=-2:2*trunc(ih/2)"
+
+          assert filter(args(video_codec: "libx264", max_height: -720)) ==
+                   "scale=-2:2*trunc(ih/2)"
         end)
 
       assert log =~ "non-positive transcode height ceiling (0)"
