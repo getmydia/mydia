@@ -1,0 +1,85 @@
+name: Deploy Appcast
+
+# Rebuilds the merged Sparkle feed served at updates.mydia.dev.
+#
+# The feed is a pure function of the published releases, so this is safe to run
+# at any time. release.yml calls it after publishing; the dispatch entry point
+# is the manual rebuild, and the way to backfill the feed for the first time.
+#
+# The per-release appcast.xml asset that release.yml uploads is untouched by
+# this workflow. That asset remains the feed for every app installed before the
+# SUFeedURL change, and it is also this generator's input.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Commit to check out for the generator source'
+        required: false
+        type: string
+  workflow_dispatch:
+
+concurrency:
+  group: appcast
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy appcast
+    runs-on: ubuntu-latest
+    # Declared at job level so the step-level `if` below can read it. A secret
+    # referenced only in a step's own `env` is not reliably visible to that
+    # step's `if`.
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: scripts/appcast/package-lock.json
+
+      - name: Install generator dependencies
+        working-directory: scripts/appcast
+        run: npm ci
+
+      - name: Generate merged appcast
+        working-directory: scripts/appcast
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node generate.mjs dist/appcast.xml
+
+      # ubuntu-latest does not ship xmllint. release.yml's publish job installs
+      # it the same way; without this, validate.sh exits 1 on every run.
+      - name: Install xmllint
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+
+      - name: Validate merged appcast
+        working-directory: scripts/appcast
+        run: ./validate.sh dist/appcast.xml
+
+      - name: Summarise
+        working-directory: scripts/appcast
+        run: |
+          {
+            echo "### Merged appcast"
+            echo
+            echo "Items: $(grep -c '<item>' dist/appcast.xml)"
+            echo "Beta items: $(grep -c '<sparkle:channel>beta</sparkle:channel>' dist/appcast.xml || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy to Cloudflare Pages
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        working-directory: scripts/appcast
+        run: npx wrangler pages deploy dist/ --project-name=mydia-appcast
+
+      - name: Note skipped deploy
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::warning::CLOUDFLARE_API_TOKEN absent; generated and validated the feed but did not deploy it."

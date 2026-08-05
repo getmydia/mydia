@@ -1550,3 +1550,14 @@ jobs:
           flatpak install --user -y "$REMOTE" dev.mydia.player
           flatpak info --user dev.mydia.player
           echo "Verified: dev.mydia.player installs from $REPOFILE"
+
+  appcast:
+    name: Deploy Appcast
+    if: ${{ !inputs.dry_run }}
+    needs:
+      - prepare
+      - publish
+    uses: ./.github/workflows/deploy-appcast.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+    secrets: inherit
