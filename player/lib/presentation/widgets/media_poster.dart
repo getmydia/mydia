@@ -50,108 +50,105 @@ class _MediaPosterState extends ConsumerState<MediaPoster> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Builder(
-              builder: (context) {
-                final reduceMotion = context.reduceMotion;
-                final deepened = _isHovered && !reduceMotion;
-                // Solid, always-elevated poster (R7): a resting token shadow
-                // that firms up slightly on hover — no lift, no scale (R11).
-                // Under reduced motion the hover accent collapses and the
-                // resting shadow stays.
-                return MouseRegion(
-                  // Tapping a poster opens the title, it does not start
-                  // playback, so the affordance is a plain click cursor — no
-                  // play glyph.
-                  cursor: widget.onTap != null
-                      ? SystemMouseCursors.click
-                      : MouseCursor.defer,
-                  onEnter: (_) => _handleHoverEnter(),
-                  onExit: (_) => _handleHoverExit(),
-                  child: AnimatedContainer(
-                    duration:
-                        reduceMotion ? Duration.zero : DepthTokens.motionMedium,
-                    curve: DepthTokens.curveStandard,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: deepened
-                          ? DepthTokens.posterHover
-                          : DepthTokens.posterResting,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Stack(
-                        children: [
-                          SizedBox.expand(
-                            child: widget.posterUrl != null
-                                ? CachedNetworkImage(
-                                    imageUrl: widget.posterUrl!,
-                                    fit: BoxFit.cover,
-                                    cacheManager: PosterCacheManager(),
-                                    placeholder: (context, url) => Container(
-                                      color: AppColors.surfaceVariant,
-                                      child: const Center(
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    ),
-                                    errorWidget: (context, url, error) =>
-                                        Container(
-                                      color: AppColors.surfaceVariant,
-                                      child: const Icon(
-                                        Icons.movie,
-                                        size: 48,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  )
-                                : Container(
-                                    color: AppColors.surfaceVariant,
-                                    child: const Icon(
-                                      Icons.movie,
-                                      size: 48,
-                                      color: AppColors.textSecondary,
-                                    ),
+    final reduceMotion = context.reduceMotion;
+    final deepened = _isHovered && !reduceMotion;
+
+    // One hover target for the whole card, matching the tap target: the
+    // GestureDetector below navigates from the title as well as the poster, so
+    // the cursor and the shadow accent have to cover both.
+    //
+    // Tapping opens the title, it does not start playback, so the affordance is
+    // a plain click cursor — no play glyph.
+    return MouseRegion(
+      cursor:
+          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: (_) => _handleHoverEnter(),
+      onExit: (_) => _handleHoverExit(),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Solid, always-elevated poster (R7): a resting token shadow that
+            // firms up slightly on hover — no lift, no scale (R11). Under
+            // reduced motion the hover accent collapses and the resting shadow
+            // stays.
+            Expanded(
+              child: AnimatedContainer(
+                duration:
+                    reduceMotion ? Duration.zero : DepthTokens.motionMedium,
+                curve: DepthTokens.curveStandard,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: deepened
+                      ? DepthTokens.posterHover
+                      : DepthTokens.posterResting,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Stack(
+                    children: [
+                      SizedBox.expand(
+                        child: widget.posterUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: widget.posterUrl!,
+                                fit: BoxFit.cover,
+                                cacheManager: PosterCacheManager(),
+                                placeholder: (context, url) => Container(
+                                  color: AppColors.surfaceVariant,
+                                  child: const Center(
+                                    child: CircularProgressIndicator(),
                                   ),
-                          ),
-                          if (widget.progressPercentage != null &&
-                              widget.progressPercentage! > 0)
-                            ProgressOverlay(
-                                percentage: widget.progressPercentage!),
-                          if (widget.isFavorite)
-                            const Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Icon(
-                                Icons.favorite,
-                                color: Colors.red,
-                                size: 20,
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: AppColors.surfaceVariant,
+                                  child: const Icon(
+                                    Icons.movie,
+                                    size: 48,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                color: AppColors.surfaceVariant,
+                                child: const Icon(
+                                  Icons.movie,
+                                  size: 48,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
-                            ),
-                        ],
                       ),
+                      if (widget.progressPercentage != null &&
+                          widget.progressPercentage! > 0)
+                        ProgressOverlay(percentage: widget.progressPercentage!),
+                      if (widget.isFavorite)
+                        const Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Icon(
+                            Icons.favorite,
+                            color: Colors.red,
+                            size: 20,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (widget.showTitle) ...[
+              const SizedBox(height: 8),
+              Text(
+                widget.title,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                );
-              },
-            ),
-          ),
-          if (widget.showTitle) ...[
-            const SizedBox(height: 8),
-            Text(
-              widget.title,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

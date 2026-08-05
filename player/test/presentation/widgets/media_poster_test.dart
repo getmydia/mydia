@@ -53,6 +53,18 @@ BoxDecoration _shadowDecoration(WidgetTester tester) {
   fail('no DecoratedBox with a boxShadow found');
 }
 
+/// The cursor declared by the card-wide hover region.
+MouseCursor _cardCursor(WidgetTester tester) => tester
+    .widget<MouseRegion>(
+      find
+          .descendant(
+            of: find.byType(MediaPoster),
+            matching: find.byType(MouseRegion),
+          )
+          .first,
+    )
+    .cursor;
+
 Future<void> _hover(WidgetTester tester, Finder target) async {
   final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
   await gesture.addPointer(location: Offset.zero);
@@ -111,6 +123,30 @@ void main() {
       await _hover(tester, find.byType(MediaPoster));
 
       expect(findPlayGlyph(), findsNothing);
+    });
+
+    testWidgets(
+        'the hover target covers the title, which is part of the same '
+        'tap target as the poster', (tester) async {
+      await tester.pumpWidget(_host(const MediaPoster(title: 'Show')));
+      await tester.pump();
+
+      await _hover(tester, find.text('Show'));
+
+      expect(_shadowDecoration(tester).boxShadow, DepthTokens.posterHover);
+    });
+
+    testWidgets('a tappable poster offers a click cursor, an inert one defers',
+        (tester) async {
+      await tester.pumpWidget(_host(MediaPoster(title: 'Show', onTap: () {})));
+      await tester.pump();
+
+      expect(_cardCursor(tester), SystemMouseCursors.click);
+
+      await tester.pumpWidget(_host(const MediaPoster(title: 'Show')));
+      await tester.pump();
+
+      expect(_cardCursor(tester), MouseCursor.defer);
     });
 
     testWidgets('tap fires onTap', (tester) async {
