@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Generates the merged Sparkle appcast served at updates.mydia.dev",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "generate": "node generate.mjs"
   },
   "dependencies": {
