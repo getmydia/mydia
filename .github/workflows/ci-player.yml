@@ -298,3 +298,24 @@ jobs:
       - name: Check web icons are current
         working-directory: player
         run: tool/gen-web-icons.sh --check
+
+  flatpak-validate:
+    name: Flatpak / Validate metadata
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Seconds, not minutes. Catches most manifest metadata mistakes long
+      # before the full flatpak-build job below finishes compiling mpv.
+      - name: Install validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils appstream
+
+      - name: Validate desktop entry
+        run: desktop-file-validate player/flatpak/dev.mydia.player.desktop
+
+      - name: Validate AppStream metainfo
+        run: appstreamcli validate --explain player/flatpak/dev.mydia.player.metainfo.xml
