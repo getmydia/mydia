@@ -15,12 +15,12 @@ The integration tests verify that HLS streaming works correctly over the P2P con
 
 ### 1. Test Media Infrastructure
 
-**File**: `Dockerfile.e2e`
+**File**: `scripts/e2e/seed.sh`
 - **Changes**: Added test video generation and library seeding
 - **What it does**:
   - Generates a 5-second 720p H.264/AAC test video using ffmpeg
   - Creates library path, media item, and media file records
-  - Stores test media at `/data/test-media/test-video.mp4`
+  - Stores test media at `/media/movies/e2e-test-video.mp4`
 
 **Test Media Details**:
 - Resolution: 1280x720
@@ -300,7 +300,7 @@ Represents P2P connection state:
 
 ### Common Issues
 
-1. **Test media not found**: Check ffmpeg generation in Dockerfile.e2e
+1. **Test media not found**: Check ffmpeg generation in `scripts/e2e/seed.sh`
 2. **Pairing timeout**: Verify claim code generation and relay service
 3. **HLS playlist not ready**: Check transcoding timeout (30s)
 4. **P2P connection fails**: Verify iroh relay is running
@@ -351,15 +351,16 @@ Logs are available in:
 
 ### Updating Test Media
 
-Edit the ffmpeg command in `Dockerfile.e2e`:
+Edit the ffmpeg command in `scripts/e2e/seed.sh`:
 
-```dockerfile
-ffmpeg -f lavfi -i testsrc=duration=5:size=1280x720:rate=30 \
-       -f lavfi -i sine=frequency=1000:duration=5 \
-       -pix_fmt yuv420p -c:v libx264 -preset fast -crf 23 \
+```sh
+ffmpeg -y -f lavfi -i testsrc2=duration=5:size=1280x720:rate=24 \
+       -f lavfi -i sine=frequency=440:duration=5 \
+       -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p \
+       -g 24 -keyint_min 24 \
        -c:a aac -b:a 128k \
        -movflags +faststart \
-       /data/test-media/test-video.mp4
+       /media/movies/e2e-test-video.mp4
 ```
 
 ### Adding New Test Scenarios

@@ -6,7 +6,9 @@
 # so tests exercise the same iroh P2P code path used by real devices.
 #
 # NOTE: This Dockerfile expects the build context to be the project root
-# (not the player directory) so it can access priv/graphql/schema.graphql
+# (not the player directory) so it can access player/pubspec.yaml and
+# player/pubspec.lock below. player/lib/graphql/schema.graphql resolves at
+# runtime through its real symlink once compose bind-mounts the repo root.
 #
 # Build with: DOCKER_BUILDKIT=1 docker build -f player/Dockerfile.test .
 #
@@ -49,243 +51,36 @@ RUN apt-get update -qq && \
         libgl1-mesa-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Rust toolchain is required for building the mydia_player_p2p plugin.
+# Rust toolchain is required for building the mydia_player_p2p plugin. This
+# installs rustup itself with a throwaway stable default; the toolchain
+# actually used at test time is pinned below.
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable
 
+# Bake the pinned toolchain from rust-toolchain.toml (channel 1.96.0, plus the
+# wasm32-wasip2 target) into the image instead of leaving it to be resolved at
+# runtime. Once compose bind-mounts the repo root over /workspace,
+# rust-toolchain.toml sits above every cargo invocation under it, so without
+# this rustup would install 1.96.0 (and a wasm target the player never uses)
+# from scratch into a layer that gets discarded, on every single run.
+WORKDIR /workspace
+COPY rust-toolchain.toml ./
+RUN rustup toolchain install
+
 RUN flutter config --enable-linux-desktop
 
-WORKDIR /app
-
-# Copy pubspec files first for better caching
+# Warm the pub cache using dependency manifests alone, so the expensive layer
+# is keyed on pubspec.lock and not on player source. Source is bind-mounted at
+# runtime by compose, which is why nothing else is copied here.
+WORKDIR /warm
 COPY player/pubspec.yaml player/pubspec.lock ./
-COPY player/rust_builder ./rust_builder
+# This is expected to fail: mydia_player_p2p is a path dependency
+# (rust_builder/), and only the pubspec files are present here, not the
+# package itself, so pub cannot resolve it. `|| true` masks only that
+# anticipated failure. The network fetch of every hosted (pub.dev)
+# dependency still happens and populates /root/.pub-cache before the
+# resolver gives up, which is the entire point of this layer.
+RUN flutter pub get || true
 
-# Install dependencies with cache
-RUN --mount=type=cache,target=/root/.pub-cache \
-    flutter pub get && \
-    cp -r /root/.pub-cache /tmp/.pub-cache-copy
-
-# Copy the rest of the player app
-COPY player/ .
-
-# The Rust crate `player/rust/mydia_player_p2p` depends on
-# `../../../native/mydia_p2p_core`, which resolves to `/native/...`
-# in this container layout.
-COPY native /native
-
-# Remove the broken symlink and copy the actual schema file
-RUN rm -f lib/graphql/schema.graphql
-COPY priv/graphql/schema.graphql lib/graphql/schema.graphql
-
-# Run build_runner for code generation with cache
-RUN --mount=type=cache,target=/root/.pub-cache \
-    cp -r /tmp/.pub-cache-copy/* /root/.pub-cache/ 2>/dev/null || true && \
-    flutter pub run build_runner build
-
-# Persist pub cache into the image filesystem (cache mounts are ephemeral).
-RUN mkdir -p /root/.pub-cache && \
-    cp -a /tmp/.pub-cache-copy/. /root/.pub-cache/
-
-# Copy the test entrypoint script
-COPY <<'EOF' /entrypoint.sh
-#!/bin/bash
-set -e
-
-echo "============================================"
-echo "Flutter E2E Integration Test Runner"
-echo "============================================"
-echo ""
-echo "Configuration:"
-echo "  MYDIA_URL: ${MYDIA_URL:-not set}"
-echo "  RELAY_URL: ${RELAY_URL:-not set}"
-echo "  E2E_TEST_TARGET: ${E2E_TEST_TARGET:-integration_test/pairing_flow_test.dart}"
-echo "  E2E_TEST_ARGS: ${E2E_TEST_ARGS:-<none>}"
-echo "  Target device: linux (native)"
-echo ""
-
-# Wait for Mydia to be ready
-echo "Waiting for Mydia..."
-max_attempts=30
-attempt=0
-while [ $attempt -lt $max_attempts ]; do
-    if curl -sf "${MYDIA_URL}/health" > /dev/null 2>&1; then
-        echo "  ✓ Mydia is ready!"
-        break
-    fi
-    attempt=$((attempt + 1))
-    echo "  Attempt $attempt/$max_attempts..."
-    sleep 2
-done
-
-if [ $attempt -eq $max_attempts ]; then
-    echo "ERROR: Mydia not available at ${MYDIA_URL}"
-    exit 1
-fi
-
-# Wait for Relay to be ready
-echo ""
-echo "Waiting for Relay..."
-attempt=0
-while [ $attempt -lt $max_attempts ]; do
-    if curl -sf "${RELAY_URL}/health" > /dev/null 2>&1; then
-        echo "  ✓ Relay is ready!"
-        break
-    fi
-    attempt=$((attempt + 1))
-    echo "  Attempt $attempt/$max_attempts..."
-    sleep 2
-done
-
-if [ $attempt -eq $max_attempts ]; then
-    echo "ERROR: Relay not available at ${RELAY_URL}"
-    exit 1
-fi
-
-echo ""
-echo "All services ready!"
-echo "============================================"
-echo ""
-
-# Verify integration test files exist
-if [ ! -f "integration_test/pairing_flow_test.dart" ]; then
-    echo "ERROR: pairing_flow_test.dart not found!"
-    exit 1
-fi
-
-echo "Found integration tests:"
-ls -la integration_test/
-
-echo ""
-echo "Setting up test environment..."
-echo "  Mydia API: ${MYDIA_URL}"
-echo ""
-
-# Ensure deps are present at runtime for linux integration test build.
-echo "Ensuring Flutter dependencies are available..."
-# Remove stale generated Linux plugin artifacts copied from host paths.
-rm -rf linux/flutter/ephemeral/.plugin_symlinks
-rm -f linux/flutter/ephemeral/generated_config.cmake
-rm -f linux/flutter/generated_plugins.cmake
-rm -f linux/flutter/generated_plugin_registrant.cc
-rm -f linux/flutter/generated_plugin_registrant.h
-
-flutter pub get >/tmp/flutter-pub-get.log 2>&1 || {
-    echo "ERROR: flutter pub get failed"
-    cat /tmp/flutter-pub-get.log
-    exit 1
-}
-
-# Login to Mydia and get auth token
-echo "Logging in as test admin..."
-LOGIN_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \
-    -H "Content-Type: application/json" \
-    -d '{
-        "query": "mutation Login($input: LoginInput!) { login(input: $input) { token } }",
-        "variables": {
-            "input": {
-                "username": "'"${E2E_ADMIN_EMAIL:-admin@test.local}"'",
-                "password": "'"${E2E_ADMIN_PASSWORD:-testpassword123}"'",
-                "deviceId": "e2e-test-runner",
-                "deviceName": "E2E Test Runner",
-                "platform": "linux"
-            }
-        }
-    }' 2>&1)
-
-AUTH_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.data.login.token // empty')
-
-if [ -z "$AUTH_TOKEN" ]; then
-    echo "ERROR: Failed to login to Mydia"
-    echo "Response: $LOGIN_RESPONSE"
-    exit 1
-fi
-echo "  ✓ Login successful"
-
-# Generate a claim code (with retry while P2P/remote access initializes)
-echo "Generating claim code..."
-CLAIM_CODE=""
-CLAIM_RESPONSE=""
-max_claim_attempts=30
-claim_attempt=0
-while [ $claim_attempt -lt $max_claim_attempts ]; do
-    CLAIM_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $AUTH_TOKEN" \
-        -d '{
-            "query": "mutation { generateClaimCode { code expiresAt } }"
-        }' 2>&1)
-
-    CLAIM_CODE=$(echo "$CLAIM_RESPONSE" | jq -r '.data.generateClaimCode.code // empty')
-    if [ -n "$CLAIM_CODE" ]; then
-        break
-    fi
-
-    claim_attempt=$((claim_attempt + 1))
-    CLAIM_ERROR=$(echo "$CLAIM_RESPONSE" | jq -r '.errors[0].message // "unknown error"')
-    echo "  Claim code attempt $claim_attempt/$max_claim_attempts failed: $CLAIM_ERROR"
-    sleep 2
-done
-
-if [ -z "$CLAIM_CODE" ]; then
-    echo "ERROR: Failed to generate claim code after $max_claim_attempts attempts"
-    echo "Response: $CLAIM_RESPONSE"
-    exit 1
-fi
-echo "  ✓ Claim code generated: $CLAIM_CODE"
-
-echo "Running Flutter integration tests..."
-echo "  Claim Code: $CLAIM_CODE"
-echo ""
-
-TEST_TARGET="${E2E_TEST_TARGET:-integration_test/pairing_flow_test.dart}"
-
-if [ ! -f "$TEST_TARGET" ]; then
-    echo "ERROR: Test target not found: $TEST_TARGET"
-    exit 1
-fi
-
-echo "  Flutter dart-define values:"
-echo "    RELAY_URL=${RELAY_URL}"
-echo "    MYDIA_URL=${MYDIA_URL}"
-echo "    E2E_CLAIM_CODE=${CLAIM_CODE}"
-echo ""
-
-# Run native Linux integration test under a virtual X server.
-flutter_cmd=(
-    flutter test "$TEST_TARGET"
-    -d linux
-    -v
-    --reporter expanded
-    --dart-define=MYDIA_URL=${MYDIA_URL}
-    --dart-define=RELAY_URL=${RELAY_URL}
-    --dart-define=E2E_MODE=true
-    --dart-define=E2E_CLAIM_CODE=${CLAIM_CODE}
-)
-
-if [ -n "${E2E_TEST_ARGS:-}" ]; then
-    # shellcheck disable=SC2206
-    extra_args=(${E2E_TEST_ARGS})
-    flutter_cmd+=("${extra_args[@]}")
-fi
-
-xvfb-run -a "${flutter_cmd[@]}"
-
-TEST_EXIT_CODE=$?
-
-echo ""
-echo "============================================"
-if [ $TEST_EXIT_CODE -eq 0 ]; then
-    echo "E2E Tests PASSED!"
-else
-    echo "E2E Tests FAILED! (exit code: $TEST_EXIT_CODE)"
-fi
-echo "============================================"
-
-exit $TEST_EXIT_CODE
-EOF
-
-RUN chmod +x /entrypoint.sh
-
-# Default command
-ENTRYPOINT ["/entrypoint.sh"]
+# jq is used by scripts/e2e/run-tests.sh to parse GraphQL responses.
+WORKDIR /workspace/player

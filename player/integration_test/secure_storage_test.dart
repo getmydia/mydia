@@ -1,9 +1,12 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/storage/secure_storage_options.dart';
+import 'helpers/test_bootstrap.dart';
 
 /// Regression tests for the "have to re-pair on every launch" bug.
 ///
@@ -22,6 +25,10 @@ import 'package:player/core/storage/secure_storage_options.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  // Set up the app once before all tests. Shared with the other integration
+  // test files so all_tests.dart can run them in one process.
+  setUpAll(ensureTestBootstrap);
+
   const raw = FlutterSecureStorage(
     aOptions: kAndroidSecureStorageOptions,
     mOptions: kMacOsSecureStorageOptions,
@@ -39,27 +46,43 @@ void main() {
   setUp(discard);
   tearDown(discard);
 
-  testWidgets('the real keychain accepts writes and reads them back',
-      (tester) async {
-    // Before the fix this threw PlatformException(-34018) on macOS.
-    await raw.write(key: key, value: 'persisted-value');
+  // Skip on Linux only: needs a session dbus in the toolbox image for
+  // libsecret. On Linux the real keychain fails every call with
+  // PlatformException(KeyringLocked, KeyringLocked, null, null) because there
+  // is no session bus running to unlock a libsecret provider
+  // (gnome-keyring/kwallet). To enable, run dbus-launch (or a real session
+  // bus) and a libsecret provider (gnome-keyring/kwallet) inside the
+  // player-e2e-toolbox image. These are the regression tests for the macOS
+  // re-pair bug, so they must still run on macOS.
+  testWidgets(
+    'the real keychain accepts writes and reads them back',
+    (tester) async {
+      // Before the fix this threw PlatformException(-34018) on macOS.
+      await raw.write(key: key, value: 'persisted-value');
 
-    expect(await raw.read(key: key), 'persisted-value');
-  });
+      expect(await raw.read(key: key), 'persisted-value');
+    },
+    skip: Platform.isLinux, // needs a session dbus for libsecret; see above
+  );
 
-  testWidgets('a failing delete does not disable later persistence',
-      (tester) async {
-    final storage = getAuthStorage();
+  // Skip on Linux only: same libsecret/session-dbus gap as the test above.
+  testWidgets(
+    'a failing delete does not disable later persistence',
+    (tester) async {
+      final storage = getAuthStorage();
 
-    // Deleting a key that isn't there fails on the macOS legacy keychain.
-    // AuthStorage must absorb that without giving up on secure storage.
-    await storage.delete(key);
+      // Deleting a key that isn't there fails on the macOS legacy keychain.
+      // AuthStorage must absorb that without giving up on secure storage.
+      await storage.delete(key);
 
-    await storage.write(key, 'still-persisted');
+      await storage.write(key, 'still-persisted');
 
-    // Read through the raw plugin, not AuthStorage: if the write had been
-    // downgraded to the in-memory map, AuthStorage would still return the
-    // value but the keychain would be empty and the app would lose it on exit.
-    expect(await raw.read(key: key), 'still-persisted');
-  });
+      // Read through the raw plugin, not AuthStorage: if the write had been
+      // downgraded to the in-memory map, AuthStorage would still return the
+      // value but the keychain would be empty and the app would lose it on
+      // exit.
+      expect(await raw.read(key: key), 'still-persisted');
+    },
+    skip: Platform.isLinux, // needs a session dbus for libsecret; see above
+  );
 }

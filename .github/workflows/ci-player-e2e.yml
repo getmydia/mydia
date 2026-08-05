@@ -8,17 +8,67 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  publish-toolbox:
+    name: Publish / Toolbox
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: test-player-e2e
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push toolbox
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./player/Dockerfile.test
+          push: true
+          tags: ghcr.io/${{ github.repository }}/player-e2e-toolbox:master
+          cache-from: type=gha,scope=player-toolbox
+          cache-to: type=gha,mode=max,scope=player-toolbox
+
   test-player-e2e:
     name: Test / Player E2E
     runs-on: ubuntu-latest
-    # The build is uncached and routinely spends ~20 minutes in the player test
-    # image's apt layer alone, which left almost no margin at 30 and timed the
-    # job out mid-install without running a single test. This is headroom for a
-    # slow-mirror day, not a fix; the build genuinely wants layer caching.
+    # Runaway guard only, not a performance mechanism: speed comes from the
+    # pull-by-default design (prebuilt images pulled from the registry), not
+    # from this cap. Pull-path runs finish well inside it.
+    #
+    # The cap must still fit a worst-case cold run, where all three images are
+    # built from source with empty caches. Two independent findings set the
+    # number. First, a timed-out run blocks publish-toolbox (needs:
+    # test-player-e2e) from ever populating the registry tag or cache, so every
+    # following push stays in the same cold-start state; see cache-to below for
+    # the other half of that fix. Second, master previously observed the player
+    # test image spending around 20 minutes in its apt layer alone, timing the
+    # job out at 30 without running a single test, which is why the cap was
+    # raised to 60 there.
+    #
+    # Measured cold non-PR runs on this design are 22m48s and 25m22s, so 30
+    # would usually pass and would fail on a slow-mirror day. 60 is kept: the
+    # cost of a generous runaway guard is nothing, and the cost of tripping it
+    # is a deadlock that does not self-recover.
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - name: Checkout
@@ -29,6 +79,17 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
+          # Invariant: `relevant` must be a superset of the union of
+          # `server`, `toolbox`, and `relay`. `relevant` gates whether this
+          # job runs at all and is consulted first; the per-image filters
+          # below only decide whether their image builds or pulls, and never
+          # run if `relevant` said no. A path that can trigger one of those
+          # builds but is missing from `relevant` is unreachable on a PR that
+          # touches only that path, which has been the root cause of two
+          # separate bugs here (the production Dockerfile, then
+          # rust-toolchain.toml). player/pubspec.lock and
+          # player/Dockerfile.test don't need their own entries: 'player/**'
+          # already covers them.
           filters: |
             relevant:
               - 'player/**'
@@ -36,9 +97,32 @@ jobs:
               - 'native/**'
               - 'metadata-relay/**'
               - 'config/**'
-              - 'Dockerfile.e2e'
+              - 'priv/**'
+              - 'assets/**'
+              - 'plugins/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - 'Dockerfile'
+              - 'rust-toolchain.toml'
+              - 'scripts/e2e/**'
               - 'compose.player-e2e.yml'
               - '.github/workflows/ci-player-e2e.yml'
+            server:
+              - 'lib/**'
+              - 'native/**'
+              - 'config/**'
+              - 'priv/**'
+              - 'assets/**'
+              - 'plugins/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - 'Dockerfile'
+            toolbox:
+              - 'player/pubspec.lock'
+              - 'player/Dockerfile.test'
+              - 'rust-toolchain.toml'
+            relay:
+              - 'metadata-relay/**'
 
       - name: Decide whether to run
         id: should
@@ -51,14 +135,16 @@ jobs:
           fi
 
       - name: Free up disk space
-        if: steps.should.outputs.run == 'true'
+        if: steps.should.outputs.run == 'true' && (github.event_name != 'pull_request' || steps.filter.outputs.server == 'true')
         run: |
           echo "Disk before cleanup:"
           df -h /
-          # The E2E build runs entirely in Docker (the Android emulator is built
-          # inside the container from Dockerfile.e2e), so the host's preinstalled
-          # toolchains are unused. Remove them to avoid "No space left on device"
-          # while compiling the Rust p2p NIF + Android image.
+          # This step only runs when the server image is being built from source:
+          # on every push (master runs always build so they validate the real
+          # commit, not a stale pull) or on a pull request that touched server
+          # paths. The host's preinstalled toolchains are unused in that build,
+          # so remove them to avoid "No space left on device" while compiling
+          # the Rust p2p NIF and the Elixir release.
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
             /usr/local/share/powershell /usr/local/share/chromium \
@@ -71,17 +157,141 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v3
 
-      # Keep this a sequential `docker compose build`. Switching it to
-      # `docker buildx bake` to gain layer caching was tried and reverted: bake
-      # builds every target in parallel, and three heavy images (Elixir release,
-      # Rust p2p NIF, and the GTK/mpv/Flutter desktop toolchain) competing for a
-      # two-core runner starved the apt layer from ~20 minutes to over 56, which
-      # is worse than the problem it was meant to fix. Layer caching here also
-      # cannot bootstrap: a cold build that cannot finish inside the job budget
-      # never exports a cache, so every run stays cold.
-      - name: Build E2E images
+      # The resolve steps below replace the former `docker compose build`.
+      # They pull by default and build only what a PR actually changed, which
+      # removes the cold-build cost from the common path rather than trying to
+      # make it cheaper.
+      #
+      # Keep those builds SEQUENTIAL. Switching the old step to
+      # `docker buildx bake` to gain layer caching was tried on master and
+      # reverted: bake builds every target in parallel, and three heavy images
+      # (Elixir release, Rust p2p NIF, and the GTK/mpv/Flutter desktop
+      # toolchain) competing for a two-core runner starved the apt layer from
+      # around 20 minutes to over 56, worse than the problem it was meant to
+      # fix. The same hazard applies here if anyone parallelizes the resolve
+      # steps.
+      #
+      # That revert also noted layer caching could not bootstrap, because a
+      # cold build that cannot finish inside the job budget never exports a
+      # cache. That is addressed here from both ends: pulls mean most runs
+      # never build at all, and the non-PR builds below export cache so a cold
+      # run still leaves something warm behind.
+      - name: Log in to registry
         if: steps.should.outputs.run == 'true'
-        run: DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build
+        uses: docker/login-action@v3
+        continue-on-error: true
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve server image
+        if: steps.should.outputs.run == 'true'
+        id: server
+        run: |
+          set -euo pipefail
+          IMAGE=ghcr.io/${{ github.repository }}:master
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.server }}" = "true" ]; then
+            echo "::notice::Not a pull request, or backend paths changed; building the server from source."
+            BUILD=1
+          elif docker pull "$IMAGE"; then
+            echo "::notice::Using prebuilt server image $IMAGE"
+            BUILD=0
+          else
+            echo "::warning::Could not pull $IMAGE; building from source instead."
+            BUILD=1
+          fi
+
+          if [ "$BUILD" = "1" ]; then
+            IMAGE=mydia-e2e:pr
+            docker buildx build \
+              --file Dockerfile \
+              --build-arg DATABASE_TYPE=sqlite \
+              --build-arg BUILD_COMMIT=${{ github.sha }} \
+              --cache-from type=gha,scope=docker-sqlite \
+              --load \
+              --tag "$IMAGE" \
+              .
+          fi
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Server image: $IMAGE"
+          docker image inspect "$IMAGE" --format 'digest: {{index .RepoDigests 0}}' || true
+
+      - name: Resolve toolbox and relay images
+        if: steps.should.outputs.run == 'true'
+        id: aux
+        run: |
+          set -euo pipefail
+
+          # cache-to here is a deliberate, narrow exception to the
+          # cache-from-only rule that governs this workflow everywhere else.
+          # That rule exists so this workflow never writes to ci-docker.yml's
+          # docker-sqlite scope: the GHA cache is capped at 10 GB with LRU
+          # eviction, and docker-sqlite is populated by a different workflow,
+          # so writing to it here would evict entries that workflow depends
+          # on. player-toolbox and relay-master are different: only jobs in
+          # this file ever write to them, so there is no cross-workflow
+          # contention. Populating them on non-PR builds means even a
+          # timed-out first run (see timeout-minutes above) leaves a warm
+          # cache behind, so the next push is fast instead of repeating the
+          # same cold build. Restricted to non-PR events to match the two
+          # registry tags themselves, which publish-toolbox and ci-relay.yml
+          # only ever push on push events; a PR build's layers are not
+          # something master's cache should be seeded from.
+          TOOLBOX_CACHE_TO=()
+          RELAY_CACHE_TO=()
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            TOOLBOX_CACHE_TO=(--cache-to type=gha,mode=max,scope=player-toolbox)
+            RELAY_CACHE_TO=(--cache-to type=gha,mode=max,scope=relay-master)
+          fi
+
+          TOOLBOX=ghcr.io/${{ github.repository }}/player-e2e-toolbox:master
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.toolbox }}" = "true" ]; then
+            echo "::notice::Not a pull request, or toolbox paths changed; building the player toolbox image."
+            BUILD_TOOLBOX=1
+          elif docker pull "$TOOLBOX"; then
+            echo "::notice::Using prebuilt toolbox image $TOOLBOX"
+            BUILD_TOOLBOX=0
+          else
+            echo "::warning::Could not pull $TOOLBOX; building from source instead."
+            BUILD_TOOLBOX=1
+          fi
+
+          if [ "$BUILD_TOOLBOX" = "1" ]; then
+            TOOLBOX=player-e2e-toolbox:pr
+            docker buildx build \
+              --file player/Dockerfile.test \
+              --cache-from type=gha,scope=player-toolbox \
+              "${TOOLBOX_CACHE_TO[@]}" \
+              --load --tag "$TOOLBOX" .
+          fi
+
+          RELAY=ghcr.io/${{ github.repository }}/metadata-relay:master
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relay }}" = "true" ]; then
+            echo "::notice::Not a pull request, or relay paths changed; building the relay image."
+            BUILD_RELAY=1
+          elif docker pull "$RELAY"; then
+            echo "::notice::Using prebuilt relay image $RELAY"
+            BUILD_RELAY=0
+          else
+            echo "::warning::Could not pull $RELAY; building from source instead."
+            BUILD_RELAY=1
+          fi
+
+          if [ "$BUILD_RELAY" = "1" ]; then
+            RELAY=metadata-relay:pr
+            docker buildx build \
+              --file metadata-relay/Dockerfile \
+              --cache-from type=gha,scope=relay-master \
+              "${RELAY_CACHE_TO[@]}" \
+              --load --tag "$RELAY" .
+          fi
+
+          echo "toolbox=$TOOLBOX" >> "$GITHUB_OUTPUT"
+          echo "relay=$RELAY" >> "$GITHUB_OUTPUT"
+          echo "Toolbox image: $TOOLBOX"
+          echo "Relay image: $RELAY"
 
       - name: Run player E2E tests
         if: steps.should.outputs.run == 'true'
@@ -90,7 +300,10 @@ jobs:
             --abort-on-container-exit \
             --exit-code-from test
         env:
-          E2E_TEST_TARGET: integration_test/pairing_flow_test.dart
+          E2E_TEST_TARGET: integration_test/all_tests.dart
+          MYDIA_E2E_IMAGE: ${{ steps.server.outputs.image }}
+          PLAYER_E2E_TOOLBOX_IMAGE: ${{ steps.aux.outputs.toolbox }}
+          RELAY_E2E_IMAGE: ${{ steps.aux.outputs.relay }}
 
       - name: Collect service logs
         if: failure() && steps.should.outputs.run == 'true'
