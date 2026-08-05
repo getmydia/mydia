@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/connection/connection_provider.dart';
 import '../../core/graphql/graphql_provider.dart';
+import '../../core/update/platform_updater.dart';
 import '../../core/update/update_provider.dart';
 import '../../core/update/updaters/macos_updater.dart';
 import '../widgets/ambient_backdrop_provider.dart';
@@ -141,8 +142,9 @@ class SettingsScreen extends ConsumerWidget {
             const ConnectionStatusTile(),
             const Divider(),
 
-            // Updates section (desktop only, not Android)
-            if (!kIsWeb && !Platform.isAndroid) ...[
+            // Updates section (desktop only — mobile updates through the app
+            // stores and web is served by the Mydia server)
+            if (PlatformUpdater.supportedOnCurrentPlatform) ...[
               const _SectionHeader(title: 'Updates'),
               // On macOS, Sparkle manages update notifications natively
               if (!Platform.isMacOS) const UpdateTile(),
