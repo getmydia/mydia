@@ -144,14 +144,8 @@ defmodule Mydia.Media.RecentlyAdded do
 
     rows =
       since
-      |> windowed_rows_query(Keyword.get(opts, :types))
+      |> windowed_rows_query(Keyword.get(opts, :types), Keyword.get(opts, :limit))
       |> Repo.all()
-
-    rows =
-      case Keyword.get(opts, :limit) do
-        nil -> rows
-        limit -> Enum.take(rows, limit)
-      end
 
     items = load_items(Enum.map(rows, & &1.media_item_id))
     latest = load_latest_episodes(rows)
@@ -177,7 +171,7 @@ defmodule Mydia.Media.RecentlyAdded do
     end)
   end
 
-  defp windowed_rows_query(since, types) do
+  defp windowed_rows_query(since, types, limit) do
     slots = slots_query()
 
     query =
@@ -192,18 +186,29 @@ defmodule Mydia.Media.RecentlyAdded do
             sum(fragment("CASE WHEN ? >= ? THEN 1 ELSE 0 END", s.first_added_at, ^since))
         }
 
-    case types do
-      nil ->
-        query
+    query =
+      case types do
+        nil ->
+          query
 
-      [] ->
-        query
+        [] ->
+          query
 
-      types ->
-        item_ids = from(m in MediaItem, where: m.type in ^types, select: m.id)
-        where(query, [s], s.media_item_id in subquery(item_ids))
-    end
+        types ->
+          item_ids = from(m in MediaItem, where: m.type in ^types, select: m.id)
+          where(query, [s], s.media_item_id in subquery(item_ids))
+      end
+
+    # Applied last, after any type filter, so the cap counts rows the caller
+    # will actually see. The rows are already ordered newest-first, so a SQL
+    # LIMIT returns the same top-N a post-hoc Enum.take would, without the
+    # database handing back the whole 30-day window for the process to discard
+    # most of.
+    maybe_limit(query, limit)
   end
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, limit) when is_integer(limit) and limit > 0, do: limit(query, ^limit)
 
   defp load_items([]), do: %{}
 

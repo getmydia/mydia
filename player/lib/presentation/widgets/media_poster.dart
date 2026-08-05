@@ -84,10 +84,10 @@ class MediaPoster extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            if (widget.subtitle != null) ...[
+            if (subtitle != null) ...[
               const SizedBox(height: 2),
               Text(
-                widget.subtitle!,
+                subtitle!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: AppColors.textSecondary,
                     ),
