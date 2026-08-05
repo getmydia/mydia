@@ -175,8 +175,20 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     // obtained. So this defers, the same way publishBackdropSource and
     // didUpdateWidget above do.
     if (_isHovered) {
+      // Identity-checked, not a bare clearHover(): this scroll-recycling
+      // scenario is exactly what didUpdateWidget above exists for — this
+      // poster can be disposed-while-hovered (onExit never fired, which is
+      // the bug this file fixes) in the same frame a different poster
+      // scrolls in under the stationary cursor and publishes its own hover
+      // override. If our deferred clear ran unconditionally, it could land
+      // after that fresh publish and wipe it, leaving the backdrop on the
+      // default while a poster is visibly hovered — the same class of
+      // staleness bug, polarity reversed. clearHoverIf only clears when the
+      // override still equals what this instance published.
+      final source =
+          BackdropSource(imageUrl: widget.imageUrl, id: widget.imageUrl);
       SchedulerBinding.instance.addPostFrameCallback((_) {
-        _backdropController.clearHover();
+        _backdropController.clearHoverIf(source);
       });
     }
     super.dispose();

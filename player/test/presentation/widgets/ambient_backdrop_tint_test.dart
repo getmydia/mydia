@@ -50,6 +50,58 @@ void main() {
       notifier.clearHover();
       expect(container.read(ambientBackdropControllerProvider).id, 'd');
     });
+
+    test('clearHoverIf clears the override when it still matches', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(ambientBackdropControllerProvider.notifier);
+
+      const a = BackdropSource(imageUrl: 'a', id: 'a');
+      notifier.setHover(a);
+
+      notifier.clearHoverIf(a);
+      expect(
+        container.read(ambientBackdropControllerProvider),
+        BackdropSource.none,
+      );
+    });
+
+    test(
+        'clearHoverIf leaves a newer, different override untouched '
+        '(regression: scroll-recycling race)', () {
+      // A poster unmounting while hovered defers its clear to a post-frame
+      // callback (PosterFrame.dispose). During a scroll under a stationary
+      // cursor, a different poster can already have published its own hover
+      // override by the time that deferred clear runs. A bare clearHover()
+      // would wipe the fresh override and strand the backdrop on the default
+      // while a poster is visibly hovered — the same staleness bug this
+      // whole file exists to fix, polarity reversed. clearHoverIf is the
+      // guard against that: it must only clear the override it was asked to
+      // clear, not whatever happens to be there now.
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(ambientBackdropControllerProvider.notifier);
+
+      const posterA = BackdropSource(imageUrl: 'a', id: 'a');
+      const posterB = BackdropSource(imageUrl: 'b', id: 'b');
+
+      // Poster A is hovered...
+      notifier.setHover(posterA);
+      // ...scrolls out of the cached area and is disposed while still
+      // hovered (onExit never fired — that's the bug), so its clear targets
+      // posterA specifically...
+      //
+      // ...but before that deferred clear runs, poster B scrolls in under
+      // the same stationary cursor and fires its own onEnter.
+      notifier.setHover(posterB);
+
+      // A's late clear arrives. It must not touch B's override.
+      notifier.clearHoverIf(posterA);
+
+      expect(container.read(ambientBackdropControllerProvider), posterB);
+    });
   });
 
   group('poster hover drives the backdrop (R5/R9)', () {
