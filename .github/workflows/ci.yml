@@ -184,6 +184,13 @@ jobs:
             echo "::error::exit_status: 0 found in .credo.exs - fix the finding or disable the check with false (see CONTRIBUTING.md)"
             exit 1
           fi
+          # Guard against DEPRECATED markers surviving in lib/: deprecated
+          # code must be deleted, not left behind under a marker. See
+          # CONTRIBUTING.md.
+          if grep -rn "DEPRECATED" lib --include='*.ex' --include='*.heex'; then
+            echo "::error::DEPRECATED: is not allowed in lib/. Delete the code, or mark it COMPAT: if it is load-bearing backward compatibility. See CONTRIBUTING.md."
+            exit 1
+          fi
           mix credo --strict
           # Advisory dead-code report (non-blocking; see CONTRIBUTING.md "Quality gates").
           UNUSED_CHECK=true mix compile --force || true

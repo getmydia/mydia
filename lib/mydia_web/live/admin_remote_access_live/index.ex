@@ -289,15 +289,20 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
       current_urls = config.direct_urls || []
       updated_urls = Enum.uniq(current_urls ++ [new_url])
 
-      # Legacy relay URL update - now a no-op, URLs stored locally only
-      {:ok, _urls} = RemoteAccess.update_relay_urls(updated_urls)
+      case RemoteAccess.upsert_config(%{direct_urls: updated_urls}) do
+        {:ok, _config} ->
+          {:noreply,
+           socket
+           |> assign(:show_add_url_modal, false)
+           |> assign(:new_url, "")
+           |> load_config()
+           |> put_flash(:info, "Direct URL added successfully")}
 
-      {:noreply,
-       socket
-       |> assign(:show_add_url_modal, false)
-       |> assign(:new_url, "")
-       |> load_config()
-       |> put_flash(:info, "Direct URL added successfully")}
+        {:error, changeset} ->
+          {:noreply,
+           socket
+           |> put_flash(:error, "Failed to add direct URL: #{format_errors(changeset)}")}
+      end
     else
       {:noreply, socket}
     end
@@ -308,12 +313,18 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     current_urls = config.direct_urls || []
     updated_urls = Enum.reject(current_urls, &(&1 == url))
 
-    {:ok, _urls} = RemoteAccess.update_relay_urls(updated_urls)
+    case RemoteAccess.upsert_config(%{direct_urls: updated_urls}) do
+      {:ok, _config} ->
+        {:noreply,
+         socket
+         |> load_config()
+         |> put_flash(:info, "Direct URL removed successfully")}
 
-    {:noreply,
-     socket
-     |> load_config()
-     |> put_flash(:info, "Direct URL removed successfully")}
+      {:error, changeset} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to remove direct URL: #{format_errors(changeset)}")}
+    end
   end
 
   def handle_event("refresh_p2p", _params, socket) do

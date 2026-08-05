@@ -204,7 +204,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       release_title = "random_garbage_123"
 
       # Test the FileParser directly to verify it fails
-      parsed = Mydia.Library.FileParser.parse(release_title)
+      parsed = Mydia.Library.ReleaseParser.parse(release_title)
       assert parsed.type == :unknown
     end
 
@@ -249,7 +249,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       # Test with a title that produces low confidence
       release_title = "Movie.Title"
 
-      parsed = Mydia.Library.FileParser.parse(release_title)
+      parsed = Mydia.Library.ReleaseParser.parse(release_title)
 
       # Verify low confidence is detected
       if parsed.confidence < 0.5 do
@@ -274,7 +274,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       ]
 
       for {title, expected_year} <- release_titles do
-        parsed = Mydia.Library.FileParser.parse(title)
+        parsed = Mydia.Library.ReleaseParser.parse(title)
         assert parsed.year == expected_year, "Failed to extract year from: #{title}"
       end
     end
@@ -321,7 +321,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       ]
 
       for test_case <- test_cases do
-        parsed = Mydia.Library.FileParser.parse(test_case.input)
+        parsed = Mydia.Library.ReleaseParser.parse(test_case.input)
         assert parsed.type == test_case.expected.type, "Type mismatch for #{test_case.input}"
 
         assert parsed.title == test_case.expected.title,
@@ -365,7 +365,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       ]
 
       for test_case <- test_cases do
-        parsed = Mydia.Library.FileParser.parse(test_case.input)
+        parsed = Mydia.Library.ReleaseParser.parse(test_case.input)
         assert parsed.type == test_case.expected.type
         assert parsed.title == test_case.expected.title
         assert parsed.season == test_case.expected.season
@@ -382,7 +382,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       ]
 
       for title <- unparseable_titles do
-        parsed = Mydia.Library.FileParser.parse(title)
+        parsed = Mydia.Library.ReleaseParser.parse(title)
         assert parsed.type == :unknown, "Should be unknown for: #{title}"
       end
     end
@@ -396,7 +396,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       ]
 
       for title <- low_confidence_titles do
-        parsed = Mydia.Library.FileParser.parse(title)
+        parsed = Mydia.Library.ReleaseParser.parse(title)
         # Low confidence should still return a result but with lower confidence score
         assert parsed.confidence >= 0.0 and parsed.confidence <= 1.0
       end

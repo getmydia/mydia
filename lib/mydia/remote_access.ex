@@ -714,31 +714,6 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
-  DEPRECATED: Use p2p_status/0 instead.
-  Gets the status of the relay connection (legacy compatibility).
-  """
-  def relay_status do
-    case p2p_status() do
-      {:ok, status} ->
-        # Map p2p status to legacy relay status format for compatibility
-        {:ok,
-         %{
-           connected: status.running,
-           registered: status.running,
-           instance_id: status.node_id
-         }}
-    end
-  end
-
-  @doc """
-  DEPRECATED: Use p2p_available?/0 instead.
-  Checks if the relay service is available and connected.
-  """
-  def relay_available? do
-    p2p_available?()
-  end
-
-  @doc """
   Updates the instance's direct URLs and certificate fingerprint.
   """
   def update_direct_urls(direct_urls, cert_fingerprint, _notify_relay? \\ true)
@@ -774,21 +749,6 @@ defmodule Mydia.RemoteAccess do
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  @doc """
-  Updates the instance's direct URLs with the relay service.
-  DEPRECATED - This is a stub that just returns the URLs without relay integration.
-  """
-  def update_relay_urls(direct_urls) when is_list(direct_urls) do
-    {:ok, direct_urls}
-  end
-
-  @doc """
-  Manually triggers a relay reconnection.
-  """
-  def reconnect_relay do
-    :ok
   end
 
   @doc """

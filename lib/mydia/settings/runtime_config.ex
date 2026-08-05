@@ -233,7 +233,23 @@ defmodule Mydia.Settings.RuntimeConfig do
         []
       end
 
-    # Add legacy movies path if configured and not already in library_paths
+    # COMPAT: `MOVIES_PATH` is superseded internally by the generic
+    # `library_paths` list (`LIBRARY_PATH_<N>_PATH`/`_TYPE=movies`), but it
+    # is not old configuration in the sense of no longer being current: it
+    # remains the actively documented shorthand for the default movies
+    # library (README.md, docs/using/tutorials/get-mydia-running.md,
+    # docs/using/how-to/manage-libraries.md) and has its own field in the
+    # admin Configuration > Media settings.
+    #
+    # Accepts: the `MOVIES_PATH` environment variable, layered through the
+    # usual env/DB/YAML config precedence as `media.movies_path`.
+    # Source: operator `.env` files, compose files, and the admin
+    # Configuration UI, per the getting-started docs, for both new and
+    # existing installs.
+    # Removing it would: silently drop the default movies library for every
+    # install configured this way, which today includes fresh installs
+    # following the README, not only upgrades from before
+    # `LIBRARY_PATH_<N>_*` existed.
     paths =
       if is_struct(runtime_config) and Map.has_key?(runtime_config, :media) and
            runtime_config.media.movies_path do
@@ -267,7 +283,17 @@ defmodule Mydia.Settings.RuntimeConfig do
         paths
       end
 
-    # Add legacy TV path if configured and not already in library_paths
+    # COMPAT: `TV_PATH` is the TV counterpart to `MOVIES_PATH` above; see
+    # that block for the full justification. It is superseded internally by
+    # `LIBRARY_PATH_<N>_PATH`/`_TYPE=series` but remains the actively
+    # documented shorthand for the default TV library.
+    #
+    # Accepts: the `TV_PATH` environment variable, layered as
+    # `media.tv_path`.
+    # Source: operator `.env` files, compose files, and the admin
+    # Configuration UI, for both new and existing installs.
+    # Removing it would: silently drop the default TV library for every
+    # install configured this way.
     paths =
       if is_struct(runtime_config) and Map.has_key?(runtime_config, :media) and
            runtime_config.media.tv_path do

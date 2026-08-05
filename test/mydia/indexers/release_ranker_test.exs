@@ -606,6 +606,90 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       score_1080p_pref = Enum.find(with_pref, &(&1.result.quality.resolution == "1080p"))
       assert score_1080p.breakdown.quality == score_1080p_pref.breakdown.quality
     end
+
+    # The following four tests document a deliberate divergence from the
+    # retired Mydia.Settings.QualityMatcher. QualityMatcher.matches?/2 hard-
+    # rejected a result with {:error, :quality_not_allowed}, {:error,
+    # :quality_unknown}, or {:error, violation} when a resolution fell outside
+    # the preferred_resolutions allow-list, quality was nil, or a min/max
+    # resolution constraint was violated. ReleaseRanker never adopted any of
+    # those gates: per filter_acceptable/2's moduledoc, only blocked tags and
+    # too-recent NZBs are hard removals now — every quality dimension is a
+    # ranking signal, not a filter, so a weak match sinks instead of
+    # vanishing. These tests pin down that the results stay in the ranking
+    # rather than asserting the old exclusion contract, which no longer holds.
+
+    test "a resolution outside preferred_resolutions is not excluded (no quality_not_allowed rejection)" do
+      profile =
+        build_quality_profile(%{
+          quality_standards: %{
+            preferred_video_codecs: ["h265", "h264"],
+            preferred_audio_codecs: ["ac3", "aac"],
+            preferred_resolutions: ["1080p", "720p"],
+            preferred_sources: ["BluRay", "WEB-DL"],
+            movie_min_size_mb: 2048,
+            movie_max_size_mb: 15360
+          }
+        })
+
+      result =
+        build_result(%{
+          title: "Test.Movie.2024.480p.WEB-DL.x264-GROUP",
+          size: 1 * 1024 * 1024 * 1024,
+          seeders: 20,
+          leechers: 2,
+          quality: QualityParser.parse("Test.Movie.2024.480p.WEB-DL.x264-GROUP")
+        })
+
+      ranked = ReleaseRanker.rank_all([result], quality_profile: profile)
+      assert [%{result: ^result}] = ranked
+
+      [scored] = ReleaseRanker.score_all_with_reasons([result], quality_profile: profile)
+      assert scored.status == :accepted
+    end
+
+    test "nil quality does not exclude a result when a quality profile is set (no quality_unknown rejection)" do
+      profile = build_quality_profile()
+      result = build_result(%{quality: nil, seeders: 50})
+
+      ranked = ReleaseRanker.rank_all([result], quality_profile: profile)
+      assert length(ranked) == 1
+    end
+
+    test "a min/max resolution violation zeroes the quality component but does not hard-reject the release" do
+      profile =
+        build_quality_profile(%{
+          quality_standards: %{
+            preferred_resolutions: ["1080p", "2160p"],
+            min_resolution: "1080p",
+            max_resolution: "2160p"
+          }
+        })
+
+      result =
+        build_result(%{
+          title: "Test.Movie.2024.720p.BluRay.x265-GROUP",
+          seeders: 100,
+          quality: QualityParser.parse("Test.Movie.2024.720p.BluRay.x265-GROUP")
+        })
+
+      breakdown = ReleaseRanker.calculate_score_breakdown(result, quality_profile: profile)
+      # QualityProfile.score_media_file/2 still detects the violation and zeroes
+      # the quality sub-score; that's real. What it no longer does is prevent
+      # the release from being ranked and selected.
+      assert breakdown.quality == 0.0
+
+      ranked = ReleaseRanker.rank_all([result], quality_profile: profile)
+      assert length(ranked) == 1
+    end
+
+    test "a profile without quality_standards zeroes the quality component" do
+      profile = build_quality_profile(%{quality_standards: nil})
+      result = build_result(%{seeders: 50})
+
+      breakdown = ReleaseRanker.calculate_score_breakdown(result, quality_profile: profile)
+      assert breakdown.quality == 0.0
+    end
   end
 
   describe "seeder scoring" do
