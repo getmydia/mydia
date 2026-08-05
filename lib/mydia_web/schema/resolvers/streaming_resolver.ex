@@ -159,14 +159,31 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   # its ceiling is not negotiable by the client: an uncapped request becomes
   # capped, and an over-cap request is lowered. A direct connection is
   # peer-to-peer or local, so the client's choice stands.
-  def effective_quality("relay", requested_bitrate, requested_height) do
-    {min(requested_bitrate || @relay_bitrate_cap, @relay_bitrate_cap),
-     min(requested_height || @relay_height_cap, @relay_height_cap)}
+  def effective_quality(connection_type, requested_bitrate, requested_height) do
+    clamp_for_connection(
+      connection_type,
+      positive_or_nil(requested_bitrate),
+      positive_or_nil(requested_height)
+    )
   end
 
-  def effective_quality(_connection_type, requested_bitrate, requested_height) do
-    {requested_bitrate, requested_height}
+  defp clamp_for_connection("relay", bitrate, height) do
+    {min(bitrate || @relay_bitrate_cap, @relay_bitrate_cap),
+     min(height || @relay_height_cap, @relay_height_cap)}
   end
+
+  defp clamp_for_connection(_connection_type, bitrate, height), do: {bitrate, height}
+
+  # A non-positive cap is not a smaller cap, it is no cap: the transcoder
+  # declines to scale to a non-positive height, so a relay client could
+  # otherwise bypass the relay ceiling entirely by asking for `maxHeight: 0`
+  # and get native resolution over infrastructure the cap exists to protect.
+  #
+  # `requested || @cap` does not catch it, because Elixir treats 0 as truthy —
+  # `min(0 || 720, 720)` is 0, not 720. Normalising before the clamp is what
+  # makes the `|| @cap` fallback mean what it reads like it means.
+  defp positive_or_nil(value) when is_integer(value) and value > 0, do: value
+  defp positive_or_nil(_), do: nil
 
   defp start_session_for_user(
          file_id,

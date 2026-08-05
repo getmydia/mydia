@@ -210,6 +210,24 @@ defmodule MydiaWeb.Schema.StreamingTest do
       assert StreamingResolver.effective_quality(nil, 8000, 1080) == {8000, 1080}
     end
 
+    test "a relay cannot be talked out of its ceiling with a zero height" do
+      # Elixir treats 0 as truthy, so `requested || @cap` does not fall back and
+      # `min(0, 720)` is 0. The transcoder declines to scale to a non-positive
+      # height, so without normalisation a relay client got native resolution
+      # over the very infrastructure the ceiling protects.
+      assert StreamingResolver.effective_quality("relay", 0, 0) == {2000, 720}
+    end
+
+    test "a relay cannot be talked out of its ceiling with a negative height" do
+      assert StreamingResolver.effective_quality("relay", -1, -1) == {2000, 720}
+    end
+
+    test "a non-positive cap on a direct connection reads as no cap" do
+      # Nothing to protect here, but the echo must not report 0 as an applied
+      # ceiling — the client labels its quality control from these values.
+      assert StreamingResolver.effective_quality(nil, 0, 0) == {nil, nil}
+    end
+
     test "leaves an uncapped direct request uncapped" do
       assert StreamingResolver.effective_quality(nil, nil, nil) == {nil, nil}
     end
