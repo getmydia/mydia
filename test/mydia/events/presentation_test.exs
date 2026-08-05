@@ -466,6 +466,31 @@ defmodule Mydia.Events.PresentationTest do
       refute detail.(one_day) =~ "1 days"
     end
 
+    test "backoff_applied renders whole hours without a decimal and keeps fractions" do
+      # Offsets are far from a bucket boundary, so elapsed test time cannot shift
+      # which branch runs or what the value rounds to.
+      at = fn seconds ->
+        DateTime.utc_now() |> DateTime.add(seconds, :second) |> DateTime.to_iso8601()
+      end
+
+      detail = fn next_eligible_at ->
+        Presentation.detail(
+          event(
+            type: "search.backoff_applied",
+            metadata: %{"title" => "Arrival", "next_eligible_at" => next_eligible_at}
+          )
+        )
+      end
+
+      assert detail.(at.(3660)) =~ "next search in 1 hour"
+      refute detail.(at.(3660)) =~ "1.0 hours"
+
+      assert detail.(at.(7200)) =~ "next search in 2 hours"
+      refute detail.(at.(7200)) =~ "2.0 hours"
+
+      assert detail.(at.(5400)) =~ "next search in 1.5 hours"
+    end
+
     test "backoff_reset reports how many attempts it took" do
       assert Presentation.detail(
                event(

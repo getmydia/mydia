@@ -604,10 +604,20 @@ defmodule Mydia.Events.Presentation do
       diff_seconds <= 0 -> "now"
       diff_seconds < 60 -> "in #{pluralize_unit(diff_seconds, "second")}"
       diff_seconds < 3600 -> "in #{pluralize_unit(div(diff_seconds, 60), "minute")}"
-      # A float always reads naturally as plural ("1.0 hours"), so no singular
-      # branch is needed here.
-      diff_seconds < 86_400 -> "in #{Float.round(diff_seconds / 3600, 1)} hours"
+      diff_seconds < 86_400 -> "in #{format_hours(diff_seconds / 3600)}"
       true -> "in #{pluralize_unit(div(diff_seconds, 86_400), "day")}"
+    end
+  end
+
+  # Whole hours read better without the decimal ("in 2 hours", not "in 2.0
+  # hours"), and one hour needs the singular. Fractional hours keep one place.
+  defp format_hours(hours) do
+    rounded = Float.round(hours, 1)
+
+    if rounded == trunc(rounded) do
+      pluralize_unit(trunc(rounded), "hour")
+    else
+      "#{rounded} hours"
     end
   end
 
