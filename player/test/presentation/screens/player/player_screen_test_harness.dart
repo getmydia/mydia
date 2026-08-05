@@ -94,6 +94,12 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
   bool stopped = false;
   bool startCalled = false;
 
+  /// The file id `PlayerScreen` asked to direct-stream, or null if it never
+  /// took the direct-play branch. This is the user's selected file: a test
+  /// that mounts the screen with one file id and scripts the server to name a
+  /// different one proves the selection is honored.
+  String? capturedDirectStreamFileId;
+
   @override
   int get port => 12345;
 
@@ -107,8 +113,10 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
       'http://127.0.0.1:$port/hls/$sessionId/index.m3u8';
 
   @override
-  String buildDirectStreamUrl(String fileId) =>
-      'http://127.0.0.1:$port/direct/$fileId/stream';
+  String buildDirectStreamUrl(String fileId) {
+    capturedDirectStreamFileId = fileId;
+    return 'http://127.0.0.1:$port/direct/$fileId/stream';
+  }
 
   @override
   Future<void> stop() async {

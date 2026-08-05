@@ -684,11 +684,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         });
       }
 
-      final contentType = widget.mediaType == 'movie' ? 'movie' : 'episode';
+      // Ask about the *file*, not the media item. Keying this on mediaId left
+      // the server to pick one of the item's files with no way to express the
+      // user's choice, and its pick then won on the direct-play path below.
+      // `content_type: "file"` is already supported server-side.
       final candidatesResult = await _fetchStreamingCandidates(
         graphqlClient,
-        contentType,
-        widget.mediaId,
+        'file',
+        widget.fileId,
       );
 
       // Determine if direct play is possible
@@ -737,12 +740,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       if (canDirect) {
         // Direct play path (native only)
-        final fileId = candidatesResult.fileId;
-        debugPrint('[PlayerScreen] Direct play for file_id=$fileId');
+        debugPrint('[PlayerScreen] Direct play for file_id=${widget.fileId}');
 
         if (isP2PMode) {
-          mediaSource =
-              ref.read(localProxyServiceProvider).buildDirectStreamUrl(fileId);
+          mediaSource = ref
+              .read(localProxyServiceProvider)
+              .buildDirectStreamUrl(widget.fileId);
         } else {
           // Get media token for URL (if available)
           final mediaTokenService =
@@ -751,7 +754,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           final mediaToken = await mediaTokenService.getToken();
 
           mediaSource =
-              '$serverUrl/api/v1/stream/file/$fileId?strategy=DIRECT_PLAY';
+              '$serverUrl/api/v1/stream/file/${widget.fileId}?strategy=DIRECT_PLAY';
           if (mediaToken != null) {
             mediaSource += '&token=$mediaToken';
           } else {
