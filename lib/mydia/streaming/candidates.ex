@@ -11,7 +11,7 @@ defmodule Mydia.Streaming.Candidates do
   require Logger
 
   alias Mydia.Library
-  alias Mydia.Library.{FileAnalyzer, MediaFile}
+  alias Mydia.Library.{FileAnalyzer, FileRanking, MediaFile}
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
   alias Mydia.Streaming.{CodecString, Compatibility}
@@ -33,9 +33,9 @@ defmodule Mydia.Streaming.Candidates do
           media_item =
             Mydia.Media.get_media_item!(id, preload: [media_files: active_files_query])
 
-          case media_item.media_files do
-            [media_file | _] -> {:ok, media_file}
-            [] -> {:error, :no_media_files}
+          case FileRanking.best(media_item.media_files) do
+            nil -> {:error, :no_media_files}
+            media_file -> {:ok, media_file}
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
@@ -45,9 +45,9 @@ defmodule Mydia.Streaming.Candidates do
         try do
           episode = Mydia.Media.get_episode!(id, preload: [media_files: active_files_query])
 
-          case episode.media_files do
-            [media_file | _] -> {:ok, media_file}
-            [] -> {:error, :no_media_files}
+          case FileRanking.best(episode.media_files) do
+            nil -> {:error, :no_media_files}
+            media_file -> {:ok, media_file}
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}

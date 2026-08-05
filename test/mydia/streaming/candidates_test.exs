@@ -4,6 +4,7 @@ defmodule Mydia.Streaming.CandidatesTest do
 
   import Ecto.Query
   import Mydia.SettingsFixtures
+  import Mydia.MediaFixtures
 
   alias Mydia.Library
   alias Mydia.Library.MediaFile
@@ -185,6 +186,96 @@ defmodule Mydia.Streaming.CandidatesTest do
       result = Candidates.ensure_codec_info(media_file)
       assert result.id == media_file.id
       assert is_nil(result.analyzed_at)
+    end
+  end
+
+  describe "resolve_media_file/2 file selection" do
+    test "a movie resolves to its highest-resolution file, whichever was created first" do
+      hd_first = media_item_fixture(%{type: "movie"})
+      _hd = media_file_fixture(%{media_item_id: hd_first.id, resolution: "1080p"})
+      uhd = media_file_fixture(%{media_item_id: hd_first.id, resolution: "4K"})
+
+      uhd_first = media_item_fixture(%{type: "movie"})
+      uhd2 = media_file_fixture(%{media_item_id: uhd_first.id, resolution: "4K"})
+      _hd2 = media_file_fixture(%{media_item_id: uhd_first.id, resolution: "1080p"})
+
+      assert {:ok, chosen} = Candidates.resolve_media_file("movie", hd_first.id)
+      assert chosen.id == uhd.id
+
+      assert {:ok, chosen2} = Candidates.resolve_media_file("movie", uhd_first.id)
+      assert chosen2.id == uhd2.id
+    end
+
+    test "an episode resolves to its highest-resolution file" do
+      show = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id})
+
+      _hd = media_file_fixture(%{episode_id: episode.id, resolution: "720p"})
+      uhd = media_file_fixture(%{episode_id: episode.id, resolution: "2160p"})
+
+      assert {:ok, chosen} = Candidates.resolve_media_file("episode", episode.id)
+      assert chosen.id == uhd.id
+    end
+
+    test "a resolution tie falls through to bitrate" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      _low =
+        media_file_fixture(%{media_item_id: movie.id, resolution: "1080p", bitrate: 4_000_000})
+
+      high =
+        media_file_fixture(%{media_item_id: movie.id, resolution: "1080p", bitrate: 15_000_000})
+
+      assert {:ok, chosen} = Candidates.resolve_media_file("movie", movie.id)
+      assert chosen.id == high.id
+    end
+
+    test "an unanalyzed file never wins over one with a known resolution" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      _unknown =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          resolution: nil,
+          bitrate: 99_000_000
+        })
+
+      known = media_file_fixture(%{media_item_id: movie.id, resolution: "480p"})
+
+      assert {:ok, chosen} = Candidates.resolve_media_file("movie", movie.id)
+      assert chosen.id == known.id
+    end
+
+    test "content_type \"file\" returns that exact file even when a better sibling exists" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      hd = media_file_fixture(%{media_item_id: movie.id, resolution: "1080p"})
+      _uhd = media_file_fixture(%{media_item_id: movie.id, resolution: "4K"})
+
+      # This is the path the fixed player takes. It must never re-rank.
+      assert {:ok, chosen} = Candidates.resolve_media_file("file", hd.id)
+      assert chosen.id == hd.id
+    end
+
+    test "trashed files are excluded from ranking" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      hd = media_file_fixture(%{media_item_id: movie.id, resolution: "1080p"})
+
+      _trashed_uhd =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          resolution: "4K",
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert {:ok, chosen} = Candidates.resolve_media_file("movie", movie.id)
+      assert chosen.id == hd.id
+    end
+
+    test "a movie with no files reports :no_media_files" do
+      movie = media_item_fixture(%{type: "movie"})
+      assert {:error, :no_media_files} = Candidates.resolve_media_file("movie", movie.id)
     end
   end
 
