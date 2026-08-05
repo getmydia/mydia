@@ -196,4 +196,12 @@ void main() {
       expect(scheme.surfaceBright, DepthTokens.surfaceBright);
     });
   });
+
+  group('poster geometry', () {
+    test('radiusPoster is a single positive radius for all poster surfaces',
+        () {
+      expect(DepthTokens.radiusPoster, 8.0);
+      expect(DepthTokens.radiusPoster, greaterThan(0));
+    });
+  });
 }
