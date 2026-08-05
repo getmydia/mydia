@@ -144,6 +144,46 @@ void main() {
     expect(row(tester).toggleValue, isFalse);
   });
 
+  testWidgets(
+      'a tap that lands before the initial load resolves is not clobbered by it',
+      (tester) async {
+    // The initial getBetaChannel read is gated so it is still in flight when
+    // the tap's own round trip (ungated) completes first. Without a
+    // generation guard on _load, its setState would land after the tap's and
+    // stomp the already-confirmed optimistic value back to the stale read.
+    final loadGate = Completer<void>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kSparkleChannel, (call) async {
+      calls.add(call);
+      if (call.method == 'getBetaChannel') {
+        await loadGate.future;
+        return false;
+      }
+      if (call.method == 'setBetaChannel') {
+        hostValue = call.arguments as bool;
+        return null;
+      }
+      return null;
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: BetaChannelRow())),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+
+    expect(row(tester).toggleValue, isTrue,
+        reason: 'the confirmed tap must already be reflected');
+
+    loadGate.complete();
+    await tester.pumpAndSettle();
+
+    expect(row(tester).toggleValue, isTrue,
+        reason: 'the stale load must not clobber the confirmed tap');
+  });
+
   testWidgets('uses no em dashes in its copy', (tester) async {
     await pump(tester);
 
