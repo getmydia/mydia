@@ -51,6 +51,14 @@ test('formats published_at as RFC 822 in UTC', () => {
   assert.equal(toRfc822('2026-08-04T12:00:00Z'), 'Tue, 04 Aug 2026 12:00:00 +0000')
 })
 
+test('rejects a null published_at instead of silently returning the epoch', () => {
+  // new Date(null) coerces to 1970-01-01T00:00:00.000Z, so Number.isNaN never
+  // fires on its getTime(). GitHub returns an explicit null for published_at
+  // on releases that lack one, and that must fail the same way any other bad
+  // input does rather than backdating the item by five decades.
+  assert.throws(() => toRfc822(null), /invalid published_at/)
+})
+
 test('a stable-only repo produces items with no channel', async () => {
   const { items } = await build([release({ tag: 'v1.4.9', short: '1.4.9', versionCode: '10100' })])
 
@@ -139,6 +147,28 @@ test('caps the feed at MAX_ITEMS, keeping the newest', async () => {
   assert.equal(items[0].version, String(10000 + MAX_ITEMS + 4))
 })
 
+test('reserves the newest stable items so a long prerelease run cannot evict all of them', async () => {
+  // Sparkle filters by allowed channel after fetching the feed, so a
+  // stable-channel user only ever sees channel-less items. A bare
+  // slice(0, MAX_ITEMS) applied after sorting across both channels would let
+  // enough prereleases push the one stable item below the cutoff, leaving
+  // stable users with no update offered at all.
+  const stable = release({ tag: 'v1.0.0', short: '1.0.0', versionCode: '10000' })
+  const betas = Array.from({ length: 30 }, (_, i) =>
+    release({
+      tag: `v1.1.0-beta.${i}`,
+      short: `1.1.0-beta.${i}`,
+      versionCode: String(20000 + i),
+      prerelease: true,
+    }),
+  )
+
+  const { items } = await build([stable, ...betas])
+
+  assert.equal(items.length, MAX_ITEMS)
+  assert.ok(items.some((item) => item.version === '10000'), 'the stable item must survive the cap')
+})
+
 test('assertFeedInvariants rejects an empty feed', () => {
   assert.throws(() => assertFeedInvariants([]), /empty appcast/)
 })
@@ -166,4 +196,14 @@ test('assertFeedInvariants accepts a well-formed mixed feed', async () => {
   ])
 
   assert.doesNotThrow(() => assertFeedInvariants(items))
+})
+
+test('assertFeedInvariants rejects two items sharing the same sparkle:version', async () => {
+  // Sparkle would pick between duplicates non-deterministically, so this is a
+  // generator bug to fail loudly on, not something to ship and hope resolves
+  // itself.
+  const { items } = await build([release({ tag: 'v1.4.9', short: '1.4.9', versionCode: '10100' })])
+  const duplicate = { ...items[0] }
+
+  assert.throws(() => assertFeedInvariants([...items, duplicate]), /duplicate/)
 })

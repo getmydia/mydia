@@ -42,4 +42,14 @@ for i in $(seq 1 "$item_count"); do
   fi
 done
 
-echo "merged appcast validated: $item_count item(s)"
+# xmllint --xpath cannot resolve the sparkle: prefix without a namespace
+# declaration on the command line, so this matches on local-name() instead.
+# A stable-channel client only ever sees channel-less items, so a feed with
+# none silently tells every stable install "no updates available" forever.
+stable_count=$(count_xpath "count(/rss/channel/item[not(*[local-name()='channel'])])")
+if [ "$stable_count" -lt 1 ]; then
+  echo "::error::merged appcast has no channel-less (stable) item; every stable-channel client would see no updates"
+  exit 1
+fi
+
+echo "merged appcast validated: $item_count item(s), $stable_count stable"

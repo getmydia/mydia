@@ -54,6 +54,20 @@ test('emits the beta channel element for a prerelease item', () => {
   assert.match(renderItem(item({ channel: 'beta' })), /<sparkle:channel>beta<\/sparkle:channel>/)
 })
 
+test('emits the minimumSystemVersion element when known', () => {
+  assert.match(
+    renderItem(item({ minimumSystemVersion: '14.0' })),
+    /<sparkle:minimumSystemVersion>14\.0<\/sparkle:minimumSystemVersion>/,
+  )
+})
+
+test('omits the minimumSystemVersion element for a historical item with no known value', () => {
+  // Releases published before this field existed have no true answer, and
+  // omitting the element (rather than stamping today's deployment target on
+  // them) is what keeps the claim honest.
+  assert.ok(!renderItem(item({ minimumSystemVersion: null })).includes('minimumSystemVersion'))
+})
+
 test('escapes an ampersand in the enclosure url', () => {
   const xml = renderItem(item({ enclosure: { url: 'https://x.test/a.dmg?a=1&b=2', signature: 'AAAA', length: '123' } }))
 

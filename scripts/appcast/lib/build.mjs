@@ -2,7 +2,6 @@ import { parseReleaseAppcast } from './parse.mjs'
 
 export const DMG_PATTERN = /^mydia-player-macos-v.*\.dmg$/
 export const APPCAST_ASSET = 'appcast.xml'
-export const MINIMUM_SYSTEM_VERSION = '14.0'
 export const BETA_CHANNEL = 'beta'
 export const MAX_ITEMS = 20
 
@@ -17,6 +16,9 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  * deterministic.
  */
 export function toRfc822(iso) {
+  if (typeof iso !== 'string') {
+    throw new Error(`invalid published_at: ${JSON.stringify(iso)}`)
+  }
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) {
     throw new Error(`invalid published_at: ${JSON.stringify(iso)}`)
@@ -72,7 +74,7 @@ export async function buildItems(releases, { loadAppcast, renderNotes }) {
         version: parsed.version,
         shortVersionString: parsed.shortVersionString,
         channel: prerelease ? BETA_CHANNEL : null,
-        minimumSystemVersion: MINIMUM_SYSTEM_VERSION,
+        minimumSystemVersion: parsed.minimumSystemVersion,
         pubDate: toRfc822(release.published_at),
         descriptionHtml: renderNotes(release.body ?? ''),
         enclosure: parsed.enclosure,
@@ -85,7 +87,30 @@ export async function buildItems(releases, { loadAppcast, renderNotes }) {
 
   items.sort((a, b) => Number(b.version) - Number(a.version))
 
-  return { items: items.slice(0, MAX_ITEMS), warnings }
+  return { items: capItems(items), warnings }
+}
+
+export const MIN_STABLE_ITEMS = 5
+
+/**
+ * Caps the feed while guaranteeing the newest stable items survive.
+ *
+ * Sparkle filters by allowed channel after fetching, so a stable-channel
+ * user only ever sees channel-less items. A long prerelease cycle could
+ * otherwise push every stable item past the cap and leave those users with
+ * no update offered at all, silently and indefinitely.
+ */
+export function capItems(items) {
+  const stable = items.filter((item) => !item.prerelease)
+  const reserved = stable.slice(0, MIN_STABLE_ITEMS)
+  const reservedVersions = new Set(reserved.map((item) => item.version))
+  const fill = items
+    .filter((item) => !reservedVersions.has(item.version))
+    .slice(0, Math.max(0, MAX_ITEMS - reserved.length))
+
+  return [...reserved, ...fill].sort(
+    (a, b) => Number(b.version) - Number(a.version),
+  )
 }
 
 /**
@@ -100,6 +125,8 @@ export function assertFeedInvariants(items) {
     throw new Error('refusing to emit an empty appcast: no release produced an item')
   }
 
+  const seenVersions = new Set()
+
   for (const item of items) {
     if (item.prerelease && item.channel !== BETA_CHANNEL) {
       throw new Error(`${item.title}: prerelease item must carry the ${BETA_CHANNEL} channel`)
@@ -110,6 +137,13 @@ export function assertFeedInvariants(items) {
     if (!/^\d+$/.test(item.version)) {
       throw new Error(`${item.title}: sparkle:version must be an integer, got ${item.version}`)
     }
+    // Sparkle would pick between duplicates non-deterministically, so two
+    // items claiming the same build number is a generator bug, not something
+    // to ship and hope Sparkle sorts out.
+    if (seenVersions.has(item.version)) {
+      throw new Error(`${item.title}: duplicate sparkle:version ${item.version}`)
+    }
+    seenVersions.add(item.version)
     const { url, signature, length } = item.enclosure ?? {}
     if (!url || !signature || !/^\d+$/.test(String(length))) {
       throw new Error(`${item.title}: enclosure needs a url, a signature and an integer length`)

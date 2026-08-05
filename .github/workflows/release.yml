@@ -818,6 +818,11 @@ jobs:
             exit 1
           fi
 
+          # The built app's Info.plist has LSMinimumSystemVersion resolved from
+          # MACOSX_DEPLOYMENT_TARGET, so this can never drift from the binary it
+          # describes the way a hardcoded constant in the appcast generator would.
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "Mydia Player.app/Contents/Info.plist")
+
           # sparkle:version must be the integer CFBundleVersion (VERSION_CODE) that
           # `flutter build macos` writes into the bundle — Sparkle compares
           # <sparkle:version> against the installed app's CFBundleVersion. The
@@ -831,6 +836,7 @@ jobs:
                 <title>Version ${VERSION}</title>
                 <sparkle:version>${VERSION_CODE}</sparkle:version>
                 <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>${MIN_OS}</sparkle:minimumSystemVersion>
                 <pubDate>$(date -R)</pubDate>
                 <enclosure url="${DMG_URL}"
                            ${SIGNATURE}

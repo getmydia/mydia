@@ -26,11 +26,18 @@ export function renderItem(item) {
     ? `\n      <sparkle:channel>${escapeXml(item.channel)}</sparkle:channel>`
     : ''
 
+  // Historical releases published before minimumSystemVersion was tracked
+  // carry null here. Omitting the element makes no claim about the minimum
+  // OS for those builds, which matches the legacy feed's behavior and is
+  // strictly more honest than stamping today's deployment target on them.
+  const minimumSystemVersionLine = item.minimumSystemVersion
+    ? `\n      <sparkle:minimumSystemVersion>${escapeXml(item.minimumSystemVersion)}</sparkle:minimumSystemVersion>`
+    : ''
+
   return `    <item>
       <title>${escapeXml(item.title)}</title>
       <sparkle:version>${escapeXml(item.version)}</sparkle:version>
-      <sparkle:shortVersionString>${escapeXml(item.shortVersionString)}</sparkle:shortVersionString>${channelLine}
-      <sparkle:minimumSystemVersion>${escapeXml(item.minimumSystemVersion)}</sparkle:minimumSystemVersion>
+      <sparkle:shortVersionString>${escapeXml(item.shortVersionString)}</sparkle:shortVersionString>${channelLine}${minimumSystemVersionLine}
       <pubDate>${escapeXml(item.pubDate)}</pubDate>
       <description>${wrapCdata(item.descriptionHtml)}</description>
       <enclosure url="${escapeXml(item.enclosure.url)}"

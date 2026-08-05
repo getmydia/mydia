@@ -40,6 +40,12 @@ export function parseReleaseAppcast(xml) {
     throw new Error('missing sparkle:shortVersionString')
   }
 
+  // Absent on every release published before this field started being
+  // emitted, so null (not a default) is the correct value for those items:
+  // making no claim about minimum OS is what the legacy feed already does.
+  const minimumSystemVersion =
+    item['sparkle:minimumSystemVersion'] != null ? String(item['sparkle:minimumSystemVersion']) : null
+
   const enclosure = item.enclosure
   if (!enclosure) {
     throw new Error('item has no enclosure')
@@ -59,5 +65,5 @@ export function parseReleaseAppcast(xml) {
     throw new Error(`enclosure length must be an integer, got ${JSON.stringify(length)}`)
   }
 
-  return { version, shortVersionString, enclosure: { url, signature, length } }
+  return { version, shortVersionString, minimumSystemVersion, enclosure: { url, signature, length } }
 }

@@ -3,10 +3,13 @@ import assert from 'node:assert/strict'
 import { parseReleaseAppcast } from '../lib/parse.mjs'
 
 /** A per-release appcast in exactly the shape release.yml emits. */
-function releaseAppcast({ version = '10123', short = '1.5.0', enclosure } = {}) {
+function releaseAppcast({ version = '10123', short = '1.5.0', minimumSystemVersion = '14.0', enclosure } = {}) {
   const enc =
     enclosure ??
     '<enclosure url="https://example.test/a.dmg" sparkle:edSignature="AAAA" length="123" type="application/octet-stream" />'
+  const minOsLine = minimumSystemVersion
+    ? `<sparkle:minimumSystemVersion>${minimumSystemVersion}</sparkle:minimumSystemVersion>`
+    : ''
   return `<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
@@ -15,6 +18,7 @@ function releaseAppcast({ version = '10123', short = '1.5.0', enclosure } = {}) 
       <title>Version ${short}</title>
       <sparkle:version>${version}</sparkle:version>
       <sparkle:shortVersionString>${short}</sparkle:shortVersionString>
+      ${minOsLine}
       <pubDate>Mon, 04 Aug 2026 12:00:00 +0000</pubDate>
       ${enc}
     </item>
@@ -22,18 +26,28 @@ function releaseAppcast({ version = '10123', short = '1.5.0', enclosure } = {}) 
 </rss>`
 }
 
-test('extracts version, short version and the signed enclosure', () => {
+test('extracts version, short version, minimum OS and the signed enclosure', () => {
   const result = parseReleaseAppcast(releaseAppcast())
 
   assert.deepEqual(result, {
     version: '10123',
     shortVersionString: '1.5.0',
+    minimumSystemVersion: '14.0',
     enclosure: {
       url: 'https://example.test/a.dmg',
       signature: 'AAAA',
       length: '123',
     },
   })
+})
+
+test('returns a null minimumSystemVersion when the element is absent', () => {
+  // Every release published before this field started being emitted lacks
+  // it. null (not a default) is the only honest value: it makes no claim
+  // about those builds' minimum OS, matching the legacy feed's behavior.
+  const result = parseReleaseAppcast(releaseAppcast({ minimumSystemVersion: null }))
+
+  assert.equal(result.minimumSystemVersion, null)
 })
 
 test('keeps a numeric-looking short version as a string', () => {
