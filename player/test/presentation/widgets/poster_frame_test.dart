@@ -3,11 +3,14 @@
 // overlays, and hover overlay without owning any of their appearance.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/poster_frame.dart';
 
+import '../../test_utils/mock_network_images.dart';
 import '../../test_utils/poster_contract.dart';
 
 const _placeholder = ColoredBox(
@@ -104,6 +107,146 @@ void main() {
         clip.borderRadius,
         BorderRadius.circular(DepthTokens.radiusPoster),
       );
+    });
+  });
+
+  group('PosterFrame ambient backdrop staleness (regression)', () {
+    // These three tests build their own ProviderContainer (rather than the
+    // shared posterHost, which wraps a plain ProviderScope) so the backdrop
+    // state can be inspected directly, and attach a listener the way
+    // ambient_backdrop_tint_test.dart does: the real shell always watches
+    // this provider, and it is autoDispose, so an unwatched container would
+    // drop the hover state between writes and mask the very staleness this
+    // suite exists to catch.
+    Widget host(ProviderContainer container, Widget child) {
+      return UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(width: 140, height: 210, child: child),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets(
+        "republishes the backdrop when a hovered poster's artwork changes",
+        (tester) async {
+      await mockNetworkImages(() async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        container.listen(ambientBackdropControllerProvider, (_, __) {});
+
+        const urlA = 'https://example.com/a.jpg';
+        const urlB = 'https://example.com/b.jpg';
+
+        await tester.pumpWidget(
+          host(
+            container,
+            const PosterFrame(imageUrl: urlA, placeholder: _placeholder),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await hoverOver(tester, find.byType(PosterFrame));
+
+        expect(
+          container.read(ambientBackdropControllerProvider).imageUrl,
+          urlA,
+        );
+
+        // Same widget type, same position: Flutter reuses the element and
+        // preserves State, exactly like a scrolling grid recycling an item
+        // under a stationary cursor. Neither onEnter nor onExit fires here.
+        await tester.pumpWidget(
+          host(
+            container,
+            const PosterFrame(imageUrl: urlB, placeholder: _placeholder),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          container.read(ambientBackdropControllerProvider).imageUrl,
+          urlB,
+        );
+      });
+    });
+
+    testWidgets('clears the backdrop when a hovered poster leaves the tree',
+        (tester) async {
+      await mockNetworkImages(() async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        container.listen(ambientBackdropControllerProvider, (_, __) {});
+
+        const url = 'https://example.com/a.jpg';
+
+        await tester.pumpWidget(
+          host(
+            container,
+            const PosterFrame(imageUrl: url, placeholder: _placeholder),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await hoverOver(tester, find.byType(PosterFrame));
+
+        expect(
+          container.read(ambientBackdropControllerProvider).imageUrl,
+          url,
+        );
+
+        // No PosterFrame in this tree at all. MouseRegion's own docs warn
+        // onExit may not fire when the region unmounts while hovered, so
+        // this must not depend on it.
+        await tester.pumpWidget(host(container, const SizedBox.shrink()));
+        await tester.pump();
+
+        expect(
+          container.read(ambientBackdropControllerProvider),
+          BackdropSource.none,
+        );
+      });
+    });
+
+    testWidgets(
+        "a hovered poster whose artwork becomes null clears the override",
+        (tester) async {
+      await mockNetworkImages(() async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        container.listen(ambientBackdropControllerProvider, (_, __) {});
+
+        const url = 'https://example.com/a.jpg';
+
+        await tester.pumpWidget(
+          host(
+            container,
+            const PosterFrame(imageUrl: url, placeholder: _placeholder),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await hoverOver(tester, find.byType(PosterFrame));
+
+        expect(
+          container.read(ambientBackdropControllerProvider).imageUrl,
+          url,
+        );
+
+        await tester.pumpWidget(
+          host(
+            container,
+            const PosterFrame(placeholder: _placeholder),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          container.read(ambientBackdropControllerProvider),
+          BackdropSource.none,
+        );
+      });
     });
   });
 

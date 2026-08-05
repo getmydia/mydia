@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cache/poster_cache_manager.dart';
@@ -83,9 +84,32 @@ class PosterFrame extends ConsumerStatefulWidget {
 class _PosterFrameState extends ConsumerState<PosterFrame> {
   bool _isHovered = false;
 
+  /// Captured eagerly in [initState], rather than read fresh via [ref] from
+  /// [dispose].
+  ///
+  /// Riverpod's own `ref` surface throws once a widget starts unmounting —
+  /// confirmed empirically: `ref.read` from [dispose] raises "Using ref when
+  /// a widget is about to or has been unmounted is unsafe" as soon as any
+  /// listener is attached to the provider, which is always true in the real
+  /// app since the shell watches it for the backdrop crossfade. Riverpod's
+  /// own error message for this is to save the provider state in a field
+  /// instead, which is what this does: the notifier instance itself remains
+  /// safe to call after unmount, only the [ref] accessor is not. A `late
+  /// final` field initializer would evaluate lazily on first read — which,
+  /// for a poster that is never hovered until it is disposed, is *inside*
+  /// [dispose] itself, defeating the point — so this is assigned eagerly in
+  /// [initState] instead.
+  late final AmbientBackdropController _backdropController;
+
   bool get _hasArtwork {
     final url = widget.imageUrl;
     return url != null && url.isNotEmpty;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _backdropController = ref.read(ambientBackdropControllerProvider.notifier);
   }
 
   void _handleHoverEnter() {
@@ -103,6 +127,59 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
   void _handleHoverExit() {
     setState(() => _isHovered = false);
     clearBackdropHover(ref);
+  }
+
+  @override
+  void didUpdateWidget(covariant PosterFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A hovered element can be recycled onto different data under a
+    // stationary cursor (a scrolling grid, say), which fires neither onEnter
+    // nor onExit. Without this, the backdrop would stay pinned to whichever
+    // poster last triggered a real hover event.
+    if (_isHovered && widget.imageUrl != oldWidget.imageUrl) {
+      final hasArtwork = _hasArtwork;
+      final url = widget.imageUrl;
+      // didUpdateWidget runs while the widget tree is still building, and
+      // Riverpod forbids writing provider state synchronously from there
+      // (confirmed empirically: it throws "Tried to modify a provider while
+      // the widget tree was building"). Deferring to a post-frame callback
+      // mirrors publishBackdropSource just below, which defers for the same
+      // reason.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (hasArtwork) {
+          _backdropController.setHover(BackdropSource(imageUrl: url, id: url));
+        } else {
+          // The new data has no artwork; leaving the previous poster's art up
+          // would misattribute it to whatever is now on screen.
+          _backdropController.clearHover();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    // MouseRegion's onExit is not guaranteed to fire when the region is
+    // unmounted while hovered (scrolling a hovered poster out of the tree,
+    // navigating away). Clear any override this instance published so it
+    // doesn't strand the backdrop on artwork no longer on screen.
+    //
+    // This cannot call _backdropController.clearHover() directly here, even
+    // via the captured controller (which sidesteps the separate ref-unsafety
+    // issue documented on that field). Confirmed empirically: `dispose` is
+    // itself one of the widget life-cycles Riverpod forbids synchronous
+    // provider writes from — unmounting runs inside BuildOwner.finalizeTree's
+    // build lock, and writing there throws "Tried to modify a provider while
+    // the widget tree was building" regardless of how the notifier was
+    // obtained. So this defers, the same way publishBackdropSource and
+    // didUpdateWidget above do.
+    if (_isHovered) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _backdropController.clearHover();
+      });
+    }
+    super.dispose();
   }
 
   @override
