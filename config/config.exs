@@ -356,6 +356,13 @@ config :mydia, :streaming,
   # :always - Always re-encode (original behavior, slower but ensures consistent output)
   transcode_policy: :copy_when_compatible
 
+# The transcode height ceiling is deliberately NOT here. This file is
+# compile-time and baked into the release, so a key here is unreachable to an
+# operator running the published image. It lives in the layered runtime config
+# instead (lib/mydia/config/schema.ex, the :streaming embed), which makes it
+# settable through MAX_TRANSCODE_HEIGHT, config.yml, or the settings UI. See
+# Mydia.Streaming.FfmpegHlsTranscoder.effective_max_height/1.
+
 # Episode monitor search limits
 # Prevents excessive API usage that exhausts indexer quotas
 config :mydia, :episode_monitor,

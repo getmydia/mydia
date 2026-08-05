@@ -27,6 +27,7 @@ defmodule Mydia.Config.Schema do
           metadata: __MODULE__.Metadata.t() | nil,
           downloads: __MODULE__.Downloads.t() | nil,
           upgrades: __MODULE__.Upgrades.t() | nil,
+          streaming: __MODULE__.Streaming.t() | nil,
           logging: __MODULE__.Logging.t() | nil,
           oban: __MODULE__.Oban.t() | nil,
           plugins: __MODULE__.Plugins.t() | nil,
@@ -105,6 +106,20 @@ defmodule Mydia.Config.Schema do
       # Caps indexer searches (not items) a single sweep run may cost, since
       # upgrade-eligible items can be the whole library.
       field :sweep_batch_size, :integer, default: 50
+    end
+
+    embeds_one :streaming, Streaming, on_replace: :update, primary_key: false do
+      # Ceiling, in pixels, on the output height of any HLS transcode. nil
+      # means no ceiling: a transcode keeps the source resolution.
+      #
+      # This exists because a forced transcode no longer downgrades to 720p
+      # on its own, so a 4K file with an incompatible codec now encodes at 4K,
+      # which a small home server may not sustain in realtime. An operator on
+      # constrained hardware sets this once instead of configuring every
+      # client. It composes with the per-request height a player asks for by
+      # taking whichever is lower. See
+      # Mydia.Streaming.FfmpegHlsTranscoder.effective_max_height/1.
+      field :max_transcode_height, :integer
     end
 
     embeds_one :logging, Logging, on_replace: :update, primary_key: false do
@@ -241,6 +256,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:metadata, with: &metadata_changeset/2)
     |> cast_embed(:downloads, with: &downloads_changeset/2)
     |> cast_embed(:upgrades, with: &upgrades_changeset/2)
+    |> cast_embed(:streaming, with: &streaming_changeset/2)
     |> cast_embed(:logging, with: &logging_changeset/2)
     |> cast_embed(:oban, with: &oban_changeset/2)
     |> cast_embed(:plugins, with: &plugins_changeset/2)
@@ -344,6 +360,15 @@ defmodule Mydia.Config.Schema do
     |> cast(attrs, [:sweep_enabled, :sweep_batch_size])
     |> validate_required([:sweep_enabled, :sweep_batch_size])
     |> validate_number(:sweep_batch_size, greater_than: 0)
+  end
+
+  defp streaming_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [:max_transcode_height])
+    # Not validate_required: nil is the default and means "no ceiling". A
+    # zero or negative ceiling would scale every transcode to nothing, so it
+    # is rejected here rather than discovered as a dead encoder later.
+    |> validate_number(:max_transcode_height, greater_than: 0)
   end
 
   defp logging_changeset(schema, attrs) do
@@ -715,6 +740,7 @@ defmodule Mydia.Config.Schema do
       metadata: %__MODULE__.Metadata{},
       downloads: %__MODULE__.Downloads{},
       upgrades: %__MODULE__.Upgrades{},
+      streaming: %__MODULE__.Streaming{},
       logging: %__MODULE__.Logging{},
       oban: %__MODULE__.Oban{},
       plugins: %__MODULE__.Plugins{},

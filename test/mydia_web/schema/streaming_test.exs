@@ -22,6 +22,7 @@ defmodule MydiaWeb.Schema.StreamingTest do
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
   alias Mydia.SettingsFixtures
+  alias MydiaWeb.Schema.Resolvers.StreamingResolver
 
   @moduletag :requires_ffmpeg
 
@@ -48,6 +49,16 @@ defmodule MydiaWeb.Schema.StreamingTest do
   @end_streaming_session_mutation """
   mutation EndStreamingSession($sessionId: String!) {
     endStreamingSession(sessionId: $sessionId)
+  }
+  """
+
+  @echo_quality_mutation """
+  mutation StartStreamingSession($fileId: ID!, $strategy: StreamingStrategy!) {
+    startStreamingSession(fileId: $fileId, strategy: $strategy) {
+      sessionId
+      maxBitrate
+      maxHeight
+    }
   }
   """
 
@@ -109,7 +120,48 @@ defmodule MydiaWeb.Schema.StreamingTest do
         stop_session(session["sessionId"], user)
       end
     end
+
+    @tag :tmp_dir
+    test "echoes the operator's transcode ceiling to a client that asked for nothing",
+         %{tmp_dir: tmp_dir} do
+      # The echo exists to be honest with clients. Composing the ceiling only
+      # inside the transcoder made this reply say "no height cap" while the
+      # encode really did scale, so a viewer on a direct connection saw
+      # "Original" over a downscaled stream.
+      user = AccountsFixtures.user_fixture()
+      media_file = cold_media_file(tmp_dir)
+
+      original = Application.get_env(:mydia, :runtime_config)
+      on_exit(fn -> restore_runtime_config(original) end)
+      put_transcode_ceiling(480)
+
+      result =
+        Absinthe.run(
+          @echo_quality_mutation,
+          MydiaWeb.Schema,
+          variables: %{"fileId" => media_file.id, "strategy" => "TRANSCODE"},
+          context: %{current_user: user}
+        )
+
+      assert {:ok, %{data: %{"startStreamingSession" => session}}} = result
+
+      try do
+        assert session["maxHeight"] == 480
+        assert session["maxBitrate"] == nil
+      after
+        stop_session(session["sessionId"], user)
+      end
+    end
   end
+
+  defp put_transcode_ceiling(height) do
+    defaults = Mydia.Config.Schema.defaults()
+    streaming = %{defaults.streaming | max_transcode_height: height}
+    Application.put_env(:mydia, :runtime_config, %{defaults | streaming: streaming})
+  end
+
+  defp restore_runtime_config(nil), do: Application.delete_env(:mydia, :runtime_config)
+  defp restore_runtime_config(config), do: Application.put_env(:mydia, :runtime_config, config)
 
   # A real, tiny (2s) H.264+AAC file so the cold-file path runs an actual
   # ffprobe and an actual FFmpeg HLS transcode, not a stub. Video+audio
@@ -151,6 +203,56 @@ defmodule MydiaWeb.Schema.StreamingTest do
       # these tests override that on purpose.
       analyzed_at: nil
     })
+  end
+
+  describe "start_streaming_session quality clamping" do
+    test "passes a direct connection's requested values through unchanged" do
+      assert StreamingResolver.effective_quality(nil, 8000, 1080) == {8000, 1080}
+    end
+
+    test "a relay cannot be talked out of its ceiling with a zero height" do
+      # Elixir treats 0 as truthy, so `requested || @cap` does not fall back and
+      # `min(0, 720)` is 0. The transcoder declines to scale to a non-positive
+      # height, so without normalisation a relay client got native resolution
+      # over the very infrastructure the ceiling protects.
+      assert StreamingResolver.effective_quality("relay", 0, 0) == {2000, 720}
+    end
+
+    test "a relay cannot be talked out of its ceiling with a negative height" do
+      assert StreamingResolver.effective_quality("relay", -1, -1) == {2000, 720}
+    end
+
+    test "a non-positive cap on a direct connection reads as no cap" do
+      # Nothing to protect here, but the echo must not report 0 as an applied
+      # ceiling — the client labels its quality control from these values.
+      assert StreamingResolver.effective_quality(nil, 0, 0) == {nil, nil}
+    end
+
+    test "leaves an uncapped direct request uncapped" do
+      assert StreamingResolver.effective_quality(nil, nil, nil) == {nil, nil}
+    end
+
+    test "clamps a relay connection to the relay ceiling" do
+      # A relay carries the stream through Mydia's own infrastructure, so the
+      # cap is not negotiable by the client.
+      assert StreamingResolver.effective_quality("relay", 8000, 1080) == {2000, 720}
+    end
+
+    test "caps an uncapped relay request rather than letting it run free" do
+      assert StreamingResolver.effective_quality("relay", nil, nil) == {2000, 720}
+    end
+
+    test "honours a relay request already below the ceiling" do
+      assert StreamingResolver.effective_quality("relay", 800, 360) == {800, 360}
+    end
+
+    test "clamps each half of the pair independently" do
+      # The two min/2 calls are separate, so a request that is under the
+      # ceiling on one axis and over it on the other must come back mixed
+      # rather than clamped or passed through wholesale.
+      assert StreamingResolver.effective_quality("relay", 800, 1080) == {800, 720}
+      assert StreamingResolver.effective_quality("relay", 8000, 360) == {2000, 360}
+    end
   end
 
   defp stop_session(session_id, user) do

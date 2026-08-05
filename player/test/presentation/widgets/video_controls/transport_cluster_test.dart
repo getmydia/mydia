@@ -42,11 +42,15 @@ void main() {
       expect(find.byKey(TransportSurface.previousEpisodeKey), findsNothing);
       expect(find.byKey(TransportSurface.nextEpisodeKey), findsNothing);
 
-      // Still the same 48px play/pause button, not some other size.
+      // Still the same 40px play/pause button, not some other size.
+      //
+      // 40, not the original 48: the transport cluster was compacted so a
+      // 4th secondary button fits below the desktop tier. See
+      // transport_cluster.dart's `gap` dartdoc.
       final button = tester.widget<ControlButton>(
         find.byKey(TransportSurface.playPauseKey),
       );
-      expect(button.size, 48);
+      expect(button.size, 40);
     });
 
     testWidgets('shows episode buttons when callbacks are given',
@@ -65,7 +69,12 @@ void main() {
       expect(find.byKey(TransportSurface.nextEpisodeKey), findsOneWidget);
     });
 
-    testWidgets('play is 1.25x its skip neighbours, not 1.7x', (tester) async {
+    testWidgets('play is 1.2x its skip neighbours, not 1.7x', (tester) async {
+      // Play/skip iconSizes dropped from 30/24 to 24/20 alongside the
+      // transport cluster's compaction (48/44px buttons to 40/36px), but the
+      // proportion between them is deliberately preserved at roughly the
+      // same ratio as before (1.25x -> 1.2x), not left at the old absolute
+      // sizes. See transport_cluster.dart's `gap` dartdoc.
       await tester.pumpWidget(
         _host(const TransportSurface(isPlaying: false)),
       );
@@ -77,12 +86,15 @@ void main() {
         find.byKey(TransportSurface.back10Key),
       );
 
-      expect(play.iconSize, 30);
-      expect(skip.iconSize, 24);
-      expect(play.iconSize / skip.iconSize, closeTo(1.25, 0.01));
+      expect(play.iconSize, 24);
+      expect(skip.iconSize, 20);
+      expect(play.iconSize / skip.iconSize, closeTo(1.2, 0.01));
     });
 
-    testWidgets('every target meets the 44px minimum', (tester) async {
+    testWidgets('every target meets the 36px minimum', (tester) async {
+      // 36, not ControlButton's 44px default: the transport cluster was
+      // compacted so a 4th secondary button fits below the desktop tier.
+      // See transport_cluster.dart's `gap` dartdoc.
       await tester.pumpWidget(
         _host(
           TransportSurface(
@@ -101,7 +113,7 @@ void main() {
         TransportSurface.nextEpisodeKey,
       ]) {
         final button = tester.widget<ControlButton>(find.byKey(key));
-        expect(button.size, greaterThanOrEqualTo(44), reason: '$key');
+        expect(button.size, greaterThanOrEqualTo(36), reason: '$key');
       }
     });
 
@@ -189,9 +201,13 @@ void main() {
     });
 
     testWidgets(
-        'targets stay left-to-right ordered with uniform 8px gaps, '
+        'targets stay left-to-right ordered with uniform 2px gaps, '
         'with or without episode buttons', (tester) async {
-      // Without episode buttons: back10, play, forward10 in order with 8px
+      // 2, not the original 8: the transport cluster was compacted so a 4th
+      // secondary button fits below the desktop tier. See
+      // transport_cluster.dart's `gap` dartdoc.
+      //
+      // Without episode buttons: back10, play, forward10 in order with 2px
       // gaps between each hit-target edge.
       await tester.pumpWidget(
         _host(const TransportSurface(isPlaying: false)),
@@ -205,11 +221,11 @@ void main() {
 
       expect(backRect.right, lessThan(playRect.left));
       expect(playRect.right, lessThan(forwardRect.left));
-      expect(playRect.left - backRect.right, closeTo(8, 0.5));
-      expect(forwardRect.left - playRect.right, closeTo(8, 0.5));
+      expect(playRect.left - backRect.right, closeTo(2, 0.5));
+      expect(forwardRect.left - playRect.right, closeTo(2, 0.5));
 
       // With episode buttons: prev sits left of back10 and next sits right of
-      // forward10, each separated by the same 8px gap, and the whole row
+      // forward10, each separated by the same 2px gap, and the whole row
       // stays centred (the added prev/next mass is symmetric).
       await tester.pumpWidget(
         _host(
@@ -237,10 +253,10 @@ void main() {
       expect(playRect2.right, lessThan(forwardRect2.left));
       expect(forwardRect2.right, lessThan(nextRect.left));
 
-      expect(backRect2.left - prevRect.right, closeTo(8, 0.5));
-      expect(playRect2.left - backRect2.right, closeTo(8, 0.5));
-      expect(forwardRect2.left - playRect2.right, closeTo(8, 0.5));
-      expect(nextRect.left - forwardRect2.right, closeTo(8, 0.5));
+      expect(backRect2.left - prevRect.right, closeTo(2, 0.5));
+      expect(playRect2.left - backRect2.right, closeTo(2, 0.5));
+      expect(forwardRect2.left - playRect2.right, closeTo(2, 0.5));
+      expect(nextRect.left - forwardRect2.right, closeTo(2, 0.5));
 
       // The row is symmetric about its own centre: prev/next add equal
       // widths on either side, so the play button's centre doesn't shift.

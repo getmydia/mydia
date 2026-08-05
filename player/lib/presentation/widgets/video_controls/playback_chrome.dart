@@ -528,14 +528,11 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                         secondary: SecondaryCluster(
                           onSubtitleTap: widget.onSubtitleTap,
                           onAudioTap: widget.onAudioTap,
-                          // Gated on the panel's own tier, not passed through
-                          // bare: a 4th 40px button raises SecondaryCluster's
-                          // floor from 120 to 160px each side, which only the
-                          // desktop tier's width budget can absorb (see
-                          // PanelMetrics.showQuality's dartdoc). Below that,
-                          // a narrow web window falls back to the same
-                          // 3-button layout native mobile/tablet already
-                          // show, since onQualityTap is web-only regardless.
+                          // Passed through `metrics.showQuality` rather than
+                          // bare, even though every tier shows it today: see
+                          // that field's dartdoc — it stays a real per-tier
+                          // lever for the tier that can't absorb a future
+                          // 5th control.
                           onQualityTap:
                               metrics.showQuality ? widget.onQualityTap : null,
                           onFullscreenTap: widget.onFullscreenTap,
@@ -545,6 +542,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                           selectedSubtitleLabel: widget.selectedSubtitleLabel,
                           selectedQualityLabel: widget.selectedQualityLabel,
                           isFullscreen: widget.isFullscreen,
+                          gap: metrics.secondaryGap,
                         ),
                         scrubber: _ScrubberRow(
                           player: widget.player,

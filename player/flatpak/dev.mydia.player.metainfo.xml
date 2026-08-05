@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.mydia.player</id>
+
+  <name>Mydia Player</name>
+  <summary>Watch the TV shows and movies on your Mydia server</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+
+  <developer id="dev.mydia">
+    <name>Mydia</name>
+  </developer>
+
+  <description>
+    <p>
+      Mydia Player is the desktop client for Mydia, a self-hosted media manager
+      for TV shows and movies. Point it at your own Mydia server and stream your
+      library, either over the local network or remotely through an encrypted
+      peer-to-peer connection.
+    </p>
+    <p>What it does:</p>
+    <ul>
+      <li>Streams the TV shows and movies from a Mydia server you run yourself</li>
+      <li>Reaches that server remotely over an encrypted peer-to-peer connection, with no port forwarding</li>
+      <li>Keeps watch progress in sync with every other device signed in to the same server</li>
+      <li>Bundles its own media stack, so no codec packages need installing</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">dev.mydia.player.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://mydia.dev/img/player-1.png</image>
+      <caption>Browsing a library</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://mydia.dev/img/player-2.png</image>
+      <caption>Playing an episode</caption>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://mydia.dev</url>
+  <url type="bugtracker">https://github.com/getmydia/mydia/issues</url>
+  <url type="help">https://docs.mydia.dev</url>
+  <url type="vcs-browser">https://github.com/getmydia/mydia</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.0.0" date="2026-08-04"/>
+  </releases>
+</component>

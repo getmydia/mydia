@@ -243,8 +243,9 @@ void main() {
   // --- Panel geometry, derived from ChromePanel's own public constants plus
   // representative row/glyph dimensions (ChromePanel doesn't own row content
   // sizing, so these mirror what the rest of this test suite already uses:
-  // a 48px transport row and a 32px scrubber row).
-  const row1Height = 48.0;
+  // a 40px transport row — TransportSurface's play/pause button, its
+  // tallest element — and a 32px scrubber row).
+  const row1Height = 40.0;
   const row2Height = 32.0;
   const panelHeight = ChromePanel.verticalPadding * 2 +
       row1Height +
@@ -256,10 +257,10 @@ void main() {
   final row2Top = row1Bottom + ChromePanel.rowGap;
 
   // The tallest icon glyph actually used in row 1 is TransportSurface's
-  // play/pause button (`iconSize: 30`, in a `size: 48` button matching the
-  // row's own height) — the worst case, since a taller glyph reaches closer
-  // to the row's edges where fill is sheerest.
-  const controlGlyphHeight = 30.0;
+  // play/pause button (`iconSize: 24`, in a `size: 40` button) — the worst
+  // case, since a taller glyph reaches closer to the row's edges where fill
+  // is sheerest.
+  const controlGlyphHeight = 24.0;
   final controlGlyphTop = row1Top + (row1Height - controlGlyphHeight) / 2;
   final controlGlyphBottom = controlGlyphTop + controlGlyphHeight;
 

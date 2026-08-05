@@ -34,6 +34,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   SortOption _currentSort = SortOption.recentlyAdded;
   bool _showSearch = false;
 
+  /// Height of the search row when it is expanded. Matches the
+  /// `AnimatedContainer` in `_buildAppBar` below.
+  static const double _searchRowHeight = 56;
+
+  /// The app bar's settled height, excluding the status bar inset.
+  ///
+  /// The single source of truth for three call sites that used to carry their
+  /// own copy: `preferredSize`, the freshness inset, and the scroll padding.
+  /// The old copies all said 120 while the bar actually builds 112.
+  double _barHeight(bool showSearch) =>
+      kToolbarHeight + (showSearch ? _searchRowHeight : 0);
+
   @override
   void initState() {
     super.initState();
@@ -111,61 +123,82 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     // On desktop, always show search bar expanded
     final effectiveShowSearch = isDesktop || _showSearch;
 
+    final barHeight = _barHeight(effectiveShowSearch);
+    // Read MediaQuery *here*, above the `Scaffold`. Inside the body of a
+    // `Scaffold(extendBodyBehindAppBar: true)` Flutter rewrites `padding.top`
+    // to the app bar's own bottom edge (see `_BodyBuilder` in
+    // material/scaffold.dart), so any descendant that reads it and adds
+    // `barHeight` again counts the bar twice. That was this screen's bug: the
+    // grid read it from a `LayoutBuilder` inside the body and sat 128px too
+    // low, while the list read it from this context and was nearly right.
+    final chromeTop = freshnessTopInset(context, appBarHeight: barHeight);
+    final scrollTopPadding = chromeTop + 8;
+
     // Library grids use the calm static backdrop (no per-title artwork).
     publishBackdropSource(ref, BackdropSource.none);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(title, icon, isDesktop, effectiveShowSearch),
-      body: Column(
+      appBar:
+          _buildAppBar(title, icon, isDesktop, effectiveShowSearch, barHeight),
+      // A `Stack`, not a `Column`: `FreshnessHeader` carries a top inset that
+      // exists purely to clear an app bar this body already extends behind. As
+      // a `Column` sibling that inset was charged as layout height too, so
+      // every background refetch shoved the whole grid down by ~161px on top
+      // of its own padding. Overlaying keeps the header in the same pixels
+      // without it owning any of the scroll view's space.
+      body: Stack(
         children: [
-          FreshnessHeader(
-            queryKeys: [
-              widget.libraryType == LibraryType.movies
-                  ? QueryKeys.moviesList
-                  : QueryKeys.tvShowsList,
-            ],
-            topInset: freshnessTopInset(
-              context,
-              appBarHeight: effectiveShowSearch ? 120 : kToolbarHeight,
+          RefreshIndicator(
+            // Without this the spinner drops from y=0, behind the glass bar.
+            edgeOffset: chromeTop,
+            onRefresh: () async {
+              await ref
+                  .read(libraryControllerProvider(widget.libraryType).notifier)
+                  .refresh();
+            },
+            child: libraryData.when(
+              loading: () => _buildLoadingView(),
+              error: (error, stackTrace) => _buildErrorView(error),
+              data: (data) {
+                if (data.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                // Filter items based on search query
+                final searchQuery = _searchController.text.toLowerCase().trim();
+                final filteredItems = searchQuery.isEmpty
+                    ? data.items
+                    : data.items
+                        .where((item) =>
+                            item.title.toLowerCase().contains(searchQuery))
+                        .toList();
+
+                if (filteredItems.isEmpty && searchQuery.isNotEmpty) {
+                  return _buildNoSearchResultsState(searchQuery);
+                }
+
+                return _viewMode == ViewMode.grid
+                    ? _buildGridView(context, filteredItems, scrollTopPadding)
+                    : _buildListView(context, filteredItems, scrollTopPadding);
+              },
             ),
           ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref
-                    .read(
-                        libraryControllerProvider(widget.libraryType).notifier)
-                    .refresh();
-              },
-              child: libraryData.when(
-                loading: () => _buildLoadingView(),
-                error: (error, stackTrace) => _buildErrorView(error),
-                data: (data) {
-                  if (data.isEmpty) {
-                    return _buildEmptyState();
-                  }
-
-                  // Filter items based on search query
-                  final searchQuery =
-                      _searchController.text.toLowerCase().trim();
-                  final filteredItems = searchQuery.isEmpty
-                      ? data.items
-                      : data.items
-                          .where((item) =>
-                              item.title.toLowerCase().contains(searchQuery))
-                          .toList();
-
-                  if (filteredItems.isEmpty && searchQuery.isNotEmpty) {
-                    return _buildNoSearchResultsState(searchQuery);
-                  }
-
-                  return _viewMode == ViewMode.grid
-                      ? _buildGridView(context, filteredItems)
-                      : _buildListView(context, filteredItems);
-                },
-              ),
+          // `Positioned` rather than a bare `Stack` child so the header spans
+          // the full width explicitly instead of relying on loose constraints
+          // plus the banner's own `width: double.infinity`.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: FreshnessHeader(
+              queryKeys: [
+                widget.libraryType == LibraryType.movies
+                    ? QueryKeys.moviesList
+                    : QueryKeys.tvShowsList,
+              ],
+              topInset: chromeTop,
             ),
           ),
         ],
@@ -173,12 +206,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(
-      String title, IconData icon, bool isDesktop, bool showSearch) {
+  PreferredSizeWidget _buildAppBar(String title, IconData icon, bool isDesktop,
+      bool showSearch, double barHeight) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
 
     return PreferredSize(
-      preferredSize: Size.fromHeight(showSearch ? 120 : kToolbarHeight),
+      preferredSize: Size.fromHeight(barHeight),
       child: GlassSurface.appBar(
         opacity: 0.85,
         child: SafeArea(
@@ -266,7 +299,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
-                height: showSearch ? 56 : 0,
+                height: showSearch ? _searchRowHeight : 0,
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 200),
                   opacity: showSearch ? 1.0 : 0.0,
@@ -473,22 +506,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  double _getTopPadding(BuildContext context, bool showSearch) {
-    final safeAreaTop = MediaQuery.of(context).padding.top;
-    final appBarHeight = showSearch ? 120.0 : kToolbarHeight;
-    return safeAreaTop + appBarHeight + 8;
-  }
-
-  Widget _buildGridView(BuildContext context, List items) {
+  Widget _buildGridView(BuildContext context, List items, double topPadding) {
     final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
-    final effectiveShowSearch = isDesktop || _showSearch;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
-        final topPadding = _getTopPadding(context, effectiveShowSearch);
         // Less bottom padding on desktop (no bottom nav)
         final bottomPadding = isDesktop ? 32.0 : 100.0;
 
@@ -519,11 +544,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildListView(BuildContext context, List items) {
+  Widget _buildListView(BuildContext context, List items, double topPadding) {
     final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final effectiveShowSearch = isDesktop || _showSearch;
-    final topPadding = _getTopPadding(context, effectiveShowSearch);
     final bottomPadding = isDesktop ? 32.0 : 100.0;
 
     return ListView.builder(

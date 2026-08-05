@@ -26,40 +26,43 @@ class PanelMetrics {
   /// Whether controls should use enlarged touch hit areas.
   final bool touchTargets;
 
-  /// Whether `SecondaryCluster`'s web-only quality button may render.
+  /// Whether `SecondaryCluster`'s quality button renders.
   ///
-  /// True only at the desktop tier (>= [Breakpoints.tablet] in this file's
-  /// own three-tier scheme). This is a real overflow-budget lever, not a
-  /// platform check in disguise: `onQualityTap` being non-null is a *web*
-  /// signal (native builds never pass it — see `player_screen.dart`), but
-  /// whether the resulting 4th 40px button actually *fits* is a *width*
-  /// question, so the gate belongs here, next to the rest of the per-tier
-  /// budget, rather than on `SecondaryCluster` (which has no business
-  /// knowing about platforms) or on a bare `kIsWeb` check at the call site.
+  /// True at every tier. It was previously true only on desktop, for two
+  /// reasons that no longer hold. The first was that a non-null
+  /// `onQualityTap` was a *web* signal, because `player_screen.dart` gated
+  /// the callback on `PlatformFeatures.isWeb`; that gate is gone and the
+  /// control is wired on every platform. The second was budget: a 4th 40px
+  /// button raised `SecondaryCluster`'s floor from 120 to 160px each side,
+  /// which genuinely could not be closed at the tablet or mobile tiers by
+  /// any padding or width-factor lever.
   ///
-  /// A 4th button raises `SecondaryCluster`'s own floor from 120px (3
-  /// buttons, 0 gap) to 160px (4 buttons) each side. At the tablet and mobile
-  /// tiers that is not closeable by any padding/width-factor combination —
-  /// 600px would need the *entire* viewport as panel — so the button is
-  /// simply not shown there; a narrow web window falls back to the same
-  /// 3-button layout native mobile/tablet already use. Desktop closes with
-  /// real margin once its own width factor is widened (see the desktop
-  /// branch of [PanelMetrics.forWidth] and `chrome_panel_overflow_test.dart`'s
-  /// `quality: true` cases).
+  /// Compaction closed it structurally rather than by lever. The transport
+  /// cluster dropped from 256px to 192px, secondary buttons from 40 to 32,
+  /// and padding from 20/12 to 12/8, so the four-button floor is now 128px
+  /// on mobile against 142px available at 360px wide. See
+  /// `chrome_panel_overflow_test.dart` for the full per-width budget.
+  ///
+  /// This field is kept rather than deleted because it stays a real
+  /// per-tier lever: if a 5th control is ever added, this is where the tier
+  /// that cannot afford it says so.
   final bool showQuality;
 
   /// Horizontal padding on both sides of the panel. Previously a single
   /// global constant on [ChromePanel] itself; now tier-dependent, so it
   /// lives here alongside the other per-tier values.
   ///
-  /// 12px on the mobile and tablet tiers, 20px on desktop. This is a real
-  /// overflow-budget lever, not a cosmetic tweak: at the 650px tablet width
-  /// (episode-nav wired, `SecondaryCluster` at its 40px-button floor), 20px
-  /// of padding each side left `SecondaryCluster` 8px short of fitting in
-  /// its equal-flex slot — see `chrome_panel_overflow_test.dart` for the
-  /// full per-width budget. Desktop keeps 20px: it was never short of room,
-  /// and this wasn't asked to change there.
+  /// 8px on the mobile and tablet tiers, 12px on desktop. This is a real
+  /// overflow-budget lever, not a cosmetic tweak — see
+  /// `chrome_panel_overflow_test.dart` for the full per-width budget.
   final double horizontalPadding;
+
+  /// Horizontal gap between `SecondaryCluster`'s buttons, supplied per tier.
+  ///
+  /// Desktop and tablet can afford real separation once the transport
+  /// cluster is compacted; mobile runs at the 0px floor, which is what makes
+  /// four discrete 32px buttons fit at 360px at all.
+  final double secondaryGap;
 
   const PanelMetrics({
     required this.maxWidth,
@@ -67,6 +70,7 @@ class PanelMetrics {
     required this.showVolume,
     required this.touchTargets,
     required this.showQuality,
+    required this.secondaryGap,
     required this.horizontalPadding,
   });
 
@@ -76,49 +80,36 @@ class PanelMetrics {
   factory PanelMetrics.forWidth(double width) {
     if (width >= Breakpoints.tablet) {
       return PanelMetrics(
-        // 0.70, not the original 0.60: with the web-only quality button
-        // wired (see [showQuality]), `SecondaryCluster`'s floor rises from
-        // 120px to 160px each side. At the tightest desktop width, 900px,
-        // 0.60 left `avail` at 500 against a 576px need (256 transport +
-        // 2*160) — 38px short, the whole fullscreen button clipped. 0.70
-        // gives 630 -> avail 590 -> eachSide 167 >= 160, with real margin.
-        // The `min(720, …)` cap is untouched, so nothing changes above
-        // ~1029px, where both factors already saturate at 720 — see
-        // `chrome_panel_test.dart`'s "70% of width" case and
-        // `chrome_panel_overflow_test.dart`'s `quality: true` matrix.
         maxWidth: math.min(720.0, width * 0.70),
         bottomOffset: 48,
         showVolume: true,
         touchTargets: false,
         showQuality: true,
-        horizontalPadding: 20,
+        secondaryGap: 8,
+        horizontalPadding: 12,
       );
     }
     if (width >= Breakpoints.mobile) {
       return PanelMetrics(
-        // 0.9, not the original 0.8: at 600px (the tightest point of this
-        // branch, with episode-nav wired) 0.8 left this tier's equal-flex
-        // slot 28px short of `SecondaryCluster`'s 120px floor — closeable
-        // only by widening the panel itself, since neither the padding nor
-        // gap levers reach a shortfall that size. See
-        // `chrome_panel_overflow_test.dart`'s budget table.
         maxWidth: math.min(640.0, width * 0.90),
         bottomOffset: 32,
         showVolume: true,
         touchTargets: false,
-        showQuality: false,
-        horizontalPadding: 12,
+        showQuality: true,
+        secondaryGap: 6,
+        horizontalPadding: 8,
       );
     }
     return PanelMetrics(
-      // Clamp: below a 32px-wide viewport this would otherwise go negative,
+      // Clamp: below a 20px-wide viewport this would otherwise go negative,
       // which trips BoxConstraints' normalization assert downstream.
-      maxWidth: math.max(0.0, width - 32),
+      maxWidth: math.max(0.0, width - 20),
       bottomOffset: 24,
       showVolume: false,
       touchTargets: true,
-      showQuality: false,
-      horizontalPadding: 12,
+      showQuality: true,
+      secondaryGap: 0,
+      horizontalPadding: 8,
     );
   }
 }
@@ -169,12 +160,12 @@ class ChromePanel extends StatelessWidget {
   });
 
   /// Vertical gap between the controls row and the scrubber row.
-  static const double rowGap = 18.0;
+  static const double rowGap = 10.0;
 
   /// Vertical padding above row 1 and below row 2. Public so tests (e.g.
   /// `glass_legibility_test`) can derive real panel-geometry fractions
   /// instead of hand-rounded literals.
-  static const double verticalPadding = 16.0;
+  static const double verticalPadding = 10.0;
 
   @override
   Widget build(BuildContext context) {

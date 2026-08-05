@@ -144,6 +144,22 @@ abstract final class DepthTokens {
   static const double rimWidth = 1.0;
 
   // ---------------------------------------------------------------------------
+  // Poster geometry
+  //
+  // The corner radius shared by the poster-shaped surfaces that have adopted
+  // it: library grid, library list, home rails, and search results. Before
+  // this token the grid used 8 and the rails used 12, and a new surface picked
+  // whichever it happened to copy. The movie and show detail screens still
+  // render their poster artwork at a hand-rolled radius 12 with their own
+  // BoxShadows — they have not been converted to PosterFrame yet.
+  // ---------------------------------------------------------------------------
+
+  /// Corner radius for every poster surface that composes [PosterFrame]. Read
+  /// via [PosterFrame], which is the only widget that should apply it
+  /// directly.
+  static const double radiusPoster = 8.0;
+
+  // ---------------------------------------------------------------------------
   // Glass fill (R4/R10)
   //
   // Translucent fill opacities for glass chrome and the legibility floor that

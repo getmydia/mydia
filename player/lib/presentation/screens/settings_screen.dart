@@ -9,10 +9,12 @@ import '../../core/graphql/graphql_provider.dart';
 import '../../core/update/platform_updater.dart';
 import '../../core/update/update_provider.dart';
 import '../../core/update/updaters/macos_updater.dart';
+import '../../domain/models/quality_rung.dart';
 import '../widgets/ambient_backdrop_provider.dart';
 import '../widgets/cast_actions.dart';
 import '../widgets/cast_button.dart';
 import '../widgets/connection_status_indicator.dart';
+import '../widgets/hls_quality_selector.dart';
 import '../widgets/update_tile.dart';
 import 'settings/settings_controller.dart';
 
@@ -125,6 +127,35 @@ class SettingsScreen extends ConsumerWidget {
 
             // Playback section
             const _SectionHeader(title: 'Playback'),
+            ListTile(
+              key: const Key('default-quality-tile'),
+              leading: const Icon(Icons.hd),
+              title: const Text('Default quality'),
+              subtitle: Text(
+                QualityRung.fromStorageKey(settings.defaultQuality)?.label ??
+                    QualityRung.original.label,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                // The full ladder, not a per-file one: this is a standing
+                // preference set outside playback, where there is no source
+                // to derive against. Playback narrows it per file and falls
+                // back to Original if the stored rung would upscale.
+                final current =
+                    QualityRung.fromStorageKey(settings.defaultQuality) ??
+                        QualityRung.original;
+                final picked = await showQualityPicker(
+                  context,
+                  deriveQualityLadder(sourceHeight: 2160),
+                  current,
+                );
+                if (picked != null && context.mounted) {
+                  await ref
+                      .read(settingsControllerProvider.notifier)
+                      .setDefaultQuality(picked.storageKey);
+                }
+              },
+            ),
             SwitchListTile(
               key: const Key('auto-skip-segments-switch'),
               secondary: const Icon(Icons.fast_forward),

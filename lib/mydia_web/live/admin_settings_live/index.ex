@@ -23,6 +23,21 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
   ## General Settings Events
 
+  # A text or number input reports through `phx-blur`, which sends the
+  # element's own value alongside its `phx-value-*` metadata — never the
+  # `settings` map the clause below expects. Without this clause every
+  # typed setting in this screen raised FunctionClauseError on edit, so the
+  # database layer was reachable for toggles and selects but not for
+  # anything you type, `streaming.max_transcode_height` included.
+  @impl true
+  def handle_event(
+        "update_setting_form",
+        %{"key" => key, "category" => category, "value" => value},
+        socket
+      ) do
+    save_setting(socket, key, category, to_string(value))
+  end
+
   @impl true
   def handle_event(
         "update_setting_form",
@@ -204,6 +219,83 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
   ## Private Helpers
 
+  # Validates, persists, and reloads a single key. Shared by the typed-input
+  # path above; the toggle and select paths predate it and still inline the
+  # same steps.
+  defp save_setting(socket, key, category, value) do
+    changeset =
+      validate_config_setting(%{
+        key: key,
+        value: value,
+        category: category_string_to_atom(category)
+      })
+
+    cond do
+      unchanged?(socket, key, value) ->
+        # `phx-blur` fires on every blur, including one that only tabbed
+        # through. Writing then would insert a ConfigSetting row holding the
+        # value the field was already showing, flipping the provenance badge
+        # from Default or YAML to DB and permanently shadowing that key from
+        # any later YAML or default change. The layered config is only
+        # honest if the database layer holds values an operator actually
+        # chose, so an unchanged field writes nothing at all.
+        {:noreply, socket}
+
+      changeset.valid? ->
+        persist_setting(socket, changeset, key, category)
+
+      true ->
+        {:noreply, put_flash(socket, :error, "Invalid setting value")}
+    end
+  end
+
+  # Compares against the value the screen is currently showing, which is the
+  # *resolved* one across every layer — not just the database row. Comparing
+  # against the row alone would still write a first row for a key whose
+  # displayed value came from YAML or a schema default, which is the case
+  # that matters.
+  defp unchanged?(socket, key, value) do
+    current =
+      socket.assigns
+      |> Map.get(:config_settings_with_sources, %{})
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.find(&(&1.key == key))
+
+    case current do
+      nil -> false
+      setting -> to_string(value) == to_string(setting.value || "")
+    end
+  end
+
+  defp persist_setting(socket, changeset, key, category) do
+    attrs =
+      changeset
+      |> Ecto.Changeset.apply_changes()
+      |> Map.put(:updated_by_id, socket.assigns.current_user.id)
+
+    case Settings.upsert_config_setting(attrs) do
+      {:ok, _setting} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Setting updated successfully")
+         |> load_data()}
+
+      {:error, error} ->
+        MydiaLogger.log_error(:liveview, "Failed to update setting",
+          error: error,
+          error_details: inspect(error, pretty: true),
+          operation: :update_setting,
+          category: category,
+          setting_key: key,
+          user_id: socket.assigns.current_user.id
+        )
+
+        {:noreply,
+         put_flash(socket, :error, MydiaLogger.user_error_message(:update_setting, error))}
+    end
+  end
+
   defp load_data(socket) do
     socket
     |> assign(:config_settings_with_sources, get_all_settings_with_sources())
@@ -221,6 +313,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       end
 
     metadata = config.metadata || %Mydia.Config.Schema.Metadata{}
+    streaming = config.streaming || %Mydia.Config.Schema.Streaming{}
 
     # Fetch all DB settings in one query to avoid N+1 per-key lookups
     all_db_settings = Settings.list_config_settings() |> Map.new(&{&1.key, &1})
@@ -328,6 +421,26 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
             Settings.config_source(
               "DOWNLOAD_MONITOR_INTERVAL_MINUTES",
               "downloads.monitor_interval_minutes",
+              all_db_settings
+            )
+        }
+      ],
+      "Streaming" => [
+        %{
+          key: "streaming.max_transcode_height",
+          label: "Max Transcode Height",
+          description:
+            "Ceiling in pixels on the output height of any transcode, for example 720. " <>
+              "Empty means no ceiling and a transcode keeps the source resolution, which " <>
+              "a small server may not sustain in realtime for a 4K file. Never upscales, " <>
+              "and never applies when the file is streamed without re-encoding.",
+          type: :integer,
+          value: streaming.max_transcode_height,
+          placeholder: "no limit",
+          source:
+            Settings.config_source(
+              "MAX_TRANSCODE_HEIGHT",
+              "streaming.max_transcode_height",
               all_db_settings
             )
         }
@@ -486,6 +599,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Media" -> :media
       "Metadata" -> :metadata
       "Downloads" -> :downloads
+      "Streaming" -> :streaming
       "Crash Reporting" -> :crash_reporting
       "Feedback" -> :feedback
       "Notifications" -> :notifications

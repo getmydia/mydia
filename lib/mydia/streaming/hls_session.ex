@@ -55,6 +55,7 @@ defmodule Mydia.Streaming.HlsSession do
       :mode,
       :start_position,
       :max_bitrate,
+      :max_height,
       :backend,
       :backend_pid,
       :temp_dir,
@@ -181,6 +182,7 @@ defmodule Mydia.Streaming.HlsSession do
     registry_key = Keyword.fetch!(opts, :registry_key)
     mode = Keyword.get(opts, :mode, :transcode)
     max_bitrate = Keyword.get(opts, :max_bitrate)
+    max_height = Keyword.get(opts, :max_height)
     start_position = Keyword.get(opts, :start_position, 0)
 
     # Load media file with metadata
@@ -207,6 +209,8 @@ defmodule Mydia.Streaming.HlsSession do
                user_id: user_id,
                mode: mode,
                start_position: start_position,
+               max_bitrate: max_bitrate,
+               max_height: max_height,
                started_at: DateTime.utc_now()
              }
            ) do
@@ -216,6 +220,7 @@ defmodule Mydia.Streaming.HlsSession do
             user_id,
             mode,
             max_bitrate,
+            max_height,
             start_position,
             media_file
           )
@@ -238,6 +243,7 @@ defmodule Mydia.Streaming.HlsSession do
          user_id,
          mode,
          max_bitrate,
+         max_height,
          start_position,
          media_file
        ) do
@@ -289,6 +295,7 @@ defmodule Mydia.Streaming.HlsSession do
         # Start FFmpeg backend
         case start_backend(:ffmpeg, media_file, temp_dir, job.id,
                max_bitrate: max_bitrate,
+               max_height: max_height,
                start_position: start_position
              ) do
           {:ok, backend_pid} ->
@@ -303,6 +310,7 @@ defmodule Mydia.Streaming.HlsSession do
               mode: mode,
               start_position: start_position,
               max_bitrate: max_bitrate,
+              max_height: max_height,
               backend: :ffmpeg,
               backend_pid: backend_pid,
               temp_dir: temp_dir,
@@ -477,14 +485,16 @@ defmodule Mydia.Streaming.HlsSession do
     # Capture self() to notify when FFmpeg is ready
     session_pid = self()
 
-    # Build transcoder opts, including max_bitrate if set
+    # Build transcoder opts, including max_bitrate and max_height if set
     base_opts =
       [
         input_path: absolute_path,
         output_dir: temp_dir,
         media_file: media_file,
         start_position: Keyword.get(opts, :start_position, 0)
-      ] ++ if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: [])
+      ] ++
+        if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: []) ++
+        if(opts[:max_height], do: [max_height: opts[:max_height]], else: [])
 
     transcoder_opts =
       base_opts ++

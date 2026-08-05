@@ -126,6 +126,56 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
       refute html =~ "FlareSolverr"
       refute has_element?(view, "input[phx-value-key='flaresolverr.url']")
     end
+
+    test "offers the transcode height ceiling", %{view: view} do
+      # The escape hatch for an operator whose hardware cannot encode a 4K
+      # file in realtime. It shipped once as a compile-time key in
+      # config/config.exs, reachable only by rebuilding the image.
+      assert has_element?(
+               view,
+               "input[phx-value-key='streaming.max_transcode_height']"
+             )
+    end
+
+    test "persists a typed setting instead of crashing on blur", %{view: view} do
+      # `phx-blur` sends the element's value and its phx-value-* metadata, not
+      # a `settings` map. Every typed setting in this screen used to raise
+      # FunctionClauseError here, which left the database layer reachable for
+      # toggles but not for anything an operator types.
+      html =
+        view
+        |> element("input[phx-value-key='streaming.max_transcode_height']")
+        |> render_blur(%{"value" => "720"})
+
+      assert html =~ "Setting updated successfully"
+
+      setting = Settings.get_config_setting_by_key("streaming.max_transcode_height")
+      assert setting.value == "720"
+      assert setting.category == :streaming
+    end
+
+    test "blurring an unchanged field writes nothing", %{view: view} do
+      # `phx-blur` fires on every blur, including one that only tabbed through.
+      # A write there would pin the currently displayed value — which may come
+      # from YAML or a schema default — into the database overlay, flipping the
+      # provenance badge to DB and shadowing that key from every later YAML or
+      # default change.
+      html =
+        view
+        |> element("input[phx-value-key='server.host']")
+        |> render_blur(%{"value" => "0.0.0.0"})
+
+      refute html =~ "Setting updated successfully"
+      assert Settings.get_config_setting_by_key("server.host") == nil
+    end
+
+    test "blurring a changed field still writes", %{view: view} do
+      view
+      |> element("input[phx-value-key='server.host']")
+      |> render_blur(%{"value" => "127.0.0.1"})
+
+      assert Settings.get_config_setting_by_key("server.host").value == "127.0.0.1"
+    end
   end
 
   describe "Crash report widget" do
