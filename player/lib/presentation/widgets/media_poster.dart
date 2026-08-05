@@ -45,45 +45,54 @@ class MediaPoster extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = progressPercentage;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: PosterFrame(
-              imageUrl: posterUrl,
-              placeholder: _placeholder,
-              loadingPlaceholder: _loadingPlaceholder,
-              hoverOverlay: const PosterPlayScrim(),
-              overlays: [
-                if (progress != null && progress > 0)
-                  ProgressOverlay(percentage: progress),
-                if (isFavorite)
-                  const Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Icon(
-                      Icons.favorite,
-                      color: Colors.red,
-                      size: 20,
+    // The cursor sits out here rather than on the PosterFrame, because the
+    // GestureDetector's tap target includes the title label and the affordance
+    // has to cover everything that responds to a click. PosterFrame sets no
+    // cursor of its own, so this one wins inside it too.
+    //
+    // A click cursor and nothing more: tapping opens the title, it does not
+    // start playback, so there is no play glyph and no hoverOverlay here.
+    return MouseRegion(
+      cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: PosterFrame(
+                imageUrl: posterUrl,
+                placeholder: _placeholder,
+                loadingPlaceholder: _loadingPlaceholder,
+                overlays: [
+                  if (progress != null && progress > 0)
+                    ProgressOverlay(percentage: progress),
+                  if (isFavorite)
+                    const Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Icon(
+                        Icons.favorite,
+                        color: Colors.red,
+                        size: 20,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (showTitle) ...[
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            if (showTitle) ...[
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

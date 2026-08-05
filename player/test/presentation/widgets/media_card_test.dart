@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 import 'package:player/presentation/widgets/progress_overlay.dart';
 
+import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/poster_contract.dart';
 
 // Tall enough for the 195px poster plus its gap and a two-line title, short
@@ -32,6 +33,47 @@ void main() {
       );
 
       expect(find.byType(ProgressOverlay), findsOneWidget);
+    });
+
+    testWidgets(
+        'offers no play affordance at rest or on hover, because tapping a '
+        'card opens the title rather than playing it', (tester) async {
+      await tester.pumpWidget(
+        posterHost(const MediaCard(title: 'Movie'), size: _cardHost),
+      );
+      await tester.pumpAndSettle();
+
+      expect(findPlayGlyph(), findsNothing);
+
+      await hoverOver(tester, find.byType(MediaCard));
+
+      expect(findPlayGlyph(), findsNothing);
+    });
+
+    testWidgets('a tappable card offers a click cursor, an inert one defers',
+        (tester) async {
+      await tester.pumpWidget(
+        posterHost(
+          MediaCard(title: 'Movie', onTap: () {}),
+          size: _cardHost,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        hoverCursor(tester, of: find.byType(MediaCard)),
+        SystemMouseCursors.click,
+      );
+
+      await tester.pumpWidget(
+        posterHost(const MediaCard(title: 'Movie'), size: _cardHost),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        hoverCursor(tester, of: find.byType(MediaCard)),
+        MouseCursor.defer,
+      );
     });
 
     testWidgets('tap fires onTap', (tester) async {

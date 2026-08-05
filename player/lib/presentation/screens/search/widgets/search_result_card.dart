@@ -90,41 +90,46 @@ class SearchResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final caption = _caption;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: PosterFrame(
-              imageUrl: result.posterUrl,
-              placeholder: _buildPlaceholder(),
-              loadingPlaceholder: _loadingPlaceholder,
-              hoverOverlay: const PosterPlayScrim(),
-              overlays: [_buildTypeBadge()],
+    // A click cursor and nothing more: tapping a result opens the title, it
+    // does not start playback, so there is no play glyph here. The cursor wraps
+    // the whole tap target, which includes the title and caption beneath.
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: PosterFrame(
+                imageUrl: result.posterUrl,
+                placeholder: _buildPlaceholder(),
+                loadingPlaceholder: _loadingPlaceholder,
+                overlays: [_buildTypeBadge()],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            result.title,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (caption.isNotEmpty) ...[
-            const SizedBox(height: 2),
+            const SizedBox(height: 8),
             Text(
-              caption,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
+              result.title,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            if (caption.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                caption,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

@@ -4,7 +4,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cache/poster_cache_manager.dart';
-import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/ui/reduced_motion.dart';
 import 'ambient_backdrop_provider.dart';
@@ -66,6 +65,12 @@ class PosterFrame extends ConsumerStatefulWidget {
   final List<Widget> overlays;
 
   /// Cross-faded in while hovered. Each surface keeps its own treatment.
+  ///
+  /// No surface supplies one today. The grids and rails used to reveal a play
+  /// glyph here, which promised playback their tap never delivered — they
+  /// navigate to the title instead — so they now offer a click cursor and
+  /// nothing else. Anything added here has to be honest about what a tap on
+  /// that particular surface actually does.
   final Widget? hoverOverlay;
 
   const PosterFrame({
@@ -258,34 +263,6 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
                 ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The neutral play affordance revealed when hovering a grid poster.
-///
-/// Shared by the library grid ([MediaPoster]) and search results
-/// (`SearchResultCard`), which must read identically. The home rails
-/// (`MediaCard`) deliberately use a glassier treatment of their own, so they do
-/// not use this.
-///
-/// This exists because an earlier revision left each grid surface with its own
-/// private copy of this scrim, which is the same duplication that let the
-/// search card drift away from the library card in the first place.
-class PosterPlayScrim extends StatelessWidget {
-  const PosterPlayScrim({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: AppColors.overlayDark,
-      child: Center(
-        child: Icon(
-          Icons.play_circle_filled,
-          size: 48,
-          color: AppColors.textPrimary,
         ),
       ),
     );

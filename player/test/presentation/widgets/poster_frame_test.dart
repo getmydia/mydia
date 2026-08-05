@@ -5,7 +5,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/poster_frame.dart';
@@ -71,9 +70,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Scope to PosterFrame's own subtree. MaterialApp's Material 3 route
-      // entrance transition contributes incidental widgets to the tree (see
-      // the PosterPlayScrim comment below), so a bare find.byType risks
-      // matching something outside this widget.
+      // entrance transition contributes incidental widgets to the tree, so a
+      // bare find.byType risks matching something outside this widget.
       AnimatedOpacity opacity() => tester.widget<AnimatedOpacity>(
             find.descendant(
               of: find.byType(PosterFrame),
@@ -297,31 +295,6 @@ void main() {
 
         expect(container.read(ambientBackdropControllerProvider), posterB);
       });
-    });
-  });
-
-  group('PosterPlayScrim', () {
-    testWidgets('renders the neutral play affordance over a dark ground',
-        (tester) async {
-      await tester.pumpWidget(
-        posterHost(const PosterPlayScrim(), size: const Size(140, 210)),
-      );
-
-      expect(find.byIcon(Icons.play_circle_filled), findsOneWidget);
-      // Scope to the scrim's own ColoredBox. MaterialApp's Material 3 route
-      // entrance transition contributes an incidental transparent ColoredBox to
-      // the tree, so a bare find.byType(ColoredBox) matches two and throws.
-      expect(
-        tester
-            .widget<ColoredBox>(
-              find.descendant(
-                of: find.byType(PosterPlayScrim),
-                matching: find.byType(ColoredBox),
-              ),
-            )
-            .color,
-        AppColors.overlayDark,
-      );
     });
   });
 }
