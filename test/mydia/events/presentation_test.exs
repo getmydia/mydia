@@ -563,19 +563,21 @@ defmodule Mydia.Events.PresentationTest do
 
   describe "registry coverage backstop" do
     test "every event type recorded in lib/ is registered" do
-      {output, status} =
-        System.cmd("grep", ["-rhoE", ~S{type: "[a-z_]+\.[a-z_]+"}, "lib/"])
-
-      assert status == 0, "grep exited #{status}, expected 0 (a match was found)"
+      lib_dir = Path.expand("../../../lib", __DIR__)
 
       recorded =
-        output
-        |> String.split("\n", trim: true)
-        |> Enum.map(&(&1 |> String.replace(~s{type: "}, "") |> String.replace(~s{"}, "")))
+        [lib_dir, "**", "*.ex"]
+        |> Path.join()
+        |> Path.wildcard()
+        |> Enum.flat_map(fn path ->
+          ~r/type: "([a-z_]+\.[a-z_]+)"/
+          |> Regex.scan(File.read!(path), capture: :all_but_first)
+          |> List.flatten()
+        end)
         |> Enum.uniq()
 
       assert recorded != [],
-             "grep found no event types in lib/; the backstop is broken, not the registry"
+             "found no event types under #{lib_dir}; the backstop is broken, not the registry"
 
       unregistered = recorded -- Presentation.known_types()
 

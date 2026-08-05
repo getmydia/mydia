@@ -200,8 +200,14 @@ defmodule Mydia.Events do
   defp filter_by_exclude_types(query, nil), do: query
   defp filter_by_exclude_types(query, []), do: query
 
-  defp filter_by_exclude_types(query, types) when is_list(types),
-    do: where(query, [e], e.type not in ^types)
+  defp filter_by_exclude_types(query, types) when is_list(types) do
+    if Enum.all?(types, &is_binary/1) do
+      where(query, [e], e.type not in ^types)
+    else
+      raise ArgumentError,
+            "expected :exclude_types to be a list of strings, got: #{inspect(types)}"
+    end
+  end
 
   defp filter_by_exclude_types(_query, other),
     do:
