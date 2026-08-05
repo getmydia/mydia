@@ -356,15 +356,6 @@ config :mydia, :streaming,
   # :always - Always re-encode (original behavior, slower but ensures consistent output)
   transcode_policy: :copy_when_compatible
 
-# Quality profile scoring configuration
-config :mydia,
-  # Minimum quality score (0.0-100.0) for search results to be considered acceptable
-  # Results scoring below this threshold will be rejected
-  # Default: 50.0 (allows reasonable quality matches)
-  # Increase to be more selective (e.g., 70.0 for higher quality)
-  # Decrease to be more permissive (e.g., 30.0 for broader matches)
-  min_quality_score: 50.0
-
 # Episode monitor search limits
 # Prevents excessive API usage that exhausts indexer quotas
 config :mydia, :episode_monitor,

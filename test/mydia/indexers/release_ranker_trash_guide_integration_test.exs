@@ -1150,7 +1150,8 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
 
   # ===========================================================================
   # TEST: QUALITY PROFILE INTEGRATION WITH RELEASE RANKER
-  # Verify QualityMatcher and ReleaseRanker work together correctly
+  # Verify that a QualityProfile's resolution constraints and preferred
+  # resolutions correctly shape ReleaseRanker's ranking order.
   # ===========================================================================
 
   describe "quality profile integration" do

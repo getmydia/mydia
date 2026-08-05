@@ -151,7 +151,14 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
       ~r/(?<![a-zA-Z])S\d{1,3}[-\s.]?E\d{1,4}(?:[-\s.]?E?\d{1,4})*(?![a-zA-Z])/i,
       ~r/(?<![a-zA-Z])\d{1,3}x\d{1,4}(?![a-zA-Z0-9])/i,
       ~r/(?<![a-zA-Z])S\d{1,3}(?![0-9a-zA-Z])/i,
-      ~r/\b[Ss]eason[\s._]+\d{1,3}\b/
+      ~r/\b[Ss]eason[\s._]+\d{1,3}\b/,
+      # Standalone absolute episode numbering (E18, E018, E1234) with no
+      # season marker — common in anime. The digit-preceded lookbehind
+      # keeps this from ever winning against a real S01E01 match (the
+      # "E" there is always preceded by a digit), and the alnum
+      # lookaround keeps it from matching inside words like "EAC3" or
+      # "ETHEL".
+      ~r/(?<![a-zA-Z0-9])E\d{2,4}(?![a-zA-Z0-9])/i
     ]
   end
 

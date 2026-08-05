@@ -5,9 +5,16 @@ defmodule Mydia.Settings.DownloadClientConfig do
 
   ## Field notes
 
-  - `category` (string) — **deprecated** in favour of `categories` (map). Kept
-    for backwards compatibility; `categories` takes precedence when populated.
-    New code should prefer `categories` keyed by `Download.content_type`.
+  - `category` (string) — COMPAT: superseded by `categories` (map).
+    Accepts: single-category download client configs written before
+    per-category routing existed.
+    Source: existing rows in `download_client_configs` and the
+    `DOWNLOAD_CLIENT_<N>_CATEGORY` environment variable (the only
+    category-related env var; `categories` has no env-var equivalent).
+    Removing it would: silently drop the configured category for clients
+    still using it, sending completed downloads to the wrong path.
+    `categories` takes precedence when populated; new code should prefer
+    `categories` keyed by `Download.content_type`.
   - `categories` — map keyed by content type (`"movie"`, `"tv"`, `"music"`) to a
     client-native category string. Falls back to `category` when the key is
     missing or the map is empty.

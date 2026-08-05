@@ -154,6 +154,13 @@ class P2pService {
   int _autoReconnectAttempts = 0;
   Timer? _autoReconnectTimer;
 
+  // Subscription to the native host's event stream. Must be cancelled before
+  // the host is dropped or the status controllers are closed: the Rust host
+  // is only dropped when it is garbage collected, not synchronously on
+  // dispose, so without cancelling this explicitly a torn-down host can keep
+  // emitting events into an already-closed StreamController.
+  StreamSubscription<String>? _eventSubscription;
+
   // Stream of P2P status updates
   final _statusController = StreamController<P2pStatus>.broadcast();
   Stream<P2pStatus> get onStatusChanged => _statusController.stream;
@@ -262,7 +269,7 @@ class P2pService {
       debugPrint('[P2P] Host started with NodeID: $nodeId');
 
       // Start Event Stream
-      _host!.eventStream().listen((event) {
+      _eventSubscription = _host!.eventStream().listen((event) {
         debugPrint('[P2P] Event: $event');
 
         if (event.startsWith('connected:')) {
@@ -612,10 +619,25 @@ class P2pService {
 
   /// Reset the P2P host for re-initialization.
   /// This allows changing the relay URL by calling initialize() again.
+  ///
+  /// This method is intentionally void, not `Future<void>`, so it cannot
+  /// await the subscription cancellation below. Do not "fix" this into an
+  /// await; that does not compile in a void method, and reset() does not
+  /// need to be async because initialize() only checks _isInitialized,
+  /// which is cleared synchronously here regardless of when cancellation
+  /// finishes. Detach the subscription from the field before cancelling
+  /// it, so nothing can observe or act on a half-cancelled subscription,
+  /// and attach an error handler to the cancellation itself so a rejected
+  /// Future cannot surface as an unhandled async error.
   void reset() {
     _autoReconnectTimer?.cancel();
     _autoReconnectAttempts = 0;
     _lastDialedEndpointAddr = null;
+    final subscription = _eventSubscription;
+    _eventSubscription = null;
+    unawaited(subscription?.cancel().catchError((Object e) {
+      debugPrint('[P2P] Error cancelling event subscription on reset: $e');
+    }));
     _host = null;
     _isInitialized = false;
     _isRelayConnected = false;
@@ -666,6 +688,11 @@ class P2pService {
 
   Future<void> dispose() async {
     _autoReconnectTimer?.cancel();
+    // Cancel before closing the controllers below: the Rust host is only
+    // dropped when it is garbage collected, not synchronously here, so a
+    // live subscription can otherwise still fire into a closed controller.
+    await _eventSubscription?.cancel();
+    _eventSubscription = null;
     // Rust host is dropped when P2PHost is garbage collected
     _host = null;
     _isInitialized = false;

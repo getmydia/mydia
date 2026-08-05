@@ -4,7 +4,9 @@
 
 Mydia enforces a small set of automated quality gates in CI: the compiler's
 set-theoretic type checker (`mix compile --warnings-as-errors`), Credo
-(`mix credo --strict`), and an advisory dead-code report (`mix_unused`).
+(`mix credo --strict`), and an advisory dead-code report (`mix_unused`). A
+second, more precise dead-code detector, `mix mydia.dead_code`, is available
+for manual use; see "A note on `mix mydia.dead_code`" below.
 
 These gates follow one rule, and it is the rule that keeps them honest:
 
@@ -60,3 +62,47 @@ runtime dispatch, and the irreducible residual is intentional public API plus
 default-argument arity artifacts. Rule-shaped ignores cover the structural
 blind spots and provably-dead code is deleted at the source, but the gate
 reports rather than blocks. See `.github/workflows/ci.yml`.
+
+### Deprecated code versus compatibility shims
+
+`DEPRECATED:` must not appear in `lib/`. If code is deprecated, delete it.
+CI greps for it and fails the build if it reappears.
+
+Code that reads old data or old configuration is not deprecated; it is
+load-bearing, and it is marked `COMPAT:`. A `COMPAT:` block states three things:
+
+- **Accepts:** what old input the code handles
+- **Source:** where that input actually comes from in the field
+- **Removing it would:** the concrete operator-visible breakage
+
+This distinction exists because the two are indistinguishable on sight, and
+mistaking a live shim for dead code, or the reverse, is how stale parallel
+implementations survive.
+
+### A note on `mix mydia.dead_code`
+
+`mix_unused` checks for unused exports; it cannot tell a genuinely dead
+module from a self-referencing cluster that only calls itself (a scanner, a
+context, and its schemas that reference one another but nothing outside the
+group). `mix mydia.dead_code` closes that gap with true reachability
+analysis: it traces every module reference the compiler records and
+classifies each module as live, test-only, or orphaned by growing outward
+from a small set of exempt framework entry points.
+
+Run it with:
+
+    MIX_ENV=test mix mydia.dead_code
+
+`MIX_ENV=test` is mandatory. `test/support` is only on `elixirc_paths` in the
+test environment, so without it the task cannot see test references and
+misreports every test-only module as orphaned. Pass `--format json` for
+machine-readable output.
+
+Like `mix_unused`, this is advisory: it is not wired into CI and does not
+fail the build. Verify every finding by hand before deleting anything. The
+known blind spot is attribution: the task attributes a template's edges to
+the module it believes owns the template (a colocated `foo.ex` for
+`foo.html.heex`, or the parent directory's `.ex` file for
+`embed_templates "dir/*"`), and any template or other non-module-defining
+file whose owner it cannot resolve this way contributes no liveness at all.
+That silence is a gap in the tool, not proof that the code is dead.

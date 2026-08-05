@@ -424,6 +424,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
       result = parse_axb(value) -> result
       result = parse_season_only(value) -> result
       result = parse_verbose_season(value) -> result
+      result = parse_absolute_episode(value) -> result
       true -> {nil, nil}
     end
   end
@@ -467,6 +468,16 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   defp parse_season_only(value) do
     case Regex.run(~r/^[Ss](\d{1,3})$/, value) do
       [_, season_str] -> {String.to_integer(season_str), []}
+      _ -> nil
+    end
+  end
+
+  # Standalone absolute episode numbering with no season marker (`E18`,
+  # `E018`, `E1234`) — common in anime. Defaults to season 1, matching
+  # the historical FileParser (V1) behavior this replaces.
+  defp parse_absolute_episode(value) do
+    case Regex.run(~r/^[Ee](\d{2,4})$/, value) do
+      [_, ep_str] -> {1, [String.to_integer(ep_str)]}
       _ -> nil
     end
   end

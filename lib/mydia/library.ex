@@ -189,6 +189,20 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Returns true when the episode already has a media file that has not been trashed.
+
+  Used by the importer to skip season-pack files for episodes the library
+  already has, since nothing downstream reconciles two live files for one
+  episode outside the upgrade path.
+  """
+  @spec episode_has_media_file?(String.t()) :: boolean()
+  def episode_has_media_file?(episode_id) when is_binary(episode_id) do
+    Repo.exists?(
+      from(f in MediaFile, where: f.episode_id == ^episode_id and is_nil(f.trashed_at))
+    )
+  end
+
+  @doc """
   Creates a media file.
   """
   @spec create_media_file(map()) :: {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()}
@@ -2066,8 +2080,15 @@ defmodule Mydia.Library do
         )
 
       {:path_prefix, _prefix}, query ->
-        # Legacy option - no longer supported
-        # Use :library_path_id instead
+        # COMPAT: `path_prefix` is superseded by `library_path_id`.
+        #
+        # Accepts: callers that still pass a path string rather than a
+        # library path id.
+        # Source: no in-repo caller passes this option today, and no
+        # external consumer is known. Retention here is precautionary, not
+        # evidence of an actual caller.
+        # Removing it would: turn any caller still using it into a
+        # match-nothing query with no error, which reads as an empty library.
         Logger.warning("path_prefix filter is deprecated, use library_path_id instead")
         query
 

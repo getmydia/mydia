@@ -1328,6 +1328,9 @@ defmodule Mydia.Events do
 
   defp format_download_error(:no_clients_configured), do: "No download clients configured"
   defp format_download_error(:duplicate_download), do: "Download already exists"
+  # Covers episodes, season packs and movies alike, so the wording stays
+  # media-type-agnostic.
+  defp format_download_error(:already_have_files), do: "Files already exist"
   defp format_download_error(:no_suitable_client), do: "No suitable download client found"
   defp format_download_error(:client_error), do: "Download client error"
 

@@ -5,6 +5,7 @@ defmodule Mydia.Settings.QualityProfile do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Quality.Sources
   alias Mydia.Settings.JsonAtomMapType
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -54,17 +55,26 @@ defmodule Mydia.Settings.QualityProfile do
   ]
   @valid_audio_channels ["1.0", "2.0", "2.1", "5.1", "6.1", "7.1", "7.1.2", "7.1.4"]
   @valid_resolutions ["360p", "480p", "576p", "720p", "1080p", "2160p", "4320p"]
+  # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" for the
+  # indexer search/grab path, but the V3 release parser
+  # (priv/release_parser/sources.exs) still emits canonical "BDRip" for
+  # on-disk files, and that value flows through Mydia.Upgrades.Attrs into
+  # scoring. So "BDRip" remains a meaningful, selectable preference here.
   @valid_sources [
     "BluRay",
+    "BDRip",
     "REMUX",
     "WEB-DL",
     "WEBRip",
     "HDTV",
     "SDTV",
     "DVD",
-    "DVDRip",
-    "BDRip"
+    "DVDRip"
   ]
+  # Sources that may appear in an exclusion list. Superset of @valid_sources,
+  # since the whole point of the exclusion list is naming the cam-tier types
+  # that are never valid *preferences*.
+  @valid_excludable_sources @valid_sources ++ Sources.cam_tier()
   @valid_hdr_formats ["hdr10", "hdr10+", "dolby_vision", "hlg"]
 
   schema "quality_profiles" do
@@ -166,6 +176,7 @@ defmodule Mydia.Settings.QualityProfile do
         |> validate_resolution_ranges(standards)
         |> validate_resolutions(standards)
         |> validate_sources(standards)
+        |> validate_excluded_sources(standards)
         |> validate_media_type_sizes(standards)
         |> validate_hdr_formats(standards)
         |> validate_min_ratio(standards)
@@ -492,6 +503,30 @@ defmodule Mydia.Settings.QualityProfile do
     end
   end
 
+  defp validate_excluded_sources(changeset, standards) do
+    case Map.get(standards, :excluded_sources) do
+      nil ->
+        changeset
+
+      sources when is_list(sources) ->
+        invalid = sources -- @valid_excludable_sources
+
+        if Enum.empty?(invalid) do
+          changeset
+        else
+          add_error(
+            changeset,
+            :quality_standards,
+            "contains invalid excluded sources: #{Enum.join(invalid, ", ")}. " <>
+              "Valid sources: #{Enum.join(@valid_excludable_sources, ", ")}"
+          )
+        end
+
+      _ ->
+        add_error(changeset, :quality_standards, "excluded_sources must be a list")
+    end
+  end
+
   defp validate_media_type_sizes(changeset, standards) do
     # Validate movie sizes
     movie_min = Map.get(standards, :movie_min_size_mb)
@@ -748,6 +783,22 @@ defmodule Mydia.Settings.QualityProfile do
         {max_res, res} when is_binary(max_res) and is_binary(res) ->
           if is_above_resolution?(res, max_res) do
             ["Resolution #{res} is above maximum #{max_res}" | violations]
+          else
+            violations
+          end
+
+        _ ->
+          violations
+      end
+
+    # Excluded sources are a hard violation, not a scoring penalty. A file whose
+    # source the profile refuses to grab should read as maximally upgradable so
+    # the upgrade path replaces it once a real release appears.
+    violations =
+      case {Map.get(standards, :excluded_sources), Map.get(media_attrs, :source)} do
+        {excluded, source} when is_list(excluded) and is_binary(source) ->
+          if source in excluded do
+            ["Source #{source} is excluded by this profile" | violations]
           else
             violations
           end

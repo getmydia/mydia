@@ -715,7 +715,7 @@ defmodule Mydia.DownloadsTest do
       # Try to initiate download for episode that already has files
       result = Downloads.initiate_download(search_result, episode_id: episode.id)
 
-      assert {:error, :duplicate_download} = result
+      assert {:error, :already_have_files} = result
     end
 
     test "prevents movie download when media files already exist", %{
@@ -728,31 +728,90 @@ defmodule Mydia.DownloadsTest do
       # Try to initiate download for movie that already has files
       result = Downloads.initiate_download(search_result, media_item_id: movie.id)
 
-      assert {:error, :duplicate_download} = result
+      assert {:error, :already_have_files} = result
     end
 
-    test "prevents season pack download when some episodes already have media files", %{
+    test "allows a season pack when only SOME episodes already have media files", %{
       search_result: search_result,
       tv_show: tv_show
     } do
-      # Create episodes for season 2 (to avoid conflict with setup which creates season 1 episode 1)
+      # The prod regression: S03 had 2 of 7 episodes on disk, and the pack that
+      # would have filled the other 5 was rejected every hour, forever.
+      # Season 2 here to avoid the setup block's season 1 episode.
       episode1 = episode_fixture(media_item_id: tv_show.id, season_number: 2, episode_number: 1)
       episode2 = episode_fixture(media_item_id: tv_show.id, season_number: 2, episode_number: 2)
       _episode3 = episode_fixture(media_item_id: tv_show.id, season_number: 2, episode_number: 3)
 
-      # Create media files for some episodes (but not all)
       media_file_fixture(%{episode_id: episode1.id})
       media_file_fixture(%{episode_id: episode2.id})
 
-      # Try to initiate season pack download - should be prevented since some episodes have files
+      # No episode_ids, so this exercises the season-wide fallback rule.
       season_pack_result = %{
         search_result
         | metadata: SearchResultMetadata.season_pack(2, 3)
       }
 
-      result = Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
+      assert {:ok, _download} =
+               Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
+    end
 
-      assert {:error, :duplicate_download} = result
+    test "blocks a season pack when EVERY episode in the season has a media file", %{
+      search_result: search_result,
+      tv_show: tv_show
+    } do
+      episode1 = episode_fixture(media_item_id: tv_show.id, season_number: 6, episode_number: 1)
+      episode2 = episode_fixture(media_item_id: tv_show.id, season_number: 6, episode_number: 2)
+
+      media_file_fixture(%{episode_id: episode1.id})
+      media_file_fixture(%{episode_id: episode2.id})
+
+      season_pack_result = %{
+        search_result
+        | metadata: SearchResultMetadata.season_pack(6, 2)
+      }
+
+      assert {:error, :already_have_files} =
+               Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
+    end
+
+    test "blocks a season pack when every TARGETED episode already has a file", %{
+      search_result: search_result,
+      tv_show: tv_show
+    } do
+      # episode_ids names the two episodes the search wanted. Both are now on
+      # disk, so the grab is genuinely redundant even though ep3 has no file.
+      episode1 = episode_fixture(media_item_id: tv_show.id, season_number: 7, episode_number: 1)
+      episode2 = episode_fixture(media_item_id: tv_show.id, season_number: 7, episode_number: 2)
+      _episode3 = episode_fixture(media_item_id: tv_show.id, season_number: 7, episode_number: 3)
+
+      media_file_fixture(%{episode_id: episode1.id})
+      media_file_fixture(%{episode_id: episode2.id})
+
+      season_pack_result = %{
+        search_result
+        | metadata: SearchResultMetadata.season_pack(7, 2, [episode1.id, episode2.id])
+      }
+
+      assert {:error, :already_have_files} =
+               Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
+    end
+
+    test "allows a season pack when a TARGETED episode is still missing", %{
+      search_result: search_result,
+      tv_show: tv_show
+    } do
+      episode1 = episode_fixture(media_item_id: tv_show.id, season_number: 8, episode_number: 1)
+      episode2 = episode_fixture(media_item_id: tv_show.id, season_number: 8, episode_number: 2)
+
+      media_file_fixture(%{episode_id: episode1.id})
+
+      season_pack_result = %{
+        search_result
+        | metadata: SearchResultMetadata.season_pack(8, 2, [episode1.id, episode2.id])
+      }
+
+      assert {:ok, _download} =
+               Downloads.initiate_download(season_pack_result, media_item_id: tv_show.id)
     end
 
     test "allows season pack download when no episodes have media files", %{

@@ -459,4 +459,29 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.audio == "DTS-HD MA"
     end
   end
+
+  describe "extract_source/1 regression: unanchored short tokens" do
+    test "ordinary words containing cam-tier letter pairs are not cam-tier" do
+      alias Mydia.Quality.Sources
+
+      for title <- [
+            "Ghosts.of.Mars.2001.1080p.x264-GRP",
+            "The.Watchmen.2009.2160p.HDR.x265",
+            "Scream.VI.2023.1080p.x265-RARBG",
+            "Cameron.Diaz.Doc.2020.1080p.x264",
+            "Lights.Out.2016.1080p.x264"
+          ] do
+        refute Sources.cam_tier?(QualityParser.extract_source(title)),
+               "#{title} must not be classified cam-tier"
+      end
+    end
+
+    test "real telesync releases are still detected" do
+      assert QualityParser.extract_source("The.Odyssey.2026.1080p.TELESYNC.HEVC.AAC2.0") ==
+               "Telesync"
+
+      assert QualityParser.extract_source("Movie.2026.HDTS.x264") == "Telesync"
+      assert QualityParser.extract_source("Movie.2026.HDCAM.x264") == "CAM"
+    end
+  end
 end

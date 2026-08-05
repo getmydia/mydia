@@ -9,13 +9,13 @@
 # Tests run on native Linux (`flutter test -d linux`) under xvfb so the
 # iroh P2P code path is exercised. This is intentionally not web/chrome.
 #
-# Performance optimizations:
-# - BuildKit enabled for cache mounts (DOCKER_BUILDKIT=1)
-# - Reduced service dependencies for faster parallel startup
-# - Pre-build with: ./dev player e2e-build
+# No service defines a `build:` block. Images are pulled by default, and CI
+# or `./dev player e2e --build` builds and tags them beforehand, so
+# `docker compose build` against this file does nothing.
 #
 # Usage:
-#   DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build
+#   ./dev player e2e                 # pull prebuilt images and run
+#   ./dev player e2e --build         # build all three locally first
 #   docker compose -f compose.player-e2e.yml up --abort-on-container-exit
 #   docker compose -f compose.player-e2e.yml down -v
 
@@ -24,13 +24,13 @@ services:
   # Metadata Relay Service
   # ============================================
   relay:
-    # Explicit image names: without them the tag is derived from the compose
-    # project (the checkout directory), so a git worktree and CI disagree, and
-    # the CI build step tags something `docker compose up` then does not find.
-    image: mydia-e2e-relay:latest
-    build:
-      context: .
-      dockerfile: metadata-relay/Dockerfile
+    # Every service names its image explicitly rather than letting compose
+    # derive a tag from the project directory. A derived tag makes a git
+    # worktree and CI disagree, so a build step tags something that
+    # `docker compose up` then cannot find. Registry refs with an env override
+    # avoid that by construction, and the `build:` blocks are gone because CI
+    # and `./dev player e2e --build` now build and tag images themselves.
+    image: ${RELAY_E2E_IMAGE:-ghcr.io/getmydia/mydia/metadata-relay:master}
     container_name: e2e_relay
     environment:
       PORT: "4001"
@@ -57,10 +57,8 @@ services:
   # Mydia Main Application
   # ============================================
   mydia:
-    image: mydia-e2e-app:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.e2e
+    image: ${MYDIA_E2E_IMAGE:-ghcr.io/getmydia/mydia:master}
+    entrypoint: ["/e2e/server-entrypoint.sh"]
     container_name: e2e_mydia
     environment:
       # Phoenix config
@@ -95,6 +93,7 @@ services:
     volumes:
       - mydia_config:/config
       - mydia_data:/data
+      - ./scripts/e2e:/e2e:ro
     ports:
       - "14000:4000"
       - "14443:4443"
@@ -102,10 +101,17 @@ services:
       relay:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      # Gated on both the HTTP health endpoint and the seeding sentinel
+      # (scripts/e2e/server-entrypoint.sh), so dependents never start against
+      # a container whose seed step failed. start_period covers boot plus
+      # migrations plus seeding (ffmpeg generation and three separate
+      # `mydia rpc` calls, each of which boots its own BEAM node), measured
+      # around 16-17s end to end on a warm local image; 90s leaves a wide
+      # margin for slower CI runners.
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/health && test -f /tmp/e2e-seeded"]
       interval: 2s
       timeout: 2s
-      start_period: 15s
+      start_period: 90s
       retries: 20
     networks:
       - e2e
@@ -113,21 +119,34 @@ services:
   # ============================================
   # Flutter Integration Test Runner
   # ============================================
-  # The test container includes Chrome and runs tests using
-  # `flutter test -d chrome`, which manages Chrome directly.
+  # The test container is a Flutter toolbox image with the repo bind-mounted
+  # at runtime; it runs tests natively with `flutter test -d linux` under
+  # xvfb, not Chrome.
   test:
-    image: mydia-e2e-test:latest
-    build:
-      context: .
-      dockerfile: player/Dockerfile.test
+    image: ${PLAYER_E2E_TOOLBOX_IMAGE:-ghcr.io/getmydia/mydia/player-e2e-toolbox:master}
+    entrypoint: ["/e2e/run-tests.sh"]
+    working_dir: /workspace/player
     container_name: e2e_test
+    volumes:
+      # The repo root, so player/lib/graphql/schema.graphql resolves through
+      # its real symlink and native/mydia_p2p_core resolves at its natural
+      # relative path. Both hacks in the old Dockerfile go away.
+      - .:/workspace
+      - ./scripts/e2e:/e2e:ro
+      # Anonymous volumes masking host build output. Without these the
+      # container sees host-built artifacts containing host paths, which is
+      # what the old entrypoint's manual rm -rf calls were working around.
+      - /workspace/player/build
+      - /workspace/player/.dart_tool
+      - /workspace/player/linux/flutter/ephemeral
+      - /workspace/player/rust_builder/target
     environment:
       # Backend service URLs (test container is on the e2e network)
       MYDIA_URL: "http://mydia:4000"
       RELAY_URL: "http://relay:4001"
 
       # Test selection (set by ./dev player e2e --target/-- args)
-      E2E_TEST_TARGET: ${E2E_TEST_TARGET:-integration_test/pairing_flow_test.dart}
+      E2E_TEST_TARGET: ${E2E_TEST_TARGET:-integration_test/all_tests.dart}
       E2E_TEST_ARGS: ${E2E_TEST_ARGS:-}
 
       # Test admin credentials

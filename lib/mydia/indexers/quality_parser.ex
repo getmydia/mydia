@@ -31,6 +31,7 @@ defmodule Mydia.Indexers.QualityParser do
   """
 
   alias Mydia.Library.Structs.Quality
+  alias Mydia.Quality.Sources
 
   # Resolution patterns (ordered by priority for matching)
   defp resolutions do
@@ -41,25 +42,6 @@ defmodule Mydia.Indexers.QualityParser do
       {"576p", ~r/576p/i},
       {"480p", ~r/480p/i},
       {"360p", ~r/360p/i}
-    ]
-  end
-
-  # Source patterns
-  defp sources do
-    [
-      {"REMUX", ~r/remux/i},
-      {"BluRay", ~r/blu[\-\s]?ray|bluray|bdrip|brrip|bd(?:$|[\.\s])/i},
-      {"WEB-DL", ~r/web[\-\s]?dl|webdl/i},
-      {"WEBRip", ~r/web[\-\s]?rip|webrip/i},
-      {"HDTV", ~r/hdtv/i},
-      {"SDTV", ~r/sdtv/i},
-      {"DVDRip", ~r/dvd[\-\s]?rip|dvdrip/i},
-      {"DVD", ~r/dvd/i},
-      {"Telecine", ~r/telecine|tc/i},
-      {"Telesync", ~r/telesync|ts/i},
-      {"CAM", ~r/cam(?:rip)?/i},
-      {"Screener", ~r/screener|scr/i},
-      {"PDTV", ~r/pdtv/i}
     ]
   end
 
@@ -203,10 +185,7 @@ defmodule Mydia.Indexers.QualityParser do
   """
   @spec extract_source(String.t()) :: String.t() | nil
   def extract_source(title) do
-    sources()
-    |> Enum.find_value(fn {label, pattern} ->
-      if Regex.match?(pattern, title), do: label
-    end)
+    Sources.detect(title)
   end
 
   @doc """

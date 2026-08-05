@@ -12,6 +12,7 @@
 #   - player android <build|run|shell>    (nix devShell .#android, native Nix)
 #   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
 #   - player e2e / e2e-build              (Docker E2E stack, compose.player-e2e.yml)
+#     e2e pulls prebuilt images by default; --build forces local builds
 
 set -e
 
@@ -441,7 +442,7 @@ case "$COMMAND" in
             e2e)
                 shift
                 rebuild_images=false
-                test_target="integration_test/pairing_flow_test.dart"
+                test_target="integration_test/all_tests.dart"
                 test_args=""
                 while [ $# -gt 0 ]; do
                     case "$1" in
@@ -462,19 +463,46 @@ case "$COMMAND" in
                 done
                 echo -e "${GREEN}Running player E2E integration tests (Docker)...${NC}"
                 echo "Test target: $test_target"
+
                 if [ "$rebuild_images" = true ]; then
-                    DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build
+                    echo -e "${GREEN}Building E2E images locally...${NC}"
+                    DOCKER_BUILDKIT=1 docker build -f Dockerfile \
+                        --build-arg DATABASE_TYPE=sqlite -t mydia-e2e:local .
+                    DOCKER_BUILDKIT=1 docker build -f player/Dockerfile.test \
+                        -t player-e2e-toolbox:local .
+                    DOCKER_BUILDKIT=1 docker build -f metadata-relay/Dockerfile \
+                        -t metadata-relay:local .
+                    export MYDIA_E2E_IMAGE=mydia-e2e:local
+                    export PLAYER_E2E_TOOLBOX_IMAGE=player-e2e-toolbox:local
+                    export RELAY_E2E_IMAGE=metadata-relay:local
+                else
+                    docker compose -f compose.player-e2e.yml pull --quiet || \
+                        echo -e "${YELLOW}Warning: could not pull all images; compose will use whatever is cached locally${NC}"
                 fi
+
+                exit_code=0
                 E2E_TEST_TARGET="$test_target" E2E_TEST_ARGS="$test_args" \
-                    docker compose -f compose.player-e2e.yml up --abort-on-container-exit --exit-code-from test
-                exit_code=$?
+                    docker compose -f compose.player-e2e.yml up --abort-on-container-exit --exit-code-from test \
+                    || exit_code=$?
                 docker compose -f compose.player-e2e.yml down -v
                 exit $exit_code
                 ;;
             e2e-build)
                 echo -e "${GREEN}Pre-building player E2E images (Docker)...${NC}"
-                DOCKER_BUILDKIT=1 docker compose -f compose.player-e2e.yml build
+                DOCKER_BUILDKIT=1 docker build -f Dockerfile \
+                    --build-arg DATABASE_TYPE=sqlite -t mydia-e2e:local .
+                DOCKER_BUILDKIT=1 docker build -f player/Dockerfile.test \
+                    -t player-e2e-toolbox:local .
+                DOCKER_BUILDKIT=1 docker build -f metadata-relay/Dockerfile \
+                    -t metadata-relay:local .
                 echo -e "${GREEN}E2E images pre-built successfully!${NC}"
+                # --build is required here: without it, 'player e2e' takes the
+                # pull branch, and :local tags can never be pulled from a
+                # registry, so the copy-pasted command would always print a
+                # spurious "could not pull" warning. --build re-runs the same
+                # docker build commands above, which is a fast no-op against
+                # Docker's layer cache when nothing changed since this run.
+                echo "Run with: ./dev player e2e --build"
                 ;;
             android)
                 # Android builds use the player's flake.nix (native, not devenv)

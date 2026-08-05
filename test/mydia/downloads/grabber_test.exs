@@ -94,8 +94,32 @@ defmodule Mydia.Downloads.GrabberTest do
                Grabber.run_grab(optimistic, sr, media_item_id: movie.id, manual: true)
 
       assert Repo.get(Download, optimistic.id) == nil
-      assert_receive {:grab_duplicate, %{download_url: url}}
+      assert_receive {:grab_duplicate, %{download_url: url, reason: :duplicate_download}}
       assert url == sr.download_url
+    end
+
+    test "carries :already_have_files when files on disk are the blocker" do
+      # No in-flight download here. The movie already has a media file and the
+      # grab is not manual, so the existing-files check is what rejects it.
+      # Subscribers need the two cases apart: one means wait, the other means
+      # there is nothing to wait for.
+      movie = media_item_fixture(%{type: "movie"})
+      media_file_fixture(%{media_item_id: movie.id})
+
+      sr = search_result()
+
+      {:ok, optimistic} =
+        Downloads.create_download(%{
+          title: sr.title,
+          indexer: sr.indexer,
+          download_url: sr.download_url,
+          media_item_id: movie.id
+        })
+
+      assert :duplicate = Grabber.run_grab(optimistic, sr, media_item_id: movie.id)
+
+      assert Repo.get(Download, optimistic.id) == nil
+      assert_receive {:grab_duplicate, %{reason: :already_have_files}}
     end
   end
 

@@ -5,6 +5,8 @@ defmodule Mydia.Downloads.BlacklistsTest do
   alias Mydia.Downloads.ReleaseBlacklist
   alias Mydia.Repo
 
+  import Mydia.DownloadsFixtures
+
   describe "add/5" do
     test "inserts a row with the given fields" do
       assert {:ok, row} =
@@ -210,6 +212,40 @@ defmodule Mydia.Downloads.BlacklistsTest do
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
       {:ok, _} = Blacklists.add("a", "1", "T", "x", expires_at: future)
       assert 0 == Blacklists.cleanup_expired()
+    end
+  end
+
+  describe "extract_key/1" do
+    test "returns indexer and guid from metadata" do
+      download =
+        download_fixture(%{
+          indexer: "1337x",
+          metadata: %{"guid" => "https://1337x.to/torrent/123/"}
+        })
+
+      assert {:ok, "1337x", "https://1337x.to/torrent/123/"} = Blacklists.extract_key(download)
+    end
+
+    test "falls back to the indexer stored in metadata" do
+      download =
+        download_fixture(%{
+          indexer: nil,
+          metadata: %{"indexer" => "nyaa", "guid" => "abc"}
+        })
+
+      assert {:ok, "nyaa", "abc"} = Blacklists.extract_key(download)
+    end
+
+    test "errors when the guid is missing" do
+      download = download_fixture(%{indexer: "1337x", metadata: %{}})
+
+      assert {:error, :no_guid} = Blacklists.extract_key(download)
+    end
+
+    test "errors when the indexer is missing" do
+      download = download_fixture(%{indexer: nil, metadata: %{"guid" => "abc"}})
+
+      assert {:error, :no_indexer} = Blacklists.extract_key(download)
     end
   end
 end

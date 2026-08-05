@@ -256,7 +256,7 @@
                   )}
                 </span>
                 <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
-                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_size(
+                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{Components.format_size(
                     download.size
                   )}
                 </span>
@@ -286,7 +286,7 @@
                   )}
                 </span>
                 <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
-                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_size(
+                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{Components.format_size(
                     download.size
                   )}
                 </span>
@@ -538,70 +538,19 @@
                   {get_display_title(download)}
                 </div>
                 <div class="text-xs text-base-content/50">{download.title}</div>
-                <%!-- Unresolved files list with episode pickers --%>
-                <% unresolved_files = get_metadata_value(download, "unresolved_files") || [] %>
-                <%= if unresolved_files != [] do %>
-                  <form
-                    id={"resolve-files-form-#{download.id}"}
-                    phx-submit="resolve_files"
-                    class="mt-3 space-y-2"
-                  >
-                    <input type="hidden" name="download_id" value={download.id} />
-                    <%= for {file, idx} <- Enum.with_index(unresolved_files) do %>
-                      <div class="flex items-center gap-3 bg-base-200 rounded-lg px-3 py-2">
-                        <div class="flex-1 min-w-0">
-                          <div class="text-sm font-mono truncate">
-                            {file["name"] || Path.basename(file["path"])}
-                          </div>
-                          <div class="text-xs text-base-content/50">
-                            {format_size(file["size"] || 0)}
-                            <%= if file["parsed_season"] do %>
-                              <span>
-                                • S{String.pad_leading("#{file["parsed_season"]}", 2, "0")}
-                                <%= if file["parsed_episode"] do %>
-                                  E{String.pad_leading("#{file["parsed_episode"]}", 2, "0")}
-                                <% end %>
-                              </span>
-                            <% end %>
-                          </div>
-                        </div>
-                        <select
-                          name={"episode_#{idx}"}
-                          class="select select-bordered select-sm w-48"
-                        >
-                          <option value="">Select episode...</option>
-                          <%!-- Episodes will be populated based on the media item --%>
-                          <%= if download.media_item do %>
-                            <% episodes =
-                              get_episodes_for_media_item(
-                                @episodes_by_media_item,
-                                download.media_item
-                              ) %>
-                            <%= for episode <- episodes do %>
-                              <option value={episode.id}>
-                                S{String.pad_leading("#{episode.season_number}", 2, "0")}E{String.pad_leading(
-                                  "#{episode.episode_number}",
-                                  2,
-                                  "0"
-                                )}
-                                <%= if episode.title do %>
-                                  - {episode.title}
-                                <% end %>
-                              </option>
-                            <% end %>
-                          <% end %>
-                        </select>
-                      </div>
-                    <% end %>
-                    <div class="flex justify-end gap-2 mt-2">
-                      <button type="submit" class="btn btn-sm btn-primary">
-                        <.icon name="hero-arrow-down-tray" class="size-4" /> Import Files
-                      </button>
-                    </div>
-                  </form>
-                <% end %>
               </div>
               <div class="flex gap-1">
+                <button
+                  type="button"
+                  id={"match-files-#{download.id}"}
+                  class="btn btn-sm btn-outline"
+                  phx-click="open_match_files"
+                  phx-value-id={download.id}
+                  title="See what this download contains and match files by hand"
+                >
+                  <.icon name="hero-document-magnifying-glass" class="size-4" />
+                  <span class="hidden sm:inline">Match files…</span>
+                </button>
                 <button
                   type="button"
                   class="btn btn-square btn-ghost btn-sm"
@@ -772,6 +721,17 @@
                     <.icon name="hero-arrow-path" class="size-4" />
                   </button>
                 <% end %>
+                <button
+                  type="button"
+                  id={"match-files-#{download.id}"}
+                  class="btn btn-sm btn-outline"
+                  phx-click="open_match_files"
+                  phx-value-id={download.id}
+                  title="See what this download contains and match files by hand"
+                >
+                  <.icon name="hero-document-magnifying-glass" class="size-4" />
+                  <span class="hidden sm:inline">Match files…</span>
+                </button>
                 <button
                   type="button"
                   class="btn btn-square btn-ghost btn-sm"
@@ -979,5 +939,12 @@
         </button>
       </:actions>
     </.modal>
+
+    <%!-- Match files modal (manual file matching on import failure) --%>
+    <Components.match_files_modal
+      :if={@match_files_modal}
+      modal={@match_files_modal}
+      error={@match_files_error}
+    />
   </div>
 </Layouts.app>

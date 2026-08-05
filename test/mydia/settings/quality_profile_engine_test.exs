@@ -1,6 +1,7 @@
 defmodule Mydia.Settings.QualityProfileEngineTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Quality.Sources
   alias Mydia.Settings
   alias Mydia.Settings.QualityProfileEngine
   alias Mydia.Library.MediaFile
@@ -210,6 +211,31 @@ defmodule Mydia.Settings.QualityProfileEngineTest do
       assert summary.processed == 0
       assert summary.updated == 0
       assert summary.errors == []
+    end
+  end
+
+  describe "source inference from an on-disk path" do
+    test "detects cam-tier releases already sitting in the library" do
+      # The real file the production instance imported on 2026-08-04.
+      path =
+        "The Odyssey (2026)/The Odyssey (2026) 1080p HQ HDTS - x264 - [Tel + Tam + Hin + Eng] - HQ Clean - 3.3GB.mkv"
+
+      assert Sources.cam_tier?(QualityProfileEngine.infer_source_from_filename(path))
+    end
+
+    test "still detects good sources" do
+      assert QualityProfileEngine.infer_source_from_filename(
+               "The Matrix (1999)/The.Matrix.1999.1080p.BluRay.x264.mkv"
+             ) == "BluRay"
+
+      assert QualityProfileEngine.infer_source_from_filename(
+               "Interstellar (2014)/Interstellar.2014.2160p.WEB-DL.x265.mkv"
+             ) == "WEB-DL"
+    end
+
+    test "returns nil when the path carries no source token" do
+      assert QualityProfileEngine.infer_source_from_filename("Wonka (2023)/Wonka.2023.1080p.mkv") ==
+               nil
     end
   end
 end

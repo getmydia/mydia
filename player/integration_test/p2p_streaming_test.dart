@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:media_kit/media_kit.dart';
 
 import 'package:player/app.dart';
-import 'package:player/native/frb_generated.dart'
-    if (dart.library.js_interop) 'package:player/native/frb_stub.dart';
 import 'helpers/e2e_api_client.dart';
 import 'helpers/streaming_helpers.dart';
+import 'helpers/test_bootstrap.dart';
 
 /// E2E integration tests for P2P streaming functionality.
 ///
@@ -37,9 +34,7 @@ void main() {
 
   // Set up the app once before all tests
   setUpAll(() async {
-    await RustLib.init();
-    MediaKit.ensureInitialized();
-    await initHiveForFlutter();
+    await ensureTestBootstrap();
 
     await apiClient.waitForHealthy();
     await apiClient.login();
