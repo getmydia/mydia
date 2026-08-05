@@ -52,6 +52,16 @@ defmodule MydiaWeb.Schema.StreamingTest do
   }
   """
 
+  @echo_quality_mutation """
+  mutation StartStreamingSession($fileId: ID!, $strategy: StreamingStrategy!) {
+    startStreamingSession(fileId: $fileId, strategy: $strategy) {
+      sessionId
+      maxBitrate
+      maxHeight
+    }
+  }
+  """
+
   describe "startStreamingSession mutation" do
     @tag :tmp_dir
     test "a cold file (analyzed_at: nil) returns a non-nil duration", %{tmp_dir: tmp_dir} do
@@ -110,7 +120,48 @@ defmodule MydiaWeb.Schema.StreamingTest do
         stop_session(session["sessionId"], user)
       end
     end
+
+    @tag :tmp_dir
+    test "echoes the operator's transcode ceiling to a client that asked for nothing",
+         %{tmp_dir: tmp_dir} do
+      # The echo exists to be honest with clients. Composing the ceiling only
+      # inside the transcoder made this reply say "no height cap" while the
+      # encode really did scale, so a viewer on a direct connection saw
+      # "Original" over a downscaled stream.
+      user = AccountsFixtures.user_fixture()
+      media_file = cold_media_file(tmp_dir)
+
+      original = Application.get_env(:mydia, :runtime_config)
+      on_exit(fn -> restore_runtime_config(original) end)
+      put_transcode_ceiling(480)
+
+      result =
+        Absinthe.run(
+          @echo_quality_mutation,
+          MydiaWeb.Schema,
+          variables: %{"fileId" => media_file.id, "strategy" => "TRANSCODE"},
+          context: %{current_user: user}
+        )
+
+      assert {:ok, %{data: %{"startStreamingSession" => session}}} = result
+
+      try do
+        assert session["maxHeight"] == 480
+        assert session["maxBitrate"] == nil
+      after
+        stop_session(session["sessionId"], user)
+      end
+    end
   end
+
+  defp put_transcode_ceiling(height) do
+    defaults = Mydia.Config.Schema.defaults()
+    streaming = %{defaults.streaming | max_transcode_height: height}
+    Application.put_env(:mydia, :runtime_config, %{defaults | streaming: streaming})
+  end
+
+  defp restore_runtime_config(nil), do: Application.delete_env(:mydia, :runtime_config)
+  defp restore_runtime_config(config), do: Application.put_env(:mydia, :runtime_config, config)
 
   # A real, tiny (2s) H.264+AAC file so the cold-file path runs an actual
   # ffprobe and an actual FFmpeg HLS transcode, not a stub. Video+audio
@@ -175,6 +226,14 @@ defmodule MydiaWeb.Schema.StreamingTest do
 
     test "honours a relay request already below the ceiling" do
       assert StreamingResolver.effective_quality("relay", 800, 360) == {800, 360}
+    end
+
+    test "clamps each half of the pair independently" do
+      # The two min/2 calls are separate, so a request that is under the
+      # ceiling on one axis and over it on the other must come back mixed
+      # rather than clamped or passed through wholesale.
+      assert StreamingResolver.effective_quality("relay", 800, 1080) == {800, 720}
+      assert StreamingResolver.effective_quality("relay", 8000, 360) == {2000, 360}
     end
   end
 

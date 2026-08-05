@@ -682,9 +682,10 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   end
 
   # A zero or negative ceiling would scale to nothing. It can only arrive from
-  # a misconfigured transcode height ceiling, so say so rather than silently
-  # encoding at native resolution and leaving the operator to wonder why their
-  # cap does nothing.
+  # a misconfigured `streaming.max_transcode_height` (the schema rejects it,
+  # but a stale cached runtime config could still carry one), so say so rather
+  # than silently encoding at native resolution and leaving the operator to
+  # wonder why their cap does nothing.
   defp scale_args(height) when is_integer(height) do
     Logger.warning(
       "Ignoring a non-positive transcode height ceiling (#{height}); " <>
@@ -696,19 +697,39 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
   defp scale_args(_), do: []
 
-  # Composes the per-request height with the operator's configured ceiling by
-  # taking whichever is lower. Either may be nil, meaning "no limit from this
-  # source"; nil from both means native resolution.
-  defp effective_max_height(requested) do
-    configured =
-      Application.get_env(:mydia, :streaming, [])
-      |> Keyword.get(:max_transcode_height)
+  @doc """
+  Composes a requested output height with the operator's configured ceiling
+  by taking whichever is lower.
 
-    case {requested, configured} do
+  Either may be nil, meaning "no limit from this source"; nil from both means
+  native resolution.
+
+  Public because the GraphQL resolver echoes back the height it actually
+  applied, and that echo has to be derived from the same expression the
+  filter is. Computing it separately meant an operator who set
+  `streaming.max_transcode_height` made the server tell a direct-connection
+  client "Original" while this module really did scale.
+
+  The ceiling comes from the layered runtime config (env > DB/UI > YAML >
+  schema defaults; see `Mydia.Config.Loader`) rather than a flat
+  `Application.get_env(:mydia, :streaming, ...)` key. Nothing explodes the
+  resolved config struct back out to flat keys, so a flat read here would
+  silently ignore both `MAX_TRANSCODE_HEIGHT` and the settings UI.
+  """
+  @spec effective_max_height(integer() | nil) :: integer() | nil
+  def effective_max_height(requested) do
+    case {requested, configured_max_height()} do
       {nil, nil} -> nil
       {nil, cap} -> cap
       {height, nil} -> height
       {height, cap} -> min(height, cap)
+    end
+  end
+
+  defp configured_max_height do
+    case Mydia.Config.get() do
+      %{streaming: %{max_transcode_height: height}} -> height
+      _ -> nil
     end
   end
 end

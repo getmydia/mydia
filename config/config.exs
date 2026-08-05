@@ -354,16 +354,14 @@ config :mydia, :streaming,
   # Transcoding policy: :copy_when_compatible or :always
   # :copy_when_compatible - Use stream copy for compatible codecs (H.264/AAC) - 10-100x faster, zero quality loss
   # :always - Always re-encode (original behavior, slower but ensures consistent output)
-  transcode_policy: :copy_when_compatible,
-  # Ceiling, in pixels, on the output height of any HLS transcode. nil means
-  # no ceiling: a transcode keeps the source resolution.
-  #
-  # This exists because dropping the old hardcoded 720p output means a 4K file
-  # with an incompatible codec now transcodes at 4K, which a small home server
-  # may not sustain in realtime. Operators on constrained hardware set this
-  # once rather than configuring every client. It composes with the
-  # per-request height from the player by taking whichever is lower.
-  max_transcode_height: nil
+  transcode_policy: :copy_when_compatible
+
+# The transcode height ceiling is deliberately NOT here. This file is
+# compile-time and baked into the release, so a key here is unreachable to an
+# operator running the published image. It lives in the layered runtime config
+# instead (lib/mydia/config/schema.ex, the :streaming embed), which makes it
+# settable through MAX_TRANSCODE_HEIGHT, config.yml, or the settings UI. See
+# Mydia.Streaming.FfmpegHlsTranscoder.effective_max_height/1.
 
 # Episode monitor search limits
 # Prevents excessive API usage that exhausts indexer quotas

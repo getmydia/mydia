@@ -11,6 +11,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Streaming.Candidates
+  alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
 
@@ -90,12 +91,20 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         {:error, "Authentication required"}
 
       user ->
-        {max_bitrate, max_height} =
+        {max_bitrate, clamped_height} =
           effective_quality(
             context[:peer_connection_type],
             args[:max_bitrate],
             args[:max_height]
           )
+
+        # Composed here, not left to the transcoder, so the height this
+        # mutation echoes back is the one that will actually be encoded.
+        # The operator's ceiling used to be applied inside the transcoder
+        # alone, which made a server with a ceiling set report "Original" to
+        # a client that asked for no cap while really scaling it — the one
+        # thing echoing the applied value exists to prevent.
+        max_height = FfmpegHlsTranscoder.effective_max_height(clamped_height)
 
         start_session_for_user(
           file_id,

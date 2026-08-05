@@ -126,6 +126,33 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
       refute html =~ "FlareSolverr"
       refute has_element?(view, "input[phx-value-key='flaresolverr.url']")
     end
+
+    test "offers the transcode height ceiling", %{view: view} do
+      # The escape hatch for an operator whose hardware cannot encode a 4K
+      # file in realtime. It shipped once as a compile-time key in
+      # config/config.exs, reachable only by rebuilding the image.
+      assert has_element?(
+               view,
+               "input[phx-value-key='streaming.max_transcode_height']"
+             )
+    end
+
+    test "persists a typed setting instead of crashing on blur", %{view: view} do
+      # `phx-blur` sends the element's value and its phx-value-* metadata, not
+      # a `settings` map. Every typed setting in this screen used to raise
+      # FunctionClauseError here, which left the database layer reachable for
+      # toggles but not for anything an operator types.
+      html =
+        view
+        |> element("input[phx-value-key='streaming.max_transcode_height']")
+        |> render_blur(%{"value" => "720"})
+
+      assert html =~ "Setting updated successfully"
+
+      setting = Settings.get_config_setting_by_key("streaming.max_transcode_height")
+      assert setting.value == "720"
+      assert setting.category == :streaming
+    end
   end
 
   describe "Crash report widget" do

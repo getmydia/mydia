@@ -306,6 +306,16 @@ These pace the daily upgrade sweep instance-wide. Which items it considers is se
 
 See [Automatic Quality Upgrades](../how-to/automatic-quality-upgrades.md) for what these cost you in disk.
 
+## Streaming
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MAX_TRANSCODE_HEIGHT` | Ceiling in pixels on the output height of any transcode, for example `720`. Unset means no ceiling and a transcode keeps the source resolution | No limit |
+
+A transcode only happens when a file's codec is not playable as-is, or when a player asks for a quality below the source. This ceiling bounds those; it never
+upscales, and it does not apply when a file is streamed without re-encoding. Set it on a server that cannot encode 4K in realtime, which is what an
+incompatible 4K file would otherwise ask of it. Also settable under **Admin > Configuration > Settings > Streaming**.
+
 ## Advanced Configuration
 
 | Variable | Description | Default |
