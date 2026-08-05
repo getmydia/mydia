@@ -65,10 +65,18 @@ void main() {
             container: container,
             child: const MaterialApp(
               home: Scaffold(
+                // MediaCard's Column is MainAxisSize.max, so an unbounded host
+                // stretches it to the full viewport while the poster occupies
+                // only the top ~195px, putting getCenter in dead space. Hover is
+                // scoped to the poster itself, so the host must be bounded.
                 body: Center(
-                  child: MediaCard(
-                    title: 'Movie',
-                    posterUrl: 'https://example.com/p.jpg',
+                  child: SizedBox(
+                    width: 130,
+                    height: 260,
+                    child: MediaCard(
+                      title: 'Movie',
+                      posterUrl: 'https://example.com/p.jpg',
+                    ),
                   ),
                 ),
               ),
@@ -83,8 +91,7 @@ void main() {
         addTearDown(gesture.removePointer);
 
         // Hover enters the card.
-        await gesture
-            .moveTo(tester.getCenter(find.byType(MediaCard)));
+        await gesture.moveTo(tester.getCenter(find.byType(MediaCard)));
         await tester.pumpAndSettle();
         expect(
           container.read(ambientBackdropControllerProvider).imageUrl,
@@ -111,7 +118,15 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: const MaterialApp(
-            home: Scaffold(body: Center(child: MediaCard(title: 'No Art'))),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 130,
+                  height: 260,
+                  child: MediaCard(title: 'No Art'),
+                ),
+              ),
+            ),
           ),
         ),
       );
@@ -132,7 +147,8 @@ void main() {
   });
 
   group('default updates are not masked by a matching hover (regression)', () {
-    testWidgets('a published default is recorded even when it equals the '
+    testWidgets(
+        'a published default is recorded even when it equals the '
         'active hover; clearHover then settles on it', (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
