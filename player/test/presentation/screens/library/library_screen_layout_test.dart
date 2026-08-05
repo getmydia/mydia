@@ -4,9 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Riverpod 3.x; it lives in the `misc.dart` sub-library.
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/graphql/watch/freshness.dart';
+import 'package:player/core/graphql/watch/query_key.dart';
 import 'package:player/presentation/screens/library/library_controller.dart';
 import 'package:player/presentation/screens/library/library_screen.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
@@ -133,6 +136,51 @@ double appBarBottom(WidgetTester tester) {
 double firstPosterTop(WidgetTester tester) =>
     tester.getTopLeft(find.byType(MediaPoster).first).dy;
 
+/// Pins the freshness state for the whole test.
+///
+/// `build()` alone is not enough: the screen's real `LibraryController`
+/// creates a watcher that calls `publish` as soon as its fetch resolves, which
+/// would immediately overwrite the state under test with
+/// `isRefreshing: false`. Both mutators are no-ops so the pinned map wins.
+class _PinnedFreshnessRegistry extends FreshnessRegistry {
+  _PinnedFreshnessRegistry(this._pinned);
+
+  final Map<QueryKey, Freshness> _pinned;
+
+  @override
+  Map<QueryKey, Freshness> build() => _pinned;
+
+  @override
+  void publish(QueryKey key, Freshness freshness) {}
+
+  @override
+  void clear(QueryKey key) {}
+}
+
+/// `FreshnessHeader` renders nothing at all in offline mode, so the auth state
+/// has to be pinned to authenticated for the in-flight line to show.
+class _StubAuthState extends AuthStateNotifier {
+  _StubAuthState(this._status);
+
+  final AuthStatus _status;
+
+  @override
+  AsyncValue<AuthStatus> build() => AsyncValue.data(_status);
+}
+
+List<Override> refreshingOverrides() => [
+      authStateProvider
+          .overrideWith(() => _StubAuthState(AuthStatus.authenticated)),
+      freshnessRegistryProvider.overrideWith(
+        () => _PinnedFreshnessRegistry({
+          QueryKeys.moviesList: Freshness(
+            fetchedAt: DateTime(2026, 8, 4),
+            isRefreshing: true,
+          ),
+        }),
+      ),
+    ];
+
 void main() {
   testWidgets('grid starts just below the app bar on desktop', (tester) async {
     await pumpLibrary(tester, size: kDesktopSize);
@@ -159,5 +207,33 @@ void main() {
     final listTop = tester.widget<ListView>(find.byType(ListView)).padding;
 
     expect(listTop, gridTop);
+  });
+
+  testWidgets('a refresh in flight does not move the grid', (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      extraOverrides: refreshingOverrides(),
+      settle: false,
+    );
+
+    expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
+    expect(firstPosterTop(tester), appBarBottom(tester) + kContentGap);
+  });
+
+  testWidgets('the grid still scrolls while the refresh line shows',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      extraOverrides: refreshingOverrides(),
+      settle: false,
+    );
+
+    final before = firstPosterTop(tester);
+    await tester.drag(find.byType(GridView), const Offset(0, -120));
+    await tester.pump();
+
+    expect(before - firstPosterTop(tester), 120);
   });
 }

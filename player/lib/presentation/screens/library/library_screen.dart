@@ -142,52 +142,63 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       extendBodyBehindAppBar: true,
       appBar:
           _buildAppBar(title, icon, isDesktop, effectiveShowSearch, barHeight),
-      body: Column(
+      // A `Stack`, not a `Column`: `FreshnessHeader` carries a top inset that
+      // exists purely to clear an app bar this body already extends behind. As
+      // a `Column` sibling that inset was charged as layout height too, so
+      // every background refetch shoved the whole grid down by ~161px on top
+      // of its own padding. Overlaying keeps the header in the same pixels
+      // without it owning any of the scroll view's space.
+      body: Stack(
         children: [
-          FreshnessHeader(
-            queryKeys: [
-              widget.libraryType == LibraryType.movies
-                  ? QueryKeys.moviesList
-                  : QueryKeys.tvShowsList,
-            ],
-            topInset: chromeTop,
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref
-                    .read(
-                        libraryControllerProvider(widget.libraryType).notifier)
-                    .refresh();
+          RefreshIndicator(
+            // Without this the spinner drops from y=0, behind the glass bar.
+            edgeOffset: chromeTop,
+            onRefresh: () async {
+              await ref
+                  .read(libraryControllerProvider(widget.libraryType).notifier)
+                  .refresh();
+            },
+            child: libraryData.when(
+              loading: () => _buildLoadingView(),
+              error: (error, stackTrace) => _buildErrorView(error),
+              data: (data) {
+                if (data.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                // Filter items based on search query
+                final searchQuery = _searchController.text.toLowerCase().trim();
+                final filteredItems = searchQuery.isEmpty
+                    ? data.items
+                    : data.items
+                        .where((item) =>
+                            item.title.toLowerCase().contains(searchQuery))
+                        .toList();
+
+                if (filteredItems.isEmpty && searchQuery.isNotEmpty) {
+                  return _buildNoSearchResultsState(searchQuery);
+                }
+
+                return _viewMode == ViewMode.grid
+                    ? _buildGridView(context, filteredItems, scrollTopPadding)
+                    : _buildListView(context, filteredItems, scrollTopPadding);
               },
-              child: libraryData.when(
-                loading: () => _buildLoadingView(),
-                error: (error, stackTrace) => _buildErrorView(error),
-                data: (data) {
-                  if (data.isEmpty) {
-                    return _buildEmptyState();
-                  }
-
-                  // Filter items based on search query
-                  final searchQuery =
-                      _searchController.text.toLowerCase().trim();
-                  final filteredItems = searchQuery.isEmpty
-                      ? data.items
-                      : data.items
-                          .where((item) =>
-                              item.title.toLowerCase().contains(searchQuery))
-                          .toList();
-
-                  if (filteredItems.isEmpty && searchQuery.isNotEmpty) {
-                    return _buildNoSearchResultsState(searchQuery);
-                  }
-
-                  return _viewMode == ViewMode.grid
-                      ? _buildGridView(context, filteredItems, scrollTopPadding)
-                      : _buildListView(
-                          context, filteredItems, scrollTopPadding);
-                },
-              ),
+            ),
+          ),
+          // `Positioned` rather than a bare `Stack` child so the header spans
+          // the full width explicitly instead of relying on loose constraints
+          // plus the banner's own `width: double.infinity`.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: FreshnessHeader(
+              queryKeys: [
+                widget.libraryType == LibraryType.movies
+                    ? QueryKeys.moviesList
+                    : QueryKeys.tvShowsList,
+              ],
+              topInset: chromeTop,
             ),
           ),
         ],
