@@ -5,6 +5,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
 
   alias Mydia.{Library, Media, Playback}
 
+  alias Mydia.Media.RecentlyAdded
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
   alias MydiaWeb.Schema.Resolvers.ItemBuilder
@@ -41,39 +42,35 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   def recently_added(_parent, args, _info) do
     first = Map.get(args, :first, 20)
     after_cursor = Map.get(args, :after)
-    types = Map.get(args, :types)
+    thirty_days_ago = DateTime.add(DateTime.utc_now(), -30, :day)
 
-    # Filter to items added in last 30 days
-    thirty_days_ago = DateTime.utc_now() |> DateTime.add(-30, :day)
+    entries =
+      RecentlyAdded.list_recent(
+        since: thirty_days_ago,
+        types: requested_types(Map.get(args, :types))
+      )
 
-    # Build query options
-    opts = [preload: [], added_since: thirty_days_ago, has_files: true]
-
-    opts =
-      if types do
-        type_filter =
-          cond do
-            :movie in types and :tv_show in types -> nil
-            :movie in types -> "movie"
-            :tv_show in types -> "tv_show"
-            true -> nil
-          end
-
-        if type_filter, do: Keyword.put(opts, :type, type_filter), else: opts
-      else
-        opts
-      end
-
-    # Get recently added items (sorted by most recent first)
     all_items =
-      Media.list_media_items(opts)
-      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-      |> Enum.map(&ItemBuilder.recently_added_item/1)
+      Enum.map(entries, fn entry ->
+        ItemBuilder.recently_added_item(entry.media_item,
+          added_at: entry.content_added_at,
+          new_episode_count: entry.new_episode_count,
+          latest_episode: entry.latest_episode
+        )
+      end)
 
-    # Apply cursor pagination
-    items = paginate_simple(all_items, first, after_cursor)
+    {:ok, paginate_simple(all_items, first, after_cursor)}
+  end
 
-    {:ok, items}
+  # The GraphQL arg is a list of atoms; RecentlyAdded filters on the string
+  # column. Nil and a list covering both types both mean "no filter".
+  defp requested_types(nil), do: nil
+  defp requested_types([]), do: nil
+
+  defp requested_types(types) do
+    strings = Enum.map(types, &to_string/1)
+
+    if "movie" in strings and "tv_show" in strings, do: nil, else: strings
   end
 
   @spec up_next(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
@@ -127,10 +124,13 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
         {:ok, []}
 
       user ->
+        favorites = Media.list_user_favorites(user.id) |> maybe_filter_by_type(types)
+        added_at = RecentlyAdded.added_at_map(ids: Enum.map(favorites, & &1.id))
+
         all_items =
-          Media.list_user_favorites(user.id)
-          |> maybe_filter_by_type(types)
-          |> Enum.map(&ItemBuilder.recently_added_item/1)
+          Enum.map(favorites, fn item ->
+            ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
+          end)
 
         items = paginate_simple(all_items, first, after_cursor)
         {:ok, items}
@@ -158,12 +158,19 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
           |> Enum.reject(&is_nil/1)
           |> MapSet.new()
 
-        all_items =
+        unwatched =
           media_items
           |> Enum.reject(&MapSet.member?(watched_ids, &1.id))
           |> maybe_filter_by_type(types)
-          |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-          |> Enum.map(&ItemBuilder.recently_added_item/1)
+
+        added_at = RecentlyAdded.added_at_map(ids: Enum.map(unwatched, & &1.id))
+
+        all_items =
+          unwatched
+          |> Enum.sort_by(&(Map.get(added_at, &1.id) || &1.inserted_at), {:desc, DateTime})
+          |> Enum.map(fn item ->
+            ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
+          end)
 
         items = paginate_simple(all_items, first, after_cursor)
         {:ok, items}

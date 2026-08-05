@@ -40,10 +40,12 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
     first = Map.get(args, :first, 50)
     collection = Collections.get_collection!(user, id)
     items = Collections.list_collection_items(collection, limit: first)
+    added_at = Mydia.Media.RecentlyAdded.added_at_map(ids: Enum.map(items, & &1.id))
 
     result =
-      items
-      |> Enum.map(&ItemBuilder.recently_added_item/1)
+      Enum.map(items, fn item ->
+        ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
+      end)
 
     {:ok, result}
   rescue

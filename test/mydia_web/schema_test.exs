@@ -1,7 +1,11 @@
 defmodule MydiaWeb.SchemaTest do
-  use ExUnit.Case
+  use MydiaWeb.ConnCase
+
+  import Ecto.Query
 
   alias Absinthe.Schema
+  alias Mydia.AccountsFixtures
+  alias Mydia.MediaFixtures
 
   describe "GraphQL Schema" do
     test "schema compiles and introspects successfully" do
@@ -307,5 +311,117 @@ defmodule MydiaWeb.SchemaTest do
       assert "REVOKED" in enum_values
       assert "DELETED" in enum_values
     end
+  end
+
+  describe "recentlyAdded with content timestamps" do
+    setup do
+      %{user: AccountsFixtures.user_fixture()}
+    end
+
+    test "surfaces a long-owned show after a new episode arrives", %{user: user} do
+      show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "The Bear"})
+
+      episode =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 4,
+          episode_number: 2
+        })
+
+      file = MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+      MediaFixtures.backdate_media_file(file, DateTime.add(DateTime.utc_now(), -2, :day))
+
+      # The show record itself is ancient; only its content is new.
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^show.id),
+        set: [inserted_at: ~U[2024-01-01 00:00:00Z]]
+      )
+
+      query = """
+      query {
+        recentlyAdded(first: 10) {
+          id
+          title
+          addedAt
+          newEpisodeCount
+          latestSeasonNumber
+          latestEpisodeNumber
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => [item]}}} = run_query(query, %{}, user)
+
+      assert item["id"] == show.id
+      assert item["newEpisodeCount"] == 1
+      assert item["latestSeasonNumber"] == 4
+      assert item["latestEpisodeNumber"] == 2
+      refute String.starts_with?(item["addedAt"], "2024")
+    end
+
+    test "a movie reports nil episode context", %{user: user} do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      MediaFixtures.backdate_media_file(file, DateTime.add(DateTime.utc_now(), -2, :day))
+
+      query = """
+      query {
+        recentlyAdded(first: 10) {
+          id
+          newEpisodeCount
+          latestSeasonNumber
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => [item]}}} = run_query(query, %{}, user)
+
+      assert item["id"] == movie.id
+      assert item["newEpisodeCount"] == nil
+      assert item["latestSeasonNumber"] == nil
+    end
+
+    test "favorites reports the corrected timestamp with nil context", %{user: user} do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      MediaFixtures.backdate_media_file(file, ~U[2026-08-03 12:00:00Z])
+
+      favorite_item(user, movie)
+
+      query = """
+      query {
+        favorites(first: 10) {
+          id
+          addedAt
+          newEpisodeCount
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"favorites" => [item]}}} = run_query(query, %{}, user)
+
+      assert item["id"] == movie.id
+      assert item["addedAt"] =~ "2026-08-03"
+      assert item["newEpisodeCount"] == nil
+    end
+
+    test "rejects the new fields with a recognizable message when absent" do
+      # Pins the string that the player's downgrade detector matches on. If
+      # Absinthe ever rephrases this, the player guard must be updated in the
+      # same change.
+      query = "query { recentlyAdded(first: 1) { id noSuchField } }"
+
+      {:ok, %{errors: [error | _]}} = Absinthe.run(query, MydiaWeb.Schema)
+
+      assert error.message =~ "Cannot query field"
+    end
+  end
+
+  defp run_query(query, variables, user) do
+    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: %{current_user: user})
+  end
+
+  defp favorite_item(user, media_item) do
+    {:ok, _} = Mydia.Media.toggle_favorite(user.id, media_item.id)
   end
 end
