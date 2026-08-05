@@ -108,4 +108,96 @@ defmodule Mydia.Media.RecentlyAddedTest do
       assert RecentlyAdded.added_at_map(ids: []) == %{}
     end
   end
+
+  describe "list_recent/1" do
+    setup do
+      %{since: @last_week}
+    end
+
+    test "returns a long-owned show whose episode arrived inside the window", %{since: since} do
+      show = media_item_fixture(%{type: "tv_show", title: "The Bear"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 4, episode_number: 2})
+      backdate_media_file(media_file_fixture(%{episode_id: episode.id}), @yesterday)
+
+      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert entry.media_item.id == show.id
+      assert entry.content_added_at == @yesterday
+      assert entry.new_episode_count == 1
+      assert entry.latest_episode.id == episode.id
+    end
+
+    test "excludes items whose content predates the window", %{since: since} do
+      show = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id})
+      backdate_media_file(media_file_fixture(%{episode_id: episode.id}), @long_ago)
+
+      assert RecentlyAdded.list_recent(since: since) == []
+    end
+
+    test "counts only episodes first filled inside the window", %{since: since} do
+      show = media_item_fixture(%{type: "tv_show"})
+      old_ep = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      new_ep = episode_fixture(%{media_item_id: show.id, season_number: 4, episode_number: 2})
+
+      backdate_media_file(media_file_fixture(%{episode_id: old_ep.id}), @long_ago)
+      backdate_media_file(media_file_fixture(%{episode_id: new_ep.id}), @yesterday)
+
+      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert entry.new_episode_count == 1
+      assert entry.latest_episode.id == new_ep.id
+    end
+
+    test "a movie reports nil context rather than a count of one", %{since: since} do
+      movie = media_item_fixture(%{type: "movie"})
+      backdate_media_file(media_file_fixture(%{media_item_id: movie.id}), @yesterday)
+
+      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert entry.media_item.id == movie.id
+      assert entry.new_episode_count == nil
+      assert entry.latest_episode == nil
+    end
+
+    test "a show whose newest slot is unmatched files has a count but no episode",
+         %{since: since} do
+      show = media_item_fixture(%{type: "tv_show"})
+      backdate_media_file(media_file_fixture(%{media_item_id: show.id}), @yesterday)
+
+      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert entry.new_episode_count == 1
+      assert entry.latest_episode == nil
+    end
+
+    test "orders newest first", %{since: since} do
+      older = media_item_fixture(%{type: "movie", title: "Older"})
+      newer = media_item_fixture(%{type: "movie", title: "Newer"})
+
+      backdate_media_file(media_file_fixture(%{media_item_id: older.id}), @last_week)
+      backdate_media_file(media_file_fixture(%{media_item_id: newer.id}), @yesterday)
+
+      assert [first, second] = RecentlyAdded.list_recent(since: since)
+      assert first.media_item.id == newer.id
+      assert second.media_item.id == older.id
+    end
+
+    test "filters by type", %{since: since} do
+      movie = media_item_fixture(%{type: "movie"})
+      show = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id})
+
+      backdate_media_file(media_file_fixture(%{media_item_id: movie.id}), @yesterday)
+      backdate_media_file(media_file_fixture(%{episode_id: episode.id}), @yesterday)
+
+      assert [entry] = RecentlyAdded.list_recent(since: since, types: ["movie"])
+      assert entry.media_item.id == movie.id
+    end
+
+    test "honors the limit", %{since: since} do
+      for _ <- 1..3 do
+        movie = media_item_fixture(%{type: "movie"})
+        backdate_media_file(media_file_fixture(%{media_item_id: movie.id}), @yesterday)
+      end
+
+      assert length(RecentlyAdded.list_recent(since: since, limit: 2)) == 2
+    end
+  end
 end
