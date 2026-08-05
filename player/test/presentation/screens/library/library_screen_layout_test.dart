@@ -77,6 +77,51 @@ Map<String, dynamic> moviesPage(List<String> ids) => {
       },
     };
 
+/// The TV shows connection, whose node shape differs from a movie's: no
+/// `progress`, plus `status`, `seasonCount`, `episodeCount` and `nextEpisode`.
+Map<String, dynamic> tvShowsPage(List<String> ids) => {
+      '__typename': 'Query',
+      'tvShows': {
+        '__typename': 'TvShowConnection',
+        'edges': [
+          for (final id in ids)
+            {
+              '__typename': 'TvShowEdge',
+              'cursor': 'c-$id',
+              'node': {
+                '__typename': 'TvShow',
+                'id': id,
+                'title': 'Show $id',
+                'year': 2026,
+                'overview': null,
+                'status': null,
+                'genres': <String>[],
+                'contentRating': null,
+                'rating': null,
+                'seasonCount': 1,
+                'episodeCount': 8,
+                'artwork': {
+                  '__typename': 'Artwork',
+                  'posterUrl': null,
+                  'backdropUrl': null,
+                  'thumbnailUrl': null,
+                },
+                'isFavorite': false,
+                'nextEpisode': null,
+              },
+            }
+        ],
+        'pageInfo': {
+          '__typename': 'PageInfo',
+          'hasNextPage': false,
+          'hasPreviousPage': false,
+          'startCursor': 'c-${ids.first}',
+          'endCursor': 'c-${ids.last}',
+        },
+        'totalCount': ids.length,
+      },
+    };
+
 /// Mounts the real [LibraryScreen] over a scripted GraphQL link.
 ///
 /// [settle] must be false whenever the freshness in-flight line will be
@@ -87,6 +132,7 @@ Map<String, dynamic> moviesPage(List<String> ids) => {
 Future<void> pumpLibrary(
   WidgetTester tester, {
   required Size size,
+  LibraryType libraryType = LibraryType.movies,
   int itemCount = 40,
   List<Override> extraOverrides = const [],
   bool settle = true,
@@ -96,23 +142,23 @@ Future<void> pumpLibrary(
   tester.view.padding = const FakeViewPadding(top: kStatusBarTop);
   addTearDown(tester.view.reset);
 
+  final ids = List.generate(itemCount, (i) => '$i');
+  final page =
+      libraryType == LibraryType.movies ? moviesPage(ids) : tvShowsPage(ids);
+
   await mockNetworkImages(() async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           asyncGraphqlClientProvider.overrideWith(
-            (ref) async => stubClient(
-              StubLink.responses([
-                moviesPage(List.generate(itemCount, (i) => '$i')),
-              ]),
-            ),
+            (ref) async => stubClient(StubLink.responses([page])),
           ),
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
           ...extraOverrides,
         ],
-        child: const MaterialApp(
-          home: LibraryScreen(libraryType: LibraryType.movies),
+        child: MaterialApp(
+          home: LibraryScreen(libraryType: libraryType),
         ),
       ),
     );
@@ -184,6 +230,17 @@ List<Override> refreshingOverrides() => [
 void main() {
   testWidgets('grid starts just below the app bar on desktop', (tester) async {
     await pumpLibrary(tester, size: kDesktopSize);
+
+    expect(firstPosterTop(tester), appBarBottom(tester) + kContentGap);
+  });
+
+  testWidgets('tv shows grid starts just below the app bar too',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      libraryType: LibraryType.tvShows,
+    );
 
     expect(firstPosterTop(tester), appBarBottom(tester) + kContentGap);
   });
