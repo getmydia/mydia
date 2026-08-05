@@ -768,30 +768,59 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // still carrying that sentinel instead of a real file id. There is no
       // file to ask about, so ask about the media item and let the server rank.
       final byFile = widget.fileId != 'offline';
-      final candidatesResult = await _fetchStreamingCandidates(
+      final mediaContentType =
+          widget.mediaType == 'movie' ? 'movie' : 'episode';
+      var candidatesFetch = await _fetchStreamingCandidates(
         graphqlClient,
-        byFile ? 'file' : (widget.mediaType == 'movie' ? 'movie' : 'episode'),
+        byFile ? 'file' : mediaContentType,
         byFile ? widget.fileId : widget.mediaId,
       );
 
-      // The file actually being played. Normally the user's choice; on the
-      // offline fall-through it is whatever the server ranked highest.
+      // A selected file can go missing out from under a live route: a
+      // quality upgrade replaces an episode's file, writing a new
+      // `media_files` row and deleting the old one, and the route still
+      // carries the old id. The server tells us that explicitly —
+      // `serverRejected`, a GraphQL error, not a transport failure — so
+      // re-ask by media item and let the server rank a file that still
+      // exists, the same fallback the offline sentinel already uses below.
       //
-      // On that fall-through there is no `widget.fileId` worth falling back
-      // to if the candidates call itself failed (network hiccup, server
-      // unreachable): `widget.fileId` is still the `'offline'` sentinel that
-      // sent us down this branch in the first place, not a real file id.
-      // Sending it on to `StartStreamingSession` would just repeat the
-      // malformed-id failure this branch exists to avoid, so fail here
-      // instead with a message the user can act on — the same
+      // A transport failure (unreachable server, timeout, socket error) gets
+      // no such retry: `serverRejected` is false in that case specifically so
+      // this branch is skipped, and `playFileId` below keeps resolving to
+      // `widget.fileId`. Falling back on a network blip would silently swap
+      // the user's chosen file for a different one.
+      var usesServerRankedFile = !byFile;
+      if (byFile && candidatesFetch.serverRejected) {
+        usesServerRankedFile = true;
+        candidatesFetch = await _fetchStreamingCandidates(
+          graphqlClient,
+          mediaContentType,
+          widget.mediaId,
+        );
+      }
+
+      final candidatesResult = candidatesFetch.candidates;
+
+      // The file actually being played. Normally the user's choice; on the
+      // offline fall-through, or when the selected file was rejected by the
+      // server and re-asked above, it is whatever the server ranked highest
+      // instead.
+      //
+      // On both of those fall-throughs there is no `widget.fileId` worth
+      // falling back to if the candidates call itself failed (network
+      // hiccup, server unreachable): `widget.fileId` is either the
+      // `'offline'` sentinel or a file id the server has just said does not
+      // exist. Sending either on to `StartStreamingSession` would just
+      // repeat a failure this branch exists to avoid, so fail here instead
+      // with a message the user can act on — the same
       // throw-into-the-surrounding-catch convention used above for the
       // missing P2P server address.
-      final playFileId = byFile
-          ? widget.fileId
-          : candidatesResult?.fileId ??
+      final playFileId = usesServerRankedFile
+          ? candidatesResult?.fileId ??
               (throw Exception(
                   'Could not reach the server to find a playable file for '
-                  'this download. Check your connection and try again.'));
+                  'this title. Check your connection and try again.'))
+          : widget.fileId;
 
       await _resolveQualityForFile(candidatesResult);
 
@@ -1329,8 +1358,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// defect `core/graphql/watch/query_watcher.dart` documents. Nothing is lost
   /// by going to the network here — the offline branch returns long before this
   /// runs, and every remaining path needs the server to serve a single byte.
-  Future<Query$StreamingCandidates$streamingCandidates?>
-      _fetchStreamingCandidates(
+  ///
+  /// `serverRejected` distinguishes *why* a call failed, so the caller can
+  /// decide whether it is safe to retry against a different id.
+  /// `streaming_resolver.ex`'s `streaming_candidates/3` answers an unknown
+  /// id with a GraphQL error (e.g. "file not found") rather than throwing —
+  /// the server understood the request and gave a real answer, so
+  /// `result.exception` carries non-empty `graphqlErrors` and a null
+  /// `linkException`. A transport failure (unreachable server, timeout,
+  /// socket error) looks the opposite: no `graphqlErrors`, a non-null
+  /// `linkException`. Only the former means "this id doesn't exist"; the
+  /// latter means "we don't know", and must not be treated the same way by
+  /// callers that would otherwise retry with a different id.
+  Future<
+      ({
+        Query$StreamingCandidates$streamingCandidates? candidates,
+        bool serverRejected,
+      })> _fetchStreamingCandidates(
     GraphQLClient graphqlClient,
     String contentType,
     String id,
@@ -1350,14 +1394,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       if (result.hasException) {
         debugPrint(
             '[PlayerScreen] Failed to fetch candidates: ${result.exception}');
-        return null;
+        final exception = result.exception;
+        final serverRejected = exception != null &&
+            exception.graphqlErrors.isNotEmpty &&
+            exception.linkException == null;
+        return (candidates: null, serverRejected: serverRejected);
       }
 
       final data = Query$StreamingCandidates.fromJson(result.data!);
-      return data.streamingCandidates;
+      return (candidates: data.streamingCandidates, serverRejected: false);
     } catch (e) {
       debugPrint('[PlayerScreen] Error fetching streaming candidates: $e');
-      return null;
+      return (candidates: null, serverRejected: false);
     }
   }
 
