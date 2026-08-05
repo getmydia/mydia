@@ -31,7 +31,7 @@ defmodule Mydia.Streaming.FfmpegScaleCapTest do
          %{original: original} do
       put_cap(original, 1080)
 
-      assert filter(video_codec: "libx264") == "scale=-2:min(1080\\,ih)"
+      assert filter(video_codec: "libx264") == "scale=-2:2*trunc(min(1080\\,ih)/2)"
     end
 
     test "takes the lower of the request and the ceiling",
@@ -39,14 +39,14 @@ defmodule Mydia.Streaming.FfmpegScaleCapTest do
       put_cap(original, 720)
 
       assert filter(video_codec: "libx264", max_height: 1080) ==
-               "scale=-2:min(720\\,ih)"
+               "scale=-2:2*trunc(min(720\\,ih)/2)"
     end
 
     test "honours a request below the ceiling", %{original: original} do
       put_cap(original, 1080)
 
       assert filter(video_codec: "libx264", max_height: 480) ==
-               "scale=-2:min(480\\,ih)"
+               "scale=-2:2*trunc(min(480\\,ih)/2)"
     end
 
     test "defaults to unlimited so nothing scales unasked",

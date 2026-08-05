@@ -1,6 +1,8 @@
 defmodule Mydia.Streaming.FfmpegScaleTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Mydia.Streaming.FfmpegHlsTranscoder
 
   defp args(opts) do
@@ -26,7 +28,7 @@ defmodule Mydia.Streaming.FfmpegScaleTest do
 
     test "emits an aspect-preserving scale filter for a requested height" do
       assert filter(args(video_codec: "libx264", max_height: 720)) ==
-               "scale=-2:min(720\\,ih)"
+               "scale=-2:2*trunc(min(720\\,ih)/2)"
     end
 
     test "escapes the comma rather than shell-quoting the expression" do
@@ -36,8 +38,32 @@ defmodule Mydia.Streaming.FfmpegScaleTest do
       # backslash-escaped instead.
       result = filter(args(video_codec: "libx264", max_height: 1080))
 
-      assert result == "scale=-2:min(1080\\,ih)"
+      assert result == "scale=-2:2*trunc(min(1080\\,ih)/2)"
       refute String.contains?(result, "'")
+    end
+
+    test "rounds the clamped height down to an even number" do
+      # The clamp returns `ih` untouched whenever the source is shorter than
+      # the cap, so an odd-height source reaches libx264 as-is. With
+      # -pix_fmt yuv420p that fails to open the encoder outright, killing the
+      # transcode before a playlist exists — see ffmpeg_scale_live_test.exs,
+      # which runs this exact filter through FFmpeg.
+      assert filter(args(video_codec: "libx264", max_height: 720)) =~ "2*trunc("
+    end
+
+    test "ignores a non-positive height rather than scaling to nothing" do
+      # Only reachable through a misconfigured streaming.max_transcode_height;
+      # the config schema rejects it, but a stale cached runtime config could
+      # still carry one. Silently encoding at native resolution would leave
+      # the operator wondering why their ceiling does nothing, so it logs.
+      log =
+        capture_log(fn ->
+          refute "-vf" in args(video_codec: "libx264", max_height: 0)
+          refute "-vf" in args(video_codec: "libx264", max_height: -720)
+        end)
+
+      assert log =~ "non-positive transcode height ceiling (0)"
+      assert log =~ "non-positive transcode height ceiling (-720)"
     end
 
     test "clamps rather than upscales, via min() against the input height" do

@@ -666,8 +666,32 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # `-vf scale=-2:'min(720,ih)'` is wrong here: these arguments go straight
   # to a port with no shell, so the quotes would arrive literally and the
   # filter would fail to parse.
+  #
+  # `2*trunc(.../2)` rounds the clamped height down to an even number, and it
+  # is not decoration. Whenever the clamp picks `ih` — a source shorter than
+  # the cap — the height passes through untouched, and an odd `ih` then makes
+  # libx264 with `-pix_fmt yuv420p` refuse to open the encoder at all
+  # ("Could not open encoder before EOF"). The transcode dies before writing
+  # a playlist, so the client's playlist wait times out and the viewer gets a
+  # generic playback error. VP9 and AV1 both permit odd frame heights and are
+  # exactly the codecs this module force-transcodes, and the paths that cap a
+  # height without knowing the source — the relay clamp and the configured
+  # ceiling — reach any source at all. `-2` already guarantees an even width.
   defp scale_args(height) when is_integer(height) and height > 0 do
-    ["-vf", "scale=-2:min(#{height}\\,ih)"]
+    ["-vf", "scale=-2:2*trunc(min(#{height}\\,ih)/2)"]
+  end
+
+  # A zero or negative ceiling would scale to nothing. It can only arrive from
+  # a misconfigured transcode height ceiling, so say so rather than silently
+  # encoding at native resolution and leaving the operator to wonder why their
+  # cap does nothing.
+  defp scale_args(height) when is_integer(height) do
+    Logger.warning(
+      "Ignoring a non-positive transcode height ceiling (#{height}); " <>
+        "encoding at the source resolution"
+    )
+
+    []
   end
 
   defp scale_args(_), do: []
