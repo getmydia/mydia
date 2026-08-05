@@ -11,6 +11,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'fetch_log.dart';
 import 'freshness.dart';
 import 'query_key.dart';
+import 'schema_downgrade.dart';
 
 /// The age gate: which fetch policy a watcher starts with.
 ///
@@ -43,6 +44,7 @@ class QueryWatcher<T> {
     required Future<GraphQLClient> client,
     required this.fetchLog,
     required this.document,
+    this.fallbackDocument,
     this.variables = const {},
     required this.parse,
     this.maxAge = kFreshnessThreshold,
@@ -57,6 +59,16 @@ class QueryWatcher<T> {
   final QueryKey key;
   final FetchLog fetchLog;
   final DocumentNode document;
+
+  /// Document to retry with once, if the server rejects [document] for
+  /// selecting a field it does not define. Null means no fallback: a rejection
+  /// surfaces as a stream error like any other.
+  final DocumentNode? fallbackDocument;
+
+  /// Set once a downgrade has happened, so a server that rejects both
+  /// documents cannot loop.
+  bool _downgraded = false;
+
   final Map<String, dynamic> variables;
   final T Function(Map<String, dynamic> data) parse;
   final Duration maxAge;
@@ -97,13 +109,20 @@ class QueryWatcher<T> {
 
   Stream<T> get stream => _controller.stream;
 
+  /// The document currently in play: [document] until a schema downgrade has
+  /// happened, [fallbackDocument] (or [document] again, if there is none)
+  /// after. [document] itself is final, so `_start()` reads through here
+  /// instead.
+  DocumentNode get _activeDocument =>
+      _downgraded ? (fallbackDocument ?? document) : document;
+
   Future<void> _start() async {
     try {
       final client = await _clientFuture;
       if (_closed) return;
 
       final probe = WatchQueryOptions<Map<String, dynamic>>(
-        document: document,
+        document: _activeDocument,
         variables: variables,
       );
 
@@ -120,7 +139,7 @@ class QueryWatcher<T> {
           fetchPolicy == FetchPolicy.cacheAndNetwork;
 
       final options = WatchQueryOptions<Map<String, dynamic>>(
-        document: document,
+        document: _activeDocument,
         variables: variables,
         fetchPolicy: fetchPolicy,
         // Library default is false, which produces a watcher that never
@@ -135,6 +154,21 @@ class QueryWatcher<T> {
       _query = null;
       _addError(error, stackTrace);
     }
+  }
+
+  /// Tears down the current observable and starts a new one against
+  /// [_activeDocument]. Only reached after a schema downgrade.
+  Future<void> _restart() async {
+    await _subscription?.cancel();
+    _subscription = null;
+    // ObservableQuery.close returns FutureOr<QueryLifecycle>, matching how
+    // close() below tears the same objects down.
+    await _query?.close();
+    _query = null;
+
+    if (_closed) return;
+    _started = _start();
+    await _started;
   }
 
   bool _cacheHasData(GraphQLClient client, Request request) {
@@ -202,7 +236,17 @@ class QueryWatcher<T> {
     }
 
     if (result.hasException) {
-      _addError(result.exception!, StackTrace.current);
+      final exception = result.exception!;
+
+      if (!_downgraded &&
+          fallbackDocument != null &&
+          isUnknownFieldError(exception)) {
+        _downgraded = true;
+        unawaited(_restart());
+        return;
+      }
+
+      _addError(exception, StackTrace.current);
     }
   }
 

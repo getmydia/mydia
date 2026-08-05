@@ -22,6 +22,7 @@ QueryWatcher<T> createWatcher<T>(
   Ref ref, {
   required QueryKey key,
   required DocumentNode document,
+  DocumentNode? fallbackDocument,
   Map<String, dynamic> variables = const {},
   required T Function(Map<String, dynamic> data) parse,
   Duration maxAge = kFreshnessThreshold,
@@ -37,6 +38,7 @@ QueryWatcher<T> createWatcher<T>(
     client: ref.watch(asyncGraphqlClientProvider.future),
     fetchLog: ref.read(fetchLogProvider),
     document: document,
+    fallbackDocument: fallbackDocument,
     variables: variables,
     parse: parse,
     maxAge: maxAge,
