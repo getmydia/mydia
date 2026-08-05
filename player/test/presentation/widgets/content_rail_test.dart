@@ -69,4 +69,48 @@ void main() {
       expect(find.byType(MediaCard), findsNothing);
     });
   });
+
+  group('ContentRail RecentlyAddedItem subtitle', () {
+    // Regression guard for `item.newContentLabel ?? item.year?.toString()`:
+    // if that coalescing order is ever flipped, this is the test that catches
+    // it, since the item carries both a year and episode context.
+    testWidgets(
+        'a show with one new episode shows the episode code, not the year',
+        (tester) async {
+      const item = RecentlyAddedItem(
+        id: 'show-1',
+        type: 'tv_show',
+        title: 'The Bear',
+        year: 2023,
+        newEpisodeCount: 1,
+        latestSeasonNumber: 4,
+        latestEpisodeNumber: 2,
+      );
+
+      await tester.pumpWidget(
+        _host(const ContentRail(title: 'Recently Added', items: [item])),
+      );
+      await tester.pump();
+
+      expect(find.text('S04E02'), findsOneWidget);
+      expect(find.text('2023'), findsNothing);
+    });
+
+    testWidgets('a movie with no episode context falls back to the year',
+        (tester) async {
+      const item = RecentlyAddedItem(
+        id: 'movie-1',
+        type: 'movie',
+        title: 'A Movie',
+        year: 2023,
+      );
+
+      await tester.pumpWidget(
+        _host(const ContentRail(title: 'Recently Added', items: [item])),
+      );
+      await tester.pump();
+
+      expect(find.text('2023'), findsOneWidget);
+    });
+  });
 }

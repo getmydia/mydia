@@ -42,6 +42,16 @@ void main() {
       expect(item.newContentLabel, 'S04E02');
     });
 
+    test('pads a two-digit season without truncating it', () {
+      final item = RecentlyAddedItem.fromJson(json({
+        'newEpisodeCount': 1,
+        'latestSeasonNumber': 12,
+        'latestEpisodeNumber': 5,
+      }));
+
+      expect(item.newContentLabel, 'S12E05');
+    });
+
     test('counts when there is one but no numbers', () {
       final item = RecentlyAddedItem.fromJson(json({'newEpisodeCount': 1}));
 
