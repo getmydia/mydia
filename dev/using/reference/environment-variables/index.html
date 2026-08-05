@@ -1625,6 +1625,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#streaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streaming
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#advanced-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3167,6 +3178,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#streaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streaming
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#advanced-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3864,6 +3886,26 @@ host/port.</p>
 </tbody>
 </table>
 <p>See <a href="../../how-to/automatic-quality-upgrades/">Automatic Quality Upgrades</a> for what these cost you in disk.</p>
+<h2 id="streaming">Streaming</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAX_TRANSCODE_HEIGHT</code></td>
+<td>Ceiling in pixels on the output height of any transcode, for example <code>720</code>. Unset means no ceiling and a transcode keeps the source resolution</td>
+<td>No limit</td>
+</tr>
+</tbody>
+</table>
+<p>A transcode only happens when a file's codec is not playable as-is, or when a player asks for a quality below the source. This ceiling bounds those; it never
+upscales, and it does not apply when a file is streamed without re-encoding. Set it on a server that cannot encode 4K in realtime, which is what an
+incompatible 4K file would otherwise ask of it. Also settable under <strong>Admin &gt; Configuration &gt; Settings &gt; Streaming</strong>.</p>
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 <table>
 <thead>
