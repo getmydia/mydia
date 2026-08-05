@@ -152,6 +152,20 @@ Because `releases/latest/download/` never resolves to a prerelease, a change to
 `SUFeedURL` only reaches users through a **stable** release. Shipping such a
 change in a prerelease migrates nobody.
 
+**Backfill before the first release, not after.** Before cutting the first
+release that ships an `SUFeedURL` pointing at `updates.mydia.dev`, dispatch
+`deploy-appcast.yml` manually and confirm `https://updates.mydia.dev/appcast.xml`
+serves a feed:
+
+```bash
+gh workflow run deploy-appcast.yml --repo getmydia/mydia
+curl -fsSL https://updates.mydia.dev/appcast.xml
+```
+
+Doing this after that release ships instead of before it means every app that
+updates in the meantime starts polling a URL serving nothing, and has no
+recovery path until the feed exists.
+
 ### When the workflow refuses
 
 **"Draft targets 'master', which is a branch, not a commit."**
