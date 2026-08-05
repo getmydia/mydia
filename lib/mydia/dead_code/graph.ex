@@ -106,11 +106,22 @@ defmodule Mydia.DeadCode.Graph do
   # and every edge they contribute is silently dropped. Left unfixed, a
   # component called only from `show.html.heex` reports as an orphan.
   #
-  # Phoenix's convention makes the owner deterministic: `…/show.html.heex` is
-  # embedded by `…/show.ex`. An edge whose caller file defines no module is
-  # re-attributed to that sibling when the sibling actually defines something.
-  # Anything unattributable keeps its original file and simply never confers
-  # liveness, which is the safe direction.
+  # Phoenix has two conventions for who owns a template, and both make the
+  # owner deterministic:
+  #
+  #   - Colocated: `…/show.html.heex` is embedded by `…/show.ex`.
+  #   - Directory embed (`embed_templates "layouts/*"`): every template under
+  #     `…/layouts/` is embedded by `…/layouts.ex`, one level up. Root and
+  #     session layouts, `PageHTML`, and `SessionHTML` all use this form, and
+  #     without it their templates' edges (including the sitewide
+  #     `live_render` calls layouts make) are dropped, which is how
+  #     `MusicPlayerLive` was reported as an orphan despite being rendered on
+  #     every authenticated page.
+  #
+  # An edge whose caller file defines no module is re-attributed to whichever
+  # of these actually defines something, colocated first. Anything
+  # unattributable keeps its original file and simply never confers liveness,
+  # which is the safe direction.
   defp attribute_to_defining_file(edges, definitions) do
     defining_files = definitions |> Map.values() |> MapSet.new()
 
@@ -124,8 +135,13 @@ defmodule Mydia.DeadCode.Graph do
   end
 
   defp sibling_source(file, defining_files) do
-    candidate = (file |> Path.rootname() |> Path.rootname()) <> ".ex"
+    colocated = (file |> Path.rootname() |> Path.rootname()) <> ".ex"
 
-    if MapSet.member?(defining_files, candidate), do: candidate, else: file
+    if MapSet.member?(defining_files, colocated) do
+      colocated
+    else
+      directory_owner = Path.dirname(file) <> ".ex"
+      if MapSet.member?(defining_files, directory_owner), do: directory_owner, else: file
+    end
   end
 end

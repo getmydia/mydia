@@ -167,6 +167,43 @@ defmodule Mydia.DeadCode.GraphTest do
     assert result.live == []
   end
 
+  test "a template in a directory owned by a parent module confers liveness through that parent" do
+    # Mirrors the MusicPlayerLive regression: root.html.heex lives under
+    # layouts/, but embed_templates "layouts/*" means the owning module is
+    # layouts.ex, one directory up from the template, not a colocated sibling.
+    definitions = %{
+      App.Entry => "lib/app/entry.ex",
+      Web.Layouts => "lib/web/layouts.ex",
+      Web.MusicPlayer => "lib/web/music_player.ex"
+    }
+
+    edges = [
+      {Web.Layouts, "lib/app/entry.ex"},
+      {Web.MusicPlayer, "lib/web/layouts/root.html.heex"}
+    ]
+
+    result = Graph.classify(definitions, edges, only(App.Entry))
+
+    assert Web.MusicPlayer in result.live
+  end
+
+  test "a template owned by a dead parent-directory module does not confer liveness" do
+    # Equivalent of the colocated dead-template guard above, but for the
+    # directory-embed path: no root reaches Web.Layouts, so a template under
+    # layouts/ must not resurrect the module it calls.
+    definitions = %{
+      Web.Layouts => "lib/web/layouts.ex",
+      Web.MusicPlayer => "lib/web/music_player.ex"
+    }
+
+    edges = [{Web.MusicPlayer, "lib/web/layouts/root.html.heex"}]
+
+    result = Graph.classify(definitions, edges, never_exempt())
+
+    assert Web.MusicPlayer in result.orphan
+    assert result.live == []
+  end
+
   test "an edge from an unattributable file is left alone" do
     # No sibling .ex exists, so the edge keeps its original caller file and
     # simply never confers liveness. It must not crash or be misattributed.
