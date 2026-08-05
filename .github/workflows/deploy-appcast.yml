@@ -78,7 +78,11 @@ jobs:
       - name: Deploy to Cloudflare Pages
         if: env.CLOUDFLARE_API_TOKEN != ''
         working-directory: scripts/appcast
-        run: npx wrangler pages deploy dist/ --project-name=mydia-appcast
+        # --branch is required, not optional. The checkout above pins a commit
+        # SHA, so the runner is in detached HEAD and wrangler cannot infer the
+        # branch. Without it the upload can land as a preview deployment, which
+        # succeeds loudly while updates.mydia.dev serves nothing new.
+        run: npx wrangler pages deploy dist/ --project-name=mydia-appcast --branch master
 
       - name: Note skipped deploy
         if: env.CLOUDFLARE_API_TOKEN == ''

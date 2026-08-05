@@ -141,6 +141,13 @@ gh workflow run deploy-appcast.yml --repo getmydia/mydia
 Run that after any release where the appcast job failed, and after manually
 editing or deleting a release.
 
+The Pages project must be created with `master` as its production branch,
+for example `wrangler pages project create mydia-appcast --production-branch master`.
+The deploy passes `--branch master` explicitly because the workflow checks
+out a pinned commit and cannot infer a branch name. If the project's
+production branch is anything else, every deploy lands on a preview URL and
+`updates.mydia.dev` keeps serving the previous feed.
+
 Because `releases/latest/download/` never resolves to a prerelease, a change to
 `SUFeedURL` only reaches users through a **stable** release. Shipping such a
 change in a prerelease migrates nobody.
