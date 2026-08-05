@@ -701,8 +701,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       // The file actually being played. Normally the user's choice; on the
       // offline fall-through it is whatever the server ranked highest.
-      final playFileId =
-          byFile ? widget.fileId : (candidatesResult?.fileId ?? widget.fileId);
+      //
+      // On that fall-through there is no `widget.fileId` worth falling back
+      // to if the candidates call itself failed (network hiccup, server
+      // unreachable): `widget.fileId` is still the `'offline'` sentinel that
+      // sent us down this branch in the first place, not a real file id.
+      // Sending it on to `StartStreamingSession` would just repeat the
+      // malformed-id failure this branch exists to avoid, so fail here
+      // instead with a message the user can act on — the same
+      // throw-into-the-surrounding-catch convention used above for the
+      // missing P2P server address.
+      final playFileId = byFile
+          ? widget.fileId
+          : candidatesResult?.fileId ??
+              (throw Exception(
+                  'Could not reach the server to find a playable file for '
+                  'this download. Check your connection and try again.'));
 
       // Determine if direct play is possible
       final canDirect = !kIsWeb &&

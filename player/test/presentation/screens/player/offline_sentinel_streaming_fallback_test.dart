@@ -26,6 +26,19 @@ import 'package:player/core/connection/connection_provider.dart' as conn;
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
+// The scenario above is the *happy* offline fall-through: the candidates
+// call succeeds and ranks a real file. The test below is what happens when
+// that call itself fails — a transient GraphQL error, the server
+// unreachable. `candidatesResult` is then null, so `candidatesResult?.fileId`
+// is also null, and the naive `?? widget.fileId` fallback that used to live
+// here would resolve to the literal string `'offline'` — the exact
+// malformed-id failure this whole fallback exists to prevent, just deferred
+// to the server instead of caught locally. The fix has to fail fast with a
+// user-facing error instead, following `_initializePlayer`'s existing
+// convention (surrounding `catch` sets `_error` from a thrown `Exception`,
+// same as the missing-P2P-server-address case a few lines above this one in
+// `player_screen.dart`).
+
 void main() {
   setUp(mockPathProviderDocumentsDirectory);
 
@@ -99,6 +112,77 @@ void main() {
           'so the fallback has to ask by media item instead',
     );
     expect(candidatesVariables['id'], 'movie-1');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+      'a downloaded file missing from disk, when the candidates query '
+      'itself fails, surfaces an error instead of streaming the offline '
+      'sentinel', (tester) async {
+    final tempDir = Directory.systemTemp
+        .createTempSync('mydia_offline_sentinel_fallback_error_test_');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final missingPath = '${tempDir.path}/arrival.mkv';
+
+    final proxyService = TrackingLocalProxyService();
+
+    // Same detail/segments responses as the happy-path test above, but the
+    // third scripted response — the streaming candidates call this branch
+    // depends on to find anything to play — fails outright, standing in for
+    // a transient GraphQL error or an unreachable server.
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      graphqlErrorResponse('internal server error'),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: proxyService,
+      downloaded: downloadedItem(filePath: missingPath, runtimeMinutes: 90),
+    );
+    addTearDown(container.dispose);
+
+    await tester.runAsync(() async {
+      await pumpPlayerScreen(tester, container, fileId: 'offline');
+      // The error UI (`_buildError`'s `Icons.error_outline`) is the only
+      // stable signal available here: on this path
+      // `capturedDirectStreamFileId` never becomes non-null, so polling on
+      // it (as the happy-path test above does) would just spin to the
+      // ceiling.
+      await pumpUntilReal(
+        tester,
+        () => find.byIcon(Icons.error_outline).evaluate().isNotEmpty,
+      );
+    });
+
+    expect(
+      find.byIcon(Icons.error_outline),
+      findsOneWidget,
+      reason: 'a failed candidates call must surface as a real error, not '
+          'a silent hang and not an unhandled exception',
+    );
+
+    expect(
+      proxyService.capturedDirectStreamFileId,
+      isNull,
+      reason: 'direct play must never start when the candidates call '
+          'failed — there is no server-ranked file to play',
+    );
+
+    for (final request in link.requests) {
+      expect(
+        request.variables['fileId'],
+        isNot('offline'),
+        reason: 'the offline sentinel must never reach a '
+            'StartStreamingSession (or any other) mutation sent to the '
+            'server',
+      );
+    }
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
