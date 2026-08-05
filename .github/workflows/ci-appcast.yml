@@ -1,0 +1,54 @@
+name: CI / Appcast
+
+# The appcast generator is a small Node package with no dependency on the rest
+# of the tree, so it gets its own workflow rather than a job inside ci.yml,
+# matching how site/, player/ and relay/ are split.
+#
+# Deliberately not path-filtered, for the reason ci-site.yml gives: a workflow
+# skipped by a paths: filter never reports a status, so a required check
+# pointing at it would sit Pending forever. The job costs a few seconds.
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: "ci-appcast-${{ github.ref }}"
+  cancel-in-progress: true
+
+# The job only reads the checked-out tree; nothing here writes.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test / Appcast
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: scripts/appcast
+
+    steps:
+      # npm ci runs whatever install scripts the pull request's lockfile names,
+      # so the job must not leave the token in .git/config where that code can
+      # read it. Nothing here needs git credentials.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/appcast/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
