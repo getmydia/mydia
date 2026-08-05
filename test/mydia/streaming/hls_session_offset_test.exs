@@ -3,20 +3,62 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
 
   alias Mydia.Streaming.HlsSessionSupervisor
 
-  describe "session_matches_offset?/2" do
-    test "matches when the requested offset equals the running one" do
-      assert HlsSessionSupervisor.session_matches_offset?(%{start_position: 600}, 600)
+  describe "session_matches?/4" do
+    test "matches when offset and both quality values are equal" do
+      assert HlsSessionSupervisor.session_matches?(
+               %{start_position: 600, max_bitrate: 4000, max_height: 720},
+               600,
+               4000,
+               720
+             )
     end
 
     test "does not match a different offset" do
-      refute HlsSessionSupervisor.session_matches_offset?(%{start_position: 0}, 4200)
+      refute HlsSessionSupervisor.session_matches?(
+               %{start_position: 0, max_bitrate: nil, max_height: nil},
+               4200,
+               nil,
+               nil
+             )
     end
 
-    test "treats metadata with no start_position as offset zero" do
-      # Registry metadata is in-memory, but a session registered before this
-      # field existed must not be mistaken for an offset session.
-      assert HlsSessionSupervisor.session_matches_offset?(%{mode: :transcode}, 0)
-      refute HlsSessionSupervisor.session_matches_offset?(%{mode: :transcode}, 4200)
+    test "does not match a different bitrate at the same offset" do
+      # This is the whole point of widening the match: without it, picking a
+      # new rung hands back the session already running at the old one.
+      refute HlsSessionSupervisor.session_matches?(
+               %{start_position: 600, max_bitrate: 4000, max_height: 720},
+               600,
+               1500,
+               720
+             )
+    end
+
+    test "does not match a different height at the same offset and bitrate" do
+      refute HlsSessionSupervisor.session_matches?(
+               %{start_position: 600, max_bitrate: 4000, max_height: 720},
+               600,
+               4000,
+               480
+             )
+    end
+
+    test "treats metadata missing the new keys as an uncapped session" do
+      # Registry metadata is in-memory, but a session registered before these
+      # fields existed must not be mistaken for a capped one, nor treated as
+      # a wildcard that matches every request.
+      assert HlsSessionSupervisor.session_matches?(%{mode: :transcode}, 0, nil, nil)
+      refute HlsSessionSupervisor.session_matches?(%{mode: :transcode}, 0, 4000, 720)
+      refute HlsSessionSupervisor.session_matches?(%{mode: :transcode}, 4200, nil, nil)
+    end
+
+    test "matches an explicitly uncapped session against an uncapped request" do
+      # Original quality: no cap on either side.
+      assert HlsSessionSupervisor.session_matches?(
+               %{start_position: 0, max_bitrate: nil, max_height: nil},
+               0,
+               nil,
+               nil
+             )
     end
   end
 

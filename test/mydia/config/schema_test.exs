@@ -425,6 +425,27 @@ defmodule Mydia.Config.SchemaTest do
     end
   end
 
+  describe "streaming max_transcode_height (MAX_TRANSCODE_HEIGHT)" do
+    test "round-trips a configured ceiling" do
+      changeset = Schema.changeset(%Schema{}, %{streaming: %{max_transcode_height: 720}})
+      assert changeset.valid?
+
+      config = Ecto.Changeset.apply_changes(changeset)
+      assert config.streaming.max_transcode_height == 720
+    end
+
+    test "defaults to nil, which means a transcode keeps the source resolution" do
+      assert Schema.defaults().streaming.max_transcode_height == nil
+    end
+
+    test "rejects a non-positive ceiling rather than scaling to nothing" do
+      changeset = Schema.changeset(%Schema{}, %{streaming: %{max_transcode_height: 0}})
+
+      refute changeset.valid?
+      assert "must be greater than 0" in errors_on(changeset).streaming.max_transcode_height
+    end
+  end
+
   describe "plugins override_dir (PLUGINS_OVERRIDE_DIR)" do
     test "round-trips a configured override directory" do
       changeset = Schema.changeset(%Schema{}, %{plugins: %{override_dir: "/data/plugins"}})

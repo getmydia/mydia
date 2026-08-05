@@ -21,7 +21,7 @@ class TransportSurface extends StatelessWidget {
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
 
-  /// Renders only the play/pause button (48px) — no ±10s seek, no episode
+  /// Renders only the play/pause button (40px) — no ±10s seek, no episode
   /// nav — regardless of which callbacks are supplied. Used below the mobile
   /// breakpoint (`PanelMetrics.touchTargets`): ±10s already has a gesture
   /// equivalent there (double-tap, see `gesture_controls.dart`), and the
@@ -53,7 +53,13 @@ class TransportSurface extends StatelessWidget {
   static const Key nextEpisodeKey = Key('transport-next-episode');
 
   /// Uniform gap between transport glyphs.
-  static const double gap = 8.0;
+  ///
+  /// 2, not the original 8: the transport cluster was the only part of the
+  /// control row never squeezed, at 256px with episode navigation wired, and
+  /// that width was what kept a 4th `SecondaryCluster` button from fitting
+  /// below the desktop tier. See `chrome_panel_overflow_test.dart` for the
+  /// per-width budget this feeds.
+  static const double gap = 2.0;
 
   /// The play/pause glyph, cross-fading and scaling between states.
   ///
@@ -79,8 +85,8 @@ class TransportSurface extends StatelessWidget {
         child: ControlButton(
           key: playPauseKey,
           icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          size: 48,
-          iconSize: 30,
+          size: 40,
+          iconSize: 24,
           tooltip: isPlaying ? 'Pause' : 'Play',
           onTap: onPlayPause,
         ),
@@ -101,8 +107,8 @@ class TransportSurface extends StatelessWidget {
           ControlButton(
             key: previousEpisodeKey,
             icon: Icons.skip_previous_rounded,
-            size: 44,
-            iconSize: 22,
+            size: 36,
+            iconSize: 18,
             tooltip: 'Previous episode',
             onTap: onPreviousEpisode,
           ),
@@ -111,8 +117,8 @@ class TransportSurface extends StatelessWidget {
         ControlButton(
           key: back10Key,
           icon: Icons.replay_10_rounded,
-          size: 44,
-          iconSize: 24,
+          size: 36,
+          iconSize: 20,
           tooltip: 'Rewind 10 seconds',
           onTap: onBack10,
         ),
@@ -122,8 +128,8 @@ class TransportSurface extends StatelessWidget {
         ControlButton(
           key: forward10Key,
           icon: Icons.forward_10_rounded,
-          size: 44,
-          iconSize: 24,
+          size: 36,
+          iconSize: 20,
           tooltip: 'Forward 10 seconds',
           onTap: onForward10,
         ),
@@ -132,8 +138,8 @@ class TransportSurface extends StatelessWidget {
           ControlButton(
             key: nextEpisodeKey,
             icon: Icons.skip_next_rounded,
-            size: 44,
-            iconSize: 22,
+            size: 36,
+            iconSize: 18,
             tooltip: 'Next episode',
             onTap: onNextEpisode,
           ),

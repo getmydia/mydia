@@ -325,8 +325,12 @@ void main() {
       final fullscreenRect =
           tester.getRect(find.byKey(SecondaryCluster.fullscreenKey));
 
-      // Not strict `lessThan`: `SecondaryCluster.gap` was trimmed to 0 to
-      // help close a real `ChromePanel` overflow (see the constant's own
+      // 32, not the previous 40: the whole control row was compacted so four
+      // discrete buttons fit down to 360px. See `chrome_panel.dart`'s
+      // PanelMetrics dartdocs for the per-width budget.
+      //
+      // Not strict `lessThan`: `SecondaryCluster.gap` defaults to 0 to
+      // help close a real `ChromePanel` overflow (see the field's own
       // dartdoc and `chrome_panel_overflow_test.dart`), so adjacent buttons
       // may legitimately share an edge rather than have a visible gap.
       expect(subtitlesRect.right, lessThanOrEqualTo(audioRect.left));
@@ -339,10 +343,15 @@ void main() {
       // buttons from a totally broken layout) — it stops discriminating a
       // real gap regression from "buttons happen to be near each other".
       // Pitch anchored to each button's own *measured* width (not a
-      // hardcoded 40) stays meaningful at any `gap` value, including 0: a
+      // hardcoded 32) stays meaningful at any `gap` value, including 0: a
       // widened, narrowed, overlapping, or displaced button all move the
       // pitch away from `buttonWidth + gap`.
-      const gap = SecondaryCluster.gap;
+      //
+      // `gap` is `SecondaryCluster`'s own default (0.0), not a static
+      // constant: the field became instance-level and tier-dependent in
+      // this same change, supplied by `PanelMetrics.secondaryGap` in real
+      // usage. This widget doesn't pass one, so it renders at the default.
+      const gap = 0.0;
       expect(
         audioRect.left - subtitlesRect.left,
         closeTo(subtitlesRect.width + gap, 0.5),

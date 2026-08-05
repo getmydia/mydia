@@ -179,7 +179,10 @@ class SecondaryCluster extends StatelessWidget {
   final VoidCallback? onSubtitleTap;
   final VoidCallback? onAudioTap;
 
-  /// Web-only. When null the quality button is omitted entirely.
+  /// When null the quality button is omitted entirely, which is how the
+  /// player screen hides it for a source that has only one rung to offer.
+  /// Not a platform signal: it was web-only while `player_screen.dart` gated
+  /// the callback on `PlatformFeatures.isWeb`, and that gate is gone.
   final VoidCallback? onQualityTap;
   final VoidCallback? onFullscreenTap;
 
@@ -202,6 +205,7 @@ class SecondaryCluster extends StatelessWidget {
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,
     this.isFullscreen = false,
+    this.gap = 0.0,
   });
 
   static const Key subtitlesKey = Key('secondary-subtitles');
@@ -209,16 +213,16 @@ class SecondaryCluster extends StatelessWidget {
   static const Key qualityKey = Key('secondary-quality');
   static const Key fullscreenKey = Key('secondary-fullscreen');
 
-  /// Trimmed from 4 to 0 to close real overflows in `ChromePanel`'s
-  /// equal-flex right slot. Still load-bearing after `PanelMetrics`'
-  /// tablet-branch width factor and per-tier `horizontalPadding` closed the
-  /// worse 600–689px shortfall: at 4px this cluster's 3 buttons cost 128px,
-  /// which still doesn't fit the desktop breakpoint's own slot (900px was
-  /// -6px short, 920px exactly 0px, at 4px gap) — 0 gaps is the narrowest
-  /// this cluster can get without shrinking a button below its own 40px
-  /// spec. See `chrome_panel_overflow_test.dart` for the full per-width
-  /// budget with this value.
-  static const double gap = 0.0;
+  /// Horizontal gap between this cluster's buttons.
+  ///
+  /// Tier-dependent, supplied by the caller from `PanelMetrics`: 8 on
+  /// desktop, 6 on tablet, 0 on mobile. This used to be a hard `0.0`
+  /// constant, which was the narrowest the cluster could go and was needed
+  /// to squeeze a 4th 40px button into the desktop tier at all. Compacting
+  /// the transport cluster (see `transport_cluster.dart`) freed enough width
+  /// that desktop and tablet can afford real separation again, while mobile
+  /// still runs at the floor.
+  final double gap;
 
   @override
   Widget build(BuildContext context) {
@@ -231,20 +235,20 @@ class SecondaryCluster extends StatelessWidget {
         ControlButton(
           key: subtitlesKey,
           icon: Icons.subtitles_rounded,
-          iconSize: 20,
-          size: 40,
+          iconSize: 18,
+          size: 32,
           enabled: subtitlesEnabled,
           tooltip: subtitlesEnabled
               ? 'Subtitles: ${selectedSubtitleLabel ?? 'Off'}'
               : 'No subtitles',
           onTap: subtitlesEnabled ? onSubtitleTap : null,
         ),
-        const SizedBox(width: gap),
+        SizedBox(width: gap),
         ControlButton(
           key: audioKey,
           icon: Icons.audiotrack_rounded,
-          iconSize: 20,
-          size: 40,
+          iconSize: 18,
+          size: 32,
           enabled: audioEnabled,
           tooltip: audioEnabled
               ? 'Audio: ${selectedAudioLabel ?? 'Default'}'
@@ -252,24 +256,30 @@ class SecondaryCluster extends StatelessWidget {
           onTap: audioEnabled ? onAudioTap : null,
         ),
         if (onQualityTap != null) ...[
-          const SizedBox(width: gap),
+          SizedBox(width: gap),
           ControlButton(
             key: qualityKey,
             icon: Icons.hd_rounded,
-            iconSize: 20,
-            size: 40,
-            tooltip: 'Quality: ${selectedQualityLabel ?? 'Auto'}',
+            iconSize: 18,
+            size: 32,
+            // No invented default. This used to read "Auto", describing
+            // adaptive streaming the server has never done — it emits a
+            // single rendition per session. A caller that cannot name the
+            // current rung gets the bare noun rather than a fiction.
+            tooltip: selectedQualityLabel == null
+                ? 'Quality'
+                : 'Quality: $selectedQualityLabel',
             onTap: onQualityTap,
           ),
         ],
-        const SizedBox(width: gap),
+        SizedBox(width: gap),
         ControlButton(
           key: fullscreenKey,
           icon: isFullscreen
               ? Icons.fullscreen_exit_rounded
               : Icons.fullscreen_rounded,
-          iconSize: 20,
-          size: 40,
+          iconSize: 18,
+          size: 32,
           tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
           onTap: onFullscreenTap,
         ),

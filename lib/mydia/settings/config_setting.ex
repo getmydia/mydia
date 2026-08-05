@@ -69,6 +69,7 @@ defmodule Mydia.Settings.ConfigSetting do
     :media,
     :metadata,
     :downloads,
+    :streaming,
     :notifications,
     :crash_reporting,
     :feedback,

@@ -143,6 +143,10 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:strategy, non_null(:streaming_strategy))
       arg(:max_bitrate, :integer, description: "Total kbps cap (video + audio), e.g. 2000")
 
+      arg(:max_height, :integer,
+        description: "Output height ceiling in pixels, e.g. 720. Preserves aspect ratio"
+      )
+
       arg(:start_position, :integer,
         description:
           "Real media position, in seconds, at which to begin transcoding. " <>

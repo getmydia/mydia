@@ -57,7 +57,9 @@ void main() {
 
     test('mobile: full width less margins, 24px offset, no volume', () {
       final mobile = PanelMetrics.forWidth(400);
-      expect(mobile.maxWidth, 400 - 32);
+      // 20, not the previous 32: the panel margin was trimmed along with
+      // every other spacing constant so four secondary buttons fit at 360px.
+      expect(mobile.maxWidth, 400 - 20);
       expect(mobile.bottomOffset, 24);
       expect(mobile.showVolume, isFalse);
       expect(mobile.touchTargets, isTrue);
@@ -70,25 +72,33 @@ void main() {
       expect(PanelMetrics.forWidth(599).bottomOffset, 24);
     });
 
-    test('horizontalPadding: 12 on mobile/tablet, 20 on desktop', () {
-      expect(PanelMetrics.forWidth(400).horizontalPadding, 12);
-      expect(PanelMetrics.forWidth(599).horizontalPadding, 12);
-      expect(PanelMetrics.forWidth(800).horizontalPadding, 12);
-      expect(PanelMetrics.forWidth(899).horizontalPadding, 12);
-      expect(PanelMetrics.forWidth(900).horizontalPadding, 20);
-      expect(PanelMetrics.forWidth(1600).horizontalPadding, 20);
+    test('horizontalPadding: 8 on mobile/tablet, 12 on desktop', () {
+      expect(PanelMetrics.forWidth(400).horizontalPadding, 8);
+      expect(PanelMetrics.forWidth(599).horizontalPadding, 8);
+      expect(PanelMetrics.forWidth(800).horizontalPadding, 8);
+      expect(PanelMetrics.forWidth(899).horizontalPadding, 8);
+      expect(PanelMetrics.forWidth(900).horizontalPadding, 12);
+      expect(PanelMetrics.forWidth(1600).horizontalPadding, 12);
     });
 
-    test(
-      'showQuality: true only at the desktop tier (900+), never below',
-      () {
-        expect(PanelMetrics.forWidth(400).showQuality, isFalse);
-        expect(PanelMetrics.forWidth(599).showQuality, isFalse);
-        expect(PanelMetrics.forWidth(899).showQuality, isFalse);
-        expect(PanelMetrics.forWidth(900).showQuality, isTrue);
-        expect(PanelMetrics.forWidth(1600).showQuality, isTrue);
-      },
-    );
+    test('secondaryGap: 8 on desktop, 6 on tablet, 0 on mobile', () {
+      // Mobile runs at the zero floor deliberately: it is what makes four
+      // discrete 32px buttons fit at 360px. See PanelMetrics.showQuality.
+      expect(PanelMetrics.forWidth(1600).secondaryGap, 8);
+      expect(PanelMetrics.forWidth(900).secondaryGap, 8);
+      expect(PanelMetrics.forWidth(800).secondaryGap, 6);
+      expect(PanelMetrics.forWidth(600).secondaryGap, 6);
+      expect(PanelMetrics.forWidth(400).secondaryGap, 0);
+    });
+
+    test('showQuality is true at every tier', () {
+      // Was desktop-only. Compaction closed the tablet and mobile budgets;
+      // see the field's dartdoc for the arithmetic.
+      expect(PanelMetrics.forWidth(1600).showQuality, isTrue);
+      expect(PanelMetrics.forWidth(900).showQuality, isTrue);
+      expect(PanelMetrics.forWidth(800).showQuality, isTrue);
+      expect(PanelMetrics.forWidth(400).showQuality, isTrue);
+    });
   });
 
   group('ChromePanel', () {
@@ -306,7 +316,7 @@ void main() {
     }
 
     testWidgets(
-      'renders the 20h/16v padding and the 18px row gap as real geometry',
+      'renders the 12h/10v padding and the 10px row gap as real geometry',
       (tester) async {
         await tester.pumpWidget(
           host(
@@ -319,18 +329,22 @@ void main() {
         final transportRect = tester.getRect(find.byKey(const Key('t')));
         final scrubberRect = tester.getRect(find.byKey(const Key('s')));
 
-        // 16px vertical padding above row 1.
-        expect(transportRect.top - panelRect.top, closeTo(16, 0.5));
-        // 18px gap between row 1 (48 tall) and row 2.
+        // 10px vertical padding above row 1. Was 16 before compaction; see
+        // `ChromePanel.verticalPadding`'s dartdoc.
+        expect(transportRect.top - panelRect.top, closeTo(10, 0.5));
+        // 10px gap between row 1 (48 tall) and row 2. Was 18 before
+        // compaction; see `ChromePanel.rowGap`'s dartdoc.
         expect(
           scrubberRect.top - transportRect.top,
           closeTo(48 + ChromePanel.rowGap, 0.5),
         );
-        // 16px vertical padding below row 2.
-        expect(panelRect.bottom - scrubberRect.bottom, closeTo(16, 0.5));
-        // 20px horizontal padding on the left (volume sits flush left).
+        // 10px vertical padding below row 2.
+        expect(panelRect.bottom - scrubberRect.bottom, closeTo(10, 0.5));
+        // 12px horizontal padding on the left (volume sits flush left). Was
+        // 20 before compaction; see `PanelMetrics.horizontalPadding`'s
+        // dartdoc.
         final volumeRect = tester.getRect(find.byKey(const Key('v')));
-        expect(volumeRect.left - panelRect.left, closeTo(20, 0.5));
+        expect(volumeRect.left - panelRect.left, closeTo(12, 0.5));
       },
     );
 
