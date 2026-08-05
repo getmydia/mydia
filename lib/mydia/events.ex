@@ -9,6 +9,7 @@ defmodule Mydia.Events do
   require Logger
   alias Mydia.Repo
   alias Mydia.Events.Event
+  alias Mydia.Events.Presentation
   alias Phoenix.PubSub
 
   @pubsub_name Mydia.PubSub
@@ -92,6 +93,7 @@ defmodule Mydia.Events do
   ## Options
     - `:category` - Filter by event category
     - `:type` - Filter by event type
+    - `:exclude_types` - Filter out a list of event types
     - `:actor_type` - Filter by actor type (:user, :system, :job)
     - `:actor_id` - Filter by actor ID (requires actor_type)
     - `:resource_type` - Filter by resource type
@@ -182,6 +184,7 @@ defmodule Mydia.Events do
     query
     |> filter_by_category(opts[:category])
     |> filter_by_type(opts[:type])
+    |> filter_by_exclude_types(opts[:exclude_types])
     |> filter_by_actor(opts[:actor_type], opts[:actor_id])
     |> filter_by_resource(opts[:resource_type], opts[:resource_id])
     |> filter_by_severity(opts[:severity])
@@ -193,6 +196,25 @@ defmodule Mydia.Events do
 
   defp filter_by_type(query, nil), do: query
   defp filter_by_type(query, type), do: where(query, [e], e.type == ^type)
+
+  defp filter_by_exclude_types(query, nil), do: query
+  defp filter_by_exclude_types(query, []), do: query
+
+  defp filter_by_exclude_types(query, types) when is_list(types) do
+    if Enum.all?(types, &is_binary/1) do
+      where(query, [e], e.type not in ^types)
+    else
+      raise ArgumentError,
+            "expected :exclude_types to be a list of strings, got: #{inspect(types)}"
+    end
+  end
+
+  defp filter_by_exclude_types(_query, other),
+    do:
+      raise(
+        ArgumentError,
+        "expected :exclude_types to be a list of strings, got: #{inspect(other)}"
+      )
 
   defp filter_by_actor(query, nil, _), do: query
 
@@ -1032,251 +1054,19 @@ defmodule Mydia.Events do
       %{
         icon: "hero-plus-circle",
         color: "text-info",
-        title: "Added to Library",
-        description: "Breaking Bad was added to your library"
+        title: "Added to library",
+        description: "Breaking Bad (TV show)"
       }
   """
   def format_for_timeline(%Event{} = event) do
-    {icon, color, title} = get_event_display_properties(event.type, event.severity)
-    description = build_event_description(event)
+    presentation = Presentation.for_event(event)
 
     %{
-      icon: icon,
-      color: color,
-      title: title,
-      description: description
+      icon: presentation.icon,
+      color: presentation.color,
+      title: presentation.title,
+      description: presentation.detail || "Event occurred"
     }
-  end
-
-  defp get_event_display_properties(type, severity) do
-    case type do
-      "media_item.added" ->
-        {"hero-plus-circle", "text-info", "Added to Library"}
-
-      "media_item.updated" ->
-        {"hero-pencil-square", "text-info", "Updated"}
-
-      "media_item.removed" ->
-        {"hero-trash", "text-error", "Removed"}
-
-      "media_item.monitoring_changed" ->
-        {"hero-bell", "text-warning", "Monitoring Changed"}
-
-      "media_file.imported" ->
-        {"hero-document-check", "text-success", "File Imported"}
-
-      "media_file.upgraded" ->
-        {"hero-arrow-up-circle", "text-success", "Quality Upgraded"}
-
-      "media_file.upgrade_rejected" ->
-        {"hero-x-circle", "text-warning", "Upgrade Rejected"}
-
-      "media_item.episodes_refreshed" ->
-        {"hero-arrow-path", "text-info", "Episodes Updated"}
-
-      "download.initiated" ->
-        {"hero-arrow-down-tray", "text-primary", "Download Started"}
-
-      "download.completed" ->
-        {"hero-check-circle", "text-success", "Download Completed"}
-
-      "download.failed" ->
-        {"hero-x-circle", "text-error", "Download Failed"}
-
-      "download.cancelled" ->
-        {"hero-minus-circle", "text-warning", "Download Cancelled"}
-
-      "download.paused" ->
-        {"hero-pause-circle", "text-warning", "Download Paused"}
-
-      "download.resumed" ->
-        {"hero-play-circle", "text-info", "Download Resumed"}
-
-      "job.executed" ->
-        {"hero-cog-6-tooth", "text-success", "Job Executed"}
-
-      "job.failed" ->
-        {"hero-exclamation-triangle", "text-error", "Job Failed"}
-
-      "search.started" ->
-        {"hero-magnifying-glass", "text-info", "Search Started"}
-
-      "search.completed" ->
-        {"hero-magnifying-glass", "text-success", "Search Completed"}
-
-      "search.no_results" ->
-        {"hero-magnifying-glass", "text-warning", "No Results"}
-
-      "search.filtered_out" ->
-        {"hero-funnel", "text-warning", "All Filtered Out"}
-
-      "search.error" ->
-        {"hero-magnifying-glass", "text-error", "Search Error"}
-
-      "search.backoff_applied" ->
-        {"hero-clock", "text-warning", "Search Backoff Applied"}
-
-      "search.backoff_reset" ->
-        {"hero-arrow-path", "text-success", "Search Backoff Reset"}
-
-      _ ->
-        # Default based on severity
-        case severity do
-          :error -> {"hero-exclamation-circle", "text-error", "Error"}
-          :warning -> {"hero-exclamation-triangle", "text-warning", "Warning"}
-          _ -> {"hero-information-circle", "text-info", "Event"}
-        end
-    end
-  end
-
-  defp build_event_description(%Event{type: "media_item.added", metadata: metadata}) do
-    "#{metadata["title"]} was added to your library"
-  end
-
-  defp build_event_description(%Event{type: "media_item.updated", metadata: metadata}) do
-    title = metadata["title"] || "Media item"
-    reason = metadata["reason"] || "updated"
-    "#{title} - #{String.downcase(reason)}"
-  end
-
-  defp build_event_description(%Event{type: "media_item.removed", metadata: metadata}) do
-    "#{metadata["title"]} was removed from your library"
-  end
-
-  defp build_event_description(%Event{
-         type: "media_item.monitoring_changed",
-         metadata: metadata
-       }) do
-    status = if metadata["monitored"], do: "enabled", else: "disabled"
-    "Monitoring #{status} for #{metadata["title"]}"
-  end
-
-  defp build_event_description(%Event{type: "media_file.imported", metadata: metadata}) do
-    metadata["file_path"] || "File imported"
-  end
-
-  defp build_event_description(%Event{type: "media_file.upgraded", metadata: metadata}) do
-    title = metadata["title"] || "Media item"
-    old_res = metadata["old_resolution"] || "unknown"
-    new_res = metadata["new_resolution"] || "unknown"
-    delta = metadata["delta"]
-
-    if delta do
-      "#{title} upgraded from #{old_res} to #{new_res} (score +#{delta})"
-    else
-      "#{title} upgraded from #{old_res} to #{new_res}"
-    end
-  end
-
-  defp build_event_description(%Event{type: "media_file.upgrade_rejected", metadata: metadata}) do
-    title = metadata["title"] || "Media item"
-    "#{title}'s upgrade candidate did not deliver the expected quality and was rejected"
-  end
-
-  defp build_event_description(%Event{
-         type: "media_item.episodes_refreshed",
-         metadata: metadata
-       }) do
-    count = metadata["episode_count"] || 0
-    "#{count} episode#{if count != 1, do: "s", else: ""} added/updated"
-  end
-
-  defp build_event_description(%Event{type: type, metadata: metadata})
-       when type in [
-              "download.initiated",
-              "download.completed",
-              "download.failed",
-              "download.cancelled",
-              "download.paused",
-              "download.resumed"
-            ] do
-    metadata["title"] || "Download event"
-  end
-
-  defp build_event_description(%Event{type: "job.executed", metadata: metadata}) do
-    job_name = metadata["job_name"] || "Unknown job"
-    duration = metadata["duration_ms"]
-    items = metadata["items_processed"]
-
-    parts = [job_name]
-
-    parts = if items, do: parts ++ ["processed #{items} items"], else: parts
-    parts = if duration, do: parts ++ ["in #{duration}ms"], else: parts
-
-    Enum.join(parts, " - ")
-  end
-
-  defp build_event_description(%Event{type: "job.failed", metadata: metadata}) do
-    job_name = metadata["job_name"] || "Unknown job"
-    error = metadata["error_message"] || "Unknown error"
-    "#{job_name} failed: #{error}"
-  end
-
-  defp build_event_description(%Event{type: "search.started", metadata: metadata}) do
-    build_search_description("Searching for", metadata)
-  end
-
-  defp build_event_description(%Event{type: "search.completed", metadata: metadata}) do
-    title = metadata["title"] || "Unknown"
-    results_count = metadata["results_count"] || 0
-    selected = metadata["selected_release"]
-    episode_part = format_episode_part(metadata)
-
-    base = "Searched for #{title}#{episode_part}"
-
-    if selected do
-      "#{base} - found #{results_count} results, selected release"
-    else
-      "#{base} - found #{results_count} results"
-    end
-  end
-
-  defp build_event_description(%Event{type: "search.no_results", metadata: metadata}) do
-    build_search_description("Searched for", metadata) <> " - no results found"
-  end
-
-  defp build_event_description(%Event{type: "search.filtered_out", metadata: metadata}) do
-    title = metadata["title"] || "Unknown"
-    results_count = metadata["results_count"] || 0
-    episode_part = format_episode_part(metadata)
-    "Searched for #{title}#{episode_part} - #{results_count} results, all filtered out"
-  end
-
-  defp build_event_description(%Event{type: "search.error", metadata: metadata}) do
-    title = metadata["title"] || "Unknown"
-    error = metadata["error_message"] || "Unknown error"
-    episode_part = format_episode_part(metadata)
-    "Search failed for #{title}#{episode_part}: #{error}"
-  end
-
-  defp build_event_description(%Event{type: "search.backoff_applied", metadata: metadata}) do
-    title = metadata["title"] || "Unknown"
-    failure_count = metadata["failure_count"] || 1
-    reason = format_backoff_reason(metadata["reason"])
-    next_eligible = format_next_eligible(metadata["next_eligible_at"])
-    episode_part = format_episode_part(metadata)
-
-    resource_type = determine_backoff_resource_type(metadata)
-
-    "#{title}#{episode_part} (#{resource_type}) - #{reason}, attempt ##{failure_count}, next search #{next_eligible}"
-  end
-
-  defp build_event_description(%Event{type: "search.backoff_reset", metadata: metadata}) do
-    title = metadata["title"] || "Unknown"
-    previous_count = metadata["previous_failure_count"] || 0
-    episode_part = format_episode_part(metadata)
-    resource_type = determine_backoff_resource_type(metadata)
-
-    "#{title}#{episode_part} (#{resource_type}) - backoff cleared after #{previous_count} failed attempts"
-  end
-
-  defp build_event_description(%Event{metadata: metadata}) do
-    # Fallback: try to extract a meaningful description from metadata
-    cond do
-      metadata["title"] -> metadata["title"]
-      metadata["description"] -> metadata["description"]
-      true -> "Event occurred"
-    end
   end
 
   defp maybe_add_media_context(metadata, nil), do: metadata
@@ -1308,30 +1098,6 @@ defmodule Mydia.Events do
   defp maybe_put_metadata(metadata, _key, nil), do: metadata
   defp maybe_put_metadata(metadata, _key, ""), do: metadata
   defp maybe_put_metadata(metadata, key, value), do: Map.put(metadata, key, value)
-
-  # Helper to build search description with episode info
-  defp build_search_description(prefix, metadata) do
-    title = metadata["title"] || "Unknown"
-    episode_part = format_episode_part(metadata)
-    "#{prefix} #{title}#{episode_part}"
-  end
-
-  # Helper to format episode part of description (e.g., " S01E05")
-  defp format_episode_part(metadata) do
-    season = metadata["season_number"]
-    episode = metadata["episode_number"]
-
-    cond do
-      season && episode ->
-        " S#{String.pad_leading("#{season}", 2, "0")}E#{String.pad_leading("#{episode}", 2, "0")}"
-
-      season ->
-        " S#{String.pad_leading("#{season}", 2, "0")}"
-
-      true ->
-        ""
-    end
-  end
 
   ## Search Event Helpers
 
@@ -1750,52 +1516,6 @@ defmodule Mydia.Events do
   # Helper to format datetime for metadata
   defp format_datetime(nil), do: nil
   defp format_datetime(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
-
-  # Helper to format backoff reason for display
-  defp format_backoff_reason("no_results"), do: "no results found"
-  defp format_backoff_reason("all_filtered"), do: "all results filtered out"
-  defp format_backoff_reason(reason) when is_binary(reason), do: reason
-  defp format_backoff_reason(_), do: "search failed"
-
-  # Helper to format next eligible time for display
-  defp format_next_eligible(nil), do: "unknown"
-
-  defp format_next_eligible(iso_string) when is_binary(iso_string) do
-    case DateTime.from_iso8601(iso_string) do
-      {:ok, dt, _offset} -> format_relative_time(dt)
-      _ -> iso_string
-    end
-  end
-
-  defp format_next_eligible(_), do: "unknown"
-
-  # Format datetime as relative time (e.g., "in 15 minutes", "at 4:30 PM")
-  defp format_relative_time(dt) do
-    now = DateTime.utc_now()
-    diff_seconds = DateTime.diff(dt, now)
-
-    cond do
-      diff_seconds <= 0 -> "now"
-      diff_seconds < 60 -> "in #{diff_seconds} seconds"
-      diff_seconds < 3600 -> "in #{div(diff_seconds, 60)} minutes"
-      diff_seconds < 86_400 -> "in #{Float.round(diff_seconds / 3600, 1)} hours"
-      true -> "in #{div(diff_seconds, 86_400)} days"
-    end
-  end
-
-  # Determine resource type from metadata for display
-  defp determine_backoff_resource_type(metadata) do
-    cond do
-      metadata["episode_id"] ->
-        "episode"
-
-      metadata["season_number"] && !metadata["episode_number"] ->
-        "season #{metadata["season_number"]}"
-
-      true ->
-        "show"
-    end
-  end
 
   ## Playback Event Helpers (U1)
 

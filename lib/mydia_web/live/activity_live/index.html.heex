@@ -74,6 +74,26 @@
               <button
                 class={[
                   "btn btn-sm gap-1",
+                  if(@category_filter == "playback", do: "btn-primary", else: "btn-ghost")
+                ]}
+                phx-click="filter_category"
+                phx-value-category="playback"
+              >
+                <.icon name="hero-play" class="w-4 h-4" /> Playback
+              </button>
+              <button
+                class={[
+                  "btn btn-sm gap-1",
+                  if(@category_filter == "plugin", do: "btn-primary", else: "btn-ghost")
+                ]}
+                phx-click="filter_category"
+                phx-value-category="plugin"
+              >
+                <.icon name="hero-puzzle-piece" class="w-4 h-4" /> Plugins
+              </button>
+              <button
+                class={[
+                  "btn btn-sm gap-1",
                   if(@category_filter == "errors",
                     do: "btn-error",
                     else: "btn-ghost text-error/70 hover:text-error"
@@ -203,7 +223,7 @@
             <!-- Content -->
             <div class="flex-1 min-w-0">
               <div class="flex items-start justify-between gap-2">
-                <p class="font-medium">{format_event_description(event)}</p>
+                <p class="font-medium">{event_summary(event)}</p>
                 <%= if event.severity != :info do %>
                   <span class={[
                     "badge badge-sm flex-shrink-0",

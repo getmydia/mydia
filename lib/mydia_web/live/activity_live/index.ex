@@ -1,6 +1,7 @@
 defmodule MydiaWeb.ActivityLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Events
+  alias Mydia.Events.Presentation
   alias Phoenix.PubSub
 
   @page_size 50
@@ -72,6 +73,10 @@ defmodule MydiaWeb.ActivityLive.Index do
     category_filter = socket.assigns.category_filter
     date_filter = socket.assigns.date_filter
 
+    # Types hidden from the feed have their own dedicated viewer elsewhere.
+    # This check must mirror build_filter_opts/2, which applies it in SQL.
+    feed_visible = event.type not in Presentation.feed_hidden_types()
+
     # Only add event if it matches current category filter
     matches_category =
       case category_filter do
@@ -84,7 +89,7 @@ defmodule MydiaWeb.ActivityLive.Index do
     matches_date = event_matches_date_filter?(event.inserted_at, date_filter)
 
     socket =
-      if matches_category && matches_date do
+      if feed_visible && matches_category && matches_date do
         socket
         |> assign(:events_empty?, false)
         |> stream_insert(:events, event, at: 0)
@@ -147,7 +152,7 @@ defmodule MydiaWeb.ActivityLive.Index do
 
     date_opts = date_filter_opts(date_filter)
 
-    category_opts ++ date_opts
+    category_opts ++ date_opts ++ [exclude_types: Presentation.feed_hidden_types()]
   end
 
   defp date_filter_opts("all"), do: []
@@ -207,140 +212,15 @@ defmodule MydiaWeb.ActivityLive.Index do
 
   ## UI Helpers
 
-  defp format_event_description(event) do
-    case event.type do
-      "media_item.added" ->
-        title = event.metadata["title"] || "Unknown"
-        media_type = event.metadata["media_type"]
-        type_label = if media_type == "movie", do: "movie", else: "TV show"
-        "Added #{type_label}: #{title}"
+  defp event_icon(event), do: Presentation.for_event(event).icon
 
-      "media_item.updated" ->
-        title = event.metadata["title"] || "Unknown"
-        reason = event.metadata["reason"] || "Updated"
-        changes_summary = format_changes_summary(event.metadata["changes"])
+  defp event_summary(event) do
+    presentation = Presentation.for_event(event)
 
-        if changes_summary do
-          "#{reason}: #{title} (#{changes_summary})"
-        else
-          "#{reason}: #{title}"
-        end
-
-      "media_item.removed" ->
-        title = event.metadata["title"] || "Unknown"
-        "Removed: #{title}"
-
-      "media_item.monitoring_changed" ->
-        title = event.metadata["title"] || "Unknown"
-        monitored = event.metadata["monitored"]
-        action = if monitored, do: "Started monitoring", else: "Stopped monitoring"
-        "#{action}: #{title}"
-
-      "download.initiated" ->
-        title = event.metadata["title"] || "Unknown"
-        "Started download: #{title}"
-
-      "download.completed" ->
-        title = event.metadata["title"] || "Unknown"
-        "Download completed: #{title}"
-
-      "download.failed" ->
-        title = event.metadata["title"] || "Unknown"
-        error = event.metadata["error_message"] || "Unknown error"
-        selected = event.metadata["selected_release"]
-
-        base = format_search_description("Download failed for", title, event.metadata)
-
-        if selected do
-          "#{base}: #{selected} (#{error})"
-        else
-          "#{base} (#{error})"
-        end
-
-      "download.cancelled" ->
-        title = event.metadata["title"] || "Unknown"
-        "Download cancelled: #{title}"
-
-      "download.paused" ->
-        title = event.metadata["title"] || "Unknown"
-        "Download paused: #{title}"
-
-      "download.resumed" ->
-        title = event.metadata["title"] || "Unknown"
-        "Download resumed: #{title}"
-
-      "job.executed" ->
-        job_name = event.metadata["job_name"] || "Unknown"
-        "Job executed: #{job_name}"
-
-      "job.failed" ->
-        job_name = event.metadata["job_name"] || "Unknown"
-        error = event.metadata["error_message"] || "Unknown error"
-        "Job failed: #{job_name} (#{error})"
-
-      "search.started" ->
-        title = event.metadata["title"] || "Unknown"
-        format_search_description("Searching for", title, event.metadata)
-
-      "search.completed" ->
-        title = event.metadata["title"] || "Unknown"
-        selected = event.metadata["selected_release"]
-
-        if selected do
-          format_search_description("Found release for", title, event.metadata) <> ": #{selected}"
-        else
-          format_search_description("Search completed for", title, event.metadata)
-        end
-
-      "search.no_results" ->
-        title = event.metadata["title"] || "Unknown"
-        format_search_description("No results found for", title, event.metadata)
-
-      "search.filtered_out" ->
-        title = event.metadata["title"] || "Unknown"
-        count = event.metadata["results_count"] || 0
-        format_search_description("#{count} results filtered out for", title, event.metadata)
-
-      "search.error" ->
-        title = event.metadata["title"] || "Unknown"
-        error = event.metadata["error_message"] || "Unknown error"
-        format_search_description("Search failed for", title, event.metadata) <> " (#{error})"
-
-      "search.backoff_applied" ->
-        title = event.metadata["title"] || "Unknown"
-        failure_count = event.metadata["failure_count"] || 1
-        reason = format_backoff_reason(event.metadata["reason"])
-        next_eligible = format_next_eligible(event.metadata["next_eligible_at"])
-        resource_type = determine_backoff_resource_type(event.metadata)
-
-        "#{title}#{format_episode_part(event.metadata)} (#{resource_type}) - #{reason}, attempt ##{failure_count}, next search #{next_eligible}"
-
-      "search.backoff_reset" ->
-        title = event.metadata["title"] || "Unknown"
-        previous_count = event.metadata["previous_failure_count"] || 0
-        resource_type = determine_backoff_resource_type(event.metadata)
-
-        "#{title}#{format_episode_part(event.metadata)} (#{resource_type}) - backoff cleared after #{previous_count} failed attempts"
-
-      _ ->
-        event.type
+    case presentation.detail do
+      nil -> presentation.title
+      detail -> "#{presentation.title}: #{detail}"
     end
-  end
-
-  defp format_search_description(prefix, title, metadata) do
-    episode_part =
-      case {metadata["season_number"], metadata["episode_number"]} do
-        {nil, _} ->
-          ""
-
-        {_, nil} ->
-          ""
-
-        {s, e} ->
-          " S#{String.pad_leading(to_string(s), 2, "0")}E#{String.pad_leading(to_string(e), 2, "0")}"
-      end
-
-    "#{prefix}: #{title}#{episode_part}"
   end
 
   defp format_actor(event) do
@@ -411,31 +291,6 @@ defmodule MydiaWeb.ActivityLive.Index do
     end
   end
 
-  defp event_icon(event) do
-    case event.type do
-      "media_item.added" -> "hero-plus-circle"
-      "media_item.updated" -> "hero-arrow-path"
-      "media_item.removed" -> "hero-trash"
-      "media_item.monitoring_changed" -> "hero-eye"
-      "download.initiated" -> "hero-arrow-down-tray"
-      "download.completed" -> "hero-check-circle"
-      "download.failed" -> "hero-x-circle"
-      "download.cancelled" -> "hero-x-mark"
-      "download.paused" -> "hero-pause"
-      "download.resumed" -> "hero-play"
-      "job.executed" -> "hero-cog-6-tooth"
-      "job.failed" -> "hero-exclamation-triangle"
-      "search.started" -> "hero-magnifying-glass"
-      "search.completed" -> "hero-magnifying-glass"
-      "search.no_results" -> "hero-magnifying-glass"
-      "search.filtered_out" -> "hero-funnel"
-      "search.error" -> "hero-magnifying-glass"
-      "search.backoff_applied" -> "hero-clock"
-      "search.backoff_reset" -> "hero-arrow-path"
-      _ -> "hero-information-circle"
-    end
-  end
-
   defp has_search_details?(event) do
     event.category == "search" &&
       (event.metadata["query"] != nil ||
@@ -456,63 +311,6 @@ defmodule MydiaWeb.ActivityLive.Index do
          event.metadata["queue"] != nil ||
          event.metadata["attempt"] != nil)
   end
-
-  # Formats a short summary of changes for the main event description
-  defp format_changes_summary(nil), do: nil
-  defp format_changes_summary(changes) when changes == %{}, do: nil
-
-  defp format_changes_summary(changes) do
-    parts = []
-
-    # Check for metadata_fields changes (from nested metadata)
-    parts =
-      case Map.get(changes, "metadata_fields") do
-        nil ->
-          parts
-
-        fields when is_list(fields) ->
-          field_names =
-            fields
-            |> Enum.take(3)
-            |> Enum.map(&format_field_name/1)
-
-          remaining = length(fields) - 3
-
-          if remaining > 0 do
-            parts ++ ["#{Enum.join(field_names, ", ")} +#{remaining} more"]
-          else
-            parts ++ [Enum.join(field_names, ", ")]
-          end
-
-        _ ->
-          parts
-      end
-
-    # Check for simple field changes (title, year, etc.)
-    simple_fields = ["title", "original_title", "year"]
-
-    simple_changes =
-      changes
-      |> Map.take(simple_fields)
-      |> Map.keys()
-
-    parts =
-      if simple_changes != [] do
-        parts ++ simple_changes
-      else
-        parts
-      end
-
-    if parts == [] do
-      nil
-    else
-      Enum.join(parts, ", ")
-    end
-  end
-
-  defp format_field_name(%{"field" => field}), do: field
-  defp format_field_name(field) when is_binary(field), do: field
-  defp format_field_name(_), do: "field"
 
   # Formats the detailed list of changes for the expandable view
   defp format_change_details(changes) when is_nil(changes), do: []
@@ -631,61 +429,4 @@ defmodule MydiaWeb.ActivityLive.Index do
   end
 
   defp format_penalty_summary(_), do: ""
-
-  # Backoff formatting helpers
-
-  defp format_episode_part(metadata) do
-    case {metadata["season_number"], metadata["episode_number"]} do
-      {nil, _} ->
-        ""
-
-      {s, nil} ->
-        " S#{String.pad_leading(to_string(s), 2, "0")}"
-
-      {s, e} ->
-        " S#{String.pad_leading(to_string(s), 2, "0")}E#{String.pad_leading(to_string(e), 2, "0")}"
-    end
-  end
-
-  defp format_backoff_reason("no_results"), do: "no results found"
-  defp format_backoff_reason("all_filtered"), do: "all results filtered out"
-  defp format_backoff_reason(reason) when is_binary(reason), do: reason
-  defp format_backoff_reason(_), do: "search failed"
-
-  defp format_next_eligible(nil), do: "unknown"
-
-  defp format_next_eligible(iso_string) when is_binary(iso_string) do
-    case DateTime.from_iso8601(iso_string) do
-      {:ok, dt, _offset} -> format_relative_future_time(dt)
-      _ -> iso_string
-    end
-  end
-
-  defp format_next_eligible(_), do: "unknown"
-
-  defp format_relative_future_time(dt) do
-    now = DateTime.utc_now()
-    diff_seconds = DateTime.diff(dt, now)
-
-    cond do
-      diff_seconds <= 0 -> "now"
-      diff_seconds < 60 -> "in #{diff_seconds}s"
-      diff_seconds < 3600 -> "in #{div(diff_seconds, 60)}m"
-      diff_seconds < 86_400 -> "in #{Float.round(diff_seconds / 3600, 1)}h"
-      true -> "in #{div(diff_seconds, 86_400)}d"
-    end
-  end
-
-  defp determine_backoff_resource_type(metadata) do
-    cond do
-      metadata["episode_id"] ->
-        "episode"
-
-      metadata["season_number"] && !metadata["episode_number"] ->
-        "season #{metadata["season_number"]}"
-
-      true ->
-        "show"
-    end
-  end
 end
