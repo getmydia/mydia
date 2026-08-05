@@ -21,6 +21,7 @@ import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
+import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
@@ -203,6 +204,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// once it has probed the file, and a probe that outruns the sample used to
   /// leave the selector empty for the rest of the session.
   StreamSubscription<Tracks>? _tracksSubscription;
+
+  /// media_kit reports playback failures asynchronously, long after
+  /// [Player.open] has returned, so the try/catch around initialisation cannot
+  /// see them. Without this the failure has nowhere to go: the screen sits
+  /// there with its loading state cleared and its timeline running off the
+  /// duration the server supplied, and a stream that never delivers a byte
+  /// looks exactly like one that is merely dark.
+  StreamSubscription<String>? _errorSubscription;
+
+  /// The furthest real playback position observed so far, seeded with the
+  /// resume offset so a seek is not mistaken for progress.
+  Duration _furthestPosition = Duration.zero;
+
+  /// Whether playback has ever actually moved forward.
+  ///
+  /// This gates [_onPlaybackError], and the gate is the whole reason that
+  /// handler is safe. media_kit's error stream carries every mpv log line at
+  /// error level, which includes recoverable decoder (`vd`/`ad`) and network
+  /// (`ffmpeg tcp:`) complaints that a healthy stream shrugs off. Replacing a
+  /// playing video with an error page over one of those would be a worse bug
+  /// than the one this exists to fix. A stream that has never advanced is not
+  /// having a hiccup: it never played at all, and a black screen is all the
+  /// viewer would otherwise get.
+  bool _playbackAdvanced = false;
   bool _isLoading = true;
   String? _error;
   String? _loadingMessage;
@@ -931,6 +956,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player = player;
     _videoController = VideoController(player);
 
+    // Bound before `open` deliberately: a source that fails to resolve at all
+    // (a deleted file id, a dead HLS session) errors during the open itself,
+    // which a subscription attached afterwards would miss entirely.
+    //
+    // This is a brand new `Player`, so nothing it does has been observed yet:
+    // a previous source's progress must not vouch for this one.
+    _playbackAdvanced = false;
+    _furthestPosition = Duration.zero;
+    await _errorSubscription?.cancel();
+    _errorSubscription = player.stream.error.listen(_onPlaybackError);
+
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
     // source switch, a session restart, or a fresh `PlayerScreen` state for
     // a new queue item. It is *not* re-bound by navigating to the next
@@ -970,6 +1006,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (plan.resumes) {
       await player.seek(plan.position);
     }
+
+    // The bar a position has to clear to count as playback. Zero on the HLS
+    // branch, which always arrives here with `ResumePlan.fromStart` because
+    // its offset went into FFmpeg's `-ss` instead, so its player-local
+    // coordinates genuinely do start at zero.
+    _furthestPosition = plan.position;
 
     // Start playback
     await player.play();
@@ -1054,6 +1096,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   /// Fetch streaming candidates from the server via GraphQL.
+  ///
+  /// `networkOnly` is load-bearing. This query is keyed by *content* id, not by
+  /// file id, so its cache entry outlives the file it describes: replacing an
+  /// episode's file (a manual delete and re-download, or an automatic quality
+  /// upgrade, which supersedes the row and deletes the old one) leaves the
+  /// entry pointing at a `fileId` that no longer exists. The direct-play branch
+  /// below takes its id from this response rather than from the route, so a
+  /// cached hit sends playback to a deleted file: the server answers "media
+  /// file not found in database", no bytes arrive, and the screen stays black
+  /// while the timeline runs off the equally stale cached duration. The default
+  /// policy for a one-shot `query()` is `cacheFirst` and the store is Hive on
+  /// disk, so that state survives restarts and never self-heals.
+  ///
+  /// `cacheAndNetwork` is not the fix: on a one-shot `client.query()` it
+  /// returns the cached result and discards the network one, which is the same
+  /// defect `core/graphql/watch/query_watcher.dart` documents. Nothing is lost
+  /// by going to the network here — the offline branch returns long before this
+  /// runs, and every remaining path needs the server to serve a single byte.
   Future<Query$StreamingCandidates$streamingCandidates?>
       _fetchStreamingCandidates(
     GraphQLClient graphqlClient,
@@ -1068,6 +1128,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             contentType: contentType,
             id: id,
           ).toJson(),
+          fetchPolicy: FetchPolicy.networkOnly,
         ),
       );
 
@@ -1414,6 +1475,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = _player;
     if (player == null || !mounted) return;
 
+    // Strictly greater, against a mark seeded with the resume offset, so that
+    // neither a resume seek nor a position that simply stands still counts as
+    // playback. See [_playbackAdvanced].
+    final position = player.state.position;
+    if (position > _furthestPosition) {
+      _furthestPosition = position;
+      _playbackAdvanced = true;
+    }
+
     _maybeAutoSkipSegment(player);
 
     // Check if video is near completion (90%)
@@ -1434,6 +1504,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _saveProgress().whenComplete(_invalidateAfterPlayback);
       }
     }
+  }
+
+  /// Surface a playback failure media_kit reported after the media opened.
+  ///
+  /// Only fatal-looking failures reach the UI: see [_playbackAdvanced] for why
+  /// an error arriving mid-playback is logged and otherwise ignored.
+  ///
+  /// Clearing [_isLoading] matters as much as setting [_error]: a failure
+  /// during `open` leaves the screen still loading, and `_buildBody` checks
+  /// the loading state first, so an error set on its own would never be
+  /// reached.
+  void _onPlaybackError(String message) {
+    debugPrint('[PlayerScreen] Playback error: $message');
+    if (!mounted) return;
+
+    if (_playbackAdvanced) {
+      // Already playing, so this is something the stream can survive. Killing
+      // the video over it would be the regression, not the fix.
+      return;
+    }
+
+    setState(() {
+      _error = playbackErrorMessage(message);
+      _isLoading = false;
+    });
   }
 
   /// Seek past a detected segment the viewer opted into skipping.
@@ -1832,6 +1927,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _positionSubscription = null;
         await _tracksSubscription?.cancel();
         _tracksSubscription = null;
+        await _errorSubscription?.cancel();
+        _errorSubscription = null;
         _progressService?.stopSync();
         await _player?.dispose();
         _player = null;
@@ -2188,6 +2285,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Cancel stream subscriptions to prevent memory leaks
     _positionSubscription?.cancel();
     _tracksSubscription?.cancel();
+    _errorSubscription?.cancel();
 
     // Cancel auto-play timer
     _upNextTimer?.cancel();
@@ -2243,6 +2341,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _positionSubscription = null;
     await _tracksSubscription?.cancel();
     _tracksSubscription = null;
+    await _errorSubscription?.cancel();
+    _errorSubscription = null;
     _progressService?.stopSync();
 
     final player = _player;

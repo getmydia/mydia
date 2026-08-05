@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
@@ -94,6 +95,13 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
   bool stopped = false;
   bool startCalled = false;
 
+  /// Every file id direct playback has been pointed at, in order.
+  ///
+  /// This is the id that actually reaches the wire, which is the only thing
+  /// that distinguishes "asked the server which file to play" from "reused a
+  /// cached answer about a file that has since been deleted".
+  final List<String> directStreamFileIds = [];
+
   @override
   int get port => 12345;
 
@@ -107,8 +115,10 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
       'http://127.0.0.1:$port/hls/$sessionId/index.m3u8';
 
   @override
-  String buildDirectStreamUrl(String fileId) =>
-      'http://127.0.0.1:$port/direct/$fileId/stream';
+  String buildDirectStreamUrl(String fileId) {
+    directStreamFileIds.add(fileId);
+    return 'http://127.0.0.1:$port/direct/$fileId/stream';
+  }
 
   @override
   Future<void> stop() async {
@@ -254,15 +264,21 @@ Map<String, dynamic> movieSegmentsResponse({
 /// `_canDirectPlay` declines an empty list. Pass [directPlay] to put a
 /// `DIRECT_PLAY` candidate first instead, which is what makes
 /// `_initializePlayer` take its native direct-play branch.
+///
+/// [fileId] is parameterised because this response is what the direct-play
+/// branch takes its file id from, in preference to the one on the route. A
+/// test that needs to tell a fresh answer apart from a stale cached one has to
+/// be able to make the two differ.
 Map<String, dynamic> streamingCandidatesResponse({
   double? duration,
   bool directPlay = false,
+  String fileId = 'file-1',
 }) {
   return {
     '__typename': 'Query',
     'streamingCandidates': {
       '__typename': 'StreamingCandidatesResult',
-      'fileId': 'file-1',
+      'fileId': fileId,
       'candidates': <dynamic>[
         if (directPlay)
           {
@@ -321,6 +337,10 @@ Map<String, dynamic> endStreamingSessionResponse({bool ok = true}) {
 /// `Override` (the element type `ProviderContainer.overrides` expects) is not
 /// part of `flutter_riverpod`'s public export surface, so a helper can only
 /// spell its return type by constructing the container itself.
+///
+/// Pass [cache] to hand the client a cache that already holds entries, which
+/// is what lets a test stand in for an install that has played this content
+/// before. Omitted, each container gets its own empty non-persistent cache.
 ProviderContainer buildPlayerScreenContainer({
   required StubLink link,
   required conn.ConnectionState connectionState,
@@ -329,6 +349,7 @@ ProviderContainer buildPlayerScreenContainer({
   DownloadedMedia? downloaded,
   AuthStatus authStatus = AuthStatus.authenticated,
   PlaybackProgressStore? progressStore,
+  GraphQLCache? cache,
 }) {
   return ProviderContainer(overrides: [
     authStateProvider.overrideWith(
@@ -336,7 +357,8 @@ ProviderContainer buildPlayerScreenContainer({
     ),
     downloadManagerProvider.overrideWith(
         (ref) async => FakeDownloadService(downloaded: downloaded)),
-    asyncGraphqlClientProvider.overrideWith((ref) async => stubClient(link)),
+    asyncGraphqlClientProvider
+        .overrideWith((ref) async => stubClient(link, cache: cache)),
     serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
     authTokenProvider.overrideWith((ref) async => 'tok'),
     conn.connectionProvider
