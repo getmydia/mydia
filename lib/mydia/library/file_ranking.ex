@@ -39,10 +39,13 @@ defmodule Mydia.Library.FileRanking do
     "360p" => 360
   }
 
-  # Deliberately unanchored at the start, matching the player's
-  # `MediaFileSelector.parseToPixels` (media_file_selector.dart:46) so client
-  # and server agree on odd values. It reads "1920x1080" as 1080.
-  @numeric_resolution ~r/(\d+)p?$/
+  # Deliberately unanchored at the start. Originally matched the player's
+  # `MediaFileSelector.parseToPixels` (media_file_selector.dart:46) for odd
+  # values like "1920x1080" -> 1080. Additionally accepts interlaced suffixes
+  # because ReleaseParser persists them (e.g. "1080i") and the Dart parser
+  # does not yet handle them. Treats interlaced as equal to progressive at
+  # the same height.
+  @numeric_resolution ~r/(\d+)[pi]?$/
 
   @doc """
   Parses a resolution string into a vertical pixel count.

@@ -40,6 +40,18 @@ defmodule Mydia.Library.FileRankingTest do
       assert FileRanking.resolution_pixels("") == 0
       assert FileRanking.resolution_pixels("unknown") == 0
     end
+
+    test "treats interlaced resolutions as equal to progressive at the same height" do
+      # ReleaseParser persists interlaced forms (e.g. "1080i"), treating them
+      # as equal to progressive at the same resolution for ranking purposes.
+      assert FileRanking.resolution_pixels("1080i") == 1080
+      assert FileRanking.resolution_pixels("720i") == 720
+      assert FileRanking.resolution_pixels("2160i") == 2160
+    end
+
+    test "ignores case for interlaced suffix" do
+      assert FileRanking.resolution_pixels("1080I") == 1080
+    end
   end
 
   describe "best/1" do
@@ -96,6 +108,13 @@ defmodule Mydia.Library.FileRankingTest do
       y = file(id: "bbb", resolution: "1080p", bitrate: 1)
 
       assert FileRanking.best([x, y]).id == FileRanking.best([y, x]).id
+    end
+
+    test "an interlaced file outranks an unanalyzed file" do
+      unanalyzed = file(id: "a", resolution: nil, bitrate: 99_000_000)
+      interlaced = file(id: "b", resolution: "1080i", bitrate: nil)
+
+      assert FileRanking.best([unanalyzed, interlaced]).id == "b"
     end
   end
 
