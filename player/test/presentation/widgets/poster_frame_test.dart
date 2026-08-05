@@ -19,7 +19,6 @@ void main() {
   runPosterDepthContract(
     description: 'PosterFrame',
     build: () => const PosterFrame(placeholder: _placeholder),
-    target: find.byType(PosterFrame),
     size: const Size(140, 210),
   );
 
@@ -68,8 +67,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      AnimatedOpacity opacity() =>
-          tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      // Scope to PosterFrame's own subtree. MaterialApp's Material 3 route
+      // entrance transition contributes incidental widgets to the tree (see
+      // the PosterPlayScrim comment below), so a bare find.byType risks
+      // matching something outside this widget.
+      AnimatedOpacity opacity() => tester.widget<AnimatedOpacity>(
+            find.descendant(
+              of: find.byType(PosterFrame),
+              matching: find.byType(AnimatedOpacity),
+            ),
+          );
 
       expect(opacity().opacity, 0.0);
 
@@ -86,7 +93,12 @@ void main() {
         ),
       );
 
-      final clip = tester.widget<ClipRRect>(find.byType(ClipRRect).first);
+      final clip = tester.widget<ClipRRect>(
+        find.descendant(
+          of: find.byType(PosterFrame),
+          matching: find.byType(ClipRRect),
+        ),
+      );
 
       expect(
         clip.borderRadius,

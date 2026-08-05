@@ -18,7 +18,6 @@ void main() {
   runPosterDepthContract(
     description: 'MediaCard',
     build: () => const MediaCard(title: 'Movie'),
-    target: find.byType(MediaCard),
     size: _cardHost,
   );
 

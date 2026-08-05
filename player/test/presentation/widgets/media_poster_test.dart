@@ -12,7 +12,6 @@ void main() {
   runPosterDepthContract(
     description: 'MediaPoster',
     build: () => const MediaPoster(title: 'Show'),
-    target: find.byType(MediaPoster),
     size: const Size(140, 230),
   );
 

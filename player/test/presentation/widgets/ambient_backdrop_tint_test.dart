@@ -10,10 +10,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 
 import '../../test_utils/mock_network_images.dart';
+import '../../test_utils/poster_contract.dart';
 
 void main() {
   group('AmbientBackdropController default/hover layering (R9)', () {
@@ -137,6 +139,12 @@ void main() {
       addTearDown(gesture.removePointer);
       await gesture.moveTo(tester.getCenter(find.byType(MediaCard)));
       await tester.pumpAndSettle();
+
+      // A card with no artwork publishes nothing whether or not the gesture
+      // actually landed on the poster, so that alone can't prove hit-testing
+      // still works. Assert the hover landed — the shadow deepened to the
+      // hover token — before trusting the negative below.
+      expect(shadowDecoration(tester).boxShadow, DepthTokens.posterHover);
 
       // No artwork -> no override -> backdrop stays on the calm default.
       expect(

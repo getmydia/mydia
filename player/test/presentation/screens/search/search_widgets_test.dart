@@ -28,7 +28,6 @@ void main() {
       ),
       onTap: () {},
     ),
-    target: find.byType(SearchResultCard),
     size: const Size(180, 320),
   );
 
