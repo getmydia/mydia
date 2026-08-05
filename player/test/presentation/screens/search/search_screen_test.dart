@@ -13,6 +13,7 @@ import 'package:player/presentation/screens/search/search_screen.dart';
 import 'package:player/presentation/screens/search/widgets/episode_result_row.dart';
 import 'package:player/presentation/screens/search/widgets/search_result_card.dart';
 import 'package:player/presentation/screens/search/widgets/search_section_header.dart';
+import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import 'search_screen_test.mocks.dart';
@@ -302,5 +303,55 @@ void main() {
     });
 
     expect(find.byKey(const Key('cast-button')), findsOneWidget);
+  });
+
+  testWidgets('resets the ambient backdrop to the static fallback',
+      (tester) async {
+    final backdropClient = MockGraphQLClient();
+    when(backdropClient.query(any)).thenAnswer(
+      (_) async => QueryResult(
+        options: QueryOptions(document: gql('query { x }')),
+        source: QueryResultSource.network,
+        data: const {'search': _twoSections},
+      ),
+    );
+
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith((ref) async => backdropClient),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    // The shell always watches this provider; keep it alive here so the
+    // autoDispose controller isn't scheduled for disposal between the seed
+    // below and the final read (see ambient_backdrop_tint_test.dart).
+    container.listen(ambientBackdropControllerProvider, (_, __) {});
+
+    // Arrive from a focal screen that left its artwork on the backdrop.
+    container.read(ambientBackdropControllerProvider.notifier).setDefault(
+          const BackdropSource(
+            imageUrl: 'https://example.test/hero.jpg',
+            id: 'hero',
+          ),
+        );
+
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: SearchScreen()),
+        ),
+      );
+      // publishBackdropSource defers to a post-frame callback.
+      await tester.pump();
+    });
+
+    expect(
+      container.read(ambientBackdropControllerProvider.notifier).defaultSource,
+      BackdropSource.none,
+    );
   });
 }
