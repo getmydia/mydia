@@ -1,0 +1,64 @@
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/update/updaters/macos_updater.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late List<MethodCall> calls;
+
+  void mock(Future<Object?> Function(MethodCall call) handler) {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kSparkleChannel, (call) async {
+      calls.add(call);
+      return handler(call);
+    });
+  }
+
+  setUp(() {
+    calls = [];
+    mock((_) async => null);
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kSparkleChannel, null);
+  });
+
+  test('checkForUpdates reaches the host', () async {
+    await MacOSUpdater.checkForUpdates();
+
+    expect(calls.map((c) => c.method), ['checkForUpdates']);
+  });
+
+  test('betaChannelEnabled returns what the host reports', () async {
+    mock((_) async => true);
+
+    expect(await MacOSUpdater.betaChannelEnabled(), isTrue);
+    expect(calls.map((c) => c.method), ['getBetaChannel']);
+  });
+
+  test('betaChannelEnabled defaults to false when the host returns null',
+      () async {
+    mock((_) async => null);
+
+    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
+  });
+
+  test('setBetaChannel forwards the boolean', () async {
+    await MacOSUpdater.setBetaChannel(true);
+
+    expect(calls.single.method, 'setBetaChannel');
+    expect(calls.single.arguments, isTrue);
+  });
+
+  test('a host failure never propagates to the caller', () async {
+    // The updater is called from settings taps. A PlatformException escaping
+    // here would surface as an unhandled error in the widget tree.
+    mock((_) async => throw PlatformException(code: 'boom'));
+
+    await expectLater(MacOSUpdater.checkForUpdates(), completes);
+    await expectLater(MacOSUpdater.setBetaChannel(true), completes);
+    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
+  });
+}
