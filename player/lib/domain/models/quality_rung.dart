@@ -98,13 +98,29 @@ List<QualityRung> deriveQualityLadder({int? sourceHeight}) {
 /// pair that is not on the ladder at all (2000kbps with 720p). Height is the
 /// more meaningful half of that pair to a viewer, so it decides the label and
 /// the bitrate is only a tiebreak.
+///
+/// A height that matches no rung is still named, from the height itself. The
+/// caller displays `effective ?? selected`, so returning null for an
+/// unrecognised height would label the stream with the rung that was *asked*
+/// for — the one thing labelling from the applied value exists to prevent.
+/// Only a genuinely unnameable answer returns null: a bitrate cap with no
+/// height, where there is no honest resolution to report and falling back to
+/// the request is the least wrong option available.
 QualityRung? effectiveRungLabel({int? maxHeight, int? maxBitrateKbps}) {
   if (maxHeight == null && maxBitrateKbps == null) {
     return QualityRung.original;
   }
-  if (maxHeight == null) return null;
+  if (maxHeight == null || maxHeight <= 0) return null;
   for (final rung in _allRungs) {
     if (rung.height == maxHeight) return rung;
   }
-  return null;
+
+  // Off-ladder, so synthesised rather than looked up. Deliberately built with
+  // the echoed bitrate, not a ladder rung's: this describes what the server
+  // did, and nothing sends it back.
+  return QualityRung(
+    label: '${maxHeight}p',
+    height: maxHeight,
+    maxBitrateKbps: maxBitrateKbps,
+  );
 }

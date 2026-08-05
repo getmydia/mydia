@@ -28,9 +28,11 @@ import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/screens/settings/settings_controller.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
 
@@ -87,6 +89,35 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
     final error = startCastError;
     if (error != null) throw error;
   }
+}
+
+/// Answers the preference reads `PlayerScreen` makes at startup from memory.
+///
+/// The real [SettingsService] goes through `flutter_secure_storage`, whose
+/// platform channel is not registered under `testWidgets`: the awaiting
+/// Future never completes (the same trap documented on
+/// [mockPathProviderDocumentsDirectory]). `_initializePlayer` awaits the
+/// default-quality read before it decides anything, so an un-overridden
+/// provider wedges initialization short of the resume prompt — every test
+/// that mounts the screen fails on a dialog that never appears, with no
+/// error to explain it.
+class FakeSettingsService extends Fake implements SettingsService {
+  FakeSettingsService({this.defaultQuality = 'auto'});
+
+  /// The persisted `default_quality` key. `auto` — the real service's own
+  /// default — reads back as `QualityRung.original`.
+  String defaultQuality;
+
+  @override
+  Future<String> getDefaultQuality() async => defaultQuality;
+
+  @override
+  Future<void> setDefaultQuality(String quality) async {
+    defaultQuality = quality;
+  }
+
+  @override
+  Future<bool> getAutoSkipSegments() async => false;
 }
 
 /// Tracks whether `stop()` ran, without touching a real P2P/HTTP stack.
@@ -254,9 +285,20 @@ Map<String, dynamic> movieSegmentsResponse({
 /// `_canDirectPlay` declines an empty list. Pass [directPlay] to put a
 /// `DIRECT_PLAY` candidate first instead, which is what makes
 /// `_initializePlayer` take its native direct-play branch.
+///
+/// Every field the document selects must be present, including the ones a
+/// given test does not care about: the normalized cache refuses a partial
+/// write, which surfaces as `result.hasException` and makes
+/// `_fetchStreamingCandidates` return null — indistinguishable, from the
+/// screen's point of view, from a server that knows nothing about the file.
+///
+/// [height] feeds `deriveQualityLadder`. Null (the default) collapses the
+/// ladder to Original alone, which hides the quality control — what every
+/// test that is not about quality wants.
 Map<String, dynamic> streamingCandidatesResponse({
   double? duration,
   bool directPlay = false,
+  int? height,
 }) {
   return {
     '__typename': 'Query',
@@ -278,17 +320,47 @@ Map<String, dynamic> streamingCandidatesResponse({
         '__typename': 'StreamingMetadata',
         'duration': duration,
         'width': null,
-        'height': null,
+        'height': height,
+        'bitrate': null,
+        'resolution': null,
       },
     },
   };
 }
 
-/// A well-formed `StartStreamingSession` response. [startPosition] is the
-/// *echoed* value the server claims to have used — deliberately a separate
-/// parameter from whatever the client requested, so tests can make them
-/// differ on purpose.
+/// A well-formed `StartStreamingSession` response. [startPosition],
+/// [maxBitrate] and [maxHeight] are the *echoed* values the server claims to
+/// have applied — deliberately separate parameters from whatever the client
+/// requested, so tests can make them differ on purpose (a relay clamps both
+/// caps below the request).
 Map<String, dynamic> startStreamingSessionResponse({
+  String sessionId = 'sess-1',
+  double? duration,
+  int? startPosition,
+  int? maxBitrate,
+  int? maxHeight,
+}) {
+  return {
+    '__typename': 'RootMutationType',
+    'startStreamingSession': {
+      '__typename': 'StreamingSessionResult',
+      'sessionId': sessionId,
+      'duration': duration,
+      'startPosition': startPosition,
+      'maxBitrate': maxBitrate,
+      'maxHeight': maxHeight,
+    },
+  };
+}
+
+/// What a server that predates the height cap answers the legacy document
+/// with: no `maxBitrate` or `maxHeight` keys at all, because its schema has
+/// no such fields for that document to select.
+///
+/// Distinct from passing nulls to [startStreamingSessionResponse], which
+/// still sends the keys and so would not exercise the generated `fromJson`
+/// reading them as absent.
+Map<String, dynamic> legacyStartStreamingSessionResponse({
   String sessionId = 'sess-1',
   double? duration,
   int? startPosition,
@@ -329,8 +401,11 @@ ProviderContainer buildPlayerScreenContainer({
   DownloadedMedia? downloaded,
   AuthStatus authStatus = AuthStatus.authenticated,
   PlaybackProgressStore? progressStore,
+  SettingsService? settingsService,
 }) {
   return ProviderContainer(overrides: [
+    settingsServiceProvider
+        .overrideWithValue(settingsService ?? FakeSettingsService()),
     authStateProvider.overrideWith(
       () => FakeAuthNotifier(AsyncValue.data(authStatus)),
     ),

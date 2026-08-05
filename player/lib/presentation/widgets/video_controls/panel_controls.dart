@@ -179,7 +179,10 @@ class SecondaryCluster extends StatelessWidget {
   final VoidCallback? onSubtitleTap;
   final VoidCallback? onAudioTap;
 
-  /// Web-only. When null the quality button is omitted entirely.
+  /// When null the quality button is omitted entirely, which is how the
+  /// player screen hides it for a source that has only one rung to offer.
+  /// Not a platform signal: it was web-only while `player_screen.dart` gated
+  /// the callback on `PlatformFeatures.isWeb`, and that gate is gone.
   final VoidCallback? onQualityTap;
   final VoidCallback? onFullscreenTap;
 
@@ -259,7 +262,13 @@ class SecondaryCluster extends StatelessWidget {
             icon: Icons.hd_rounded,
             iconSize: 18,
             size: 32,
-            tooltip: 'Quality: ${selectedQualityLabel ?? 'Auto'}',
+            // No invented default. This used to read "Auto", describing
+            // adaptive streaming the server has never done — it emits a
+            // single rendition per session. A caller that cannot name the
+            // current rung gets the bare noun rather than a fiction.
+            tooltip: selectedQualityLabel == null
+                ? 'Quality'
+                : 'Quality: $selectedQualityLabel',
             onTap: onQualityTap,
           ),
         ],

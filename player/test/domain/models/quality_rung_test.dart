@@ -130,6 +130,49 @@ void main() {
       // the control displays.
       expect(effectiveRungLabel(maxHeight: null, maxBitrateKbps: 4000), isNull);
     });
+
+    test('names a height that matches no rung from the height itself', () {
+      // Falling back to null here would let the caller's
+      // `effective ?? selected` label the stream with the rung that was
+      // *asked* for, which is the one thing labelling from the applied value
+      // exists to prevent. A server free to clamp anywhere is not obliged to
+      // land on one of the four ladder heights.
+      final effective =
+          effectiveRungLabel(maxHeight: 540, maxBitrateKbps: 1800);
+
+      expect(effective?.label, '540p');
+      expect(effective?.height, 540);
+      expect(effective?.maxBitrateKbps, 1800,
+          reason: 'the synthesised rung describes what the server applied, '
+              'not a ladder entry');
+    });
+
+    test('names an off-ladder height even with no bitrate reported', () {
+      expect(
+        effectiveRungLabel(maxHeight: 540, maxBitrateKbps: null)?.label,
+        '540p',
+      );
+    });
+
+    test('prefers the canonical ladder rung over a synthesised one', () {
+      // 720p is on the ladder, so the relay pair (720p at 2000kbps) must
+      // resolve to the ladder's own 720p rung rather than a look-alike built
+      // from the echoed bitrate. Equality against `_selectedQuality` is what
+      // decides whether the clamp note appears, and two rungs that differ
+      // only in bitrate are not equal.
+      const ladderRung =
+          QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+
+      expect(
+          effectiveRungLabel(maxHeight: 720, maxBitrateKbps: 2000), ladderRung);
+    });
+
+    test('treats a non-positive height as unnameable', () {
+      // Same defence as `deriveQualityLadder`: 0 is not a resolution, and
+      // "0p" would be a worse label than falling back to the request.
+      expect(effectiveRungLabel(maxHeight: 0, maxBitrateKbps: 2000), isNull);
+      expect(effectiveRungLabel(maxHeight: -1, maxBitrateKbps: 2000), isNull);
+    });
   });
 
   group('equality', () {

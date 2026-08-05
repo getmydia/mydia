@@ -40,6 +40,7 @@ import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/up_next_overlay.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
+import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../graphql/fragments/media_file_fragment.graphql.dart';
@@ -48,6 +49,7 @@ import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session.graphql.dart';
+import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
@@ -251,8 +253,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Whether current playback is direct play (vs HLS)
   bool _isDirectPlay = false;
 
-  // HLS quality selection (web only)
-  HlsQualityLevel _selectedQuality = HlsQualityLevel.auto;
+  /// The rung the viewer chose, which is what gets requested.
+  QualityRung _selectedQuality = QualityRung.original;
+
+  /// The rung the server reported actually applying, which is what gets
+  /// displayed. These differ on a relay connection, where the cap is not
+  /// negotiable by the client. Null until a session echoes its caps back,
+  /// and reset on every re-initialization so a value from the previous
+  /// session cannot label the new one.
+  QualityRung? _effectiveQuality;
+
+  /// Ladder for the current file, derived from its source height.
+  ///
+  /// Original alone — the initial value, and what the downloaded and offline
+  /// branches leave in place — hides the control: a local file has no
+  /// session to restart and nothing to switch between.
+  List<QualityRung> _qualityLadder = const [QualityRung.original];
+
+  /// Set when this server rejected the maxHeight argument, meaning it
+  /// predates height support. Rungs still work through maxBitrate alone;
+  /// they just land at whatever resolution the old server picks. Sticky for
+  /// the widget's lifetime so the detection costs one extra round trip per
+  /// session rather than one per request.
+  bool _serverLacksHeightSupport = false;
 
   // HLS session tracking for cleanup
   String? _hlsSessionId;
@@ -455,6 +478,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Future<void> _initializePlayer() async {
     _resetSegmentsIfMediaChanged();
+
+    // Cleared up front so the branches that never reach a streaming session —
+    // offline, and already-downloaded — cannot inherit a ladder derived for a
+    // previous one. Both return early below, and a local file has no session
+    // to restart and nothing to switch between, so Original alone is right
+    // for them and hides the control.
+    _qualityLadder = const [QualityRung.original];
+    _effectiveQuality = null;
 
     try {
       setState(() {
@@ -691,10 +722,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         widget.mediaId,
       );
 
-      // Determine if direct play is possible
+      await _resolveQualityForFile(candidatesResult);
+
+      // Determine if direct play is possible.
+      //
+      // A chosen rung vetoes direct play. Direct play hands the file over
+      // untouched, so there is no encoder to give a cap to — honouring the
+      // choice means going through a transcoded HLS session instead. Original
+      // is the only rung with nothing to ask for, so it is the only one that
+      // leaves the cheap path available.
       final canDirect = !kIsWeb &&
           candidatesResult != null &&
-          _canDirectPlay(candidatesResult.candidates);
+          _canDirectPlay(candidatesResult.candidates) &&
+          _selectedQuality.isOriginal;
 
       _isDirectPlay = canDirect;
 
@@ -775,16 +815,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         final startPositionSeconds = plan.position.inSeconds;
 
         // Start HLS session via GraphQL mutation (works for both modes)
-        final result = await graphqlClient.mutate(
-          MutationOptions(
-            document: documentNodeMutationStartStreamingSession,
-            variables: Variables$Mutation$StartStreamingSession(
-              fileId: widget.fileId,
-              strategy: hlsStrategy,
-              startPosition:
-                  startPositionSeconds > 0 ? startPositionSeconds : null,
-            ).toJson(),
-          ),
+        final result = await _startSessionMutation(
+          graphqlClient: graphqlClient,
+          hlsStrategy: hlsStrategy,
+          startPositionSeconds: startPositionSeconds,
         );
 
         if (result.hasException) {
@@ -801,6 +835,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
         _hlsSessionId = sessionResult.sessionId;
         debugPrint('[PlayerScreen] HLS session started: $_hlsSessionId');
+
+        // Label from what the server applied, not what was asked for: a relay
+        // connection clamps to 2000kbps and 720p regardless of the request.
+        //
+        // Only a server that echoes at all gets to decide the label. The
+        // legacy request does not select the echo fields, so reading them
+        // there would report "no caps applied" for every rung and label a
+        // capped stream Original. Null instead, which falls the label back to
+        // what was requested and suppresses the clamp note — the honest
+        // answer when the server never said.
+        _effectiveQuality = _serverLacksHeightSupport
+            ? null
+            : effectiveRungLabel(
+                maxHeight: sessionResult.maxHeight,
+                maxBitrateKbps: sessionResult.maxBitrate,
+              );
 
         // Use the echoed offset, not the requested one. The server clamps the
         // value, and `-ss` lands on the nearest keyframe, so the stream can
@@ -895,6 +945,117 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     }
     return Enum$StreamingStrategy.TRANSCODE;
+  }
+
+  /// Rebuilds the quality ladder for the file about to play and settles which
+  /// rung this playback will request.
+  ///
+  /// Both are per-file, not per-widget: the ladder depends on the source
+  /// height, and a rung persisted while watching a taller file may not exist
+  /// in this one's ladder. Falling back to Original there beats requesting an
+  /// upscale, which costs encode time to produce a larger, blurrier picture.
+  Future<void> _resolveQualityForFile(
+    Query$StreamingCandidates$streamingCandidates? candidatesResult,
+  ) async {
+    _qualityLadder = deriveQualityLadder(
+      sourceHeight: candidatesResult?.metadata.height,
+    );
+
+    _selectedQuality = QualityRung.original;
+
+    // Secure storage being unreadable is no reason to fail playback, and the
+    // safe answer is the cheapest one for the server. Matches how
+    // `_loadAutoSkipPreference` treats the same failure.
+    try {
+      final storedKey =
+          await ref.read(settingsServiceProvider).getDefaultQuality();
+      final storedRung = QualityRung.fromStorageKey(storedKey);
+      if (storedRung != null && _qualityLadder.contains(storedRung)) {
+        _selectedQuality = storedRung;
+      }
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not read default quality: $e');
+    }
+  }
+
+  /// Starts the streaming session, degrading gracefully on a server that
+  /// predates the height cap.
+  ///
+  /// Mydia installs update on their own schedule and the native player ships
+  /// separately from the server, so a newer player routinely meets an older
+  /// one. Against such a server the current document is rejected outright —
+  /// the `maxHeight` argument and the echo fields it selects are both
+  /// validation errors, which fail the whole request rather than degrading —
+  /// so the first failure of that shape is retried through the legacy
+  /// document, which asks only for what every server since the bitrate cap
+  /// has had. [_serverLacksHeightSupport] makes that a once-per-session cost
+  /// rather than once per request.
+  Future<QueryResult<Object?>> _startSessionMutation({
+    required GraphQLClient graphqlClient,
+    required Enum$StreamingStrategy hlsStrategy,
+    required int startPositionSeconds,
+  }) async {
+    final startPosition =
+        startPositionSeconds > 0 ? startPositionSeconds : null;
+
+    Future<QueryResult<Object?>> runLegacy() {
+      return graphqlClient.mutate(
+        MutationOptions(
+          document: documentNodeMutationStartStreamingSessionLegacy,
+          variables: Variables$Mutation$StartStreamingSessionLegacy(
+            fileId: widget.fileId,
+            strategy: hlsStrategy,
+            maxBitrate: _selectedQuality.maxBitrateKbps,
+            startPosition: startPosition,
+          ).toJson(),
+        ),
+      );
+    }
+
+    if (_serverLacksHeightSupport) return runLegacy();
+
+    final result = await graphqlClient.mutate(
+      MutationOptions(
+        document: documentNodeMutationStartStreamingSession,
+        variables: Variables$Mutation$StartStreamingSession(
+          fileId: widget.fileId,
+          strategy: hlsStrategy,
+          maxBitrate: _selectedQuality.maxBitrateKbps,
+          maxHeight: _selectedQuality.height,
+          startPosition: startPosition,
+        ).toJson(),
+      ),
+    );
+
+    if (_looksLikeMissingHeightSupport(result)) {
+      debugPrint(
+        '[PlayerScreen] Server does not know maxHeight; '
+        'retrying without the height cap',
+      );
+      _serverLacksHeightSupport = true;
+      return runLegacy();
+    }
+
+    return result;
+  }
+
+  /// True when the failure is this server's schema not knowing about
+  /// `maxHeight`, rather than a transport, authorization, or resolver
+  /// problem. Only the former is worth retrying through the legacy document.
+  ///
+  /// Both messages are Absinthe's verbatim validation text — see
+  /// `Absinthe.Phase.Document.Validation.KnownArgumentNames` and
+  /// `.FieldsOnCorrectType`. An old server emits both at once (the argument
+  /// and the echoed fields arrived in the same change), so either is enough.
+  /// Matching the exact phrasing rather than loose keywords keeps a genuine
+  /// failure from being mistaken for version skew and silently retried.
+  bool _looksLikeMissingHeightSupport(QueryResult<Object?> result) {
+    final graphqlErrors = result.exception?.graphqlErrors ?? const [];
+    return graphqlErrors.any((error) {
+      final message = error.message;
+      return message.contains('Unknown argument "maxHeight"') ||
+          message.contains('Cannot query field "maxHeight"');
+    });
   }
 
   /// Shared tail of _initializePlayer: create player, open the media, start
@@ -1791,13 +1952,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// [_isRestartingSession] on before anything else and guarantees it is
   /// cleared afterward — including if any step throws — so [seekToReal]'s
   /// re-entrancy guard can never wedge shut for the rest of the session.
-  Future<void> _restartSessionAt(Duration target) async {
+  ///
+  /// [loadingMessage] names what the viewer asked for, since a restart is the
+  /// same machinery behind two different requests: seeking past the
+  /// transcoded window, and changing quality. Telling someone who picked
+  /// 720p that the player is "Seeking" describes the implementation rather
+  /// than what they did.
+  Future<void> _restartSessionAt(
+    Duration target, {
+    String loadingMessage = 'Seeking...',
+  }) async {
     await trackRestartInFlight(
       (inFlight) => _isRestartingSession = inFlight,
       () async {
         if (mounted) {
           setState(() {
-            _loadingMessage = 'Seeking...';
+            _loadingMessage = loadingMessage;
             _isLoading = true;
           });
         }
@@ -1989,34 +2159,93 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  /// Show HLS quality selector (web only)
+  /// Shows the quality picker and applies the choice by restarting the
+  /// session at the current position.
+  ///
+  /// A rung change cannot be applied to a running session: its segments are
+  /// already encoded at the old settings, and the playlist is live-style, so
+  /// there is nothing to re-request. [_restartSessionAt] already handles the
+  /// teardown correctly, including saving progress before the old session
+  /// goes away, and guards against a concurrent restart leaking an FFmpeg
+  /// process.
   Future<void> _showQualitySelector() async {
-    final selected = await showHlsQualitySelector(
+    // A restart already in flight owns the player this would act on, exactly
+    // as in [seekToReal]. Dropping the request beats queueing one against a
+    // session on its way out.
+    if (_isRestartingSession) return;
+
+    final previous = _selectedQuality;
+
+    final selected = await showQualityPicker(
       context,
+      _qualityLadder,
       _selectedQuality,
+      clampNote: _clampNote(),
     );
 
-    if (selected != null && selected != _selectedQuality && mounted) {
-      setState(() {
-        _selectedQuality = selected;
-      });
-
-      debugPrint('Selected quality: ${selected.label}');
-
-      // Note: media_kit on web with hls.js handles quality selection automatically
-      // The HLS.js library manages adaptive bitrate switching based on network conditions
-      // For manual quality selection, we would need to access the hls.js instance
-      // which is not directly exposed by media_kit's web implementation
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Quality preference set to ${selected.label}. '
-            'Note: HLS adaptive streaming is handled automatically by the player.',
-          ),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+    // `_isRestartingSession` is re-checked, not just `mounted`: the modal
+    // barrier stops taps, not the position stream. [_maybeAutoSkipSegment]
+    // fires on every tick and reaches [_restartSessionAt] through
+    // `seekToReal` whenever the segment end lies past what FFmpeg has
+    // transcoded, so a restart can begin behind the open dialog. Applying a
+    // rung on top of that would run a second teardown concurrently, leaving
+    // the first session id overwritten and its FFmpeg process never ended —
+    // the exact leak [trackRestartInFlight] exists to prevent.
+    if (selected == null ||
+        selected == _selectedQuality ||
+        !mounted ||
+        _isRestartingSession) {
+      return;
     }
+
+    // Read after the choice, not before it: playback carries on behind the
+    // open dialog, so a position captured when the picker appeared would
+    // rewind the viewer by however long they spent deciding.
+    //
+    // Real coordinates, not the player's: on a resumed session the player's
+    // zero is [StreamTimeline.startOffset] into the media, and
+    // [_restartSessionAt] takes a real target.
+    final position = _timeline.toReal(_player?.state.position ?? Duration.zero);
+
+    await applyQualityChoice(
+      selected: selected,
+      previous: previous,
+      persist: (rung) async {
+        if (mounted) setState(() => _selectedQuality = rung);
+        await _persistQuality(rung);
+      },
+      restart: (rung, {required bool isFallback}) => _restartSessionAt(
+        position,
+        loadingMessage: isFallback
+            ? 'Returning to ${rung.label}...'
+            : 'Switching to ${rung.label}...',
+      ),
+      stillActive: () => mounted,
+      onGaveUp: (error) => setState(() {
+        _error = error.toString();
+        _isLoading = false;
+      }),
+    );
+  }
+
+  /// Remembers the chosen rung for the next playback. A storage failure is
+  /// logged and dropped: it costs the preference, not the playback.
+  Future<void> _persistQuality(QualityRung rung) async {
+    try {
+      await ref
+          .read(settingsServiceProvider)
+          .setDefaultQuality(rung.storageKey);
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not save default quality: $e');
+    }
+  }
+
+  /// Explains a server-side limit when the applied rung is below the chosen
+  /// one, or null when the viewer got what they picked.
+  String? _clampNote() {
+    final effective = _effectiveQuality;
+    if (effective == null || effective == _selectedQuality) return null;
+    return 'Limited to ${effective.label} by your connection';
   }
 
   /// Handle keyboard shortcuts (desktop only)
@@ -2318,7 +2547,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           },
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
-          onQualityTap: PlatformFeatures.isWeb ? _showQualitySelector : null,
+          // Hidden when the ladder collapsed to Original alone — a source
+          // shorter than every rung, a local file, or a height the server
+          // never reported — matching how subtitles and audio disable
+          // themselves at zero tracks rather than opening a one-item menu.
+          onQualityTap: _qualityLadder.length > 1 ? _showQualitySelector : null,
           onFullscreenTap: _toggleFullscreen,
           onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
           onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
@@ -2327,7 +2560,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           subtitleTrackCount: _subtitleTracks.length,
           selectedAudioLabel: _selectedAudioTrack?.displayName,
           selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
-          selectedQualityLabel: _selectedQuality.label,
+          selectedQualityLabel: (_effectiveQuality ?? _selectedQuality).label,
         ),
         fill: Colors.black,
       ),
@@ -2716,5 +2949,60 @@ Future<void> trackRestartInFlight(
     await restart();
   } finally {
     setInFlight(false);
+  }
+}
+
+/// Puts [selected] into effect, restoring [previous] if that fails.
+///
+/// Extracted from [_PlayerScreenState._showQualitySelector] for the same
+/// reason as [trackRestartInFlight]: the widget path cannot be driven under
+/// `flutter test`. `_waitForPlaylist` polls a real URL that `flutter_test`'s
+/// `HttpOverrides` answers with 400 on every attempt, so the screen reaches
+/// its error state before the chrome that owns the quality button is ever
+/// built, and the picker can never be tapped. This is the riskiest decision
+/// in the quality change and the one most worth pinning, so it lives where a
+/// fake [restart] that throws can exercise it.
+///
+/// [persist] records a rung as the one now in effect — the widget both
+/// displays and stores it. [restart] tears the session down and brings it
+/// back at that rung, throwing if it cannot; [isFallback] distinguishes the
+/// two attempts, which the viewer is told apart. [stillActive] reports
+/// whether the caller can still act at all (its widget is still mounted).
+/// [onGaveUp] receives the second failure.
+///
+/// The retry is deliberately single. If returning to the rung that was
+/// already working also fails, the problem is not the quality choice, and
+/// another teardown would only cost the viewer more time before showing them
+/// the same error. [onGaveUp] is where they land on the error screen instead.
+@visibleForTesting
+Future<void> applyQualityChoice({
+  required QualityRung selected,
+  required QualityRung previous,
+  required Future<void> Function(QualityRung rung) persist,
+  required Future<void> Function(QualityRung rung, {required bool isFallback})
+      restart,
+  required bool Function() stillActive,
+  required void Function(Object error) onGaveUp,
+}) async {
+  await persist(selected);
+
+  try {
+    await restart(selected, isFallback: false);
+  } catch (error) {
+    // Fall back to the rung that was working rather than stranding the
+    // viewer on a black screen at a rung this file or server cannot serve.
+    debugPrint(
+        '[PlayerScreen] Quality change to ${selected.label} failed: $error');
+    if (!stillActive()) return;
+    await persist(previous);
+
+    try {
+      await restart(previous, isFallback: true);
+    } catch (fallbackError) {
+      debugPrint('[PlayerScreen] Restoring ${previous.label} failed too: '
+          '$fallbackError');
+      if (!stillActive()) return;
+      onGaveUp(fallbackError);
+    }
   }
 }
