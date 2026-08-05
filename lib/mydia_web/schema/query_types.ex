@@ -202,6 +202,8 @@ defmodule MydiaWeb.Schema.QueryTypes do
     field :title, non_null(:string)
     field :artwork, :artwork
     field :progress, non_null(:progress)
+    @desc "Playable files for this item, used to start playback straight from the rail"
+    field :files, list_of(:media_file)
 
     @desc "For episodes, includes show context"
     field :show_id, :id

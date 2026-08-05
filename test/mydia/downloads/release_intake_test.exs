@@ -68,4 +68,36 @@ defmodule Mydia.Downloads.ReleaseIntakeTest do
       assert is_binary(info.title) and info.title != ""
     end
   end
+
+  # ReleaseParser.infer_media_type/4 returns :movie on a year or quality token
+  # without consulting the title, so a titleless :movie is reachable. It cannot
+  # be title-matched against a library, so it is rejected at the boundary.
+  describe "parse_release/1 — titleless releases" do
+    test "a tracker-tagged name whose only title token was the tag is rejected" do
+      # The validator runs on the original name, where "[Tracker]" is meaningful
+      # content. clean_torrent_name/1 then strips bracket tags before parsing,
+      # leaving nothing to use as a title.
+      assert {:error, :missing_title} =
+               ReleaseIntake.parse_release("[Tracker] (2019) 2160p UHD BluRay x265-GROUP")
+    end
+
+    test "a quality-and-group-only name is rejected" do
+      assert {:error, :missing_title} =
+               ReleaseIntake.parse_release("1080p.BluRay.x264-GROUP")
+    end
+
+    test "a normal movie release is still accepted" do
+      assert {:ok, %ParsedFileInfo{type: :movie, title: title}} =
+               ReleaseIntake.parse_release("The.Matrix.1999.1080p.BluRay.x264-GROUP")
+
+      assert is_binary(title)
+    end
+
+    test "a normal TV release is still accepted" do
+      assert {:ok, %ParsedFileInfo{type: :tv_show, title: title}} =
+               ReleaseIntake.parse_release("From.S04E07.1080p.WEB.h264-GROUP")
+
+      assert is_binary(title)
+    end
+  end
 end

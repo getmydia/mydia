@@ -49,13 +49,23 @@ jobs:
     runs-on: ubuntu-latest
     # Runaway guard only, not a performance mechanism: speed comes from the
     # pull-by-default design (prebuilt images pulled from the registry), not
-    # from this cap. A worst-case cold run (empty cache, all three images
-    # built from source) must fit inside it, or a timed-out run blocks
-    # publish-toolbox/publish-relay (needs: test-player-e2e) from ever
-    # populating the registry tag or cache, which would keep every following
-    # push in the same cold-start state. See cache-to below for the other
-    # half of that fix.
-    timeout-minutes: 30
+    # from this cap. Pull-path runs finish well inside it.
+    #
+    # The cap must still fit a worst-case cold run, where all three images are
+    # built from source with empty caches. Two independent findings set the
+    # number. First, a timed-out run blocks publish-toolbox (needs:
+    # test-player-e2e) from ever populating the registry tag or cache, so every
+    # following push stays in the same cold-start state; see cache-to below for
+    # the other half of that fix. Second, master previously observed the player
+    # test image spending around 20 minutes in its apt layer alone, timing the
+    # job out at 30 without running a single test, which is why the cap was
+    # raised to 60 there.
+    #
+    # Measured cold non-PR runs on this design are 22m48s and 25m22s, so 30
+    # would usually pass and would fail on a slow-mirror day. 60 is kept: the
+    # cost of a generous runaway guard is nothing, and the cost of tripping it
+    # is a deadlock that does not self-recover.
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: read
@@ -147,6 +157,25 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v3
 
+      # The resolve steps below replace the former `docker compose build`.
+      # They pull by default and build only what a PR actually changed, which
+      # removes the cold-build cost from the common path rather than trying to
+      # make it cheaper.
+      #
+      # Keep those builds SEQUENTIAL. Switching the old step to
+      # `docker buildx bake` to gain layer caching was tried on master and
+      # reverted: bake builds every target in parallel, and three heavy images
+      # (Elixir release, Rust p2p NIF, and the GTK/mpv/Flutter desktop
+      # toolchain) competing for a two-core runner starved the apt layer from
+      # around 20 minutes to over 56, worse than the problem it was meant to
+      # fix. The same hazard applies here if anyone parallelizes the resolve
+      # steps.
+      #
+      # That revert also noted layer caching could not bootstrap, because a
+      # cold build that cannot finish inside the job budget never exports a
+      # cache. That is addressed here from both ends: pulls mean most runs
+      # never build at all, and the non-PR builds below export cache so a cold
+      # run still leaves something warm behind.
       - name: Log in to registry
         if: steps.should.outputs.run == 'true'
         uses: docker/login-action@v3

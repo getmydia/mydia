@@ -17,7 +17,9 @@ import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/media_file_selector.dart';
+import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
+import '../../../domain/models/show_next_up.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/smart_play_button.dart';
@@ -364,16 +366,48 @@ class ShowDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  if (show.nextEpisode != null)
-                    SmartPlayButton(
-                      files: show.nextEpisode!.files,
-                      onFileSelected: (file) {
-                        final nextEp = show.nextEpisode!;
-                        final title = '${show.title} - ${nextEp.episodeCode}';
-                        context.push(
-                          '/player/episode/${nextEp.id}?fileId=${file.id}&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${nextEp.seasonNumber}',
+                  if (show.nextUp != null)
+                    // Flexible gives SmartPlayButton's internal LayoutBuilder a
+                    // bounded maxWidth to key its narrow-layout collapse off of.
+                    // Without it, a non-flex trailing Row child gets unbounded
+                    // main-axis constraints, so the pill never collapses and
+                    // can overflow on narrow screens.
+                    Flexible(
+                      child: Builder(builder: (context) {
+                        final nextUp = show.nextUp!;
+                        final episode = nextUp.episode;
+                        if (episode.files.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return SmartPlayButton(
+                          files: episode.files,
+                          state: nextUp.state,
+                          episode: episode,
+                          onFileSelected: (file) {
+                            final title =
+                                '${show.title} - ${episode.episodeCode}';
+                            final progress = episode.progress;
+                            final resume = shouldPassResume(
+                              isContinueState:
+                                  nextUp.state == NextUpState.continueWatching,
+                              positionSeconds: progress?.positionSeconds,
+                              watched: progress?.watched ?? false,
+                            )
+                                ? '&resume=${progress!.positionSeconds}'
+                                : '';
+
+                            context.push(
+                              '/player/episode/${episode.id}'
+                              '?fileId=${file.id}'
+                              '&title=${Uri.encodeComponent(title)}'
+                              '&showId=$id'
+                              '&seasonNumber=${episode.seasonNumber}'
+                              '$resume',
+                            );
+                          },
                         );
-                      },
+                      }),
                     ),
                 ],
               ),

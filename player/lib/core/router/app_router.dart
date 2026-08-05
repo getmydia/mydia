@@ -288,6 +288,8 @@ GoRouter appRouter(Ref ref) {
           final showId = state.uri.queryParameters['showId'];
           final seasonNumber =
               int.tryParse(state.uri.queryParameters['seasonNumber'] ?? '');
+          final resumeSeconds =
+              int.tryParse(state.uri.queryParameters['resume'] ?? '');
 
           if (fileId == null) {
             // If no fileId provided, show error
@@ -324,6 +326,7 @@ GoRouter appRouter(Ref ref) {
             title: title,
             showId: showId,
             seasonNumber: seasonNumber,
+            resumeSeconds: resumeSeconds,
           );
         },
       ),

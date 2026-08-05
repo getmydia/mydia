@@ -105,3 +105,20 @@ Future<ResumePlan?> resolveResumePlan({
       ? ResumePlan(Duration(seconds: savedPositionSeconds))
       : ResumePlan.fromStart;
 }
+
+/// Whether a caller should hand the player an explicit resume position.
+///
+/// [resolveResumePlan] bypasses every threshold once `resumeOverride` is set,
+/// so the decision to skip the dialog belongs to the caller. These mirror
+/// [shouldOfferResume], evaluated against GraphQL progress fields because the
+/// real media duration is not known until playback starts.
+bool shouldPassResume({
+  required bool isContinueState,
+  required int? positionSeconds,
+  required bool watched,
+}) {
+  if (!isContinueState) return false;
+  if (watched) return false;
+  if (positionSeconds == null) return false;
+  return positionSeconds > kMinResumeThresholdSeconds;
+}

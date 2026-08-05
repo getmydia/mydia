@@ -190,6 +190,26 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
     end
   end
 
+  @spec resolve_next_up(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_next_up(%{id: media_item_id}, _args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        # Mirrors resolve_next_episode/3 so the two fields never disagree.
+        case Media.list_episodes(media_item_id) do
+          [] -> {:ok, nil}
+          [first | _] -> {:ok, %{episode: first, progress_state: "start"}}
+        end
+
+      user ->
+        case Playback.get_next_episode(media_item_id, user.id) do
+          nil -> {:ok, nil}
+          :all_watched -> {:ok, nil}
+          {state, episode} -> {:ok, %{episode: episode, progress_state: Atom.to_string(state)}}
+        end
+    end
+  end
+
   # Season resolver for episodes
   @spec resolve_season_episodes(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}

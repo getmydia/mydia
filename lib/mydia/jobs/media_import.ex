@@ -35,9 +35,11 @@ defmodule Mydia.Jobs.MediaImport do
   require Logger
   alias Mydia.{Downloads, Library, Media, Settings}
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.ImportCandidates
   alias Mydia.Library.{FileNamer, FileOrganizer, SampleDetector}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.ReleaseParser.TargetContext
+  alias Mydia.Media.Episode
   alias Mydia.Indexers.QualityParser
   alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
   alias Mydia.Metadata.NfoWriter
@@ -381,142 +383,198 @@ defmodule Mydia.Jobs.MediaImport do
     end
   end
 
-  # True when the reported save_path is the client's configured download
-  # directory rather than a per-download subfolder. Compared after path
-  # mapping so a remote root and its local mount both match.
-  defp shared_download_root?(save_path, %{download_directory: root})
-       when is_binary(save_path) and save_path != "" and is_binary(root) and root != "" do
-    same_dir?(save_path, root) or
-      same_dir?(mapped_path_quiet(save_path), mapped_path_quiet(root))
+  # Delegates to `ImportCandidates.shared_download_root?/2`, the single
+  # source of truth for "is the reported save_path the client's configured
+  # download directory rather than a per-download subfolder." The manual
+  # file matching modal's read path (`ImportCandidates.load/1`) relies on
+  # the exact same check before offering a live re-listing, so the two can
+  # never silently disagree about what is safe to enumerate.
+  defp shared_download_root?(save_path, client_info) do
+    ImportCandidates.shared_download_root?(save_path, Map.get(client_info, :download_directory))
   end
 
-  defp shared_download_root?(_save_path, _client_info), do: false
-
-  defp same_dir?(a, b) when is_binary(a) and a != "" and is_binary(b) and b != "",
-    do: Path.expand(a) == Path.expand(b)
-
-  defp same_dir?(_a, _b), do: false
-
   defp process_import(download, files, args) do
-    # Get library path for this media type
     library_path = determine_library_path(download)
 
-    if library_path do
-      # The resolved library path's auto_rename policy is authoritative at
-      # execution time: it drives renaming in both directions, overriding
-      # whatever rename_files the job was enqueued with.
-      args = %{args | rename_files: library_path.auto_rename}
+    result =
+      if library_path do
+        # The resolved library path's auto_rename policy is authoritative at
+        # execution time: it drives renaming in both directions, overriding
+        # whatever rename_files the job was enqueued with.
+        args = %{args | rename_files: library_path.auto_rename}
 
-      # Organize files into library structure
-      case organize_and_import_files(download, files, library_path, args) do
-        {:ok, imported_files} ->
-          Logger.info("Successfully imported files",
-            download_id: download.id,
-            file_count: length(imported_files)
-          )
-
-          # Detect partial season packs: a download that claimed to deliver N
-          # episodes but actually matched fewer. Sets match_status accordingly
-          # so future re-imports and reporting can recognize it.
-          partial_pack_status = detect_partial_pack(download, imported_files)
-
-          # Reload download to check if it was flagged as having unresolved files
-          updated_download =
-            Downloads.get_download!(download.id,
-              preload: [{:media_item, :episodes}, :episode, :library_path]
-            )
-
-          has_unresolved = updated_download.match_status == "unresolved_files"
-
-          # Cleanup is only safe when every file resolved — keep the
-          # download in the client when some files remain unmatched so
-          # the user can manually retry after fixing the matches.
-          unless has_unresolved do
-            client_info = get_client_info(download)
-            should_cleanup = client_info && client_info.remove_completed
-
-            if should_cleanup do
-              Logger.info("Removing download from client (remove_completed enabled)",
-                download_id: download.id,
-                client: download.download_client
-              )
-
-              cleanup_download_client(download)
-            else
-              Logger.info("Keeping download in client for seeding (remove_completed disabled)",
-                download_id: download.id,
-                client: download.download_client
-              )
-            end
-          end
-
-          # Always stamp `imported_at` once we've made an honest attempt,
-          # even when some files are still unresolved. `match_status` keeps
-          # surfacing the partial result in the Issues tab. The previous
-          # behaviour left `imported_at` nil on partial imports, which
-          # caused DownloadMonitor.list_stuck_downloads/1 to re-flag the
-          # download every poll and enqueue a fresh MediaImport job every
-          # 2 minutes — a retry loop that did no useful work but kept
-          # showing "Import stalled - never ran" in the UI.
-          import_update =
-            %{imported_at: DateTime.utc_now()}
-            |> then(fn attrs ->
-              # Preserve `match_status: "unresolved_files"` when present so
-              # the Issues tab can still surface partial imports. Only
-              # touch match_status when we're transitioning to a clean
-              # state (partial_pack or nil), never overwrite the
-              # in-progress "unresolved_files" flag.
-              if has_unresolved do
-                attrs
-              else
-                Map.put(attrs, :match_status, partial_pack_status)
-              end
-            end)
-
-          case Downloads.update_download(updated_download, import_update) do
-            {:ok, _updated} ->
-              Logger.info("Download marked as imported",
-                download_id: download.id,
-                has_unresolved: has_unresolved
-              )
-
-            {:error, changeset} ->
-              Logger.warning("Failed to mark download as imported",
-                download_id: download.id,
-                errors: inspect(changeset.errors)
-              )
-          end
-
-          # Write NFO metadata files if enabled for this library path
-          if download.media_item_id do
-            NfoWriter.maybe_write_nfos(download.media_item_id)
-          end
-
-          # Notify media servers (Plex, Jellyfin) to scan for new content
-          # This is fire-and-forget (async) - errors won't affect import success
-          MediaServerNotifier.notify_all()
-
-          if has_unresolved do
-            Logger.info("Partial import complete, unresolved files flagged",
-              download_id: download.id
-            )
-
-            {:ok, :partial_import}
-          else
-            {:ok, :imported}
-          end
-
-        {:error, reason} ->
-          Logger.error("Failed to import files",
-            download_id: download.id,
-            reason: inspect(reason)
-          )
-
-          {:error, reason}
+        do_process_import(download, files, library_path, args)
+      else
+        Logger.error("Could not determine library path for download", download_id: download.id)
+        {:error, :no_library_path}
       end
-    else
-      Logger.error("Could not determine library path for download", download_id: download.id)
-      {:error, :no_library_path}
+
+    snapshot_candidates_on_failure(result, download, files, library_path)
+  end
+
+  # Persist what the download actually contained whenever the import fails after
+  # the file listing succeeded. Without this the operator sees only an error
+  # string and has no way to inspect or hand-match the files.
+  defp snapshot_candidates_on_failure({:error, _reason} = result, download, files, library_path) do
+    library_type = if library_path, do: library_path.type, else: :unknown
+
+    candidates = ImportCandidates.build(files, library_type, parser_opts_for(download))
+
+    # Reload rather than starting from the `download` struct captured before
+    # `do_process_import/4` ran: `flag_unresolved_files/2` (called from
+    # `organize_and_import_files/4` on the all-unresolved and partial-import
+    # paths) already wrote its own metadata to the row by the time this runs.
+    # Merging onto the stale in-memory struct would blindly overwrite that
+    # write instead of layering on top of it.
+    #
+    # The row can also be gone by now — an operator dismissing the download
+    # while a large import is still copying files, for example — so this
+    # mirrors `fetch_download/1`'s rescue rather than letting a raised
+    # `Ecto.NoResultsError` crash the job. There is nothing left to attach a
+    # candidate listing to, so skip the snapshot and hand back the original
+    # result untouched; the job still fails/succeeds exactly as it would have
+    # without this snapshot step.
+    case fetch_current_download(download.id) do
+      {:ok, current} ->
+        metadata =
+          (current.metadata || %{})
+          |> Map.put("import_candidates", candidates)
+          |> Map.put("import_candidates_at", DateTime.utc_now() |> DateTime.to_iso8601())
+
+        case Downloads.update_download(current, %{metadata: metadata}) do
+          {:ok, _updated} ->
+            :ok
+
+          {:error, changeset} ->
+            Logger.warning("Failed to store import candidates",
+              download_id: download.id,
+              errors: inspect(changeset.errors)
+            )
+        end
+
+      :not_found ->
+        Logger.info("Skipping import candidate snapshot: download row no longer exists",
+          download_id: download.id
+        )
+    end
+
+    result
+  end
+
+  defp snapshot_candidates_on_failure(result, _download, _files, _library_path), do: result
+
+  defp fetch_current_download(download_id) do
+    {:ok, Downloads.get_download!(download_id)}
+  rescue
+    Ecto.NoResultsError -> :not_found
+  end
+
+  defp do_process_import(download, files, library_path, args) do
+    case organize_and_import_files(download, files, library_path, args) do
+      {:ok, imported_files} ->
+        Logger.info("Successfully imported files",
+          download_id: download.id,
+          file_count: length(imported_files)
+        )
+
+        # Detect partial season packs: a download that claimed to deliver N
+        # episodes but actually matched fewer. Sets match_status accordingly
+        # so future re-imports and reporting can recognize it.
+        partial_pack_status = detect_partial_pack(download, imported_files)
+
+        # Reload download to check if it was flagged as having unresolved files
+        updated_download =
+          Downloads.get_download!(download.id,
+            preload: [{:media_item, :episodes}, :episode, :library_path]
+          )
+
+        has_unresolved = updated_download.match_status == "unresolved_files"
+
+        # Cleanup is only safe when every file resolved — keep the
+        # download in the client when some files remain unmatched so
+        # the user can manually retry after fixing the matches.
+        unless has_unresolved do
+          client_info = get_client_info(download)
+          should_cleanup = client_info && client_info.remove_completed
+
+          if should_cleanup do
+            Logger.info("Removing download from client (remove_completed enabled)",
+              download_id: download.id,
+              client: download.download_client
+            )
+
+            cleanup_download_client(download)
+          else
+            Logger.info("Keeping download in client for seeding (remove_completed disabled)",
+              download_id: download.id,
+              client: download.download_client
+            )
+          end
+        end
+
+        # Always stamp `imported_at` once we've made an honest attempt,
+        # even when some files are still unresolved. `match_status` keeps
+        # surfacing the partial result in the Issues tab. The previous
+        # behaviour left `imported_at` nil on partial imports, which
+        # caused DownloadMonitor.list_stuck_downloads/1 to re-flag the
+        # download every poll and enqueue a fresh MediaImport job every
+        # 2 minutes — a retry loop that did no useful work but kept
+        # showing "Import stalled - never ran" in the UI.
+        import_update =
+          %{imported_at: DateTime.utc_now()}
+          |> then(fn attrs ->
+            # Preserve `match_status: "unresolved_files"` when present so
+            # the Issues tab can still surface partial imports. Only
+            # touch match_status when we're transitioning to a clean
+            # state (partial_pack or nil), never overwrite the
+            # in-progress "unresolved_files" flag.
+            if has_unresolved do
+              attrs
+            else
+              Map.put(attrs, :match_status, partial_pack_status)
+            end
+          end)
+
+        case Downloads.update_download(updated_download, import_update) do
+          {:ok, _updated} ->
+            Logger.info("Download marked as imported",
+              download_id: download.id,
+              has_unresolved: has_unresolved
+            )
+
+          {:error, changeset} ->
+            Logger.warning("Failed to mark download as imported",
+              download_id: download.id,
+              errors: inspect(changeset.errors)
+            )
+        end
+
+        # Write NFO metadata files if enabled for this library path
+        if download.media_item_id do
+          NfoWriter.maybe_write_nfos(download.media_item_id)
+        end
+
+        # Notify media servers (Plex, Jellyfin) to scan for new content
+        # This is fire-and-forget (async) - errors won't affect import success
+        MediaServerNotifier.notify_all()
+
+        if has_unresolved do
+          Logger.info("Partial import complete, unresolved files flagged",
+            download_id: download.id
+          )
+
+          {:ok, :partial_import}
+        else
+          {:ok, :imported}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to import files",
+          download_id: download.id,
+          reason: inspect(reason)
+        )
+
+        {:error, reason}
     end
   end
 
@@ -563,9 +621,18 @@ defmodule Mydia.Jobs.MediaImport do
       errors = Enum.filter(results, &match?({:error, _}, &1))
 
       if errors == [] do
-        # All targeted files imported — clear match_status and unresolved_files metadata
+        # All targeted files imported — clear match_status and the stale
+        # candidate/unresolved-file listings. Without dropping
+        # "import_candidates" and "import_candidates_at" too, a hand-matched
+        # download would keep carrying the listing (and probe verdicts) from
+        # the failure this import just resolved, forever.
         current_metadata = download.metadata || %{}
-        cleaned_metadata = Map.delete(current_metadata, "unresolved_files")
+
+        cleaned_metadata =
+          current_metadata
+          |> Map.delete("unresolved_files")
+          |> Map.delete("import_candidates")
+          |> Map.delete("import_candidates_at")
 
         Downloads.update_download(download, %{
           imported_at: DateTime.utc_now(),
@@ -696,13 +763,6 @@ defmodule Mydia.Jobs.MediaImport do
         mapped
     end
   end
-
-  # Same rewrite without the log line, for comparisons that are not about to
-  # touch the filesystem.
-  defp mapped_path_quiet(path) when is_binary(path),
-    do: Mydia.Library.PathMapping.rewrite(path)
-
-  defp mapped_path_quiet(path), do: path
 
   defp list_files_in_path(path) do
     path_stat = File.stat(path)
@@ -858,11 +918,14 @@ defmodule Mydia.Jobs.MediaImport do
           end
         end)
 
-      # Separate results into imported, unresolved, and errors
+      # Separate results into imported, unresolved, and errors. Skipped files
+      # (season pack entries for episodes that already have a file) belong to
+      # none of the three: they are a deliberate no-op, not a failure.
       {imported, unresolved, errors} =
         Enum.reduce(results, {[], [], []}, fn
           {:ok, media_file}, {imp, unr, err} -> {[media_file | imp], unr, err}
           {:unresolved, file_info}, {imp, unr, err} -> {imp, [file_info | unr], err}
+          {:skipped, _info}, {imp, unr, err} -> {imp, unr, err}
           {:error, _} = error, {imp, unr, err} -> {imp, unr, [error | err]}
         end)
 
@@ -1079,56 +1142,11 @@ defmodule Mydia.Jobs.MediaImport do
     |> String.trim()
   end
 
-  defp filter_video_files(files) do
-    video_extensions = ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .mpg .mpeg .m2ts)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in video_extensions
-    end)
-  end
-
-  # Filter files based on library type
-  defp filter_files_for_library_type(files, library_type)
-       when library_type in [:movies, :series, :mixed] do
-    # For video libraries, only import video files
-    filter_video_files(files)
-  end
-
-  defp filter_files_for_library_type(files, :music) do
-    # Music file extensions
-    music_extensions = ~w(.mp3 .flac .wav .aac .ogg .m4a .wma .opus .ape .alac .aiff)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in music_extensions
-    end)
-  end
-
-  defp filter_files_for_library_type(files, :books) do
-    # Ebook file extensions
-    book_extensions = ~w(.epub .pdf .mobi .azw .azw3 .cbr .cbz .djvu .fb2 .lit .txt .rtf)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in book_extensions
-    end)
-  end
-
-  defp filter_files_for_library_type(files, :adult) do
-    # Adult libraries can contain video and image files
-    media_extensions =
-      ~w(.mkv .mp4 .avi .mov .wmv .flv .webm .m4v .jpg .jpeg .png .gif .webp .bmp .tiff)
-
-    Enum.filter(files, fn file ->
-      ext = Path.extname(file.name) |> String.downcase()
-      ext in media_extensions
-    end)
-  end
-
-  defp filter_files_for_library_type(files, _unknown) do
-    # For unknown library types, import all files (fallback)
-    files
+  # The extension vocabulary lives in `ImportCandidates`, which also derives the
+  # skip reasons shown to the operator on a failed import. Keeping one copy means
+  # the two can never disagree.
+  defp filter_files_for_library_type(files, library_type) do
+    Enum.filter(files, &ImportCandidates.importable?(&1, library_type))
   end
 
   defp filter_extras_and_samples(files) do
@@ -1388,8 +1406,39 @@ defmodule Mydia.Jobs.MediaImport do
         {:unresolved, file_info}
 
       {episode, dest_dir} ->
-        import_file_to_destination(file, episode, dest_dir, download, library_path, args)
+        if skip_already_filed_episode?(episode, download) do
+          Logger.info("Skipping season pack file - episode already has a media file",
+            download_id: download.id,
+            file: file.name,
+            episode_id: episode.id
+          )
+
+          {:skipped, %{name: file.name, episode_id: episode.id}}
+        else
+          import_file_to_destination(file, episode, dest_dir, download, library_path, args)
+        end
     end
+  end
+
+  # A season pack legitimately contains episodes the library already has, now
+  # that the grab guard only blocks a pack whose every targeted episode is on
+  # disk. Importing those files would create a second non-trashed media_files
+  # row for the episode: the importer's only existence check is on the
+  # destination path, and there is no unique index on media_files.episode_id.
+  #
+  # Upgrades are exempt. An upgrade pack targets episodes that already have
+  # files by definition, and its per-episode supersede pointer (see
+  # supersede_target/3) is what trashes the loser after the margin gate.
+  defp skip_already_filed_episode?(%Episode{id: episode_id}, download) do
+    get_in(download.metadata, ["season_pack"]) == true and
+      not upgrade_download?(download) and
+      Library.episode_has_media_file?(episode_id)
+  end
+
+  defp skip_already_filed_episode?(_episode, _download), do: false
+
+  defp upgrade_download?(download) do
+    match?(%{"upgrade_target_media_file_id" => id} when is_binary(id), download.metadata)
   end
 
   defp import_file_to_destination(file, episode, dest_dir, download, library_path, args) do
@@ -1897,7 +1946,7 @@ defmodule Mydia.Jobs.MediaImport do
       import_failed_at: import_failed_at
     }
 
-    case Downloads.update_download(download, attrs) do
+    case update_retry_metadata(download, attrs) do
       {:ok, _updated} ->
         if terminal? do
           Logger.warning("Import failed terminally — no further retries",
@@ -1923,7 +1972,26 @@ defmodule Mydia.Jobs.MediaImport do
         )
 
         :ok
+
+      :not_found ->
+        # The row this whole job is about was deleted while the job was
+        # running (e.g. an operator dismissed it mid-import). `Repo.update/1`
+        # raises `Ecto.StaleEntryError` when the struct's primary key no
+        # longer matches any row — there is no retry metadata left to
+        # attach it to, and the job already self-heals next attempt via
+        # `fetch_download/1`'s `:not_found` guard, so skip rather than crash.
+        Logger.info("Skipping retry-metadata update: download row no longer exists",
+          download_id: download.id
+        )
+
+        :ok
     end
+  end
+
+  defp update_retry_metadata(download, attrs) do
+    Downloads.update_download(download, attrs)
+  rescue
+    Ecto.StaleEntryError -> :not_found
   end
 
   # Structured failure classification persisted alongside the human message, so

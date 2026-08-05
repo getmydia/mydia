@@ -55,7 +55,7 @@ defmodule Mydia.Downloads.UntrackedMatcher do
 
     # Attempt to match and create downloads for untracked torrents
     not_imported
-    |> Enum.map(&process_untracked_torrent/1)
+    |> Enum.map(&safe_process_untracked_torrent/1)
     |> Enum.filter(&match?({:ok, _}, &1))
     |> Enum.map(fn {:ok, download} -> download end)
   end
@@ -133,6 +133,46 @@ defmodule Mydia.Downloads.UntrackedMatcher do
       imported?
     end)
   end
+
+  @doc false
+  # A single malformed torrent must not abort the pass. A raise here propagates
+  # out of Mydia.Jobs.DownloadMonitor.perform/1 and kills every pass that runs
+  # after it (the external-torrent refresh, stuck-download detection), and
+  # because the torrent stays in the client the job then fails on every
+  # subsequent run.
+  #
+  # The ErrorTracker report is load-bearing: rescuing without it would hide
+  # exactly the class of bug this isolation exists to survive. Mirrors
+  # Mydia.Jobs.MetadataRefresh.safe_refresh/2.
+  #
+  # Public for the same reason process_untracked_torrent/1 is: the repo has no
+  # download client mock, so find_and_match_untracked/0 cannot be driven end to
+  # end in a test.
+  def safe_process_untracked_torrent(torrent) do
+    process_untracked_torrent(torrent)
+  rescue
+    error ->
+      # The torrent is what failed, so it may be missing the very keys used to
+      # describe it, or not be a map at all. Dot access would raise on a missing
+      # key and Map.get/2 would raise BadMapError on a non-map, and a rescue
+      # that can itself raise defeats the isolation this function exists for.
+      name = torrent_field(torrent, :name)
+      client = torrent_field(torrent, :client_name)
+
+      ErrorTracker.report(error, __STACKTRACE__, %{torrent_name: name, client: client})
+
+      Logger.error("Exception matching untracked torrent, continuing pass",
+        torrent_name: name,
+        client: client,
+        error: inspect(error)
+      )
+
+      {:error, :match_exception}
+  end
+
+  # Total by construction so the rescue above can never raise a second time.
+  defp torrent_field(torrent, key) when is_map(torrent), do: Map.get(torrent, key)
+  defp torrent_field(_torrent, _key), do: nil
 
   @doc false
   # Public for testing the parse/match/route decision in isolation. Not part of

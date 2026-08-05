@@ -180,9 +180,16 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   Sort manual-search results using a pre-built RankingOptions keyword list.
 
   For the `:quality` sort mode this routes through `ReleaseRanker.rank_all/2`,
-  so the manual top result equals what automatic search would select (R2).
-  Penalized releases (size/seeder/identity) remain visible, sorted to the bottom
-  (R3); only hard removals (blocked tags, invalid, too-recent NZB) drop out.
+  so the manual top result equals what automatic search would select (R2),
+  with one deliberate exception: `quality_sort_via_ranker/2` passes
+  `apply_source_exclusion: false`, so a profile's `:excluded_sources` list is
+  NOT enforced here. Per spec R8, manual search and manual grab are the
+  operator's explicit escape hatch and must stay unaffected by exclusion the
+  automatic path applies — silently dropping a release from the manual
+  dialog, recoverable only by switching sort mode, would remove that escape
+  hatch. Penalized releases (size/seeder/identity) remain visible, sorted to
+  the bottom (R3); the hard removals that still apply to manual search are
+  blocked tags, invalid releases, and too-recent NZBs.
   Non-quality sort modes (`:seeders`, `:size`, `:date`) stay as direct sorts.
   """
   def sort_search_results_with_opts(results, :quality, ranking_opts) do
@@ -199,6 +206,13 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   # Run the unified ranker and return the surviving SearchResults in ranked
   # order. When no quality profile is set, fall back to a seeders sort (matching
   # the legacy no-profile behavior).
+  #
+  # apply_source_exclusion: false is load-bearing (R8): this is the manual
+  # search dialog, and manual search/grab must never silently drop a release
+  # because of a profile's :excluded_sources list, even though a resolved
+  # profile IS passed through for scoring/sorting. The opt-out is an explicit
+  # flag rather than "no profile present" so it can't be defeated by the
+  # profile the manual dialog legitimately does pass.
   defp quality_sort_via_ranker(results, ranking_opts) do
     case Keyword.get(ranking_opts, :quality_profile) do
       nil ->
@@ -206,7 +220,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
       _profile ->
         results
-        |> ReleaseRanker.rank_all(ranking_opts)
+        |> ReleaseRanker.rank_all(Keyword.put(ranking_opts, :apply_source_exclusion, false))
         |> Enum.map(& &1.result)
     end
   end

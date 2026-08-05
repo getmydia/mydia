@@ -6,6 +6,7 @@ defmodule Mydia.Downloads.Queue do
   alias Mydia.Repo
   alias Mydia.Downloads.ContentType
   alias Mydia.Downloads.Download
+  alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
@@ -128,6 +129,46 @@ defmodule Mydia.Downloads.Queue do
       {:error, reason} ->
         Logger.warning("Failed to cancel download: #{inspect(reason)}")
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Rejects a release the operator has judged unusable.
+
+  Blacklists `(indexer, guid)` so future searches filter it out, removes the
+  torrent and its data from the client, deletes the download row, and queues a
+  fresh search for the bound episode or movie.
+
+  The blacklist write happens first: if a later step fails, the release must
+  still not be re-grabbed. Client removal is best effort, since the torrent may
+  already be gone.
+  """
+  @spec reject_release(Download.t(), keyword()) ::
+          {:ok, :rejected} | {:error, :no_indexer | :no_guid | term()}
+  def reject_release(%Download{} = download, opts \\ []) do
+    with {:ok, indexer, guid} <- Blacklists.extract_key(download),
+         {:ok, _row} <-
+           Blacklists.add(indexer, guid, download.title || "Unknown release", "rejected_by_user") do
+      # Computed before deletion: it reads through the media_item association.
+      search = replacement_search(download)
+
+      remove_from_client(download)
+
+      case History.delete_download(download) do
+        {:ok, _deleted} ->
+          enqueue_search(search)
+
+          Events.download_cancelled(
+            download,
+            Keyword.get(opts, :actor_type, :user),
+            Keyword.get(opts, :actor_id, "unknown")
+          )
+
+          {:ok, :rejected}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
@@ -393,12 +434,16 @@ defmodule Mydia.Downloads.Queue do
             episode_id: episode_id
           )
 
-          {:error, :duplicate_download}
+          {:error, :already_have_files}
         else
           :ok
         end
 
-      # For season packs, check if any episodes in the season already have media files
+      # A pack is grabbed to fill a specific set of episodes, so it is only
+      # redundant when every one of them is already on disk. The old rule
+      # rejected the pack if ANY episode in the season had a file, which made a
+      # partially-complete season permanently unfillable: one stray episode
+      # blocked every future pack for that season.
       media_item_id &&
           match?(
             %SearchResultMetadata{season_pack: true, season_number: _},
@@ -406,33 +451,18 @@ defmodule Mydia.Downloads.Queue do
           ) ->
         season_number = search_result.metadata.season_number
 
-        # Get all episodes for this season
-        episodes_query =
-          from(e in Episode,
-            where: e.media_item_id == ^media_item_id and e.season_number == ^season_number,
-            select: e.id
+        targeted_ids = targeted_episode_ids(search_result.metadata, media_item_id, season_number)
+
+        if targeted_ids != [] and all_episodes_have_files?(targeted_ids) do
+          Logger.info(
+            "Skipping download - every episode this season pack targets already has a file",
+            media_item_id: media_item_id,
+            season_number: season_number,
+            targeted_episodes: length(targeted_ids)
           )
 
-        episode_ids = Repo.all(episodes_query)
-
-        if episode_ids != [] do
-          # Check if any of these episodes have media files
-          media_files_query =
-            from(f in MediaFile, where: f.episode_id in ^episode_ids and is_nil(f.trashed_at))
-
-          if Repo.exists?(media_files_query) do
-            Logger.info(
-              "Skipping download - media files already exist for some episodes in season",
-              media_item_id: media_item_id,
-              season_number: season_number
-            )
-
-            {:error, :duplicate_download}
-          else
-            :ok
-          end
+          {:error, :already_have_files}
         else
-          # No episodes found for this season yet - allow download
           :ok
         end
 
@@ -463,7 +493,7 @@ defmodule Mydia.Downloads.Queue do
                 media_item_id: media_item_id
               )
 
-              {:error, :duplicate_download}
+              {:error, :already_have_files}
             else
               :ok
             end
@@ -481,6 +511,37 @@ defmodule Mydia.Downloads.Queue do
       true ->
         :ok
     end
+  end
+
+  # The search records the episodes a pack was grabbed for in `episode_ids`.
+  # Manual grabs and rows predating that field carry none, so fall back to the
+  # season's full episode list, which makes the rule "block only if the whole
+  # season is already on disk".
+  defp targeted_episode_ids(%SearchResultMetadata{episode_ids: ids}, _media_item_id, _season)
+       when is_list(ids) and ids != [],
+       do: ids
+
+  defp targeted_episode_ids(_metadata, media_item_id, season_number) do
+    Repo.all(
+      from(e in Episode,
+        where: e.media_item_id == ^media_item_id and e.season_number == ^season_number,
+        select: e.id
+      )
+    )
+  end
+
+  defp all_episodes_have_files?(episode_ids) do
+    wanted = episode_ids |> Enum.uniq() |> length()
+
+    filed =
+      Repo.one(
+        from(f in MediaFile,
+          where: f.episode_id in ^episode_ids and is_nil(f.trashed_at),
+          select: count(f.episode_id, :distinct)
+        )
+      )
+
+    filed == wanted
   end
 
   # --- Issues Tab Functions ---
@@ -723,6 +784,74 @@ defmodule Mydia.Downloads.Queue do
     )
     |> Repo.delete_all()
   end
+
+  # Best effort: a torrent the client no longer holds must not block the reject.
+  defp remove_from_client(%Download{download_client: nil}), do: :ok
+  defp remove_from_client(%Download{download_client_id: nil}), do: :ok
+
+  defp remove_from_client(download) do
+    with {:ok, client_config} <- find_client_config(download.download_client),
+         {:ok, adapter} <- get_adapter_for_client(client_config) do
+      Client.remove_download(
+        adapter,
+        config_to_map(client_config),
+        download.download_client_id,
+        delete_files: true
+      )
+    end
+
+    :ok
+  rescue
+    exception ->
+      Logger.warning("Could not remove rejected release from client",
+        download_id: download.id,
+        error: Exception.message(exception)
+      )
+
+      :ok
+  catch
+    # The debrid adapter's remove_torrent/3 terminates any running Fetcher
+    # first via DynamicSupervisor.terminate_child/2 — a GenServer.call that
+    # emits an :exit signal (not an Elixir exception) if the supervisor isn't
+    # alive, same hazard documented on
+    # Mydia.Downloads.Client.Debrid.RateLimiter.acquire/3. `rescue` alone
+    # would not catch it, and a client that will not answer must not block
+    # rejecting a bad release.
+    :exit, reason ->
+      Logger.warning("Could not remove rejected release from client (process exit)",
+        download_id: download.id,
+        reason: inspect(reason)
+      )
+
+      :ok
+  end
+
+  # Returns an Oban changeset, or nil when there is nothing sensible to search
+  # for. `Media` exposes only the raising `get_media_item!/1`, so this reads the
+  # association instead: a deleted media item yields nil rather than raising in
+  # the middle of a cleanup path.
+  defp replacement_search(%Download{episode_id: episode_id}) when is_binary(episode_id) do
+    Mydia.Jobs.TVShowSearch.new(%{"mode" => "specific", "episode_id" => episode_id})
+  end
+
+  defp replacement_search(%Download{media_item_id: media_item_id} = download)
+       when is_binary(media_item_id) do
+    case Repo.preload(download, :media_item).media_item do
+      %{type: "movie", id: id} ->
+        Mydia.Jobs.MovieSearch.new(%{"mode" => "specific", "media_item_id" => id})
+
+      %{type: "tv_show", id: id} ->
+        Mydia.Jobs.TVShowSearch.new(%{"mode" => "show", "media_item_id" => id})
+
+      _other ->
+        nil
+    end
+  end
+
+  defp replacement_search(_download), do: nil
+
+  defp enqueue_search(nil), do: :ok
+  defp enqueue_search(changeset), do: insert_job(changeset)
 
   ## Private Functions - Download Initiation
 
