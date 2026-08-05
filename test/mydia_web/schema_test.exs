@@ -430,6 +430,55 @@ defmodule MydiaWeb.SchemaTest do
       assert Enum.map(items, & &1["id"]) |> Enum.sort() == Enum.sort([show.id, movie.id])
     end
 
+    test "a second page after the cursor returns the next item, not an empty list",
+         %{user: user} do
+      newest = MediaFixtures.media_item_fixture(%{type: "movie", title: "Newest"})
+      middle = MediaFixtures.media_item_fixture(%{type: "movie", title: "Middle"})
+      oldest = MediaFixtures.media_item_fixture(%{type: "movie", title: "Oldest"})
+
+      MediaFixtures.backdate_media_file(
+        MediaFixtures.media_file_fixture(%{media_item_id: newest.id}),
+        DateTime.add(DateTime.utc_now(), -1, :day)
+      )
+
+      MediaFixtures.backdate_media_file(
+        MediaFixtures.media_file_fixture(%{media_item_id: middle.id}),
+        DateTime.add(DateTime.utc_now(), -2, :day)
+      )
+
+      MediaFixtures.backdate_media_file(
+        MediaFixtures.media_file_fixture(%{media_item_id: oldest.id}),
+        DateTime.add(DateTime.utc_now(), -3, :day)
+      )
+
+      first_page_query = "query { recentlyAdded(first: 1) { id } }"
+
+      assert {:ok, %{data: %{"recentlyAdded" => [first_item]}}} =
+               run_query(first_page_query, %{}, user)
+
+      assert first_item["id"] == newest.id
+
+      # The schema exposes no cursor field on recentlyAdded items; the
+      # resolver's own encoding (see decode_cursor/1 in DiscoveryResolver) is
+      # base64("cursor:<offset>"), built here directly rather than through a
+      # field the API doesn't provide.
+      cursor = Base.encode64("cursor:0")
+
+      second_page_query = """
+      query {
+        recentlyAdded(first: 1, after: "#{cursor}") {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => [second_item]}}} =
+               run_query(second_page_query, %{}, user)
+
+      assert second_item["id"] == middle.id
+      refute second_item["id"] == oldest.id
+    end
+
     test "favorites reports the corrected timestamp with nil context", %{user: user} do
       movie = MediaFixtures.media_item_fixture(%{type: "movie"})
       file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
@@ -452,6 +501,67 @@ defmodule MydiaWeb.SchemaTest do
       assert item["id"] == movie.id
       assert item["addedAt"] =~ "2026-08-03"
       assert item["newEpisodeCount"] == nil
+    end
+
+    test "unwatched orders by content arrival, not by record creation", %{user: user} do
+      stale = MediaFixtures.media_item_fixture(%{type: "movie", title: "Stale"})
+      stale_file = MediaFixtures.media_file_fixture(%{media_item_id: stale.id})
+      MediaFixtures.backdate_media_file(stale_file, ~U[2024-01-01 12:00:00Z])
+
+      fresh = MediaFixtures.media_item_fixture(%{type: "movie", title: "Fresh"})
+      fresh_file = MediaFixtures.media_file_fixture(%{media_item_id: fresh.id})
+      MediaFixtures.backdate_media_file(fresh_file, ~U[2026-08-03 12:00:00Z])
+
+      # Make the records themselves disagree with the content order, so a
+      # passing test cannot be explained by inserted_at.
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^fresh.id),
+        set: [inserted_at: ~U[2023-01-01 00:00:00Z]]
+      )
+
+      query = """
+      query {
+        unwatched(first: 10) {
+          id
+          addedAt
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"unwatched" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) == [fresh.id, stale.id]
+    end
+
+    test "collectionItems reports the corrected addedAt", %{user: user} do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      MediaFixtures.backdate_media_file(file, ~U[2026-08-03 12:00:00Z])
+
+      # The record itself is old; only its content is new.
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^movie.id),
+        set: [inserted_at: ~U[2024-01-01 00:00:00Z]]
+      )
+
+      collection = Mydia.CollectionsFixtures.collection_fixture(%{user: user})
+      {:ok, _count} = Mydia.Collections.add_items(collection, [movie.id])
+
+      query = """
+      query($collectionId: ID!) {
+        collectionItems(collectionId: $collectionId, first: 10) {
+          id
+          addedAt
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"collectionItems" => [item]}}} =
+               run_query(query, %{"collectionId" => collection.id}, user)
+
+      assert item["id"] == movie.id
+      assert item["addedAt"] =~ "2026-08-03"
+      refute item["addedAt"] =~ "2024-01-01"
     end
 
     test "rejects the new fields with a recognizable message when absent" do

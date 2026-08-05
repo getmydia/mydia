@@ -87,6 +87,12 @@ void main() {
 
       await expectLater(watcher.stream, emits('abc'));
       expect(link.requests.length, 2);
+      // `StubLink.responses` scripts by call index, so a second request
+      // alone doesn't prove the retry used the fallback document — a
+      // watcher that always resent `extended` would produce the same
+      // request count and the same stubbed response. Pin the actual
+      // document the retry sent.
+      expect(link.requests[1].operation.document, legacy);
     });
 
     test('surfaces the error when there is no fallback', () async {

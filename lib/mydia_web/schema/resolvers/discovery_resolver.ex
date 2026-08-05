@@ -47,7 +47,8 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
     entries =
       RecentlyAdded.list_recent(
         since: thirty_days_ago,
-        types: requested_types(Map.get(args, :types))
+        types: requested_types(Map.get(args, :types)),
+        limit: pagination_limit(first, after_cursor)
       )
 
     all_items =
@@ -212,6 +213,15 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
         0
     end
   end
+
+  # `list_recent/1` takes `Enum.take` on this limit BEFORE loading each item's
+  # metadata and resolving its latest episode, so the limit here has to cover
+  # everything `paginate_simple/3` can slice from — the offset the cursor
+  # encodes, plus the page itself — or a page past the first would silently
+  # come back empty. Without a limit at all, every mount rebuilds and loads
+  # the entire 30-day window just to show `first` cards.
+  defp pagination_limit(first, nil), do: first
+  defp pagination_limit(first, after_cursor), do: decode_cursor(after_cursor) + 1 + first
 
   defp build_continue_watching_item(%{media_item_id: media_item_id} = progress, _user_id)
        when not is_nil(media_item_id) do

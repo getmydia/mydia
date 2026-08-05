@@ -107,6 +107,32 @@ defmodule Mydia.Media.RecentlyAddedTest do
 
       assert RecentlyAdded.added_at_map(ids: []) == %{}
     end
+
+    test "a library-sized id list is chunked rather than raising on a bind-parameter ceiling" do
+      # Enough synthetic ids to force multiple chunks (well past @id_chunk_size)
+      # without paying for thousands of real media items and files. None of
+      # these match a real row, so the correct answer is an empty map; the
+      # point is that the query executes at all.
+      ids = for _ <- 1..5000, do: Ecto.UUID.generate()
+
+      assert RecentlyAdded.added_at_map(ids: ids) == %{}
+    end
+
+    test "chunking still returns real matches scattered across chunk boundaries" do
+      movie_a = media_item_fixture(%{type: "movie"})
+      movie_b = media_item_fixture(%{type: "movie"})
+
+      backdate_media_file(media_file_fixture(%{media_item_id: movie_a.id}), @yesterday)
+      backdate_media_file(media_file_fixture(%{media_item_id: movie_b.id}), @last_week)
+
+      noise_ids = for _ <- 1..5000, do: Ecto.UUID.generate()
+      ids = [movie_a.id | noise_ids] ++ [movie_b.id]
+
+      assert RecentlyAdded.added_at_map(ids: ids) == %{
+               movie_a.id => @yesterday,
+               movie_b.id => @last_week
+             }
+    end
   end
 
   describe "list_recent/1" do

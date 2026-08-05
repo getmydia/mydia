@@ -34,6 +34,11 @@ defmodule Mydia.Media.RecentlyAdded do
   alias Mydia.Media.RecentlyAdded.Entry
   alias Mydia.Repo
 
+  # Keeps a single `:ids` query under both SQLite's 32,766 and PostgreSQL's
+  # 65,535 bind-parameter ceilings with plenty of headroom, regardless of how
+  # many other parameters the same query carries.
+  @id_chunk_size 500
+
   @doc """
   Maps media item id to the time its newest content arrived.
 
@@ -43,7 +48,14 @@ defmodule Mydia.Media.RecentlyAdded do
   Options:
 
     * `:ids` - restrict to these media item ids. An empty list returns `%{}`
-      without hitting the database.
+      without hitting the database. A larger list is chunked into batches of
+      #{@id_chunk_size} and queried separately, with the per-chunk maps
+      merged, so a caller scoping to an entire library (a sort on the media
+      library page, or an unwatched/favorites rail) can never build a single
+      query past a bind-parameter ceiling. Chunking is chosen over dropping
+      the filter on a large list because the filter is what keeps the query
+      cheap: an unfiltered aggregate re-scans and re-groups every media file
+      in the library, which is exactly the cost this option exists to avoid.
   """
   @spec added_at_map(keyword()) :: %{binary() => DateTime.t()}
   def added_at_map(opts \\ [])
@@ -54,7 +66,11 @@ defmodule Mydia.Media.RecentlyAdded do
         %{}
 
       {:ok, ids} ->
-        ids |> item_timestamps_query() |> Repo.all() |> Map.new()
+        ids
+        |> Enum.chunk_every(@id_chunk_size)
+        |> Enum.reduce(%{}, fn chunk, acc ->
+          Map.merge(acc, chunk |> item_timestamps_query() |> Repo.all() |> Map.new())
+        end)
 
       :error ->
         nil |> item_timestamps_query() |> Repo.all() |> Map.new()
@@ -62,14 +78,22 @@ defmodule Mydia.Media.RecentlyAdded do
   end
 
   # One row per (owning item, episode) slot, carrying the slot's earliest file.
-  # Public to this module only; Task 3 reuses it for windowed counts.
+  # Public to this module only.
+  #
+  # `ids`, when given, filters slots to those whose owning item is in the
+  # list. The filter is a `where` on the media_files/episodes join, applied
+  # *before* `group_by`, rather than a filter on the outer aggregate: a caller
+  # that only needs a handful of items (added_at_map/1's per-chunk scoping,
+  # load_latest_episodes/1's lookup for the rail) never pays for grouping the
+  # whole table first and discarding most of the result.
   @doc false
-  @spec slots_query() :: Ecto.Query.t()
-  def slots_query do
+  @spec slots_query([binary()] | nil) :: Ecto.Query.t()
+  def slots_query(ids \\ nil) do
     from f in MediaFile,
       left_join: e in Episode,
       on: f.episode_id == e.id,
       where: not is_nil(e.media_item_id) or not is_nil(f.media_item_id),
+      where: ^id_filter(ids),
       group_by: [coalesce(e.media_item_id, f.media_item_id), f.episode_id],
       select: %{
         media_item_id: coalesce(e.media_item_id, f.media_item_id),
@@ -78,19 +102,29 @@ defmodule Mydia.Media.RecentlyAdded do
       }
   end
 
+  defp id_filter(nil), do: dynamic([f, e], true)
+
+  defp id_filter(ids) do
+    # `coalesce(...) in ^ids` alone leaves Postgrex to guess the comparison's
+    # type from a bare `coalesce/2` expression, which it cannot: it falls back
+    # to `:binary` and then rejects every UUID string with an "expected a
+    # binary of 16 bytes" encode error. Typing the *left* side as `:binary_id`
+    # (the type `media_item_id` already has on both `f` and `e`) lets Ecto
+    # infer the correct encoding for `^ids` from it, on both adapters — SQLite
+    # never needed this (it has no binary UUID representation to get wrong),
+    # but tagging the RHS list directly with `{:array, :binary_id}` instead
+    # breaks *SQLite's* plain `IN (?, ?, ...)` expansion, so the type belongs
+    # on the expression being compared, not the list.
+    dynamic(
+      [f, e],
+      type(coalesce(e.media_item_id, f.media_item_id), :binary_id) in ^ids
+    )
+  end
+
   defp item_timestamps_query(ids) do
-    slots = slots_query()
-
-    query =
-      from s in subquery(slots),
-        group_by: s.media_item_id,
-        select: {s.media_item_id, type(max(s.first_added_at), :utc_datetime)}
-
-    if is_nil(ids) do
-      query
-    else
-      where(query, [s], s.media_item_id in ^ids)
-    end
+    from s in subquery(slots_query(ids)),
+      group_by: s.media_item_id,
+      select: {s.media_item_id, type(max(s.first_added_at), :utc_datetime)}
   end
 
   @doc """
@@ -191,12 +225,13 @@ defmodule Mydia.Media.RecentlyAdded do
   defp load_latest_episodes(rows) do
     ids = Enum.map(rows, & &1.media_item_id)
 
-    slots = slots_query()
-
-    # `subquery/1` returns an %Ecto.SubQuery{}, not a query, so it cannot be
-    # piped into `where/3`. It has to be the source of a `from`.
+    # Filtering inside slots_query/1 means this scan-and-group only ever
+    # touches the handful of items the caller already resolved (the rail's
+    # page, after list_recent/1's :limit), rather than repeating the full
+    # unfiltered aggregate windowed_rows_query/2 already ran.
     newest_episode_ids =
-      from(s in subquery(slots), where: s.media_item_id in ^ids)
+      ids
+      |> slots_query()
       |> Repo.all()
       |> Enum.group_by(& &1.media_item_id)
       |> Map.new(fn {item_id, item_slots} ->
