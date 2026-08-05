@@ -466,14 +466,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// calls it — so the receiver starts where the user asked, instead of
   /// always at zero the way it did when each of the three call sites reached
   /// this before the resume decision existed.
-  Future<bool> _castToTargetIfSet(ResumePlan plan) async {
+  ///
+  /// [fileId] is the file id to hand the receiver. Callers before the
+  /// streaming-candidates fetch pass `widget.fileId` (there is no other id
+  /// yet); the caller after it must pass `playFileId` instead, so a self-heal
+  /// that swaps in the server-ranked file for local playback (see
+  /// [_fetchStreamingCandidates]) reaches the receiver too, rather than
+  /// sending it the id the server just rejected.
+  Future<bool> _castToTargetIfSet(ResumePlan plan,
+      {required String fileId}) async {
     final target = ref.read(castTargetProvider);
     if (target == null) return false;
 
     // Downloaded media lives only on this device; the route resolver has no
     // server-side file to hand the receiver. Playing locally is the useful
     // outcome, but silently ignoring the chosen device is not, so say why.
-    if (widget.fileId == 'offline') {
+    if (fileId == 'offline') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Downloads cannot be cast — playing on this device.'),
@@ -487,7 +495,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       await manager.startCast(
         device: target,
         request: CastLaunchRequest(
-          fileId: widget.fileId,
+          fileId: fileId,
           mediaId: widget.mediaId,
           mediaType: widget.mediaType,
           title: widget.title ?? 'Untitled',
@@ -613,7 +621,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         );
         if (plan == null) return;
 
-        if (await _castToTargetIfSet(plan)) return;
+        if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
 
         await _openPlayerAndStart(offlinePath, {}, plan: plan);
         return;
@@ -685,7 +693,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           );
           if (plan == null) return;
 
-          if (await _castToTargetIfSet(plan)) return;
+          if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
 
           await _openPlayerAndStart(localPath, {}, plan: plan);
           return;
@@ -870,7 +878,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
       if (plan == null) return;
 
-      if (await _castToTargetIfSet(plan)) return;
+      if (await _castToTargetIfSet(plan, fileId: playFileId)) return;
 
       String mediaSource;
       Map<String, String> httpHeaders = {};
@@ -1341,17 +1349,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   /// Fetch streaming candidates from the server via GraphQL.
   ///
-  /// `networkOnly` is load-bearing. This query is keyed by *content* id, not by
-  /// file id, so its cache entry outlives the file it describes: replacing an
-  /// episode's file (a manual delete and re-download, or an automatic quality
-  /// upgrade, which supersedes the row and deletes the old one) leaves the
-  /// entry pointing at a `fileId` that no longer exists. The direct-play branch
-  /// below takes its id from this response rather than from the route, so a
-  /// cached hit sends playback to a deleted file: the server answers "media
-  /// file not found in database", no bytes arrive, and the screen stays black
-  /// while the timeline runs off the equally stale cached duration. The default
-  /// policy for a one-shot `query()` is `cacheFirst` and the store is Hive on
-  /// disk, so that state survives restarts and never self-heals.
+  /// `networkOnly` is load-bearing. The primary call here is keyed by the
+  /// specific file the user selected (`('file', widget.fileId)`), not by
+  /// content id. When the server rejects that file id — e.g. because a
+  /// quality upgrade trashed it (`Mydia.Upgrades.apply_upgrade/4`) — the
+  /// caller in [_initializePlayer] re-asks by media item and plays whatever
+  /// the server ranks instead (`playFileId`). That self-heal only works if
+  /// the rejection is actually visible: a warm cache entry for
+  /// `('file', id)` recorded before the file was trashed still holds a
+  /// *successful* response, with no `graphqlErrors`, because the request
+  /// that produced it really did succeed at the time. Serving that cached
+  /// hit would make `result.hasException` false, so `serverRejected` below
+  /// would never be true, and the self-heal would silently never fire — the
+  /// exact bug this whole mechanism exists to avoid. `networkOnly` is what
+  /// forces a live request every time, so a rejection is always observable.
+  /// That is the load-bearing reason, not merely keeping a stale `fileId`
+  /// out of the direct-play URL: on the fallback paths (the offline
+  /// sentinel, and this self-heal) the id used for playback comes from this
+  /// response rather than from the route regardless, so a stale cached
+  /// response there would feed a dead file straight into playback either way.
   ///
   /// `cacheAndNetwork` is not the fix: on a one-shot `client.query()` it
   /// returns the cached result and discards the network one, which is the same
@@ -1471,7 +1487,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _extractSubtitlesFromFiles(List<Fragment$MediaFileFragment?>? files) {
     if (files == null || files.isEmpty) return;
 
-    // Find the file matching the current fileId
+    // Find the file matching the current fileId. This always matches on
+    // `widget.fileId`, never `playFileId`, so on the self-heal path in
+    // [_initializePlayer] (server rejected the selected file and re-ranked
+    // one instead) this is comparing against the id the server just
+    // rejected. No file matches, so external subtitles are silently
+    // dropped for that playback. Intentional for now — see
+    // [_fetchStreamingCandidates] for the self-heal itself.
     for (final file in files) {
       if (file == null) continue;
       if (file.id == widget.fileId) {
@@ -1557,6 +1579,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         return;
       }
 
+      // Matched on `widget.fileId`, never `playFileId`, so on the self-heal
+      // path in [_initializePlayer] (server rejected the selected file and
+      // re-ranked one instead) this looks up segments for the id the server
+      // just rejected and finds none. Skip markers are silently dropped for
+      // that playback. Intentional for now — see [_fetchStreamingCandidates]
+      // for the self-heal itself.
       _segments = MediaSegment.forFile(
         result.data,
         root: root,

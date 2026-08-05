@@ -113,12 +113,14 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     // The candidates call for the selected file never reaches the server at
-    // all. `http.ClientException` is what `package:graphql`'s
-    // `translateFailure` recognizes and wraps into a genuine
-    // `LinkException` — the shape a real socket error or unreachable server
-    // takes, as opposed to the server answering with a GraphQL error (see
-    // `player_screen_stale_candidates_test.dart`, the case this one exists
-    // to be told apart from).
+    // all. `http.ClientException` is not special here — `package:graphql`'s
+    // `translateFailure` wraps *any* unrecognized thrown object in an
+    // `UnknownException`, so any exception thrown from the link would give a
+    // non-null `linkException` just the same. It is simply a realistic
+    // stand-in for a real socket error or unreachable server, the shape a
+    // transport failure takes, as opposed to the server answering with a
+    // GraphQL error (see `player_screen_stale_candidates_test.dart`, the
+    // case this one exists to be told apart from).
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),

@@ -273,6 +273,19 @@ defmodule Mydia.Streaming.CandidatesTest do
       assert chosen.id == hd.id
     end
 
+    test "content_type \"file\" never resolves to a trashed file" do
+      trashed =
+        media_file_fixture(%{
+          resolution: "4K",
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      # This is the exact hole the self-heal in the player depends on: a
+      # quality upgrade trashes the old file (Mydia.Upgrades.apply_upgrade/4)
+      # but leaves its id resolvable if this clause doesn't filter it out.
+      assert {:error, :not_found} = Candidates.resolve_media_file("file", trashed.id)
+    end
+
     test "a movie with no files reports :no_media_files" do
       movie = media_item_fixture(%{type: "movie"})
       assert {:error, :no_media_files} = Candidates.resolve_media_file("movie", movie.id)

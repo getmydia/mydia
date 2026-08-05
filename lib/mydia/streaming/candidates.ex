@@ -57,7 +57,12 @@ defmodule Mydia.Streaming.Candidates do
 
       "file" ->
         try do
-          media_file = Mydia.Library.get_media_file!(id, preload: [:library_path])
+          # A trashed file is not a streaming candidate, same as the "movie"
+          # and "episode" clauses above. Without this, a quality upgrade that
+          # trashes the old file (Mydia.Upgrades.apply_upgrade/4) would leave
+          # a dead file id resolvable here, so the player's self-heal (which
+          # relies on this returning :not_found) would never fire.
+          media_file = Repo.get!(active_files_query, id)
           {:ok, media_file}
         rescue
           Ecto.NoResultsError -> {:error, :not_found}

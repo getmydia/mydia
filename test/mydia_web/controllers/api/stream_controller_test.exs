@@ -142,6 +142,24 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       assert json_response(conn, 404)["error"] == "Media file not found on disk"
     end
 
+    test "returns 404 for a trashed media file", %{conn: conn, token: token} do
+      # This is the exact hole the player's self-heal depends on: a quality
+      # upgrade trashes the old file (Mydia.Upgrades.apply_upgrade/4) but
+      # leaves its row and id resolvable if this route doesn't filter it out.
+      trashed =
+        media_file_fixture(%{
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/stream/#{trashed.id}")
+
+      assert conn.status == 404
+      assert json_response(conn, 404)["error"] == "Media file not found"
+    end
+
     test "requires authentication", %{conn: conn, media_file: media_file} do
       conn = get(conn, "/api/v1/stream/#{media_file.id}")
 

@@ -3,10 +3,10 @@ defmodule MydiaWeb.Api.StreamController do
 
   import Ecto.Query, only: [from: 2]
 
-  alias Mydia.Library
   alias Mydia.Library.FileRanking
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Repo
 
   alias Mydia.Streaming.{
     Candidates,
@@ -90,10 +90,15 @@ defmodule MydiaWeb.Api.StreamController do
   - Seeking via Range requests
   """
   def stream(conn, %{"id" => media_file_id}) do
-    # Load media file with preloads to check access
+    # Load media file with preloads to check access. A trashed file is not a
+    # streaming candidate — see the comment on active_files_query/0 below.
     try do
       media_file =
-        Library.get_media_file!(media_file_id, preload: [:media_item, :episode, :library_path])
+        from(mf in MediaFile,
+          where: is_nil(mf.trashed_at),
+          preload: [:media_item, :episode, :library_path]
+        )
+        |> Repo.get!(media_file_id)
 
       stream_media_file(conn, media_file)
     rescue

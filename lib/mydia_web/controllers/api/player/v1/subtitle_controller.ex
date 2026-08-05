@@ -11,9 +11,9 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
   import Ecto.Query, only: [from: 2]
 
-  alias Mydia.Library
   alias Mydia.Library.FileRanking
   alias Mydia.Library.MediaFile
+  alias Mydia.Repo
   alias Mydia.Subtitles.Extractor
 
   require Logger
@@ -185,7 +185,9 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
       "file" ->
         try do
-          media_file = Library.get_media_file!(id, preload: [:library_path])
+          # A trashed file is not a subtitle source, same as the "movie" and
+          # "episode" clauses above (see active_files_query/0 below).
+          media_file = Repo.get!(active_files_query(), id)
           {:ok, media_file}
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
