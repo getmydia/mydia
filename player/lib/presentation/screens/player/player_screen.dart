@@ -36,6 +36,7 @@ import '../../widgets/gesture_controls.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
+import '../../widgets/video_controls/cast_chrome_icon.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/up_next_overlay.dart';
@@ -2685,6 +2686,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               context.go('/');
             }
           },
+          // The chrome's own cast pill. Null on a build that cannot cast at
+          // all, which drops the pill rather than drawing an empty one.
+          castAction: castChromeActionFor(ref),
+          onCastTap: _showCastDevicePicker,
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
           // Hidden when the ladder collapsed to Original alone — a source

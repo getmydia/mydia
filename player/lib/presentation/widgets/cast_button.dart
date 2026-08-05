@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cast/cast_providers.dart';
+import 'cast_visuals.dart';
 
 /// The cast affordance, shown in app bars and as the shell overlay.
 ///
 /// Renders nothing when the current build has no cast capability at all
 /// (e.g. web), so unsupported builds show no dead affordance.
 ///
-/// Every visual comes from [castConnectionProvider]. `Icons.cast_connected` is
-/// the platform's "this app owns that receiver" glyph, so it appears only when
-/// a connection is genuinely live — a device that has merely been chosen gets
-/// the hollow `Icons.cast` in the same blue.
+/// Every visual comes from [castVisualsFor]. Glyphs are the bare Material
+/// family, which is what the app bars this sits in use; the playback chrome's
+/// own affordance is `CastChromeIcon`, which draws the `_rounded` family
+/// instead.
 class CastButton extends ConsumerWidget {
   final VoidCallback onPressed;
 
@@ -25,31 +26,8 @@ class CastButton extends ConsumerWidget {
 
     final connection = ref.watch(castConnectionProvider);
     final device = ref.watch(castDisplayDeviceProvider);
-    final name = device?.name ?? 'device';
-
-    final (IconData glyph, Color color, String tooltip) = switch (connection) {
-      CastConnection.none => (Icons.cast, Colors.white, 'Cast to device'),
-      CastConnection.connecting => (
-          Icons.cast,
-          Colors.blue,
-          'Connecting to $name…',
-        ),
-      CastConnection.connectedIdle => (
-          Icons.cast_connected,
-          Colors.blue,
-          'Connected to $name',
-        ),
-      CastConnection.casting => (
-          Icons.cast_connected,
-          Colors.blue,
-          'Casting to $name',
-        ),
-      CastConnection.chosenOffline => (
-          Icons.cast,
-          Colors.blue,
-          '$name — not connected',
-        ),
-    };
+    final visuals = castVisualsFor(connection, device?.name ?? 'device');
+    final glyph = visuals.connected ? Icons.cast_connected : Icons.cast;
 
     return IconButton(
       key: const Key('cast-button'),
@@ -57,7 +35,7 @@ class CastButton extends ConsumerWidget {
           ? Stack(
               alignment: Alignment.center,
               children: [
-                Icon(glyph, color: color, size: 16),
+                Icon(glyph, color: visuals.color, size: 16),
                 const SizedBox(
                   width: 24,
                   height: 24,
@@ -68,12 +46,12 @@ class CastButton extends ConsumerWidget {
                 ),
               ],
             )
-          : Icon(glyph, color: color),
+          : Icon(glyph, color: visuals.color),
       onPressed: onPressed,
       style: IconButton.styleFrom(
         backgroundColor: Colors.black.withValues(alpha: 0.5),
       ),
-      tooltip: tooltip,
+      tooltip: visuals.tooltip,
     );
   }
 }

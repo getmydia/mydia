@@ -8,12 +8,22 @@ import 'playback_chrome.dart';
 ///
 /// All chrome now lives in [PlaybackChrome]; this file is only the adapter
 /// between media_kit's builder signature and that widget.
+///
+/// [castAction] and [onCastTap] are `required` despite being nullable, which
+/// the other optional chrome parameters are not. Casting was invisible for the
+/// whole of playback once before: the refactor that introduced [PlaybackChrome]
+/// deleted the old top bar — cast button and all — and left the replacement's
+/// cast slot unfilled, so the affordance survived only in the loading and
+/// error states nobody demos. Requiring them turns "forgot the cast
+/// affordance" from something you have to notice into something that does not
+/// compile.
 Widget Function(VideoState) customVideoControlsBuilderWithCallback({
   required StreamTimeline timeline,
   required Future<void> Function(Duration realTarget) onSeekToReal,
+  required Widget? castAction,
+  required VoidCallback? onCastTap,
   String? title,
   VoidCallback? onBack,
-  Widget? castAction,
   VoidCallback? onAudioTap,
   VoidCallback? onSubtitleTap,
   VoidCallback? onQualityTap,
@@ -34,6 +44,7 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
         title: title,
         onBack: onBack,
         castAction: castAction,
+        onCastTap: onCastTap,
         onAudioTap: onAudioTap,
         onSubtitleTap: onSubtitleTap,
         onQualityTap: onQualityTap,
