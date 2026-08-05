@@ -96,16 +96,25 @@ jobs:
         run: |
           # Turns a broken Pages project, a wrong production branch, or a missing
           # DNS record into a failed job instead of a green one over a stale feed.
-          sleep 10
-          served=$(curl -fsSL https://updates.mydia.dev/appcast.xml || true)
-          if [ -z "$served" ]; then
-            echo "::error::updates.mydia.dev/appcast.xml served nothing after deploy."
-            exit 1
-          fi
+          #
+          # Retries because Cloudflare propagation timing is not guaranteed, and a
+          # release going red over ordinary propagation variance would train
+          # everyone to ignore this check.
           local_count=$(grep -c '<item>' dist/appcast.xml)
-          served_count=$(printf '%s' "$served" | grep -c '<item>' || true)
-          if [ "$served_count" -ne "$local_count" ]; then
-            echo "::error::Served feed has $served_count item(s), expected $local_count. The deploy may have landed on a preview URL."
-            exit 1
-          fi
-          echo "updates.mydia.dev is serving $served_count item(s)."
+
+          for attempt in 1 2 3 4 5 6; do
+            served=$(curl -fsSL --max-time 20 https://updates.mydia.dev/appcast.xml || true)
+            served_count=$(printf '%s' "$served" | grep -c '<item>' || true)
+
+            if [ -n "$served" ] && [ "$served_count" -eq "$local_count" ]; then
+              echo "updates.mydia.dev is serving $served_count item(s) after $attempt attempt(s)."
+              exit 0
+            fi
+
+            echo "Attempt $attempt: served $served_count item(s), expected $local_count. Retrying."
+            sleep 15
+          done
+
+          echo "::error::updates.mydia.dev did not serve the expected $local_count item(s) after 6 attempts."
+          echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
+          exit 1
