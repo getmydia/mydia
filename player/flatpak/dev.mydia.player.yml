@@ -60,6 +60,12 @@ modules:
   - name: libplacebo
     buildsystem: meson
     config-opts:
+      # --libdir=lib is not cosmetic. Meson's default libdir is environment
+      # dependent: it resolved to lib locally but to lib64 on the CI runner,
+      # which put libplacebo.pc outside PKG_CONFIG_PATH and made the mpv
+      # module fail with 'Dependency "libplacebo" not found'. Pin it so both
+      # agree.
+      - --libdir=lib
       - -Dvulkan=enabled
       - -Dopengl=enabled
       - -Ddemos=false
@@ -72,6 +78,10 @@ modules:
   - name: mpv
     buildsystem: meson
     config-opts:
+      # Same reason as libplacebo: media_kit dlopens libmpv.so.2 through
+      # LD_LIBRARY_PATH=/app/lib, so an environment-dependent lib64 would
+      # leave it unfindable at runtime rather than at build time.
+      - --libdir=lib
       # libmpv only. media_kit dlopens libmpv.so.2 and never runs the player
       # binary, so building cplayer would be dead weight in the image.
       - -Dlibmpv=true
