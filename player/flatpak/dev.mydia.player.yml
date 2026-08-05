@@ -1,0 +1,124 @@
+# Mydia Player Flatpak.
+#
+# Built on the GNOME runtime because player/linux/CMakeLists.txt requires
+# gtk+-3.0, which the freedesktop runtime does not carry.
+#
+# libass, libplacebo and mpv are built here because media_kit links a system
+# libmpv rather than bundling one. That is also the bug this package fixes: the
+# tarball release fails at load time for anyone without libmpv installed.
+#
+# Codecs come from org.freedesktop.Platform.codecs-extra, which the GNOME
+# runtime declares as its own extension (directory lib/x86_64-linux-gnu/
+# codecs-extra, version 25.08-extra, add-ld-path lib) and flatpak installs
+# automatically. Nothing is declared here for it. Note the older
+# org.freedesktop.Platform.ffmpeg-full extension does NOT exist for freedesktop
+# 25.08 and cannot be used with this runtime.
+#
+# This manifest deliberately names no Flutter or Rust version. build.sh reads
+# both from player/.fvmrc and rust-toolchain.toml, which the CI pin guards
+# require.
+app-id: dev.mydia.player
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: mydia-player
+
+# Flutter's Linux desktop build hardcodes CC=clang and CXX=clang++, and the
+# GNOME SDK ships gcc only. Without this the build dies in CMake with
+# "Could not find the compiler specified in the environment variable CXX".
+# llvm21 is the LLVM extension built for freedesktop 25.08, which is the base
+# GNOME 50 sits on; it is a build-time dependency and ships nothing in the app.
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.llvm21
+
+finish-args:
+  # Talks to the Mydia server over HTTP and to p2p peers over QUIC/UDP.
+  - --share=network
+  # Required alongside fallback X11.
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  # Hardware video decode.
+  - --device=dri
+  # Stop the screen blanking during playback.
+  - --talk-name=org.freedesktop.ScreenSaver
+  # The Flutter bundle and mpv both live under /app/lib.
+  - --env=LD_LIBRARY_PATH=/app/lib
+  # No --filesystem: the player streams from a server and reads no local media.
+
+modules:
+  - name: libass
+    config-opts:
+      - --disable-static
+    sources:
+      - type: git
+        url: https://github.com/libass/libass.git
+        tag: '0.17.5'
+        commit: 64ebcac709d949e6059bdacf5356c3af7848e8e5
+
+  - name: libplacebo
+    buildsystem: meson
+    config-opts:
+      # --libdir=lib is not cosmetic. Meson's default libdir is environment
+      # dependent: it resolved to lib locally but to lib64 on the CI runner,
+      # which put libplacebo.pc outside PKG_CONFIG_PATH and made the mpv
+      # module fail with 'Dependency "libplacebo" not found'. Pin it so both
+      # agree.
+      - --libdir=lib
+      - -Dvulkan=enabled
+      - -Dopengl=enabled
+      - -Ddemos=false
+    sources:
+      - type: git
+        url: https://code.videolan.org/videolan/libplacebo.git
+        tag: v7.360.1
+        commit: 719cc95244a1f1d648dd72459822e026e6530f22
+
+  - name: mpv
+    buildsystem: meson
+    config-opts:
+      # Same reason as libplacebo: media_kit dlopens libmpv.so.2 through
+      # LD_LIBRARY_PATH=/app/lib, so an environment-dependent lib64 would
+      # leave it unfindable at runtime rather than at build time.
+      - --libdir=lib
+      # libmpv only. media_kit dlopens libmpv.so.2 and never runs the player
+      # binary, so building cplayer would be dead weight in the image.
+      - -Dlibmpv=true
+      - -Dcplayer=false
+      - -Dmanpage-build=disabled
+      - -Dlua=disabled
+    sources:
+      - type: git
+        url: https://github.com/mpv-player/mpv.git
+        tag: v0.41.0
+        commit: 2c219aa822df18a1b7fd9abe3e151cd93ad67307
+
+  - name: mydia-player
+    buildsystem: simple
+    build-options:
+      # Puts the llvm21 extension's clang on PATH ahead of the SDK's gcc.
+      append-path: /usr/lib/sdk/llvm21/bin
+      prepend-ld-library-path: /usr/lib/sdk/llvm21/lib
+      # Not hermetic, and deliberately so. flutter pub get, cargokit's crate
+      # fetches and Flutter's own SDK download all need the network. Making
+      # this build offline would mean vendoring all three, which is only
+      # required for Flathub, and Flathub is out of scope.
+      build-args:
+        - --share=network
+    build-commands:
+      - bash player/flatpak/build.sh
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - .claude
+          - _build
+          - deps
+          - node_modules
+          - docs/.venv
+          - player/build
+          - site/dist
+          - site/node_modules
+          - target

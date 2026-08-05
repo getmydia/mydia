@@ -60,7 +60,7 @@ jobs:
           hits="$(
             git ls-files -z \
                 '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
-                'scripts/*' 'dev' \
+                'scripts/*' 'dev' 'player/flatpak/*' \
               | xargs -0 grep -HnIiE 'flutter' \
               | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \
               | grep -E '[0-9]+\.[0-9]+|[Ff]lutter[0-9]' \
@@ -74,6 +74,7 @@ jobs:
             echo "  workflows   -> subosito/flutter-action with flutter-version-file"
             echo "  Dockerfiles -> jq -r .flutter player/.fvmrc"
             echo "  nix         -> import player/flutter-version.nix"
+            echo "  flatpak     -> read it in build.sh from player/.fvmrc"
             exit 1
           fi
           echo "OK: player/.fvmrc is the only file naming a Flutter version."

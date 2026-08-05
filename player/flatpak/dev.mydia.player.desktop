@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Mydia Player
+GenericName=Media Player
+Comment=Watch the TV shows and movies on your Mydia server
+Exec=mydia-player
+Icon=dev.mydia.player
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=media;video;streaming;movies;tv;mydia;
+StartupNotify=true
+StartupWMClass=mydia-player

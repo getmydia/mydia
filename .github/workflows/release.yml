@@ -37,7 +37,7 @@ on:
         type: boolean
         default: false
       allow_missing:
-        description: "Comma-separated platforms whose failure must not block publish (android,ios,macos,windows,linux,docker)"
+        description: "Comma-separated platforms whose failure must not block publish (android,ios,macos,windows,linux,flatpak,docker)"
         required: false
         default: ''
 
@@ -938,6 +938,118 @@ jobs:
           path: ${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle
           retention-days: 30
 
+  player-flatpak:
+    name: Player / Flatpak
+    needs: prepare
+    runs-on: ubuntu-latest
+    # mpv, libplacebo and libass are roughly a third of this; the Flutter
+    # build and its Rust cdylib are the rest.
+    timeout-minutes: 90
+    outputs:
+      channel: ${{ steps.channel.outputs.channel }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Pick the channel
+        id: channel
+        env:
+          IS_PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          # The same flag that decides :beta against :latest for Docker.
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            echo "channel=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=stable" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update
+          # appstream provides appstreamcli, which flatpak-builder shells out to
+          # on the host during export. Without it the build fails at the very
+          # last step, after everything has already compiled.
+          sudo apt-get install -y flatpak flatpak-builder xvfb appstream
+
+      - name: Allow unprivileged user namespaces
+        # Ubuntu 24.04 restricts these through AppArmor, which breaks the
+        # bubblewrap sandbox flatpak-builder needs.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Add Flathub and install the runtime
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            org.gnome.Platform//50 org.gnome.Sdk//50 \
+            org.freedesktop.Sdk.Extension.llvm21//25.08
+
+      - name: Stamp the version
+        run: |
+          ./player/flatpak/stamp-version.sh \
+            "${{ needs.prepare.outputs.version }}" \
+            "${{ needs.prepare.outputs.version_code }}" \
+            "$(date -u +%Y-%m-%d)"
+
+      - name: Build
+        run: |
+          flatpak-builder --user --force-clean --disable-rofiles-fuse \
+            --repo=staged-repo \
+            --default-branch=${{ steps.channel.outputs.channel }} \
+            build-dir player/flatpak/dev.mydia.player.yml
+
+      - name: Install and smoke test
+        run: |
+          flatpak remote-add --user --no-gpg-verify --if-not-exists \
+            staged "$PWD/staged-repo"
+          flatpak install --user -y --reinstall staged dev.mydia.player
+          ./player/flatpak/smoke-test.sh ${{ steps.channel.outputs.channel }}
+
+      - name: Rehearse signing and install (dry run only)
+        if: inputs.dry_run
+        run: |
+          set -euo pipefail
+          # flatpak-publish is skipped on a dry run because it needs `publish`,
+          # which carries !inputs.dry_run. So the rehearsal of signing and of
+          # installing from a signed repo has to happen here, with a throwaway
+          # key. The real key never enters this job in either mode.
+          sudo apt-get install -y ostree rclone
+          GNUPGHOME="$(mktemp -d)"
+          export GNUPGHOME
+          # --pinentry-mode loopback is required even for an unprotected key,
+          # or gpg-agent fails with "No pinentry" on a headless runner.
+          gpg --batch --pinentry-mode loopback --passphrase '' \
+            --quick-generate-key "Dry Run <dryrun@mydia.dev>" rsa2048 sign never
+          KEYID=$(gpg --list-keys --with-colons dryrun@mydia.dev | awk -F: '/^fpr:/ {print $10; exit}')
+
+          # The destination is a local directory, which rclone treats like any
+          # other backend. Nothing leaves the runner.
+          GPG_KEY_ID="$KEYID" LIVE_REPO_DIR="$PWD/dryrun-live" \
+            ./player/flatpak/publish.sh \
+              "${{ steps.channel.outputs.channel }}" \
+              "$PWD/staged-repo" "$PWD/dryrun-dest"
+
+          # Replace the unsigned staged install with one that came through the
+          # real signing and publishing path.
+          flatpak uninstall --user -y dev.mydia.player
+          flatpak remote-add --user --no-gpg-verify --if-not-exists \
+            dryrun "$PWD/dryrun-dest"
+          flatpak install --user -y dryrun dev.mydia.player
+          ./player/flatpak/smoke-test.sh ${{ steps.channel.outputs.channel }}
+          echo "Dry run rehearsal complete. Nothing was uploaded."
+
+      - name: Upload staged repo
+        uses: actions/upload-artifact@v4
+        with:
+          # Deliberately not named mydia-player-*: the publish job downloads
+          # that pattern and has no use for a multi-hundred-megabyte repo.
+          name: flatpak-repo-staged
+          path: staged-repo
+          retention-days: 30
+
   publish:
     name: Publish Release
     # always() so this job runs even when a platform failed, and can report
@@ -951,6 +1063,7 @@ jobs:
       - player-macos
       - player-windows
       - player-linux
+      - player-flatpak
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -965,6 +1078,7 @@ jobs:
           RESULT_MACOS: ${{ needs.player-macos.result }}
           RESULT_WINDOWS: ${{ needs.player-windows.result }}
           RESULT_LINUX: ${{ needs.player-linux.result }}
+          RESULT_FLATPAK: ${{ needs.player-flatpak.result }}
         run: |
           set -euo pipefail
 
@@ -988,7 +1102,8 @@ jobs:
             "ios:$RESULT_IOS" \
             "macos:$RESULT_MACOS" \
             "windows:$RESULT_WINDOWS" \
-            "linux:$RESULT_LINUX"; do
+            "linux:$RESULT_LINUX" \
+            "flatpak:$RESULT_FLATPAK"; do
             name="${entry%%:*}"
             result="${entry#*:}"
             [ "$result" = "success" ] && continue
@@ -1193,3 +1308,99 @@ jobs:
           uv run --project docs mike delete --push latest || true
           uv run --project docs mike deploy --push --update-aliases "$VERSION" latest
           uv run --project docs mike set-default --push latest
+
+  flatpak-publish:
+    name: Publish Flatpak
+    # Needs `publish`, which carries !inputs.dry_run, so this is skipped
+    # entirely on a rehearsal. No R2 traffic can happen during a dry run.
+    needs:
+      - prepare
+      - player-flatpak
+      - publish
+    runs-on: ubuntu-latest
+    concurrency:
+      # Syncing down, committing and syncing back up is a read-modify-write
+      # against one shared repo. The workflow's release-${version} group does
+      # not serialise two different versions against each other.
+      group: flatpak-publish-${{ needs.player-flatpak.outputs.channel }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak ostree rclone
+
+      - name: Download staged repo
+        uses: actions/download-artifact@v4
+        with:
+          name: flatpak-repo-staged
+          path: staged-repo
+
+      - name: Import the signing key
+        env:
+          FLATPAK_GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FLATPAK_GPG_PRIVATE_KEY" ]; then
+            echo "::error::FLATPAK_GPG_PRIVATE_KEY is not set. See docs/contributing/releasing.md, 'Flatpak channels'." >&2
+            exit 1
+          fi
+          echo "$FLATPAK_GPG_PRIVATE_KEY" | base64 -d \
+            | gpg --batch --pinentry-mode loopback --import
+
+      - name: Configure rclone for R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${R2_ACCESS_KEY_ID}
+          secret_access_key = ${R2_SECRET_ACCESS_KEY}
+          endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+          acl = private
+          EOF
+
+      - name: Publish
+        env:
+          GPG_KEY_ID: ${{ secrets.FLATPAK_GPG_KEY_ID }}
+          CHANNEL: ${{ needs.player-flatpak.outputs.channel }}
+        run: |
+          ./player/flatpak/publish.sh "$CHANNEL" staged-repo "r2:mydia-flatpak/$CHANNEL"
+
+      - name: Publish the .flatpakrepo files
+        run: |
+          set -euo pipefail
+          ./player/flatpak/make-flatpakrepo.sh repofiles
+          rclone copy repofiles r2:mydia-flatpak --include '*.flatpakrepo'
+
+      - name: Verify the published repo end to end
+        env:
+          CHANNEL: ${{ needs.player-flatpak.outputs.channel }}
+        run: |
+          set -euo pipefail
+          # Detection, not prevention: the GitHub release is already published
+          # by now. A failure here means running the rollback procedure in
+          # docs/contributing/releasing.md.
+          if [ "$CHANNEL" = "beta" ]; then
+            REPOFILE="https://flatpak.mydia.dev/mydia-beta.flatpakrepo"
+            REMOTE="mydia-beta"
+          else
+            REPOFILE="https://flatpak.mydia.dev/mydia.flatpakrepo"
+            REMOTE="mydia"
+          fi
+
+          flatpak remote-add --user --if-not-exists --from "$REMOTE" "$REPOFILE"
+          flatpak install --user -y "$REMOTE" dev.mydia.player
+          flatpak info --user dev.mydia.player
+          echo "Verified: dev.mydia.player installs from $REPOFILE"
