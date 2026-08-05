@@ -39,6 +39,7 @@ defmodule Mydia.Streaming.Candidates do
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
+          Ecto.Query.CastError -> {:error, :not_found}
         end
 
       "episode" ->
@@ -51,6 +52,7 @@ defmodule Mydia.Streaming.Candidates do
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
+          Ecto.Query.CastError -> {:error, :not_found}
         end
 
       "file" ->
@@ -59,6 +61,7 @@ defmodule Mydia.Streaming.Candidates do
           {:ok, media_file}
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
+          Ecto.Query.CastError -> {:error, :not_found}
         end
 
       _ ->

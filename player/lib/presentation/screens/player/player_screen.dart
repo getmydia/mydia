@@ -684,15 +684,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         });
       }
 
-      // Ask about the *file*, not the media item. Keying this on mediaId left
+      // Ask about the *file* the user picked. Keying this on mediaId left
       // the server to pick one of the item's files with no way to express the
       // user's choice, and its pick then won on the direct-play path below.
-      // `content_type: "file"` is already supported server-side.
+      //
+      // The exception is the `'offline'` sentinel: a downloaded item whose
+      // local file has gone missing falls through to streaming from above,
+      // still carrying that sentinel instead of a real file id. There is no
+      // file to ask about, so ask about the media item and let the server rank.
+      final byFile = widget.fileId != 'offline';
       final candidatesResult = await _fetchStreamingCandidates(
         graphqlClient,
-        'file',
-        widget.fileId,
+        byFile ? 'file' : (widget.mediaType == 'movie' ? 'movie' : 'episode'),
+        byFile ? widget.fileId : widget.mediaId,
       );
+
+      // The file actually being played. Normally the user's choice; on the
+      // offline fall-through it is whatever the server ranked highest.
+      final playFileId =
+          byFile ? widget.fileId : (candidatesResult?.fileId ?? widget.fileId);
 
       // Determine if direct play is possible
       final canDirect = !kIsWeb &&
@@ -740,12 +750,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       if (canDirect) {
         // Direct play path (native only)
-        debugPrint('[PlayerScreen] Direct play for file_id=${widget.fileId}');
+        debugPrint('[PlayerScreen] Direct play for file_id=$playFileId');
 
         if (isP2PMode) {
           mediaSource = ref
               .read(localProxyServiceProvider)
-              .buildDirectStreamUrl(widget.fileId);
+              .buildDirectStreamUrl(playFileId);
         } else {
           // Get media token for URL (if available)
           final mediaTokenService =
@@ -754,7 +764,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           final mediaToken = await mediaTokenService.getToken();
 
           mediaSource =
-              '$serverUrl/api/v1/stream/file/${widget.fileId}?strategy=DIRECT_PLAY';
+              '$serverUrl/api/v1/stream/file/$playFileId?strategy=DIRECT_PLAY';
           if (mediaToken != null) {
             mediaSource += '&token=$mediaToken';
           } else {
@@ -782,7 +792,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           MutationOptions(
             document: documentNodeMutationStartStreamingSession,
             variables: Variables$Mutation$StartStreamingSession(
-              fileId: widget.fileId,
+              fileId: playFileId,
               strategy: hlsStrategy,
               startPosition:
                   startPositionSeconds > 0 ? startPositionSeconds : null,

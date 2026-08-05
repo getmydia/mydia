@@ -277,6 +277,17 @@ defmodule Mydia.Streaming.CandidatesTest do
       movie = media_item_fixture(%{type: "movie"})
       assert {:error, :no_media_files} = Candidates.resolve_media_file("movie", movie.id)
     end
+
+    test "a malformed id reports :not_found instead of raising" do
+      # binary_id primary keys reject anything that doesn't parse as a UUID
+      # with Ecto.Query.CastError, not Ecto.NoResultsError. The player sends
+      # the literal string "offline" here when a downloaded file's local
+      # copy has gone missing and playback falls through to streaming — that
+      # has to come back as a clean not-found, not a crash report.
+      assert {:error, :not_found} = Candidates.resolve_media_file("file", "not-a-uuid")
+      assert {:error, :not_found} = Candidates.resolve_media_file("movie", "not-a-uuid")
+      assert {:error, :not_found} = Candidates.resolve_media_file("episode", "not-a-uuid")
+    end
   end
 
   # Helpers
