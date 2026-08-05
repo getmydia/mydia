@@ -2070,12 +2070,11 @@ defmodule Mydia.Library do
         #
         # Accepts: callers that still pass a path string rather than a
         # library path id.
-        # Source: no in-repo caller passes this option today; it is kept for
-        # external callers (operator scripts invoked through `mydia rpc`,
-        # third-party integrations) that were written against this context
-        # function before `library_path_id` existed.
-        # Removing it would: turn those callers' filter into a match-nothing
-        # query with no error, which reads as an empty library.
+        # Source: no in-repo caller passes this option today, and no
+        # external consumer is known. Retention here is precautionary, not
+        # evidence of an actual caller.
+        # Removing it would: turn any caller still using it into a
+        # match-nothing query with no error, which reads as an empty library.
         Logger.warning("path_prefix filter is deprecated, use library_path_id instead")
         query
 
