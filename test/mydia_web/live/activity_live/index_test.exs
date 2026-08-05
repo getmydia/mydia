@@ -4,6 +4,21 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
   alias Mydia.Events
+  alias Mydia.Events.Presentation
+
+  # The category an event type is actually recorded under by the `Mydia.Events`
+  # helpers. It is not the type's namespace: `media_item.*` is recorded as
+  # "media" and `job.*` as "system", so deriving it from the type would produce
+  # fixtures no code path ever writes.
+  @category_by_namespace %{
+    "download" => "downloads",
+    "job" => "system",
+    "media_file" => "media",
+    "media_item" => "media",
+    "playback" => "playback",
+    "plugin" => "plugin",
+    "search" => "search"
+  }
 
   describe "Activity feed" do
     setup %{conn: conn} do
@@ -117,7 +132,7 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
         Enum.reduce_while(1..10, nil, fn _attempt, _acc ->
           html = render(view)
 
-          if html =~ "New Movie" && html =~ "Added movie: New Movie" do
+          if html =~ "New Movie" && html =~ "Added to library: New Movie (movie)" do
             {:halt, html}
           else
             Process.sleep(50)
@@ -127,7 +142,7 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
 
       # The view should have received the update and re-rendered with the event
       assert html =~ "New Movie"
-      assert html =~ "Added movie: New Movie"
+      assert html =~ "Added to library: New Movie (movie)"
     end
 
     test "formats event descriptions correctly", %{conn: conn} do
@@ -165,9 +180,9 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       {:ok, _view, html} = live(conn, ~p"/activity")
 
       # Check formatted descriptions
-      assert html =~ "Added movie: Inception"
+      assert html =~ "Added to library: Inception (movie)"
       assert html =~ "Download completed: Test.File.mkv"
-      assert html =~ "Download failed for: Failed.File.mkv"
+      assert html =~ "Download failed: Failed.File.mkv"
       assert html =~ "Connection timeout"
     end
 
@@ -227,6 +242,151 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert has_element?(view, "button", "Search")
       assert has_element?(view, "button", "System")
       assert has_element?(view, "button", "Errors")
+    end
+
+    test "labels every feed-visible event type instead of printing its key", %{conn: conn} do
+      types = Presentation.known_types() -- Presentation.feed_hidden_types()
+
+      for type <- types do
+        [namespace, _action] = String.split(type, ".")
+
+        category =
+          Map.get_lazy(@category_by_namespace, namespace, fn ->
+            flunk(
+              "no real category mapped for event namespace #{inspect(namespace)}; " <>
+                "add it to @category_by_namespace"
+            )
+          end)
+
+        {:ok, _} =
+          Events.create_event(%{
+            category: category,
+            type: type,
+            actor_type: :system,
+            actor_id: "test",
+            metadata: %{"title" => "Fixture Title"}
+          })
+      end
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      for type <- types do
+        refute html =~ ">#{type}<", "#{type} rendered as a raw key"
+      end
+    end
+
+    test "renders a stalled download with a human label", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.stalled",
+          actor_type: :system,
+          actor_id: "download_monitor",
+          severity: :warning,
+          metadata: %{"title" => "Arrival 2160p", "message" => "no progress for 2h"}
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Download stalled: Arrival 2160p (no progress for 2h)"
+      refute html =~ "download.stalled"
+    end
+
+    test "excludes the plugin request audit trail from the feed", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.http_request",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{
+            "slug" => "tmdb-art",
+            "method" => "GET",
+            "host" => "api.themoviedb.org",
+            "status" => 200
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      refute html =~ "api.themoviedb.org"
+      assert html =~ "No events found"
+    end
+
+    test "excludes the plugin request audit trail from live inserts", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      {:ok, event} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.http_request",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{
+            "slug" => "tmdb-art",
+            "method" => "GET",
+            "host" => "api.themoviedb.org",
+            "status" => 200
+          }
+        })
+
+      send(view.pid, {:event_created, event})
+
+      refute render(view) =~ "api.themoviedb.org"
+    end
+
+    test "offers a playback filter chip that filters to playback events", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "playback",
+          type: "playback.finished",
+          actor_type: :user,
+          actor_id: "someone",
+          metadata: %{"completion_percentage" => 98, "origin" => "player"}
+        })
+
+      {:ok, _} =
+        Events.create_event(%{
+          category: "downloads",
+          type: "download.completed",
+          actor_type: :system,
+          actor_id: "system",
+          metadata: %{"title" => "Arrival"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      html =
+        view
+        |> element("button[phx-value-category='playback']")
+        |> render_click()
+
+      assert html =~ "Playback finished"
+      refute html =~ "Arrival"
+    end
+
+    test "offers a plugins filter chip", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.update_available",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{
+            "slug" => "tmdb-art",
+            "current_version" => "1.0.0",
+            "latest_version" => "1.2.0"
+          }
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      html =
+        view
+        |> element("button[phx-value-category='plugin']")
+        |> render_click()
+
+      assert html =~ "Plugin update available: tmdb-art 1.0.0 to 1.2.0"
     end
   end
 end

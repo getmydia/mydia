@@ -21,6 +21,7 @@ import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/platform_features.dart';
+import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
@@ -199,6 +200,36 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _watchedInvalidationSent = false;
 
   StreamSubscription<Duration>? _positionSubscription;
+
+  /// Keeps the audio track list current as media_kit revises it. Detection
+  /// cannot be a one-shot sample after `open()`: mpv publishes tracks only
+  /// once it has probed the file, and a probe that outruns the sample used to
+  /// leave the selector empty for the rest of the session.
+  StreamSubscription<Tracks>? _tracksSubscription;
+
+  /// media_kit reports playback failures asynchronously, long after
+  /// [Player.open] has returned, so the try/catch around initialisation cannot
+  /// see them. Without this the failure has nowhere to go: the screen sits
+  /// there with its loading state cleared and its timeline running off the
+  /// duration the server supplied, and a stream that never delivers a byte
+  /// looks exactly like one that is merely dark.
+  StreamSubscription<String>? _errorSubscription;
+
+  /// The furthest real playback position observed so far, seeded with the
+  /// resume offset so a seek is not mistaken for progress.
+  Duration _furthestPosition = Duration.zero;
+
+  /// Whether playback has ever actually moved forward.
+  ///
+  /// This gates [_onPlaybackError], and the gate is the whole reason that
+  /// handler is safe. media_kit's error stream carries every mpv log line at
+  /// error level, which includes recoverable decoder (`vd`/`ad`) and network
+  /// (`ffmpeg tcp:`) complaints that a healthy stream shrugs off. Replacing a
+  /// playing video with an error page over one of those would be a worse bug
+  /// than the one this exists to fix. A stream that has never advanced is not
+  /// having a hiccup: it never played at all, and a black screen is all the
+  /// viewer would otherwise get.
+  bool _playbackAdvanced = false;
   bool _isLoading = true;
   String? _error;
   String? _loadingMessage;
@@ -1111,6 +1142,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player = player;
     _videoController = VideoController(player);
 
+    // Bound before `open` deliberately: a source that fails to resolve at all
+    // (a deleted file id, a dead HLS session) errors during the open itself,
+    // which a subscription attached afterwards would miss entirely.
+    //
+    // This is a brand new `Player`, so nothing it does has been observed yet:
+    // a previous source's progress must not vouch for this one.
+    _playbackAdvanced = false;
+    _furthestPosition = Duration.zero;
+    await _errorSubscription?.cancel();
+    _errorSubscription = player.stream.error.listen(_onPlaybackError);
+
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
     // source switch, a session restart, or a fresh `PlayerScreen` state for
     // a new queue item. It is *not* re-bound by navigating to the next
@@ -1119,6 +1161,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // `initState` and this call do not run again then. The sizer cancels
     // the previous subscription itself.
     _windowSizer?.bindVideoParams(player.stream.videoParams);
+
+    // Subscribe before opening. `player.stream.tracks` is a plain broadcast
+    // stream with no replay, so a revision published between `open()` and the
+    // detection pass below would otherwise be lost — which is the whole
+    // failure this guards against.
+    await _tracksSubscription?.cancel();
+    _tracksSubscription = watchAudioTracks(
+      player.stream.tracks,
+      _onAudioTracksDetected,
+    );
 
     // Open media
     await player.open(
@@ -1129,7 +1181,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Wait for player to be ready
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // Detect available tracks from media_kit
+    // Detect available tracks from media_kit. Covers whatever mpv already
+    // knew before the subscription above went live; anything discovered
+    // later arrives through that subscription instead.
     _detectTracks();
 
     // A plain seek, not a `seekToReal`: these paths hold the whole file, so
@@ -1138,6 +1192,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (plan.resumes) {
       await player.seek(plan.position);
     }
+
+    // The bar a position has to clear to count as playback. Zero on the HLS
+    // branch, which always arrives here with `ResumePlan.fromStart` because
+    // its offset went into FFmpeg's `-ss` instead, so its player-local
+    // coordinates genuinely do start at zero.
+    _furthestPosition = plan.position;
 
     // Start playback
     await player.play();
@@ -1222,6 +1282,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   /// Fetch streaming candidates from the server via GraphQL.
+  ///
+  /// `networkOnly` is load-bearing. This query is keyed by *content* id, not by
+  /// file id, so its cache entry outlives the file it describes: replacing an
+  /// episode's file (a manual delete and re-download, or an automatic quality
+  /// upgrade, which supersedes the row and deletes the old one) leaves the
+  /// entry pointing at a `fileId` that no longer exists. The direct-play branch
+  /// below takes its id from this response rather than from the route, so a
+  /// cached hit sends playback to a deleted file: the server answers "media
+  /// file not found in database", no bytes arrive, and the screen stays black
+  /// while the timeline runs off the equally stale cached duration. The default
+  /// policy for a one-shot `query()` is `cacheFirst` and the store is Hive on
+  /// disk, so that state survives restarts and never self-heals.
+  ///
+  /// `cacheAndNetwork` is not the fix: on a one-shot `client.query()` it
+  /// returns the cached result and discards the network one, which is the same
+  /// defect `core/graphql/watch/query_watcher.dart` documents. Nothing is lost
+  /// by going to the network here — the offline branch returns long before this
+  /// runs, and every remaining path needs the server to serve a single byte.
   Future<Query$StreamingCandidates$streamingCandidates?>
       _fetchStreamingCandidates(
     GraphQLClient graphqlClient,
@@ -1236,6 +1314,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             contentType: contentType,
             id: id,
           ).toJson(),
+          fetchPolicy: FetchPolicy.networkOnly,
         ),
       );
 
@@ -1419,33 +1498,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (player == null) return;
 
     // --- Audio tracks ---
-    final mkAudioTracks = player.state.tracks.audio;
-    final audioTracks = <app_models_audio.AudioTrack>[];
-    final audioMap = <String, AudioTrack>{};
-
-    for (final mkTrack in mkAudioTracks) {
-      // Skip the "auto" and "no" sentinel tracks
-      if (mkTrack == AudioTrack.auto() || mkTrack == AudioTrack.no()) continue;
-
-      final appTrack = app_models_audio.AudioTrack(
-        id: mkTrack.id,
-        language: mkTrack.language ?? 'und',
-        title: mkTrack.title,
-      );
-      audioTracks.add(appTrack);
-      audioMap[appTrack.id] = mkTrack;
-    }
-
-    // Mark first track as default if available
-    if (audioTracks.isNotEmpty) {
-      final firstTrack = audioTracks.first;
-      audioTracks[0] = app_models_audio.AudioTrack(
-        id: firstTrack.id,
-        language: firstTrack.language,
-        title: firstTrack.title,
-        isDefault: true,
-      );
-    }
+    final audioDetection = detectAudioTracks(player.state.tracks.audio);
 
     // --- Subtitle tracks ---
     final mkSubtitleTracks = player.state.tracks.subtitle;
@@ -1501,25 +1554,50 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     }
 
-    _audioTracks = audioTracks;
-    _mediaKitAudioTrackMap = audioMap;
+    _audioTracks = audioDetection.tracks;
+    _mediaKitAudioTrackMap = audioDetection.byId;
     _mediaKitSubtitleTrackMap = subtitleMap;
 
-    // Auto-select the current audio track
-    final currentMkAudio = player.state.track.audio;
-    if (currentMkAudio != AudioTrack.auto() &&
-        currentMkAudio != AudioTrack.no()) {
-      for (final appTrack in _audioTracks) {
-        if (_mediaKitAudioTrackMap[appTrack.id]?.id == currentMkAudio.id) {
-          _selectedAudioTrack = appTrack;
-          break;
-        }
-      }
-    }
+    _syncSelectedAudioTrack();
 
     debugPrint('[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
         '${_subtitleTracks.length} subtitle tracks '
         '(directPlay=$_isDirectPlay)');
+  }
+
+  /// Point [_selectedAudioTrack] at whichever detected track media_kit is
+  /// actually playing, so the selector opens on the real current choice.
+  void _syncSelectedAudioTrack() {
+    final player = _player;
+    if (player == null) return;
+
+    final currentMkAudio = player.state.track.audio;
+    if (currentMkAudio == AudioTrack.auto() ||
+        currentMkAudio == AudioTrack.no()) {
+      return;
+    }
+
+    for (final appTrack in _audioTracks) {
+      if (_mediaKitAudioTrackMap[appTrack.id]?.id == currentMkAudio.id) {
+        _selectedAudioTrack = appTrack;
+        return;
+      }
+    }
+  }
+
+  /// Adopt a track list media_kit published after playback opened.
+  ///
+  /// The audio button is gated on `audioTrackCount > 0`, so until this lands
+  /// a late-probing file leaves it disabled with no way to reach a second
+  /// language.
+  void _onAudioTracksDetected(AudioTrackDetection detection) {
+    if (!mounted) return;
+
+    setState(() {
+      _audioTracks = detection.tracks;
+      _mediaKitAudioTrackMap = detection.byId;
+      _syncSelectedAudioTrack();
+    });
   }
 
   /// Build a full subtitle URL from a relative URL path.
@@ -1583,6 +1661,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = _player;
     if (player == null || !mounted) return;
 
+    // Strictly greater, against a mark seeded with the resume offset, so that
+    // neither a resume seek nor a position that simply stands still counts as
+    // playback. See [_playbackAdvanced].
+    final position = player.state.position;
+    if (position > _furthestPosition) {
+      _furthestPosition = position;
+      _playbackAdvanced = true;
+    }
+
     _maybeAutoSkipSegment(player);
 
     // Check if video is near completion (90%)
@@ -1603,6 +1690,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _saveProgress().whenComplete(_invalidateAfterPlayback);
       }
     }
+  }
+
+  /// Surface a playback failure media_kit reported after the media opened.
+  ///
+  /// Only fatal-looking failures reach the UI: see [_playbackAdvanced] for why
+  /// an error arriving mid-playback is logged and otherwise ignored.
+  ///
+  /// Clearing [_isLoading] matters as much as setting [_error]: a failure
+  /// during `open` leaves the screen still loading, and `_buildBody` checks
+  /// the loading state first, so an error set on its own would never be
+  /// reached.
+  void _onPlaybackError(String message) {
+    debugPrint('[PlayerScreen] Playback error: $message');
+    if (!mounted) return;
+
+    if (_playbackAdvanced) {
+      // Already playing, so this is something the stream can survive. Killing
+      // the video over it would be the regression, not the fix.
+      return;
+    }
+
+    setState(() {
+      _error = playbackErrorMessage(message);
+      _isLoading = false;
+    });
   }
 
   /// Seek past a detected segment the viewer opted into skipping.
@@ -2008,6 +2120,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
         await _positionSubscription?.cancel();
         _positionSubscription = null;
+        await _tracksSubscription?.cancel();
+        _tracksSubscription = null;
+        await _errorSubscription?.cancel();
+        _errorSubscription = null;
         _progressService?.stopSync();
         await _player?.dispose();
         _player = null;
@@ -2413,8 +2529,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       web_lifecycle.unregisterBeforeUnload();
     }
 
-    // Cancel stream subscription to prevent memory leak
+    // Cancel stream subscriptions to prevent memory leaks
     _positionSubscription?.cancel();
+    _tracksSubscription?.cancel();
+    _errorSubscription?.cancel();
 
     // Cancel auto-play timer
     _upNextTimer?.cancel();
@@ -2468,6 +2586,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void> _restartLocalPlayback() async {
     await _positionSubscription?.cancel();
     _positionSubscription = null;
+    await _tracksSubscription?.cancel();
+    _tracksSubscription = null;
+    await _errorSubscription?.cancel();
+    _errorSubscription = null;
     _progressService?.stopSync();
 
     final player = _player;
@@ -3051,4 +3173,84 @@ Future<void> _adoptAndRemember(
   } catch (e) {
     debugPrint('[PlayerScreen] Could not save default quality: $e');
   }
+}
+
+/// media_kit's current audio track list mapped onto the app's own model,
+/// together with the reverse lookup needed to hand a chosen track back to
+/// media_kit.
+@visibleForTesting
+class AudioTrackDetection {
+  const AudioTrackDetection({required this.tracks, required this.byId});
+
+  /// Selectable tracks, in the order media_kit reports them. Never contains
+  /// the `auto`/`no` sentinels.
+  final List<app_models_audio.AudioTrack> tracks;
+
+  /// [app_models_audio.AudioTrack.id] to the media_kit track it came from.
+  /// `_showAudioSelector` passes the resolved value to `setAudioTrack`, so a
+  /// missing entry silently no-ops the user's choice.
+  final Map<String, AudioTrack> byId;
+}
+
+/// Maps media_kit's audio tracks onto the app's model.
+///
+/// Extracted as a free function so the mapping can be unit-tested without a
+/// live `Player` — see [shouldRestartForSeek]'s dartdoc for why one cannot be
+/// constructed under `flutter test`.
+///
+/// Which track counts as the default comes from media_kit's own `isDefault`
+/// flag, which carries the container's disposition. Position is only the
+/// fallback, for files that flag nothing: a dual-language release can order
+/// its tracks one way and flag another, and picking by position alone
+/// mislabels those.
+@visibleForTesting
+AudioTrackDetection detectAudioTracks(List<AudioTrack> mkTracks) {
+  final tracks = <app_models_audio.AudioTrack>[];
+  final byId = <String, AudioTrack>{};
+
+  for (final mkTrack in mkTracks) {
+    // Skip the "auto" and "no" sentinel tracks
+    if (mkTrack == AudioTrack.auto() || mkTrack == AudioTrack.no()) continue;
+
+    tracks.add(
+      app_models_audio.AudioTrack(
+        id: mkTrack.id,
+        language: mkTrack.language ?? 'und',
+        title: mkTrack.title,
+        isDefault: mkTrack.isDefault ?? false,
+      ),
+    );
+    byId[mkTrack.id] = mkTrack;
+  }
+
+  if (tracks.isNotEmpty && !tracks.any((t) => t.isDefault)) {
+    final first = tracks.first;
+    tracks[0] = app_models_audio.AudioTrack(
+      id: first.id,
+      language: first.language,
+      title: first.title,
+      isDefault: true,
+    );
+  }
+
+  return AudioTrackDetection(tracks: tracks, byId: byId);
+}
+
+/// Reports an [AudioTrackDetection] every time media_kit revises [tracks].
+///
+/// mpv discovers tracks asynchronously while it probes the file, and revises
+/// the list afterwards, so sampling it once at a fixed moment after `open()`
+/// races the probe. On a slow enough source the sample lands before any audio
+/// track exists and the selector is left permanently empty. Driving detection
+/// off the stream instead means a late arrival still reaches the UI.
+///
+/// `player.stream.tracks` is a plain broadcast stream with no replay, so
+/// callers must subscribe before opening the media and still run a detection
+/// pass afterwards to cover anything emitted in between.
+@visibleForTesting
+StreamSubscription<Tracks> watchAudioTracks(
+  Stream<Tracks> tracks,
+  void Function(AudioTrackDetection detection) onDetected,
+) {
+  return tracks.listen((t) => onDetected(detectAudioTracks(t.audio)));
 }

@@ -165,3 +165,13 @@ docs/research/
 # Subagent-driven-development scratch (ledger, briefs, review packages)
 .superpowers/
 player/ios/scripts/test-ci-signing.sh
+
+# Flatpak build artifacts. Produced in the repository root by the
+# flatpak-builder and publish commands in docs/contributing/releasing.md.
+.flatpak-builder/
+build-dir/
+staged-repo/
+live-repo/
+dryrun-live/
+dryrun-dest/
+repofiles/

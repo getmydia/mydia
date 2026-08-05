@@ -100,7 +100,13 @@ defmodule Mydia.Plugins.Manifest do
             min_host_version: nil
 
   # v1 event catalog (KTD3): a curated subset of existing event `type` strings
-  # dispatched off the "events:all" bus.
+  # dispatched off the "events:all" bus. This is a deliberate, narrower public
+  # contract than `Mydia.Events.Presentation.known_types/0` — not every
+  # registered event is safe or useful to hand to a plugin. The subset
+  # invariant (every entry here must also be in the presentation registry) is
+  # enforced by a test in `test/mydia/events/presentation_test.exs`, not by
+  # code, so renaming or removing a type below must be checked against that
+  # registry by hand.
   @event_catalog ~w(
     media_item.added
     media_item.updated
@@ -143,7 +149,14 @@ defmodule Mydia.Plugins.Manifest do
   # multiline textarea (used for template fields); otherwise like `string`.
   @setting_types ~w(string url secret enum text)
 
-  @doc "Returns the v1 event catalog (allowed `events:subscribe` values)."
+  @doc """
+  Returns the v1 event catalog: the plugin subscription contract for
+  `events:subscribe` (allowed values).
+
+  This is a deliberate subset of `Mydia.Events.Presentation.known_types/0`,
+  not a mirror of it — plugins only ever see the events curated for the
+  public contract.
+  """
   @spec event_catalog() :: [String.t()]
   def event_catalog, do: @event_catalog
 

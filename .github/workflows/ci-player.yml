@@ -298,3 +298,69 @@ jobs:
       - name: Check web icons are current
         working-directory: player
         run: tool/gen-web-icons.sh --check
+
+  flatpak-validate:
+    name: Flatpak / Validate metadata
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Seconds, not minutes. Catches most manifest metadata mistakes long
+      # before the full flatpak-build job below finishes compiling mpv.
+      - name: Install validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils appstream
+
+      - name: Validate desktop entry
+        run: desktop-file-validate player/flatpak/dev.mydia.player.desktop
+
+      - name: Validate AppStream metainfo
+        run: appstreamcli validate --explain player/flatpak/dev.mydia.player.metainfo.xml
+
+  flatpak-build:
+    name: Flatpak / Build
+    runs-on: ubuntu-latest
+    # mpv, libplacebo and libass account for roughly a third of this; the
+    # Flutter build and its Rust cdylib account for the rest.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update
+          # appstream provides appstreamcli, which flatpak-builder shells out to
+          # on the host during export. Without it the build fails at the very
+          # last step, after everything has already compiled.
+          sudo apt-get install -y flatpak flatpak-builder xvfb appstream
+
+      - name: Allow unprivileged user namespaces
+        # Ubuntu 24.04 restricts these through AppArmor, which breaks the
+        # bubblewrap sandbox flatpak-builder needs.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Add Flathub and install the runtime
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            org.gnome.Platform//50 org.gnome.Sdk//50 \
+            org.freedesktop.Sdk.Extension.llvm21//25.08
+
+      - name: Build
+        run: |
+          flatpak-builder --user --force-clean --disable-rofiles-fuse \
+            --repo=staged-repo --default-branch=stable \
+            build-dir player/flatpak/dev.mydia.player.yml
+
+      - name: Install and smoke test
+        run: |
+          flatpak remote-add --user --no-gpg-verify --if-not-exists \
+            staged "$PWD/staged-repo"
+          flatpak install --user -y --reinstall staged dev.mydia.player
+          ./player/flatpak/smoke-test.sh stable
