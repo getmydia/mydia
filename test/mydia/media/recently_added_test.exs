@@ -167,6 +167,19 @@ defmodule Mydia.Media.RecentlyAddedTest do
       assert entry.latest_episode == nil
     end
 
+    test "a show reports no latest episode when its newest slot is unmatched files",
+         %{since: since} do
+      show = media_item_fixture(%{type: "tv_show"})
+      old_ep = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      backdate_media_file(media_file_fixture(%{episode_id: old_ep.id}), @long_ago)
+      backdate_media_file(media_file_fixture(%{media_item_id: show.id}), @yesterday)
+
+      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert entry.new_episode_count == 1
+      assert entry.latest_episode == nil
+    end
+
     test "orders newest first", %{since: since} do
       older = media_item_fixture(%{type: "movie", title: "Older"})
       newer = media_item_fixture(%{type: "movie", title: "Newer"})

@@ -180,8 +180,12 @@ defmodule Mydia.Media.RecentlyAdded do
     |> Map.new(&{&1.id, &1})
   end
 
-  # The newest slot per item, resolved to an episode. Slots whose episode_id is
-  # NULL (unmatched files) contribute a timestamp but no episode to name.
+  # The newest slot per item, resolved to an episode. The max must be taken
+  # over ALL of an item's slots, not just the matched ones — filtering out
+  # unmatched slots before the max would name an older matched episode for an
+  # item whose newest arrival was actually an unmatched file. Slots whose
+  # episode_id is NULL (unmatched files) contribute a timestamp but no episode
+  # to name.
   defp load_latest_episodes([]), do: %{}
 
   defp load_latest_episodes(rows) do
@@ -192,23 +196,24 @@ defmodule Mydia.Media.RecentlyAdded do
     # `subquery/1` returns an %Ecto.SubQuery{}, not a query, so it cannot be
     # piped into `where/3`. It has to be the source of a `from`.
     newest_episode_ids =
-      from(s in subquery(slots),
-        where: s.media_item_id in ^ids and not is_nil(s.episode_id)
-      )
+      from(s in subquery(slots), where: s.media_item_id in ^ids)
       |> Repo.all()
       |> Enum.group_by(& &1.media_item_id)
-      |> Map.new(fn {item_id, slots} ->
-        {item_id, Enum.max_by(slots, & &1.first_added_at, DateTime).episode_id}
+      |> Map.new(fn {item_id, item_slots} ->
+        newest = Enum.max_by(item_slots, & &1.first_added_at, DateTime)
+        {item_id, newest.episode_id}
       end)
+
+    episode_ids = newest_episode_ids |> Map.values() |> Enum.reject(&is_nil/1)
 
     episodes =
       Episode
-      |> where([e], e.id in ^Map.values(newest_episode_ids))
+      |> where([e], e.id in ^episode_ids)
       |> Repo.all()
       |> Map.new(&{&1.id, &1})
 
     Map.new(newest_episode_ids, fn {item_id, episode_id} ->
-      {item_id, Map.get(episodes, episode_id)}
+      {item_id, episode_id && Map.get(episodes, episode_id)}
     end)
   end
 
