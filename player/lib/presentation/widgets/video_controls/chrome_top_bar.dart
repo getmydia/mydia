@@ -108,6 +108,12 @@ class ChromeTopBar extends StatelessWidget {
   /// Cast / AirPlay affordance. When null the pill is omitted.
   final Widget? castAction;
 
+  /// Cast tap handler. Lives here rather than inside [castAction] so the whole
+  /// pill is the tap target: an 18px glyph in a 36px pill would leave most of
+  /// the affordance dead to touch, and only the pill can offer the hover
+  /// cursor. When null the pill renders but is inert, like the back pill.
+  final VoidCallback? onCastTap;
+
   final PlayerGlassTier? tier;
 
   const ChromeTopBar({
@@ -115,6 +121,7 @@ class ChromeTopBar extends StatelessWidget {
     this.title,
     this.onBack,
     this.castAction,
+    this.onCastTap,
     this.tier,
   });
 
@@ -186,6 +193,7 @@ class ChromeTopBar extends StatelessWidget {
                 : GlassPill(
                     key: castKey,
                     tier: tier,
+                    onTap: onCastTap,
                     child: cast,
                   ),
           ),

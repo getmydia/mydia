@@ -2685,6 +2685,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               context.go('/');
             }
           },
+          // The chrome's own cast pill. Null on a build that cannot cast at
+          // all, which drops the pill rather than drawing an empty one.
+          castAction: castChromeActionFor(ref),
+          onCastTap: _showCastDevicePicker,
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
           // Hidden when the ladder collapsed to Original alone — a source

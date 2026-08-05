@@ -103,6 +103,46 @@ void main() {
       expect(find.byKey(ChromeTopBar.castKey), findsOneWidget);
     });
 
+    testWidgets('the cast pill fires onCastTap across its whole surface',
+        (tester) async {
+      // The tap target has to be the pill, not the glyph. An 18px icon in a
+      // 36px pill leaves most of the affordance dead to touch, so this taps
+      // the pill itself rather than the icon inside it.
+      var casted = false;
+      await tester.pumpWidget(
+        _host(
+          ChromeTopBar(
+            tier: PlayerGlassTier.full,
+            castAction: const Icon(Icons.cast_rounded),
+            onCastTap: () => casted = true,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(ChromeTopBar.castKey));
+      expect(casted, isTrue);
+    });
+
+    testWidgets('the cast pill is inert when onCastTap is null, like back',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeTopBar(
+            tier: PlayerGlassTier.full,
+            castAction: Icon(Icons.cast_rounded),
+          ),
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(ChromeTopBar.castKey),
+          matching: find.byType(GestureDetector),
+        ),
+        findsNothing,
+      );
+    });
+
     testWidgets(
         'title carries a small targeted shadow — measured (see '
         'pill_legibility_test.dart) to be load-bearing at this pill height, '

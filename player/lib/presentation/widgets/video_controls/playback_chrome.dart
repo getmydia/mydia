@@ -376,6 +376,7 @@ class PlaybackChrome extends StatefulWidget {
   final String? title;
   final VoidCallback? onBack;
   final Widget? castAction;
+  final VoidCallback? onCastTap;
 
   final VoidCallback? onAudioTap;
   final VoidCallback? onSubtitleTap;
@@ -399,6 +400,7 @@ class PlaybackChrome extends StatefulWidget {
     this.title,
     this.onBack,
     this.castAction,
+    this.onCastTap,
     this.onAudioTap,
     this.onSubtitleTap,
     this.onQualityTap,
@@ -467,6 +469,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                       title: widget.title,
                       onBack: widget.onBack,
                       castAction: widget.castAction,
+                      onCastTap: widget.onCastTap,
                     ),
                   ),
                 ),
