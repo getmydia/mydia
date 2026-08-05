@@ -53,4 +53,29 @@ fi
 flatpak remotes --user --columns=name | grep -qx mydia-test \
   || { echo "FAIL: remote was not registered"; exit 1; }
 
+# `flatpak remote-add --from URL` without a remote name fails with
+# "LOCATION must be specified". The form is `--from NAME LOCATION`. This test
+# used the correct form above and so did not catch the docs and workflow using
+# the broken one, which would have failed for every user and on every publish.
+# Guard the call sites directly.
+bad=$(grep -rn -- '--from https\?://' \
+        "$REPO_ROOT/docs/using" \
+        "$REPO_ROOT/docs/contributing" \
+        "$REPO_ROOT/site/src" \
+        "$REPO_ROOT/.github/workflows" 2>/dev/null || true)
+if [ -n "$bad" ]; then
+  echo "FAIL: 'flatpak remote-add --from' is missing its remote name:"
+  echo "$bad"
+  exit 1
+fi
+
+# shellcheck disable=SC2016  # matching the literal text "$REPOFILE" in the
+# workflow source, so expansion is exactly what must not happen.
+bad=$(grep -rnF -- '--from "$REPOFILE"' "$REPO_ROOT/.github/workflows" 2>/dev/null || true)
+if [ -n "$bad" ]; then
+  echo "FAIL: workflow passes a repo file to --from with no remote name:"
+  echo "$bad"
+  exit 1
+fi
+
 echo "PASS"

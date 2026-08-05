@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Generates the two .flatpakrepo files users add as remotes. The embedded
-# GPGKey is the base64 of the DER public key, which is what flatpak expects.
+# GPGKey is the base64 of the binary OpenPGP keyring that `gpg --dearmor`
+# produces, which is the form flatpak expects.
 #
 # The public key is an operator artifact, generated alongside the private key
 # and committed to this directory. It is deliberately not in the repository
@@ -23,7 +24,9 @@ if [ ! -f "$PUBKEY" ]; then
 fi
 
 mkdir -p "$OUT"
-KEY_B64="$(gpg --dearmor < "$PUBKEY" | base64 -w0)"
+# base64 -w0 is GNU-only and fails on macOS/BSD, where operators may run
+# this. `tr -d` strips the wrapping portably.
+KEY_B64="$(gpg --dearmor < "$PUBKEY" | base64 | tr -d '\n')"
 
 write_repo() {
   local file="$1" title="$2" url="$3" comment="$4"

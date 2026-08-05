@@ -74,7 +74,7 @@ the docs deploy.
 | `version` | required | Tag of an existing draft release. Ignored when `dry_run` is set. |
 | `dry_run` | `false` | Build, sign and notarize everything without publishing, pushing images, or uploading to stores. |
 | `accept_drift` | `false` | Proceed even though master has moved past the commit the draft targets. |
-| `allow_missing` | `""` | Comma-separated platforms whose failure must not block publish: `android`, `ios`, `macos`, `windows`, `linux`, `docker`. |
+| `allow_missing` | `""` | Comma-separated platforms whose failure must not block publish: `android`, `ios`, `macos`, `windows`, `linux`, `flatpak`, `docker`. |
 
 ### Patch releases
 
@@ -236,7 +236,7 @@ One-time operator actions. The release job fails without them.
    gpg --batch --pinentry-mode loopback --passphrase '' \
      --quick-generate-key "Mydia Flatpak Signing <releases@mydia.dev>" rsa4096 sign never
    KEYID=$(gpg --list-keys --with-colons releases@mydia.dev | awk -F: '/^fpr:/ {print $10; exit}')
-   gpg --export-secret-keys --armor "$KEYID" | base64 -w0 > flatpak-signing-key.b64
+   gpg --export-secret-keys --armor "$KEYID" | base64 | tr -d '\n' > flatpak-signing-key.b64
    gpg --export --armor "$KEYID" > player/flatpak/flatpak-signing-key.pub.asc
    echo "$KEYID"
    ```

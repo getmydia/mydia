@@ -6,7 +6,7 @@ stack, so nothing else needs installing.
 ## Stable
 
 ```bash
-flatpak remote-add --if-not-exists --from https://flatpak.mydia.dev/mydia.flatpakrepo
+flatpak remote-add --if-not-exists --from mydia https://flatpak.mydia.dev/mydia.flatpakrepo
 flatpak install mydia dev.mydia.player
 flatpak run dev.mydia.player
 ```
@@ -19,7 +19,7 @@ Beta tracks prereleases. It is the same application under a different remote,
 so pick one channel or the other rather than adding both.
 
 ```bash
-flatpak remote-add --if-not-exists --from https://flatpak.mydia.dev/mydia-beta.flatpakrepo
+flatpak remote-add --if-not-exists --from mydia-beta https://flatpak.mydia.dev/mydia-beta.flatpakrepo
 flatpak install mydia-beta dev.mydia.player
 ```
 
@@ -28,7 +28,7 @@ To move back to stable:
 ```bash
 flatpak uninstall dev.mydia.player
 flatpak remote-delete mydia-beta
-flatpak remote-add --if-not-exists --from https://flatpak.mydia.dev/mydia.flatpakrepo
+flatpak remote-add --if-not-exists --from mydia https://flatpak.mydia.dev/mydia.flatpakrepo
 flatpak install mydia dev.mydia.player
 ```
 

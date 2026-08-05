@@ -1400,7 +1400,7 @@ jobs:
             REMOTE="mydia"
           fi
 
-          flatpak remote-add --user --if-not-exists --from "$REPOFILE"
+          flatpak remote-add --user --if-not-exists --from "$REMOTE" "$REPOFILE"
           flatpak install --user -y "$REMOTE" dev.mydia.player
           flatpak info --user dev.mydia.player
           echo "Verified: dev.mydia.player installs from $REPOFILE"
