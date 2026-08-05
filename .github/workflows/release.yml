@@ -1361,8 +1361,14 @@ jobs:
           # That is what failed the flatpak publish on v0.13.0-beta.5. Creating
           # the directories outright does not depend on any of that.
           #
-          # Only the directories that are still empty after a build are listed.
-          # objects/ and refs/heads/ carry content and survive the round trip.
+          # The whole refs skeleton is recreated rather than just the subset a
+          # given build happens to leave empty, because mkdir -p on a directory
+          # that already exists costs nothing and does not require reasoning
+          # about which refs a build produced. refs/heads normally survives, in
+          # that it holds the app ref; it is listed for that reason, not because
+          # it is expected to be missing. objects/ is omitted because it always
+          # carries content, so its absence would mean a broken artifact rather
+          # than a dropped empty directory, and should fail loudly.
           mkdir -p \
             staged-repo/refs/heads \
             staged-repo/refs/mirrors \
