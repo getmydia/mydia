@@ -90,6 +90,20 @@ void main() {
       expect(QualityRung.fromStorageKey('4320p'), isNull);
       expect(QualityRung.fromStorageKey(''), isNull);
     });
+
+    test('an unreadable stored key falls back to Original for display', () {
+      // Exactly the expression the Settings tile renders. A key written by a
+      // newer build, or corrupted storage, must show a sensible label rather
+      // than an empty subtitle or a crash on the settings screen.
+      String label(String stored) =>
+          QualityRung.fromStorageKey(stored)?.label ??
+          QualityRung.original.label;
+
+      expect(label('720p'), '720p');
+      expect(label('auto'), 'Original');
+      expect(label('4320p'), 'Original');
+      expect(label(''), 'Original');
+    });
   });
 
   group('effectiveRungLabel', () {
