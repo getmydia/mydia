@@ -1,7 +1,11 @@
 defmodule MydiaWeb.SchemaTest do
-  use ExUnit.Case
+  use MydiaWeb.ConnCase
+
+  import Ecto.Query
 
   alias Absinthe.Schema
+  alias Mydia.AccountsFixtures
+  alias Mydia.MediaFixtures
 
   describe "GraphQL Schema" do
     test "schema compiles and introspects successfully" do
@@ -307,5 +311,299 @@ defmodule MydiaWeb.SchemaTest do
       assert "REVOKED" in enum_values
       assert "DELETED" in enum_values
     end
+  end
+
+  describe "recentlyAdded with content timestamps" do
+    setup do
+      %{user: AccountsFixtures.user_fixture()}
+    end
+
+    test "surfaces a long-owned show after a new episode arrives", %{user: user} do
+      show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "The Bear"})
+
+      episode =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 4,
+          episode_number: 2
+        })
+
+      file = MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+      MediaFixtures.backdate_media_file(file, DateTime.add(DateTime.utc_now(), -2, :day))
+
+      # The show record itself is ancient; only its content is new.
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^show.id),
+        set: [inserted_at: ~U[2024-01-01 00:00:00Z]]
+      )
+
+      query = """
+      query {
+        recentlyAdded(first: 10) {
+          id
+          title
+          addedAt
+          newEpisodeCount
+          latestSeasonNumber
+          latestEpisodeNumber
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => [item]}}} = run_query(query, %{}, user)
+
+      assert item["id"] == show.id
+      assert item["newEpisodeCount"] == 1
+      assert item["latestSeasonNumber"] == 4
+      assert item["latestEpisodeNumber"] == 2
+      refute String.starts_with?(item["addedAt"], "2024")
+    end
+
+    test "a movie reports nil episode context", %{user: user} do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      MediaFixtures.backdate_media_file(file, DateTime.add(DateTime.utc_now(), -2, :day))
+
+      query = """
+      query {
+        recentlyAdded(first: 10) {
+          id
+          newEpisodeCount
+          latestSeasonNumber
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => [item]}}} = run_query(query, %{}, user)
+
+      assert item["id"] == movie.id
+      assert item["newEpisodeCount"] == nil
+      assert item["latestSeasonNumber"] == nil
+    end
+
+    test "types: [TV_SHOW] excludes a recently-arrived movie", %{user: user} do
+      {show, _movie} = seed_recently_added_show_and_movie()
+
+      query = """
+      query {
+        recentlyAdded(first: 10, types: [TV_SHOW]) {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) == [show.id]
+    end
+
+    test "types: [MOVIE] excludes a recently-arrived show", %{user: user} do
+      {_show, movie} = seed_recently_added_show_and_movie()
+
+      query = """
+      query {
+        recentlyAdded(first: 10, types: [MOVIE]) {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) == [movie.id]
+    end
+
+    test "types: [MOVIE, TV_SHOW] returns both, since requesting every type means no filter",
+         %{user: user} do
+      {show, movie} = seed_recently_added_show_and_movie()
+
+      query = """
+      query {
+        recentlyAdded(first: 10, types: [MOVIE, TV_SHOW]) {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) |> Enum.sort() == Enum.sort([show.id, movie.id])
+    end
+
+    test "a second page after the cursor returns the next item, not an empty list",
+         %{user: user} do
+      newest = MediaFixtures.media_item_fixture(%{type: "movie", title: "Newest"})
+      middle = MediaFixtures.media_item_fixture(%{type: "movie", title: "Middle"})
+      oldest = MediaFixtures.media_item_fixture(%{type: "movie", title: "Oldest"})
+
+      MediaFixtures.backdate_media_file(
+        MediaFixtures.media_file_fixture(%{media_item_id: newest.id}),
+        DateTime.add(DateTime.utc_now(), -1, :day)
+      )
+
+      MediaFixtures.backdate_media_file(
+        MediaFixtures.media_file_fixture(%{media_item_id: middle.id}),
+        DateTime.add(DateTime.utc_now(), -2, :day)
+      )
+
+      MediaFixtures.backdate_media_file(
+        MediaFixtures.media_file_fixture(%{media_item_id: oldest.id}),
+        DateTime.add(DateTime.utc_now(), -3, :day)
+      )
+
+      first_page_query = "query { recentlyAdded(first: 1) { id } }"
+
+      assert {:ok, %{data: %{"recentlyAdded" => [first_item]}}} =
+               run_query(first_page_query, %{}, user)
+
+      assert first_item["id"] == newest.id
+
+      # The schema exposes no cursor field on recentlyAdded items; the
+      # resolver's own encoding (see decode_cursor/1 in DiscoveryResolver) is
+      # base64("cursor:<offset>"), built here directly rather than through a
+      # field the API doesn't provide.
+      cursor = Base.encode64("cursor:0")
+
+      second_page_query = """
+      query {
+        recentlyAdded(first: 1, after: "#{cursor}") {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => [second_item]}}} =
+               run_query(second_page_query, %{}, user)
+
+      assert second_item["id"] == middle.id
+      refute second_item["id"] == oldest.id
+    end
+
+    test "favorites reports the corrected timestamp with nil context", %{user: user} do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      MediaFixtures.backdate_media_file(file, ~U[2026-08-03 12:00:00Z])
+
+      favorite_item(user, movie)
+
+      query = """
+      query {
+        favorites(first: 10) {
+          id
+          addedAt
+          newEpisodeCount
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"favorites" => [item]}}} = run_query(query, %{}, user)
+
+      assert item["id"] == movie.id
+      assert item["addedAt"] =~ "2026-08-03"
+      assert item["newEpisodeCount"] == nil
+    end
+
+    test "unwatched orders by content arrival, not by record creation", %{user: user} do
+      stale = MediaFixtures.media_item_fixture(%{type: "movie", title: "Stale"})
+      stale_file = MediaFixtures.media_file_fixture(%{media_item_id: stale.id})
+      MediaFixtures.backdate_media_file(stale_file, ~U[2024-01-01 12:00:00Z])
+
+      fresh = MediaFixtures.media_item_fixture(%{type: "movie", title: "Fresh"})
+      fresh_file = MediaFixtures.media_file_fixture(%{media_item_id: fresh.id})
+      MediaFixtures.backdate_media_file(fresh_file, ~U[2026-08-03 12:00:00Z])
+
+      # Make the records themselves disagree with the content order, so a
+      # passing test cannot be explained by inserted_at.
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^fresh.id),
+        set: [inserted_at: ~U[2023-01-01 00:00:00Z]]
+      )
+
+      query = """
+      query {
+        unwatched(first: 10) {
+          id
+          addedAt
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"unwatched" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) == [fresh.id, stale.id]
+    end
+
+    test "collectionItems reports the corrected addedAt", %{user: user} do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      MediaFixtures.backdate_media_file(file, ~U[2026-08-03 12:00:00Z])
+
+      # The record itself is old; only its content is new.
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^movie.id),
+        set: [inserted_at: ~U[2024-01-01 00:00:00Z]]
+      )
+
+      collection = Mydia.CollectionsFixtures.collection_fixture(%{user: user})
+      {:ok, _count} = Mydia.Collections.add_items(collection, [movie.id])
+
+      query = """
+      query($collectionId: ID!) {
+        collectionItems(collectionId: $collectionId, first: 10) {
+          id
+          addedAt
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"collectionItems" => [item]}}} =
+               run_query(query, %{"collectionId" => collection.id}, user)
+
+      assert item["id"] == movie.id
+      assert item["addedAt"] =~ "2026-08-03"
+      refute item["addedAt"] =~ "2024-01-01"
+    end
+
+    test "rejects the new fields with a recognizable message when absent" do
+      # Pins the string that the player's downgrade detector matches on. If
+      # Absinthe ever rephrases this, the player guard must be updated in the
+      # same change.
+      query = "query { recentlyAdded(first: 1) { id noSuchField } }"
+
+      {:ok, %{errors: [error | _]}} = Absinthe.run(query, MydiaWeb.Schema)
+
+      assert error.message =~ "Cannot query field"
+    end
+  end
+
+  defp run_query(query, variables, user) do
+    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: %{current_user: user})
+  end
+
+  defp favorite_item(user, media_item) do
+    {:ok, _} = Mydia.Media.toggle_favorite(user.id, media_item.id)
+  end
+
+  # A show (linked the way production links episode files: episode_id set,
+  # media_item_id left NULL) and a movie, both with a file inside the 30-day
+  # window, so a `types:` filter has something real to exclude.
+  defp seed_recently_added_show_and_movie do
+    show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "The Bear"})
+
+    episode =
+      MediaFixtures.episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1
+      })
+
+    show_file = MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+    MediaFixtures.backdate_media_file(show_file, DateTime.add(DateTime.utc_now(), -2, :day))
+
+    movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+    movie_file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+    MediaFixtures.backdate_media_file(movie_file, DateTime.add(DateTime.utc_now(), -3, :day))
+
+    {show, movie}
   end
 end

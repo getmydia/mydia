@@ -54,6 +54,115 @@ query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextL
       thumbnailUrl
     }
     addedAt
+    newEpisodeCount
+    latestSeasonNumber
+    latestEpisodeNumber
+  }
+
+  upNext(first: $upNextLimit) {
+    progressState
+    episode {
+      id
+      seasonNumber
+      episodeNumber
+      title
+      airDate
+      thumbnailUrl
+      hasFile
+      files {
+        id
+        resolution
+        codec
+        audioCodec
+        hdrFormat
+        size
+        bitrate
+        directPlaySupported
+        streamUrl
+        directPlayUrl
+      }
+      progress {
+        positionSeconds
+        durationSeconds
+        percentage
+        watched
+        lastWatchedAt
+      }
+    }
+    show {
+      id
+      title
+      artwork {
+        posterUrl
+        backdropUrl
+        thumbnailUrl
+      }
+    }
+  }
+
+  favorites(first: $favoritesLimit) {
+    id
+    type
+    title
+    year
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
+  }
+}
+''';
+
+/// The pre-episode-context shape, for a server older than this build.
+const String homeScreenQueryLegacy = r'''
+query HomeScreen($continueWatchingLimit: Int, $recentlyAddedLimit: Int, $upNextLimit: Int, $favoritesLimit: Int) {
+  continueWatching(first: $continueWatchingLimit) {
+    id
+    type
+    title
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    progress {
+      positionSeconds
+      durationSeconds
+      percentage
+      watched
+      lastWatchedAt
+    }
+    showId
+    showTitle
+    seasonNumber
+    episodeNumber
+    files {
+      id
+      resolution
+      codec
+      audioCodec
+      hdrFormat
+      size
+      bitrate
+      directPlaySupported
+      streamUrl
+      directPlayUrl
+    }
+  }
+
+  recentlyAdded(first: $recentlyAddedLimit) {
+    id
+    type
+    title
+    year
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
   }
 
   upNext(first: $upNextLimit) {
@@ -131,6 +240,7 @@ class HomeController extends _$HomeController {
       ref,
       key: QueryKeys.home,
       document: gql(homeScreenQuery),
+      fallbackDocument: gql(homeScreenQueryLegacy),
       variables: homeScreenVariables,
       parse: HomeData.fromJson,
     );

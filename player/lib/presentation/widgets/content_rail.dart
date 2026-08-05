@@ -211,7 +211,7 @@ class _ContentRailState extends State<ContentRail> {
       return MediaCard(
         posterUrl: item.posterUrl,
         title: item.title,
-        subtitle: item.year?.toString(),
+        subtitle: item.newContentLabel ?? item.year?.toString(),
         width: cardSize.width,
         height: cardSize.height,
         onTap: () => widget.onItemTap?.call(item.id, item.type),

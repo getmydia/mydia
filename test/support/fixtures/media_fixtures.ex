@@ -3,6 +3,7 @@ defmodule Mydia.MediaFixtures do
   This module defines test helpers for creating entities via the `Mydia.Media` context.
   """
 
+  import Ecto.Query
   import Mydia.SettingsFixtures
 
   @doc """
@@ -129,5 +130,23 @@ defmodule Mydia.MediaFixtures do
     {:ok, media_file} = Mydia.Library.create_media_file(final_attrs)
 
     media_file
+  end
+
+  @doc """
+  Rewrites a media file's `inserted_at`.
+
+  `Mydia.Library.create_media_file/1` cannot set it (timestamps are not cast),
+  so any test that needs a file to look old has to go around the changeset.
+  """
+  def backdate_media_file(%Mydia.Library.MediaFile{} = media_file, %DateTime{} = at) do
+    at = DateTime.truncate(at, :second)
+
+    {1, _} =
+      Mydia.Repo.update_all(
+        from(f in Mydia.Library.MediaFile, where: f.id == ^media_file.id),
+        set: [inserted_at: at]
+      )
+
+    %{media_file | inserted_at: at}
   end
 end

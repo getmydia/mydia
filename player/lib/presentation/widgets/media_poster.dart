@@ -12,6 +12,7 @@ import 'progress_overlay.dart';
 class MediaPoster extends StatelessWidget {
   final String? posterUrl;
   final String title;
+  final String? subtitle;
   final double? progressPercentage;
   final bool isFavorite;
   final VoidCallback? onTap;
@@ -21,6 +22,7 @@ class MediaPoster extends StatelessWidget {
     super.key,
     this.posterUrl,
     required this.title,
+    this.subtitle,
     this.progressPercentage,
     this.isFavorite = false,
     this.onTap,
@@ -90,6 +92,17 @@ class MediaPoster extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ],
           ],
         ),

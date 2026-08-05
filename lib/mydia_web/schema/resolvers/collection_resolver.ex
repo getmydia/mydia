@@ -5,8 +5,8 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
 
   alias Mydia.Collections
 
-  alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
+  alias MydiaWeb.Schema.Resolvers.ItemBuilder
 
   @spec list_collections(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
@@ -40,10 +40,12 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
     first = Map.get(args, :first, 50)
     collection = Collections.get_collection!(user, id)
     items = Collections.list_collection_items(collection, limit: first)
+    added_at = Mydia.Media.RecentlyAdded.added_at_map(ids: Enum.map(items, & &1.id))
 
     result =
-      items
-      |> Enum.map(&build_recently_added_item/1)
+      Enum.map(items, fn item ->
+        ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
+      end)
 
     {:ok, result}
   rescue
@@ -68,30 +70,4 @@ defmodule MydiaWeb.Schema.Resolvers.CollectionResolver do
       poster_paths: Enum.map(posters, &ImageUrl.poster_url/1)
     }
   end
-
-  defp build_recently_added_item(media_item) do
-    %{
-      id: media_item.id,
-      type: String.to_existing_atom(media_item.type),
-      title: media_item.title,
-      year: media_item.year,
-      artwork: build_artwork(media_item),
-      added_at: media_item.inserted_at
-    }
-  end
-
-  defp build_artwork(%{metadata: nil}), do: nil
-
-  defp build_artwork(%{metadata: metadata}) do
-    poster_path = MetadataAccess.get(metadata, :poster_path)
-    backdrop_path = MetadataAccess.get(metadata, :backdrop_path)
-
-    %{
-      poster_url: ImageUrl.poster_url(poster_path),
-      backdrop_url: ImageUrl.backdrop_url(backdrop_path),
-      thumbnail_url: nil
-    }
-  end
-
-  defp build_artwork(_), do: nil
 end

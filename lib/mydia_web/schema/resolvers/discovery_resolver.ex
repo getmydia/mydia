@@ -5,8 +5,10 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
 
   alias Mydia.{Library, Media, Playback}
 
+  alias Mydia.Media.RecentlyAdded
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
+  alias MydiaWeb.Schema.Resolvers.ItemBuilder
 
   @spec continue_watching(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
@@ -40,39 +42,36 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   def recently_added(_parent, args, _info) do
     first = Map.get(args, :first, 20)
     after_cursor = Map.get(args, :after)
-    types = Map.get(args, :types)
+    thirty_days_ago = DateTime.add(DateTime.utc_now(), -30, :day)
 
-    # Filter to items added in last 30 days
-    thirty_days_ago = DateTime.utc_now() |> DateTime.add(-30, :day)
+    entries =
+      RecentlyAdded.list_recent(
+        since: thirty_days_ago,
+        types: requested_types(Map.get(args, :types)),
+        limit: pagination_limit(first, after_cursor)
+      )
 
-    # Build query options
-    opts = [preload: [], added_since: thirty_days_ago, has_files: true]
-
-    opts =
-      if types do
-        type_filter =
-          cond do
-            :movie in types and :tv_show in types -> nil
-            :movie in types -> "movie"
-            :tv_show in types -> "tv_show"
-            true -> nil
-          end
-
-        if type_filter, do: Keyword.put(opts, :type, type_filter), else: opts
-      else
-        opts
-      end
-
-    # Get recently added items (sorted by most recent first)
     all_items =
-      Media.list_media_items(opts)
-      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-      |> Enum.map(&build_recently_added_item/1)
+      Enum.map(entries, fn entry ->
+        ItemBuilder.recently_added_item(entry.media_item,
+          added_at: entry.content_added_at,
+          new_episode_count: entry.new_episode_count,
+          latest_episode: entry.latest_episode
+        )
+      end)
 
-    # Apply cursor pagination
-    items = paginate_simple(all_items, first, after_cursor)
+    {:ok, paginate_simple(all_items, first, after_cursor)}
+  end
 
-    {:ok, items}
+  # The GraphQL arg is a list of atoms; RecentlyAdded filters on the string
+  # column. Nil and a list covering both types both mean "no filter".
+  defp requested_types(nil), do: nil
+  defp requested_types([]), do: nil
+
+  defp requested_types(types) do
+    strings = Enum.map(types, &to_string/1)
+
+    if "movie" in strings and "tv_show" in strings, do: nil, else: strings
   end
 
   @spec up_next(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
@@ -126,10 +125,13 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
         {:ok, []}
 
       user ->
+        favorites = Media.list_user_favorites(user.id) |> maybe_filter_by_type(types)
+        added_at = RecentlyAdded.added_at_map(ids: Enum.map(favorites, & &1.id))
+
         all_items =
-          Media.list_user_favorites(user.id)
-          |> maybe_filter_by_type(types)
-          |> Enum.map(&build_recently_added_item/1)
+          Enum.map(favorites, fn item ->
+            ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
+          end)
 
         items = paginate_simple(all_items, first, after_cursor)
         {:ok, items}
@@ -157,12 +159,19 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
           |> Enum.reject(&is_nil/1)
           |> MapSet.new()
 
-        all_items =
+        unwatched =
           media_items
           |> Enum.reject(&MapSet.member?(watched_ids, &1.id))
           |> maybe_filter_by_type(types)
-          |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-          |> Enum.map(&build_recently_added_item/1)
+
+        added_at = RecentlyAdded.added_at_map(ids: Enum.map(unwatched, & &1.id))
+
+        all_items =
+          unwatched
+          |> Enum.sort_by(&(Map.get(added_at, &1.id) || &1.inserted_at), {:desc, DateTime})
+          |> Enum.map(fn item ->
+            ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
+          end)
 
         items = paginate_simple(all_items, first, after_cursor)
         {:ok, items}
@@ -205,6 +214,15 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
     end
   end
 
+  # `list_recent/1` takes `Enum.take` on this limit BEFORE loading each item's
+  # metadata and resolving its latest episode, so the limit here has to cover
+  # everything `paginate_simple/3` can slice from — the offset the cursor
+  # encodes, plus the page itself — or a page past the first would silently
+  # come back empty. Without a limit at all, every mount rebuilds and loads
+  # the entire 30-day window just to show `first` cards.
+  defp pagination_limit(first, nil), do: first
+  defp pagination_limit(first, after_cursor), do: decode_cursor(after_cursor) + 1 + first
+
   defp build_continue_watching_item(%{media_item_id: media_item_id} = progress, _user_id)
        when not is_nil(media_item_id) do
     media_item = Media.get_media_item!(media_item_id)
@@ -218,7 +236,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
           id: media_item.id,
           type: String.to_existing_atom(media_item.type),
           title: media_item.title,
-          artwork: build_artwork(media_item),
+          artwork: ItemBuilder.artwork(media_item),
           progress: format_progress(progress),
           files: files,
           show_title: nil,
@@ -260,37 +278,10 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
 
   defp build_continue_watching_item(_, _), do: nil
 
-  defp build_recently_added_item(media_item) do
-    %{
-      id: media_item.id,
-      type: String.to_existing_atom(media_item.type),
-      title: media_item.title,
-      year: media_item.year,
-      artwork: build_artwork(media_item),
-      added_at: media_item.inserted_at
-    }
-  end
+  defp build_episode_artwork(%{metadata: metadata} = episode, show) when not is_nil(metadata) do
+    still_path = MetadataAccess.get(episode.metadata, :still_path)
+    show_artwork = ItemBuilder.artwork(show)
 
-  defp build_artwork(%{metadata: nil}), do: nil
-
-  defp build_artwork(%{metadata: metadata}) do
-    poster_path = MetadataAccess.get(metadata, :poster_path)
-    backdrop_path = MetadataAccess.get(metadata, :backdrop_path)
-
-    %{
-      poster_url: ImageUrl.poster_url(poster_path),
-      backdrop_url: ImageUrl.backdrop_url(backdrop_path),
-      thumbnail_url: nil
-    }
-  end
-
-  defp build_artwork(_), do: nil
-
-  defp build_episode_artwork(%{metadata: metadata}, show) when not is_nil(metadata) do
-    still_path = MetadataAccess.get(metadata, :still_path)
-    show_artwork = build_artwork(show)
-
-    # Always include show's poster/backdrop, plus episode thumbnail if available
     %{
       poster_url: show_artwork && show_artwork.poster_url,
       backdrop_url: show_artwork && show_artwork.backdrop_url,
@@ -298,7 +289,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
     }
   end
 
-  defp build_episode_artwork(_episode, show), do: build_artwork(show)
+  defp build_episode_artwork(_episode, show), do: ItemBuilder.artwork(show)
 
   defp format_progress(progress) do
     %{

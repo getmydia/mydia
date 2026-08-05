@@ -220,6 +220,15 @@ defmodule MydiaWeb.Schema.QueryTypes do
     field :year, :integer
     field :artwork, :artwork
     field :added_at, non_null(:datetime)
+
+    @desc "Episodes whose first file arrived inside the recently-added window. Null for movies and for unwindowed lists."
+    field :new_episode_count, :integer
+
+    @desc "Season of the newest arrived episode. Null for movies and for unmatched files."
+    field :latest_season_number, :integer
+
+    @desc "Number of the newest arrived episode. Null for movies and for unmatched files."
+    field :latest_episode_number, :integer
   end
 
   @desc "An item in the up next rail (next episode to watch)"

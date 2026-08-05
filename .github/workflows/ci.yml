@@ -326,7 +326,9 @@ jobs:
         run: flutter pub run build_runner build
 
       - name: Run tests
-        run: flutter test
+        # --concurrency=1: the default concurrency silently drops 2-4 test
+        # files while still exiting 0, so this is load-bearing, not cosmetic.
+        run: flutter test --concurrency=1
 
   test-e2e:
     name: Test / E2E Browser
