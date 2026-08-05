@@ -643,6 +643,8 @@
       
         
       
+        
+      
     
     
     
@@ -1160,6 +1162,34 @@
     
   
     NixOS Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../using/how-to/install-player-linux/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install the player on Linux
   
 
     
@@ -2728,6 +2758,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#flatpak-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flatpak channels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Flatpak channels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-time-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First-time setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rolling-back-a-bad-flatpak-publish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rolling back a bad Flatpak publish
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#if-the-signing-key-is-lost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If the signing key is lost
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#release-notes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2886,6 +2966,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#flatpak-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flatpak channels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Flatpak channels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-time-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First-time setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rolling-back-a-bad-flatpak-publish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rolling back a bad Flatpak publish
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#if-the-signing-key-is-lost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If the signing key is lost
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#release-notes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3003,7 +3133,7 @@ the docs deploy.</p>
 <tr>
 <td><code>allow_missing</code></td>
 <td><code>""</code></td>
-<td>Comma-separated platforms whose failure must not block publish: <code>android</code>, <code>ios</code>, <code>macos</code>, <code>windows</code>, <code>linux</code>, <code>docker</code>.</td>
+<td>Comma-separated platforms whose failure must not block publish: <code>android</code>, <code>ios</code>, <code>macos</code>, <code>windows</code>, <code>linux</code>, <code>flatpak</code>, <code>docker</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -3113,6 +3243,87 @@ is the SQLite build.</p>
 <p>The floating tags only ever move forward. Publishing a v0.11.2 patch after
 v0.12.0 applies <code>0.11.2</code> and <code>0.11</code>, and leaves <code>latest</code> and <code>0</code> pointing at
 v0.12.0.</p>
+<h2 id="flatpak-channels">Flatpak channels</h2>
+<p>The player publishes to two self-hosted OSTree repositories on Cloudflare R2.
+The channel comes from the draft's prerelease flag, the same flag that decides
+between the <code>beta</code> and <code>latest</code> Docker tags.</p>
+<table>
+<thead>
+<tr>
+<th>Remote</th>
+<th>Repo file</th>
+<th>Fed by</th>
+<th>History kept</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mydia</code></td>
+<td><code>https://flatpak.mydia.dev/mydia.flatpakrepo</code></td>
+<td>Published stable release</td>
+<td>5 commits</td>
+</tr>
+<tr>
+<td><code>mydia-beta</code></td>
+<td><code>https://flatpak.mydia.dev/mydia-beta.flatpakrepo</code></td>
+<td>Published prerelease</td>
+<td>2 commits</td>
+</tr>
+</tbody>
+</table>
+<p>Both ship <code>dev.mydia.player</code>, distinguished by OSTree branch. <code>flatpak-publish</code>
+runs after <code>publish</code>, so a rehearsal never touches R2.</p>
+<p>The manifest pins <code>org.gnome.Platform</code> 50 and the <code>llvm21</code> SDK extension built
+for freedesktop 25.08. Those two move together: a newer GNOME runtime sits on a
+newer freedesktop base and needs the matching LLVM extension. The pinned
+runtime eventually goes end of life and nothing detects that automatically, so
+check it when cutting a release.</p>
+<p>Codecs come from <code>org.freedesktop.Platform.codecs-extra</code>, which the GNOME
+runtime declares itself and flatpak installs automatically. The older
+<code>org.freedesktop.Platform.ffmpeg-full</code> extension does not exist for freedesktop
+25.08 and cannot be used with this runtime.</p>
+<h3 id="first-time-setup">First-time setup</h3>
+<p>One-time operator actions. The release job fails without them.</p>
+<ol>
+<li>Create an R2 bucket named <code>mydia-flatpak</code>, attach <code>flatpak.mydia.dev</code> to it
+   and enable public access.</li>
+<li>Create an R2 API token with object read and write on that bucket.</li>
+<li>Generate the signing key on a trusted machine, not in CI. The
+   <code>--pinentry-mode loopback</code> flag is required even for an unprotected key, or
+   gpg fails with "No pinentry" on a headless machine:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>gpg<span class="w"> </span>--batch<span class="w"> </span>--pinentry-mode<span class="w"> </span>loopback<span class="w"> </span>--passphrase<span class="w"> </span><span class="s1">&#39;&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--quick-generate-key<span class="w"> </span><span class="s2">&quot;Mydia Flatpak Signing &lt;releases@mydia.dev&gt;&quot;</span><span class="w"> </span>rsa4096<span class="w"> </span>sign<span class="w"> </span>never
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nv">KEYID</span><span class="o">=</span><span class="k">$(</span>gpg<span class="w"> </span>--list-keys<span class="w"> </span>--with-colons<span class="w"> </span>releases@mydia.dev<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F:<span class="w"> </span><span class="s1">&#39;/^fpr:/ {print $10; exit}&#39;</span><span class="k">)</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>gpg<span class="w"> </span>--export-secret-keys<span class="w"> </span>--armor<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;\n&#39;</span><span class="w"> </span>&gt;<span class="w"> </span>flatpak-signing-key.b64
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>gpg<span class="w"> </span>--export<span class="w"> </span>--armor<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>player/flatpak/flatpak-signing-key.pub.asc
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$KEYID</span><span class="s2">&quot;</span>
+</code></pre></div>
+<ol>
+<li>Back up <code>flatpak-signing-key.b64</code> somewhere other than GitHub. See below.</li>
+<li>Add the secrets <code>FLATPAK_GPG_PRIVATE_KEY</code> (contents of the <code>.b64</code> file),
+   <code>FLATPAK_GPG_KEY_ID</code> (the fingerprint), <code>R2_ACCOUNT_ID</code>, <code>R2_ACCESS_KEY_ID</code>
+   and <code>R2_SECRET_ACCESS_KEY</code>.</li>
+<li>Commit <code>player/flatpak/flatpak-signing-key.pub.asc</code>. The public half is not
+   a secret, and <code>make-flatpakrepo.sh</code> embeds it in both repo files.</li>
+</ol>
+<p>The existing <code>CLOUDFLARE_API_TOKEN</code> is a Pages deploy token and cannot do S3
+auth against R2.</p>
+<h3 id="rolling-back-a-bad-flatpak-publish">Rolling back a bad Flatpak publish</h3>
+<p>Pruning keeps previous commits, so a bad publish is recoverable. From a machine
+with the signing key and R2 credentials:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>rclone<span class="w"> </span>sync<span class="w"> </span>r2:mydia-flatpak/stable<span class="w"> </span>./live-repo<span class="w"> </span>--create-empty-src-dirs
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>ostree<span class="w"> </span>log<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>ostree<span class="w"> </span>reset<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable<span class="w"> </span>&lt;previous-commit&gt;
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>flatpak<span class="w"> </span>build-update-repo<span class="w"> </span>--gpg-sign<span class="o">=</span><span class="nv">$GPG_KEY_ID</span><span class="w"> </span>live-repo
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>./player/flatpak/sync-repo.sh<span class="w"> </span>./live-repo<span class="w"> </span>r2:mydia-flatpak/stable
+</code></pre></div>
+<p>Anyone who already updated moves back on their next <code>flatpak update</code>.</p>
+<h3 id="if-the-signing-key-is-lost">If the signing key is lost</h3>
+<p>The public key is pinned inside every <code>.flatpakrepo</code> users added, so a lost
+private key breaks updates for every existing install. Recovery means shipping
+new repo files and asking users to re-add the remote. Keep a backup outside
+GitHub Actions.</p>
 <h2 id="release-notes">Release notes</h2>
 <p>Notes are authored into <code>priv/changelog/&lt;version&gt;.md</code> and tracked in the
 repository. The app compiles that file into the image, and the draft's
@@ -3125,8 +3336,8 @@ itself for anyone who skipped one.</p>
 <h2 id="metadata-relay">Metadata relay</h2>
 <p>The relay releases on a pushed tag rather than a dispatched draft.
 <code>deploy-relay.yml</code> triggers on tags matching <code>metadata-relay-v*</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Metadata Relay v0.12.0&quot;</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Metadata Relay v0.12.0&quot;</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
 </code></pre></div>
 <p>The relay lives in this repository at <code>metadata-relay/</code> but deploys entirely
 separately, so its version is independent of mydia's.</p>
