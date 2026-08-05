@@ -153,6 +153,29 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
       assert setting.value == "720"
       assert setting.category == :streaming
     end
+
+    test "blurring an unchanged field writes nothing", %{view: view} do
+      # `phx-blur` fires on every blur, including one that only tabbed through.
+      # A write there would pin the currently displayed value — which may come
+      # from YAML or a schema default — into the database overlay, flipping the
+      # provenance badge to DB and shadowing that key from every later YAML or
+      # default change.
+      html =
+        view
+        |> element("input[phx-value-key='server.host']")
+        |> render_blur(%{"value" => "0.0.0.0"})
+
+      refute html =~ "Setting updated successfully"
+      assert Settings.get_config_setting_by_key("server.host") == nil
+    end
+
+    test "blurring a changed field still writes", %{view: view} do
+      view
+      |> element("input[phx-value-key='server.host']")
+      |> render_blur(%{"value" => "127.0.0.1"})
+
+      assert Settings.get_config_setting_by_key("server.host").value == "127.0.0.1"
+    end
   end
 
   describe "Crash report widget" do

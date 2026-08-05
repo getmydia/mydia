@@ -230,34 +230,69 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         category: category_string_to_atom(category)
       })
 
-    if changeset.valid? do
-      attrs =
-        changeset
-        |> Ecto.Changeset.apply_changes()
-        |> Map.put(:updated_by_id, socket.assigns.current_user.id)
+    cond do
+      unchanged?(socket, key, value) ->
+        # `phx-blur` fires on every blur, including one that only tabbed
+        # through. Writing then would insert a ConfigSetting row holding the
+        # value the field was already showing, flipping the provenance badge
+        # from Default or YAML to DB and permanently shadowing that key from
+        # any later YAML or default change. The layered config is only
+        # honest if the database layer holds values an operator actually
+        # chose, so an unchanged field writes nothing at all.
+        {:noreply, socket}
 
-      case Settings.upsert_config_setting(attrs) do
-        {:ok, _setting} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Setting updated successfully")
-           |> load_data()}
+      changeset.valid? ->
+        persist_setting(socket, changeset, key, category)
 
-        {:error, error} ->
-          MydiaLogger.log_error(:liveview, "Failed to update setting",
-            error: error,
-            error_details: inspect(error, pretty: true),
-            operation: :update_setting,
-            category: category,
-            setting_key: key,
-            user_id: socket.assigns.current_user.id
-          )
+      true ->
+        {:noreply, put_flash(socket, :error, "Invalid setting value")}
+    end
+  end
 
-          {:noreply,
-           put_flash(socket, :error, MydiaLogger.user_error_message(:update_setting, error))}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "Invalid setting value")}
+  # Compares against the value the screen is currently showing, which is the
+  # *resolved* one across every layer — not just the database row. Comparing
+  # against the row alone would still write a first row for a key whose
+  # displayed value came from YAML or a schema default, which is the case
+  # that matters.
+  defp unchanged?(socket, key, value) do
+    current =
+      socket.assigns
+      |> Map.get(:config_settings_with_sources, %{})
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.find(&(&1.key == key))
+
+    case current do
+      nil -> false
+      setting -> to_string(value) == to_string(setting.value || "")
+    end
+  end
+
+  defp persist_setting(socket, changeset, key, category) do
+    attrs =
+      changeset
+      |> Ecto.Changeset.apply_changes()
+      |> Map.put(:updated_by_id, socket.assigns.current_user.id)
+
+    case Settings.upsert_config_setting(attrs) do
+      {:ok, _setting} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Setting updated successfully")
+         |> load_data()}
+
+      {:error, error} ->
+        MydiaLogger.log_error(:liveview, "Failed to update setting",
+          error: error,
+          error_details: inspect(error, pretty: true),
+          operation: :update_setting,
+          category: category,
+          setting_key: key,
+          user_id: socket.assigns.current_user.id
+        )
+
+        {:noreply,
+         put_flash(socket, :error, MydiaLogger.user_error_message(:update_setting, error))}
     end
   end
 
