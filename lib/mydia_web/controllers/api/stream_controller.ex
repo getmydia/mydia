@@ -1,7 +1,10 @@
 defmodule MydiaWeb.Api.StreamController do
   use MydiaWeb, :controller
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Library
+  alias Mydia.Library.FileRanking
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
 
@@ -26,17 +29,17 @@ defmodule MydiaWeb.Api.StreamController do
   def stream_movie(conn, %{"id" => media_item_id}) do
     try do
       media_item =
-        Mydia.Media.get_media_item!(media_item_id, preload: [media_files: :library_path])
+        Mydia.Media.get_media_item!(media_item_id, preload: [media_files: active_files_query()])
 
-      # Select the first (highest quality) media file
-      case media_item.media_files do
-        [media_file | _] ->
-          stream_media_file(conn, media_file)
-
-        [] ->
+      # Highest resolution, then bitrate. See Mydia.Library.FileRanking.
+      case FileRanking.best(media_item.media_files) do
+        nil ->
           conn
           |> put_status(:not_found)
           |> json(%{error: "No media files available for this movie"})
+
+        media_file ->
+          stream_media_file(conn, media_file)
       end
     rescue
       Ecto.NoResultsError ->
@@ -53,17 +56,18 @@ defmodule MydiaWeb.Api.StreamController do
   """
   def stream_episode(conn, %{"id" => episode_id}) do
     try do
-      episode = Mydia.Media.get_episode!(episode_id, preload: [media_files: :library_path])
+      episode =
+        Mydia.Media.get_episode!(episode_id, preload: [media_files: active_files_query()])
 
-      # Select the first (highest quality) media file
-      case episode.media_files do
-        [media_file | _] ->
-          stream_media_file(conn, media_file)
-
-        [] ->
+      # Highest resolution, then bitrate. See Mydia.Library.FileRanking.
+      case FileRanking.best(episode.media_files) do
+        nil ->
           conn
           |> put_status(:not_found)
           |> json(%{error: "No media files available for this episode"})
+
+        media_file ->
+          stream_media_file(conn, media_file)
       end
     rescue
       Ecto.NoResultsError ->
@@ -163,6 +167,13 @@ defmodule MydiaWeb.Api.StreamController do
         |> put_status(:bad_request)
         |> json(%{error: "Invalid content type. Use 'movie', 'episode', or 'file'"})
     end
+  end
+
+  # Mirrors the filter in Mydia.Streaming.Candidates: a trashed file is not a
+  # streaming candidate. Without this, ranking would reliably surface a trashed
+  # high-resolution file where the unordered head only did so sometimes.
+  defp active_files_query do
+    from(mf in MediaFile, where: is_nil(mf.trashed_at), preload: :library_path)
   end
 
   # Main streaming function that handles a media file
