@@ -45,8 +45,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           audio_codec: String.t(),
           preset: String.t(),
           crf: integer(),
-          width: integer(),
-          height: integer()
+          max_bitrate: integer() | nil,
+          max_height: integer() | nil
         ]
 
   defmodule State do
@@ -101,8 +101,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     * `:audio_codec` - (optional) Audio codec (default: auto-detect from media_file or "aac")
     * `:preset` - (optional) FFmpeg preset (default: "medium")
     * `:crf` - (optional) Constant Rate Factor for quality (default: 23)
-    * `:width` - (optional) Output width (default: 1280)
-    * `:height` - (optional) Output height (default: 720)
+    * `:max_bitrate` - (optional) Total kbps cap; forces a transcode when set
+    * `:max_height` - (optional) Output height ceiling in pixels. Preserves
+      aspect ratio and never upscales. Omitted means native resolution.
 
   ## Stream Copy Optimization
 
@@ -403,6 +404,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   def build_ffmpeg_args(input_path, output_dir, opts) do
     media_file = Keyword.get(opts, :media_file)
     max_bitrate = Keyword.get(opts, :max_bitrate)
+    max_height = effective_max_height(Keyword.get(opts, :max_height))
 
     # Get transcode policy from config
     transcode_policy =
@@ -474,8 +476,6 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     preset = Keyword.get(opts, :preset, "medium")
     crf = Keyword.get(opts, :crf, 23)
-    width = Keyword.get(opts, :width, 1280)
-    height = Keyword.get(opts, :height, 720)
 
     # Use index.m3u8 to match HLS controller expectations
     playlist_path = Path.join(output_dir, "index.m3u8")
@@ -517,8 +517,6 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           "yuv420p",
           "-profile:v",
           "high",
-          "-s",
-          "#{width}x#{height}",
           "-g",
           "60",
           "-bf",
@@ -544,7 +542,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             ["-crf", to_string(crf)]
           end
 
-        base_video ++ rate_control
+        base_video ++ scale_args(max_height) ++ rate_control
       end
 
     # Build audio encoding args
@@ -652,6 +650,41 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
       true ->
         :no_match
+    end
+  end
+
+  # Builds the video scale filter, or nothing at all when no height is capped.
+  #
+  # `-2` keeps the width proportional to the source and divisible by two,
+  # which H.264 requires; hardcoding both dimensions (the previous `-s
+  # WxH`) distorted anything that was not 16:9. `min(h, ih)` clamps against
+  # the *input* height so a rung above the source never upscales, which
+  # would burn CPU to produce a larger, blurrier picture.
+  #
+  # The comma inside `min()` is backslash-escaped because FFmpeg reads a
+  # bare comma in a filtergraph as a filter separator. The usual shell form
+  # `-vf scale=-2:'min(720,ih)'` is wrong here: these arguments go straight
+  # to a port with no shell, so the quotes would arrive literally and the
+  # filter would fail to parse.
+  defp scale_args(height) when is_integer(height) and height > 0 do
+    ["-vf", "scale=-2:min(#{height}\\,ih)"]
+  end
+
+  defp scale_args(_), do: []
+
+  # Composes the per-request height with the operator's configured ceiling by
+  # taking whichever is lower. Either may be nil, meaning "no limit from this
+  # source"; nil from both means native resolution.
+  defp effective_max_height(requested) do
+    configured =
+      Application.get_env(:mydia, :streaming, [])
+      |> Keyword.get(:max_transcode_height)
+
+    case {requested, configured} do
+      {nil, nil} -> nil
+      {nil, cap} -> cap
+      {height, nil} -> height
+      {height, cap} -> min(height, cap)
     end
   end
 end
