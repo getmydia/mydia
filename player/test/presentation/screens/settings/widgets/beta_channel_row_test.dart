@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -78,14 +80,65 @@ void main() {
       (tester) async {
     // A silently-failed write would leave the switch showing a channel the
     // updater will never honor, which is worse than not moving at all.
+    //
+    // The write is gated behind a Completer rather than failing immediately:
+    // flutter_test's mocked MethodChannel resolves an immediately-throwing
+    // handler entirely within the `tester.tap()` call that triggers it (no
+    // real async delay), so without a gate there is no frame at which the
+    // optimistic, not-yet-confirmed value is observable at all.
     await pump(tester);
+    final gate = Completer<void>();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(kSparkleChannel, (call) async {
       if (call.method == 'getBetaChannel') return false;
+      await gate.future;
       throw PlatformException(code: 'boom');
     });
 
     await tester.tap(find.byType(Switch));
+    await tester.pump();
+    expect(row(tester).toggleValue, isTrue,
+        reason: 'the switch should move optimistically');
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(row(tester).toggleValue, isFalse,
+        reason: 'a rejected write must revert');
+  });
+
+  testWidgets('two failing taps settle on the host value', (tester) async {
+    await pump(tester);
+    // Both writes fail and the host keeps reporting false. The row must
+    // converge on that, not on the inverse of whatever it last sent.
+    //
+    // Both writes are gated so the second tap's write genuinely overlaps the
+    // first's still-pending one. Without gating, flutter_test's mocked
+    // MethodChannel resolves each tap's entire write-then-catch chain inside
+    // that tap's own `tester.tap()` call, so the two calls never actually
+    // overlap and the race this guards against cannot occur.
+    final gates = <Completer<void>>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kSparkleChannel, (call) async {
+      if (call.method == 'getBetaChannel') return false;
+      final gate = Completer<void>();
+      gates.add(gate);
+      await gate.future;
+      throw PlatformException(code: 'boom');
+    });
+
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    expect(gates, hasLength(2),
+        reason: 'both writes must be in flight at once');
+
+    // Resolve the writes in the order they were sent, matching the trace
+    // this test guards against: the first tap's write fails, then the
+    // second's.
+    gates[0].complete();
+    await tester.pump();
+    gates[1].complete();
     await tester.pumpAndSettle();
 
     expect(row(tester).toggleValue, isFalse);
