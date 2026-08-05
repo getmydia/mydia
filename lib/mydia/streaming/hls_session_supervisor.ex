@@ -54,16 +54,21 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   def start_session(media_file_id, user_id, mode \\ :transcode, opts \\ []) do
     session_key = session_key(media_file_id, user_id)
     start_position = Keyword.get(opts, :start_position, 0)
+    max_bitrate = Keyword.get(opts, :max_bitrate)
+    max_height = Keyword.get(opts, :max_height)
 
     case Registry.lookup(@registry_name, session_key) do
       [{pid, metadata}] ->
-        if session_matches_offset?(metadata, start_position) do
+        if session_matches?(metadata, start_position, max_bitrate, max_height) do
           {:ok, pid}
         else
           # A session transcoding from a different offset cannot serve this
-          # request: its playlist simply does not contain the wanted range.
-          # Replace it rather than keying sessions by offset, so a user
-          # scrubbing around does not accumulate concurrent FFmpeg processes.
+          # request: its playlist simply does not contain the wanted range. A
+          # session running at a different quality cannot serve it either: its
+          # segments are already encoded at the old rung. Replace it rather
+          # than keying sessions by offset and quality, so a user scrubbing
+          # around or flipping rungs does not accumulate concurrent FFmpeg
+          # processes.
           stop_gracefully(pid)
           start_new_session(media_file_id, user_id, mode, opts, session_key)
         end
@@ -74,10 +79,13 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   end
 
   @doc false
-  # Public for unit testing. Metadata registered before :start_position existed
-  # is treated as offset zero rather than as a wildcard match.
-  def session_matches_offset?(metadata, start_position) do
-    Map.get(metadata, :start_position, 0) == start_position
+  # Public for unit testing. Metadata registered before the quality fields
+  # existed is treated as an uncapped session at offset zero rather than as a
+  # wildcard that matches any request.
+  def session_matches?(metadata, start_position, max_bitrate, max_height) do
+    Map.get(metadata, :start_position, 0) == start_position and
+      Map.get(metadata, :max_bitrate) == max_bitrate and
+      Map.get(metadata, :max_height) == max_height
   end
 
   # Stops a session the way `endStreamingSession` does, rather than through

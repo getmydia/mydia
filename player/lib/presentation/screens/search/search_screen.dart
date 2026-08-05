@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/search_result.dart';
+import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import 'search_controller.dart';
@@ -129,6 +130,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final searchState = ref.watch(searchControllerProvider);
+
+    // Search is a grid surface, so it uses the calm static backdrop rather than
+    // inheriting whatever artwork the previous screen published. Individual
+    // result posters still tint it on hover via PosterFrame.
+    publishBackdropSource(ref, BackdropSource.none);
 
     return Scaffold(
       // Transparent so the shell's ambient backdrop shows through, matching

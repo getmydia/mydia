@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/search_result.dart';
 import 'package:player/presentation/screens/search/widgets/episode_result_row.dart';
@@ -6,14 +7,31 @@ import 'package:player/presentation/screens/search/widgets/search_filter_chip.da
 import 'package:player/presentation/screens/search/widgets/search_result_card.dart';
 import 'package:player/presentation/screens/search/widgets/search_section_header.dart';
 
+import '../../../test_utils/hover_affordance.dart';
 import '../../../test_utils/mock_network_images.dart';
-import '../../../test_utils/play_glyph_finders.dart';
+import '../../../test_utils/poster_contract.dart';
 
-Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(body: Center(child: SizedBox(width: 400, child: child))),
+Widget _host(Widget child) => ProviderScope(
+      child: MaterialApp(
+        home: Scaffold(body: Center(child: SizedBox(width: 400, child: child))),
+      ),
     );
 
 void main() {
+  runPosterDepthContract(
+    description: 'SearchResultCard',
+    build: () => SearchResultCard(
+      result: const SearchResult(
+        id: 'm1',
+        type: SearchResultType.movie,
+        title: 'Alien',
+        year: 1979,
+      ),
+      onTap: () {},
+    ),
+    size: const Size(180, 320),
+  );
+
   group('SearchSectionHeader', () {
     testWidgets('shows the title and the honest count', (tester) async {
       await tester.pumpWidget(
@@ -151,8 +169,8 @@ void main() {
     });
 
     testWidgets(
-        'hover offers no play affordance, because tapping a result '
-        'opens the title rather than playing it', (tester) async {
+        'offers no play affordance at rest or on hover, because tapping a '
+        'result opens the title rather than playing it', (tester) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
           _host(
@@ -170,12 +188,17 @@ void main() {
             ),
           ),
         );
+        await tester.pumpAndSettle();
 
         expect(findPlayGlyph(), findsNothing);
 
         await hoverOver(tester, find.byType(SearchResultCard));
 
         expect(findPlayGlyph(), findsNothing);
+        expect(
+          hoverCursor(tester, of: find.byType(SearchResultCard)),
+          SystemMouseCursors.click,
+        );
       });
     });
   });

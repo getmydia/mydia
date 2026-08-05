@@ -1,0 +1,21 @@
+# The shape StartStreamingSession had before the server learned about height
+# caps: no $maxHeight argument, and no maxBitrate/maxHeight echo in the
+# selection set.
+#
+# Kept as its own document because the fallback cannot be expressed by simply
+# omitting a variable. An argument the schema does not declare, and a field
+# the result type does not have, are both GraphQL *validation* errors against
+# the document text, decided before any variable value is looked at. Sending
+# the current document with maxHeight left out of the variables map would be
+# rejected exactly as it was the first time.
+#
+# A newer player meets an older server routinely — Mydia installs update on
+# their own schedule and the native player ships separately from the server —
+# so this is the request that lets playback degrade instead of failing.
+mutation StartStreamingSessionLegacy($fileId: ID!, $strategy: StreamingStrategy!, $maxBitrate: Int, $startPosition: Int) {
+  startStreamingSession(fileId: $fileId, strategy: $strategy, maxBitrate: $maxBitrate, startPosition: $startPosition) {
+    sessionId
+    duration
+    startPosition
+  }
+}

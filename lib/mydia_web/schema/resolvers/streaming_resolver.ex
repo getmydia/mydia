@@ -11,6 +11,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Streaming.Candidates
+  alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
 
@@ -77,6 +78,10 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   @spec start_streaming_session(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
   @relay_bitrate_cap 2000
+  # A 2000kbps ceiling cannot carry 1080p at watchable quality, so the height
+  # ceiling that accompanies it is 720p. The two move together: raising one
+  # without the other produces either wasted pixels or wasted bits.
+  @relay_height_cap 720
 
   def start_streaming_session(_parent, args, %{context: context}) do
     %{file_id: file_id, strategy: strategy} = args
@@ -86,19 +91,29 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         {:error, "Authentication required"}
 
       user ->
-        # Determine effective max_bitrate:
-        # - For relay connections, cap at @relay_bitrate_cap regardless of request
-        # - For direct connections, use player-requested value (nil means CRF default)
-        max_bitrate =
-          case context[:peer_connection_type] do
-            "relay" ->
-              min(args[:max_bitrate] || @relay_bitrate_cap, @relay_bitrate_cap)
+        {max_bitrate, clamped_height} =
+          effective_quality(
+            context[:peer_connection_type],
+            args[:max_bitrate],
+            args[:max_height]
+          )
 
-            _ ->
-              args[:max_bitrate]
-          end
+        # Composed here, not left to the transcoder, so the height this
+        # mutation echoes back is the one that will actually be encoded.
+        # The operator's ceiling used to be applied inside the transcoder
+        # alone, which made a server with a ceiling set report "Original" to
+        # a client that asked for no cap while really scaling it — the one
+        # thing echoing the applied value exists to prevent.
+        max_height = FfmpegHlsTranscoder.effective_max_height(clamped_height)
 
-        start_session_for_user(file_id, user.id, strategy, max_bitrate, args[:start_position])
+        start_session_for_user(
+          file_id,
+          user.id,
+          strategy,
+          max_bitrate,
+          max_height,
+          args[:start_position]
+        )
     end
   end
 
@@ -136,14 +151,55 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
   def clamp_start_position(position, _duration), do: position
 
-  defp start_session_for_user(file_id, user_id, strategy, max_bitrate, requested_position) do
+  @doc false
+  # Public for unit testing. Resolves what the server will actually apply,
+  # which is not always what the client asked for.
+  #
+  # A relay connection carries media through Mydia's own infrastructure, so
+  # its ceiling is not negotiable by the client: an uncapped request becomes
+  # capped, and an over-cap request is lowered. A direct connection is
+  # peer-to-peer or local, so the client's choice stands.
+  def effective_quality(connection_type, requested_bitrate, requested_height) do
+    clamp_for_connection(
+      connection_type,
+      positive_or_nil(requested_bitrate),
+      positive_or_nil(requested_height)
+    )
+  end
+
+  defp clamp_for_connection("relay", bitrate, height) do
+    {min(bitrate || @relay_bitrate_cap, @relay_bitrate_cap),
+     min(height || @relay_height_cap, @relay_height_cap)}
+  end
+
+  defp clamp_for_connection(_connection_type, bitrate, height), do: {bitrate, height}
+
+  # A non-positive cap is not a smaller cap, it is no cap: the transcoder
+  # declines to scale to a non-positive height, so a relay client could
+  # otherwise bypass the relay ceiling entirely by asking for `maxHeight: 0`
+  # and get native resolution over infrastructure the cap exists to protect.
+  #
+  # `requested || @cap` does not catch it, because Elixir treats 0 as truthy —
+  # `min(0 || 720, 720)` is 0, not 720. Normalising before the clamp is what
+  # makes the `|| @cap` fallback mean what it reads like it means.
+  defp positive_or_nil(value) when is_integer(value) and value > 0, do: value
+  defp positive_or_nil(_), do: nil
+
+  defp start_session_for_user(
+         file_id,
+         user_id,
+         strategy,
+         max_bitrate,
+         max_height,
+         requested_position
+       ) do
     mode = strategy_to_mode(strategy)
 
     with {:ok, media_file} <- load_media_file(file_id),
          media_file <- ensure_duration_known(media_file),
          duration <- get_duration_from_metadata(media_file),
          start_position <- clamp_start_position(requested_position, duration),
-         session_opts <- build_session_opts(max_bitrate, start_position),
+         session_opts <- build_session_opts(max_bitrate, max_height, start_position),
          {:ok, pid} <-
            HlsSessionSupervisor.start_session(media_file.id, user_id, mode, session_opts),
          {:ok, info} <- HlsSession.get_info(pid) do
@@ -173,7 +229,9 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
        %{
          session_id: info.session_id,
          duration: duration,
-         start_position: session_start_position
+         start_position: session_start_position,
+         max_bitrate: max_bitrate,
+         max_height: max_height
        }}
     else
       {:error, reason} ->
@@ -182,8 +240,9 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
     end
   end
 
-  defp build_session_opts(max_bitrate, start_position) do
+  defp build_session_opts(max_bitrate, max_height, start_position) do
     opts = if max_bitrate, do: [max_bitrate: max_bitrate], else: []
+    opts = if max_height, do: [{:max_height, max_height} | opts], else: opts
     if start_position > 0, do: [{:start_position, start_position} | opts], else: opts
   end
 

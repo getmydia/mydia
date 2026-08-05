@@ -103,6 +103,7 @@ nav:
           - using/how-to/update-mydia.md
           - using/how-to/monitor-and-logs.md
           - using/how-to/nixos.md
+          - using/how-to/install-player-linux.md
           - using/how-to/remote-access.md
       - Reference:
           - using/reference/index.md

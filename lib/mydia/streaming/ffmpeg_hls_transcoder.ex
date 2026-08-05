@@ -45,8 +45,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           audio_codec: String.t(),
           preset: String.t(),
           crf: integer(),
-          width: integer(),
-          height: integer()
+          max_bitrate: integer() | nil,
+          max_height: integer() | nil
         ]
 
   defmodule State do
@@ -101,8 +101,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     * `:audio_codec` - (optional) Audio codec (default: auto-detect from media_file or "aac")
     * `:preset` - (optional) FFmpeg preset (default: "medium")
     * `:crf` - (optional) Constant Rate Factor for quality (default: 23)
-    * `:width` - (optional) Output width (default: 1280)
-    * `:height` - (optional) Output height (default: 720)
+    * `:max_bitrate` - (optional) Total kbps cap; forces a transcode when set
+    * `:max_height` - (optional) Output height ceiling in pixels. Preserves
+      aspect ratio and never upscales. Omitted means native resolution.
 
   ## Stream Copy Optimization
 
@@ -403,6 +404,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   def build_ffmpeg_args(input_path, output_dir, opts) do
     media_file = Keyword.get(opts, :media_file)
     max_bitrate = Keyword.get(opts, :max_bitrate)
+    max_height = effective_max_height(Keyword.get(opts, :max_height))
 
     # Get transcode policy from config
     transcode_policy =
@@ -474,8 +476,6 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     preset = Keyword.get(opts, :preset, "medium")
     crf = Keyword.get(opts, :crf, 23)
-    width = Keyword.get(opts, :width, 1280)
-    height = Keyword.get(opts, :height, 720)
 
     # Use index.m3u8 to match HLS controller expectations
     playlist_path = Path.join(output_dir, "index.m3u8")
@@ -517,8 +517,6 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           "yuv420p",
           "-profile:v",
           "high",
-          "-s",
-          "#{width}x#{height}",
           "-g",
           "60",
           "-bf",
@@ -544,7 +542,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             ["-crf", to_string(crf)]
           end
 
-        base_video ++ rate_control
+        base_video ++ scale_args(max_height) ++ rate_control
       end
 
     # Build audio encoding args
@@ -652,6 +650,99 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
       true ->
         :no_match
+    end
+  end
+
+  # Builds the video scale filter. Every encode gets one; only the ceiling is
+  # optional.
+  #
+  # `-2` keeps the width proportional to the source and divisible by two,
+  # which H.264 requires; hardcoding both dimensions (the previous `-s
+  # WxH`) distorted anything that was not 16:9. `min(h, ih)` clamps against
+  # the *input* height so a rung above the source never upscales, which
+  # would burn CPU to produce a larger, blurrier picture.
+  #
+  # The comma inside `min()` is backslash-escaped because FFmpeg reads a
+  # bare comma in a filtergraph as a filter separator. The usual shell form
+  # `-vf scale=-2:'min(720,ih)'` is wrong here: these arguments go straight
+  # to a port with no shell, so the quotes would arrive literally and the
+  # filter would fail to parse.
+  #
+  # `2*trunc(.../2)` rounds the height down to an even number, and it is the
+  # reason the uncapped clause emits a filter at all rather than nothing. An
+  # odd frame height makes libx264 with `-pix_fmt yuv420p` refuse to open the
+  # encoder outright ("height not divisible by 2", exit 187): the transcode
+  # dies before writing a playlist, the client's playlist wait times out, and
+  # the viewer gets a generic playback error with nothing in it pointing here.
+  #
+  # That is reachable on the DEFAULT path, not just under a cap. The old
+  # hardcoded `-s 1280x720` evened every transcode as a side effect; removing
+  # it (correctly, since it also squished everything that was not 16:9) took
+  # the evening with it. VP9 and AV1 both permit odd frame heights and are
+  # exactly the codecs this module force-transcodes, and ordinary rips like
+  # 720x405 and 848x477 are odd too. Rounding down rather than up is what
+  # keeps the no-upscale guarantee; `-2` then tracks the width to it, which is
+  # what preserves the aspect ratio.
+  #
+  # Only ever reached on the encode branch — a stream copy returns before
+  # this, so no filter can turn a copy into a transcode.
+  defp scale_args(height) when is_integer(height) and height > 0 do
+    ["-vf", "scale=-2:2*trunc(min(#{height}\\,ih)/2)"]
+  end
+
+  # A zero or negative ceiling would scale to nothing. It can only arrive from
+  # a misconfigured `streaming.max_transcode_height` (the schema rejects it,
+  # but a stale cached runtime config could still carry one), so say so rather
+  # than silently ignoring it and leaving the operator to wonder why their cap
+  # does nothing. The encode still gets the evening filter: a bad ceiling is
+  # no reason to hand libx264 an odd height.
+  defp scale_args(height) when is_integer(height) do
+    Logger.warning(
+      "Ignoring a non-positive transcode height ceiling (#{height}); " <>
+        "encoding at the source resolution"
+    )
+
+    even_height_args()
+  end
+
+  defp scale_args(_), do: even_height_args()
+
+  # No ceiling: keep the source resolution, rounded down to an even height.
+  defp even_height_args, do: ["-vf", "scale=-2:2*trunc(ih/2)"]
+
+  @doc """
+  Composes a requested output height with the operator's configured ceiling
+  by taking whichever is lower.
+
+  Either may be nil, meaning "no limit from this source"; nil from both means
+  native resolution.
+
+  Public because the GraphQL resolver echoes back the height it actually
+  applied, and that echo has to be derived from the same expression the
+  filter is. Computing it separately meant an operator who set
+  `streaming.max_transcode_height` made the server tell a direct-connection
+  client "Original" while this module really did scale.
+
+  The ceiling comes from the layered runtime config (env > DB/UI > YAML >
+  schema defaults; see `Mydia.Config.Loader`) rather than a flat
+  `Application.get_env(:mydia, :streaming, ...)` key. Nothing explodes the
+  resolved config struct back out to flat keys, so a flat read here would
+  silently ignore both `MAX_TRANSCODE_HEIGHT` and the settings UI.
+  """
+  @spec effective_max_height(integer() | nil) :: integer() | nil
+  def effective_max_height(requested) do
+    case {requested, configured_max_height()} do
+      {nil, nil} -> nil
+      {nil, cap} -> cap
+      {height, nil} -> height
+      {height, cap} -> min(height, cap)
+    end
+  end
+
+  defp configured_max_height do
+    case Mydia.Config.get() do
+      %{streaming: %{max_transcode_height: height}} -> height
+      _ -> nil
     end
   end
 end

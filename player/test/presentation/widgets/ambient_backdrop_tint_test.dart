@@ -10,10 +10,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 
 import '../../test_utils/mock_network_images.dart';
+import '../../test_utils/poster_contract.dart';
 
 void main() {
   group('AmbientBackdropController default/hover layering (R9)', () {
@@ -48,6 +50,58 @@ void main() {
       notifier.clearHover();
       expect(container.read(ambientBackdropControllerProvider).id, 'd');
     });
+
+    test('clearHoverIf clears the override when it still matches', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(ambientBackdropControllerProvider.notifier);
+
+      const a = BackdropSource(imageUrl: 'a', id: 'a');
+      notifier.setHover(a);
+
+      notifier.clearHoverIf(a);
+      expect(
+        container.read(ambientBackdropControllerProvider),
+        BackdropSource.none,
+      );
+    });
+
+    test(
+        'clearHoverIf leaves a newer, different override untouched '
+        '(regression: scroll-recycling race)', () {
+      // A poster unmounting while hovered defers its clear to a post-frame
+      // callback (PosterFrame.dispose). During a scroll under a stationary
+      // cursor, a different poster can already have published its own hover
+      // override by the time that deferred clear runs. A bare clearHover()
+      // would wipe the fresh override and strand the backdrop on the default
+      // while a poster is visibly hovered — the same staleness bug this
+      // whole file exists to fix, polarity reversed. clearHoverIf is the
+      // guard against that: it must only clear the override it was asked to
+      // clear, not whatever happens to be there now.
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(ambientBackdropControllerProvider.notifier);
+
+      const posterA = BackdropSource(imageUrl: 'a', id: 'a');
+      const posterB = BackdropSource(imageUrl: 'b', id: 'b');
+
+      // Poster A is hovered...
+      notifier.setHover(posterA);
+      // ...scrolls out of the cached area and is disposed while still
+      // hovered (onExit never fired — that's the bug), so its clear targets
+      // posterA specifically...
+      //
+      // ...but before that deferred clear runs, poster B scrolls in under
+      // the same stationary cursor and fires its own onEnter.
+      notifier.setHover(posterB);
+
+      // A's late clear arrives. It must not touch B's override.
+      notifier.clearHoverIf(posterA);
+
+      expect(container.read(ambientBackdropControllerProvider), posterB);
+    });
   });
 
   group('poster hover drives the backdrop (R5/R9)', () {
@@ -65,10 +119,18 @@ void main() {
             container: container,
             child: const MaterialApp(
               home: Scaffold(
+                // MediaCard's Column is MainAxisSize.max, so an unbounded host
+                // stretches it to the full viewport while the poster occupies
+                // only the top ~195px, putting getCenter in dead space. Hover is
+                // scoped to the poster itself, so the host must be bounded.
                 body: Center(
-                  child: MediaCard(
-                    title: 'Movie',
-                    posterUrl: 'https://example.com/p.jpg',
+                  child: SizedBox(
+                    width: 130,
+                    height: 260,
+                    child: MediaCard(
+                      title: 'Movie',
+                      posterUrl: 'https://example.com/p.jpg',
+                    ),
                   ),
                 ),
               ),
@@ -83,8 +145,7 @@ void main() {
         addTearDown(gesture.removePointer);
 
         // Hover enters the card.
-        await gesture
-            .moveTo(tester.getCenter(find.byType(MediaCard)));
+        await gesture.moveTo(tester.getCenter(find.byType(MediaCard)));
         await tester.pumpAndSettle();
         expect(
           container.read(ambientBackdropControllerProvider).imageUrl,
@@ -111,7 +172,15 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: const MaterialApp(
-            home: Scaffold(body: Center(child: MediaCard(title: 'No Art'))),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 130,
+                  height: 260,
+                  child: MediaCard(title: 'No Art'),
+                ),
+              ),
+            ),
           ),
         ),
       );
@@ -123,6 +192,12 @@ void main() {
       await gesture.moveTo(tester.getCenter(find.byType(MediaCard)));
       await tester.pumpAndSettle();
 
+      // A card with no artwork publishes nothing whether or not the gesture
+      // actually landed on the poster, so that alone can't prove hit-testing
+      // still works. Assert the hover landed — the shadow deepened to the
+      // hover token — before trusting the negative below.
+      expect(shadowDecoration(tester).boxShadow, DepthTokens.posterHover);
+
       // No artwork -> no override -> backdrop stays on the calm default.
       expect(
         container.read(ambientBackdropControllerProvider),
@@ -132,7 +207,8 @@ void main() {
   });
 
   group('default updates are not masked by a matching hover (regression)', () {
-    testWidgets('a published default is recorded even when it equals the '
+    testWidgets(
+        'a published default is recorded even when it equals the '
         'active hover; clearHover then settles on it', (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);

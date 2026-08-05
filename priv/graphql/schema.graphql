@@ -133,6 +133,9 @@ type RootMutationType {
     "Total kbps cap (video + audio), e.g. 2000"
     maxBitrate: Int
 
+    "Output height ceiling in pixels, e.g. 720. Preserves aspect ratio"
+    maxHeight: Int
+
     "Real media position, in seconds, at which to begin transcoding. Optional; omitted or 0 starts at the beginning."
     startPosition: Int
   ): StreamingSessionResult
@@ -904,6 +907,12 @@ type StreamingSessionResult {
 
   "Real media position, in seconds, at which the stream begins. Clients must map stream-local positions by this offset. Absent or 0 means the stream starts at the beginning."
   startPosition: Int
+
+  "Total kbps cap the server actually applied, which may be lower than requested on a relay connection. Null means uncapped. Clients should label the quality control from this, not from what they asked for."
+  maxBitrate: Int
+
+  "Output height ceiling the server actually applied, which may be lower than requested on a relay connection. Null means the source resolution is preserved."
+  maxHeight: Int
 }
 
 "A download quality option"

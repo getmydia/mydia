@@ -26,6 +26,9 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
                       <.setting_source_badge source={setting.source} />
                     </div>
                     <div class="text-xs opacity-50 font-mono truncate">{setting.key}</div>
+                    <%= if Map.get(setting, :description) do %>
+                      <div class="text-xs opacity-60 mt-1">{setting.description}</div>
+                    <% end %>
                   </div>
                   <div class="sm:ml-auto">
                     <.setting_value_control
@@ -213,6 +216,7 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   defp category_icon("Media"), do: "hero-film"
   defp category_icon("Metadata"), do: "hero-language"
   defp category_icon("Downloads"), do: "hero-arrow-down-tray"
+  defp category_icon("Streaming"), do: "hero-play-circle"
   defp category_icon("Crash Reporting"), do: "hero-bug-ant"
   defp category_icon("Notifications"), do: "hero-bell"
   defp category_icon("Library"), do: "hero-folder-open"
