@@ -381,6 +381,55 @@ defmodule MydiaWeb.SchemaTest do
       assert item["latestSeasonNumber"] == nil
     end
 
+    test "types: [TV_SHOW] excludes a recently-arrived movie", %{user: user} do
+      {show, _movie} = seed_recently_added_show_and_movie()
+
+      query = """
+      query {
+        recentlyAdded(first: 10, types: [TV_SHOW]) {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) == [show.id]
+    end
+
+    test "types: [MOVIE] excludes a recently-arrived show", %{user: user} do
+      {_show, movie} = seed_recently_added_show_and_movie()
+
+      query = """
+      query {
+        recentlyAdded(first: 10, types: [MOVIE]) {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) == [movie.id]
+    end
+
+    test "types: [MOVIE, TV_SHOW] returns both, since requesting every type means no filter",
+         %{user: user} do
+      {show, movie} = seed_recently_added_show_and_movie()
+
+      query = """
+      query {
+        recentlyAdded(first: 10, types: [MOVIE, TV_SHOW]) {
+          id
+        }
+      }
+      """
+
+      assert {:ok, %{data: %{"recentlyAdded" => items}}} = run_query(query, %{}, user)
+
+      assert Enum.map(items, & &1["id"]) |> Enum.sort() == Enum.sort([show.id, movie.id])
+    end
+
     test "favorites reports the corrected timestamp with nil context", %{user: user} do
       movie = MediaFixtures.media_item_fixture(%{type: "movie"})
       file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
@@ -423,5 +472,28 @@ defmodule MydiaWeb.SchemaTest do
 
   defp favorite_item(user, media_item) do
     {:ok, _} = Mydia.Media.toggle_favorite(user.id, media_item.id)
+  end
+
+  # A show (linked the way production links episode files: episode_id set,
+  # media_item_id left NULL) and a movie, both with a file inside the 30-day
+  # window, so a `types:` filter has something real to exclude.
+  defp seed_recently_added_show_and_movie do
+    show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "The Bear"})
+
+    episode =
+      MediaFixtures.episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1
+      })
+
+    show_file = MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+    MediaFixtures.backdate_media_file(show_file, DateTime.add(DateTime.utc_now(), -2, :day))
+
+    movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+    movie_file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+    MediaFixtures.backdate_media_file(movie_file, DateTime.add(DateTime.utc_now(), -3, :day))
+
+    {show, movie}
   end
 end
