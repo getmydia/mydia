@@ -22,6 +22,7 @@ defmodule MydiaWeb.Schema.StreamingTest do
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
   alias Mydia.SettingsFixtures
+  alias MydiaWeb.Schema.Resolvers.StreamingResolver
 
   @moduletag :requires_ffmpeg
 
@@ -151,6 +152,30 @@ defmodule MydiaWeb.Schema.StreamingTest do
       # these tests override that on purpose.
       analyzed_at: nil
     })
+  end
+
+  describe "start_streaming_session quality clamping" do
+    test "passes a direct connection's requested values through unchanged" do
+      assert StreamingResolver.effective_quality(nil, 8000, 1080) == {8000, 1080}
+    end
+
+    test "leaves an uncapped direct request uncapped" do
+      assert StreamingResolver.effective_quality(nil, nil, nil) == {nil, nil}
+    end
+
+    test "clamps a relay connection to the relay ceiling" do
+      # A relay carries the stream through Mydia's own infrastructure, so the
+      # cap is not negotiable by the client.
+      assert StreamingResolver.effective_quality("relay", 8000, 1080) == {2000, 720}
+    end
+
+    test "caps an uncapped relay request rather than letting it run free" do
+      assert StreamingResolver.effective_quality("relay", nil, nil) == {2000, 720}
+    end
+
+    test "honours a relay request already below the ceiling" do
+      assert StreamingResolver.effective_quality("relay", 800, 360) == {800, 360}
+    end
   end
 
   defp stop_session(session_id, user) do
