@@ -142,6 +142,24 @@ defmodule MydiaWeb.Api.StreamControllerTest do
       assert json_response(conn, 404)["error"] == "Media file not found on disk"
     end
 
+    test "returns 404 for a trashed media file", %{conn: conn, token: token} do
+      # This is the exact hole the player's self-heal depends on: a quality
+      # upgrade trashes the old file (Mydia.Upgrades.apply_upgrade/4) but
+      # leaves its row and id resolvable if this route doesn't filter it out.
+      trashed =
+        media_file_fixture(%{
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/stream/#{trashed.id}")
+
+      assert conn.status == 404
+      assert json_response(conn, 404)["error"] == "Media file not found"
+    end
+
     test "requires authentication", %{conn: conn, media_file: media_file} do
       conn = get(conn, "/api/v1/stream/#{media_file.id}")
 
@@ -406,6 +424,100 @@ defmodule MydiaWeb.Api.StreamControllerTest do
 
       # Should get 401 Unauthorized or redirect to login
       assert conn.status in [401, 302]
+    end
+  end
+
+  describe "stream_movie/2 file selection" do
+    test "streams the highest-resolution file, not an arbitrary one", %{
+      conn: conn,
+      token: token
+    } do
+      movie = media_item_fixture(%{type: "movie"})
+      library_path = library_path_fixture()
+      File.mkdir_p!(library_path.path)
+
+      lowres_name = "lowres_#{System.unique_integer([:positive])}.mp4"
+      lowres_path = Path.join(library_path.path, lowres_name)
+      File.write!(lowres_path, String.duplicate("l", 100))
+
+      uhd_name = "uhd_#{System.unique_integer([:positive])}.mp4"
+      uhd_path = Path.join(library_path.path, uhd_name)
+      File.write!(uhd_path, String.duplicate("u", 500))
+
+      _lowres =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: library_path.id,
+          relative_path: lowres_name,
+          resolution: "1080p"
+        })
+
+      _uhd =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: library_path.id,
+          relative_path: uhd_name,
+          resolution: "4K"
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/stream/movie/#{movie.id}")
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-length") == ["500"]
+      assert conn.resp_body == String.duplicate("u", 500)
+
+      File.rm!(lowres_path)
+      File.rm!(uhd_path)
+    end
+
+    test "never selects a trashed file", %{conn: conn, token: token} do
+      movie = media_item_fixture(%{type: "movie"})
+      library_path = library_path_fixture()
+      File.mkdir_p!(library_path.path)
+
+      active_name = "active_#{System.unique_integer([:positive])}.mp4"
+      active_path = Path.join(library_path.path, active_name)
+      File.write!(active_path, String.duplicate("a", 100))
+
+      trashed_name = "trashed_#{System.unique_integer([:positive])}.mp4"
+      trashed_path = Path.join(library_path.path, trashed_name)
+      File.write!(trashed_path, String.duplicate("t", 500))
+
+      # Created before the active file: the pre-fix implementation takes the
+      # head of an unordered preload, so creation order determines what an
+      # unfiltered query returns first. Trashed-first is what makes this test
+      # genuinely fail before the trashed_at filter exists (see task report).
+      _trashed =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: library_path.id,
+          relative_path: trashed_name,
+          resolution: "4K",
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      _active =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: library_path.id,
+          relative_path: active_name,
+          resolution: "1080p"
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/stream/movie/#{movie.id}")
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-length") == ["100"]
+      assert conn.resp_body == String.duplicate("a", 100)
+
+      File.rm!(active_path)
+      File.rm!(trashed_path)
     end
   end
 end

@@ -9,7 +9,11 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
   use MydiaWeb, :controller
 
-  alias Mydia.Library
+  import Ecto.Query, only: [from: 2]
+
+  alias Mydia.Library.FileRanking
+  alias Mydia.Library.MediaFile
+  alias Mydia.Repo
   alias Mydia.Subtitles.Extractor
 
   require Logger
@@ -157,11 +161,11 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
       "movie" ->
         try do
           media_item =
-            Mydia.Media.get_media_item!(id, preload: [media_files: :library_path])
+            Mydia.Media.get_media_item!(id, preload: [media_files: active_files_query()])
 
-          case media_item.media_files do
-            [media_file | _] -> {:ok, media_file}
-            [] -> {:error, :no_media_files}
+          case FileRanking.best(media_item.media_files) do
+            nil -> {:error, :no_media_files}
+            media_file -> {:ok, media_file}
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
@@ -169,11 +173,11 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
       "episode" ->
         try do
-          episode = Mydia.Media.get_episode!(id, preload: [media_files: :library_path])
+          episode = Mydia.Media.get_episode!(id, preload: [media_files: active_files_query()])
 
-          case episode.media_files do
-            [media_file | _] -> {:ok, media_file}
-            [] -> {:error, :no_media_files}
+          case FileRanking.best(episode.media_files) do
+            nil -> {:error, :no_media_files}
+            media_file -> {:ok, media_file}
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
@@ -181,7 +185,9 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
       "file" ->
         try do
-          media_file = Library.get_media_file!(id, preload: [:library_path])
+          # A trashed file is not a subtitle source, same as the "movie" and
+          # "episode" clauses above (see active_files_query/0 below).
+          media_file = Repo.get!(active_files_query(), id)
           {:ok, media_file}
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
@@ -190,6 +196,12 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
       _ ->
         {:error, :invalid_type}
     end
+  end
+
+  # Mirrors the filter in Mydia.Streaming.Candidates: a trashed file is not a
+  # subtitle source.
+  defp active_files_query do
+    from(mf in MediaFile, where: is_nil(mf.trashed_at), preload: :library_path)
   end
 
   # Parse track ID from string parameter

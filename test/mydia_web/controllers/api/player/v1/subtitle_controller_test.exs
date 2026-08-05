@@ -1,6 +1,8 @@
 defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
   use MydiaWeb.ConnCase, async: true
 
+  import Mydia.MediaFixtures
+
   alias Mydia.{Media, Repo}
 
   setup do
@@ -162,6 +164,23 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
       assert json_response(conn, 404)["error"] == "Media not found"
     end
 
+    test "returns 404 for a trashed media file", %{conn: conn, token: token} do
+      # This is the exact hole the player's self-heal depends on: a quality
+      # upgrade trashes the old file (Mydia.Upgrades.apply_upgrade/4) but
+      # leaves its row and id resolvable if this route doesn't filter it out.
+      trashed =
+        media_file_fixture(%{
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/player/v1/subtitles/file/#{trashed.id}")
+
+      assert json_response(conn, 404)["error"] == "Media not found"
+    end
+
     test "returns 400 for invalid type", %{conn: conn, token: token, movie: movie} do
       conn =
         conn
@@ -246,6 +265,78 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
 
       # Should get 401 Unauthorized or redirect to login
       assert conn.status in [401, 302]
+    end
+  end
+
+  describe "subtitle track listing file selection" do
+    test "lists tracks for the highest-resolution file, not an arbitrary one", %{
+      conn: conn,
+      token: token
+    } do
+      movie = media_item_fixture(%{type: "movie"})
+
+      _low = media_file_fixture(%{media_item_id: movie.id, resolution: "1080p"})
+      high = media_file_fixture(%{media_item_id: movie.id, resolution: "4K"})
+
+      {:ok, subtitle} =
+        Repo.insert(%Mydia.Subtitles.Subtitle{
+          media_file_id: high.id,
+          language: "en",
+          provider: "test",
+          subtitle_hash: "hash-#{System.unique_integer([:positive])}",
+          file_path: "/tmp/high-res-subtitle.srt",
+          format: "srt"
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/player/v1/subtitles/movie/#{movie.id}")
+
+      assert %{"data" => tracks} = json_response(conn, 200)
+
+      # The external subtitle is only attached to the 4K file, so it only
+      # shows up here if the controller resolved to that file.
+      track = Enum.find(tracks, fn t -> t["track_id"] == subtitle.id end)
+      assert track != nil
+    end
+
+    test "never resolves to a trashed file", %{conn: conn, token: token} do
+      movie = media_item_fixture(%{type: "movie"})
+
+      # Created first, so an unfiltered/unordered preload would naturally
+      # return it before the active file below.
+      _trashed_uhd =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          resolution: "4K",
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      active = media_file_fixture(%{media_item_id: movie.id, resolution: "1080p"})
+
+      {:ok, subtitle} =
+        Repo.insert(%Mydia.Subtitles.Subtitle{
+          media_file_id: active.id,
+          language: "en",
+          provider: "test",
+          subtitle_hash: "hash-#{System.unique_integer([:positive])}",
+          file_path: "/tmp/active-file-subtitle.srt",
+          format: "srt"
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/player/v1/subtitles/movie/#{movie.id}")
+
+      assert %{"data" => tracks} = json_response(conn, 200)
+
+      # The external subtitle is only attached to the active (non-trashed)
+      # file, so it only shows up here if the controller skipped the trashed
+      # 4K file.
+      track = Enum.find(tracks, fn t -> t["track_id"] == subtitle.id end)
+      assert track != nil
     end
   end
 end

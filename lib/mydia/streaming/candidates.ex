@@ -11,7 +11,7 @@ defmodule Mydia.Streaming.Candidates do
   require Logger
 
   alias Mydia.Library
-  alias Mydia.Library.{FileAnalyzer, MediaFile}
+  alias Mydia.Library.{FileAnalyzer, FileRanking, MediaFile}
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
   alias Mydia.Streaming.{CodecString, Compatibility}
@@ -33,32 +33,40 @@ defmodule Mydia.Streaming.Candidates do
           media_item =
             Mydia.Media.get_media_item!(id, preload: [media_files: active_files_query])
 
-          case media_item.media_files do
-            [media_file | _] -> {:ok, media_file}
-            [] -> {:error, :no_media_files}
+          case FileRanking.best(media_item.media_files) do
+            nil -> {:error, :no_media_files}
+            media_file -> {:ok, media_file}
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
+          Ecto.Query.CastError -> {:error, :not_found}
         end
 
       "episode" ->
         try do
           episode = Mydia.Media.get_episode!(id, preload: [media_files: active_files_query])
 
-          case episode.media_files do
-            [media_file | _] -> {:ok, media_file}
-            [] -> {:error, :no_media_files}
+          case FileRanking.best(episode.media_files) do
+            nil -> {:error, :no_media_files}
+            media_file -> {:ok, media_file}
           end
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
+          Ecto.Query.CastError -> {:error, :not_found}
         end
 
       "file" ->
         try do
-          media_file = Mydia.Library.get_media_file!(id, preload: [:library_path])
+          # A trashed file is not a streaming candidate, same as the "movie"
+          # and "episode" clauses above. Without this, a quality upgrade that
+          # trashes the old file (Mydia.Upgrades.apply_upgrade/4) would leave
+          # a dead file id resolvable here, so the player's self-heal (which
+          # relies on this returning :not_found) would never fire.
+          media_file = Repo.get!(active_files_query, id)
           {:ok, media_file}
         rescue
           Ecto.NoResultsError -> {:error, :not_found}
+          Ecto.Query.CastError -> {:error, :not_found}
         end
 
       _ ->
