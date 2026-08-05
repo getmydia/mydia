@@ -89,6 +89,11 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
   /// receiver-relative value here would be asserting against the wrong space.
   final List<Duration> seekTargets = [];
 
+  /// When set, `seek` throws it. A receiver that has gone away mid-playback is
+  /// a routine state, not a hypothetical: the target is reachable over the
+  /// network right up until it is not.
+  Object? seekError;
+
   @override
   Future<void> startCast({
     required CastDevice device,
@@ -102,6 +107,8 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
   @override
   Future<void> seek(Duration position) async {
     seekTargets.add(position);
+    final error = seekError;
+    if (error != null) throw error;
   }
 }
 

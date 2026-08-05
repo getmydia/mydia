@@ -213,6 +213,39 @@ void main() {
     expect(find.byKey(SkipSegmentButton.buttonKey), findsNothing);
   });
 
+  testWidgets('survives a receiver that fails the skip', (tester) async {
+    // Neither call site can await this seek: `onSkip` is a void callback and
+    // auto-skip fires from a provider listener. A rejected seek therefore has
+    // nobody to catch it, and an error escaping into the zone is a crash, not
+    // a failed skip. `unawaited()` would document the drop without changing
+    // any of that, so the handling belongs at the source instead.
+    final castManager = CapturingCastSessionManager()
+      ..seekError = StateError('receiver went away');
+    final proxyService = TrackingLocalProxyService();
+
+    final container = buildPlayerScreenContainer(
+      link: _link(segments: [_creditsSegment()]),
+      connectionState: conn.ConnectionState.direct(),
+      castManager: castManager,
+      proxyService: proxyService,
+      castSessionStream: session.stream,
+    );
+    addTearDown(container.dispose);
+
+    container.read(castTargetProvider.notifier).set(testDevice);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpCastUntil(tester, session, _insideCredits, () => _buttonShowing);
+
+    await tester.tap(find.text('Skip Credits'));
+    await tester.pump();
+
+    // The seek was attempted; the test surviving to this line is the assertion
+    // that its rejection did not escape. An unhandled async error fails the
+    // enclosing `testWidgets` outright.
+    expect(castManager.seekTargets, hasLength(1));
+  });
+
   testWidgets('auto-skips the receiver exactly once when the setting is on',
       (tester) async {
     final castManager = CapturingCastSessionManager();

@@ -1857,9 +1857,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// and the session restart for a target the running stream cannot reach, so
   /// nothing here needs to know which of the two a given skip requires.
   /// Skipping credits well past the start offset is squarely the second case.
+  ///
+  /// Never completes with an error, because neither caller can catch one. The
+  /// button's `onSkip` is a void callback and auto-skip fires from a provider
+  /// listener, so a rejected seek would escape into the zone as a crash rather
+  /// than a failed skip. A receiver that has gone away is routine, and it
+  /// already announces itself: the session goes stale, which withdraws this
+  /// button and turns the placeholder to "Lost connection". Failing a skip
+  /// loudly on top of that would be the second telling of one story.
   Future<void> _castSeekToReal(Duration target) async {
-    final manager = await ref.read(castSessionManagerProvider.future);
-    await manager.seek(target);
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.seek(target);
+    } catch (e) {
+      debugPrint('[PlayerScreen] Cast skip to $target failed: $e');
+    }
   }
 
   /// The segment covering [position], or null when playback is between them.
