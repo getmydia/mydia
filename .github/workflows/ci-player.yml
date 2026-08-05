@@ -334,7 +334,10 @@ jobs:
       - name: Install flatpak-builder
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder xvfb
+          # appstream provides appstreamcli, which flatpak-builder shells out to
+          # on the host during export. Without it the build fails at the very
+          # last step, after everything has already compiled.
+          sudo apt-get install -y flatpak flatpak-builder xvfb appstream
 
       - name: Allow unprivileged user namespaces
         # Ubuntu 24.04 restricts these through AppArmor, which breaks the

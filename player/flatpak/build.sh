@@ -59,10 +59,16 @@ install -Dm644 player/flatpak/dev.mydia.player.desktop \
 install -Dm644 player/flatpak/dev.mydia.player.metainfo.xml \
   /app/share/metainfo/dev.mydia.player.metainfo.xml
 
-# Icons come from the existing player assets rather than a second copy checked
-# into player/flatpak/, which would only drift.
-install -Dm644 player/assets/icon.svg \
-  /app/share/icons/hicolor/scalable/apps/dev.mydia.player.svg
+# Icons are rasterised from the existing player asset rather than a second copy
+# checked into player/flatpak/, which would only drift.
+#
+# Deliberately PNG only. Installing the SVG as a scalable hicolor icon makes
+# flatpak-builder's `appstreamcli compose` step fail the whole build with
+# "Unrecognized image file format", because appstreamcli reads icons through
+# gdk-pixbuf and its SVG loader is not present on every host. The AppStream
+# catalog stores rasterised PNGs regardless, and desktop environments are happy
+# with the hicolor sizes below, so the SVG buys nothing and costs a
+# host-dependent build failure.
 for size in 64 128 256; do
   install -d "/app/share/icons/hicolor/${size}x${size}/apps"
   rsvg-convert -w "$size" -h "$size" player/assets/icon.svg \
