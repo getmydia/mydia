@@ -103,9 +103,21 @@ Widget _panel(double width) {
                         onToggleMute: () {},
                       )
                     : null,
-                secondary: const SecondaryCluster(
+                // `gap` and `onQualityTap` mirror real wiring too (see
+                // `playback_chrome.dart`'s `SecondaryCluster` construction):
+                // production passes `metrics.secondaryGap` unconditionally
+                // and wires the quality button at every tier now (see
+                // `PanelMetrics.showQuality`'s dartdoc). Omitting either, as
+                // an earlier version of this file did, would freeze these
+                // goldens at the 0.0 gap default even for the desktop/tablet
+                // images (where production now separates the buttons) and
+                // would never exercise the 4-button layout this whole change
+                // exists to enable.
+                secondary: SecondaryCluster(
                   subtitleTrackCount: 1,
                   audioTrackCount: 2,
+                  gap: metrics.secondaryGap,
+                  onQualityTap: () {},
                 ),
                 // `touchTarget` mirrors real wiring (see
                 // `playback_chrome.dart`'s `_ScrubberRow`, which always

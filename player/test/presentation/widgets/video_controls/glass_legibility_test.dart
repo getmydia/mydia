@@ -243,8 +243,9 @@ void main() {
   // --- Panel geometry, derived from ChromePanel's own public constants plus
   // representative row/glyph dimensions (ChromePanel doesn't own row content
   // sizing, so these mirror what the rest of this test suite already uses:
-  // a 48px transport row and a 32px scrubber row).
-  const row1Height = 48.0;
+  // a 40px transport row — TransportSurface's play/pause button, its
+  // tallest element — and a 32px scrubber row).
+  const row1Height = 40.0;
   const row2Height = 32.0;
   const panelHeight = ChromePanel.verticalPadding * 2 +
       row1Height +

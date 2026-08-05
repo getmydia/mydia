@@ -176,6 +176,18 @@ Future<void> _expectFitsAtFullSize(
   // 32, not 40: the whole control row was compacted so four discrete
   // buttons fit down to 360px. See `PanelMetrics.showQuality`'s
   // dartdoc for the arithmetic that replaced the old desktop gate.
+  //
+  // 32 is also below `ControlButton`'s own 44px default hit target
+  // (`control_button.dart`), which `control_button_test.dart`'s "default
+  // target meets the 44px touch minimum" test pins as this codebase's
+  // stated minimum. `SecondaryCluster` has deliberately undercut that
+  // default since before this change — it hard-codes its own smaller size
+  // rather than inheriting `ControlButton`'s default, and never receives
+  // `touchTargets`, so nothing expands the hit area to compensate. That
+  // trade-off is intentional and this commit doesn't revisit it, but
+  // compaction raises its stakes: `showQuality` is now true at the mobile
+  // tier too, so phones move from three 40px sub-44px targets to four 32px
+  // ones.
   final secondaryRect = tester.getRect(
     find.byKey(SecondaryCluster.fullscreenKey),
   );
