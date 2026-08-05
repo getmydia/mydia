@@ -8,18 +8,23 @@
 // it is the CI-visible half of the regression guard for this whole class of
 // bug.
 //
-// Only 320px remains broken, and it is broken *by construction*, not
-// pending: `SecondaryCluster`'s 3 buttons at their own 40px spec cost 120px
-// with zero gap (the floor — already guarded by the passing-width
-// assertions below), but 320px's equal-flex slot only ever offers 108px, and
-// even removing 100% of `ChromePanel`'s horizontal padding (not just
-// trimming it) only gets to 120px available — exactly matching, with zero
-// margin for the padding itself to occupy. There is no gap/slider/padding
-// lever left to pull; closing this needs either shrinking a button below
-// its spec or abandoning the equal-flex centering guarantee for this one
-// width, and neither is this file's call. If that changes, *move* 320px
+// Only 320px remains broken, and it is still broken *by construction*, not
+// pending: four 32px buttons at zero gap cost 128px, and 320px's equal-flex
+// slot offers 122px after compaction. Closing the remaining 6px needs either
+// a sub-32px button or abandoning the equal-flex centering guarantee for this
+// one width, and neither is this file's call. If that changes, *move* 320px
 // from `_knownBrokenWidths` to `_passingWidths` — don't just delete its
 // assertion.
+//
+// 320px is the one width whose outcome now depends on `quality`, unlike
+// every other width tested here: the 128px figure above is the 4-button
+// (quality: true) case. With only 3 buttons (quality: false) — the same
+// count every other width's "worst case" no longer forces once `_panel`
+// stopped replicating the old platform gate — the need drops to 96px
+// against the same 122px slot, a comfortable 26px margin. So 320px's
+// quality:false case is asserted passing, separately, right after the main
+// passing-widths loop below, rather than inside the uniform
+// `_knownBrokenWidths` loop with quality:true.
 //
 // 600px and 650px *were* asserted broken in an earlier revision of this
 // file — that escalation was wrong. Both close with two more one-constant
@@ -27,22 +32,15 @@
 // and per-tier `horizontalPadding` on `PanelMetrics` (20 -> 12 for mobile and
 // tablet). See the constants' own dartdocs for the exact arithmetic.
 //
-// **`quality` axis:** a whole-branch review found this file's own header
-// claim — "the worst case PlaybackChrome can present" — was false: it never
-// wired the web-only quality button, so it missed a real Critical (a 4th
-// `SecondaryCluster` button, raising its floor from 120 to 160px each side,
-// overflowed <424px, 600-666px, and 900-1026px in production, clipping the
-// fullscreen button on a mid-size browser window). The fix gates the button
-// on `PanelMetrics.showQuality` (true only at the desktop tier, 900+ in this
-// file's three-tier scheme) rather than showing it whenever the caller has
-// something to wire it to — see that field's dartoc for why the tablet/
-// mobile tiers cannot be widened to fit a 4th button at all. `_panel` below
-// replicates that exact gate (mirroring `PlaybackChrome`'s own composition,
-// not `SecondaryCluster`'s, which deliberately has no platform knowledge),
-// so `quality: true` at desktop widths genuinely exercises the widened
-// 0.60 -> 0.70 desktop width factor, while below that tier it exercises
-// "the button was requested but the tier can't show it" — both real
-// production paths.
+// **`quality` axis:** the quality button used to be gated to the desktop
+// tier, because a 4th `SecondaryCluster` button raised its floor from 120 to
+// 160px each side and overflowed below 424px, 600-666px, and 900-1026px in
+// production. That gate is gone: the control is wired on every platform and
+// every tier now shows it. What closed the budget was compaction rather than
+// a lever — transport 256 -> 192, secondary buttons 40 -> 32, padding 20/12
+// -> 12/8 — so `_panel` below no longer needs to replicate a platform gate.
+// `quality: true` now genuinely exercises the 4-button layout at every width
+// in `_passingWidths`.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,11 +55,11 @@ import 'package:player/presentation/widgets/video_controls/video_progress_bar.da
 /// — see its wiring comment), `compact` following `metrics.touchTargets`
 /// (dropping seek/episode-nav to play/pause-only below the mobile
 /// breakpoint), `volume` supplied whenever `metrics.showVolume`, and the
-/// quality button gated on `metrics.showQuality` whenever [quality] requests
-/// it (mirroring `PlaybackChrome`'s own gate — see the file header). This is
-/// deliberately the *worst case* PlaybackChrome can present at a given
-/// width — a caller with no adjacent episodes, or not on web, gets an
-/// easier layout, not a harder one.
+/// quality button shown whenever [quality] requests it — every tier's
+/// `metrics.showQuality` is true now, so there is no gate left to replicate
+/// (see the file header's `quality` axis note). This is deliberately the
+/// *worst case* PlaybackChrome can present at a given width — a caller with
+/// no adjacent episodes gets an easier layout, not a harder one.
 Widget _panel(double width, {bool quality = false}) {
   final metrics = PanelMetrics.forWidth(width);
   return MaterialApp(
@@ -86,7 +84,8 @@ Widget _panel(double width, {bool quality = false}) {
           secondary: SecondaryCluster(
             subtitleTrackCount: 1,
             audioTrackCount: 2,
-            onQualityTap: (quality && metrics.showQuality) ? () {} : null,
+            gap: metrics.secondaryGap,
+            onQualityTap: quality ? () {} : null,
           ),
           scrubber: ProgressBarSurface(
             progress: 0.35,
@@ -126,7 +125,11 @@ const _passingWidths = <double>[
   1600,
 ];
 
-/// Widths that still overflow, by construction — see the file header.
+/// Widths that still overflow, by construction, in their `quality: true`
+/// case — see the file header. 320px's `quality: false` case does *not*
+/// overflow (3 buttons fit with real margin), so it is exercised separately,
+/// right after the passing-widths loop below, rather than looped here
+/// uniformly with `quality: true`.
 const _knownBrokenWidths = <double>[320];
 
 /// Consumes every exception `tester` recorded, rather than just the first —
@@ -144,6 +147,63 @@ List<Object> _takeAllExceptions(WidgetTester tester) {
   return exceptions;
 }
 
+/// Shared body for a width/quality combination expected to render every
+/// control at its own full, natural size with no overflow. Used both by the
+/// main [_passingWidths] loop and, separately, by 320px's `quality: false`
+/// case (see [_knownBrokenWidths]'s dartdoc for why that one is not looped
+/// alongside the rest).
+Future<void> _expectFitsAtFullSize(
+  WidgetTester tester,
+  double width, {
+  required bool quality,
+}) async {
+  tester.view.physicalSize = Size(width, 600);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(_panel(width, quality: quality));
+  await tester.pumpAndSettle();
+
+  expect(_takeAllExceptions(tester), isEmpty);
+
+  // Effective on-screen size — not `tester.getSize`, which reports
+  // the pre-transform intrinsic size and would silently miss a
+  // `FittedBox`-style scale-down applied by an ancestor. `getRect` is
+  // transform-aware: it independently maps each corner through
+  // `RenderBox.localToGlobal`, so its width reflects any ancestor
+  // scaling.
+  //
+  // 32, not 40: the whole control row was compacted so four discrete
+  // buttons fit down to 360px. See `PanelMetrics.showQuality`'s
+  // dartdoc for the arithmetic that replaced the old desktop gate.
+  final secondaryRect = tester.getRect(
+    find.byKey(SecondaryCluster.fullscreenKey),
+  );
+  expect(secondaryRect.width, greaterThanOrEqualTo(32));
+  expect(secondaryRect.height, greaterThanOrEqualTo(32));
+
+  final metrics = PanelMetrics.forWidth(width);
+  if (metrics.showVolume) {
+    final volumeRect = tester.getRect(find.byKey(VolumeSurface.muteKey));
+    expect(volumeRect.width, greaterThanOrEqualTo(40));
+    expect(volumeRect.height, greaterThanOrEqualTo(40));
+  }
+
+  // Every tier shows the quality button now, so requesting it is
+  // enough — there is no tier that suppresses it.
+  expect(
+    find.byKey(SecondaryCluster.qualityKey),
+    quality ? findsOneWidget : findsNothing,
+  );
+  if (quality) {
+    final qualityRect = tester.getRect(
+      find.byKey(SecondaryCluster.qualityKey),
+    );
+    expect(qualityRect.width, greaterThanOrEqualTo(32));
+    expect(qualityRect.height, greaterThanOrEqualTo(32));
+  }
+}
+
 void main() {
   for (final width in _passingWidths) {
     for (final quality in const [false, true]) {
@@ -151,90 +211,43 @@ void main() {
         'ChromePanel at ${width}px (quality: $quality): no RenderFlex '
         'overflow, and every control renders at its own full natural size '
         '(not squeezed)',
-        (tester) async {
-          tester.view.physicalSize = Size(width, 600);
-          tester.view.devicePixelRatio = 1.0;
-          addTearDown(tester.view.reset);
-
-          await tester.pumpWidget(_panel(width, quality: quality));
-          await tester.pumpAndSettle();
-
-          expect(_takeAllExceptions(tester), isEmpty);
-
-          // Effective on-screen size — not `tester.getSize`, which reports
-          // the pre-transform intrinsic size and would silently miss a
-          // `FittedBox`-style scale-down applied by an ancestor. `getRect` is
-          // transform-aware: it independently maps each corner through
-          // `RenderBox.localToGlobal`, so its width reflects any ancestor
-          // scaling.
-          //
-          // 40, not 44: `SecondaryCluster` hard-codes `size: 40` for these
-          // buttons (see `panel_controls.dart`) — a deliberately smaller
-          // target than `ControlButton`'s own 44px default, which is what
-          // `control_button_test.dart`'s "default target meets the 44px touch
-          // minimum" test measures in isolation.
-          final secondaryRect = tester.getRect(
-            find.byKey(SecondaryCluster.fullscreenKey),
-          );
-          expect(secondaryRect.width, greaterThanOrEqualTo(40));
-          expect(secondaryRect.height, greaterThanOrEqualTo(40));
-
-          final metrics = PanelMetrics.forWidth(width);
-          if (metrics.showVolume) {
-            final volumeRect =
-                tester.getRect(find.byKey(VolumeSurface.muteKey));
-            expect(volumeRect.width, greaterThanOrEqualTo(40));
-            expect(volumeRect.height, greaterThanOrEqualTo(40));
-          }
-
-          // The quality button only ever renders when both requested AND
-          // the tier allows it (desktop only, see PanelMetrics.showQuality)
-          // — this is the exact gate PlaybackChrome applies, replicated in
-          // `_panel`. At non-desktop widths `quality: true` still requests
-          // it, but the tier suppresses it, same as `quality: false`.
-          final showsQuality = quality && metrics.showQuality;
-          expect(
-            find.byKey(SecondaryCluster.qualityKey),
-            showsQuality ? findsOneWidget : findsNothing,
-          );
-          if (showsQuality) {
-            final qualityRect = tester.getRect(
-              find.byKey(SecondaryCluster.qualityKey),
-            );
-            expect(qualityRect.width, greaterThanOrEqualTo(40));
-            expect(qualityRect.height, greaterThanOrEqualTo(40));
-          }
-        },
+        (tester) => _expectFitsAtFullSize(tester, width, quality: quality),
       );
     }
   }
 
+  // 320px, quality: false only — see _knownBrokenWidths' dartdoc. Its
+  // quality: true case is covered by the broken-widths loop below.
+  testWidgets(
+    'ChromePanel at 320.0px (quality: false): no RenderFlex overflow, and '
+    'every control renders at its own full natural size (not squeezed)',
+    (tester) => _expectFitsAtFullSize(tester, 320, quality: false),
+  );
+
   for (final width in _knownBrokenWidths) {
-    for (final quality in const [false, true]) {
-      testWidgets(
-        'ChromePanel at ${width}px (quality: $quality): out of budget by '
-        'construction, not pending — see this file\'s header',
-        (tester) async {
-          tester.view.physicalSize = Size(width, 600);
-          tester.view.devicePixelRatio = 1.0;
-          addTearDown(tester.view.reset);
+    testWidgets(
+      'ChromePanel at ${width}px (quality: true): out of budget by '
+      'construction, not pending — see this file\'s header',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-          await tester.pumpWidget(_panel(width, quality: quality));
-          await tester.pumpAndSettle();
+        await tester.pumpWidget(_panel(width, quality: true));
+        await tester.pumpAndSettle();
 
-          final exceptions = _takeAllExceptions(tester);
-          expect(
-            exceptions,
-            isNotEmpty,
-            reason: 'this width was expected to still overflow; if it no '
-                'longer does, move ${width}px from _knownBrokenWidths to '
-                '_passingWidths above instead of loosening this assertion',
-          );
-          for (final exception in exceptions) {
-            expect(exception.toString(), contains('RenderFlex'));
-          }
-        },
-      );
-    }
+        final exceptions = _takeAllExceptions(tester);
+        expect(
+          exceptions,
+          isNotEmpty,
+          reason: 'this width was expected to still overflow; if it no '
+              'longer does, move ${width}px from _knownBrokenWidths to '
+              '_passingWidths above instead of loosening this assertion',
+        );
+        for (final exception in exceptions) {
+          expect(exception.toString(), contains('RenderFlex'));
+        }
+      },
+    );
   }
 }
