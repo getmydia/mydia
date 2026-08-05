@@ -1341,6 +1341,24 @@ jobs:
           name: flatpak-repo-staged
           path: staged-repo
 
+      - name: Restore the staged repo's empty directories
+        run: |
+          set -euo pipefail
+          # upload-artifact does not preserve empty directories, and an ostree
+          # repo is full of them: refs/remotes, refs/mirrors, extensions, state
+          # and tmp/cache all survive a build empty. The artifact round trip
+          # drops them, so the first thing to read the downloaded repo dies with
+          # "Listing refs: opendir(refs/remotes): No such file or directory".
+          #
+          # The dry run cannot catch this. It rehearses against $PWD/staged-repo
+          # in the build job, which never goes through an artifact, so the
+          # skeleton is still intact there.
+          #
+          # Same idempotent trick publish.sh already uses on the live repo:
+          # ostree init recreates the skeleton and leaves config and objects be.
+          ostree init --repo=staged-repo --mode=archive
+          test -d staged-repo/refs/remotes
+
       - name: Import the signing key
         env:
           FLATPAK_GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
