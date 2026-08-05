@@ -18,12 +18,24 @@ defmodule Mydia.Settings.QualityProfiles do
   # through ReleaseRanker instead of the bare seeders sort a nil profile hits.
   @seeded_default_profile_name "Any"
 
-  # Mirrors the resolution -> score backfill run by the
-  # 20260730170000_add_quality_upgrade_fields migration when the retired
-  # `upgrade_until_quality` column was dropped. Kept here (rather than shared
-  # with the migration) because migrations are not meant to be called from
-  # runtime code. If this mapping ever changes, update the migration's SQL
-  # CASE statement to match, and vice versa.
+  # COMPAT: `upgrade_until_quality` (a resolution string) is superseded by
+  # `upgrade_until_score` (an integer).
+  #
+  # Accepts: quality profiles exported (see export_profile/2, schema_version
+  # 1) by a Mydia version before the
+  # 20260730170000_add_quality_upgrade_fields migration, which still carry
+  # `upgrade_until_quality` instead of `upgrade_until_score`.
+  # Source: profile JSON files exported by an older install and shared or
+  # re-imported, including onto that same install after an upgrade.
+  # Removing it would: make importing such a profile fall through to the
+  # schema default (see resolve_typed/4) instead of the operator's actual
+  # setting, silently loosening or tightening their upgrade ceiling.
+  #
+  # Mirrors the resolution -> score backfill run by that migration for
+  # existing rows. Kept here (rather than shared with the migration) because
+  # migrations are not meant to be called from runtime code. If this mapping
+  # ever changes, update the migration's SQL CASE statement to match, and
+  # vice versa.
   @legacy_upgrade_quality_scores %{
     "480p" => 40,
     "576p" => 45,

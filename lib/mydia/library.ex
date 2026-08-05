@@ -2066,8 +2066,16 @@ defmodule Mydia.Library do
         )
 
       {:path_prefix, _prefix}, query ->
-        # Legacy option - no longer supported
-        # Use :library_path_id instead
+        # COMPAT: `path_prefix` is superseded by `library_path_id`.
+        #
+        # Accepts: callers that still pass a path string rather than a
+        # library path id.
+        # Source: no in-repo caller passes this option today; it is kept for
+        # external callers (operator scripts invoked through `mydia rpc`,
+        # third-party integrations) that were written against this context
+        # function before `library_path_id` existed.
+        # Removing it would: turn those callers' filter into a match-nothing
+        # query with no error, which reads as an empty library.
         Logger.warning("path_prefix filter is deprecated, use library_path_id instead")
         query
 

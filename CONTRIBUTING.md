@@ -60,3 +60,19 @@ runtime dispatch, and the irreducible residual is intentional public API plus
 default-argument arity artifacts. Rule-shaped ignores cover the structural
 blind spots and provably-dead code is deleted at the source, but the gate
 reports rather than blocks. See `.github/workflows/ci.yml`.
+
+### Deprecated code versus compatibility shims
+
+`DEPRECATED:` must not appear in `lib/`. If code is deprecated, delete it.
+CI greps for it and fails the build if it reappears.
+
+Code that reads old data or old configuration is not deprecated; it is
+load-bearing, and it is marked `COMPAT:`. A `COMPAT:` block states three things:
+
+- **Accepts:** what old input the code handles
+- **Source:** where that input actually comes from in the field
+- **Removing it would:** the concrete operator-visible breakage
+
+This distinction exists because the two are indistinguishable on sight, and
+mistaking a live shim for dead code, or the reverse, is how stale parallel
+implementations survive.
