@@ -74,7 +74,7 @@ the docs deploy.
 | `version` | required | Tag of an existing draft release. Ignored when `dry_run` is set. |
 | `dry_run` | `false` | Build, sign and notarize everything without publishing, pushing images, or uploading to stores. |
 | `accept_drift` | `false` | Proceed even though master has moved past the commit the draft targets. |
-| `allow_missing` | `""` | Comma-separated platforms whose failure must not block publish: `android`, `ios`, `macos`, `windows`, `linux`, `docker`. |
+| `allow_missing` | `""` | Comma-separated platforms whose failure must not block publish: `android`, `ios`, `macos`, `windows`, `linux`, `flatpak`, `docker`. |
 
 ### Patch releases
 
@@ -195,6 +195,83 @@ is the SQLite build.
 The floating tags only ever move forward. Publishing a v0.11.2 patch after
 v0.12.0 applies `0.11.2` and `0.11`, and leaves `latest` and `0` pointing at
 v0.12.0.
+
+## Flatpak channels
+
+The player publishes to two self-hosted OSTree repositories on Cloudflare R2.
+The channel comes from the draft's prerelease flag, the same flag that decides
+between the `beta` and `latest` Docker tags.
+
+| Remote | Repo file | Fed by | History kept |
+| --- | --- | --- | --- |
+| `mydia` | `https://flatpak.mydia.dev/mydia.flatpakrepo` | Published stable release | 5 commits |
+| `mydia-beta` | `https://flatpak.mydia.dev/mydia-beta.flatpakrepo` | Published prerelease | 2 commits |
+
+Both ship `dev.mydia.player`, distinguished by OSTree branch. `flatpak-publish`
+runs after `publish`, so a rehearsal never touches R2.
+
+The manifest pins `org.gnome.Platform` 50 and the `llvm21` SDK extension built
+for freedesktop 25.08. Those two move together: a newer GNOME runtime sits on a
+newer freedesktop base and needs the matching LLVM extension. The pinned
+runtime eventually goes end of life and nothing detects that automatically, so
+check it when cutting a release.
+
+Codecs come from `org.freedesktop.Platform.codecs-extra`, which the GNOME
+runtime declares itself and flatpak installs automatically. The older
+`org.freedesktop.Platform.ffmpeg-full` extension does not exist for freedesktop
+25.08 and cannot be used with this runtime.
+
+### First-time setup
+
+One-time operator actions. The release job fails without them.
+
+1. Create an R2 bucket named `mydia-flatpak`, attach `flatpak.mydia.dev` to it
+   and enable public access.
+2. Create an R2 API token with object read and write on that bucket.
+3. Generate the signing key on a trusted machine, not in CI. The
+   `--pinentry-mode loopback` flag is required even for an unprotected key, or
+   gpg fails with "No pinentry" on a headless machine:
+
+   ```bash
+   gpg --batch --pinentry-mode loopback --passphrase '' \
+     --quick-generate-key "Mydia Flatpak Signing <releases@mydia.dev>" rsa4096 sign never
+   KEYID=$(gpg --list-keys --with-colons releases@mydia.dev | awk -F: '/^fpr:/ {print $10; exit}')
+   gpg --export-secret-keys --armor "$KEYID" | base64 | tr -d '\n' > flatpak-signing-key.b64
+   gpg --export --armor "$KEYID" > player/flatpak/flatpak-signing-key.pub.asc
+   echo "$KEYID"
+   ```
+
+4. Back up `flatpak-signing-key.b64` somewhere other than GitHub. See below.
+5. Add the secrets `FLATPAK_GPG_PRIVATE_KEY` (contents of the `.b64` file),
+   `FLATPAK_GPG_KEY_ID` (the fingerprint), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`
+   and `R2_SECRET_ACCESS_KEY`.
+6. Commit `player/flatpak/flatpak-signing-key.pub.asc`. The public half is not
+   a secret, and `make-flatpakrepo.sh` embeds it in both repo files.
+
+The existing `CLOUDFLARE_API_TOKEN` is a Pages deploy token and cannot do S3
+auth against R2.
+
+### Rolling back a bad Flatpak publish
+
+Pruning keeps previous commits, so a bad publish is recoverable. From a machine
+with the signing key and R2 credentials:
+
+```bash
+rclone sync r2:mydia-flatpak/stable ./live-repo --create-empty-src-dirs
+ostree log --repo=live-repo app/dev.mydia.player/x86_64/stable
+ostree reset --repo=live-repo app/dev.mydia.player/x86_64/stable <previous-commit>
+flatpak build-update-repo --gpg-sign=$GPG_KEY_ID live-repo
+./player/flatpak/sync-repo.sh ./live-repo r2:mydia-flatpak/stable
+```
+
+Anyone who already updated moves back on their next `flatpak update`.
+
+### If the signing key is lost
+
+The public key is pinned inside every `.flatpakrepo` users added, so a lost
+private key breaks updates for every existing install. Recovery means shipping
+new repo files and asking users to re-add the remote. Keep a backup outside
+GitHub Actions.
 
 ## Release notes
 

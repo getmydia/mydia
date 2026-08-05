@@ -166,6 +166,7 @@ defmodule Mydia.Config.Loader do
       metadata: load_metadata_env(),
       downloads: load_downloads_env(),
       upgrades: load_upgrades_env(),
+      streaming: load_streaming_env(),
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
@@ -262,6 +263,15 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(
       :sweep_batch_size,
       System.get_env("UPGRADE_SWEEP_BATCH_SIZE"),
+      &parse_integer/1
+    )
+  end
+
+  defp load_streaming_env do
+    %{}
+    |> put_if_present(
+      :max_transcode_height,
+      System.get_env("MAX_TRANSCODE_HEIGHT"),
       &parse_integer/1
     )
   end

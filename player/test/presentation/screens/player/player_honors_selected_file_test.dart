@@ -45,12 +45,12 @@ void main() {
     await pumpPlayerScreen(tester, container, fileId: 'file-2');
     await pumpUntil(
       tester,
-      () => proxyService.capturedDirectStreamFileId != null,
+      () => proxyService.directStreamFileIds.isNotEmpty,
     );
 
     expect(
-      proxyService.capturedDirectStreamFileId,
-      'file-2',
+      proxyService.directStreamFileIds,
+      ['file-2'],
       reason: 'the direct-play branch must stream widget.fileId, not whatever '
           'the candidates response named',
     );

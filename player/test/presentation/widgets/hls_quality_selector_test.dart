@@ -1,181 +1,116 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/presentation/widgets/hls_quality_selector.dart';
 
+Widget _host(void Function(BuildContext) onReady) {
+  return MaterialApp(
+    home: Scaffold(
+      body: Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () => onReady(context),
+          child: const Text('open'),
+        ),
+      ),
+    ),
+  );
+}
+
 void main() {
-  group('HlsQualityLevel', () {
-    test('auto quality is marked as isAuto', () {
-      expect(HlsQualityLevel.auto.isAuto, isTrue);
-      expect(HlsQualityLevel.auto.label, equals('Auto'));
-    });
+  final ladder = deriveQualityLadder(sourceHeight: 2160);
 
-    test('standard quality levels have correct properties', () {
-      final levels = HlsQualityLevel.standardLevels;
+  testWidgets('lists every rung in the supplied ladder', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        (context) => showQualityPicker(context, ladder, QualityRung.original),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
 
-      expect(levels.length, equals(5));
-      expect(levels[0].label, equals('Auto'));
-      expect(levels[1].label, equals('1080p'));
-      expect(levels[1].height, equals(1080));
-      expect(levels[2].label, equals('720p'));
-      expect(levels[2].height, equals(720));
-      expect(levels[3].label, equals('480p'));
-      expect(levels[3].height, equals(480));
-      expect(levels[4].label, equals('360p'));
-      expect(levels[4].height, equals(360));
-    });
-
-    test('equality operator works correctly', () {
-      const level1 = HlsQualityLevel(label: '720p', height: 720);
-      const level2 = HlsQualityLevel(label: '720p', height: 720);
-      const level3 = HlsQualityLevel(label: '1080p', height: 1080);
-
-      expect(level1, equals(level2));
-      expect(level1, isNot(equals(level3)));
-      expect(HlsQualityLevel.auto, equals(HlsQualityLevel.auto));
-    });
-
-    test('hashCode is consistent', () {
-      const level1 = HlsQualityLevel(label: '720p', height: 720);
-      const level2 = HlsQualityLevel(label: '720p', height: 720);
-
-      expect(level1.hashCode, equals(level2.hashCode));
-    });
+    for (final rung in ladder) {
+      expect(find.text(rung.label), findsOneWidget);
+    }
   });
 
-  group('showHlsQualitySelector', () {
-    testWidgets('shows all quality levels', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () {
-                  showHlsQualitySelector(context, HlsQualityLevel.auto);
-                },
-                child: const Text('Show Selector'),
-              ),
-            ),
-          ),
-        ),
-      );
+  testWidgets('returns the tapped rung', (tester) async {
+    QualityRung? result;
+    await tester.pumpWidget(
+      _host((context) async {
+        result = await showQualityPicker(context, ladder, QualityRung.original);
+      }),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
 
-      // Tap button to show dialog
-      await tester.tap(find.text('Show Selector'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('720p'));
+    await tester.pumpAndSettle();
 
-      // Verify dialog is shown
-      expect(find.text('Video Quality'), findsOneWidget);
+    expect(result?.label, '720p');
+    expect(result?.maxBitrateKbps, 4000);
+  });
 
-      // Verify all quality levels are shown
-      expect(find.text('Auto'), findsOneWidget);
-      expect(find.text('1080p'), findsOneWidget);
-      expect(find.text('720p'), findsOneWidget);
-      expect(find.text('480p'), findsOneWidget);
-      expect(find.text('360p'), findsOneWidget);
+  testWidgets('returns null when dismissed', (tester) async {
+    QualityRung? result;
+    var completed = false;
+    await tester.pumpWidget(
+      _host((context) async {
+        result = await showQualityPicker(context, ladder, QualityRung.original);
+        completed = true;
+      }),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
 
-      // Verify auto has subtitle
-      expect(find.text('Adapts to your connection'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
 
-      // Verify cancel button
-      expect(find.text('Cancel'), findsOneWidget);
-    });
+    expect(completed, isTrue);
+    expect(result, isNull);
+  });
 
-    testWidgets('shows selected quality with check icon', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () {
-                  showHlsQualitySelector(
-                    context,
-                    const HlsQualityLevel(label: '720p', height: 720),
-                  );
-                },
-                child: const Text('Show Selector'),
-              ),
-            ),
-          ),
-        ),
-      );
+  testWidgets('marks the current rung as selected', (tester) async {
+    const current =
+        QualityRung(label: '480p', height: 480, maxBitrateKbps: 1500);
+    await tester.pumpWidget(
+      _host((context) => showQualityPicker(context, ladder, current)),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
 
-      // Tap button to show dialog
-      await tester.tap(find.text('Show Selector'));
-      await tester.pumpAndSettle();
+    expect(find.byKey(const Key('quality-rung-selected-480p')), findsOneWidget);
+  });
 
-      // Verify check_circle icon exists (for selected item)
-      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+  testWidgets('shows a clamp note when the server limited the stream',
+      (tester) async {
+    // A relay caps at 2000kbps and 720p regardless of what was asked for.
+    // Saying so beats letting the viewer think their choice was applied.
+    await tester.pumpWidget(
+      _host((context) => showQualityPicker(
+            context,
+            ladder,
+            QualityRung.original,
+            clampNote: 'Limited to 720p by your remote connection',
+          )),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
 
-      // Verify circle_outlined icons exist (for unselected items)
-      expect(find.byIcon(Icons.circle_outlined), findsNWidgets(4));
-    });
+    expect(
+      find.text('Limited to 720p by your remote connection'),
+      findsOneWidget,
+    );
+  });
 
-    testWidgets('returns selected quality when tapped', (tester) async {
-      HlsQualityLevel? result;
+  testWidgets('omits the note when nothing was clamped', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        (context) => showQualityPicker(context, ladder, QualityRung.original),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  result = await showHlsQualitySelector(
-                    context,
-                    HlsQualityLevel.auto,
-                  );
-                },
-                child: const Text('Show Selector'),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // Tap button to show dialog
-      await tester.tap(find.text('Show Selector'));
-      await tester.pumpAndSettle();
-
-      // Tap 1080p option
-      await tester.tap(find.text('1080p'));
-      await tester.pumpAndSettle();
-
-      // Verify the result
-      expect(result, isNotNull);
-      expect(result?.label, equals('1080p'));
-      expect(result?.height, equals(1080));
-    });
-
-    testWidgets('returns null when cancelled', (tester) async {
-      HlsQualityLevel? result;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  result = await showHlsQualitySelector(
-                    context,
-                    HlsQualityLevel.auto,
-                  );
-                },
-                child: const Text('Show Selector'),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // Tap button to show dialog
-      await tester.tap(find.text('Show Selector'));
-      await tester.pumpAndSettle();
-
-      // Tap cancel button
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      // Verify the result is null
-      expect(result, isNull);
-    });
+    expect(find.byKey(const Key('quality-clamp-note')), findsNothing);
   });
 }

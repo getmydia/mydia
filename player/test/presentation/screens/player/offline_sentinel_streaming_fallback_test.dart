@@ -89,13 +89,13 @@ void main() {
       await pumpPlayerScreen(tester, container, fileId: 'offline');
       await pumpUntilReal(
         tester,
-        () => proxyService.capturedDirectStreamFileId != null,
+        () => proxyService.directStreamFileIds.isNotEmpty,
       );
     });
 
     expect(
-      proxyService.capturedDirectStreamFileId,
-      'file-1',
+      proxyService.directStreamFileIds,
+      ['file-1'],
       reason: 'the offline sentinel must never reach the direct-play URL — '
           'once streaming takes over it has to play whatever the server '
           'ranked for the media item',
@@ -151,7 +151,7 @@ void main() {
       await pumpPlayerScreen(tester, container, fileId: 'offline');
       // The error UI (`_buildError`'s `Icons.error_outline`) is the only
       // stable signal available here: on this path
-      // `capturedDirectStreamFileId` never becomes non-null, so polling on
+      // `directStreamFileIds` never gains an entry, so polling on
       // it (as the happy-path test above does) would just spin to the
       // ceiling.
       await pumpUntilReal(
@@ -168,8 +168,8 @@ void main() {
     );
 
     expect(
-      proxyService.capturedDirectStreamFileId,
-      isNull,
+      proxyService.directStreamFileIds,
+      isEmpty,
       reason: 'direct play must never start when the candidates call '
           'failed — there is no server-ranked file to play',
     );

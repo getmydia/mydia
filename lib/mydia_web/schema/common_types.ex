@@ -282,6 +282,19 @@ defmodule MydiaWeb.Schema.CommonTypes do
         "Real media position, in seconds, at which the stream begins. " <>
           "Clients must map stream-local positions by this offset. " <>
           "Absent or 0 means the stream starts at the beginning."
+
+    field :max_bitrate, :integer,
+      description:
+        "Total kbps cap the server actually applied, which may be lower " <>
+          "than requested on a relay connection. Null means uncapped. " <>
+          "Clients should label the quality control from this, not from " <>
+          "what they asked for."
+
+    field :max_height, :integer,
+      description:
+        "Output height ceiling the server actually applied, which may be " <>
+          "lower than requested on a relay connection. Null means the " <>
+          "source resolution is preserved."
   end
 
   @desc "A download quality option"

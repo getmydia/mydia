@@ -975,4 +975,121 @@ defmodule Mydia.EventsTest do
       assert event.metadata["error_message"] == "boom"
     end
   end
+
+  describe "Event.changeset/2 type registration" do
+    test "accepts a registered type" do
+      changeset =
+        Event.changeset(%Event{}, %{
+          category: "downloads",
+          type: "download.stalled",
+          actor_type: :system,
+          actor_id: "download_monitor"
+        })
+
+      assert changeset.valid?
+    end
+
+    test "rejects a well-formed but unregistered type" do
+      changeset = Event.changeset(%Event{}, %{category: "downloads", type: "download.invented"})
+
+      refute changeset.valid?
+
+      assert "is not a registered event type; add it to Mydia.Events.Presentation" in errors_on(
+               changeset
+             ).type
+    end
+
+    test "still reports the format error for a malformed type" do
+      changeset = Event.changeset(%Event{}, %{category: "downloads", type: "nodot"})
+
+      refute changeset.valid?
+      assert "must be format: category.action" in errors_on(changeset).type
+
+      refute "is not a registered event type; add it to Mydia.Events.Presentation" in errors_on(
+               changeset
+             ).type
+    end
+  end
+
+  describe "list_events/1 exclude_types" do
+    setup do
+      {:ok, kept} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.update_available",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{"slug" => "tmdb-art"}
+        })
+
+      {:ok, excluded} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.http_request",
+          actor_type: :system,
+          actor_id: "tmdb-art",
+          metadata: %{"slug" => "tmdb-art"}
+        })
+
+      %{kept: kept, excluded: excluded}
+    end
+
+    test "omits the excluded types", %{kept: kept} do
+      ids =
+        [exclude_types: ["plugin.http_request"]]
+        |> Events.list_events()
+        |> Enum.map(& &1.id)
+
+      assert kept.id in ids
+      assert length(ids) == 1
+    end
+
+    test "an empty list excludes nothing" do
+      assert length(Events.list_events(exclude_types: [])) == 2
+    end
+
+    test "omitting the option excludes nothing" do
+      assert length(Events.list_events()) == 2
+    end
+
+    test "a non-list value raises instead of crashing deep in query building" do
+      assert_raise ArgumentError, ~r/exclude_types/, fn ->
+        Events.list_events(exclude_types: "plugin.http_request")
+      end
+    end
+  end
+
+  describe "format_for_timeline/1" do
+    test "returns a plain map with the four keys the timeline template reads" do
+      formatted =
+        Events.format_for_timeline(%Event{
+          type: "download.completed",
+          severity: :info,
+          metadata: %{"title" => "Arrival"}
+        })
+
+      refute is_struct(formatted)
+      assert %{icon: _, color: _, title: _, description: _} = formatted
+      assert map_size(formatted) == 4
+    end
+
+    test "labels a type the old map never covered" do
+      formatted =
+        Events.format_for_timeline(%Event{
+          type: "download.stalled",
+          severity: :warning,
+          metadata: %{"title" => "Arrival", "message" => "no progress for 2h"}
+        })
+
+      assert formatted.title == "Download stalled"
+      assert formatted.description == "Arrival (no progress for 2h)"
+    end
+
+    test "keeps the historical fallback description for an unregistered type" do
+      formatted =
+        Events.format_for_timeline(%Event{type: "legacy.gone", severity: :info, metadata: %{}})
+
+      assert formatted.description == "Event occurred"
+    end
+  end
 end

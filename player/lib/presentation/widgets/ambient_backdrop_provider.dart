@@ -22,9 +22,7 @@ class BackdropSource {
 
   @override
   bool operator ==(Object other) =>
-      other is BackdropSource &&
-      other.imageUrl == imageUrl &&
-      other.id == id;
+      other is BackdropSource && other.imageUrl == imageUrl && other.id == id;
 
   @override
   int get hashCode => Object.hash(imageUrl, id);
@@ -88,6 +86,18 @@ class AmbientBackdropController extends _$AmbientBackdropController {
     _apply();
   }
 
+  /// Clears the hover override only if it is still [source].
+  ///
+  /// A poster unmounting while hovered defers its clear to a post-frame
+  /// callback, by which time a different poster may already have published
+  /// its own override — during a scroll under a stationary cursor, for
+  /// example. Clearing unconditionally would wipe that fresh override and
+  /// leave the backdrop on the default while a poster is visibly hovered.
+  void clearHoverIf(BackdropSource source) {
+    if (_hover != source) return;
+    clearHover();
+  }
+
   /// Clears the default to the static fallback.
   void clear() => setDefault(BackdropSource.none);
 }
@@ -130,4 +140,10 @@ void publishBackdropHover(WidgetRef ref, BackdropSource source) {
 /// Clears the hover override, reverting the backdrop to the screen default.
 void clearBackdropHover(WidgetRef ref) {
   ref.read(ambientBackdropControllerProvider.notifier).clearHover();
+}
+
+/// Clears the hover override only if it still equals [source] — see
+/// [AmbientBackdropController.clearHoverIf].
+void clearBackdropHoverIf(WidgetRef ref, BackdropSource source) {
+  ref.read(ambientBackdropControllerProvider.notifier).clearHoverIf(source);
 }
