@@ -40,6 +40,17 @@ void main() {
       .where((r) => r.variables.containsKey('strategy'))
       .toList(growable: false);
 
+  /// True when [request] carries the named GraphQL operation. Lets a stub
+  /// answer by document rather than by call index, which is what a test with
+  /// more than one `_initializePlayer` pass needs.
+  ///
+  /// Reads the document off `Operation.toString()`, which prints the query
+  /// source. `DocumentNode.toString()` does not — it is the default
+  /// `Instance of 'DocumentNode'`, so matching on it silently matches
+  /// nothing and every request falls through to the stub's default.
+  bool isOperation(Request request, String name) =>
+      request.operation.toString().contains(name);
+
   Future<void> pumpUntilSessionStarted(WidgetTester tester, StubLink link,
       {int count = 1}) async {
     await pumpUntil(tester, () => sessionRequests(link).length >= count);
@@ -186,6 +197,103 @@ void main() {
           'without this the test proves only that a retry was sent, not that '
           'an old server response is usable',
     );
+  });
+
+  testWidgets(
+      'reads the stored default once and carries the rung across a '
+      're-initialization', (tester) async {
+    // The rung the viewer is watching at must not round-trip through secure
+    // storage to survive a restart. It used to: `_resolveQualityForFile`
+    // re-read the stored key on every re-initialization, so a write that
+    // failed — deliberately swallowed, and `flutter_secure_storage` needs a
+    // keyring on Linux desktop — silently put the session back at the rung
+    // they had just replaced.
+    //
+    // Driven through the error screen's Retry button, which is the only way
+    // to reach a second `_initializePlayer` under `flutter_test`: the chrome
+    // that owns the quality picker is never built here (see
+    // `quality_choice_test.dart` for why).
+    //
+    // Answered by operation rather than by call index. A second pass does not
+    // re-issue every query — the client's default cache-and-network policy
+    // serves some of them from the cache — so a positional script silently
+    // hands the wrong payload to the wrong document.
+    var sessionAttempts = 0;
+    final link = StubLink((request, _) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'StreamingCandidates')) {
+        return streamingCandidatesResponse(duration: 5400, height: 2160);
+      }
+      if (isOperation(request, 'StartStreamingSession')) {
+        sessionAttempts++;
+        return sessionAttempts == 1
+            ? graphqlErrorResponse('Failed to start streaming session')
+            : startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720);
+      }
+      return endStreamingSessionResponse();
+    });
+
+    final settings = FakeSettingsService(defaultQuality: '720p');
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      settingsService: settings,
+    );
+    addTearDown(container.dispose);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntil(tester, () => find.text('Retry').evaluate().isNotEmpty);
+
+    // Storage now disagrees with what is in effect — exactly the state a
+    // failed or stale write leaves behind.
+    settings.defaultQuality = '360p';
+
+    await tester.tap(find.text('Retry'));
+    await pumpUntilSessionStarted(tester, link, count: 2);
+
+    final attempts = sessionRequests(link);
+    expect(attempts, hasLength(2),
+        reason: 'without a second pass this test proves nothing; the whole '
+            'point is what the re-initialization requests');
+    expect(settings.getDefaultQualityCalls, 1,
+        reason: 'storage seeds the rung, it does not carry it');
+    expect(attempts.last.variables['maxHeight'], 720,
+        reason: 'the rung in effect wins over whatever storage now holds');
+  });
+
+  testWidgets('an unreadable preference plays at Original rather than failing',
+      (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      streamingCandidatesResponse(duration: 5400, height: 2160),
+      startStreamingSessionResponse(),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      settingsService: FakeSettingsService(
+        defaultQuality: '720p',
+        readError: StateError('secure storage is unavailable'),
+      ),
+    );
+    addTearDown(container.dispose);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntilSessionStarted(tester, link);
+
+    final variables = sessionRequests(link).single.variables;
+    expect(variables.containsKey('maxHeight'), isFalse,
+        reason: 'a locked keyring costs the preference, not the playback, and '
+            'the safe answer is the cheapest one for the server');
   });
 
   testWidgets('does not retry a genuine failure', (tester) async {

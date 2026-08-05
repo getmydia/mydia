@@ -31,24 +31,46 @@ class _RestartCall {
 /// Records every callback `applyQualityChoice` makes, and fails whichever
 /// restarts [failing] names.
 class _Recorder {
-  _Recorder({this.failing = const <int>{}});
+  _Recorder({this.failing = const <int>{}, this.storageFails = false});
 
   /// Zero-based indices of `restart` calls that throw.
   final Set<int> failing;
+
+  /// Stands in for secure storage being unavailable — a locked or missing
+  /// keyring on Linux desktop, which `flutter_secure_storage` needs.
+  final bool storageFails;
 
   /// Stands in for the widget still being mounted. Set through a cascade at
   /// the call site rather than the constructor, since only one test cares.
   bool active = true;
 
-  final List<QualityRung> persisted = [];
+  /// The rung each restart saw in memory when it ran. This is the property
+  /// that matters: the viewer's choice has to reach the restart, whatever
+  /// storage did.
+  final List<QualityRung> inEffectAtRestart = [];
+
+  QualityRung? adopted;
+  final List<QualityRung> adoptedRungs = [];
+  final List<QualityRung> remembered = [];
   final List<_RestartCall> restarts = [];
   final List<Object> gaveUp = [];
 
-  Future<void> persist(QualityRung rung) async => persisted.add(rung);
+  void adopt(QualityRung rung) {
+    adopted = rung;
+    adoptedRungs.add(rung);
+  }
+
+  Future<void> remember(QualityRung rung) async {
+    if (storageFails) {
+      throw StateError('secure storage is unavailable');
+    }
+    remembered.add(rung);
+  }
 
   Future<void> restart(QualityRung rung, {required bool isFallback}) async {
     final index = restarts.length;
     restarts.add(_RestartCall(rung, isFallback));
+    inEffectAtRestart.add(adopted ?? QualityRung.original);
     if (failing.contains(index)) {
       throw StateError('restart #$index refused ${rung.label}');
     }
@@ -61,7 +83,8 @@ class _Recorder {
   Future<void> run() => applyQualityChoice(
         selected: _selected,
         previous: _previous,
-        persist: persist,
+        adopt: adopt,
+        remember: remember,
         restart: restart,
         stillActive: stillActive,
         onGaveUp: onGaveUp,
@@ -69,12 +92,14 @@ class _Recorder {
 }
 
 void main() {
-  test('a choice that works persists it and restarts once', () async {
+  test('a choice that works adopts it, remembers it, and restarts once',
+      () async {
     final recorder = _Recorder();
 
     await recorder.run();
 
-    expect(recorder.persisted, [_selected]);
+    expect(recorder.adoptedRungs, [_selected]);
+    expect(recorder.remembered, [_selected]);
     expect(recorder.restarts.map((c) => c.rung), [_selected]);
     expect(recorder.restarts.single.isFallback, isFalse,
         reason: 'the first attempt is what the viewer asked for, and is told '
@@ -82,23 +107,44 @@ void main() {
     expect(recorder.gaveUp, isEmpty);
   });
 
-  test('persists before restarting, not after', () async {
-    // Ordering is load-bearing rather than cosmetic: `_initializePlayer`
-    // re-reads the stored rung on its way through, so a restart that ran
-    // before the write would negotiate the session at the *old* rung and the
-    // viewer's choice would silently not apply.
+  test(
+      'adopts in memory before writing to storage, and both before the '
+      'restart', () async {
+    // Ordering is load-bearing rather than cosmetic. `_resolveQualityForFile`
+    // carries the in-memory rung into the session it negotiates, so a restart
+    // that ran before `adopt` would request the *old* rung and the viewer's
+    // choice would silently not apply.
     final order = <String>[];
     await applyQualityChoice(
       selected: _selected,
       previous: _previous,
-      persist: (rung) async => order.add('persist:${rung.label}'),
+      adopt: (rung) => order.add('adopt:${rung.label}'),
+      remember: (rung) async => order.add('remember:${rung.label}'),
       restart: (rung, {required bool isFallback}) async =>
           order.add('restart:${rung.label}'),
       stillActive: () => true,
       onGaveUp: (_) {},
     );
 
-    expect(order, ['persist:720p', 'restart:720p']);
+    expect(order, ['adopt:720p', 'remember:720p', 'restart:720p']);
+  });
+
+  test('a restart still gets the chosen rung when persistence fails', () async {
+    // The regression this split exists for. The choice used to reach the
+    // restart *through* secure storage, whose write failure is deliberately
+    // swallowed, so a locked keyring meant the session came back at the rung
+    // the viewer had just replaced — a restart that visibly changed nothing.
+    final recorder = _Recorder(storageFails: true);
+
+    await recorder.run();
+
+    expect(recorder.remembered, isEmpty, reason: 'the write threw');
+    expect(recorder.restarts.map((c) => c.rung), [_selected],
+        reason: 'the restart happens anyway; losing the preference for next '
+            'time is not a reason to abandon this playback');
+    expect(recorder.inEffectAtRestart, [_selected],
+        reason: 'and it runs with the chosen rung in effect, not the old one');
+    expect(recorder.gaveUp, isEmpty);
   });
 
   test('a failing choice restores the previous rung and retries once',
@@ -107,14 +153,28 @@ void main() {
 
     await recorder.run();
 
-    expect(recorder.persisted, [_selected, _previous],
-        reason: 'the rung that was working has to be stored again, or the '
-            'retry re-reads the failing one');
+    expect(recorder.adoptedRungs, [_selected, _previous],
+        reason: 'the rung that was working has to be back in effect, or the '
+            'retry re-requests the failing one');
+    expect(recorder.remembered, [_selected, _previous]);
     expect(recorder.restarts.map((c) => c.rung), [_selected, _previous]);
+    expect(recorder.inEffectAtRestart, [_selected, _previous]);
     expect(recorder.restarts.last.isFallback, isTrue);
     expect(recorder.gaveUp, isEmpty,
         reason: 'the rollback succeeded, so the viewer keeps watching and '
             'never sees the error screen');
+  });
+
+  test('the rollback survives a storage failure too', () async {
+    final recorder = _Recorder(failing: {0}, storageFails: true);
+
+    await recorder.run();
+
+    expect(recorder.restarts.map((c) => c.rung), [_selected, _previous]);
+    expect(recorder.inEffectAtRestart, [_selected, _previous],
+        reason: 'an unwritable keyring must not strand the viewer at a rung '
+            'that could not be served');
+    expect(recorder.gaveUp, isEmpty);
   });
 
   test('a second failure gives up instead of retrying again', () async {
@@ -139,14 +199,14 @@ void main() {
   });
 
   test('stops without rolling back when the caller is gone', () async {
-    // The widget was disposed mid-restart. Persisting and restarting against
+    // The widget was disposed mid-restart. Adopting and restarting against
     // a dead `State` is at best wasted work and at worst a `setState` after
     // dispose.
     final recorder = _Recorder(failing: {0})..active = false;
 
     await recorder.run();
 
-    expect(recorder.persisted, [_selected]);
+    expect(recorder.adoptedRungs, [_selected]);
     expect(recorder.restarts, hasLength(1));
     expect(recorder.gaveUp, isEmpty);
   });
@@ -159,7 +219,8 @@ void main() {
     await applyQualityChoice(
       selected: _selected,
       previous: _previous,
-      persist: recorder.persist,
+      adopt: recorder.adopt,
+      remember: recorder.remember,
       restart: recorder.restart,
       stillActive: () => ++checks == 1,
       onGaveUp: recorder.onGaveUp,

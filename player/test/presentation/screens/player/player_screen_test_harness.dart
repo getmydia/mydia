@@ -102,17 +102,41 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
 /// that mounts the screen fails on a dialog that never appears, with no
 /// error to explain it.
 class FakeSettingsService extends Fake implements SettingsService {
-  FakeSettingsService({this.defaultQuality = 'auto'});
+  FakeSettingsService({
+    this.defaultQuality = 'auto',
+    this.readError,
+    this.writeError,
+  });
 
   /// The persisted `default_quality` key. `auto` — the real service's own
   /// default — reads back as `QualityRung.original`.
   String defaultQuality;
 
+  /// When set, reads throw it. `flutter_secure_storage` needs a keyring on
+  /// Linux desktop, so an unreadable preference is a real state, not a
+  /// hypothetical one.
+  final Object? readError;
+
+  /// When set, writes throw it.
+  final Object? writeError;
+
+  /// How many times the screen has asked storage for the default rung.
+  /// Storage seeds the rung once per playback; the in-memory value carries
+  /// it across every later re-initialization.
+  int getDefaultQualityCalls = 0;
+
   @override
-  Future<String> getDefaultQuality() async => defaultQuality;
+  Future<String> getDefaultQuality() async {
+    getDefaultQualityCalls++;
+    final error = readError;
+    if (error != null) throw error;
+    return defaultQuality;
+  }
 
   @override
   Future<void> setDefaultQuality(String quality) async {
+    final error = writeError;
+    if (error != null) throw error;
     defaultQuality = quality;
   }
 

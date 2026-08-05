@@ -253,8 +253,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Whether current playback is direct play (vs HLS)
   bool _isDirectPlay = false;
 
+  /// The rung in effect, or null before anything has settled one for this
+  /// playback.
+  ///
+  /// Null is what makes secure storage a *seed* rather than a channel.
+  /// [_resolveQualityForFile] consults storage only while this is null; once
+  /// a rung is settled, every later re-initialization — a quality change, a
+  /// seek past the transcoded window, the next episode — carries this value
+  /// forward. A viewer's choice therefore reaches the restart it triggers in
+  /// memory, and never has to survive a round trip through a platform
+  /// channel that can fail. [_resumeOverrideSeconds] hands the position
+  /// across the same restart for the same reason.
+  QualityRung? _settledQuality;
+
   /// The rung the viewer chose, which is what gets requested.
-  QualityRung _selectedQuality = QualityRung.original;
+  QualityRung get _selectedQuality => _settledQuality ?? QualityRung.original;
 
   /// The rung the server reported actually applying, which is what gets
   /// displayed. These differ on a relay connection, where the cap is not
@@ -950,10 +963,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// Rebuilds the quality ladder for the file about to play and settles which
   /// rung this playback will request.
   ///
-  /// Both are per-file, not per-widget: the ladder depends on the source
-  /// height, and a rung persisted while watching a taller file may not exist
-  /// in this one's ladder. Falling back to Original there beats requesting an
+  /// The ladder is per-file, not per-widget: it depends on the source height,
+  /// and a rung chosen while watching a taller file may not exist in this
+  /// one's ladder. Falling back to Original there beats requesting an
   /// upscale, which costs encode time to produce a larger, blurrier picture.
+  ///
+  /// The rung is *seeded* from storage and then carried in memory. Re-reading
+  /// it here on every re-initialization would put a fallible platform channel
+  /// on the only path carrying the viewer's choice: a swallowed write failure
+  /// would make the restart negotiate the rung they just replaced, and the
+  /// label would revert in front of them. See [_settledQuality].
   Future<void> _resolveQualityForFile(
     Query$StreamingCandidates$streamingCandidates? candidatesResult,
   ) async {
@@ -961,20 +980,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       sourceHeight: candidatesResult?.metadata.height,
     );
 
-    _selectedQuality = QualityRung.original;
+    final requested = _settledQuality ?? await _storedDefaultQuality();
 
-    // Secure storage being unreadable is no reason to fail playback, and the
-    // safe answer is the cheapest one for the server. Matches how
-    // `_loadAutoSkipPreference` treats the same failure.
+    _settledQuality =
+        _qualityLadder.contains(requested) ? requested : QualityRung.original;
+  }
+
+  /// The rung stored as this install's default, for the first session of a
+  /// playback.
+  ///
+  /// Secure storage being unreadable is no reason to fail playback, and the
+  /// safe answer is the cheapest one for the server. Matches how
+  /// `_loadAutoSkipPreference` treats the same failure.
+  Future<QualityRung> _storedDefaultQuality() async {
     try {
       final storedKey =
           await ref.read(settingsServiceProvider).getDefaultQuality();
-      final storedRung = QualityRung.fromStorageKey(storedKey);
-      if (storedRung != null && _qualityLadder.contains(storedRung)) {
-        _selectedQuality = storedRung;
-      }
+      return QualityRung.fromStorageKey(storedKey) ?? QualityRung.original;
     } catch (e) {
       debugPrint('[PlayerScreen] Could not read default quality: $e');
+      return QualityRung.original;
     }
   }
 
@@ -2210,10 +2235,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     await applyQualityChoice(
       selected: selected,
       previous: previous,
-      persist: (rung) async {
-        if (mounted) setState(() => _selectedQuality = rung);
-        await _persistQuality(rung);
+      adopt: (rung) {
+        // In memory, and only in memory. This is the channel the restart
+        // below reads the rung from — [_resolveQualityForFile] carries
+        // `_settledQuality` forward rather than re-reading storage.
+        _settledQuality = rung;
+        if (mounted) setState(() {});
       },
+      remember: (rung) =>
+          ref.read(settingsServiceProvider).setDefaultQuality(rung.storageKey),
       restart: (rung, {required bool isFallback}) => _restartSessionAt(
         position,
         loadingMessage: isFallback
@@ -2226,18 +2256,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _isLoading = false;
       }),
     );
-  }
-
-  /// Remembers the chosen rung for the next playback. A storage failure is
-  /// logged and dropped: it costs the preference, not the playback.
-  Future<void> _persistQuality(QualityRung rung) async {
-    try {
-      await ref
-          .read(settingsServiceProvider)
-          .setDefaultQuality(rung.storageKey);
-    } catch (e) {
-      debugPrint('[PlayerScreen] Could not save default quality: $e');
-    }
   }
 
   /// Explains a server-side limit when the applied rung is below the chosen
@@ -2963,12 +2981,13 @@ Future<void> trackRestartInFlight(
 /// in the quality change and the one most worth pinning, so it lives where a
 /// fake [restart] that throws can exercise it.
 ///
-/// [persist] records a rung as the one now in effect — the widget both
-/// displays and stores it. [restart] tears the session down and brings it
-/// back at that rung, throwing if it cannot; [isFallback] distinguishes the
-/// two attempts, which the viewer is told apart. [stillActive] reports
-/// whether the caller can still act at all (its widget is still mounted).
-/// [onGaveUp] receives the second failure.
+/// [adopt] puts a rung into effect in memory — the widget both requests and
+/// displays it from there. [remember] writes it to storage for the *next*
+/// playback and is allowed to fail. [restart] tears the session down and
+/// brings it back at that rung, throwing if it cannot; [isFallback]
+/// distinguishes the two attempts, which the viewer is told apart.
+/// [stillActive] reports whether the caller can still act at all (its widget
+/// is still mounted). [onGaveUp] receives the second failure.
 ///
 /// The retry is deliberately single. If returning to the rung that was
 /// already working also fails, the problem is not the quality choice, and
@@ -2978,13 +2997,14 @@ Future<void> trackRestartInFlight(
 Future<void> applyQualityChoice({
   required QualityRung selected,
   required QualityRung previous,
-  required Future<void> Function(QualityRung rung) persist,
+  required void Function(QualityRung rung) adopt,
+  required Future<void> Function(QualityRung rung) remember,
   required Future<void> Function(QualityRung rung, {required bool isFallback})
       restart,
   required bool Function() stillActive,
   required void Function(Object error) onGaveUp,
 }) async {
-  await persist(selected);
+  await _adoptAndRemember(selected, adopt, remember);
 
   try {
     await restart(selected, isFallback: false);
@@ -2994,7 +3014,7 @@ Future<void> applyQualityChoice({
     debugPrint(
         '[PlayerScreen] Quality change to ${selected.label} failed: $error');
     if (!stillActive()) return;
-    await persist(previous);
+    await _adoptAndRemember(previous, adopt, remember);
 
     try {
       await restart(previous, isFallback: true);
@@ -3004,5 +3024,31 @@ Future<void> applyQualityChoice({
       if (!stillActive()) return;
       onGaveUp(fallbackError);
     }
+  }
+}
+
+/// Puts [rung] into effect in memory, then tries to remember it for the next
+/// playback.
+///
+/// Both the order and the swallow are load-bearing. [adopt] is the only
+/// channel the restart reads the rung from, so it happens first and is
+/// synchronous — nothing can fail between choosing a rung and the restart
+/// seeing it. [remember] goes through secure storage, which needs a keyring
+/// on Linux desktop and can genuinely be unavailable, so its failure costs
+/// the preference for next time and nothing else. Before this split, the
+/// choice reached the restart *through* storage, and a swallowed write
+/// failure silently restarted the session at the rung the viewer had just
+/// replaced.
+Future<void> _adoptAndRemember(
+  QualityRung rung,
+  void Function(QualityRung rung) adopt,
+  Future<void> Function(QualityRung rung) remember,
+) async {
+  adopt(rung);
+
+  try {
+    await remember(rung);
+  } catch (e) {
+    debugPrint('[PlayerScreen] Could not save default quality: $e');
   }
 }
