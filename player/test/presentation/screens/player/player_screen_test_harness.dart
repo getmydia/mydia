@@ -321,8 +321,6 @@ Map<String, dynamic> streamingCandidatesResponse({
         'duration': duration,
         'width': null,
         'height': height,
-        'bitrate': null,
-        'resolution': null,
       },
     },
   };

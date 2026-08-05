@@ -12,8 +12,6 @@ query StreamingCandidates($contentType: String!, $id: ID!) {
       duration
       width
       height
-      bitrate
-      resolution
     }
   }
 }
