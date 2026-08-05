@@ -29,7 +29,7 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/getmydia/mydia/releases/latest/download/appcast.xml</string>
+	<string>https://updates.mydia.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>+n3C1GhBlCOwA2CLLwdh/kJjqPLNGNlVkZNLUVtkwMo=</string>
 	<key>SUEnableAutomaticChecks</key>
