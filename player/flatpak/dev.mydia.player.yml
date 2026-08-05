@@ -23,6 +23,14 @@ runtime-version: '50'
 sdk: org.gnome.Sdk
 command: mydia-player
 
+# Flutter's Linux desktop build hardcodes CC=clang and CXX=clang++, and the
+# GNOME SDK ships gcc only. Without this the build dies in CMake with
+# "Could not find the compiler specified in the environment variable CXX".
+# llvm21 is the LLVM extension built for freedesktop 25.08, which is the base
+# GNOME 50 sits on; it is a build-time dependency and ships nothing in the app.
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.llvm21
+
 finish-args:
   # Talks to the Mydia server over HTTP and to p2p peers over QUIC/UDP.
   - --share=network
@@ -79,6 +87,9 @@ modules:
   - name: mydia-player
     buildsystem: simple
     build-options:
+      # Puts the llvm21 extension's clang on PATH ahead of the SDK's gcc.
+      append-path: /usr/lib/sdk/llvm21/bin
+      prepend-ld-library-path: /usr/lib/sdk/llvm21/lib
       # Not hermetic, and deliberately so. flutter pub get, cargokit's crate
       # fetches and Flutter's own SDK download all need the network. Making
       # this build offline would mean vendoring all three, which is only

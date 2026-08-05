@@ -345,7 +345,9 @@ jobs:
         run: |
           flatpak remote-add --user --if-not-exists flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y flathub org.gnome.Platform//50 org.gnome.Sdk//50
+          flatpak install --user -y flathub \
+            org.gnome.Platform//50 org.gnome.Sdk//50 \
+            org.freedesktop.Sdk.Extension.llvm21//25.08
 
       - name: Build
         run: |
