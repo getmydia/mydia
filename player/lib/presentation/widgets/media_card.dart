@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
-import '../../core/theme/depth_tokens.dart';
 import '../../domain/models/media_file.dart';
-import 'glass_surface.dart';
 import 'poster_frame.dart';
 import 'progress_overlay.dart';
 import 'quality_badge.dart';
@@ -62,45 +60,6 @@ class MediaCard extends StatelessWidget {
     );
   }
 
-  /// A faux-glass darkening scrim with no live blur, so per-card scrolling
-  /// content never creates a [BackdropFilter] pass (R8).
-  Widget _buildHoverOverlay() {
-    return GlassSurface.faux(
-      showRim: false,
-      borderRadius: BorderRadius.circular(DepthTokens.radiusPoster),
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0x4D000000), // black @ 0.3
-          Color(0x99000000), // black @ 0.6
-        ],
-      ),
-      child: Center(
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.4),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.play_arrow_rounded,
-            size: 32,
-            color: Colors.white,
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final cardFiles = files;
@@ -125,57 +84,62 @@ class MediaCard extends StatelessWidget {
 
     final progress = progressPercentage;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: cardWidth,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: cardWidth,
-              height: cardHeight,
-              child: PosterFrame(
-                imageUrl: posterUrl,
-                placeholder: _buildPlaceholder(),
-                hoverOverlay: _buildHoverOverlay(),
-                overlays: [
-                  if (progress != null && progress > 0)
-                    ProgressOverlay(percentage: progress),
-                  if (quality.hasQuality)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: QualityBadgeRow(
-                        badges: quality.toBadges(),
-                        spacing: 4.0,
+    // A click cursor and nothing more: tapping a card opens the title, it does
+    // not start playback, so there is no play glyph and no hoverOverlay here.
+    // The cursor wraps the whole tap target, title and subtitle included.
+    return MouseRegion(
+      cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: cardWidth,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: cardWidth,
+                height: cardHeight,
+                child: PosterFrame(
+                  imageUrl: posterUrl,
+                  placeholder: _buildPlaceholder(),
+                  overlays: [
+                    if (progress != null && progress > 0)
+                      ProgressOverlay(percentage: progress),
+                    if (quality.hasQuality)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: QualityBadgeRow(
+                          badges: quality.toBadges(),
+                          spacing: 4.0,
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                  ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 10),
               Text(
-                subtitle!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                title,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
                     ),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

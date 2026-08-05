@@ -7,6 +7,7 @@ import 'package:player/presentation/screens/search/widgets/search_filter_chip.da
 import 'package:player/presentation/screens/search/widgets/search_result_card.dart';
 import 'package:player/presentation/screens/search/widgets/search_section_header.dart';
 
+import '../../../test_utils/hover_affordance.dart';
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/poster_contract.dart';
 
@@ -165,6 +166,40 @@ void main() {
       });
 
       expect(find.text('4 items'), findsOneWidget);
+    });
+
+    testWidgets(
+        'offers no play affordance at rest or on hover, because tapping a '
+        'result opens the title rather than playing it', (tester) async {
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(
+          _host(
+            SizedBox(
+              height: 320,
+              child: SearchResultCard(
+                result: const SearchResult(
+                  id: 'm1',
+                  type: SearchResultType.movie,
+                  title: 'Alien',
+                  year: 1979,
+                ),
+                onTap: () {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(findPlayGlyph(), findsNothing);
+
+        await hoverOver(tester, find.byType(SearchResultCard));
+
+        expect(findPlayGlyph(), findsNothing);
+        expect(
+          hoverCursor(tester, of: find.byType(SearchResultCard)),
+          SystemMouseCursors.click,
+        );
+      });
     });
   });
 
