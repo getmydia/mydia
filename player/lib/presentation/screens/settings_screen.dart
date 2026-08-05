@@ -149,7 +149,7 @@ class SettingsScreen extends ConsumerWidget {
                   deriveQualityLadder(sourceHeight: 2160),
                   current,
                 );
-                if (picked != null) {
+                if (picked != null && context.mounted) {
                   await ref
                       .read(settingsControllerProvider.notifier)
                       .setDefaultQuality(picked.storageKey);
