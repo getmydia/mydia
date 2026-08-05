@@ -248,6 +248,56 @@ void main() {
         );
       });
     });
+
+    testWidgets(
+        'an artwork-loss update does not wipe a newer override from a '
+        'different poster (regression: scroll-recycling race)', (tester) async {
+      await mockNetworkImages(() async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        container.listen(ambientBackdropControllerProvider, (_, __) {});
+
+        const urlA = 'https://example.com/a.jpg';
+        const urlB = 'https://example.com/b.jpg';
+
+        await tester.pumpWidget(
+          host(
+            container,
+            const PosterFrame(imageUrl: urlA, placeholder: _placeholder),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await hoverOver(tester, find.byType(PosterFrame));
+
+        expect(
+          container.read(ambientBackdropControllerProvider).imageUrl,
+          urlA,
+        );
+
+        // Simulate a different poster (elsewhere in the grid) publishing its
+        // own override before this poster's pending artwork-loss clear runs
+        // — exactly what a real onEnter from a poster scrolling in under the
+        // same stationary cursor would do. This does not need to land inside
+        // the exact same frame as the pump below: it only needs to still be
+        // the active override at the moment the deferred callback below
+        // fires, and nothing else touches the controller in between.
+        const posterB = BackdropSource(imageUrl: urlB, id: urlB);
+        container.read(ambientBackdropControllerProvider.notifier).setHover(
+              posterB,
+            );
+
+        // Same widget, same position, still hovered: loses its artwork.
+        // didUpdateWidget's no-artwork branch schedules a deferred clear of
+        // what *this* poster published (urlA) — a bare clearHover() would
+        // wipe posterB's fresher override instead.
+        await tester.pumpWidget(
+          host(container, const PosterFrame(placeholder: _placeholder)),
+        );
+        await tester.pump();
+
+        expect(container.read(ambientBackdropControllerProvider), posterB);
+      });
+    });
   });
 
   group('PosterPlayScrim', () {

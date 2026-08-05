@@ -139,6 +139,12 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     if (_isHovered && widget.imageUrl != oldWidget.imageUrl) {
       final hasArtwork = _hasArtwork;
       final url = widget.imageUrl;
+      // What this instance previously had published, in case the no-artwork
+      // branch below needs to retract exactly that (and nothing fresher).
+      final previous = BackdropSource(
+        imageUrl: oldWidget.imageUrl,
+        id: oldWidget.imageUrl,
+      );
       // didUpdateWidget runs while the widget tree is still building, and
       // Riverpod forbids writing provider state synchronously from there
       // (confirmed empirically: it throws "Tried to modify a provider while
@@ -146,13 +152,23 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
       // mirrors publishBackdropSource just below, which defers for the same
       // reason.
       SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+        // The pointer may have left this poster between scheduling and now —
+        // MouseTracker dispatches enter/exit from its own post-frame phase,
+        // and its ordering against this callback is not guaranteed, so
+        // _handleHoverExit may already have cleared the override. Without
+        // this guard we'd re-assert artwork for a poster nobody is hovering.
+        if (!mounted || !_isHovered) return;
         if (hasArtwork) {
+          // No identity check needed: _isHovered still true at this point
+          // means the pointer is genuinely on this poster, so asserting its
+          // artwork is correct regardless of what else raced.
           _backdropController.setHover(BackdropSource(imageUrl: url, id: url));
         } else {
-          // The new data has no artwork; leaving the previous poster's art up
-          // would misattribute it to whatever is now on screen.
-          _backdropController.clearHover();
+          // The new data has no artwork; a bare clearHover() would risk the
+          // same race dispose() guards against — a different poster's fresh
+          // override arriving before this callback runs. Only retract what
+          // this instance itself last published.
+          _backdropController.clearHoverIf(previous);
         }
       });
     }
