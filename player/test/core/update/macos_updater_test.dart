@@ -61,4 +61,26 @@ void main() {
     await expectLater(MacOSUpdater.setBetaChannel(true), completes);
     expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
   });
+
+  test('setBetaChannel reports success', () async {
+    expect(await MacOSUpdater.setBetaChannel(true), isTrue);
+  });
+
+  test('setBetaChannel reports failure when the host errors', () async {
+    mock((_) async => throw PlatformException(code: 'boom'));
+
+    expect(await MacOSUpdater.setBetaChannel(true), isFalse);
+  });
+
+  test('an unregistered host never propagates', () async {
+    // Clearing the handler is what a real macOS build looks like before the
+    // native side registers, and MissingPluginException is not a
+    // PlatformException, so it needs its own catch clause.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kSparkleChannel, null);
+
+    await expectLater(MacOSUpdater.checkForUpdates(), completes);
+    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
+    expect(await MacOSUpdater.setBetaChannel(true), isFalse);
+  });
 }

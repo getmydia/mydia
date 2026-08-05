@@ -36,6 +36,8 @@ class MacOSUpdater extends PlatformUpdater {
       await channel.invokeMethod('checkForUpdates');
     } on PlatformException catch (e) {
       debugPrint('[MacOSUpdater] Sparkle checkForUpdates failed: $e');
+    } on MissingPluginException catch (e) {
+      debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
     }
   }
 
@@ -52,19 +54,33 @@ class MacOSUpdater extends PlatformUpdater {
     } on PlatformException catch (e) {
       debugPrint('[MacOSUpdater] Sparkle getBetaChannel failed: $e');
       return false;
+    } on MissingPluginException catch (e) {
+      debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
+      return false;
     }
   }
 
-  /// Opts into or out of prerelease builds. Opting in also runs a check
-  /// immediately, so the change is visible without waiting for the schedule.
-  static Future<void> setBetaChannel(
+  /// Opts into or out of prerelease builds.
+  ///
+  /// Returns true when the host accepted the change. On false the preference
+  /// was not written, so a caller showing an optimistic toggle must revert it.
+  ///
+  /// On opt-in the host also runs an update check immediately, so the change
+  /// is visible without waiting for the next scheduled check. That happens on
+  /// the Swift side, not here.
+  static Future<bool> setBetaChannel(
     bool enabled, {
     MethodChannel channel = kSparkleChannel,
   }) async {
     try {
       await channel.invokeMethod('setBetaChannel', enabled);
+      return true;
     } on PlatformException catch (e) {
       debugPrint('[MacOSUpdater] Sparkle setBetaChannel failed: $e');
+      return false;
+    } on MissingPluginException catch (e) {
+      debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
+      return false;
     }
   }
 }
