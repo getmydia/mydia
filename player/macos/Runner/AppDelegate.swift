@@ -4,9 +4,11 @@ import Sparkle
 
 /// User-defaults key backing the beta channel opt-in.
 ///
-/// Swift owns this rather than Flutter because Sparkle's automatic check fires
-/// inside applicationDidFinishLaunching, before the Flutter engine has booted.
-/// The delegate has to be able to answer without asking Dart.
+/// Swift owns this rather than Flutter because `allowedChannels(for:)` is a
+/// synchronous Objective-C callback that must return a value immediately.
+/// It cannot await an asynchronous round trip to Dart, so the source of
+/// truth has to live on this side. Flutter reads and writes it through the
+/// method channel below.
 ///
 /// Settable without the UI for testing:
 ///   defaults write dev.mydia.player MydiaBetaChannel -bool true
@@ -69,13 +71,15 @@ class AppDelegate: FlutterAppDelegate {
           return
         }
         UserDefaults.standard.set(enabled, forKey: betaChannelDefaultsKey)
+        result(nil)
         // Sparkle reads allowedChannels on every check, so this takes effect
         // without a restart. Check immediately on opt-in so the toggle does
         // something visible instead of waiting for the next scheduled check.
+        // result is answered first so the Dart future never depends on how
+        // long Sparkle's check takes.
         if enabled {
           self?.updaterController.checkForUpdates(nil)
         }
-        result(nil)
 
       default:
         result(FlutterMethodNotImplemented)
