@@ -695,8 +695,10 @@ defmodule MydiaWeb.MediaLive.Index do
     items = apply_progress_filter(items, socket.assigns.filter_progress)
     Logger.debug("load_media_items: after progress filter=#{length(items)}")
 
-    # Apply sorting
-    items = apply_sorting(items, socket.assigns.sort_by)
+    # Apply sorting. The added-* sorts need content arrival times, which are
+    # one aggregate rather than a per-item lookup.
+    items =
+      apply_sorting(items, socket.assigns.sort_by, added_at_map(items, socket.assigns.sort_by))
 
     # Apply pagination
     paginated_items = items |> Enum.drop(offset) |> Enum.take(limit)
@@ -816,7 +818,15 @@ defmodule MydiaWeb.MediaLive.Index do
     end)
   end
 
-  defp apply_sorting(items, sort_by) do
+  # Only the added-* sorts need it, and the aggregate is not free, so skip it
+  # for every other sort.
+  defp added_at_map(items, sort_by) when sort_by in ["added_asc", "added_desc"] do
+    Mydia.Media.RecentlyAdded.added_at_map(ids: Enum.map(items, & &1.id))
+  end
+
+  defp added_at_map(_items, _sort_by), do: %{}
+
+  defp apply_sorting(items, sort_by, added_at) do
     Logger.debug("Applying sort: #{inspect(sort_by)} to #{length(items)} items")
 
     case sort_by do
@@ -833,10 +843,10 @@ defmodule MydiaWeb.MediaLive.Index do
         Enum.sort_by(items, &(&1.year || 0), :desc)
 
       "added_asc" ->
-        Enum.sort_by(items, & &1.inserted_at, {:asc, DateTime})
+        Enum.sort_by(items, &effective_added_at(&1, added_at), {:asc, DateTime})
 
       "added_desc" ->
-        Enum.sort_by(items, & &1.inserted_at, {:desc, DateTime})
+        Enum.sort_by(items, &effective_added_at(&1, added_at), {:desc, DateTime})
 
       "rating_asc" ->
         Enum.sort_by(items, &get_rating(&1), :asc)
@@ -866,6 +876,13 @@ defmodule MydiaWeb.MediaLive.Index do
         # Default to title ascending
         Enum.sort_by(items, &String.downcase(&1.title || ""), :asc)
     end
+  end
+
+  # A wanted item with no files has no content arrival time. Its own
+  # inserted_at is then the only meaningful answer for "when was this added",
+  # and it keeps the sort total.
+  defp effective_added_at(item, added_at) do
+    Map.get(added_at, item.id) || item.inserted_at
   end
 
   defp get_rating(media_item) do
