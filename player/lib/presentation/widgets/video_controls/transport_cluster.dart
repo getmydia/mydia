@@ -21,7 +21,7 @@ class TransportSurface extends StatelessWidget {
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
 
-  /// Renders only the play/pause button (48px) — no ±10s seek, no episode
+  /// Renders only the play/pause button (40px) — no ±10s seek, no episode
   /// nav — regardless of which callbacks are supplied. Used below the mobile
   /// breakpoint (`PanelMetrics.touchTargets`): ±10s already has a gesture
   /// equivalent there (double-tap, see `gesture_controls.dart`), and the
