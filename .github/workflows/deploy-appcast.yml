@@ -75,8 +75,15 @@ jobs:
             echo "Beta items: $(grep -c '<sparkle:channel>beta</sparkle:channel>' dist/appcast.xml || true)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Require the Cloudflare token
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set, so the feed cannot be deployed."
+            echo "::error::Failing loudly: a silent skip would leave updates.mydia.dev serving a stale feed while the release reports success."
+            exit 1
+          fi
+
       - name: Deploy to Cloudflare Pages
-        if: env.CLOUDFLARE_API_TOKEN != ''
         working-directory: scripts/appcast
         # --branch is required, not optional. The checkout above pins a commit
         # SHA, so the runner is in detached HEAD and wrangler cannot infer the
@@ -84,6 +91,21 @@ jobs:
         # succeeds loudly while updates.mydia.dev serves nothing new.
         run: npx wrangler pages deploy dist/ --project-name=mydia-appcast --branch master
 
-      - name: Note skipped deploy
-        if: env.CLOUDFLARE_API_TOKEN == ''
-        run: echo "::warning::CLOUDFLARE_API_TOKEN absent; generated and validated the feed but did not deploy it."
+      - name: Verify the deployed feed
+        working-directory: scripts/appcast
+        run: |
+          # Turns a broken Pages project, a wrong production branch, or a missing
+          # DNS record into a failed job instead of a green one over a stale feed.
+          sleep 10
+          served=$(curl -fsSL https://updates.mydia.dev/appcast.xml || true)
+          if [ -z "$served" ]; then
+            echo "::error::updates.mydia.dev/appcast.xml served nothing after deploy."
+            exit 1
+          fi
+          local_count=$(grep -c '<item>' dist/appcast.xml)
+          served_count=$(printf '%s' "$served" | grep -c '<item>' || true)
+          if [ "$served_count" -ne "$local_count" ]; then
+            echo "::error::Served feed has $served_count item(s), expected $local_count. The deploy may have landed on a preview URL."
+            exit 1
+          fi
+          echo "updates.mydia.dev is serving $served_count item(s)."
