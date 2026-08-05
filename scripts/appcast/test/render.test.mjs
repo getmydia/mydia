@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { XMLParser } from 'fast-xml-parser'
 import { escapeXml, wrapCdata, renderItem, renderFeed } from '../lib/render.mjs'
 
 function item(overrides = {}) {
@@ -26,11 +27,23 @@ test('escapes the five XML metacharacters', () => {
 
 test('splits a CDATA terminator inside release notes', () => {
   // A CDATA section ends at the first ]]>. Left alone, notes containing one
-  // truncate the document mid-item and Sparkle rejects the whole feed.
+  // truncate the document mid-item and Sparkle rejects the whole feed. The
+  // fix ends the section and reopens it, so the ]]> straddles the boundary
+  // and neither section terminates early.
   const wrapped = wrapCdata('before ]]> after')
 
-  assert.equal(wrapped, '<![CDATA[before ]]<![CDATA[> after]]>')
-  assert.ok(!wrapped.slice(9, -3).includes(']]>'))
+  assert.equal(wrapped, '<![CDATA[before ]]]]><![CDATA[> after]]>')
+})
+
+test('a CDATA terminator survives an XML round trip', () => {
+  // The property that actually matters, and the one a string comparison
+  // cannot show: a parser hands back exactly what went in.
+  const notes = 'before ]]> after'
+  const parsed = new XMLParser({ parseTagValue: false }).parse(
+    `<d>${wrapCdata(notes)}</d>`,
+  )
+
+  assert.equal(parsed.d, notes)
 })
 
 test('omits the channel element for a stable item', () => {

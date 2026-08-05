@@ -18,7 +18,7 @@ export function escapeXml(value) {
  * ]]> truncate the document mid-item and Sparkle rejects the entire feed.
  */
 export function wrapCdata(html) {
-  return `<![CDATA[${String(html).replaceAll(']]>', ']]<![CDATA[>')}]]>`
+  return `<![CDATA[${String(html).replaceAll(']]>', ']]]]><![CDATA[>')}]]>`
 }
 
 export function renderItem(item) {
