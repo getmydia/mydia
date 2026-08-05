@@ -8,7 +8,6 @@ import '../../core/theme/depth_tokens.dart';
 import '../../core/ui/reduced_motion.dart';
 import '../../domain/models/media_file.dart';
 import 'ambient_backdrop_provider.dart';
-import 'glass_surface.dart';
 import 'progress_overlay.dart';
 import 'quality_badge.dart';
 
@@ -48,8 +47,6 @@ class MediaCard extends ConsumerStatefulWidget {
 
 class _MediaCardState extends ConsumerState<MediaCard>
     with SingleTickerProviderStateMixin {
-  bool _isHovered = false;
-
   // Drives the gentle hover accent: a slight shadow deepening only — no lift,
   // scale, or sheen (R11).
   late AnimationController _animationController;
@@ -70,7 +67,6 @@ class _MediaCardState extends ConsumerState<MediaCard>
   }
 
   void _handleHoverEnter() {
-    setState(() => _isHovered = true);
     _animationController.forward();
     // Drive the ambient backdrop to this poster's artwork so the real-blur
     // chrome tints with it (R5/R9). Skipped when there is no artwork.
@@ -81,7 +77,6 @@ class _MediaCardState extends ConsumerState<MediaCard>
   }
 
   void _handleHoverExit() {
-    setState(() => _isHovered = false);
     _animationController.reverse();
     // Revert to the screen's default backdrop.
     clearBackdropHover(ref);
@@ -118,6 +113,10 @@ class _MediaCardState extends ConsumerState<MediaCard>
     final reduceMotion = context.reduceMotion;
 
     return MouseRegion(
+      // Tapping a card opens the title, it does not start playback, so the
+      // affordance is a plain click cursor — no play glyph.
+      cursor:
+          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
       onEnter: (_) => _handleHoverEnter(),
       onExit: (_) => _handleHoverExit(),
       child: GestureDetector(
@@ -181,54 +180,6 @@ class _MediaCardState extends ConsumerState<MediaCard>
                             spacing: 4.0,
                           ),
                         ),
-
-                      // Hover overlay: a faux-glass darkening scrim with no
-                      // live blur, so per-card scrolling content never
-                      // creates a BackdropFilter pass (R8).
-                      AnimatedOpacity(
-                        opacity: _isHovered ? 1.0 : 0.0,
-                        duration: DepthTokens.motionMedium,
-                        curve: Curves.easeOut,
-                        child: SizedBox(
-                          width: cardWidth,
-                          height: cardHeight,
-                          child: GlassSurface.faux(
-                            showRim: false,
-                            borderRadius: BorderRadius.circular(12),
-                            gradient: const LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0x4D000000), // black @ 0.3
-                                Color(0x99000000), // black @ 0.6
-                              ],
-                            ),
-                            child: Center(
-                              child: Container(
-                                width: 56,
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primary
-                                          .withValues(alpha: 0.4),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.play_arrow_rounded,
-                                  size: 32,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),

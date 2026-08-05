@@ -7,6 +7,7 @@ import 'package:player/presentation/screens/search/widgets/search_result_card.da
 import 'package:player/presentation/screens/search/widgets/search_section_header.dart';
 
 import '../../../test_utils/mock_network_images.dart';
+import '../../../test_utils/play_glyph_finders.dart';
 
 Widget _host(Widget child) => MaterialApp(
       home: Scaffold(body: Center(child: SizedBox(width: 400, child: child))),
@@ -147,6 +148,35 @@ void main() {
       });
 
       expect(find.text('4 items'), findsOneWidget);
+    });
+
+    testWidgets(
+        'hover offers no play affordance, because tapping a result '
+        'opens the title rather than playing it', (tester) async {
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(
+          _host(
+            SizedBox(
+              height: 320,
+              child: SearchResultCard(
+                result: const SearchResult(
+                  id: 'm1',
+                  type: SearchResultType.movie,
+                  title: 'Alien',
+                  year: 1979,
+                ),
+                onTap: () {},
+              ),
+            ),
+          ),
+        );
+
+        expect(findPlayGlyph(), findsNothing);
+
+        await hoverOver(tester, find.byType(SearchResultCard));
+
+        expect(findPlayGlyph(), findsNothing);
+      });
     });
   });
 

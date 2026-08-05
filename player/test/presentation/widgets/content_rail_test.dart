@@ -1,9 +1,10 @@
 // U7 — faux-glass rails and grids (plan R8).
 //
 // Rails appear in scrolling quantity, so their cards must carry no live blur:
-// the solid posters (U6) use a faux-glass hover overlay, so a populated rail
-// renders zero BackdropFilter widgets. Cards also carry stable id-based keys
-// (player key convention), and the scroll-edge fade gradients still render.
+// the solid posters (U6) respond to hover with a shadow deepening alone, so a
+// populated rail renders zero BackdropFilter widgets. Cards also carry stable
+// id-based keys (player key convention), and the scroll-edge fade gradients
+// still render.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

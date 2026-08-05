@@ -48,6 +48,7 @@ class _SearchResultCardState extends State<SearchResultCard> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
@@ -144,6 +145,9 @@ class _SearchResultCardState extends State<SearchResultCard> {
                             ),
                           ),
                         ),
+                        // Hover accent only. Tapping a result opens the title,
+                        // it does not start playback, so there is no play
+                        // glyph here.
                         if (_isHovered)
                           DecoratedBox(
                             decoration: BoxDecoration(
@@ -154,13 +158,6 @@ class _SearchResultCardState extends State<SearchResultCard> {
                                   Colors.transparent,
                                   AppColors.primary.withValues(alpha: 0.3),
                                 ],
-                              ),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.play_circle_fill_rounded,
-                                size: 48,
-                                color: Colors.white,
                               ),
                             ),
                           ),

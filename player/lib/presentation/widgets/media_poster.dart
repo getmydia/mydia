@@ -65,6 +65,12 @@ class _MediaPosterState extends ConsumerState<MediaPoster> {
                 // Under reduced motion the hover accent collapses and the
                 // resting shadow stays.
                 return MouseRegion(
+                  // Tapping a poster opens the title, it does not start
+                  // playback, so the affordance is a plain click cursor — no
+                  // play glyph.
+                  cursor: widget.onTap != null
+                      ? SystemMouseCursors.click
+                      : MouseCursor.defer,
                   onEnter: (_) => _handleHoverEnter(),
                   onExit: (_) => _handleHoverExit(),
                   child: AnimatedContainer(
@@ -126,24 +132,6 @@ class _MediaPosterState extends ConsumerState<MediaPoster> {
                                 size: 20,
                               ),
                             ),
-                          // Hover overlay with play button
-                          AnimatedOpacity(
-                            opacity: _isHovered ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeInOut,
-                            child: Container(
-                              decoration: const BoxDecoration(
-                                color: AppColors.overlayDark,
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.play_circle_filled,
-                                  size: 48,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),

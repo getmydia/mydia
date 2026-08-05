@@ -1,10 +1,10 @@
 // U6 — solid elevated posters + hover demotion (plan R7, R11; AE1).
 //
 // The media card is a solid, always-elevated poster with a resting token shadow
-// (depth at rest, R7). Hover is demoted to a small lift with a slight shadow
-// deepening — no 1.04 scale jump, no specular sheen, and no per-card live blur
-// (R8/R11). Under reduced motion the lift collapses while the resting shadow
-// stays.
+// (depth at rest, R7). Hover is demoted to a slight shadow deepening — no 1.04
+// scale jump, no specular sheen, no per-card live blur (R8/R11), and no play
+// affordance, since tapping a card opens the title rather than playing it.
+// Under reduced motion the accent collapses while the resting shadow stays.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 import 'package:player/presentation/widgets/progress_overlay.dart';
+
+import '../../test_utils/play_glyph_finders.dart';
 
 Widget _host(Widget child, {bool reduceMotion = false}) => ProviderScope(
       child: MaterialApp(
@@ -89,7 +91,8 @@ void main() {
   });
 
   group('MediaCard hover demotion (R11)', () {
-    testWidgets('hover does not move or scale the poster; only the shadow '
+    testWidgets(
+        'hover does not move or scale the poster; only the shadow '
         'firms up', (tester) async {
       await tester.pumpWidget(_host(const MediaCard(title: 'Movie')));
 
@@ -105,7 +108,8 @@ void main() {
       expect(_shadowDecoration(tester).boxShadow, DepthTokens.posterHover);
     });
 
-    testWidgets('under reduced motion the hover accent collapses but resting '
+    testWidgets(
+        'under reduced motion the hover accent collapses but resting '
         'shadow stays (AE1)', (tester) async {
       await tester.pumpWidget(
         _host(const MediaCard(title: 'Movie'), reduceMotion: true),
@@ -116,6 +120,18 @@ void main() {
       expect(_liftY(tester), 0);
       expect(_maxScale(tester), lessThanOrEqualTo(1.001));
       expect(_shadowDecoration(tester).boxShadow, DepthTokens.posterResting);
+    });
+
+    testWidgets(
+        'hover offers no play affordance, because tapping a card opens '
+        'the title rather than playing it', (tester) async {
+      await tester.pumpWidget(_host(const MediaCard(title: 'Movie')));
+
+      expect(findPlayGlyph(), findsNothing);
+
+      await _hover(tester, find.byType(MediaCard));
+
+      expect(findPlayGlyph(), findsNothing);
     });
 
     testWidgets('tap still fires onTap', (tester) async {

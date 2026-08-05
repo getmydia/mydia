@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 
+import '../../test_utils/play_glyph_finders.dart';
+
 Widget _host(Widget child, {bool reduceMotion = false}) => ProviderScope(
       child: MaterialApp(
         home: MediaQuery(
@@ -83,7 +85,8 @@ void main() {
       expect(_shadowDecoration(tester).boxShadow, DepthTokens.posterHover);
     });
 
-    testWidgets('under reduced motion the hover accent collapses; resting '
+    testWidgets(
+        'under reduced motion the hover accent collapses; resting '
         'shadow stays', (tester) async {
       await tester.pumpWidget(
         _host(const MediaPoster(title: 'Show'), reduceMotion: true),
@@ -95,6 +98,19 @@ void main() {
       expect(_liftY(tester), 0);
       expect(_maxScale(tester), lessThanOrEqualTo(1.001));
       expect(_shadowDecoration(tester).boxShadow, DepthTokens.posterResting);
+    });
+
+    testWidgets(
+        'hover offers no play affordance, because tapping a poster '
+        'opens the title rather than playing it', (tester) async {
+      await tester.pumpWidget(_host(const MediaPoster(title: 'Show')));
+      await tester.pump();
+
+      expect(findPlayGlyph(), findsNothing);
+
+      await _hover(tester, find.byType(MediaPoster));
+
+      expect(findPlayGlyph(), findsNothing);
     });
 
     testWidgets('tap fires onTap', (tester) async {
