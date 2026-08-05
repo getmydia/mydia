@@ -1360,6 +1360,11 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
+          # no_check_bucket is required, not a tuning knob. An R2 token scoped to
+          # object read/write on one bucket cannot ListBuckets, so rclone's
+          # existence probe fails and it falls back to CreateBucket, which the
+          # token also cannot do. Every upload then dies on a misleading
+          # "AccessDenied: CreateBucket" that reads like bad credentials.
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf <<EOF
           [r2]
@@ -1369,6 +1374,7 @@ jobs:
           secret_access_key = ${R2_SECRET_ACCESS_KEY}
           endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
           acl = private
+          no_check_bucket = true
           EOF
 
       - name: Publish
