@@ -79,9 +79,12 @@ test('a prerelease newer than the newest stable is tagged beta and sorts first',
 })
 
 test('sorts by build number, not by marketing version string', async () => {
+  // Build numbers deliberately invert the lexicographic order of the
+  // marketing strings: "1.9.0" sorts above "1.10.0" as plain text, so a
+  // string sort would return these the other way round.
   const { items } = await build([
-    release({ tag: 'v1.10.0', short: '1.10.0', versionCode: '10200' }),
-    release({ tag: 'v1.9.0', short: '1.9.0', versionCode: '10300' }),
+    release({ tag: 'v1.10.0', short: '1.10.0', versionCode: '10300' }),
+    release({ tag: 'v1.9.0', short: '1.9.0', versionCode: '10200' }),
   ])
 
   assert.deepEqual(items.map((i) => i.version), ['10300', '10200'])
@@ -106,6 +109,17 @@ test('skips a release whose appcast asset is missing without failing the run', a
 
   assert.deepEqual(items.map((i) => i.version), ['10100'])
   assert.match(warnings.join('\n'), /v1\.3\.0/)
+})
+
+test('skips a release with an unparseable published_at instead of failing the run', async () => {
+  const good = release({ tag: 'v1.4.9', short: '1.4.9', versionCode: '10100' })
+  const broken = release({ tag: 'v1.3.0', short: '1.3.0', versionCode: '10050' })
+  broken.published_at = 'not-a-date'
+
+  const { items, warnings } = await build([good, broken])
+
+  assert.deepEqual(items.map((i) => i.version), ['10100'])
+  assert.match(warnings.join('\n'), /v1\.3\.0.*invalid published_at/)
 })
 
 test('skips a draft release', async () => {

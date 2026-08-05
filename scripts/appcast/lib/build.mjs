@@ -63,26 +63,24 @@ export async function buildItems(releases, { loadAppcast, renderNotes }) {
       continue
     }
 
-    let parsed
     try {
-      parsed = parseReleaseAppcast(await loadAppcast(appcastAsset))
+      const parsed = parseReleaseAppcast(await loadAppcast(appcastAsset))
+      const prerelease = Boolean(release.prerelease)
+
+      items.push({
+        title: `Version ${parsed.shortVersionString}`,
+        version: parsed.version,
+        shortVersionString: parsed.shortVersionString,
+        channel: prerelease ? BETA_CHANNEL : null,
+        minimumSystemVersion: MINIMUM_SYSTEM_VERSION,
+        pubDate: toRfc822(release.published_at),
+        descriptionHtml: renderNotes(release.body ?? ''),
+        enclosure: parsed.enclosure,
+        prerelease,
+      })
     } catch (error) {
       warnings.push(`${tag}: skipped, ${error.message}`)
-      continue
     }
-
-    const prerelease = Boolean(release.prerelease)
-    items.push({
-      title: `Version ${parsed.shortVersionString}`,
-      version: parsed.version,
-      shortVersionString: parsed.shortVersionString,
-      channel: prerelease ? BETA_CHANNEL : null,
-      minimumSystemVersion: MINIMUM_SYSTEM_VERSION,
-      pubDate: toRfc822(release.published_at),
-      descriptionHtml: renderNotes(release.body ?? ''),
-      enclosure: parsed.enclosure,
-      prerelease,
-    })
   }
 
   items.sort((a, b) => Number(b.version) - Number(a.version))
