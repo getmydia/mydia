@@ -6,7 +6,11 @@ import { marked } from 'marked'
 import { buildItems, assertFeedInvariants } from './lib/build.mjs'
 import { renderFeed } from './lib/render.mjs'
 
-const REPO = process.env.APPCAST_REPO ?? 'getmydia/mydia'
+// APPCAST_REPO is the explicit override for a manual run. GITHUB_REPOSITORY is
+// set by Actions and keeps a fork or a renamed repo from building a feed out of
+// somebody else's releases. The literal is only the local-development fallback.
+const REPO =
+  process.env.APPCAST_REPO ?? process.env.GITHUB_REPOSITORY ?? 'getmydia/mydia'
 const OUTPUT = process.argv[2] ?? 'dist/appcast.xml'
 const USER_AGENT = 'mydia-appcast-generator'
 

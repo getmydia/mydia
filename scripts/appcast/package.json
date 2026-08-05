@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "description": "Generates the merged Sparkle appcast served at updates.mydia.dev",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "generate": "node generate.mjs"
