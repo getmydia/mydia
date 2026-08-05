@@ -20,6 +20,27 @@ query RecentlyAddedFull($first: Int) {
       thumbnailUrl
     }
     addedAt
+    newEpisodeCount
+    latestSeasonNumber
+    latestEpisodeNumber
+  }
+}
+''';
+
+/// The pre-episode-context shape, for a server older than this build.
+const String recentlyAddedFullQueryLegacy = r'''
+query RecentlyAddedFull($first: Int) {
+  recentlyAdded(first: $first) {
+    id
+    type
+    title
+    year
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
   }
 }
 ''';
@@ -41,6 +62,7 @@ class RecentlyAddedController extends _$RecentlyAddedController {
       ref,
       key: QueryKeys.recentlyAdded,
       document: gql(recentlyAddedFullQuery),
+      fallbackDocument: gql(recentlyAddedFullQueryLegacy),
       variables: const {'first': 50},
       parse: (data) => _parseItems(data, 'recentlyAdded'),
     );

@@ -26,6 +26,9 @@ Map<String, dynamic> _homeData(String title) => {
             'thumbnailUrl': null,
           },
           'addedAt': '2026-07-01T00:00:00Z',
+          'newEpisodeCount': null,
+          'latestSeasonNumber': null,
+          'latestEpisodeNumber': null,
         }
       ],
       'upNext': <dynamic>[],

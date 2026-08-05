@@ -245,6 +245,7 @@ class RecentlyAddedScreen extends ConsumerWidget {
               key: ValueKey(item.id),
               posterUrl: item.posterUrl,
               title: item.title,
+              subtitle: item.newContentLabel,
               onTap: () => _handleItemTap(context, item.id, item.type),
             );
           },

@@ -11,6 +11,7 @@ import 'progress_overlay.dart';
 class MediaPoster extends ConsumerStatefulWidget {
   final String? posterUrl;
   final String title;
+  final String? subtitle;
   final double? progressPercentage;
   final bool isFavorite;
   final VoidCallback? onTap;
@@ -20,6 +21,7 @@ class MediaPoster extends ConsumerStatefulWidget {
     super.key,
     this.posterUrl,
     required this.title,
+    this.subtitle,
     this.progressPercentage,
     this.isFavorite = false,
     this.onTap,
@@ -162,6 +164,17 @@ class _MediaPosterState extends ConsumerState<MediaPoster> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            if (widget.subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                widget.subtitle!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
         ],
       ),

@@ -7,6 +7,9 @@ class RecentlyAddedItem {
   final int? year;
   final Artwork? artwork;
   final String? addedAt;
+  final int? newEpisodeCount;
+  final int? latestSeasonNumber;
+  final int? latestEpisodeNumber;
 
   const RecentlyAddedItem({
     required this.id,
@@ -15,6 +18,9 @@ class RecentlyAddedItem {
     this.year,
     this.artwork,
     this.addedAt,
+    this.newEpisodeCount,
+    this.latestSeasonNumber,
+    this.latestEpisodeNumber,
   });
 
   factory RecentlyAddedItem.fromJson(Map<String, dynamic> json) {
@@ -27,6 +33,9 @@ class RecentlyAddedItem {
           ? Artwork.fromJson(json['artwork'] as Map<String, dynamic>)
           : null,
       addedAt: json['addedAt'] as String?,
+      newEpisodeCount: json['newEpisodeCount'] as int?,
+      latestSeasonNumber: json['latestSeasonNumber'] as int?,
+      latestEpisodeNumber: json['latestEpisodeNumber'] as int?,
     );
   }
 
@@ -43,5 +52,25 @@ class RecentlyAddedItem {
       return '$title ($year)';
     }
     return title;
+  }
+
+  /// What arrived, for the card subtitle.
+  ///
+  /// Null for movies, for lists that are not windowed, and for a server too
+  /// old to send the count. Names the episode when exactly one arrived and its
+  /// numbers are known, since that is more useful than "1 new episode".
+  String? get newContentLabel {
+    final count = newEpisodeCount;
+    if (count == null || count == 0) return null;
+
+    if (count == 1 &&
+        latestSeasonNumber != null &&
+        latestEpisodeNumber != null) {
+      final season = latestSeasonNumber!.toString().padLeft(2, '0');
+      final episode = latestEpisodeNumber!.toString().padLeft(2, '0');
+      return 'S${season}E$episode';
+    }
+
+    return count == 1 ? '1 new episode' : '$count new episodes';
   }
 }
