@@ -436,17 +436,29 @@ defmodule Mydia.MetadataTest do
     end
   end
 
-  describe "default_append_to_response/0" do
-    test "includes the resources every full-detail fetch needs" do
-      resources = Mydia.Metadata.default_append_to_response()
+  describe "default_append_to_response/1" do
+    test "movie fetches ask for release_dates, not content_ratings" do
+      resources = Mydia.Metadata.default_append_to_response(:movie)
 
       assert "credits" in resources
       assert "images" in resources
       assert "videos" in resources
       assert "keywords" in resources
-      assert "release_dates" in resources
-      assert "content_ratings" in resources
       assert "recommendations" in resources
+      assert "release_dates" in resources
+      refute "content_ratings" in resources
+    end
+
+    test "tv_show fetches ask for content_ratings, not release_dates" do
+      resources = Mydia.Metadata.default_append_to_response(:tv_show)
+
+      assert "credits" in resources
+      assert "images" in resources
+      assert "videos" in resources
+      assert "keywords" in resources
+      assert "recommendations" in resources
+      assert "content_ratings" in resources
+      refute "release_dates" in resources
     end
   end
 end
