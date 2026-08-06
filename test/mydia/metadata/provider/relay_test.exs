@@ -7,14 +7,12 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
   @moduletag :external
 
-  @config %{
-    type: :metadata_relay,
-    base_url: "https://metadata-relay.fly.dev",
-    options: %{
-      language: "en-US",
-      include_adult: false
-    }
-  }
+  # Live smoke test against the real relay. `metadata-relay.fly.dev` is a
+  # long-abandoned deployment; use the current production default (or
+  # METADATA_RELAY_URL, if the caller wants to point this at a different
+  # instance) so `mix test --include external` exercises a service that
+  # actually exists.
+  @config Mydia.Metadata.default_relay_config()
 
   describe "test_connection/1" do
     test "successfully connects to relay service" do
