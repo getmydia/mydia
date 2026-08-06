@@ -365,10 +365,8 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, List<DownloadedMedia> downloads) {
     final widgets = <Widget>[];
 
-    // Collect all unique seasons
-    final seasons = downloads.map((d) => d.seasonNumber ?? 0).toSet().toList()
-      ..sort();
-    final hasMultipleSeasons = seasons.length > 1;
+    final seasonMap = _groupBySeason(downloads, (d) => d.seasonNumber ?? 0);
+    final hasMultipleSeasons = seasonMap.length > 1;
 
     if (!hasMultipleSeasons) {
       widgets.add(Text(
@@ -392,12 +390,12 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       ));
       widgets.add(const SizedBox(height: 12));
 
-      for (int i = 0; i < seasons.length; i++) {
-        final season = seasons[i];
-        final seasonEpisodes =
-            downloads.where((d) => (d.seasonNumber ?? 0) == season).toList();
-
-        if (i > 0) widgets.add(const SizedBox(height: 16));
+      var first = true;
+      for (final entry in seasonMap.entries) {
+        final season = entry.key;
+        final seasonEpisodes = entry.value;
+        if (!first) widgets.add(const SizedBox(height: 16));
+        first = false;
         widgets.add(
             _buildSeasonHeader(context, ref, season, seasonEpisodes.length));
         widgets.add(const SizedBox(height: 8));
@@ -956,6 +954,20 @@ class SeriesDownloadsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Groups items by season number, returning a sorted map (Specials=0 first,
+  /// then ascending).
+  Map<int, List<T>> _groupBySeason<T>(List<T> items, int Function(T) seasonOf) {
+    final map = <int, List<T>>{};
+    for (final item in items) {
+      final season = seasonOf(item);
+      map.putIfAbsent(season, () => []).add(item);
+    }
+    final sorted = Map.fromEntries(
+      map.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+    );
+    return sorted;
   }
 
   Future<void> _showDeleteAllDialog(BuildContext context, WidgetRef ref,
