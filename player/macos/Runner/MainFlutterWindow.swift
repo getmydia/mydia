@@ -15,11 +15,6 @@ class MainFlutterWindow: NSWindow {
     self.titleVisibility = .hidden
     self.styleMask.insert(.fullSizeContentView)
 
-    // Optional: hide traffic light buttons (close/minimize/zoom)
-    // self.standardWindowButton(.closeButton)?.isHidden = true
-    // self.standardWindowButton(.miniaturizeButton)?.isHidden = true
-    // self.standardWindowButton(.zoomButton)?.isHidden = true
-
     super.awakeFromNib()
   }
 }
