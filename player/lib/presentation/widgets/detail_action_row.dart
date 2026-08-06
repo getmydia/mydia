@@ -20,6 +20,13 @@ class DetailActionRow extends StatelessWidget {
   /// showing a button that can never do anything.
   final bool showDownload;
 
+  /// Whether this title is already downloaded. Defaults to `false`; callers
+  /// pass the current download state so the button reads as done (a filled
+  /// check icon in the success colour) instead of inviting a download that
+  /// only produces an "Already downloaded" snackbar — the state the
+  /// pre-redesign app-bar download button used to show.
+  final bool isDownloaded;
+
   const DetailActionRow({
     super.key,
     required this.watched,
@@ -29,6 +36,7 @@ class DetailActionRow extends StatelessWidget {
     required this.onDownload,
     required this.trailerUrl,
     this.showDownload = true,
+    this.isDownloaded = false,
   });
 
   @override
@@ -57,10 +65,12 @@ class DetailActionRow extends StatelessWidget {
         ),
         if (showDownload)
           _ActionButton(
-            icon: Icons.download_rounded,
+            icon: isDownloaded
+                ? Icons.download_done_rounded
+                : Icons.download_rounded,
             label: 'Download',
-            highlighted: false,
-            highlightColor: AppColors.primary,
+            highlighted: isDownloaded,
+            highlightColor: AppColors.success,
             onTap: onDownload,
           ),
         if (trailerUrl != null)

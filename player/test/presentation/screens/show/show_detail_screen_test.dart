@@ -8,6 +8,8 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
+import 'package:player/presentation/widgets/detail_action_row.dart';
+import 'package:player/presentation/widgets/play_button.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -18,11 +20,54 @@ String? _operationName(Request request) {
   return operations.isEmpty ? null : operations.first.name?.value;
 }
 
-Map<String, dynamic> _episodeJson(int number, {bool watched = false}) {
+Map<String, dynamic> _fileJson(String id) {
+  return {
+    '__typename': 'MediaFile',
+    'id': id,
+    'resolution': '1080p',
+    'codec': 'h264',
+    'audioCodec': 'aac',
+    'hdrFormat': null,
+    'size': 1200000000,
+    'bitrate': 4000000,
+    'directPlaySupported': true,
+    'streamUrl': null,
+    'directPlayUrl': null,
+  };
+}
+
+Map<String, dynamic> _episodeJson(
+  int number, {
+  int season = 1,
+  bool watched = false,
+  int? positionSeconds,
+  List<Map<String, dynamic>> files = const [],
+}) {
+  Map<String, dynamic>? progress;
+  if (watched) {
+    progress = {
+      '__typename': 'Progress',
+      'positionSeconds': 0,
+      'durationSeconds': 2580,
+      'percentage': 100.0,
+      'watched': true,
+      'lastWatchedAt': null,
+    };
+  } else if (positionSeconds != null) {
+    progress = {
+      '__typename': 'Progress',
+      'positionSeconds': positionSeconds,
+      'durationSeconds': 2580,
+      'percentage': positionSeconds / 2580 * 100,
+      'watched': false,
+      'lastWatchedAt': null,
+    };
+  }
+
   return {
     '__typename': 'Episode',
-    'id': 'ep-$number',
-    'seasonNumber': 1,
+    'id': 'ep-$season-$number',
+    'seasonNumber': season,
     'episodeNumber': number,
     'title': 'Episode $number',
     'overview': 'Overview for episode $number.',
@@ -31,21 +76,16 @@ Map<String, dynamic> _episodeJson(int number, {bool watched = false}) {
     'monitored': true,
     'thumbnailUrl': null,
     'hasFile': true,
-    'progress': watched
-        ? {
-            '__typename': 'Progress',
-            'positionSeconds': 0,
-            'durationSeconds': 2580,
-            'percentage': 100.0,
-            'watched': true,
-            'lastWatchedAt': null,
-          }
-        : null,
-    'files': <dynamic>[],
+    'progress': progress,
+    'files': files,
   };
 }
 
-Map<String, dynamic> _showJson() {
+Map<String, dynamic> _showJson({
+  Map<String, dynamic>? nextUpEpisode,
+  bool includeNextUp = true,
+  List<Map<String, dynamic>>? seasons,
+}) {
   return {
     '__typename': 'TvShow',
     'id': 'sh-1',
@@ -70,21 +110,24 @@ Map<String, dynamic> _showJson() {
       'backdropUrl': null,
       'thumbnailUrl': null,
     },
-    'seasons': [
-      {
-        '__typename': 'Season',
-        'seasonNumber': 1,
-        'episodeCount': 3,
-        'airedEpisodeCount': 3,
-        'hasFiles': true,
-      },
-    ],
+    'seasons': seasons ??
+        [
+          {
+            '__typename': 'Season',
+            'seasonNumber': 1,
+            'episodeCount': 3,
+            'airedEpisodeCount': 3,
+            'hasFiles': true,
+          },
+        ],
     'nextEpisode': null,
-    'nextUp': {
-      '__typename': 'ShowNextUp',
-      'progressState': 'next',
-      'episode': _episodeJson(2),
-    },
+    'nextUp': includeNextUp
+        ? {
+            '__typename': 'ShowNextUp',
+            'progressState': 'next',
+            'episode': nextUpEpisode ?? _episodeJson(2),
+          }
+        : null,
     'isFavorite': false,
     'cast': [
       {
@@ -99,20 +142,38 @@ Map<String, dynamic> _showJson() {
   };
 }
 
-Future<void> _pumpScreen(WidgetTester tester) async {
+Map<int, List<Map<String, dynamic>>> _defaultEpisodes() => {
+      1: [
+        _episodeJson(1, watched: true),
+        _episodeJson(2),
+        _episodeJson(3),
+      ],
+    };
+
+Future<void> _pumpScreen(
+  WidgetTester tester, {
+  Map<String, dynamic>? showJson,
+  Map<int, List<Map<String, dynamic>>>? episodesBySeason,
+  List<String>? pushedRoutes,
+  Size? size,
+}) async {
+  if (size != null) {
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
+
+  final episodes = episodesBySeason ?? _defaultEpisodes();
+
   final link = StubLink((request, _) {
     final operation = _operationName(request);
     if (operation == 'SeasonEpisodes') {
+      final seasonNumber = request.variables['seasonNumber'] as int;
       return {
         '__typename': 'Query',
-        'seasonEpisodes': [
-          _episodeJson(1, watched: true),
-          _episodeJson(2),
-          _episodeJson(3),
-        ],
+        'seasonEpisodes': episodes[seasonNumber] ?? <dynamic>[],
       };
     }
-    return {'__typename': 'Query', 'tvShow': _showJson()};
+    return {'__typename': 'Query', 'tvShow': showJson ?? _showJson()};
   });
 
   await mockNetworkImages(() async {
@@ -130,6 +191,13 @@ Future<void> _pumpScreen(WidgetTester tester) async {
                 path: '/show/:id',
                 builder: (context, state) =>
                     ShowDetailScreen(id: state.pathParameters['id']!),
+              ),
+              GoRoute(
+                path: '/player/episode/:id',
+                builder: (context, state) {
+                  pushedRoutes?.add(state.uri.toString());
+                  return const Scaffold(body: SizedBox.shrink());
+                },
               ),
             ],
           ),
@@ -157,16 +225,172 @@ void main() {
     // The episode rail sits below the redesigned hero/cast/similar sections,
     // past the default test viewport — scroll it into view before tapping.
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('ep-3')),
+      find.byKey(const ValueKey('ep-1-3')),
       200,
       // The screen has multiple Scrollables (cast rail, season chips, episode
       // rail are all horizontal ListViews); the first one found in the tree
       // is the outer vertical CustomScrollView, which is what needs to move.
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.byKey(const ValueKey('ep-3')));
+    // scrollUntilVisible stops as soon as the tile exists in the tree, which
+    // the sliver cache extent makes true while it is still below the viewport
+    // — ensureVisible actually brings it on screen so the tap lands.
+    await tester.ensureVisible(find.byKey(const ValueKey('ep-1-3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ep-1-3')));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('E3'), findsWidgets);
+  });
+
+  testWidgets('fully-watched show (no nextUp) still renders the hero',
+      (tester) async {
+    // `resolve_next_up/3` returns nil once every episode is watched, so the
+    // hero's default-selection seed never fires and `selectedEpisodeId` stays
+    // null. The hero must fall back to the season's first episode rather than
+    // spinning forever.
+    await _pumpScreen(
+      tester,
+      showJson: _showJson(includeNextUp: false),
+      episodesBySeason: {
+        1: [
+          _episodeJson(1, watched: true),
+          _episodeJson(2, watched: true),
+          _episodeJson(3, watched: true),
+        ],
+      },
+    );
+
+    expect(find.text('Play'), findsOneWidget);
+    expect(find.byType(DetailActionRow), findsOneWidget);
+    expect(find.text('S1 · E1'), findsOneWidget);
+  });
+
+  testWidgets('switching seasons re-targets the hero at the new season',
+      (tester) async {
+    // The selected episode id still points at a season 1 episode after the
+    // switch, so it matches nothing in season 2's list — the hero has to fall
+    // back to season 2's first episode instead of spinning forever.
+    await _pumpScreen(
+      tester,
+      // A tall viewport keeps the hero and the season chips on screen at the
+      // same time, so the assertion sees the hero the tap re-targeted rather
+      // than an unbuilt sliver scrolled out of view.
+      size: const Size(1000, 2200),
+      showJson: _showJson(seasons: [
+        {
+          '__typename': 'Season',
+          'seasonNumber': 1,
+          'episodeCount': 3,
+          'airedEpisodeCount': 3,
+          'hasFiles': true,
+        },
+        {
+          '__typename': 'Season',
+          'seasonNumber': 2,
+          'episodeCount': 2,
+          'airedEpisodeCount': 2,
+          'hasFiles': true,
+        },
+      ]),
+      episodesBySeason: {
+        1: [
+          _episodeJson(1, watched: true),
+          _episodeJson(2),
+          _episodeJson(3),
+        ],
+        2: [
+          _episodeJson(1, season: 2),
+          _episodeJson(2, season: 2),
+        ],
+      },
+    );
+
+    await tester.tap(find.text('Season 2'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DetailActionRow), findsOneWidget);
+    expect(find.text('S2 · E1'), findsOneWidget);
+  });
+
+  testWidgets('hero shows the release year under the title', (tester) async {
+    await _pumpScreen(tester);
+
+    expect(find.text('2022'), findsOneWidget);
+  });
+
+  testWidgets('content rating and genres render once, in the hero tag row',
+      (tester) async {
+    // The tall viewport builds the lower metadata section too, so a
+    // reintroduced duplicate down there would be found, not silently
+    // scrolled out of the tree.
+    await _pumpScreen(tester, size: const Size(1000, 2200));
+
+    expect(find.text('TV-14'), findsOneWidget);
+    expect(find.text('Mystery'), findsOneWidget);
+    expect(find.text('Drama'), findsOneWidget);
+  });
+
+  testWidgets('Play passes a resume position for a part-watched episode',
+      (tester) async {
+    final pushed = <String>[];
+    final partWatched = _episodeJson(
+      2,
+      positionSeconds: 900,
+      files: [_fileJson('file-1')],
+    );
+
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 1200),
+      showJson: _showJson(nextUpEpisode: partWatched),
+      episodesBySeason: {
+        1: [
+          _episodeJson(1, watched: true),
+          partWatched,
+          _episodeJson(3),
+        ],
+      },
+      pushedRoutes: pushed,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PlayButton));
+    await tester.pumpAndSettle();
+
+    expect(pushed, hasLength(1));
+    expect(pushed.single, contains('/player/episode/ep-1-2'));
+    expect(pushed.single, contains('resume=900'));
+  });
+
+  testWidgets('Play omits resume for an already-watched episode',
+      (tester) async {
+    final pushed = <String>[];
+    final watched = _episodeJson(
+      2,
+      watched: true,
+      files: [_fileJson('file-1')],
+    );
+
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 1200),
+      showJson: _showJson(nextUpEpisode: watched),
+      episodesBySeason: {
+        1: [
+          _episodeJson(1, watched: true),
+          watched,
+          _episodeJson(3),
+        ],
+      },
+      pushedRoutes: pushed,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PlayButton));
+    await tester.pumpAndSettle();
+
+    expect(pushed, hasLength(1));
+    expect(pushed.single, isNot(contains('resume=')));
   });
 }

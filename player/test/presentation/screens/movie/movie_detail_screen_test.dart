@@ -119,6 +119,12 @@ void main() {
     expect(find.byType(DetailActionRow), findsOneWidget);
   });
 
+  testWidgets('hero shows the release year under the title', (tester) async {
+    await _pumpScreen(tester, const Size(1000, 900));
+
+    expect(find.text('2024'), findsOneWidget);
+  });
+
   testWidgets('rating renders under the overview, not in the tag row',
       (tester) async {
     await _pumpScreen(tester, const Size(1000, 900));

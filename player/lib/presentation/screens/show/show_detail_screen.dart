@@ -18,6 +18,7 @@ import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/media_file_selector.dart';
+import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
@@ -30,6 +31,24 @@ import '../../widgets/smart_play_button.dart';
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
 /// docs/superpowers/specs/2026-08-05-player-detail-page-infuse-redesign-design.md.
 const double _kHeroBreakpoint = 700;
+
+/// The `&resume=` suffix for a hero Play tap, or an empty string when playback
+/// should start from the beginning.
+///
+/// The pre-redesign next-up button asked the server's `nextUp.state` whether
+/// this was a continue-watching item. The redesigned hero can point at any
+/// episode in the season, not just next-up, so eligibility comes from that
+/// episode's own progress: saved progress present, not yet watched, and past
+/// the minimum position [shouldPassResume] enforces.
+String _resumeSuffix(Episode episode) {
+  final progress = episode.progress;
+  final pass = shouldPassResume(
+    isContinueState: progress != null,
+    positionSeconds: progress?.positionSeconds,
+    watched: progress?.watched ?? false,
+  );
+  return pass ? '&resume=${progress!.positionSeconds}' : '';
+}
 
 class ShowDetailScreen extends ConsumerWidget {
   final String id;
@@ -188,6 +207,25 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
+  /// Resolves which episode the hero describes: the one matching
+  /// [selectedEpisodeId] if it's in the currently-loaded [episodes] list,
+  /// otherwise the first episode of that list. The fallback matters for two
+  /// real cases: a fully-watched show has no `nextUp`, so the
+  /// default-selection seed in `_buildContent` never fires and
+  /// `selectedEpisodeId` stays null forever; and switching seasons leaves
+  /// `selectedEpisodeId` pointing at an episode from the *previous* season,
+  /// which never matches the newly-loaded list. Either case previously left
+  /// the hero stuck on a permanent loading spinner instead of falling back
+  /// to something sensible.
+  Episode? _resolveSelectedEpisode(
+    String? selectedEpisodeId,
+    List<Episode> episodes,
+  ) {
+    if (episodes.isEmpty) return null;
+    return episodes.where((e) => e.id == selectedEpisodeId).firstOrNull ??
+        episodes.first;
+  }
+
   Widget _buildContent(BuildContext context, WidgetRef ref, ShowDetail show) {
     final selectedEpisodeId = ref.watch(selectedEpisodeProvider(id));
 
@@ -209,17 +247,21 @@ class ShowDetailScreen extends ConsumerWidget {
       ),
     );
     final episodes = episodesAsync.value ?? const <Episode>[];
-    final selectedEpisode = selectedEpisodeId == null
-        ? null
-        : episodes.where((e) => e.id == selectedEpisodeId).firstOrNull;
+    final selectedEpisode =
+        _resolveSelectedEpisode(selectedEpisodeId, episodes);
 
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, ref, show, selectedEpisodeId),
+        _buildHeroSection(context, ref, show, selectedEpisode),
         SliverToBoxAdapter(
           child: _buildEpisodeHeroBody(context, ref, show, selectedEpisode),
         ),
-        SliverToBoxAdapter(child: CastRail(members: show.cast)),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 28),
+            child: CastRail(members: show.cast),
+          ),
+        ),
         if (show.similar.isNotEmpty)
           SliverToBoxAdapter(
             child: ContentRail(
@@ -241,10 +283,6 @@ class ShowDetailScreen extends ConsumerWidget {
               const SizedBox(height: 24),
               if (show.overview != null) ...[
                 _buildOverview(context, show),
-                const SizedBox(height: 24),
-              ],
-              if (show.genres.isNotEmpty) ...[
-                _buildGenres(context, show),
                 const SizedBox(height: 24),
               ],
               if (show.seasons.isNotEmpty)
@@ -289,20 +327,8 @@ class ShowDetailScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     ShowDetail show,
-    String? selectedEpisodeId,
+    Episode? selectedEpisode,
   ) {
-    final selectedSeason = ref.watch(selectedSeasonProvider(id));
-    final episodesAsync = ref.watch(
-      seasonEpisodesControllerProvider(
-        showId: id,
-        seasonNumber: selectedSeason,
-      ),
-    );
-    final episodes = episodesAsync.value ?? const <Episode>[];
-    final selectedEpisode = selectedEpisodeId == null
-        ? null
-        : episodes.where((e) => e.id == selectedEpisodeId).firstOrNull;
-
     return SliverAppBar(
       expandedHeight: 380,
       pinned: true,
@@ -380,6 +406,15 @@ class ShowDetailScreen extends ConsumerWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (show.yearDisplay.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      show.yearDisplay,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                  ],
                   if (selectedEpisode != null) ...[
                     const SizedBox(height: 8),
                     _buildEpisodeContextPill(show, selectedEpisode),
@@ -487,7 +522,8 @@ class ShowDetailScreen extends ConsumerWidget {
                 final title = '${show.title} - ${episode.episodeCode}';
                 context.push(
                   '/player/episode/${episode.id}?fileId=${file.id}'
-                  '&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${episode.seasonNumber}',
+                  '&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${episode.seasonNumber}'
+                  '${_resumeSuffix(episode)}',
                 );
               },
             ),
@@ -514,6 +550,10 @@ class ShowDetailScreen extends ConsumerWidget {
           onDownload: () => _startEpisodeDownload(context, ref, show, episode),
           trailerUrl: show.trailerUrl,
           showDownload: isDownloadSupported,
+          // Per-episode, not per-show: the hero's Download action downloads
+          // the selected episode.
+          isDownloaded:
+              ref.watch(isMediaDownloadedProvider(episode.id)).value ?? false,
         ),
       ],
     );
@@ -695,6 +735,8 @@ class ShowDetailScreen extends ConsumerWidget {
     }
   }
 
+  /// Status chip only. Content rating and genres live in the hero's tag row
+  /// now — repeating them here rendered each one twice on the page.
   Widget _buildMetadata(BuildContext context, show) {
     final items = <Widget>[];
 
@@ -706,11 +748,6 @@ class ShowDetailScreen extends ConsumerWidget {
             ? AppColors.textSecondary
             : AppColors.success,
       ));
-    }
-
-    if (show.contentRating != null) {
-      items.add(_buildMetadataChip(
-          context, show.contentRating!, AppColors.textSecondary));
     }
 
     if (items.isEmpty) return const SizedBox.shrink();
@@ -778,31 +815,6 @@ class ShowDetailScreen extends ConsumerWidget {
                 ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildGenres(BuildContext context, show) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: show.genres.map<Widget>((genre) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              genre,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
@@ -961,7 +973,14 @@ class ShowDetailScreen extends ConsumerWidget {
               showTitle: show?.title ?? 'Unknown Show',
               showId: show?.id,
               showPosterUrl: show?.artwork.posterUrl,
-              selectedEpisodeId: ref.watch(selectedEpisodeProvider(id)),
+              // Resolved through the same helper the hero uses, so the rail
+              // highlights whichever episode the hero describes — including
+              // the fallback cases where the selected id matches nothing in
+              // this season's list.
+              selectedEpisodeId: _resolveSelectedEpisode(
+                ref.watch(selectedEpisodeProvider(id)),
+                episodes,
+              )?.id,
               onEpisodeTap: (episode) async {
                 ref
                     .read(selectedEpisodeProvider(id).notifier)

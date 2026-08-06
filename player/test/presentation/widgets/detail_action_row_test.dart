@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 
 Widget _host(Widget child) => ProviderScope(
@@ -92,5 +93,38 @@ void main() {
     )));
 
     expect(find.text('Download'), findsNothing);
+  });
+
+  testWidgets('download button is plain when the title is not downloaded',
+      (tester) async {
+    await tester.pumpWidget(_host(DetailActionRow(
+      watched: false,
+      onToggleWatched: () {},
+      isFavorite: false,
+      onToggleFavorite: () {},
+      onDownload: () {},
+      trailerUrl: null,
+    )));
+
+    expect(find.byIcon(Icons.download_done_rounded), findsNothing);
+    final icon = tester.widget<Icon>(find.byIcon(Icons.download_rounded));
+    expect(icon.color, AppColors.textPrimary);
+  });
+
+  testWidgets('download button shows the done icon in success when downloaded',
+      (tester) async {
+    await tester.pumpWidget(_host(DetailActionRow(
+      watched: false,
+      onToggleWatched: () {},
+      isFavorite: false,
+      onToggleFavorite: () {},
+      onDownload: () {},
+      trailerUrl: null,
+      isDownloaded: true,
+    )));
+
+    expect(find.byIcon(Icons.download_rounded), findsNothing);
+    final icon = tester.widget<Icon>(find.byIcon(Icons.download_done_rounded));
+    expect(icon.color, AppColors.success);
   });
 }

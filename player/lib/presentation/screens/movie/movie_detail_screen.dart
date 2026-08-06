@@ -289,6 +289,8 @@ class MovieDetailScreen extends ConsumerWidget {
           onDownload: () => _startDownload(context, ref, movie),
           trailerUrl: movie.trailerUrl,
           showDownload: isDownloadSupported,
+          isDownloaded:
+              ref.watch(isMediaDownloadedProvider(movie.id)).value ?? false,
         ),
       ],
     );
@@ -498,19 +500,34 @@ class MovieDetailScreen extends ConsumerWidget {
               left: 20,
               right: 20,
               bottom: 20,
-              child: Text(
-                movie.title,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withValues(alpha: 0.8),
-                      blurRadius: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    movie.title,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (movie.yearDisplay.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      movie.yearDisplay,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
                     ),
                   ],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                ],
               ),
             ),
           ],
