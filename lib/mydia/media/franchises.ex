@@ -132,7 +132,7 @@ defmodule Mydia.Media.Franchises do
     if length(entries) < 2 do
       :none
     else
-      status = Media.library_status_for_tmdb_ids(Enum.map(entries, & &1.tmdb_id))
+      status = Media.library_status_for_tmdb_ids(Enum.map(entries, & &1.tmdb_id), "movie")
 
       entries =
         entries

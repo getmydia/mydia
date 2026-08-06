@@ -2088,4 +2088,38 @@ defmodule Mydia.MediaTest do
       assert Enum.sort(Enum.map(items, & &1.id)) == Enum.sort([movie.id, show.id])
     end
   end
+
+  describe "library_status_for_tmdb_ids/2" do
+    import Mydia.MediaFixtures
+
+    test "matches movies by tmdb id and type" do
+      movie = media_item_fixture(%{type: "movie", tmdb_id: 603, monitored: true})
+
+      status = Media.library_status_for_tmdb_ids([603, 999], "movie")
+
+      assert %{in_library: true, monitored: true, type: "movie", id: id} = status[603]
+      assert id == movie.id
+      refute Map.has_key?(status, 999)
+    end
+
+    test "does not match a tv show when asked for movies" do
+      media_item_fixture(%{type: "tv_show", tmdb_id: 603})
+
+      status = Media.library_status_for_tmdb_ids([603], "movie")
+
+      refute Map.has_key?(status, 603)
+    end
+
+    test "matches tv shows when asked for tv_show" do
+      show = media_item_fixture(%{type: "tv_show", tmdb_id: 1396})
+
+      status = Media.library_status_for_tmdb_ids([1396], "tv_show")
+
+      assert status[1396].id == show.id
+    end
+
+    test "returns an empty map for an empty id list" do
+      assert Media.library_status_for_tmdb_ids([], "movie") == %{}
+    end
+  end
 end

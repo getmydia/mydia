@@ -649,26 +649,28 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Returns library status for a specific set of TMDB movie ids.
+  Returns library status for a specific set of TMDB ids, scoped to one type.
 
   Same value shape as `get_library_status_map/0`, but scoped to the ids asked
-  for. Use this when checking a handful of ids (a franchise's members, say)
-  rather than loading the whole library.
+  for. Use this when checking a handful of ids (a franchise's members, TMDB
+  recommendations for a title) rather than loading the whole library.
 
-  Movies only. A TV row that happens to share a TMDB id with a movie is not a
-  match for a franchise member.
+  `type` is required and must be `"movie"` or `"tv_show"` — the caller already
+  knows which, since a title's franchise members and recommendations are
+  always its own type. A row of the other type that happens to share a TMDB id
+  is not a match.
 
   ## Examples
 
-      iex> library_status_for_tmdb_ids([671, 672])
+      iex> library_status_for_tmdb_ids([671, 672], "movie")
       %{671 => %{in_library: true, monitored: true, type: "movie", id: "..."}}
   """
-  @spec library_status_for_tmdb_ids([integer()]) :: map()
-  def library_status_for_tmdb_ids([]), do: %{}
+  @spec library_status_for_tmdb_ids([integer()], String.t()) :: map()
+  def library_status_for_tmdb_ids([], _type), do: %{}
 
-  def library_status_for_tmdb_ids(tmdb_ids) when is_list(tmdb_ids) do
+  def library_status_for_tmdb_ids(tmdb_ids, type) when is_list(tmdb_ids) and is_binary(type) do
     MediaItem
-    |> where([m], m.type == "movie" and m.tmdb_id in ^tmdb_ids)
+    |> where([m], m.type == ^type and m.tmdb_id in ^tmdb_ids)
     |> select([m], {m.tmdb_id, m.monitored, m.type, m.id})
     |> Repo.all()
     |> Map.new(fn {tmdb_id, monitored, type, id} ->
