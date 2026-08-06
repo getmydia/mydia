@@ -105,6 +105,8 @@ class MediaSegment {
     return ms >= startMs && ms < endMs;
   }
 
+  Duration get start => Duration(milliseconds: startMs);
+
   Duration get end => Duration(milliseconds: endMs);
 
   /// Stable identity for once-per-session skip tracking.
