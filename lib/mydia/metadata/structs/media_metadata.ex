@@ -26,6 +26,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     :tagline,
     :runtime,
     :status,
+    :content_rating,
     :genres,
     :poster_path,
     :backdrop_path,
@@ -70,6 +71,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           tagline: String.t() | nil,
           runtime: integer() | nil,
           status: String.t() | nil,
+          content_rating: String.t() | nil,
           genres: [String.t()] | nil,
           poster_path: String.t() | nil,
           backdrop_path: String.t() | nil,
@@ -125,6 +127,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
       tagline: data["tagline"],
       runtime: get_runtime(data, media_type),
       status: data["status"],
+      content_rating: parse_content_rating(data, media_type),
       genres: parse_genres(data["genres"]),
       poster_path: data["poster_path"],
       backdrop_path: data["backdrop_path"],
@@ -220,6 +223,51 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   defp parse_genres(nil), do: []
   defp parse_genres(genres) when is_list(genres), do: Enum.map(genres, & &1["name"])
   defp parse_genres(_), do: []
+
+  # US and GB certifications cover the overwhelming majority of libraries,
+  # matching how most trackers default certification lookups. Anything else
+  # falls back to the first non-blank certification TMDB reports, since a
+  # certification in the wrong region still beats showing none.
+  @certification_region_preference ["US", "GB"]
+
+  defp parse_content_rating(data, :movie) do
+    data["release_dates"]["results"]
+    |> extract_certification(fn entry ->
+      entry["release_dates"]
+      |> List.wrap()
+      |> Enum.find_value(&presence(&1["certification"]))
+    end)
+  end
+
+  defp parse_content_rating(data, :tv_show) do
+    data["content_ratings"]["results"]
+    |> extract_certification(&presence(&1["rating"]))
+  end
+
+  defp parse_content_rating(_data, _media_type), do: nil
+
+  defp extract_certification(nil, _value_fn), do: nil
+
+  defp extract_certification(results, value_fn) when is_list(results) do
+    by_country = Map.new(results, &{&1["iso_3166_1"], &1})
+
+    @certification_region_preference
+    |> Enum.find_value(fn code ->
+      case Map.get(by_country, code) do
+        nil -> nil
+        entry -> value_fn.(entry)
+      end
+    end)
+    |> case do
+      nil -> Enum.find_value(results, value_fn)
+      value -> value
+    end
+  end
+
+  defp extract_certification(_results, _value_fn), do: nil
+
+  defp presence(value) when is_binary(value) and value != "", do: value
+  defp presence(_value), do: nil
 
   defp parse_names(nil), do: []
   defp parse_names(items) when is_list(items), do: Enum.map(items, & &1["name"])

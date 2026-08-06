@@ -110,6 +110,7 @@ defmodule Mydia.Media.MetadataType do
       tagline: data[:tagline],
       runtime: data[:runtime],
       status: data[:status],
+      content_rating: data[:content_rating],
       genres: data[:genres],
       poster_path: data[:poster_path],
       backdrop_path: data[:backdrop_path],
