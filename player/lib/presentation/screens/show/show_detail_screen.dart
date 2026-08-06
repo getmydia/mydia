@@ -11,18 +11,25 @@ import 'show_detail_controller.dart';
 import 'season_episodes_controller.dart';
 import '../../../domain/models/show_detail.dart';
 import '../../../domain/models/season_info.dart';
+import '../../../domain/models/download.dart';
 import '../../../domain/models/episode.dart';
 import '../../widgets/episode_rail.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/media_file_selector.dart';
-import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/show_next_up.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
+import '../../widgets/cast_rail.dart';
+import '../../widgets/content_rail.dart';
+import '../../widgets/detail_action_row.dart';
 import '../../widgets/smart_play_button.dart';
+
+/// Below this width the hero's action column and tag column stack instead
+/// of sitting side by side. Matches the movie detail hero's breakpoint — see
+/// docs/superpowers/specs/2026-08-05-player-detail-page-infuse-redesign-design.md.
+const double _kHeroBreakpoint = 700;
 
 class ShowDetailScreen extends ConsumerWidget {
   final String id;
@@ -182,9 +189,49 @@ class ShowDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildContent(BuildContext context, WidgetRef ref, ShowDetail show) {
+    final selectedEpisodeId = ref.watch(selectedEpisodeProvider(id));
+
+    if (selectedEpisodeId == null && show.nextUp != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nextUp = show.nextUp!.episode;
+        ref.read(selectedEpisodeProvider(id).notifier).select(nextUp.id);
+        ref
+            .read(selectedSeasonProvider(id).notifier)
+            .select(nextUp.seasonNumber);
+      });
+    }
+
+    final selectedSeason = ref.watch(selectedSeasonProvider(id));
+    final episodesAsync = ref.watch(
+      seasonEpisodesControllerProvider(
+        showId: id,
+        seasonNumber: selectedSeason,
+      ),
+    );
+    final episodes = episodesAsync.value ?? const <Episode>[];
+    final selectedEpisode = selectedEpisodeId == null
+        ? null
+        : episodes.where((e) => e.id == selectedEpisodeId).firstOrNull;
+
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, ref, show),
+        _buildHeroSection(context, ref, show, selectedEpisodeId),
+        SliverToBoxAdapter(
+          child: _buildEpisodeHeroBody(context, ref, show, selectedEpisode),
+        ),
+        SliverToBoxAdapter(child: CastRail(members: show.cast)),
+        if (show.similar.isNotEmpty)
+          SliverToBoxAdapter(
+            child: ContentRail(
+              title: 'Similar in your library',
+              items: show.similar,
+              onItemTap: (itemId, type) => context.push(
+                type.toLowerCase() == 'movie'
+                    ? '/movie/$itemId'
+                    : '/show/$itemId',
+              ),
+            ),
+          ),
         SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,7 +286,23 @@ class ShowDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildHeroSection(
-      BuildContext context, WidgetRef ref, ShowDetail show) {
+    BuildContext context,
+    WidgetRef ref,
+    ShowDetail show,
+    String? selectedEpisodeId,
+  ) {
+    final selectedSeason = ref.watch(selectedSeasonProvider(id));
+    final episodesAsync = ref.watch(
+      seasonEpisodesControllerProvider(
+        showId: id,
+        seasonNumber: selectedSeason,
+      ),
+    );
+    final episodes = episodesAsync.value ?? const <Episode>[];
+    final selectedEpisode = selectedEpisodeId == null
+        ? null
+        : episodes.where((e) => e.id == selectedEpisodeId).firstOrNull;
+
     return SliverAppBar(
       expandedHeight: 380,
       pinned: true,
@@ -247,28 +310,6 @@ class ShowDetailScreen extends ConsumerWidget {
       backgroundColor: AppColors.background,
       leading: _buildBackButton(context),
       actions: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Material(
-            color: Colors.black.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => ref
-                  .read(showDetailControllerProvider(id).notifier)
-                  .toggleFavorite(),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Icon(
-                  show.isFavorite
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  color: show.isFavorite ? AppColors.error : Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ),
         Padding(
           padding: const EdgeInsets.all(8),
           child: CastButton(onPressed: () => pickCastDevice(context, ref)),
@@ -321,94 +362,28 @@ class ShowDetailScreen extends ConsumerWidget {
               left: 20,
               right: 20,
               bottom: 20,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Poster
-                  _buildPoster(show),
-                  const SizedBox(width: 16),
-                  // Title and info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          show.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.8),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                  Text(
+                    show.title,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          blurRadius: 8,
                         ),
-                        if (show.yearDisplay.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            show.yearDisplay,
-                            style:
-                                Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        _buildQuickStats(context, show),
                       ],
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 12),
-                  if (show.nextUp != null)
-                    // Flexible gives SmartPlayButton's internal LayoutBuilder a
-                    // bounded maxWidth to key its narrow-layout collapse off of.
-                    // Without it, a non-flex trailing Row child gets unbounded
-                    // main-axis constraints, so the pill never collapses and
-                    // can overflow on narrow screens.
-                    Flexible(
-                      child: Builder(builder: (context) {
-                        final nextUp = show.nextUp!;
-                        final episode = nextUp.episode;
-                        if (episode.files.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return SmartPlayButton(
-                          files: episode.files,
-                          state: nextUp.state,
-                          episode: episode,
-                          onFileSelected: (file) {
-                            final title =
-                                '${show.title} - ${episode.episodeCode}';
-                            final progress = episode.progress;
-                            final resume = shouldPassResume(
-                              isContinueState:
-                                  nextUp.state == NextUpState.continueWatching,
-                              positionSeconds: progress?.positionSeconds,
-                              watched: progress?.watched ?? false,
-                            )
-                                ? '&resume=${progress!.positionSeconds}'
-                                : '';
-
-                            context.push(
-                              '/player/episode/${episode.id}'
-                              '?fileId=${file.id}'
-                              '&title=${Uri.encodeComponent(title)}'
-                              '&showId=$id'
-                              '&seasonNumber=${episode.seasonNumber}'
-                              '$resume',
-                            );
-                          },
-                        );
-                      }),
-                    ),
+                  if (selectedEpisode != null) ...[
+                    const SizedBox(height: 8),
+                    _buildEpisodeContextPill(show, selectedEpisode),
+                  ],
                 ],
               ),
             ),
@@ -418,102 +393,306 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPoster(dynamic show) {
+  Widget _buildEpisodeContextPill(ShowDetail show, Episode episode) {
+    final isNextUp = show.nextUp?.episode.id == episode.id;
+    final label = isNextUp
+        ? 'Next Up · S${episode.seasonNumber} E${episode.episodeNumber}'
+        : 'S${episode.seasonNumber} · E${episode.episodeNumber}';
+
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: AppColors.surfaceVariant,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 100,
-          height: 150,
-          child: show.artwork.posterUrl != null
-              ? CachedNetworkImage(
-                  imageUrl: show.artwork.posterUrl!,
-                  fit: BoxFit.cover,
-                  cacheManager: PosterCacheManager(),
-                  placeholder: (context, url) => Container(
-                    color: AppColors.surfaceVariant,
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: AppColors.surfaceVariant,
-                    child: const Icon(Icons.tv_rounded,
-                        color: AppColors.textSecondary),
-                  ),
-                )
-              : Container(
-                  color: AppColors.surfaceVariant,
-                  child: const Icon(Icons.tv_rounded,
-                      color: AppColors.textSecondary),
-                ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
         ),
       ),
     );
   }
 
-  Widget _buildQuickStats(BuildContext context, show) {
-    return Row(
+  Widget _buildEpisodeHeroBody(
+    BuildContext context,
+    WidgetRef ref,
+    ShowDetail show,
+    Episode? selectedEpisode,
+  ) {
+    if (selectedEpisode == null) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: SizedBox(
+          height: 160,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= _kHeroBreakpoint;
+          final actionColumn =
+              _buildActionColumn(context, ref, show, selectedEpisode);
+          final tagColumn = _buildTagColumn(context, show, selectedEpisode);
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: wide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 248, child: actionColumn),
+                      const SizedBox(width: 40),
+                      Expanded(child: tagColumn),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      actionColumn,
+                      const SizedBox(height: 20),
+                      tagColumn,
+                    ],
+                  ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildActionColumn(
+    BuildContext context,
+    WidgetRef ref,
+    ShowDetail show,
+    Episode episode,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildStatBadge(
-          context,
-          Icons.folder_rounded,
-          '${show.seasonCount} Season${show.seasonCount != 1 ? 's' : ''}',
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Play', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            SmartPlayButton(
+              files: episode.files,
+              onFileSelected: (file) {
+                final title = '${show.title} - ${episode.episodeCode}';
+                context.push(
+                  '/player/episode/${episode.id}?fileId=${file.id}'
+                  '&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${episode.seasonNumber}',
+                );
+              },
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        _buildStatBadge(
-          context,
-          Icons.movie_rounded,
-          '${show.episodeCount} Ep',
+        const SizedBox(height: 18),
+        DetailActionRow(
+          watched: episode.progress?.watched ?? false,
+          onToggleWatched: () => episode.progress?.watched ?? false
+              ? ref
+                  .read(seasonEpisodesControllerProvider(
+                          showId: id, seasonNumber: episode.seasonNumber)
+                      .notifier)
+                  .markEpisodeUnwatched(episode)
+              : ref
+                  .read(seasonEpisodesControllerProvider(
+                          showId: id, seasonNumber: episode.seasonNumber)
+                      .notifier)
+                  .markEpisodeWatched(episode),
+          isFavorite: show.isFavorite,
+          onToggleFavorite: () => ref
+              .read(showDetailControllerProvider(id).notifier)
+              .toggleFavorite(),
+          onDownload: () => _startEpisodeDownload(context, ref, show, episode),
+          trailerUrl: show.trailerUrl,
+          showDownload: isDownloadSupported,
         ),
-        if (show.ratingDisplay.isNotEmpty) ...[
-          const SizedBox(width: 12),
-          _buildStatBadge(
-            context,
-            Icons.star_rounded,
-            show.ratingDisplay,
-            iconColor: Colors.amber,
-          ),
-        ],
       ],
     );
   }
 
-  Widget _buildStatBadge(
-    BuildContext context,
-    IconData icon,
-    String label, {
-    Color? iconColor,
-  }) {
+  Widget _buildTagColumn(
+      BuildContext context, ShowDetail show, Episode episode) {
+    final tags = <String>[
+      if (episode.runtimeDisplay.isNotEmpty) episode.runtimeDisplay,
+      if (episode.files.isNotEmpty && episode.files.first.resolution != null)
+        episode.files.first.resolution!,
+      if (show.contentRating != null) show.contentRating!,
+      ...show.genres,
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (tags.isNotEmpty) ...[
+          Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: tags.map(_buildTagChip).toList()),
+          const SizedBox(height: 18),
+        ],
+        if (episode.overview != null) ...[
+          Text(
+            episode.overview!,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
+          ),
+          const SizedBox(height: 14),
+        ],
+        if (show.ratingDisplay.isNotEmpty) _buildRatingLine(show.ratingDisplay),
+      ],
+    );
+  }
+
+  Widget _buildTagChip(String label) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
+        color: AppColors.surfaceVariant,
+        border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: iconColor ?? AppColors.textSecondary),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
       ),
     );
+  }
+
+  Widget _buildRatingLine(String ratingDisplay) {
+    return Row(
+      children: [
+        const Icon(Icons.star_rounded, size: 16, color: AppColors.primary),
+        const SizedBox(width: 6),
+        Text(
+          ratingDisplay,
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+        ),
+        const SizedBox(width: 6),
+        const Text('TMDB',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      ],
+    );
+  }
+
+  /// Progressive-download flow for the hero's Download action, adapted from
+  /// `EpisodeDownloadButton._handleDownload` since the hero isn't that
+  /// widget — it needs the same quality-dialog → `startProgressiveDownload`
+  /// sequence, just driven by whichever episode is currently selected.
+  Future<void> _startEpisodeDownload(
+    BuildContext context,
+    WidgetRef ref,
+    ShowDetail show,
+    Episode episode,
+  ) async {
+    final isDownloadedAsync = ref.read(isMediaDownloadedProvider(episode.id));
+    final isDownloaded = isDownloadedAsync.value ?? false;
+
+    if (isDownloaded) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Already downloaded'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else if (episode.files.isNotEmpty) {
+      final selectedResolution = await showQualityDownloadDialog(
+        context,
+        contentType: 'episode',
+        contentId: episode.id,
+        title: '${show.title} - ${episode.episodeCode}',
+      );
+
+      if (selectedResolution != null && context.mounted) {
+        final downloadService = ref.read(unifiedDownloadJobServiceProvider);
+        final downloadManager = await ref.read(downloadManagerProvider.future);
+
+        if (downloadService != null) {
+          try {
+            await downloadManager.startProgressiveDownload(
+              mediaId: episode.id,
+              title: '${show.title} - ${episode.episodeCode}: ${episode.title}',
+              contentType: 'episode',
+              resolution: selectedResolution,
+              mediaType: MediaType.episode,
+              posterUrl: episode.thumbnailUrl,
+              overview: episode.overview,
+              runtime: episode.runtime,
+              seasonNumber: episode.seasonNumber,
+              episodeNumber: episode.episodeNumber,
+              showId: show.id,
+              showTitle: show.title,
+              showPosterUrl: show.artwork.posterUrl,
+              thumbnailUrl: episode.thumbnailUrl,
+              airDate: episode.airDate,
+              getDownloadUrl: (jobId) async {
+                return await downloadService.getDownloadUrl(jobId);
+              },
+              prepareDownload: () async {
+                final status = await downloadService.prepareDownload(
+                  contentType: 'episode',
+                  id: episode.id,
+                  resolution: selectedResolution,
+                );
+                return (
+                  jobId: status.jobId,
+                  status: status.status.name,
+                  progress: status.progress,
+                  fileSize: status.currentFileSize,
+                );
+              },
+              getJobStatus: (jobId) async {
+                final status = await downloadService.getJobStatus(jobId);
+                return (
+                  status: status.status.name,
+                  progress: status.progress,
+                  fileSize: status.currentFileSize,
+                  error: status.error,
+                );
+              },
+              cancelJob: (jobId) async {
+                await downloadService.cancelJob(jobId);
+              },
+            );
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Download started'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to start download: $e'),
+                  backgroundColor: AppColors.error,
+                ),
+              );
+            }
+          }
+        }
+      }
+    }
   }
 
   Widget _buildMetadata(BuildContext context, show) {
@@ -783,6 +962,14 @@ class ShowDetailScreen extends ConsumerWidget {
               showId: show?.id,
               showPosterUrl: show?.artwork.posterUrl,
               onEpisodeTap: (episode) async {
+                ref
+                    .read(selectedEpisodeProvider(id).notifier)
+                    .select(episode.id);
+                if (episode.seasonNumber != selectedSeason) {
+                  ref
+                      .read(selectedSeasonProvider(id).notifier)
+                      .select(episode.seasonNumber);
+                }
                 if (episode.files.isNotEmpty) {
                   final screenWidth = MediaQuery.sizeOf(context).width;
                   final deviceContext = await DeviceContext.detect(screenWidth);
