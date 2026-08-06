@@ -6,7 +6,6 @@ import '../../../core/cache/poster_cache_manager.dart';
 import 'movie_detail_controller.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
-import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/graphql/watch/query_key.dart';
@@ -15,8 +14,15 @@ import '../../../core/theme/colors.dart';
 import '../../../domain/models/movie_detail.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
-import '../../widgets/movie_watched_controls.dart';
+import '../../widgets/cast_rail.dart';
+import '../../widgets/content_rail.dart';
+import '../../widgets/detail_action_row.dart';
 import '../../widgets/smart_play_button.dart';
+
+/// Below this width the hero's action column and tag column stack instead
+/// of sitting side by side. Matches the wide-layout mockup's tablet/desktop
+/// target — see docs/superpowers/specs/2026-08-05-player-detail-page-infuse-redesign-design.md.
+const double _kHeroBreakpoint = 700;
 
 class MovieDetailScreen extends ConsumerWidget {
   final String id;
@@ -197,29 +203,162 @@ class MovieDetailScreen extends ConsumerWidget {
       slivers: [
         _buildHeroSection(context, ref, movie),
         SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              if (movie.isWatched) ...[
-                MovieWatchedLine(dateLabel: movie.watchedAtDisplay),
-                const SizedBox(height: 24),
-              ] else if (movie.hasResumableProgress) ...[
-                _buildProgressBar(context, movie),
-                const SizedBox(height: 24),
-              ],
-              if (movie.overview != null) ...[
-                _buildOverview(context, movie),
-                const SizedBox(height: 24),
-              ],
-              if (movie.genres.isNotEmpty) ...[
-                _buildGenres(context, movie),
-                const SizedBox(height: 24),
-              ],
-              const SizedBox(height: 32),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.only(top: 24),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= _kHeroBreakpoint;
+                final actionColumn = _buildActionColumn(context, ref, movie);
+                final tagColumn = _buildTagColumn(context, movie);
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: wide
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(width: 248, child: actionColumn),
+                            const SizedBox(width: 40),
+                            Expanded(child: tagColumn),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            actionColumn,
+                            const SizedBox(height: 20),
+                            tagColumn,
+                          ],
+                        ),
+                );
+              },
+            ),
           ),
         ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 28),
+            child: CastRail(members: movie.cast),
+          ),
+        ),
+        if (movie.similar.isNotEmpty)
+          SliverToBoxAdapter(
+            child: ContentRail(
+              title: 'Similar in your library',
+              items: movie.similar,
+              onItemTap: (id, type) {
+                context.push(
+                  type.toLowerCase() == 'movie' ? '/movie/$id' : '/show/$id',
+                );
+              },
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+      ],
+    );
+  }
+
+  Widget _buildActionColumn(
+      BuildContext context, WidgetRef ref, MovieDetail movie) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Play', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            SmartPlayButton(
+              files: movie.files,
+              onFileSelected: (file) => context.push(
+                '/player/movie/${movie.id}?fileId=${file.id}&title=${Uri.encodeComponent(movie.title)}',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        DetailActionRow(
+          watched: movie.isWatched,
+          onToggleWatched: () => _toggleWatched(context, ref, movie.isWatched),
+          isFavorite: movie.isFavorite,
+          onToggleFavorite: () => ref
+              .read(movieDetailControllerProvider(id).notifier)
+              .toggleFavorite(),
+          onDownload: () => _startDownload(context, ref, movie),
+          trailerUrl: movie.trailerUrl,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTagColumn(BuildContext context, MovieDetail movie) {
+    final tags = <String>[
+      if (movie.runtimeDisplay.isNotEmpty) movie.runtimeDisplay,
+      if (movie.files.isNotEmpty && movie.files.first.resolution != null)
+        movie.files.first.resolution!,
+      if (movie.contentRating != null) movie.contentRating!,
+      ...movie.genres,
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (tags.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: tags.map((tag) => _buildTagChip(context, tag)).toList(),
+          ),
+          const SizedBox(height: 18),
+        ],
+        if (movie.overview != null) ...[
+          Text(
+            movie.overview!,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
+          ),
+          const SizedBox(height: 14),
+        ],
+        if (movie.ratingDisplay.isNotEmpty)
+          _buildRatingLine(movie.ratingDisplay),
+      ],
+    );
+  }
+
+  Widget _buildTagChip(BuildContext context, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRatingLine(String ratingDisplay) {
+    return Row(
+      children: [
+        const Icon(Icons.star_rounded, size: 16, color: AppColors.primary),
+        const SizedBox(width: 6),
+        Text(
+          ratingDisplay,
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+        ),
+        const SizedBox(width: 6),
+        const Text('TMDB',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
       ],
     );
   }
@@ -257,40 +396,6 @@ class MovieDetailScreen extends ConsumerWidget {
       backgroundColor: AppColors.background,
       leading: _buildBackButton(context),
       actions: [
-        if (isDownloadSupported)
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: _buildAppBarDownloadButton(context, ref, movie),
-          ),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: MovieWatchedButton(
-            watched: movie.isWatched,
-            onPressed: () => _toggleWatched(context, ref, movie.isWatched),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Material(
-            color: Colors.black.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => ref
-                  .read(movieDetailControllerProvider(id).notifier)
-                  .toggleFavorite(),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Icon(
-                  movie.isFavorite
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  color: movie.isFavorite ? AppColors.error : Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ),
         Padding(
           padding: const EdgeInsets.all(8),
           child: CastButton(onPressed: () => pickCastDevice(context, ref)),
@@ -340,58 +445,19 @@ class MovieDetailScreen extends ConsumerWidget {
               left: 20,
               right: 20,
               bottom: 20,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _buildPoster(movie),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          movie.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.8),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (movie.yearDisplay.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            movie.yearDisplay,
-                            style:
-                                Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        _buildQuickStats(context, movie),
-                      ],
+              child: Text(
+                movie.title,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withValues(alpha: 0.8),
+                      blurRadius: 8,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  SmartPlayButton(
-                    files: movie.files,
-                    onFileSelected: (file) {
-                      context.push(
-                        '/player/movie/${movie.id}?fileId=${file.id}&title=${Uri.encodeComponent(movie.title)}',
-                      );
-                    },
-                  ),
-                ],
+                  ],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -400,332 +466,103 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPoster(dynamic movie) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 100,
-          height: 150,
-          child: movie.artwork.posterUrl != null
-              ? CachedNetworkImage(
-                  imageUrl: movie.artwork.posterUrl!,
-                  fit: BoxFit.cover,
-                  cacheManager: PosterCacheManager(),
-                  placeholder: (context, url) => Container(
-                    color: AppColors.surfaceVariant,
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: AppColors.surfaceVariant,
-                    child: const Icon(Icons.movie_rounded,
-                        color: AppColors.textSecondary),
-                  ),
-                )
-              : Container(
-                  color: AppColors.surfaceVariant,
-                  child: const Icon(Icons.movie_rounded,
-                      color: AppColors.textSecondary),
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickStats(BuildContext context, movie) {
-    return Row(
-      children: [
-        if (movie.runtimeDisplay.isNotEmpty) ...[
-          _buildStatBadge(
-            context,
-            Icons.schedule_rounded,
-            movie.runtimeDisplay,
-          ),
-          const SizedBox(width: 12),
-        ],
-        if (movie.ratingDisplay.isNotEmpty) ...[
-          _buildStatBadge(
-            context,
-            Icons.star_rounded,
-            movie.ratingDisplay,
-            iconColor: Colors.amber,
-          ),
-          const SizedBox(width: 12),
-        ],
-        if (movie.contentRating != null)
-          _buildStatBadge(
-            context,
-            Icons.shield_rounded,
-            movie.contentRating!,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildStatBadge(
+  Future<void> _startDownload(
     BuildContext context,
-    IconData icon,
-    String label, {
-    Color? iconColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: iconColor ?? AppColors.textSecondary),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAppBarDownloadButton(
-      BuildContext context, WidgetRef ref, movie) {
-    final isDownloadedAsync = ref.watch(isMediaDownloadedProvider(movie.id));
+    WidgetRef ref,
+    MovieDetail movie,
+  ) async {
+    final isDownloadedAsync = ref.read(isMediaDownloadedProvider(movie.id));
     final isDownloaded = isDownloadedAsync.value ?? false;
     final hasFiles = movie.files.isNotEmpty;
+    if (!hasFiles) return;
 
-    return Material(
-      color: Colors.black.withValues(alpha: 0.3),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: hasFiles
-            ? () async {
-                if (isDownloaded) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Already downloaded'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                } else {
-                  final selectedResolution = await showQualityDownloadDialog(
-                    context,
-                    contentType: 'movie',
-                    contentId: movie.id,
-                    title: movie.title,
-                  );
-
-                  if (selectedResolution != null && context.mounted) {
-                    final downloadService =
-                        ref.read(unifiedDownloadJobServiceProvider);
-                    final downloadManager =
-                        await ref.read(downloadManagerProvider.future);
-
-                    if (downloadService != null) {
-                      try {
-                        await downloadManager.startProgressiveDownload(
-                          mediaId: movie.id,
-                          title: movie.title,
-                          contentType: 'movie',
-                          resolution: selectedResolution,
-                          mediaType: MediaType.movie,
-                          posterUrl: movie.artwork.posterUrl,
-                          overview: movie.overview,
-                          runtime: movie.runtime,
-                          genres: movie.genres,
-                          rating: movie.rating,
-                          backdropUrl: movie.artwork.backdropUrl,
-                          year: movie.year,
-                          contentRating: movie.contentRating,
-                          getDownloadUrl: (jobId) async {
-                            return await downloadService.getDownloadUrl(jobId);
-                          },
-                          prepareDownload: () async {
-                            final status =
-                                await downloadService.prepareDownload(
-                              contentType: 'movie',
-                              id: movie.id,
-                              resolution: selectedResolution,
-                            );
-                            return (
-                              jobId: status.jobId,
-                              status: status.status.name,
-                              progress: status.progress,
-                              fileSize: status.currentFileSize,
-                            );
-                          },
-                          getJobStatus: (jobId) async {
-                            final status =
-                                await downloadService.getJobStatus(jobId);
-                            return (
-                              status: status.status.name,
-                              progress: status.progress,
-                              fileSize: status.currentFileSize,
-                              error: status.error,
-                            );
-                          },
-                          cancelJob: (jobId) async {
-                            await downloadService.cancelJob(jobId);
-                          },
-                        );
-
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Download started'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to start download: $e'),
-                              backgroundColor: AppColors.error,
-                            ),
-                          );
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(
-            isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
-            color: isDownloaded ? AppColors.success : Colors.white,
+    if (isDownloaded) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Already downloaded'),
+            duration: Duration(seconds: 2),
           ),
-        ),
-      ),
-    );
-  }
+        );
+      }
+    } else {
+      final selectedResolution = await showQualityDownloadDialog(
+        context,
+        contentType: 'movie',
+        contentId: movie.id,
+        title: movie.title,
+      );
 
-  Widget _buildProgressBar(BuildContext context, movie) {
-    final progress = movie.progress!;
-    final percentage = progress.percentage / 100;
-    final remaining = progress.durationSeconds != null
-        ? progress.durationSeconds! - progress.positionSeconds
-        : null;
+      if (selectedResolution != null && context.mounted) {
+        final downloadService = ref.read(unifiedDownloadJobServiceProvider);
+        final downloadManager = await ref.read(downloadManagerProvider.future);
 
-    String remainingText = '';
-    if (remaining != null && remaining > 0) {
-      final hours = remaining ~/ 3600;
-      final minutes = (remaining % 3600) ~/ 60;
-      if (hours > 0) {
-        remainingText = '${hours}h ${minutes}m remaining';
-      } else {
-        remainingText = '${minutes}m remaining';
+        if (downloadService != null) {
+          try {
+            await downloadManager.startProgressiveDownload(
+              mediaId: movie.id,
+              title: movie.title,
+              contentType: 'movie',
+              resolution: selectedResolution,
+              mediaType: MediaType.movie,
+              posterUrl: movie.artwork.posterUrl,
+              overview: movie.overview,
+              runtime: movie.runtime,
+              genres: movie.genres,
+              rating: movie.rating,
+              backdropUrl: movie.artwork.backdropUrl,
+              year: movie.year,
+              contentRating: movie.contentRating,
+              getDownloadUrl: (jobId) async {
+                return await downloadService.getDownloadUrl(jobId);
+              },
+              prepareDownload: () async {
+                final status = await downloadService.prepareDownload(
+                  contentType: 'movie',
+                  id: movie.id,
+                  resolution: selectedResolution,
+                );
+                return (
+                  jobId: status.jobId,
+                  status: status.status.name,
+                  progress: status.progress,
+                  fileSize: status.currentFileSize,
+                );
+              },
+              getJobStatus: (jobId) async {
+                final status = await downloadService.getJobStatus(jobId);
+                return (
+                  status: status.status.name,
+                  progress: status.progress,
+                  fileSize: status.currentFileSize,
+                  error: status.error,
+                );
+              },
+              cancelJob: (jobId) async {
+                await downloadService.cancelJob(jobId);
+              },
+            );
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Download started'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to start download: $e'),
+                  backgroundColor: AppColors.error,
+                ),
+              );
+            }
+          }
+        }
       }
     }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: percentage.clamp(0.0, 1.0),
-              minHeight: 4,
-              backgroundColor: AppColors.surfaceVariant,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppColors.primary),
-            ),
-          ),
-          if (remainingText.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              remainingText,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOverview(BuildContext context, movie) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Overview',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            movie.overview!,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.6,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGenres(BuildContext context, movie) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: movie.genres.map<Widget>((genre) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              genre,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
   }
 }
