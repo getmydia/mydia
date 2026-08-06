@@ -19,6 +19,7 @@ defmodule Mydia.Media do
 
   ## Options
     - `:type` - Filter by type ("movie" or "tv_show")
+    - `:ids` - Filter to a specific list of media item ids
     - `:monitored` - Filter by monitored status (true/false)
     - `:category` - Filter by category (atom or string, e.g., :anime_movie or "anime_movie")
     - `:library_path_type` - Filter by library path type (:adult, :music, :books, etc.)
@@ -1603,6 +1604,9 @@ defmodule Mydia.Media do
 
       {:monitored, monitored}, query ->
         where(query, [m], m.monitored == ^monitored)
+
+      {:ids, ids}, query when is_list(ids) ->
+        where(query, [m], m.id in ^ids)
 
       {:category, category}, query when is_atom(category) ->
         where(query, [m], m.category == ^to_string(category))

@@ -83,6 +83,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
       resolve(&MediaResolver.resolve_cast/3)
     end
 
+    @desc "Recommended titles that are also in this library"
+    field :similar, list_of(:recently_added_item) do
+      resolve(&MediaResolver.resolve_similar/3)
+    end
+
     @desc "Average rating (0-10)"
     field :rating, :float do
       resolve(&MediaResolver.resolve_rating/3)
@@ -184,6 +189,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "Cast members"
     field :cast, list_of(:cast_member) do
       resolve(&MediaResolver.resolve_cast/3)
+    end
+
+    @desc "Recommended titles that are also in this library"
+    field :similar, list_of(:recently_added_item) do
+      resolve(&MediaResolver.resolve_similar/3)
     end
 
     @desc "Average rating (0-10)"

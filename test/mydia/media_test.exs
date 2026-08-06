@@ -2122,4 +2122,25 @@ defmodule Mydia.MediaTest do
       assert Media.library_status_for_tmdb_ids([], "movie") == %{}
     end
   end
+
+  describe "list_media_items/1 :ids filter" do
+    import Mydia.MediaFixtures
+
+    test "returns only the requested ids" do
+      a = media_item_fixture(%{type: "movie", title: "A"})
+      _b = media_item_fixture(%{type: "movie", title: "B"})
+      c = media_item_fixture(%{type: "movie", title: "C"})
+
+      results = Media.list_media_items(ids: [a.id, c.id])
+
+      assert length(results) == 2
+      assert Enum.map(results, & &1.id) |> Enum.sort() == Enum.sort([a.id, c.id])
+    end
+
+    test "returns an empty list for an empty id list" do
+      media_item_fixture(%{type: "movie"})
+
+      assert Media.list_media_items(ids: []) == []
+    end
+  end
 end

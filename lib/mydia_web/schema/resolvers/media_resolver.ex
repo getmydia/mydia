@@ -9,6 +9,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   alias Mydia.Metadata.ImageUrl
   alias Mydia.Metadata.Structs.Video
   alias Mydia.Repo
+  alias MydiaWeb.Schema.Resolvers.ItemBuilder
 
   # Detections below this floor are persisted, so the operator can see and
   # diagnose them, but are not shown to players. 0.4 is exactly 2 agreeing
@@ -71,6 +72,30 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
       end)
 
     {:ok, members}
+  end
+
+  @spec resolve_similar(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
+  def resolve_similar(parent, _args, _info) do
+    tmdb_ids = MetadataAccess.get_field(parent, :recommended_tmdb_ids) || []
+    status = Media.library_status_for_tmdb_ids(tmdb_ids, parent.type)
+
+    matched_ids =
+      tmdb_ids
+      |> Enum.map(&get_in(status, [&1, :id]))
+      |> Enum.reject(&is_nil/1)
+
+    items_by_id =
+      matched_ids
+      |> then(&Media.list_media_items(ids: &1))
+      |> Map.new(&{&1.id, &1})
+
+    items =
+      matched_ids
+      |> Enum.map(&Map.get(items_by_id, &1))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&ItemBuilder.recently_added_item/1)
+
+    {:ok, items}
   end
 
   @spec resolve_rating(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}

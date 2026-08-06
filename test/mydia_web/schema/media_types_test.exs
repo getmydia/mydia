@@ -66,6 +66,18 @@ defmodule MydiaWeb.Schema.MediaTypesTest do
   }
   """
 
+  @movie_similar_query """
+  query MovieSimilar($id: ID!) {
+    movie(id: $id) {
+      id
+      similar {
+        id
+        title
+      }
+    }
+  }
+  """
+
   setup do
     %{user: AccountsFixtures.user_fixture()}
   end
@@ -246,6 +258,62 @@ defmodule MydiaWeb.Schema.MediaTypesTest do
 
       assert {:ok, %{data: %{"tvShow" => %{"cast" => []}}}} =
                run_query(@show_cast_query, %{"id" => show.id}, ctx.user)
+    end
+  end
+
+  describe "movie.similar" do
+    test "returns only recommended titles that are in the library, in TMDB order", ctx do
+      owned_second =
+        MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          title: "Owned Second",
+          tmdb_id: 605
+        })
+
+      owned_first =
+        MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          title: "Owned First",
+          tmdb_id: 604
+        })
+
+      movie =
+        MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          title: "The Matrix",
+          tmdb_id: 603,
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "The Matrix",
+            # 604 first, then 606 (not owned), then 605 - order must survive.
+            "recommended_tmdb_ids" => [604, 606, 605]
+          }
+        })
+
+      assert {:ok, %{data: %{"movie" => %{"similar" => similar}}}} =
+               run_query(@movie_similar_query, %{"id" => movie.id}, ctx.user)
+
+      assert Enum.map(similar, & &1["id"]) == [owned_first.id, owned_second.id]
+    end
+
+    test "is an empty list when nothing recommended is owned", ctx do
+      movie =
+        MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          tmdb_id: 603,
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "The Matrix",
+            "recommended_tmdb_ids" => [999]
+          }
+        })
+
+      assert {:ok, %{data: %{"movie" => %{"similar" => []}}}} =
+               run_query(@movie_similar_query, %{"id" => movie.id}, ctx.user)
     end
   end
 
