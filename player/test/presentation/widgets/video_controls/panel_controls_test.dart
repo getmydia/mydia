@@ -300,6 +300,56 @@ void main() {
       );
     });
 
+    testWidgets('omits always-on-top when no callback is supplied',
+        (tester) async {
+      await tester.pumpWidget(_host(const SecondaryCluster()));
+      expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsNothing);
+    });
+
+    testWidgets('shows always-on-top when a callback is supplied',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onAlwaysOnTopTap: () {})),
+      );
+      expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsOneWidget);
+    });
+
+    testWidgets('swaps the always-on-top glyph when pinned', (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(isAlwaysOnTop: true, onAlwaysOnTopTap: () {})),
+      );
+
+      expect(
+        tester
+            .widget<ControlButton>(find.byKey(SecondaryCluster.alwaysOnTopKey))
+            .icon,
+        Icons.push_pin_rounded,
+      );
+    });
+
+    testWidgets('shows the unpinned glyph when not pinned', (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onAlwaysOnTopTap: () {})),
+      );
+
+      expect(
+        tester
+            .widget<ControlButton>(find.byKey(SecondaryCluster.alwaysOnTopKey))
+            .icon,
+        Icons.push_pin_outlined,
+      );
+    });
+
+    testWidgets('always-on-top button fires its callback', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onAlwaysOnTopTap: () => tapped = true)),
+      );
+
+      await tester.tap(find.byKey(SecondaryCluster.alwaysOnTopKey));
+      expect(tapped, isTrue);
+    });
+
     testWidgets(
         'subtitles, audio, quality, and fullscreen stay left-to-right '
         'ordered with a uniform pitch of buttonWidth + SecondaryCluster.gap',

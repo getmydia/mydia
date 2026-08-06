@@ -185,6 +185,7 @@ class SecondaryCluster extends StatelessWidget {
   /// the callback on `PlatformFeatures.isWeb`, and that gate is gone.
   final VoidCallback? onQualityTap;
   final VoidCallback? onFullscreenTap;
+  final VoidCallback? onAlwaysOnTopTap;
 
   final int audioTrackCount;
   final int subtitleTrackCount;
@@ -192,6 +193,7 @@ class SecondaryCluster extends StatelessWidget {
   final String? selectedSubtitleLabel;
   final String? selectedQualityLabel;
   final bool isFullscreen;
+  final bool isAlwaysOnTop;
 
   const SecondaryCluster({
     super.key,
@@ -199,12 +201,14 @@ class SecondaryCluster extends StatelessWidget {
     this.onAudioTap,
     this.onQualityTap,
     this.onFullscreenTap,
+    this.onAlwaysOnTopTap,
     this.audioTrackCount = 0,
     this.subtitleTrackCount = 0,
     this.selectedAudioLabel,
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,
     this.isFullscreen = false,
+    this.isAlwaysOnTop = false,
     this.gap = 0.0,
   });
 
@@ -212,6 +216,7 @@ class SecondaryCluster extends StatelessWidget {
   static const Key audioKey = Key('secondary-audio');
   static const Key qualityKey = Key('secondary-quality');
   static const Key fullscreenKey = Key('secondary-fullscreen');
+  static const Key alwaysOnTopKey = Key('secondary-always-on-top');
 
   /// Horizontal gap between this cluster's buttons.
   ///
@@ -283,6 +288,25 @@ class SecondaryCluster extends StatelessWidget {
           tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
           onTap: onFullscreenTap,
         ),
+        if (onAlwaysOnTopTap != null) ...[
+          SizedBox(width: gap),
+          ControlButton(
+            key: alwaysOnTopKey,
+            // No dedicated "unpin" glyph exists in the rounded icon family
+            // (unlike fullscreen/fullscreen_exit, which are two distinct
+            // pictograms) — push_pin_outlined vs push_pin_rounded uses the
+            // filled-vs-outline convention Material already uses elsewhere
+            // for binary state (favorite/favorite_border, bookmark/
+            // bookmark_border) instead.
+            icon: isAlwaysOnTop
+                ? Icons.push_pin_rounded
+                : Icons.push_pin_outlined,
+            iconSize: 18,
+            size: 32,
+            tooltip: isAlwaysOnTop ? 'Exit always on top' : 'Always on top',
+            onTap: onAlwaysOnTopTap,
+          ),
+        ],
       ],
     );
   }
