@@ -1145,19 +1145,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       mock_transmission_torrent_get(bypass, [torrent])
 
-      require Logger
-
-      Logger.warning(
-        "DIAG pre-completion test: visible clients before perform_job = " <>
-          inspect(
-            Enum.map(
-              Mydia.Settings.list_download_client_configs(),
-              &{&1.name, &1.type, &1.enabled, &1.host, &1.port}
-            )
-          ) <>
-          ", ours = #{inspect({client_config.name, client_config.type, client_config.enabled, client_config.host, client_config.port})}"
-      )
-
       media_item = media_item_fixture()
 
       download =
@@ -1205,19 +1192,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       mock_transmission_torrent_get(bypass, [torrent])
 
-      require Logger
-
-      Logger.warning(
-        "DIAG pre-completion test: visible clients before perform_job = " <>
-          inspect(
-            Enum.map(
-              Mydia.Settings.list_download_client_configs(),
-              &{&1.name, &1.type, &1.enabled, &1.host, &1.port}
-            )
-          ) <>
-          ", ours = #{inspect({client_config.name, client_config.type, client_config.enabled, client_config.host, client_config.port})}"
-      )
-
       media_item = media_item_fixture()
 
       download =
@@ -1249,19 +1223,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       }
 
       mock_transmission_torrent_get(bypass, [torrent])
-
-      require Logger
-
-      Logger.warning(
-        "DIAG pre-completion test: visible clients before perform_job = " <>
-          inspect(
-            Enum.map(
-              Mydia.Settings.list_download_client_configs(),
-              &{&1.name, &1.type, &1.enabled, &1.host, &1.port}
-            )
-          ) <>
-          ", ours = #{inspect({client_config.name, client_config.type, client_config.enabled, client_config.host, client_config.port})}"
-      )
 
       media_item = media_item_fixture()
 
