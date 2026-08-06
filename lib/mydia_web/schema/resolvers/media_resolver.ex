@@ -7,6 +7,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
+  alias Mydia.Metadata.Structs.Video
   alias Mydia.Repo
 
   # Detections below this floor are persisted, so the operator can see and
@@ -40,6 +41,20 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
           {:ok, term()} | {:error, term()}
   def resolve_content_rating(parent, _args, _info) do
     {:ok, MetadataAccess.get_field(parent, :content_rating)}
+  end
+
+  @spec resolve_trailer_url(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_trailer_url(parent, _args, _info) do
+    videos = MetadataAccess.get_field(parent, :videos) || []
+
+    url =
+      case List.first(videos) do
+        nil -> nil
+        video -> Video.youtube_watch_url(video)
+      end
+
+    {:ok, url}
   end
 
   @spec resolve_rating(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}

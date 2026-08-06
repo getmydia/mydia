@@ -22,6 +22,24 @@ defmodule MydiaWeb.Schema.MediaTypesTest do
   }
   """
 
+  @movie_trailer_query """
+  query MovieTrailer($id: ID!) {
+    movie(id: $id) {
+      id
+      trailerUrl
+    }
+  }
+  """
+
+  @show_trailer_query """
+  query ShowTrailer($id: ID!) {
+    tvShow(id: $id) {
+      id
+      trailerUrl
+    }
+  }
+  """
+
   setup do
     %{user: AccountsFixtures.user_fixture()}
   end
@@ -68,6 +86,66 @@ defmodule MydiaWeb.Schema.MediaTypesTest do
 
       assert {:ok, %{data: %{"tvShow" => %{"contentRating" => "TV-MA"}}}} =
                run_query(@show_query, %{"id" => show.id}, ctx.user)
+    end
+  end
+
+  describe "movie.trailerUrl" do
+    test "returns the first persisted trailer's watch URL", ctx do
+      movie =
+        MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "The Matrix",
+            "videos" => [
+              %{"key" => "vKQi3bBA1y8", "site" => "YouTube", "type" => "Trailer"}
+            ]
+          }
+        })
+
+      assert {:ok, %{data: %{"movie" => %{"trailerUrl" => url}}}} =
+               run_query(@movie_trailer_query, %{"id" => movie.id}, ctx.user)
+
+      assert url == "https://www.youtube.com/watch?v=vKQi3bBA1y8"
+    end
+
+    test "is null when there are no videos", ctx do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+
+      assert {:ok, %{data: %{"movie" => %{"trailerUrl" => nil}}}} =
+               run_query(@movie_trailer_query, %{"id" => movie.id}, ctx.user)
+    end
+  end
+
+  describe "tvShow.trailerUrl" do
+    test "returns the first persisted trailer's watch URL", ctx do
+      show =
+        MediaFixtures.media_item_fixture(%{
+          type: "tv_show",
+          metadata: %{
+            "provider_id" => "1396",
+            "provider" => "metadata_relay",
+            "media_type" => "tv_show",
+            "title" => "Breaking Bad",
+            "videos" => [
+              %{"key" => "xyz123abc", "site" => "YouTube", "type" => "Trailer"}
+            ]
+          }
+        })
+
+      assert {:ok, %{data: %{"tvShow" => %{"trailerUrl" => url}}}} =
+               run_query(@show_trailer_query, %{"id" => show.id}, ctx.user)
+
+      assert url == "https://www.youtube.com/watch?v=xyz123abc"
+    end
+
+    test "is null when there are no videos", ctx do
+      show = MediaFixtures.media_item_fixture(%{type: "tv_show"})
+
+      assert {:ok, %{data: %{"tvShow" => %{"trailerUrl" => nil}}}} =
+               run_query(@show_trailer_query, %{"id" => show.id}, ctx.user)
     end
   end
 

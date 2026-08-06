@@ -66,6 +66,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
       resolve(&MediaResolver.resolve_content_rating/3)
     end
 
+    @desc "Watch-page URL for the first available YouTube trailer"
+    field :trailer_url, :string do
+      resolve(&MediaResolver.resolve_trailer_url/3)
+    end
+
     @desc "Average rating (0-10)"
     field :rating, :float do
       resolve(&MediaResolver.resolve_rating/3)
@@ -157,6 +162,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "Content rating"
     field :content_rating, :string do
       resolve(&MediaResolver.resolve_content_rating/3)
+    end
+
+    @desc "Watch-page URL for the first available YouTube trailer"
+    field :trailer_url, :string do
+      resolve(&MediaResolver.resolve_trailer_url/3)
     end
 
     @desc "Average rating (0-10)"
