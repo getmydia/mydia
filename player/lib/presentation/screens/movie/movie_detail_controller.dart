@@ -54,6 +54,23 @@ query MovieDetail($id: ID!) {
       directPlayUrl
     }
     isFavorite
+    cast {
+      name
+      character
+      profileUrl
+    }
+    trailerUrl
+    similar {
+      id
+      type
+      title
+      year
+      artwork {
+        posterUrl
+        backdropUrl
+        thumbnailUrl
+      }
+    }
   }
 }
 ''';
