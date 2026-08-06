@@ -386,12 +386,18 @@ defmodule Mydia.Jobs.DownloadMonitor do
   # `(indexer, guid)`, remove the torrent and its data from the client,
   # delete the row, queue a replacement search), just triggered automatically
   # and before the payload finishes downloading instead of after.
+  # Capped so a large season pack (hundreds of files) doesn't blow up this
+  # warning into an outsized log line.
+  @bad_content_log_sample 10
+
   defp reject_bad_content(download_map) do
     Logger.warning(
       "Rejecting download before completion — no importable files in torrent",
       download_id: download_map.id,
       title: download_map.title,
-      files: Enum.map(download_map.files, &Path.basename/1)
+      file_count: length(download_map.files),
+      files_sample:
+        download_map.files |> Enum.take(@bad_content_log_sample) |> Enum.map(&Path.basename/1)
     )
 
     download = Downloads.get_download!(download_map.id)

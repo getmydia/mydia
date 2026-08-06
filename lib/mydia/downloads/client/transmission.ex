@@ -442,10 +442,18 @@ defmodule Mydia.Downloads.Client.Transmission do
   # itself is `download_dir/torrent_name`, which for a single-file torrent
   # names the file, not a directory, and would double the filename.
   defp resolve_torrent_files(_download_dir, files) when not is_list(files), do: nil
-  defp resolve_torrent_files(_download_dir, []), do: nil
 
   defp resolve_torrent_files(download_dir, files) do
-    Enum.map(files, fn file -> Path.join(download_dir, file["name"] || "") end)
+    paths =
+      files
+      |> Enum.map(& &1["name"])
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      |> Enum.map(&Path.join(download_dir, &1))
+
+    case paths do
+      [] -> nil
+      list -> list
+    end
   end
 
   defp parse_state(status) when is_integer(status) do

@@ -414,6 +414,58 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
       assert {:ok, status} = Transmission.get_status(config, "def456")
       assert status.files == nil
     end
+
+    test "filters out entries with a blank or missing name instead of joining an empty path",
+         %{bypass: bypass, config: config} do
+      torrent = %{
+        "hashString" => "ghi789",
+        "name" => "Some.Show.S01E02",
+        "status" => 4,
+        "percentDone" => 0.2,
+        "downloadDir" => "/downloads",
+        "files" => [
+          %{"name" => "", "length" => 0},
+          %{"length" => 0},
+          %{"name" => "Some.Show.S01E02.mkv", "length" => 500}
+        ]
+      }
+
+      Bypass.expect(bypass, "POST", "/transmission/rpc", fn conn ->
+        respond_torrent_get(
+          conn,
+          "session-blank-name",
+          fn args -> assert "files" in args["fields"] end,
+          [torrent]
+        )
+      end)
+
+      assert {:ok, status} = Transmission.get_status(config, "ghi789")
+      assert status.files == ["/downloads/Some.Show.S01E02.mkv"]
+    end
+
+    test "returns nil when every file has a blank or missing name",
+         %{bypass: bypass, config: config} do
+      torrent = %{
+        "hashString" => "jkl012",
+        "name" => "Some.Show.S01E03",
+        "status" => 4,
+        "percentDone" => 0.0,
+        "downloadDir" => "/downloads",
+        "files" => [%{"name" => "", "length" => 0}, %{"length" => 0}]
+      }
+
+      Bypass.expect(bypass, "POST", "/transmission/rpc", fn conn ->
+        respond_torrent_get(
+          conn,
+          "session-all-blank",
+          fn args -> assert "files" in args["fields"] end,
+          [torrent]
+        )
+      end)
+
+      assert {:ok, status} = Transmission.get_status(config, "jkl012")
+      assert status.files == nil
+    end
   end
 
   # Note: Full integration tests would require either:

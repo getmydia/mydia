@@ -11,6 +11,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
   alias Mydia.Repo
   import Mydia.MediaFixtures
   import Mydia.DownloadsFixtures
+  import Mydia.SettingsFixtures
 
   describe "perform/1" do
     test "successfully monitors downloads with no active downloads" do
@@ -1083,16 +1084,21 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     # waiting for it to complete — see the House of the Dragon S03E07/QAsH
     # incident, where a single disguised .exe downloaded to completion every
     # search cycle before the post-completion importer ever saw it.
-    defp start_transmission_bypass(name \\ "Trans") do
+    # Uses a DB-backed client config (`download_client_config_fixture/1`)
+    # rather than `setup_runtime_config/1`. The latter mutates the global
+    # `Application.env(:mydia, :runtime_config)`, which races against any
+    # other `async: true` test module doing the same (media_import_test.exs
+    # does) — usually too narrow a window to matter, but these tests hold it
+    # open for a real Bypass HTTP round-trip per poll, which is long enough
+    # to lose the race under CI's higher test concurrency. A DB row lives
+    # inside this test's own Ecto sandbox transaction, so it can't collide.
+    defp start_transmission_bypass(overrides \\ %{}) do
       bypass = Bypass.open()
 
       client_config =
-        build_test_client_config(%{
-          name: name,
-          type: :transmission,
-          host: "localhost",
-          port: bypass.port
-        })
+        download_client_config_fixture(
+          Map.merge(%{type: "transmission", host: "localhost", port: bypass.port}, overrides)
+        )
 
       {bypass, client_config}
     end
@@ -1139,7 +1145,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       mock_transmission_torrent_get(bypass, [torrent])
 
-      setup_runtime_config([client_config])
       media_item = media_item_fixture()
 
       download =
@@ -1187,7 +1192,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       mock_transmission_torrent_get(bypass, [torrent])
 
-      setup_runtime_config([client_config])
       media_item = media_item_fixture()
 
       download =
@@ -1220,7 +1224,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
 
       mock_transmission_torrent_get(bypass, [torrent])
 
-      setup_runtime_config([client_config])
       media_item = media_item_fixture()
 
       download =
