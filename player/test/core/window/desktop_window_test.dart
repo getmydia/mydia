@@ -22,6 +22,11 @@ void main() {
       expect(startWindowDrag, returnsNormally);
     });
 
+    test('setWindowAlwaysOnTop does not throw', () {
+      expect(() => setWindowAlwaysOnTop(true), returnsNormally);
+      expect(() => setWindowAlwaysOnTop(false), returnsNormally);
+    });
+
     test('createPlayerWindowSizer returns a usable sizer', () async {
       // With no window initialized this is the no-op, and its methods must
       // still be safe to call — PlayerScreen calls them unconditionally.

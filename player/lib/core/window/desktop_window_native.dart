@@ -148,6 +148,26 @@ void startWindowDrag() {
   }
 }
 
+/// Pins or un-pins the OS window above other windows.
+///
+/// No-op off desktop. Never throws: called from a control-panel button tap
+/// and from `PlayerScreen.dispose()`, neither of which can surface an
+/// exception usefully — same contract as [startWindowDrag].
+void setWindowAlwaysOnTop(bool value) {
+  if (!PlatformFeatures.isDesktop) return;
+  try {
+    unawaited(
+      windowManager.setAlwaysOnTop(value).catchError(
+            (Object e) => debugPrint(
+              '[DesktopWindow] Failed to set always-on-top: $e',
+            ),
+          ),
+    );
+  } catch (e) {
+    debugPrint('[DesktopWindow] Failed to set always-on-top: $e');
+  }
+}
+
 /// A sizer for the player screen, or a no-op when there is no window to size.
 PlayerWindowSizer createPlayerWindowSizer() {
   final geometry = _geometry;
