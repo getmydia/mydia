@@ -53,10 +53,13 @@ class PanelMetrics {
   /// Unlike [showQuality], this is not true at every tier. Always-on-top is
   /// desktop-only regardless of this field — `PlaybackChrome` also gates it
   /// on `PlatformFeatures.isDesktop` — but a narrowed desktop window can
-  /// still land in the mobile-width tier below, and a 5th `SecondaryCluster`
-  /// button reopens the exact overflow budget [showQuality]'s dartdoc
-  /// warned about. See `chrome_panel_overflow_test.dart`'s five-button
-  /// group for the measured budget this field is tuned against.
+  /// still land in the tablet or mobile width tiers below, and a 5th
+  /// `SecondaryCluster` button reopens the exact overflow budget
+  /// [showQuality]'s dartdoc warned about. This field is `false` at both of
+  /// those tiers, not just mobile: the tablet tier was measured too, and its
+  /// tightest width came up short (see that branch's own inline comment
+  /// below for the figure). See `chrome_panel_overflow_test.dart`'s
+  /// five-button group for the measured budget this field is tuned against.
   final bool showAlwaysOnTop;
 
   /// Horizontal padding on both sides of the panel. Previously a single

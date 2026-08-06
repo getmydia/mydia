@@ -99,6 +99,16 @@ void main() {
       expect(PanelMetrics.forWidth(800).showQuality, isTrue);
       expect(PanelMetrics.forWidth(400).showQuality, isTrue);
     });
+
+    test('showAlwaysOnTop is desktop-only', () {
+      // 600px overflows SecondaryCluster by 18px with a 5th button; see the
+      // tablet branch's inline comment in chrome_panel.dart.
+      expect(PanelMetrics.forWidth(1600).showAlwaysOnTop, isTrue);
+      expect(PanelMetrics.forWidth(900).showAlwaysOnTop, isTrue);
+      expect(PanelMetrics.forWidth(899).showAlwaysOnTop, isFalse);
+      expect(PanelMetrics.forWidth(600).showAlwaysOnTop, isFalse);
+      expect(PanelMetrics.forWidth(400).showAlwaysOnTop, isFalse);
+    });
   });
 
   group('ChromePanel', () {

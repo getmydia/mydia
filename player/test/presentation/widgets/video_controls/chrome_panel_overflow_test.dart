@@ -60,6 +60,16 @@ import 'package:player/presentation/widgets/video_controls/video_progress_bar.da
 /// (see the file header's `quality` axis note). This is deliberately the
 /// *worst case* PlaybackChrome can present at a given width — a caller with
 /// no adjacent episodes gets an easier layout, not a harder one.
+///
+/// [alwaysOnTop] works differently from [quality]: it wires
+/// `onAlwaysOnTopTap` straight from the parameter, unconditionally, rather
+/// than consulting `metrics.showAlwaysOnTop` the way real `PlaybackChrome`
+/// composition would. That is deliberate, not an oversight — the five-button
+/// group below exists to measure the raw `SecondaryCluster` layout budget at
+/// widths a real device would never actually show 5 buttons at, since
+/// `showAlwaysOnTop` gates those same widths off in production (see its
+/// dartdoc in `chrome_panel.dart`). Consulting the real gate here would make
+/// [alwaysOnTop] a no-op everywhere it is passed `true`.
 Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
   final metrics = PanelMetrics.forWidth(width);
   return MaterialApp(

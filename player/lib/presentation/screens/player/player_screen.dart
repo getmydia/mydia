@@ -2581,6 +2581,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.keyT:
+        if (!PlatformFeatures.isDesktop) return KeyEventResult.ignored;
         _toggleAlwaysOnTop();
         return KeyEventResult.handled;
 
