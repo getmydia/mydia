@@ -435,4 +435,18 @@ defmodule Mydia.MetadataTest do
       assert Metadata.metadata_language() == "en-US"
     end
   end
+
+  describe "default_append_to_response/0" do
+    test "includes the resources every full-detail fetch needs" do
+      resources = Mydia.Metadata.default_append_to_response()
+
+      assert "credits" in resources
+      assert "images" in resources
+      assert "videos" in resources
+      assert "keywords" in resources
+      assert "release_dates" in resources
+      assert "content_ratings" in resources
+      assert "recommendations" in resources
+    end
+  end
 end

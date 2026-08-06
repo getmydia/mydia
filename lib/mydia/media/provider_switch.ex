@@ -209,7 +209,7 @@ defmodule Mydia.Media.ProviderSwitch do
            Mydia.Metadata.fetch_by_id(config, new_id,
              media_type: :tv_show,
              provider: target_provider,
-             append_to_response: ["credits", "images", "videos", "keywords"]
+             append_to_response: Mydia.Metadata.default_append_to_response()
            ),
          {:ok, season_datas, expected_episode_count} <-
            prefetch_provider_seasons(

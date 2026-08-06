@@ -260,7 +260,7 @@ defmodule Mydia.Library.MetadataEnricher do
   defp fetch_full_metadata(provider_id, media_type, config, provider_type) do
     fetch_opts = [
       media_type: media_type,
-      append_to_response: ["credits", "images", "videos", "keywords"]
+      append_to_response: Metadata.default_append_to_response()
     ]
 
     # For TV shows, fetch from the provider that supplied the match so a

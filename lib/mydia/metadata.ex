@@ -440,6 +440,26 @@ defmodule Mydia.Metadata do
   end
 
   @doc """
+  The `append_to_response` list used by every full-detail metadata fetch
+  (initial match, refresh, provider switch). Extending this list is the only
+  way to pull in another TMDB resource — metadata-relay forwards
+  `append_to_response` straight through to TMDB with no allowlist, so nothing
+  outside this module needs to change to add one.
+  """
+  @spec default_append_to_response() :: [String.t()]
+  def default_append_to_response do
+    [
+      "credits",
+      "images",
+      "videos",
+      "keywords",
+      "release_dates",
+      "content_ratings",
+      "recommendations"
+    ]
+  end
+
+  @doc """
   Gets the default metadata relay configuration.
 
   This provides a ready-to-use configuration for the metadata-relay service
