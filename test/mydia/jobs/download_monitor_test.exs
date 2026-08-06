@@ -11,6 +11,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
   alias Mydia.Repo
   import Mydia.MediaFixtures
   import Mydia.DownloadsFixtures
+  import Mydia.SettingsFixtures
 
   describe "perform/1" do
     test "successfully monitors downloads with no active downloads" do
@@ -1072,6 +1073,173 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       assert_raise Ecto.NoResultsError, fn ->
         Mydia.Downloads.get_download!(download.id)
       end
+    end
+  end
+
+  describe "pre-completion content rejection" do
+    # Transmission reports a torrent's file list as soon as it knows the
+    # torrent's metadata (immediately for a direct .torrent add), well before
+    # the payload finishes downloading. DownloadMonitor must reject a torrent
+    # whose known file list contains no importable video file rather than
+    # waiting for it to complete — see the House of the Dragon S03E07/QAsH
+    # incident, where a single disguised .exe downloaded to completion every
+    # search cycle before the post-completion importer ever saw it.
+    # Uses a DB-backed client config (`download_client_config_fixture/1`)
+    # rather than `setup_runtime_config/1`. The latter mutates the global
+    # `Application.env(:mydia, :runtime_config)`, which races against any
+    # other `async: true` test module doing the same (media_import_test.exs
+    # does) — usually too narrow a window to matter, but these tests hold it
+    # open for a real Bypass HTTP round-trip per poll, which is long enough
+    # to lose the race under CI's higher test concurrency. A DB row lives
+    # inside this test's own Ecto sandbox transaction, so it can't collide.
+    defp start_transmission_bypass(overrides \\ %{}) do
+      bypass = Bypass.open()
+
+      client_config =
+        download_client_config_fixture(
+          Map.merge(%{type: "transmission", host: "localhost", port: bypass.port}, overrides)
+        )
+
+      {bypass, client_config}
+    end
+
+    defp mock_transmission_torrent_get(bypass, torrents) do
+      Bypass.expect(bypass, "POST", "/transmission/rpc", fn conn ->
+        case Plug.Conn.get_req_header(conn, "x-transmission-session-id") do
+          [] ->
+            conn
+            |> Plug.Conn.put_resp_header("x-transmission-session-id", "test-session")
+            |> Plug.Conn.resp(409, "")
+
+          ["test-session"] ->
+            {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+            decoded = Jason.decode!(body)
+
+            case decoded["method"] do
+              "torrent-get" ->
+                json_resp(conn, 200, %{
+                  "result" => "success",
+                  "arguments" => %{"torrents" => torrents}
+                })
+
+              "torrent-remove" ->
+                json_resp(conn, 200, %{"result" => "success", "arguments" => %{}})
+            end
+        end
+      end)
+    end
+
+    test "rejects a still-downloading torrent whose only file is a disguised .exe" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "qash-hash",
+        "name" => "House.of.the.Dragon.S03E07.1080p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-QAsH",
+        "status" => 4,
+        "percentDone" => 0.05,
+        "downloadDir" => "/downloads",
+        "files" => [
+          %{"name" => "C7466DBA33FE8C5F53F0F80ED8BCFC62242EF310.exe", "length" => 891_885_056}
+        ]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "House.of.the.Dragon.S03E07.1080p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-QAsH",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "qash-hash",
+          metadata: %{
+            size: 4_520_571_190,
+            indexer: "1337x",
+            guid: "https://1337x.to/torrent/6695392/qash/"
+          }
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      # Rejected before completion: blacklisted, and the row is gone —
+      # exactly as if an operator had rejected it from the Issues tab.
+      assert Mydia.Downloads.Blacklists.blacklisted?(
+               "1337x",
+               "https://1337x.to/torrent/6695392/qash/"
+             )
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Mydia.Downloads.get_download!(download.id)
+      end
+    end
+
+    test "does not reject a still-downloading torrent that has a video file" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "good-hash",
+        "name" => "Show.S01E01.1080p.WEB-DL",
+        "status" => 4,
+        "percentDone" => 0.4,
+        "downloadDir" => "/downloads",
+        "files" => [
+          %{"name" => "Show.S01E01.1080p.WEB-DL.mkv", "length" => 2_000_000_000},
+          %{"name" => "Show.S01E01.1080p.WEB-DL.nfo", "length" => 2_048}
+        ]
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Show.S01E01.1080p.WEB-DL",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "good-hash",
+          metadata: %{size: 2_000_000_000, indexer: "1337x", guid: "guid-good"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-good")
+      assert Mydia.Downloads.get_download!(download.id)
+    end
+
+    test "does not reject a torrent whose file list is not yet known" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      torrent = %{
+        "hashString" => "pending-hash",
+        "name" => "Show.S01E02.1080p.WEB-DL",
+        "status" => 4,
+        "percentDone" => 0.0,
+        "downloadDir" => "/downloads"
+        # No "files" key — metadata not resolved yet (e.g. a fresh magnet).
+      }
+
+      mock_transmission_torrent_get(bypass, [torrent])
+
+      media_item = media_item_fixture()
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          title: "Show.S01E02.1080p.WEB-DL",
+          indexer: "1337x",
+          download_client: client_config.name,
+          download_client_id: "pending-hash",
+          metadata: %{size: 2_000_000_000, indexer: "1337x", guid: "guid-pending"}
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "guid-pending")
+      assert Mydia.Downloads.get_download!(download.id)
     end
   end
 

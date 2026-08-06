@@ -147,7 +147,8 @@ defmodule Mydia.Downloads.Client.Transmission do
       "uploadRatio",
       "downloadDir",
       "addedDate",
-      "doneDate"
+      "doneDate",
+      "files"
     ]
 
     arguments = %{
@@ -189,7 +190,8 @@ defmodule Mydia.Downloads.Client.Transmission do
       "downloadDir",
       "addedDate",
       "doneDate",
-      "labels"
+      "labels",
+      "files"
     ]
 
     arguments = %{"fields" => fields}
@@ -427,9 +429,31 @@ defmodule Mydia.Downloads.Client.Transmission do
       eta: parse_eta(torrent["eta"]),
       ratio: torrent["uploadRatio"] || 0.0,
       save_path: save_path,
+      files: resolve_torrent_files(download_dir, torrent["files"]),
       added_at: Helpers.parse_timestamp_unix(torrent["addedDate"]),
       completed_at: Helpers.parse_timestamp_unix(torrent["doneDate"])
     })
+  end
+
+  # Transmission's `files[].name` is already the path relative to
+  # `downloadDir` (it includes the torrent's own subfolder for multi-file
+  # torrents, and is just the bare filename for single-file torrents), so it
+  # joins directly onto `download_dir` rather than `save_path` — `save_path`
+  # itself is `download_dir/torrent_name`, which for a single-file torrent
+  # names the file, not a directory, and would double the filename.
+  defp resolve_torrent_files(_download_dir, files) when not is_list(files), do: nil
+
+  defp resolve_torrent_files(download_dir, files) do
+    paths =
+      files
+      |> Enum.map(& &1["name"])
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      |> Enum.map(&Path.join(download_dir, &1))
+
+    case paths do
+      [] -> nil
+      list -> list
+    end
   end
 
   defp parse_state(status) when is_integer(status) do

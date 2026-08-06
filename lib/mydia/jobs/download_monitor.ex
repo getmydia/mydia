@@ -55,6 +55,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Client.FailureCategory
+  alias Mydia.Downloads.ImportCandidates
+  alias Mydia.Downloads.Queue
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.UntrackedMatcher
@@ -165,8 +167,21 @@ defmodule Mydia.Jobs.DownloadMonitor do
           is_nil(d.imported_at)
       end)
 
+    # A torrent's file list is known as soon as the client has its metadata —
+    # immediately for a direct .torrent add, within seconds for a magnet —
+    # long before the payload itself finishes downloading. Reject on sight
+    # rather than waiting for completion: this is what stops a malware
+    # torrent (a single disguised .exe with no video file at all) from
+    # pulling its full multi-hundred-MB-to-multi-GB payload just to be
+    # thrown away by the post-completion importer.
+    bad_content =
+      Enum.filter(active_for_stall_check, fn d -> is_list(d.files) and d.files != [] end)
+      |> Enum.reject(&any_importable_file?/1)
+
+    active_for_stall_check = active_for_stall_check -- bad_content
+
     Logger.info(
-      "Found #{length(completed)} newly completed, #{length(failed)} newly failed, #{length(missing)} missing downloads, #{length(stale_grabs)} stale grabs, #{length(active_for_stall_check)} active for stall check"
+      "Found #{length(completed)} newly completed, #{length(failed)} newly failed, #{length(missing)} missing downloads, #{length(stale_grabs)} stale grabs, #{length(bad_content)} bad-content downloads, #{length(active_for_stall_check)} active for stall check"
     )
 
     # Handle completions
@@ -177,6 +192,10 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     # Handle missing downloads
     Enum.each(missing, &handle_missing/1)
+
+    # Reject torrents whose file list is already known to contain nothing
+    # importable, before they finish downloading.
+    Enum.each(bad_content, &reject_bad_content/1)
 
     # Self-heal abandoned grabs (persist the timeout so occupancy is released)
     Enum.each(stale_grabs, &handle_stale_grab/1)
@@ -346,6 +365,57 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
         :ok
     end
+  end
+
+  # --- Pre-completion content check --------------------------------------
+
+  # `downloads.media_item_id` only ever points at a `movie` or `tv_show`
+  # media item (the only two `MediaItem.valid_types/0`), so every download
+  # reaching this check wants a video file regardless of which of the two it
+  # is — `ImportCandidates.importable?/2` treats `:movies`/`:series`/`:mixed`
+  # identically. Passing `:series` unconditionally is exact, not a guess.
+  defp any_importable_file?(%{files: files}) do
+    Enum.any?(files, fn path ->
+      ImportCandidates.importable?(%{name: Path.basename(path)}, :series)
+    end)
+  end
+
+  # Rejects a still-downloading torrent whose already-known file list
+  # contains not a single file with a video extension — same treatment as an
+  # operator manually rejecting a release from the Issues tab (blacklist the
+  # `(indexer, guid)`, remove the torrent and its data from the client,
+  # delete the row, queue a replacement search), just triggered automatically
+  # and before the payload finishes downloading instead of after.
+  # Capped so a large season pack (hundreds of files) doesn't blow up this
+  # warning into an outsized log line.
+  @bad_content_log_sample 10
+
+  defp reject_bad_content(download_map) do
+    Logger.warning(
+      "Rejecting download before completion — no importable files in torrent",
+      download_id: download_map.id,
+      title: download_map.title,
+      file_count: length(download_map.files),
+      files_sample:
+        download_map.files |> Enum.take(@bad_content_log_sample) |> Enum.map(&Path.basename/1)
+    )
+
+    download = Downloads.get_download!(download_map.id)
+
+    case Queue.reject_release(download, actor_type: :system, actor_id: "download_monitor") do
+      {:ok, :rejected} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Could not auto-reject bad-content download",
+          download_id: download_map.id,
+          reason: inspect(reason)
+        )
+
+        :ok
+    end
+  rescue
+    Ecto.NoResultsError -> :ok
   end
 
   # --- Release blacklist (#123) ------------------------------------------

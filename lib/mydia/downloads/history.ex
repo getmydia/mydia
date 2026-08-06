@@ -536,6 +536,7 @@ defmodule Mydia.Downloads.History do
       seeders: if(metadata, do: metadata.seeders, else: nil),
       leechers: if(metadata, do: metadata.leechers, else: nil),
       save_path: torrent_status.save_path,
+      files: torrent_status.files,
       completed_at: download.completed_at || torrent_status.completed_at,
       error_message: download.error_message,
       client_failure_category: torrent_status.failure_category,
