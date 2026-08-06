@@ -7,6 +7,13 @@ defmodule MydiaWeb.Schema.MediaTypes do
 
   alias MydiaWeb.Schema.Resolvers.MediaResolver
 
+  @desc "A cast member (actor) on a movie or TV show"
+  object :cast_member do
+    field :name, non_null(:string)
+    field :character, :string
+    field :profile_url, :string
+  end
+
   @desc "A movie"
   object :movie do
     interface(:node)
@@ -64,6 +71,21 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "Content rating (e.g., PG-13, R)"
     field :content_rating, :string do
       resolve(&MediaResolver.resolve_content_rating/3)
+    end
+
+    @desc "Watch-page URL for the first available YouTube trailer"
+    field :trailer_url, :string do
+      resolve(&MediaResolver.resolve_trailer_url/3)
+    end
+
+    @desc "Cast members"
+    field :cast, list_of(:cast_member) do
+      resolve(&MediaResolver.resolve_cast/3)
+    end
+
+    @desc "Recommended titles that are also in this library"
+    field :similar, list_of(:recently_added_item) do
+      resolve(&MediaResolver.resolve_similar/3)
     end
 
     @desc "Average rating (0-10)"
@@ -157,6 +179,21 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "Content rating"
     field :content_rating, :string do
       resolve(&MediaResolver.resolve_content_rating/3)
+    end
+
+    @desc "Watch-page URL for the first available YouTube trailer"
+    field :trailer_url, :string do
+      resolve(&MediaResolver.resolve_trailer_url/3)
+    end
+
+    @desc "Cast members"
+    field :cast, list_of(:cast_member) do
+      resolve(&MediaResolver.resolve_cast/3)
+    end
+
+    @desc "Recommended titles that are also in this library"
+    field :similar, list_of(:recently_added_item) do
+      resolve(&MediaResolver.resolve_similar/3)
     end
 
     @desc "Average rating (0-10)"

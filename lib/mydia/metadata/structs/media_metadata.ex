@@ -26,6 +26,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     :tagline,
     :runtime,
     :status,
+    :content_rating,
     :genres,
     :poster_path,
     :backdrop_path,
@@ -41,6 +42,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     :crew,
     :alternative_titles,
     :videos,
+    :recommended_tmdb_ids,
     # Classification fields (for category auto-detection)
     :origin_country,
     :original_language,
@@ -70,6 +72,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           tagline: String.t() | nil,
           runtime: integer() | nil,
           status: String.t() | nil,
+          content_rating: String.t() | nil,
           genres: [String.t()] | nil,
           poster_path: String.t() | nil,
           backdrop_path: String.t() | nil,
@@ -85,6 +88,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           crew: [CrewMember.t()] | nil,
           alternative_titles: [String.t()] | nil,
           videos: [Video.t()] | nil,
+          recommended_tmdb_ids: [integer()] | nil,
           origin_country: [String.t()] | nil,
           original_language: String.t() | nil,
           collection_id: integer() | nil,
@@ -125,6 +129,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
       tagline: data["tagline"],
       runtime: get_runtime(data, media_type),
       status: data["status"],
+      content_rating: parse_content_rating(data, media_type),
       genres: parse_genres(data["genres"]),
       poster_path: data["poster_path"],
       backdrop_path: data["backdrop_path"],
@@ -140,6 +145,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
       crew: parse_crew(data["credits"]["crew"]),
       alternative_titles: parse_alternative_titles(data["alternative_titles"]),
       videos: parse_videos(data["videos"]),
+      recommended_tmdb_ids: parse_recommended_ids(data["recommendations"]),
       origin_country: parse_origin_country(data["origin_country"]),
       original_language: data["original_language"],
       collection_id: collection_id,
@@ -220,6 +226,51 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   defp parse_genres(nil), do: []
   defp parse_genres(genres) when is_list(genres), do: Enum.map(genres, & &1["name"])
   defp parse_genres(_), do: []
+
+  # US and GB certifications cover the overwhelming majority of libraries,
+  # matching how most trackers default certification lookups. Anything else
+  # falls back to the first non-blank certification TMDB reports, since a
+  # certification in the wrong region still beats showing none.
+  @certification_region_preference ["US", "GB"]
+
+  defp parse_content_rating(data, :movie) do
+    data["release_dates"]["results"]
+    |> extract_certification(fn entry ->
+      entry["release_dates"]
+      |> List.wrap()
+      |> Enum.find_value(&presence(&1["certification"]))
+    end)
+  end
+
+  defp parse_content_rating(data, :tv_show) do
+    data["content_ratings"]["results"]
+    |> extract_certification(&presence(&1["rating"]))
+  end
+
+  defp parse_content_rating(_data, _media_type), do: nil
+
+  defp extract_certification(nil, _value_fn), do: nil
+
+  defp extract_certification(results, value_fn) when is_list(results) do
+    by_country = Map.new(results, &{&1["iso_3166_1"], &1})
+
+    @certification_region_preference
+    |> Enum.find_value(fn code ->
+      case Map.get(by_country, code) do
+        nil -> nil
+        entry -> value_fn.(entry)
+      end
+    end)
+    |> case do
+      nil -> Enum.find_value(results, value_fn)
+      value -> value
+    end
+  end
+
+  defp extract_certification(_results, _value_fn), do: nil
+
+  defp presence(value) when is_binary(value) and value != "", do: value
+  defp presence(_value), do: nil
 
   defp parse_names(nil), do: []
   defp parse_names(items) when is_list(items), do: Enum.map(items, & &1["name"])
@@ -318,8 +369,10 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     end)
     |> Enum.sort_by(
       fn video ->
-        # Prioritize official trailers, then by most recent
-        {!video["official"], video["published_at"]}
+        # Prioritize official trailers, then by most recent. `:desc` on a
+        # boolean puts `true` (official) ahead of `false`, matching Erlang
+        # term ordering (true > false).
+        {video["official"], video["published_at"]}
       end,
       :desc
     )
@@ -328,4 +381,14 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   end
 
   defp parse_videos(_), do: []
+
+  defp parse_recommended_ids(nil), do: []
+
+  defp parse_recommended_ids(%{"results" => results}) when is_list(results) do
+    results
+    |> Enum.take(20)
+    |> Enum.map(& &1["id"])
+  end
+
+  defp parse_recommended_ids(_), do: []
 end

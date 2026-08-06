@@ -439,6 +439,30 @@ defmodule Mydia.Metadata do
     end
   end
 
+  # Resources common to both movie and TV detail fetches.
+  @shared_append_to_response ["credits", "images", "videos", "keywords", "recommendations"]
+
+  @doc """
+  The `append_to_response` list for a full-detail metadata fetch (initial
+  match, refresh, provider switch), scoped to `media_type`.
+
+  Movies and TV shows have different valid TMDB append resources — movies
+  carry certification under `release_dates`, TV shows under
+  `content_ratings` — and TMDB validates `append_to_response` per endpoint,
+  so mixing the two risks breaking the fetch for one media type. Extending
+  either list is the only way to pull in another TMDB resource —
+  metadata-relay forwards `append_to_response` straight through to TMDB with
+  no allowlist, so nothing outside this module needs to change to add one.
+  """
+  @spec default_append_to_response(:movie | :tv_show) :: [String.t()]
+  def default_append_to_response(:movie) do
+    @shared_append_to_response ++ ["release_dates"]
+  end
+
+  def default_append_to_response(:tv_show) do
+    @shared_append_to_response ++ ["content_ratings"]
+  end
+
   @doc """
   Gets the default metadata relay configuration.
 

@@ -7,7 +7,9 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
+  alias Mydia.Metadata.Structs.Video
   alias Mydia.Repo
+  alias MydiaWeb.Schema.Resolvers.ItemBuilder
 
   # Detections below this floor are persisted, so the operator can see and
   # diagnose them, but are not shown to players. 0.4 is exactly 2 agreeing
@@ -38,9 +40,61 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   @spec resolve_content_rating(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
-  def resolve_content_rating(_parent, _args, _info) do
-    # Content rating isn't stored in our current metadata
-    {:ok, nil}
+  def resolve_content_rating(parent, _args, _info) do
+    {:ok, MetadataAccess.get_field(parent, :content_rating)}
+  end
+
+  @spec resolve_trailer_url(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, term()} | {:error, term()}
+  def resolve_trailer_url(parent, _args, _info) do
+    videos = MetadataAccess.get_field(parent, :videos) || []
+
+    url =
+      case List.first(videos) do
+        nil -> nil
+        video -> Video.youtube_watch_url(video)
+      end
+
+    {:ok, url}
+  end
+
+  @spec resolve_cast(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
+  def resolve_cast(parent, _args, _info) do
+    cast = MetadataAccess.get_field(parent, :cast) || []
+
+    members =
+      Enum.map(cast, fn member ->
+        %{
+          name: member.name,
+          character: member.character,
+          profile_url: ImageUrl.profile_url(member.profile_path)
+        }
+      end)
+
+    {:ok, members}
+  end
+
+  @spec resolve_similar(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
+  def resolve_similar(parent, _args, _info) do
+    tmdb_ids = MetadataAccess.get_field(parent, :recommended_tmdb_ids) || []
+    status = Media.library_status_for_tmdb_ids(tmdb_ids, parent.type)
+
+    matched_ids =
+      tmdb_ids
+      |> Enum.map(&get_in(status, [&1, :id]))
+      |> Enum.reject(&is_nil/1)
+
+    items_by_id =
+      Media.list_media_items(ids: matched_ids)
+      |> Map.new(&{&1.id, &1})
+
+    items =
+      matched_ids
+      |> Enum.map(&Map.get(items_by_id, &1))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&ItemBuilder.recently_added_item/1)
+
+    {:ok, items}
   end
 
   @spec resolve_rating(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}

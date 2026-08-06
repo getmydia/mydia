@@ -188,6 +188,48 @@ defmodule Mydia.Media.MetadataTypeTest do
       assert reloaded.metadata.collection_id == nil
       assert reloaded.metadata.collection_name == nil
     end
+
+    test "content rating survives a database round trip" do
+      {:ok, media_item} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "The Matrix",
+          year: 1999,
+          tmdb_id: 603,
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "The Matrix",
+            "content_rating" => "R"
+          }
+        })
+
+      reloaded = Media.get_media_item!(media_item.id)
+
+      assert reloaded.metadata.content_rating == "R"
+    end
+
+    test "recommended tmdb ids survive a database round trip" do
+      {:ok, media_item} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "The Matrix",
+          year: 1999,
+          tmdb_id: 603,
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "The Matrix",
+            "recommended_tmdb_ids" => [604, 605, 606]
+          }
+        })
+
+      reloaded = Media.get_media_item!(media_item.id)
+
+      assert reloaded.metadata.recommended_tmdb_ids == [604, 605, 606]
+    end
   end
 
   describe "Ecto.Type callbacks" do

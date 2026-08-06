@@ -99,7 +99,7 @@ defmodule Mydia.Media.Refresh do
     fetch_opts = [
       media_type: media_type,
       provider: source,
-      append_to_response: ["credits", "images", "videos", "keywords"]
+      append_to_response: Metadata.default_append_to_response(media_type)
     ]
 
     Metadata.fetch_by_id(config, to_string(provider_id), fetch_opts)

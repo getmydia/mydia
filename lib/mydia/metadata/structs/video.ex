@@ -125,6 +125,29 @@ defmodule Mydia.Metadata.Structs.Video do
   def youtube_embed_url(_), do: nil
 
   @doc """
+  Returns the YouTube watch-page URL for this video (as opposed to the embed
+  URL `youtube_embed_url/1` returns) — for opening in a new browser tab rather
+  than embedding a player.
+
+  Returns nil if the video is not hosted on YouTube.
+
+  ## Examples
+
+      iex> video = %Video{key: "dQw4w9WgXcQ", site: "YouTube"}
+      iex> youtube_watch_url(video)
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+      iex> video = %Video{key: "abc123", site: "Vimeo"}
+      iex> youtube_watch_url(video)
+      nil
+  """
+  def youtube_watch_url(%__MODULE__{site: "YouTube", key: key}) when is_binary(key) do
+    "https://www.youtube.com/watch?v=#{key}"
+  end
+
+  def youtube_watch_url(_), do: nil
+
+  @doc """
   Builds a Video struct from a raw TVDB trailer map.
 
   TVDB trailer entries from `/series/{id}/extended` look like:
