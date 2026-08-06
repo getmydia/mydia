@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
+import '../../../core/window/traffic_lights.dart';
 import '../../../core/theme/depth_tokens.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
@@ -56,6 +57,11 @@ class ChromeVisibility extends StatefulWidget {
   /// Starts an OS window drag from the background. Null by default.
   final VoidCallback? onWindowDrag;
 
+  /// Hides/shows the macOS traffic-light window buttons in step with chrome
+  /// visibility. Injected by tests; defaults to the real native bridge
+  /// (`setTrafficLightsHidden` from `core/window/traffic_lights.dart`).
+  final void Function(bool hidden)? onTrafficLightsHidden;
+
   const ChromeVisibility({
     super.key,
     required this.isPlaying,
@@ -64,6 +70,7 @@ class ChromeVisibility extends StatefulWidget {
     this.autoHide = const Duration(seconds: 3),
     this.onDoubleTap,
     this.onWindowDrag,
+    this.onTrafficLightsHidden,
   });
 
   static const Key contentKey = Key('chrome-content');
@@ -176,6 +183,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _hideTimer?.cancel();
     _curved.dispose();
     _controller.dispose();
+    _setTrafficLightsHidden(false);
     super.dispose();
   }
 
@@ -190,9 +198,14 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     });
   }
 
+  /// Resolves to the injected test callback, or the real native bridge.
+  void Function(bool hidden) get _setTrafficLightsHidden =>
+      widget.onTrafficLightsHidden ?? setTrafficLightsHidden;
+
   void _show() {
     if (!_visible) {
       setState(() => _visible = true);
+      _setTrafficLightsHidden(false);
     }
     _controller.forward();
     _restartTimer();
@@ -202,6 +215,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _hideTimer?.cancel();
     if (_visible) {
       setState(() => _visible = false);
+      _setTrafficLightsHidden(true);
     }
     _controller.reverse();
   }

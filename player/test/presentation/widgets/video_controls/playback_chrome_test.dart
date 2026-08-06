@@ -525,6 +525,94 @@ void main() {
     });
   });
 
+  group('ChromeVisibility traffic lights', () {
+    testWidgets('hides the traffic lights when chrome auto-hides',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      expect(calls, [true]);
+    });
+
+    testWidgets('shows the traffic lights again when chrome reappears on tap',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(calls, [true]);
+
+      await tester.tapAt(const Offset(400, 300));
+      await tester.pumpAndSettle();
+
+      expect(calls, [true, false]);
+    });
+
+    testWidgets(
+        'never calls the callback while paused, since chrome never hides',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: false,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpAndSettle();
+
+      expect(calls, isEmpty);
+    });
+
+    testWidgets(
+        'restores the traffic lights on dispose even if chrome was hidden',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(calls, [true]);
+
+      // Replace the tree so ChromeVisibility disposes.
+      await tester.pumpWidget(_host(const Text('gone')));
+
+      expect(calls, [true, false]);
+    });
+  });
+
   group('PlaybackChrome gating', () {
     late Player player;
 
