@@ -65,4 +65,32 @@ void main() {
 
     expect(find.text('Trailer'), findsOneWidget);
   });
+
+  testWidgets('download button is present by default', (tester) async {
+    await tester.pumpWidget(_host(DetailActionRow(
+      watched: false,
+      onToggleWatched: () {},
+      isFavorite: false,
+      onToggleFavorite: () {},
+      onDownload: () {},
+      trailerUrl: null,
+    )));
+
+    expect(find.text('Download'), findsOneWidget);
+  });
+
+  testWidgets('download button is absent when showDownload is false',
+      (tester) async {
+    await tester.pumpWidget(_host(DetailActionRow(
+      watched: false,
+      onToggleWatched: () {},
+      isFavorite: false,
+      onToggleFavorite: () {},
+      onDownload: () {},
+      trailerUrl: null,
+      showDownload: false,
+    )));
+
+    expect(find.text('Download'), findsNothing);
+  });
 }

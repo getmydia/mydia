@@ -6,6 +6,7 @@ import '../../../core/cache/poster_cache_manager.dart';
 import 'movie_detail_controller.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
+import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/graphql/watch/query_key.dart';
@@ -17,6 +18,7 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
+import '../../widgets/movie_watched_controls.dart';
 import '../../widgets/smart_play_button.dart';
 
 /// Below this width the hero's action column and tag column stack instead
@@ -286,6 +288,7 @@ class MovieDetailScreen extends ConsumerWidget {
               .toggleFavorite(),
           onDownload: () => _startDownload(context, ref, movie),
           trailerUrl: movie.trailerUrl,
+          showDownload: isDownloadSupported,
         ),
       ],
     );
@@ -303,6 +306,13 @@ class MovieDetailScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (movie.isWatched) ...[
+          MovieWatchedLine(dateLabel: movie.watchedAtDisplay),
+          const SizedBox(height: 18),
+        ] else if (movie.hasResumableProgress) ...[
+          _buildProgressBar(context, movie),
+          const SizedBox(height: 18),
+        ],
         if (tags.isNotEmpty) ...[
           Wrap(
             spacing: 8,
@@ -359,6 +369,49 @@ class MovieDetailScreen extends ConsumerWidget {
         const SizedBox(width: 6),
         const Text('TMDB',
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      ],
+    );
+  }
+
+  Widget _buildProgressBar(BuildContext context, MovieDetail movie) {
+    final progress = movie.progress!;
+    final percentage = progress.percentage / 100;
+    final remaining = progress.durationSeconds != null
+        ? progress.durationSeconds! - progress.positionSeconds
+        : null;
+
+    String remainingText = '';
+    if (remaining != null && remaining > 0) {
+      final hours = remaining ~/ 3600;
+      final minutes = (remaining % 3600) ~/ 60;
+      if (hours > 0) {
+        remainingText = '${hours}h ${minutes}m remaining';
+      } else {
+        remainingText = '${minutes}m remaining';
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: percentage.clamp(0.0, 1.0),
+            minHeight: 4,
+            backgroundColor: AppColors.surfaceVariant,
+            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+          ),
+        ),
+        if (remainingText.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            remainingText,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+          ),
+        ],
       ],
     );
   }

@@ -14,6 +14,12 @@ class DetailActionRow extends StatelessWidget {
   final VoidCallback onDownload;
   final String? trailerUrl;
 
+  /// Whether to show the Download button at all. Defaults to `true`; callers
+  /// on platforms without download support (e.g. gated by
+  /// `isDownloadSupported`) pass `false` to hide it entirely rather than
+  /// showing a button that can never do anything.
+  final bool showDownload;
+
   const DetailActionRow({
     super.key,
     required this.watched,
@@ -22,6 +28,7 @@ class DetailActionRow extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onDownload,
     required this.trailerUrl,
+    this.showDownload = true,
   });
 
   @override
@@ -48,13 +55,14 @@ class DetailActionRow extends StatelessWidget {
           highlightColor: AppColors.error,
           onTap: onToggleFavorite,
         ),
-        _ActionButton(
-          icon: Icons.download_rounded,
-          label: 'Download',
-          highlighted: false,
-          highlightColor: AppColors.primary,
-          onTap: onDownload,
-        ),
+        if (showDownload)
+          _ActionButton(
+            icon: Icons.download_rounded,
+            label: 'Download',
+            highlighted: false,
+            highlightColor: AppColors.primary,
+            onTap: onDownload,
+          ),
         if (trailerUrl != null)
           _ActionButton(
             icon: Icons.smart_display_rounded,
