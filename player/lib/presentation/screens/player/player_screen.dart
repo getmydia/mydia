@@ -2639,11 +2639,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   /// Toggle always-on-top across desktop platforms.
   ///
-  /// No-op on mobile/web: [setWindowAlwaysOnTop] itself gates on
-  /// `PlatformFeatures.isDesktop`, and the button that calls this is hidden
-  /// there too (see `PlaybackChrome`'s wiring). `_isAlwaysOnTop` still
-  /// flips on every platform so it stays consistent with what
-  /// `setWindowAlwaysOnTop` was actually asked to do.
+  /// Both call sites (the button and the `T` shortcut) are already gated on
+  /// `PlatformFeatures.isDesktop`, so this only ever runs on desktop in
+  /// practice. [setWindowAlwaysOnTop] gates on the same check independently,
+  /// so the OS pin operation is a no-op if this were ever reached elsewhere
+  /// — but `_isAlwaysOnTop` itself always flips when this method runs; it is
+  /// not conditioned on platform.
   void _toggleAlwaysOnTop() {
     setState(() => _isAlwaysOnTop = !_isAlwaysOnTop);
     setWindowAlwaysOnTop(_isAlwaysOnTop);

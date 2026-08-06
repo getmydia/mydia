@@ -314,7 +314,7 @@ void main() {
       expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsOneWidget);
     });
 
-    testWidgets('tilts the always-on-top icon when pinned (no rotation)',
+    testWidgets('the always-on-top icon stays upright when pinned',
         (tester) async {
       await tester.pumpWidget(
         _host(SecondaryCluster(isAlwaysOnTop: true, onAlwaysOnTopTap: () {})),
