@@ -45,6 +45,7 @@ import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
+import '../../../domain/models/download.dart';
 import '../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
@@ -1926,8 +1927,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// viewer already dismissed a still-pending offer some other way.
   Future<void> _maybeShowUpNextForDownloadedNext() async {
     final nextEpisode = _seasonEpisodes![_currentEpisodeIndex! + 1];
-    final manager = await ref.read(downloadManagerProvider.future);
-    final downloaded = manager.getDownloadedMediaById(nextEpisode.id);
+
+    final DownloadedMedia? downloaded;
+    try {
+      final manager = await ref.read(downloadManagerProvider.future);
+      downloaded = manager.getDownloadedMediaById(nextEpisode.id);
+    } catch (e) {
+      // Simply not offering Up Next is the right failure mode here: this
+      // runs fired-and-forgotten off a position tick, with no return value
+      // and no caller waiting on it, so there is nothing to propagate an
+      // error to.
+      debugPrint('[PlayerScreen] Could not check next-episode download: $e');
+      return;
+    }
+
     if (!mounted || downloaded == null) return;
     if (_showUpNext || _autoPlayCancelled) return;
 

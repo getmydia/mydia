@@ -32,11 +32,18 @@ bool shouldOfferUpNext({
   required Duration position,
   required Duration duration,
 }) {
-  final creditsSegments =
-      segments.where((segment) => segment.type == SegmentType.credits);
-  if (creditsSegments.isNotEmpty) {
-    return creditsSegments.any((segment) => position >= segment.start);
+  // A single pass, comparing raw milliseconds: this runs on every position
+  // tick, and `segments` rarely holds more than an intro and a credits
+  // marker, but there is no reason to walk the list twice or allocate a
+  // `Duration` per comparison when an int compare does the same job.
+  final positionMs = position.inMilliseconds;
+  var hasCredits = false;
+  for (final segment in segments) {
+    if (segment.type != SegmentType.credits) continue;
+    hasCredits = true;
+    if (positionMs >= segment.startMs) return true;
   }
+  if (hasCredits) return false;
   if (duration <= Duration.zero) return false;
   return duration - position <= upNextFallbackWindow;
 }
