@@ -16,17 +16,28 @@ import 'window_fullscreen.dart';
 
 const MethodChannel _channel = MethodChannel('dev.mydia.player/window_chrome');
 
-/// Whether [setTrafficLightsHidden] should touch the native buttons at all.
+/// Whether [setTrafficLightsHidden] should forward a call for the given
+/// [hidden] direction to the native buttons.
 ///
-/// False off macOS (no traffic lights to control) and while fullscreen,
-/// where macOS already hides them on its own — forcing them visible there
-/// would fight the OS's own transition.
+/// False off macOS regardless of [hidden] — there are no traffic lights to
+/// control there. On macOS, a hide (`hidden: true`) is additionally blocked
+/// while [isFullscreen]: the OS already hides the buttons there on its own,
+/// so forcing them hidden ourselves would fight its own transition. A
+/// restore (`hidden: false`) is never blocked by fullscreen — `isHidden =
+/// false` is the stock state every unmodified macOS app has there, so
+/// passing a restore through is always safe. That asymmetry matters:
+/// [ChromeVisibility]'s `dispose()` safety net calls this with `hidden:
+/// false` unconditionally, and it must actually reach the native side even
+/// when the player is torn down while still fullscreen — otherwise a window
+/// could be left with its close/minimize/zoom buttons stranded hidden after
+/// returning to windowed mode.
 @visibleForTesting
 bool shouldControlTrafficLights({
   required TargetPlatform platform,
+  required bool hidden,
   required bool isFullscreen,
 }) =>
-    platform == TargetPlatform.macOS && !isFullscreen;
+    platform == TargetPlatform.macOS && !(hidden && isFullscreen);
 
 /// Hides or shows the native close/minimize/zoom buttons.
 ///
@@ -35,6 +46,7 @@ bool shouldControlTrafficLights({
 void setTrafficLightsHidden(bool hidden) {
   if (!shouldControlTrafficLights(
     platform: defaultTargetPlatform,
+    hidden: hidden,
     isFullscreen: windowFullscreen.value,
   )) {
     return;

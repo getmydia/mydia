@@ -162,6 +162,15 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
       reverseCurve: DepthTokens.curveEmphasized,
     );
     _restartTimer();
+    // `_visible` starts true and `_show()` only calls the bridge on a
+    // false -> true transition, so a freshly-mounted ChromeVisibility would
+    // otherwise never assert "buttons are visible" to the native side. This
+    // makes that invariant self-healing: even if some other bug left the
+    // native buttons stranded hidden, the next mount (e.g. re-entering the
+    // player) restores them. Safe to fire even if the app happens to
+    // already be fullscreen at mount time — see shouldControlTrafficLights'
+    // doc comment for why a restore always gets through.
+    _setTrafficLightsHidden(false);
   }
 
   @override
@@ -181,9 +190,9 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _setTrafficLightsHidden(false);
     _curved.dispose();
     _controller.dispose();
-    _setTrafficLightsHidden(false);
     super.dispose();
   }
 
