@@ -7,6 +7,13 @@ defmodule MydiaWeb.Schema.MediaTypes do
 
   alias MydiaWeb.Schema.Resolvers.MediaResolver
 
+  @desc "A cast member (actor) on a movie or TV show"
+  object :cast_member do
+    field :name, non_null(:string)
+    field :character, :string
+    field :profile_url, :string
+  end
+
   @desc "A movie"
   object :movie do
     interface(:node)
@@ -69,6 +76,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "Watch-page URL for the first available YouTube trailer"
     field :trailer_url, :string do
       resolve(&MediaResolver.resolve_trailer_url/3)
+    end
+
+    @desc "Cast members"
+    field :cast, list_of(:cast_member) do
+      resolve(&MediaResolver.resolve_cast/3)
     end
 
     @desc "Average rating (0-10)"
@@ -167,6 +179,11 @@ defmodule MydiaWeb.Schema.MediaTypes do
     @desc "Watch-page URL for the first available YouTube trailer"
     field :trailer_url, :string do
       resolve(&MediaResolver.resolve_trailer_url/3)
+    end
+
+    @desc "Cast members"
+    field :cast, list_of(:cast_member) do
+      resolve(&MediaResolver.resolve_cast/3)
     end
 
     @desc "Average rating (0-10)"

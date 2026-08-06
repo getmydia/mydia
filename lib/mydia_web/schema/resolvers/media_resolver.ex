@@ -57,6 +57,22 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
     {:ok, url}
   end
 
+  @spec resolve_cast(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
+  def resolve_cast(parent, _args, _info) do
+    cast = MetadataAccess.get_field(parent, :cast) || []
+
+    members =
+      Enum.map(cast, fn member ->
+        %{
+          name: member.name,
+          character: member.character,
+          profile_url: ImageUrl.profile_url(member.profile_path)
+        }
+      end)
+
+    {:ok, members}
+  end
+
   @spec resolve_rating(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
   def resolve_rating(parent, _args, _info) do
     {:ok, MetadataAccess.get_field(parent, :vote_average)}

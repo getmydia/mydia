@@ -40,6 +40,32 @@ defmodule MydiaWeb.Schema.MediaTypesTest do
   }
   """
 
+  @movie_cast_query """
+  query MovieCast($id: ID!) {
+    movie(id: $id) {
+      id
+      cast {
+        name
+        character
+        profileUrl
+      }
+    }
+  }
+  """
+
+  @show_cast_query """
+  query ShowCast($id: ID!) {
+    tvShow(id: $id) {
+      id
+      cast {
+        name
+        character
+        profileUrl
+      }
+    }
+  }
+  """
+
   setup do
     %{user: AccountsFixtures.user_fixture()}
   end
@@ -146,6 +172,80 @@ defmodule MydiaWeb.Schema.MediaTypesTest do
 
       assert {:ok, %{data: %{"tvShow" => %{"trailerUrl" => nil}}}} =
                run_query(@show_trailer_query, %{"id" => show.id}, ctx.user)
+    end
+  end
+
+  describe "movie.cast" do
+    test "returns cast members with a built profile URL", ctx do
+      movie =
+        MediaFixtures.media_item_fixture(%{
+          type: "movie",
+          metadata: %{
+            "provider_id" => "603",
+            "provider" => "metadata_relay",
+            "media_type" => "movie",
+            "title" => "The Matrix",
+            "cast" => [
+              %{
+                "name" => "Keanu Reeves",
+                "character" => "Neo",
+                "order" => 0,
+                "profile_path" => "/abc.jpg"
+              }
+            ]
+          }
+        })
+
+      assert {:ok, %{data: %{"movie" => %{"cast" => [member]}}}} =
+               run_query(@movie_cast_query, %{"id" => movie.id}, ctx.user)
+
+      assert member["name"] == "Keanu Reeves"
+      assert member["character"] == "Neo"
+      assert member["profileUrl"] == "https://image.tmdb.org/t/p/w185/abc.jpg"
+    end
+
+    test "is an empty list when there is no cast", ctx do
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+
+      assert {:ok, %{data: %{"movie" => %{"cast" => []}}}} =
+               run_query(@movie_cast_query, %{"id" => movie.id}, ctx.user)
+    end
+  end
+
+  describe "tvShow.cast" do
+    test "returns cast members with a built profile URL", ctx do
+      show =
+        MediaFixtures.media_item_fixture(%{
+          type: "tv_show",
+          metadata: %{
+            "provider_id" => "1396",
+            "provider" => "metadata_relay",
+            "media_type" => "tv_show",
+            "title" => "Breaking Bad",
+            "cast" => [
+              %{
+                "name" => "Bryan Cranston",
+                "character" => "Walter White",
+                "order" => 0,
+                "profile_path" => "/def.jpg"
+              }
+            ]
+          }
+        })
+
+      assert {:ok, %{data: %{"tvShow" => %{"cast" => [member]}}}} =
+               run_query(@show_cast_query, %{"id" => show.id}, ctx.user)
+
+      assert member["name"] == "Bryan Cranston"
+      assert member["character"] == "Walter White"
+      assert member["profileUrl"] == "https://image.tmdb.org/t/p/w185/def.jpg"
+    end
+
+    test "is an empty list when there is no cast", ctx do
+      show = MediaFixtures.media_item_fixture(%{type: "tv_show"})
+
+      assert {:ok, %{data: %{"tvShow" => %{"cast" => []}}}} =
+               run_query(@show_cast_query, %{"id" => show.id}, ctx.user)
     end
   end
 
