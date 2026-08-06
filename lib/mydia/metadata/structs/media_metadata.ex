@@ -42,6 +42,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     :crew,
     :alternative_titles,
     :videos,
+    :recommended_tmdb_ids,
     # Classification fields (for category auto-detection)
     :origin_country,
     :original_language,
@@ -87,6 +88,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           crew: [CrewMember.t()] | nil,
           alternative_titles: [String.t()] | nil,
           videos: [Video.t()] | nil,
+          recommended_tmdb_ids: [integer()] | nil,
           origin_country: [String.t()] | nil,
           original_language: String.t() | nil,
           collection_id: integer() | nil,
@@ -143,6 +145,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
       crew: parse_crew(data["credits"]["crew"]),
       alternative_titles: parse_alternative_titles(data["alternative_titles"]),
       videos: parse_videos(data["videos"]),
+      recommended_tmdb_ids: parse_recommended_ids(data["recommendations"]),
       origin_country: parse_origin_country(data["origin_country"]),
       original_language: data["original_language"],
       collection_id: collection_id,
@@ -376,4 +379,14 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   end
 
   defp parse_videos(_), do: []
+
+  defp parse_recommended_ids(nil), do: []
+
+  defp parse_recommended_ids(%{"results" => results}) when is_list(results) do
+    results
+    |> Enum.take(20)
+    |> Enum.map(& &1["id"])
+  end
+
+  defp parse_recommended_ids(_), do: []
 end

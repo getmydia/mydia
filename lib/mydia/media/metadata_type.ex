@@ -126,6 +126,7 @@ defmodule Mydia.Media.MetadataType do
       crew: parse_crew_list(data[:crew]),
       alternative_titles: data[:alternative_titles],
       videos: parse_videos_list(data[:videos]),
+      recommended_tmdb_ids: data[:recommended_tmdb_ids],
       origin_country: data[:origin_country],
       original_language: data[:original_language],
       collection_id: data[:collection_id],

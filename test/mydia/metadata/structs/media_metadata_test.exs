@@ -83,6 +83,34 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
     end
   end
 
+  describe "recommended_tmdb_ids" do
+    test "extracts ids from the recommendations response, capped at 20" do
+      results = for id <- 1..25, do: %{"id" => id, "title" => "Movie #{id}"}
+
+      body = %{
+        "id" => 603,
+        "title" => "The Matrix",
+        "credits" => %{"cast" => [], "crew" => []},
+        "recommendations" => %{"results" => results}
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "603")
+
+      assert length(metadata.recommended_tmdb_ids) == 20
+      assert metadata.recommended_tmdb_ids == Enum.to_list(1..20)
+    end
+
+    test "is an empty list when recommendations is absent" do
+      body = %{
+        "id" => 603,
+        "title" => "The Matrix",
+        "credits" => %{"cast" => [], "crew" => []}
+      }
+
+      assert MediaMetadata.from_api_response(body, :movie, "603").recommended_tmdb_ids == []
+    end
+  end
+
   describe "content_rating for TV shows" do
     test "picks the US rating when present" do
       body = %{
