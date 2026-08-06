@@ -45,6 +45,7 @@ import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
+import '../../../domain/models/download.dart';
 import '../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
@@ -1778,12 +1779,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     _maybeAutoSkipSegment(player);
 
-    // Check if video is near completion (90%)
+    // Offer the next episode once real credits are known to have started;
+    // only a file with no detected credits segment falls back to a fixed
+    // window before the real end. See [shouldOfferUpNext].
+    if (shouldOfferUpNext(
+      segments: _segments,
+      position: _timeline.toReal(player.state.position),
+      duration: _timeline.resolveDuration(player.state.duration),
+    )) {
+      _maybeShowUpNext();
+    }
+
     final isWatched = _progressService?.isWatched(player) == true;
     if (isWatched) {
       debugPrint('Content is considered watched (90% complete)');
-      // Trigger "Up Next" overlay for episodes with a next episode available
-      _maybeShowUpNext();
 
       if (!_watchedInvalidationSent) {
         _watchedInvalidationSent = true;
@@ -1899,7 +1908,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
 
-    // Show the overlay and start countdown
+    // Offline/local playback can only ever autoplay into a next episode
+    // that is itself already on disk — the next one existing in the season
+    // is not enough, since there may be no connection to stream or fetch it
+    // when the countdown lands.
+    if (_isDownloadedSource) {
+      unawaited(_maybeShowUpNextForDownloadedNext());
+      return;
+    }
+
+    _showUpNextOverlay();
+  }
+
+  /// The download-gated half of [_maybeShowUpNext].
+  ///
+  /// Re-checks [_showUpNext]/[_autoPlayCancelled] after the lookup: both can
+  /// change while the (async) download-manager query is in flight, e.g. the
+  /// viewer already dismissed a still-pending offer some other way.
+  Future<void> _maybeShowUpNextForDownloadedNext() async {
+    final nextEpisode = _seasonEpisodes![_currentEpisodeIndex! + 1];
+
+    final DownloadedMedia? downloaded;
+    try {
+      final manager = await ref.read(downloadManagerProvider.future);
+      downloaded = manager.getDownloadedMediaById(nextEpisode.id);
+    } catch (e) {
+      // Simply not offering Up Next is the right failure mode here: this
+      // runs fired-and-forgotten off a position tick, with no return value
+      // and no caller waiting on it, so there is nothing to propagate an
+      // error to.
+      debugPrint('[PlayerScreen] Could not check next-episode download: $e');
+      return;
+    }
+
+    if (!mounted || downloaded == null) return;
+    if (_showUpNext || _autoPlayCancelled) return;
+
+    _showUpNextOverlay();
+  }
+
+  void _showUpNextOverlay() {
     setState(() {
       _showUpNext = true;
       _autoPlayCountdown = _autoPlayCountdownDuration;
