@@ -229,7 +229,16 @@ void main() {
           {'name': 'Ana Bergström', 'character': null, 'profileUrl': null},
         ],
         'trailerUrl': 'https://www.youtube.com/watch?v=abc123',
-        'similar': <dynamic>[],
+        'similar': [
+          {
+            'id': 's-1',
+            'type': 'movie',
+            'title': 'Low Orbit',
+            'year': 2021,
+            'artwork': null,
+            'addedAt': null,
+          },
+        ],
       };
 
       final movie = MovieDetail.fromJson(json);
@@ -237,6 +246,8 @@ void main() {
 
       expect(toggled.cast, hasLength(1));
       expect(toggled.trailerUrl, 'https://www.youtube.com/watch?v=abc123');
+      expect(toggled.similar, hasLength(1));
+      expect(toggled.similar.first.title, 'Low Orbit');
     });
   });
 }
