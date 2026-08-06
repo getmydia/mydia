@@ -48,6 +48,20 @@ class PanelMetrics {
   /// that cannot afford it says so.
   final bool showQuality;
 
+  /// Whether `SecondaryCluster`'s always-on-top button renders.
+  ///
+  /// Unlike [showQuality], this is not true at every tier. Always-on-top is
+  /// desktop-only regardless of this field — `PlaybackChrome` also gates it
+  /// on `PlatformFeatures.isDesktop` — but a narrowed desktop window can
+  /// still land in the tablet or mobile width tiers below, and a 5th
+  /// `SecondaryCluster` button reopens the exact overflow budget
+  /// [showQuality]'s dartdoc warned about. This field is `false` at both of
+  /// those tiers, not just mobile: the tablet tier was measured too, and its
+  /// tightest width came up short (see that branch's own inline comment
+  /// below for the figure). See `chrome_panel_overflow_test.dart`'s
+  /// five-button group for the measured budget this field is tuned against.
+  final bool showAlwaysOnTop;
+
   /// Horizontal padding on both sides of the panel. Previously a single
   /// global constant on [ChromePanel] itself; now tier-dependent, so it
   /// lives here alongside the other per-tier values.
@@ -70,6 +84,7 @@ class PanelMetrics {
     required this.showVolume,
     required this.touchTargets,
     required this.showQuality,
+    required this.showAlwaysOnTop,
     required this.secondaryGap,
     required this.horizontalPadding,
   });
@@ -85,6 +100,7 @@ class PanelMetrics {
         showVolume: true,
         touchTargets: false,
         showQuality: true,
+        showAlwaysOnTop: true,
         secondaryGap: 8,
         horizontalPadding: 12,
       );
@@ -96,6 +112,12 @@ class PanelMetrics {
         showVolume: true,
         touchTargets: false,
         showQuality: true,
+        // false, not true: measured against `chrome_panel_overflow_test.dart`
+        // (per `showAlwaysOnTop`'s dartdoc), the tablet tier's tightest width
+        // (600px) overflows `SecondaryCluster`'s row by 18px with a 5th
+        // button. The desktop branch above affords it (looser padding and
+        // gap); this tier does not.
+        showAlwaysOnTop: false,
         secondaryGap: 6,
         horizontalPadding: 8,
       );
@@ -108,6 +130,7 @@ class PanelMetrics {
       showVolume: false,
       touchTargets: true,
       showQuality: true,
+      showAlwaysOnTop: false,
       secondaryGap: 0,
       horizontalPadding: 8,
     );

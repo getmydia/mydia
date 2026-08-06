@@ -300,6 +300,86 @@ void main() {
       );
     });
 
+    testWidgets('omits always-on-top when no callback is supplied',
+        (tester) async {
+      await tester.pumpWidget(_host(const SecondaryCluster()));
+      expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsNothing);
+    });
+
+    testWidgets('shows always-on-top when a callback is supplied',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onAlwaysOnTopTap: () {})),
+      );
+      expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsOneWidget);
+    });
+
+    testWidgets('the always-on-top icon stays upright when pinned',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(isAlwaysOnTop: true, onAlwaysOnTopTap: () {})),
+      );
+
+      // Icon is always push_pin_rounded (respects icon_family_test.dart's
+      // _rounded-only rule); state is differentiated by rotation. The key is
+      // on the outer SizedBox wrapper, so find ControlButton as a descendant.
+      expect(
+        tester
+            .widget<ControlButton>(
+              find.descendant(
+                of: find.byKey(SecondaryCluster.alwaysOnTopKey),
+                matching: find.byType(ControlButton),
+              ),
+            )
+            .icon,
+        Icons.push_pin_rounded,
+      );
+
+      // When pinned, no rotation (upright).
+      final transformRotate = tester.widget<Transform>(
+        find.byKey(SecondaryCluster.alwaysOnTopRotationKey),
+      );
+      expect(transformRotate.transform.getColumn(0)[0], closeTo(1.0, 0.01));
+    });
+
+    testWidgets('tilts the always-on-top icon when not pinned', (tester) async {
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onAlwaysOnTopTap: () {})),
+      );
+
+      // Icon is always push_pin_rounded (respects icon_family_test.dart's
+      // _rounded-only rule); state is differentiated by rotation. The key is
+      // on the outer SizedBox wrapper, so find ControlButton as a descendant.
+      expect(
+        tester
+            .widget<ControlButton>(
+              find.descendant(
+                of: find.byKey(SecondaryCluster.alwaysOnTopKey),
+                matching: find.byType(ControlButton),
+              ),
+            )
+            .icon,
+        Icons.push_pin_rounded,
+      );
+
+      // When not pinned, rotated -45° (tilted).
+      final transformRotate = tester.widget<Transform>(
+        find.byKey(SecondaryCluster.alwaysOnTopRotationKey),
+      );
+      // Rotation matrix for -pi/4 has cos(-45°) ≈ 0.707 in corners
+      expect(transformRotate.transform.getColumn(0)[0], closeTo(0.707, 0.01));
+    });
+
+    testWidgets('always-on-top button fires its callback', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        _host(SecondaryCluster(onAlwaysOnTopTap: () => tapped = true)),
+      );
+
+      await tester.tap(find.byKey(SecondaryCluster.alwaysOnTopKey));
+      expect(tapped, isTrue);
+    });
+
     testWidgets(
         'subtitles, audio, quality, and fullscreen stay left-to-right '
         'ordered with a uniform pitch of buttonWidth + SecondaryCluster.gap',

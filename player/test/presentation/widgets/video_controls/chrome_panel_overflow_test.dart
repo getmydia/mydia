@@ -60,7 +60,17 @@ import 'package:player/presentation/widgets/video_controls/video_progress_bar.da
 /// (see the file header's `quality` axis note). This is deliberately the
 /// *worst case* PlaybackChrome can present at a given width — a caller with
 /// no adjacent episodes gets an easier layout, not a harder one.
-Widget _panel(double width, {bool quality = false}) {
+///
+/// [alwaysOnTop] works differently from [quality]: it wires
+/// `onAlwaysOnTopTap` straight from the parameter, unconditionally, rather
+/// than consulting `metrics.showAlwaysOnTop` the way real `PlaybackChrome`
+/// composition would. That is deliberate, not an oversight — the five-button
+/// group below exists to measure the raw `SecondaryCluster` layout budget at
+/// widths a real device would never actually show 5 buttons at, since
+/// `showAlwaysOnTop` gates those same widths off in production (see its
+/// dartdoc in `chrome_panel.dart`). Consulting the real gate here would make
+/// [alwaysOnTop] a no-op everywhere it is passed `true`.
+Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
   final metrics = PanelMetrics.forWidth(width);
   return MaterialApp(
     home: Scaffold(
@@ -86,6 +96,7 @@ Widget _panel(double width, {bool quality = false}) {
             audioTrackCount: 2,
             gap: metrics.secondaryGap,
             onQualityTap: quality ? () {} : null,
+            onAlwaysOnTopTap: alwaysOnTop ? () {} : null,
           ),
           scrubber: ProgressBarSurface(
             progress: 0.35,
@@ -259,6 +270,44 @@ void main() {
         for (final exception in exceptions) {
           expect(exception.toString(), contains('RenderFlex'));
         }
+      },
+    );
+  }
+
+  // Five-button case: subtitles, audio, quality, fullscreen, and
+  // always-on-top all requested at once — the scenario a narrowed desktop
+  // window can reach, which `quality`-only widths above never exercise.
+  //
+  // Desktop widths only, not the full `_passingWidths` set: the tablet
+  // branch (600-899px) was tried first (per `PanelMetrics.showAlwaysOnTop`'s
+  // dartdoc's initial hypothesis) and its narrowest width, 600px, overflowed
+  // `SecondaryCluster`'s row by 18px with a 5th button — 650/670/690 held,
+  // but the field is a per-branch lever, not per-width, so the whole tablet
+  // tier fell back to `showAlwaysOnTop: false`. Only the desktop branch
+  // (>= 900px, looser padding and gap) affords the 5th button, so only its
+  // widths are asserted here.
+  const fiveButtonWidths = <double>[900, 920, 1600];
+
+  for (final width in fiveButtonWidths) {
+    testWidgets(
+      'ChromePanel at ${width}px with always-on-top: no RenderFlex '
+      'overflow with all five SecondaryCluster buttons showing',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester
+            .pumpWidget(_panel(width, quality: true, alwaysOnTop: true));
+        await tester.pumpAndSettle();
+
+        expect(_takeAllExceptions(tester), isEmpty);
+
+        final alwaysOnTopRect = tester.getRect(
+          find.byKey(SecondaryCluster.alwaysOnTopKey),
+        );
+        expect(alwaysOnTopRect.width, greaterThanOrEqualTo(32));
+        expect(alwaysOnTopRect.height, greaterThanOrEqualTo(32));
       },
     );
   }

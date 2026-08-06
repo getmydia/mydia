@@ -344,6 +344,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Fullscreen state
   bool _isFullscreen = false;
 
+  // Always-on-top state. Not persisted — starts false for every playback
+  // session and is force-disabled in dispose() if still true, so it never
+  // leaks into the browse/library window behind this one.
+  bool _isAlwaysOnTop = false;
+
   /// Skippable intro/credits segments for the file being played, as reported
   /// by the server. Empty whenever detection has not run, found nothing, or
   /// the query failed: an older server has no `segments` field at all, and
@@ -2623,6 +2628,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _toggleFullscreen();
         return KeyEventResult.handled;
 
+      case LogicalKeyboardKey.keyT:
+        if (!PlatformFeatures.isDesktop) return KeyEventResult.ignored;
+        _toggleAlwaysOnTop();
+        return KeyEventResult.handled;
+
       case LogicalKeyboardKey.keyM:
         // Toggle mute
         if (player.state.volume > 0) {
@@ -2675,11 +2685,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// Toggle always-on-top across desktop platforms.
+  ///
+  /// Both call sites (the button and the `T` shortcut) are already gated on
+  /// `PlatformFeatures.isDesktop`, so this only ever runs on desktop in
+  /// practice. [setWindowAlwaysOnTop] gates on the same check independently,
+  /// so the OS pin operation is a no-op if this were ever reached elsewhere
+  /// — but `_isAlwaysOnTop` itself always flips when this method runs; it is
+  /// not conditioned on platform.
+  void _toggleAlwaysOnTop() {
+    setState(() => _isAlwaysOnTop = !_isAlwaysOnTop);
+    setWindowAlwaysOnTop(_isAlwaysOnTop);
+  }
+
   @override
   void dispose() {
     // Exit fullscreen if active
     if (_isFullscreen) {
       defaultExitNativeFullscreen();
+    }
+
+    // Un-pin the window if it was pinned — never let always-on-top leak
+    // into the browse/library window behind this one.
+    if (_isAlwaysOnTop) {
+      setWindowAlwaysOnTop(false);
     }
 
     // Restores the window the user was browsing in and resumes geometry
@@ -2900,9 +2929,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // themselves at zero tracks rather than opening a one-item menu.
           onQualityTap: _qualityLadder.length > 1 ? _showQualitySelector : null,
           onFullscreenTap: _toggleFullscreen,
+          onAlwaysOnTopTap: _toggleAlwaysOnTop,
           onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
           onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
           isFullscreen: _isFullscreen,
+          isAlwaysOnTop: _isAlwaysOnTop,
           audioTrackCount: _audioTracks.length,
           subtitleTrackCount: _subtitleTracks.length,
           selectedAudioLabel: _selectedAudioTrack?.displayName,

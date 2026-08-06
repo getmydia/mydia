@@ -4,4 +4,6 @@ Future<void> initDesktopWindow() async {}
 
 void startWindowDrag() {}
 
+void setWindowAlwaysOnTop(bool value) {}
+
 PlayerWindowSizer createPlayerWindowSizer() => const NoopPlayerWindowSizer();
