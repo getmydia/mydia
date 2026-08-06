@@ -417,6 +417,87 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildDownloadedRow(
+      BuildContext context, WidgetRef ref, DownloadedMedia media) {
+    final episodeCode =
+        'S${media.seasonNumber?.toString().padLeft(2, '0') ?? '??'}E${media.episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
+
+    final trailing = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (media.quality.isNotEmpty) ...[
+          QualityBadge.resolution(media.quality),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          media.fileSizeDisplay,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.play_arrow_rounded, color: AppColors.primary),
+          iconSize: 22,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: () {
+            context.push(
+              '/player/episode/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}&showId=$showId&seasonNumber=${media.seasonNumber}',
+            );
+          },
+        ),
+        IconButton(
+          icon:
+              const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+          iconSize: 20,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: () async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: AppColors.surface,
+                title: const Text('Delete Episode'),
+                content: Text('Delete $episodeCode?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.error),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+            );
+
+            if (confirm == true) {
+              final manager = await ref.read(downloadManagerProvider.future);
+              await manager.deleteDownload(media.mediaId);
+            }
+          },
+        ),
+      ],
+    );
+
+    return _buildEpisodeRow(
+      context: context,
+      episodeCode: episodeCode,
+      title: media.title,
+      trailing: trailing,
+      onTap: () {
+        context.push(
+          '/player/episode/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}&showId=$showId&seasonNumber=${media.seasonNumber}',
+        );
+      },
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Downloaded Section with Season Grouping
   // ---------------------------------------------------------------------------
@@ -438,7 +519,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       ));
       widgets.add(const SizedBox(height: 8));
       for (final media in downloads) {
-        widgets.add(_buildDownloadedItem(context, ref, media));
+        widgets.add(_buildDownloadedRow(context, ref, media));
       }
     } else {
       widgets.add(Text(
@@ -460,7 +541,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
             _buildSeasonHeader(context, ref, season, seasonEpisodes.length));
         widgets.add(const SizedBox(height: 8));
         for (final media in seasonEpisodes) {
-          widgets.add(_buildDownloadedItem(context, ref, media));
+          widgets.add(_buildDownloadedRow(context, ref, media));
         }
       }
     }
@@ -739,212 +820,6 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Downloaded Item Card
-  // ---------------------------------------------------------------------------
-
-  Widget _buildDownloadedItem(
-      BuildContext context, WidgetRef ref, DownloadedMedia media) {
-    final episodeCode =
-        'S${media.seasonNumber?.toString().padLeft(2, '0') ?? '??'}E${media.episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
-
-    return GestureDetector(
-      onTap: () {
-        context.push(
-          '/player/episode/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}&showId=$showId&seasonNumber=${media.seasonNumber}',
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Thumbnail with play button overlay
-                SizedBox(
-                  width: 120,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: media.thumbnailUrl != null
-                            ? CachedNetworkImage(
-                                imageUrl: media.thumbnailUrl!,
-                                fit: BoxFit.cover,
-                                cacheManager: EpisodeThumbnailCacheManager(),
-                                placeholder: (_, __) =>
-                                    _buildThumbnailPlaceholder(),
-                                errorWidget: (_, __, ___) =>
-                                    _buildThumbnailPlaceholder(),
-                              )
-                            : _buildThumbnailPlaceholder(),
-                      ),
-                      // Play button overlay
-                      Center(
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.9),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Info area
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Episode code badge + runtime + quality
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color:
-                                    AppColors.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                episodeCode,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                            if (media.runtime != null && media.runtime! > 0)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.access_time_rounded,
-                                    size: 14,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _formatRuntime(media.runtime!),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            if (media.quality.isNotEmpty)
-                              QualityBadge.resolution(media.quality),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-
-                        // Episode title
-                        Text(
-                          media.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-
-                        // Overview
-                        if (media.overview != null &&
-                            media.overview!.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            media.overview!,
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppColors.textSecondary,
-                                      height: 1.4,
-                                    ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-
-                        // File size
-                        Text(
-                          media.fileSizeDisplay,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Delete button
-                Center(
-                  child: IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        color: AppColors.error),
-                    iconSize: 20,
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: AppColors.surface,
-                          title: const Text('Delete Episode'),
-                          content: Text('Delete $episodeCode?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            FilledButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.error),
-                              child: const Text('Delete'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm == true) {
-                        final manager =
-                            await ref.read(downloadManagerProvider.future);
-                        await manager.deleteDownload(media.mediaId);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
