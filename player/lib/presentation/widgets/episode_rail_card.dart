@@ -108,9 +108,10 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
       key: const ValueKey('episode-card-border'),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: widget.selected
-            ? Border.all(color: AppColors.primary, width: 2)
-            : null,
+        border: Border.all(
+          color: widget.selected ? AppColors.primary : Colors.transparent,
+          width: 2,
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
