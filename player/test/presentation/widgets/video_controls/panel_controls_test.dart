@@ -337,10 +337,7 @@ void main() {
 
       // When pinned, no rotation (upright).
       final transformRotate = tester.widget<Transform>(
-        find.descendant(
-          of: find.byKey(SecondaryCluster.alwaysOnTopKey),
-          matching: find.byType(Transform),
-        ),
+        find.byKey(SecondaryCluster.alwaysOnTopRotationKey),
       );
       expect(transformRotate.transform.getColumn(0)[0], closeTo(1.0, 0.01));
     });
@@ -367,10 +364,7 @@ void main() {
 
       // When not pinned, rotated -45° (tilted).
       final transformRotate = tester.widget<Transform>(
-        find.descendant(
-          of: find.byKey(SecondaryCluster.alwaysOnTopKey),
-          matching: find.byType(Transform),
-        ),
+        find.byKey(SecondaryCluster.alwaysOnTopRotationKey),
       );
       // Rotation matrix for -pi/4 has cos(-45°) ≈ 0.707 in corners
       expect(transformRotate.transform.getColumn(0)[0], closeTo(0.707, 0.01));

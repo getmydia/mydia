@@ -219,6 +219,8 @@ class SecondaryCluster extends StatelessWidget {
   static const Key qualityKey = Key('secondary-quality');
   static const Key fullscreenKey = Key('secondary-fullscreen');
   static const Key alwaysOnTopKey = Key('secondary-always-on-top');
+  static const Key alwaysOnTopRotationKey =
+      Key('secondary-always-on-top-rotation');
 
   /// Horizontal gap between this cluster's buttons.
   ///
@@ -297,6 +299,7 @@ class SecondaryCluster extends StatelessWidget {
             width: 32,
             height: 32,
             child: Transform.rotate(
+              key: alwaysOnTopRotationKey,
               // Same icon glyph either way (no dedicated "unpin" glyph exists in
               // the rounded family — see icon_family_test.dart's _rounded-only
               // rule). Tilted = not pinned, upright = pinned — the same
