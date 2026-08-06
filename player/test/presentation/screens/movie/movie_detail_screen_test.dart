@@ -10,7 +10,7 @@ import 'package:player/presentation/widgets/detail_action_row.dart';
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 
-Map<String, dynamic> _movieJson() {
+Map<String, dynamic> _movieJson({Map<String, dynamic>? progress}) {
   return {
     '__typename': 'Movie',
     'id': 'm-1',
@@ -33,7 +33,7 @@ Map<String, dynamic> _movieJson() {
       'backdropUrl': null,
       'thumbnailUrl': null,
     },
-    'progress': null,
+    'progress': progress,
     'files': <dynamic>[],
     'isFavorite': false,
     'cast': [
@@ -49,12 +49,30 @@ Map<String, dynamic> _movieJson() {
   };
 }
 
-Future<void> _pumpScreen(WidgetTester tester, Size size) async {
+Map<String, dynamic> _progressJson({
+  required bool watched,
+  String? lastWatchedAt,
+}) {
+  return {
+    '__typename': 'Progress',
+    'positionSeconds': 4200,
+    'durationSeconds': 8760,
+    'percentage': 48.0,
+    'watched': watched,
+    'lastWatchedAt': lastWatchedAt,
+  };
+}
+
+Future<void> _pumpScreen(
+  WidgetTester tester,
+  Size size, {
+  Map<String, dynamic>? movieJson,
+}) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final link = StubLink((request, _) {
-    return {'__typename': 'Query', 'movie': _movieJson()};
+    return {'__typename': 'Query', 'movie': movieJson ?? _movieJson()};
   });
 
   await mockNetworkImages(() async {
@@ -106,5 +124,35 @@ void main() {
     await _pumpScreen(tester, const Size(1000, 900));
 
     expect(find.text('8.1'), findsOneWidget);
+  });
+
+  testWidgets('shows the watched line when the movie is marked watched',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      const Size(1000, 900),
+      movieJson: _movieJson(
+        progress: _progressJson(
+          watched: true,
+          lastWatchedAt: '2026-08-01T00:00:00Z',
+        ),
+      ),
+    );
+
+    // `find.text('Watched')` alone would also match DetailActionRow's
+    // static "Watched" button label, so this looks for the
+    // "Watched · <date>" separator that only MovieWatchedLine renders.
+    expect(find.textContaining('Watched ·'), findsOneWidget);
+  });
+
+  testWidgets('shows a resume progress bar when there is resumable progress',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      const Size(1000, 900),
+      movieJson: _movieJson(progress: _progressJson(watched: false)),
+    );
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
   });
 }

@@ -47,6 +47,12 @@ class MovieWatchedButton extends StatelessWidget {
 ///
 /// The two states are mutually exclusive, so they never render together
 /// and the vertical rhythm stays stable across a toggle.
+///
+/// Carries no horizontal padding of its own — its one call site
+/// (`MovieDetailScreen._buildTagColumn`) already sits inside an ambient
+/// 20px-padded container, and adding padding here on top of that would
+/// double the inset and misalign the line against the tag chips/overview
+/// directly below it in the same column.
 class MovieWatchedLine extends StatelessWidget {
   const MovieWatchedLine({super.key, this.dateLabel = ''});
 
@@ -55,24 +61,21 @@ class MovieWatchedLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.check_circle_rounded,
-            size: 16,
-            color: AppColors.success,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            dateLabel.isEmpty ? 'Watched' : 'Watched · $dateLabel',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-          ),
-        ],
-      ),
+    return Row(
+      children: [
+        const Icon(
+          Icons.check_circle_rounded,
+          size: 16,
+          color: AppColors.success,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          dateLabel.isEmpty ? 'Watched' : 'Watched · $dateLabel',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+        ),
+      ],
     );
   }
 }
