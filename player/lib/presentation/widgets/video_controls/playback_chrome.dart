@@ -382,10 +382,12 @@ class PlaybackChrome extends StatefulWidget {
   final VoidCallback? onSubtitleTap;
   final VoidCallback? onQualityTap;
   final VoidCallback? onFullscreenTap;
+  final VoidCallback? onAlwaysOnTopTap;
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
 
   final bool isFullscreen;
+  final bool isAlwaysOnTop;
   final int audioTrackCount;
   final int subtitleTrackCount;
   final String? selectedAudioLabel;
@@ -405,9 +407,11 @@ class PlaybackChrome extends StatefulWidget {
     this.onSubtitleTap,
     this.onQualityTap,
     this.onFullscreenTap,
+    this.onAlwaysOnTopTap,
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.isFullscreen = false,
+    this.isAlwaysOnTop = false,
     this.audioTrackCount = 0,
     this.subtitleTrackCount = 0,
     this.selectedAudioLabel,
@@ -539,12 +543,17 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                           onQualityTap:
                               metrics.showQuality ? widget.onQualityTap : null,
                           onFullscreenTap: widget.onFullscreenTap,
+                          onAlwaysOnTopTap: PlatformFeatures.isDesktop &&
+                                  metrics.showAlwaysOnTop
+                              ? widget.onAlwaysOnTopTap
+                              : null,
                           audioTrackCount: widget.audioTrackCount,
                           subtitleTrackCount: widget.subtitleTrackCount,
                           selectedAudioLabel: widget.selectedAudioLabel,
                           selectedSubtitleLabel: widget.selectedSubtitleLabel,
                           selectedQualityLabel: widget.selectedQualityLabel,
                           isFullscreen: widget.isFullscreen,
+                          isAlwaysOnTop: widget.isAlwaysOnTop,
                           gap: metrics.secondaryGap,
                         ),
                         scrubber: _ScrubberRow(
