@@ -1447,6 +1447,16 @@ jobs:
             REMOTE="mydia"
           fi
 
+          # The runtime comes from Flathub, and this job is a different runner
+          # from the one that built the Flatpak, so it has no remotes at all.
+          # Without this the install fails with "requires the runtime
+          # org.gnome.Platform/x86_64/50 which was not found", which says
+          # nothing about whether our own repo is sound. It is what the
+          # verification reported on v0.13.0-beta.6, whose repo was in fact
+          # published correctly and installable by anyone who has Flathub.
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+
           flatpak remote-add --user --if-not-exists --from "$REMOTE" "$REPOFILE"
           flatpak install --user -y "$REMOTE" dev.mydia.player
           flatpak info --user dev.mydia.player
