@@ -369,8 +369,10 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     end)
     |> Enum.sort_by(
       fn video ->
-        # Prioritize official trailers, then by most recent
-        {!video["official"], video["published_at"]}
+        # Prioritize official trailers, then by most recent. `:desc` on a
+        # boolean puts `true` (official) ahead of `false`, matching Erlang
+        # term ordering (true > false).
+        {video["official"], video["published_at"]}
       end,
       :desc
     )

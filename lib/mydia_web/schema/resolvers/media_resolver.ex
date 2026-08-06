@@ -85,8 +85,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
       |> Enum.reject(&is_nil/1)
 
     items_by_id =
-      matched_ids
-      |> then(&Media.list_media_items(ids: &1))
+      Media.list_media_items(ids: matched_ids)
       |> Map.new(&{&1.id, &1})
 
     items =

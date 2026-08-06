@@ -111,6 +111,39 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
     end
   end
 
+  describe "videos" do
+    test "sorts the official trailer before an unofficial one, regardless of publish date" do
+      body = %{
+        "id" => 603,
+        "title" => "The Matrix",
+        "credits" => %{"cast" => [], "crew" => []},
+        "videos" => %{
+          "results" => [
+            %{
+              "site" => "YouTube",
+              "type" => "Trailer",
+              "key" => "unofficial",
+              "official" => false,
+              "published_at" => "2020-01-01T00:00:00.000Z"
+            },
+            %{
+              "site" => "YouTube",
+              "type" => "Trailer",
+              "key" => "official",
+              "official" => true,
+              "published_at" => "2019-01-01T00:00:00.000Z"
+            }
+          ]
+        }
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "603")
+
+      assert hd(metadata.videos).official == true
+      assert hd(metadata.videos).key == "official"
+    end
+  end
+
   describe "content_rating for TV shows" do
     test "picks the US rating when present" do
       body = %{
