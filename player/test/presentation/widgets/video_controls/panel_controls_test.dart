@@ -321,17 +321,23 @@ void main() {
       );
 
       // Icon is always push_pin_rounded (respects icon_family_test.dart's
-      // _rounded-only rule); state is differentiated by rotation.
+      // _rounded-only rule); state is differentiated by rotation. The key is
+      // on the outer SizedBox wrapper, so find ControlButton as a descendant.
       expect(
         tester
-            .widget<ControlButton>(find.byKey(SecondaryCluster.alwaysOnTopKey))
+            .widget<ControlButton>(
+              find.descendant(
+                of: find.byKey(SecondaryCluster.alwaysOnTopKey),
+                matching: find.byType(ControlButton),
+              ),
+            )
             .icon,
         Icons.push_pin_rounded,
       );
 
       // When pinned, no rotation (upright).
       final transformRotate = tester.widget<Transform>(
-        find.ancestor(
+        find.descendant(
           of: find.byKey(SecondaryCluster.alwaysOnTopKey),
           matching: find.byType(Transform),
         ),
@@ -345,17 +351,23 @@ void main() {
       );
 
       // Icon is always push_pin_rounded (respects icon_family_test.dart's
-      // _rounded-only rule); state is differentiated by rotation.
+      // _rounded-only rule); state is differentiated by rotation. The key is
+      // on the outer SizedBox wrapper, so find ControlButton as a descendant.
       expect(
         tester
-            .widget<ControlButton>(find.byKey(SecondaryCluster.alwaysOnTopKey))
+            .widget<ControlButton>(
+              find.descendant(
+                of: find.byKey(SecondaryCluster.alwaysOnTopKey),
+                matching: find.byType(ControlButton),
+              ),
+            )
             .icon,
         Icons.push_pin_rounded,
       );
 
       // When not pinned, rotated -45° (tilted).
       final transformRotate = tester.widget<Transform>(
-        find.ancestor(
+        find.descendant(
           of: find.byKey(SecondaryCluster.alwaysOnTopKey),
           matching: find.byType(Transform),
         ),

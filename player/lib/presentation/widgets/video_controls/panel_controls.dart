@@ -292,19 +292,33 @@ class SecondaryCluster extends StatelessWidget {
         ),
         if (onAlwaysOnTopTap != null) ...[
           SizedBox(width: gap),
-          Transform.rotate(
-            // Same icon glyph either way (no dedicated "unpin" glyph exists in
-            // the rounded family — see icon_family_test.dart's _rounded-only
-            // rule). Tilted = not pinned, upright = pinned — the same
-            // convention as Windows/browser "pin tab" toggles.
-            angle: isAlwaysOnTop ? 0 : -math.pi / 4,
-            child: ControlButton(
-              key: alwaysOnTopKey,
-              icon: Icons.push_pin_rounded,
-              iconSize: 18,
-              size: 32,
-              tooltip: isAlwaysOnTop ? 'Exit always on top' : 'Always on top',
-              onTap: onAlwaysOnTopTap,
+          SizedBox(
+            key: alwaysOnTopKey,
+            width: 32,
+            height: 32,
+            child: Transform.rotate(
+              // Same icon glyph either way (no dedicated "unpin" glyph exists in
+              // the rounded family — see icon_family_test.dart's _rounded-only
+              // rule). Tilted = not pinned, upright = pinned — the same
+              // convention as Windows/browser "pin tab" toggles. The key lives
+              // on this outer, unrotated SizedBox rather than on ControlButton
+              // itself: `Transform` only affects paint/hit-testing, not layout,
+              // so this box's own measured rect stays a plain 32x32 regardless
+              // of rotation — but if the key were on the rotated child instead,
+              // `tester.getRect` (which derives a rect from two
+              // independently-transformed corner points) would degenerate for a
+              // -45° rotation of a square, since both corners land on the same
+              // line. See chrome_panel_overflow_test.dart's five-button
+              // width-budget checks, which measure this key's rect and require
+              // >=32 in both dimensions regardless of pinned state.
+              angle: isAlwaysOnTop ? 0 : -math.pi / 4,
+              child: ControlButton(
+                icon: Icons.push_pin_rounded,
+                iconSize: 18,
+                size: 32,
+                tooltip: isAlwaysOnTop ? 'Exit always on top' : 'Always on top',
+                onTap: onAlwaysOnTopTap,
+              ),
             ),
           ),
         ],
