@@ -314,30 +314,54 @@ void main() {
       expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsOneWidget);
     });
 
-    testWidgets('swaps the always-on-top glyph when pinned', (tester) async {
+    testWidgets('tilts the always-on-top icon when pinned (no rotation)',
+        (tester) async {
       await tester.pumpWidget(
         _host(SecondaryCluster(isAlwaysOnTop: true, onAlwaysOnTopTap: () {})),
       );
 
+      // Icon is always push_pin_rounded (respects icon_family_test.dart's
+      // _rounded-only rule); state is differentiated by rotation.
       expect(
         tester
             .widget<ControlButton>(find.byKey(SecondaryCluster.alwaysOnTopKey))
             .icon,
         Icons.push_pin_rounded,
       );
+
+      // When pinned, no rotation (upright).
+      final transformRotate = tester.widget<Transform>(
+        find.ancestor(
+          of: find.byKey(SecondaryCluster.alwaysOnTopKey),
+          matching: find.byType(Transform),
+        ),
+      );
+      expect(transformRotate.transform.getColumn(0)[0], closeTo(1.0, 0.01));
     });
 
-    testWidgets('shows the unpinned glyph when not pinned', (tester) async {
+    testWidgets('tilts the always-on-top icon when not pinned', (tester) async {
       await tester.pumpWidget(
         _host(SecondaryCluster(onAlwaysOnTopTap: () {})),
       );
 
+      // Icon is always push_pin_rounded (respects icon_family_test.dart's
+      // _rounded-only rule); state is differentiated by rotation.
       expect(
         tester
             .widget<ControlButton>(find.byKey(SecondaryCluster.alwaysOnTopKey))
             .icon,
-        Icons.push_pin_outlined,
+        Icons.push_pin_rounded,
       );
+
+      // When not pinned, rotated -45° (tilted).
+      final transformRotate = tester.widget<Transform>(
+        find.ancestor(
+          of: find.byKey(SecondaryCluster.alwaysOnTopKey),
+          matching: find.byType(Transform),
+        ),
+      );
+      // Rotation matrix for -pi/4 has cos(-45°) ≈ 0.707 in corners
+      expect(transformRotate.transform.getColumn(0)[0], closeTo(0.707, 0.01));
     });
 
     testWidgets('always-on-top button fires its callback', (tester) async {

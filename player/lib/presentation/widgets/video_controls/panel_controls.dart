@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -290,21 +292,20 @@ class SecondaryCluster extends StatelessWidget {
         ),
         if (onAlwaysOnTopTap != null) ...[
           SizedBox(width: gap),
-          ControlButton(
-            key: alwaysOnTopKey,
-            // No dedicated "unpin" glyph exists in the rounded icon family
-            // (unlike fullscreen/fullscreen_exit, which are two distinct
-            // pictograms) — push_pin_outlined vs push_pin_rounded uses the
-            // filled-vs-outline convention Material already uses elsewhere
-            // for binary state (favorite/favorite_border, bookmark/
-            // bookmark_border) instead.
-            icon: isAlwaysOnTop
-                ? Icons.push_pin_rounded
-                : Icons.push_pin_outlined,
-            iconSize: 18,
-            size: 32,
-            tooltip: isAlwaysOnTop ? 'Exit always on top' : 'Always on top',
-            onTap: onAlwaysOnTopTap,
+          Transform.rotate(
+            // Same icon glyph either way (no dedicated "unpin" glyph exists in
+            // the rounded family — see icon_family_test.dart's _rounded-only
+            // rule). Tilted = not pinned, upright = pinned — the same
+            // convention as Windows/browser "pin tab" toggles.
+            angle: isAlwaysOnTop ? 0 : -math.pi / 4,
+            child: ControlButton(
+              key: alwaysOnTopKey,
+              icon: Icons.push_pin_rounded,
+              iconSize: 18,
+              size: 32,
+              tooltip: isAlwaysOnTop ? 'Exit always on top' : 'Always on top',
+              onTap: onAlwaysOnTopTap,
+            ),
           ),
         ],
       ],
