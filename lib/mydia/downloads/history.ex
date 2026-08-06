@@ -379,6 +379,20 @@ defmodule Mydia.Downloads.History do
             )
 
             {client_config.name, :unreachable}
+        catch
+          # `rescue` only catches raised exceptions. A pool checkout timeout
+          # or a GenServer.call timeout inside the adapter terminates via
+          # `exit/1`, not `raise/1` — uncaught, that unwinds this task and,
+          # since Task.async_stream links tasks to the caller, takes down
+          # the entire list_downloads_with_status/1 call (and whatever
+          # LiveView or job called it) over one misbehaving client.
+          kind, reason ->
+            Logger.error(
+              "Adapter #{inspect(adapter)} for client #{client_config.name} " <>
+                "(type=#{client_config.type}) #{kind}ed: #{inspect(reason)}"
+            )
+
+            {client_config.name, :unreachable}
         end
       end,
       timeout: :infinity,
