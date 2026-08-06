@@ -67,17 +67,8 @@ class SeriesDownloadsScreen extends ConsumerWidget {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 if (showQueue.isNotEmpty) ...[
-                  Text(
-                    'Downloading',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...showQueue
-                      .map((task) => _buildQueueItem(context, ref, task)),
-                  const SizedBox(height: 24),
+                  ..._buildQueueSection(context, ref, showQueue),
+                  if (showDownloads.isNotEmpty) const SizedBox(height: 24),
                 ],
                 if (showDownloads.isNotEmpty)
                   ..._buildDownloadedSection(context, ref, showDownloads),
@@ -607,247 +598,155 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   }
 
   // ---------------------------------------------------------------------------
-  // Queue Item Card (Downloading)
+  // Queue Section with Season Grouping
   // ---------------------------------------------------------------------------
 
-  Widget _buildQueueItem(
+  List<Widget> _buildQueueSection(
+      BuildContext context, WidgetRef ref, List<DownloadTask> queue) {
+    final widgets = <Widget>[];
+
+    widgets.add(Text(
+      'Downloading',
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            color: AppColors.primary,
+            fontWeight: FontWeight.bold,
+          ),
+    ));
+
+    final seasonMap = _groupBySeason(queue, (t) => t.seasonNumber ?? 0);
+    final hasMultipleSeasons = seasonMap.length > 1;
+
+    if (!hasMultipleSeasons) {
+      widgets.add(const SizedBox(height: 8));
+      for (final task in queue) {
+        widgets.add(_buildQueueRow(context, ref, task));
+      }
+    } else {
+      widgets.add(const SizedBox(height: 12));
+      var first = true;
+      for (final entry in seasonMap.entries) {
+        final season = entry.key;
+        final seasonTasks = entry.value;
+        if (!first) widgets.add(const SizedBox(height: 16));
+        first = false;
+        widgets
+            .add(_buildQueueSeasonHeader(context, season, seasonTasks.length));
+        widgets.add(const SizedBox(height: 8));
+        for (final task in seasonTasks) {
+          widgets.add(_buildQueueRow(context, ref, task));
+        }
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildQueueRow(
       BuildContext context, WidgetRef ref, DownloadTask task) {
     final progress = task.isProgressive ? task.combinedProgress : task.progress;
     final episodeCode =
         'S${task.seasonNumber?.toString().padLeft(2, '0') ?? '??'}E${task.episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.3),
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Thumbnail with progress overlay
-              SizedBox(
-                width: 120,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: task.thumbnailUrl != null
-                          ? CachedNetworkImage(
-                              imageUrl: task.thumbnailUrl!,
-                              fit: BoxFit.cover,
-                              cacheManager: EpisodeThumbnailCacheManager(),
-                              placeholder: (_, __) =>
-                                  _buildThumbnailPlaceholder(),
-                              errorWidget: (_, __, ___) =>
-                                  _buildThumbnailPlaceholder(),
-                            )
-                          : _buildThumbnailPlaceholder(),
-                    ),
-                    // Semi-transparent overlay
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    // Progress ring centered
-                    Center(
-                      child: SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: CircularProgressIndicator(
-                          value: progress,
-                          color: AppColors.primary,
-                          backgroundColor: Colors.white.withValues(alpha: 0.2),
-                          strokeWidth: 3,
-                          strokeCap: StrokeCap.round,
-                        ),
-                      ),
-                    ),
-                    Center(
-                      child: Text(
-                        '${(progress * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Info area
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Episode code badge + runtime + quality
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              episodeCode,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                          if (task.runtime != null && task.runtime! > 0)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.access_time_rounded,
-                                  size: 14,
-                                  color: AppColors.textSecondary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _formatRuntime(task.runtime!),
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          if (task.quality.isNotEmpty)
-                            QualityBadge.resolution(task.quality),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Episode title
-                      if (task.title.isNotEmpty)
-                        Text(
-                          task.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      const SizedBox(height: 8),
-
-                      // Progress bar
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 4,
-                          backgroundColor: AppColors.surfaceVariant,
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                              AppColors.primary),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Status + bytes
-                      Row(
-                        children: [
-                          Text(
-                            task.statusDisplay,
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Spacer(),
-                          Consumer(
-                            builder: (context, ref, _) {
-                              final speedAsync =
-                                  ref.watch(downloadSpeedInfoProvider);
-                              return speedAsync.when(
-                                data: (speedMap) {
-                                  final info = speedMap[task.id];
-                                  final parts = <String>[];
-                                  final bytesText = task.progressBytesDisplay ??
-                                      task.fileSizeDisplay;
-                                  parts.add(bytesText);
-                                  if (info != null && info.bytesPerSecond > 0) {
-                                    parts.add(info.speedDisplay);
-                                  }
-                                  return Text(
-                                    parts.join(' \u00B7 '),
-                                    style: const TextStyle(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 10,
-                                    ),
-                                  );
-                                },
-                                loading: () => const SizedBox.shrink(),
-                                error: (_, __) => const SizedBox.shrink(),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
+    final trailing = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Consumer(
+          builder: (context, ref, _) {
+            final speedAsync = ref.watch(downloadSpeedInfoProvider);
+            return speedAsync.when(
+              data: (speedMap) {
+                final info = speedMap[task.id];
+                final parts = <String>[];
+                final bytesText =
+                    task.progressBytesDisplay ?? task.fileSizeDisplay;
+                parts.add(bytesText);
+                if (info != null && info.bytesPerSecond > 0) {
+                  parts.add(info.speedDisplay);
+                }
+                return Text(
+                  parts.join(' \u00B7 '),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
                   ),
-                ),
-              ),
-
-              // Cancel button
-              Center(
-                child: IconButton(
-                  onPressed: () => _showCancelDialog(context, ref, task),
-                  icon: const Icon(Icons.close_rounded),
-                  color: AppColors.textSecondary,
-                  iconSize: 20,
-                ),
-              ),
-            ],
+                );
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            );
+          },
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '${(progress * 100).toStringAsFixed(0)}%',
+          style: const TextStyle(
+            color: AppColors.primary,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
           ),
         ),
-      ),
+        const SizedBox(width: 4),
+        IconButton(
+          onPressed: () => _showCancelDialog(context, ref, task),
+          icon: const Icon(Icons.close_rounded),
+          color: AppColors.textSecondary,
+          iconSize: 18,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      ],
+    );
+
+    return _buildEpisodeRow(
+      context: context,
+      episodeCode: episodeCode,
+      title: task.title,
+      trailing: trailing,
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Shared Helpers
-  // ---------------------------------------------------------------------------
-
-  Widget _buildThumbnailPlaceholder() {
-    return Container(
-      color: AppColors.surfaceVariant,
-      child: const Center(
-        child: Icon(
-          Icons.tv_rounded,
-          size: 28,
-          color: AppColors.textSecondary,
+  Widget _buildQueueSeasonHeader(
+      BuildContext context, int seasonNumber, int taskCount) {
+    final label = seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Container(
+        padding: const EdgeInsets.only(bottom: 8),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: AppColors.divider,
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '($taskCount downloading)',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                  ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                height: 1,
+                color: AppColors.divider.withValues(alpha: 0.3),
+              ),
+            ),
+          ],
         ),
       ),
     );
-  }
-
-  String _formatRuntime(int minutes) {
-    if (minutes < 60) return '$minutes min';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return m > 0 ? '${h}h ${m}m' : '${h}h';
   }
 
   String _totalSizeDisplay(List<DownloadedMedia> downloads) {
