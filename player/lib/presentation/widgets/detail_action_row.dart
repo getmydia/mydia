@@ -26,6 +26,7 @@ class DetailActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final trailerUrl = this.trailerUrl;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -60,7 +61,7 @@ class DetailActionRow extends StatelessWidget {
             label: 'Trailer',
             highlighted: false,
             highlightColor: AppColors.primary,
-            onTap: () => _openTrailer(context, trailerUrl!),
+            onTap: () => _openTrailer(context, trailerUrl),
           ),
       ],
     );
