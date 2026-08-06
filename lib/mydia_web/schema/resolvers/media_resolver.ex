@@ -38,9 +38,8 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   @spec resolve_content_rating(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
-  def resolve_content_rating(_parent, _args, _info) do
-    # Content rating isn't stored in our current metadata
-    {:ok, nil}
+  def resolve_content_rating(parent, _args, _info) do
+    {:ok, MetadataAccess.get_field(parent, :content_rating)}
   end
 
   @spec resolve_rating(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
