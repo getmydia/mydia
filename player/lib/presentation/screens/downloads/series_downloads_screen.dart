@@ -665,6 +665,9 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 }
                 return Text(
                   parts.join(' \u00B7 '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 10,
