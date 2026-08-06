@@ -63,8 +63,20 @@ defmodule Mydia.Jobs.TVShowSearchTest do
   end
 
   setup do
-    # Register mock download client adapter
+    # Register mock download client adapter. Client.Registry is a single
+    # global Agent shared by the whole app, not sandboxed per test — without
+    # restoring it, every test that runs afterward in the same suite (any
+    # file, any order) gets MockDownloadAdapter instead of the real
+    # Transmission adapter for :transmission.
+    previous_transmission_adapter = Registry.lookup(:transmission)
     Registry.register(:transmission, MockDownloadAdapter)
+
+    on_exit(fn ->
+      case previous_transmission_adapter do
+        nil -> Registry.unregister(:transmission)
+        adapter -> Registry.register(:transmission, adapter)
+      end
+    end)
 
     # Create test user for client configs
     user = user_fixture()

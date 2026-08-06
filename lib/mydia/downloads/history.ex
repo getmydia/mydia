@@ -389,7 +389,7 @@ defmodule Mydia.Downloads.History do
           kind, reason ->
             Logger.error(
               "Adapter #{inspect(adapter)} for client #{client_config.name} " <>
-                "(type=#{client_config.type}) #{kind}ed: #{inspect(reason)}"
+                "(type=#{client_config.type}) raised via #{kind}: #{inspect(reason)}"
             )
 
             {client_config.name, :unreachable}

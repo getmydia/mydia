@@ -201,7 +201,13 @@ defmodule Mydia.Downloads.HistoryClientStateTest do
         end
 
       Registry.register(:qbittorrent, CrashingAdapter)
-      on_exit(fn -> if original, do: Registry.register(:qbittorrent, original) end)
+
+      on_exit(fn ->
+        case original do
+          nil -> Registry.unregister(:qbittorrent)
+          adapter -> Registry.register(:qbittorrent, adapter)
+        end
+      end)
 
       setup_runtime_config([client_config(%{name: "flaky", enabled: true})])
       media_item = media_item_fixture()
