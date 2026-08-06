@@ -961,6 +961,7 @@ class ShowDetailScreen extends ConsumerWidget {
               showTitle: show?.title ?? 'Unknown Show',
               showId: show?.id,
               showPosterUrl: show?.artwork.posterUrl,
+              selectedEpisodeId: ref.watch(selectedEpisodeProvider(id)),
               onEpisodeTap: (episode) async {
                 ref
                     .read(selectedEpisodeProvider(id).notifier)

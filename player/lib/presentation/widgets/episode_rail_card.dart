@@ -24,6 +24,7 @@ class EpisodeRailCard extends ConsumerStatefulWidget {
   final String showTitle;
   final String? showId;
   final String? showPosterUrl;
+  final bool selected;
 
   /// Invoked when a playable card is tapped. Ignored (and not wired) when the
   /// episode has no file.
@@ -35,6 +36,7 @@ class EpisodeRailCard extends ConsumerStatefulWidget {
     required this.showTitle,
     this.showId,
     this.showPosterUrl,
+    this.selected = false,
     this.onTap,
   });
 
@@ -102,139 +104,150 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
   }
 
   Widget _buildThumbnail(BuildContext context, CardSize cardSize) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        width: cardSize.width,
-        height: cardSize.height,
-        child: Stack(
-          children: [
-            // Thumbnail image (16:9 fills the card).
-            Positioned.fill(
-              child: _episode.thumbnailUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: _episode.thumbnailUrl!,
-                      fit: BoxFit.cover,
-                      cacheManager: EpisodeThumbnailCacheManager(),
-                      placeholder: (context, url) => Container(
-                        color: AppColors.surfaceVariant,
-                      ),
-                      errorWidget: (context, url, error) => _buildPlaceholder(),
-                    )
-                  : _buildPlaceholder(),
-            ),
-
-            // Hover overlay with play button (solid scrim — no live blur, to
-            // keep the scrolling rail cheap). Only when the episode is playable.
-            if (_episode.hasFile)
+    return Container(
+      key: const ValueKey('episode-card-border'),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: widget.selected
+            ? Border.all(color: AppColors.primary, width: 2)
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: cardSize.width,
+          height: cardSize.height,
+          child: Stack(
+            children: [
+              // Thumbnail image (16:9 fills the card).
               Positioned.fill(
-                child: IgnorePointer(
-                  child: AnimatedOpacity(
-                    opacity: _isHovered ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      child: Center(
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primary.withValues(alpha: 0.4),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            size: 26,
-                            color: Colors.white,
+                child: _episode.thumbnailUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: _episode.thumbnailUrl!,
+                        fit: BoxFit.cover,
+                        cacheManager: EpisodeThumbnailCacheManager(),
+                        placeholder: (context, url) => Container(
+                          color: AppColors.surfaceVariant,
+                        ),
+                        errorWidget: (context, url, error) =>
+                            _buildPlaceholder(),
+                      )
+                    : _buildPlaceholder(),
+              ),
+
+              // Hover overlay with play button (solid scrim — no live blur, to
+              // keep the scrolling rail cheap). Only when the episode is playable.
+              if (_episode.hasFile)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: _isHovered ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        child: Center(
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.4),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              size: 26,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-            // "Unavailable" badge for episodes with no playable file.
-            if (!_episode.hasFile)
-              const Positioned.fill(
-                child: Center(
-                  child: Icon(
-                    Icons.cloud_off_rounded,
-                    size: 28,
-                    color: AppColors.textSecondary,
+              // "Unavailable" badge for episodes with no playable file.
+              if (!_episode.hasFile)
+                const Positioned.fill(
+                  child: Center(
+                    child: Icon(
+                      Icons.cloud_off_rounded,
+                      size: 28,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
-              ),
 
-            // Progress bar pinned to the bottom edge.
-            if ((_episode.progress?.percentage ?? 0) > 0)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 4,
-                  decoration: const BoxDecoration(
-                    color: AppColors.surfaceVariant,
-                  ),
-                  child: FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor:
-                        (_episode.progress!.percentage / 100).clamp(0.0, 1.0),
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.only(
-                          topRight: Radius.circular(2),
-                          bottomRight: Radius.circular(2),
+              // Progress bar pinned to the bottom edge.
+              if ((_episode.progress?.percentage ?? 0) > 0)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: 4,
+                    decoration: const BoxDecoration(
+                      color: AppColors.surfaceVariant,
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor:
+                          (_episode.progress!.percentage / 100).clamp(0.0, 1.0),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.only(
+                            topRight: Radius.circular(2),
+                            bottomRight: Radius.circular(2),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-            // Watched checkmark (top-left, so it never collides with the
-            // top-right action overlay).
-            if (_episode.progress?.watched == true)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: AppColors.success,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    size: 12,
-                    color: Colors.white,
+              // Watched checkmark (top-left, so it never collides with the
+              // top-right action overlay).
+              if (_episode.progress?.watched == true)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.success,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      size: 12,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-              ),
 
-            // Action overlay (top-right): download + watched-status menu, on a
-            // dark scrim pill for contrast against the thumbnail.
-            Positioned(
-              top: 4,
-              right: 4,
-              child: _buildActions(context),
-            ),
-          ],
+              // Action overlay (top-right): download + watched-status menu, on a
+              // dark scrim pill for contrast against the thumbnail.
+              Positioned(
+                top: 4,
+                right: 4,
+                child: _buildActions(context),
+              ),
+            ],
+          ),
         ),
       ),
     );

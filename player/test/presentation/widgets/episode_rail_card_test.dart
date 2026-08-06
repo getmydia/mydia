@@ -31,6 +31,7 @@ Future<void> _pump(
   WidgetTester tester,
   Episode episode, {
   VoidCallback? onTap,
+  bool selected = false,
 }) async {
   await mockNetworkImages(() async {
     await tester.pumpWidget(
@@ -45,6 +46,7 @@ Future<void> _pump(
               showTitle: 'Test Show',
               showId: 'show-1',
               onTap: onTap,
+              selected: selected,
             ),
           ),
         ),
@@ -152,5 +154,25 @@ void main() {
     await _pump(tester, _episode(thumbnailUrl: null));
 
     expect(find.byIcon(Icons.tv_rounded), findsOneWidget);
+  });
+
+  testWidgets('selected draws a highlighted border, unselected does not',
+      (tester) async {
+    await _pump(tester, _episode(), selected: true);
+
+    final container = tester.widget<Container>(
+      find.byKey(const ValueKey('episode-card-border')),
+    );
+    final decoration = container.decoration as BoxDecoration;
+    expect(decoration.border, isNotNull);
+
+    await _pump(tester, _episode());
+
+    final unselectedContainer = tester.widget<Container>(
+      find.byKey(const ValueKey('episode-card-border')),
+    );
+    final unselectedDecoration =
+        unselectedContainer.decoration as BoxDecoration;
+    expect(unselectedDecoration.border, isNull);
   });
 }
