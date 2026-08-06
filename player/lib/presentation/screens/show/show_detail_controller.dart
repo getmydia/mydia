@@ -77,6 +77,23 @@ query TvShowDetail($id: ID!) {
       }
     }
     isFavorite
+    cast {
+      name
+      character
+      profileUrl
+    }
+    trailerUrl
+    similar {
+      id
+      type
+      title
+      year
+      artwork {
+        posterUrl
+        backdropUrl
+        thumbnailUrl
+      }
+    }
   }
 }
 ''';
@@ -148,6 +165,9 @@ class ShowDetailController extends _$ShowDetailController {
         nextEpisode: currentState.nextEpisode,
         nextUp: currentState.nextUp,
         isFavorite: !currentState.isFavorite,
+        cast: currentState.cast,
+        trailerUrl: currentState.trailerUrl,
+        similar: currentState.similar,
       ),
     );
 
