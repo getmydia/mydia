@@ -27,6 +27,23 @@ class AppDelegate: FlutterAppDelegate {
         result(FlutterMethodNotImplemented)
       }
     }
+
+    let chromeChannel = FlutterMethodChannel(
+      name: "dev.mydia.player/window_chrome",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    chromeChannel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "setTrafficLightsHidden":
+        let hidden = (call.arguments as? [String: Any])?["hidden"] as? Bool ?? false
+        self?.mainFlutterWindow?.standardWindowButton(.closeButton)?.isHidden = hidden
+        self?.mainFlutterWindow?.standardWindowButton(.miniaturizeButton)?.isHidden = hidden
+        self?.mainFlutterWindow?.standardWindowButton(.zoomButton)?.isHidden = hidden
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

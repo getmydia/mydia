@@ -525,6 +525,120 @@ void main() {
     });
   });
 
+  group('ChromeVisibility traffic lights', () {
+    testWidgets('asserts the traffic lights visible once on mount',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      expect(
+        calls,
+        [false],
+        reason: '_visible starts true and _show() only calls the bridge on '
+            'a false -> true transition, so a freshly-mounted '
+            'ChromeVisibility must assert visibility itself in initState, '
+            'or the native side never learns the buttons should be shown',
+      );
+    });
+
+    testWidgets('hides the traffic lights when chrome auto-hides',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      // The leading `false` is the initState mount assertion; the trailing
+      // `true` is the auto-hide.
+      expect(calls, [false, true]);
+    });
+
+    testWidgets('shows the traffic lights again when chrome reappears on tap',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(calls, [false, true]);
+
+      await tester.tapAt(const Offset(400, 300));
+      await tester.pumpAndSettle();
+
+      expect(calls, [false, true, false]);
+    });
+
+    testWidgets(
+        'never calls the callback for auto-hide while paused, since chrome '
+        'never hides (only the initState mount assertion fires)',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: false,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpAndSettle();
+
+      expect(calls, [false]);
+    });
+
+    testWidgets(
+        'restores the traffic lights on dispose even if chrome was hidden',
+        (tester) async {
+      final calls = <bool>[];
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            isPlaying: true,
+            onTrafficLightsHidden: calls.add,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(calls, [false, true]);
+
+      // Replace the tree so ChromeVisibility disposes.
+      await tester.pumpWidget(_host(const Text('gone')));
+
+      expect(calls, [false, true, false]);
+    });
+  });
+
   group('PlaybackChrome gating', () {
     late Player player;
 
