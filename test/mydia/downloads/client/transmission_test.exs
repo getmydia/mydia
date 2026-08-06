@@ -328,6 +328,94 @@ defmodule Mydia.Downloads.Client.TransmissionTest do
     end
   end
 
+  describe "get_status/2 file list (Bypass)" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        @config
+        | host: "localhost",
+          port: bypass.port
+      }
+
+      {:ok, bypass: bypass, config: config}
+    end
+
+    defp respond_torrent_get(conn, session_id, arguments_assertion, torrents) do
+      case Plug.Conn.get_req_header(conn, "x-transmission-session-id") do
+        [] ->
+          conn
+          |> Plug.Conn.put_resp_header("x-transmission-session-id", session_id)
+          |> Plug.Conn.resp(409, "")
+
+        [^session_id] ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+          decoded = Jason.decode!(body)
+          assert decoded["method"] == "torrent-get"
+          arguments_assertion.(decoded["arguments"])
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(
+            200,
+            Jason.encode!(%{"result" => "success", "arguments" => %{"torrents" => torrents}})
+          )
+      end
+    end
+
+    test "requests the files field and resolves it to absolute paths",
+         %{bypass: bypass, config: config} do
+      torrent = %{
+        "hashString" => "abc123",
+        "name" => "House.of.the.Dragon.S03E07.1080p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-QAsH",
+        "status" => 4,
+        "percentDone" => 0.1,
+        "downloadDir" => "/downloads",
+        "files" => [
+          %{"name" => "C7466DBA33FE8C5F53F0F80ED8BCFC62242EF310.exe", "length" => 891_885_056}
+        ]
+      }
+
+      Bypass.expect(bypass, "POST", "/transmission/rpc", fn conn ->
+        respond_torrent_get(
+          conn,
+          "session-files",
+          fn args ->
+            assert "files" in args["fields"]
+            assert args["ids"] == ["abc123"]
+          end,
+          [torrent]
+        )
+      end)
+
+      assert {:ok, status} = Transmission.get_status(config, "abc123")
+      assert status.files == ["/downloads/C7466DBA33FE8C5F53F0F80ED8BCFC62242EF310.exe"]
+    end
+
+    test "returns nil when the client reports no files yet",
+         %{bypass: bypass, config: config} do
+      torrent = %{
+        "hashString" => "def456",
+        "name" => "Some.Show.S01E01",
+        "status" => 4,
+        "percentDone" => 0.0,
+        "downloadDir" => "/downloads"
+      }
+
+      Bypass.expect(bypass, "POST", "/transmission/rpc", fn conn ->
+        respond_torrent_get(
+          conn,
+          "session-nofiles",
+          fn args -> assert "files" in args["fields"] end,
+          [torrent]
+        )
+      end)
+
+      assert {:ok, status} = Transmission.get_status(config, "def456")
+      assert status.files == nil
+    end
+  end
+
   # Note: Full integration tests would require either:
   # 1. A real Transmission instance (can be configured via environment variables)
   # 2. HTTP mocking library like Bypass or Mox to simulate Transmission RPC responses

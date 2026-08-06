@@ -41,6 +41,13 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :seeders,
     :leechers,
     :save_path,
+    # Absolute paths of the files inside this torrent, when the client reports
+    # them (rqbit, qBittorrent, rtorrent, Transmission). Populated as soon as
+    # the client knows the torrent's metadata, which for a direct .torrent add
+    # is immediate and for a magnet is typically seconds — well before the
+    # payload finishes downloading. `nil` when the client doesn't report a
+    # file list or hasn't resolved one yet.
+    :files,
     :completed_at,
     :error_message,
     # Client-reported failure detail. Deliberately SEPARATE from
@@ -124,6 +131,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           seeders: integer() | nil,
           leechers: integer() | nil,
           save_path: String.t() | nil,
+          files: [String.t()] | nil,
           completed_at: DateTime.t() | nil,
           error_message: String.t() | nil,
           client_failure_category: FailureCategory.t() | nil,
