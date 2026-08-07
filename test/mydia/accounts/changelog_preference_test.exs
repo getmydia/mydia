@@ -129,7 +129,20 @@ defmodule Mydia.Accounts.ChangelogPreferenceTest do
           # racers. Without the participant flag, a concurrently-running async
           # test that touches user_preferences would consume a barrier slot and
           # silently stop these two from rendezvousing at all.
-          if Process.get(:first_mount_race_participant) and
+          #
+          # The `false` default on Process.get/2 is load-bearing, not cosmetic:
+          # `and` requires a strict boolean, and Process.get/1 returns `nil` for
+          # every non-participant process. Under CI's concurrency, some other
+          # async test's query is virtually guaranteed to hit this handler while
+          # it is attached; `nil and ...` raises inside the handler, and
+          # :telemetry detaches a crashing handler permanently. If that happens
+          # after one racer has already registered on the barrier but before
+          # the other racer's SELECT fires, the detached handler never runs for
+          # the second racer, the first racer's `receive` below never gets its
+          # :first_mount_race_go, and the test hangs until Task.await_many times
+          # out. This is not hypothetical: it reproduced locally (handler crash
+          # logged, detached mid-test) before this default was added.
+          if Process.get(:first_mount_race_participant, false) and
                metadata.source == "user_preferences" and String.starts_with?(query, "SELECT") and
                is_nil(Process.get(:first_mount_race_synced)) do
             Process.put(:first_mount_race_synced, true)
@@ -155,7 +168,15 @@ defmodule Mydia.Accounts.ChangelogPreferenceTest do
           end)
         end
 
-      [pref_a, pref_b] = Task.await_many(tasks, 2_000)
+      # 2s was tight under CI's PostgreSQL job even with the handler crash
+      # above fixed: this test's two racer processes share the single DB
+      # connection the test already checked out of the sandbox pool, so their
+      # queries serialize on it, and under CI's concurrent-test load the
+      # shared Postgres server and a schedulers_online()-sized batch of async
+      # test modules can legitimately push each query's round trip well past
+      # a couple hundred ms. This is slack for contention, not a change to
+      # the rendezvous logic above.
+      [pref_a, pref_b] = Task.await_many(tasks, 5_000)
 
       # Whichever process lost the race, get_user_preference!/1 must hand
       # both callers the row that is actually in the database, not a
