@@ -256,6 +256,56 @@ defmodule Mydia.Settings.DownloadClientConfigTest do
       assert changeset.valid?
     end
 
+    # HTML checkboxes submit form params as strings, not real booleans: a
+    # checked checkbox sends "true", not true. This mirrors what the admin
+    # LiveView form (components.ex) actually posts.
+    test "remote_fetch disabled as the string \"false\" does not require any fields" do
+      attrs = put_remote_fetch(@qbittorrent_attrs, %{"enabled" => "false"})
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "remote_fetch enabled as the string \"true\" is validated like the boolean" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => "true",
+          "host" => "seedbox.example.com",
+          "username" => "seeduser",
+          "auth_method" => "password",
+          "password" => "hunter2"
+        })
+
+      assert {:ok, config} = Settings.create_download_client_config(attrs)
+      assert config.connection_settings["remote_fetch"]["host"] == "seedbox.example.com"
+    end
+
+    test "remote_fetch enabled as the string \"true\" without required fields still errors" do
+      attrs = put_remote_fetch(@qbittorrent_attrs, %{"enabled" => "true"})
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+      assert Enum.any?(errors_on(changeset).connection_settings, &(&1 =~ "host can't be blank"))
+    end
+
+    # The admin form always renders the remote_fetch host/username/etc.
+    # inputs for these client types once the section exists in the DOM,
+    # regardless of whether the operator ever checks "enabled" — an
+    # unchecked checkbox is simply omitted from the submitted params. A
+    # save of an untouched section must not fail validation just because
+    # "enabled" is absent while its sibling (irrelevant, blank) fields are
+    # present.
+    test "remote_fetch present without an enabled key does not require any fields" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "host" => "",
+          "username" => "",
+          "auth_method" => "password",
+          "password" => ""
+        })
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      assert changeset.valid?
+    end
+
     test "valid password-auth remote_fetch config round-trips through the DB" do
       attrs =
         put_remote_fetch(@qbittorrent_attrs, %{

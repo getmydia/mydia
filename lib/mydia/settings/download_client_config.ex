@@ -251,13 +251,29 @@ defmodule Mydia.Settings.DownloadClientConfig do
     end
   end
 
+  # `enabled` is matched against both the real boolean and its string form:
+  # HTML checkboxes submit form params as strings ("true"/"false"), while
+  # callers that build the map programmatically (tests, seed scripts) tend to
+  # use real booleans. A missing key is treated as disabled rather than an
+  # error, because the admin UI always renders the other remote_fetch inputs
+  # (host, username, ...) for qBittorrent/Transmission/rqbit/rTorrent clients
+  # regardless of whether the operator ever opens that section — an untouched
+  # section round-trips its (irrelevant) empty field values with no
+  # "enabled" key at all, since an unchecked checkbox is omitted from form
+  # params entirely.
   defp validate_remote_fetch_config(changeset) do
     case get_field(changeset, :connection_settings) do
-      %{"remote_fetch" => %{"enabled" => true} = remote_fetch} ->
-        validate_remote_fetch_enabled(changeset, remote_fetch)
+      %{"remote_fetch" => remote_fetch} when is_map(remote_fetch) ->
+        case Map.get(remote_fetch, "enabled", false) do
+          enabled when enabled in [true, "true"] ->
+            validate_remote_fetch_enabled(changeset, remote_fetch)
 
-      %{"remote_fetch" => %{"enabled" => false}} ->
-        changeset
+          enabled when enabled in [false, "false", nil] ->
+            changeset
+
+          _other ->
+            add_error(changeset, :connection_settings, "remote_fetch.enabled must be a boolean")
+        end
 
       %{"remote_fetch" => _other} ->
         add_error(changeset, :connection_settings, "remote_fetch.enabled must be a boolean")
