@@ -41,10 +41,18 @@ defmodule Mydia.Downloads.SeedboxTest do
     |> Repo.insert!()
   end
 
+  # `name` defaults to a fresh value on every call (not a fixed "seedbox-qbit")
+  # so that `Fetcher.count_running/1` — keyed by this name — can never see a
+  # real or fake fetcher left registered by an earlier test. `Fetcher.claim/1`
+  # starts a real, long-lived GenServer on the *global* Seedbox.FetcherSupervisor
+  # (not `start_supervised!`-scoped), so anything claimed under a name reused
+  # across tests lingers into later tests and inflates their cap check —
+  # previously a genuine source of test-order-dependent flakiness in the two
+  # "claims a fetcher" tests below. See test-4-report.md's fix-round entry.
   defp client_config(overrides \\ %{}) do
     Map.merge(
       %{
-        name: "seedbox-qbit",
+        name: "seedbox-qbit-#{System.unique_integer([:positive])}",
         download_directory: "/tmp/downloads",
         connection_settings: %{
           "remote_fetch" => %{
@@ -195,14 +203,22 @@ defmodule Mydia.Downloads.SeedboxTest do
   end
 
   test "respects max_concurrent_transfers and does not claim beyond the cap" do
-    download_a = insert_download!("seedbox-qbit", "torrent-a")
-    download_b = insert_download!("seedbox-qbit", "torrent-b")
-    fake_running_fetcher!(download_a.id, "seedbox-qbit")
+    # `client_name` must stay consistent across `insert_download!`,
+    # `fake_running_fetcher!`, and `config`'s own `:name` below — the cap
+    # check (`Fetcher.count_running(client_name)`) only sees the fake
+    # fetcher if it's registered under the *same* name the config claims
+    # under. Using one fresh unique name for all three keeps this test
+    # isolated from every other test's own claimed/fake fetchers too.
+    client_name = "seedbox-qbit-#{System.unique_integer([:positive])}"
+    download_a = insert_download!(client_name, "torrent-a")
+    download_b = insert_download!(client_name, "torrent-b")
+    fake_running_fetcher!(download_a.id, client_name)
 
     torrents = [torrent(id: "torrent-b", state: :seeding)]
 
     config =
       client_config(%{
+        name: client_name,
         connection_settings: %{
           "remote_fetch" =>
             client_config().connection_settings["remote_fetch"]
