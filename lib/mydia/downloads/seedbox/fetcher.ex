@@ -122,7 +122,8 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
     case Connection.open(state.remote_fetch) do
       {:ok, channel, cleanup} ->
         try do
-          with :ok <- transfer_all(channel, state) do
+          with :ok <- transfer_all(channel, state),
+               :ok <- maybe_delete_remote(channel, state) do
             finalize(state)
           end
         after
@@ -141,10 +142,103 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
         transfer_file(channel, state.remote_path, local_path, size, state)
 
       {:ok, %File.Stat{type: :directory}} ->
-        {:error, :directory_transfer_not_yet_implemented}
+        transfer_directory(channel, state.remote_path, state)
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp transfer_directory(channel, remote_dir, state) do
+    case list_files_recursive(channel, remote_dir, remote_dir) do
+      {:ok, entries} ->
+        Enum.reduce_while(entries, :ok, fn {remote_file, relative_path, size}, :ok ->
+          local_path = local_final_path(state, relative_path)
+
+          case transfer_file(channel, remote_file, local_path, size, state) do
+            :ok -> {:cont, :ok}
+            {:error, _} = err -> {:halt, err}
+          end
+        end)
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  # Walks `dir`, recursing into subdirectories, returning
+  # `{remote_path, path_relative_to_root, size}` for every regular file.
+  # `root` stays fixed across the recursion so `relative_path` mirrors the
+  # torrent's own directory structure under the local download directory.
+  defp list_files_recursive(channel, dir, root) do
+    case :ssh_sftp.list_dir(channel, to_charlist(dir)) do
+      {:ok, names} ->
+        names
+        |> Enum.map(&to_string/1)
+        |> Enum.reject(&(&1 in [".", ".."]))
+        |> Enum.reduce_while({:ok, []}, fn name, {:ok, acc} ->
+          entry_path = Path.join(dir, name)
+
+          case to_stat(:ssh_sftp.read_file_info(channel, to_charlist(entry_path))) do
+            {:ok, %File.Stat{type: :directory}} ->
+              case list_files_recursive(channel, entry_path, root) do
+                {:ok, nested} -> {:cont, {:ok, nested ++ acc}}
+                {:error, _} = err -> {:halt, err}
+              end
+
+            {:ok, %File.Stat{type: :regular, size: size}} ->
+              relative = Path.relative_to(entry_path, root)
+              {:cont, {:ok, [{entry_path, relative, size} | acc]}}
+
+            {:ok, _other_type} ->
+              {:cont, {:ok, acc}}
+
+            {:error, reason} ->
+              {:halt, {:error, reason}}
+          end
+        end)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp maybe_delete_remote(channel, state) do
+    if Map.get(state.remote_fetch, "delete_after_transfer", false) do
+      delete_remote_recursive(channel, state.remote_path)
+    else
+      :ok
+    end
+  end
+
+  defp delete_remote_recursive(channel, remote_path) do
+    case to_stat(:ssh_sftp.read_file_info(channel, to_charlist(remote_path))) do
+      {:ok, %File.Stat{type: :directory}} ->
+        delete_remote_directory(channel, remote_path)
+
+      {:ok, %File.Stat{type: :regular}} ->
+        :ssh_sftp.delete(channel, to_charlist(remote_path))
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp delete_remote_directory(channel, remote_path) do
+    with {:ok, names} <- :ssh_sftp.list_dir(channel, to_charlist(remote_path)) do
+      names
+      |> Enum.map(&to_string/1)
+      |> Enum.reject(&(&1 in [".", ".."]))
+      |> Enum.reduce_while(:ok, fn name, :ok ->
+        case delete_remote_recursive(channel, Path.join(remote_path, name)) do
+          :ok -> {:cont, :ok}
+          {:error, _} = err -> {:halt, err}
+        end
+      end)
+      |> case do
+        :ok -> :ssh_sftp.del_dir(channel, to_charlist(remote_path))
+        err -> err
+      end
     end
   end
 
