@@ -2,6 +2,8 @@ import 'artwork.dart';
 import 'season_info.dart';
 import 'next_episode.dart';
 import 'show_next_up.dart';
+import 'cast_member.dart';
+import 'recently_added_item.dart';
 
 class ShowDetail {
   final String id;
@@ -25,6 +27,9 @@ class ShowDetail {
   final NextEpisode? nextEpisode;
   final ShowNextUp? nextUp;
   final bool isFavorite;
+  final List<CastMember> cast;
+  final String? trailerUrl;
+  final List<RecentlyAddedItem> similar;
 
   const ShowDetail({
     required this.id,
@@ -48,6 +53,9 @@ class ShowDetail {
     this.nextEpisode,
     this.nextUp,
     required this.isFavorite,
+    this.cast = const [],
+    this.trailerUrl,
+    this.similar = const [],
   });
 
   factory ShowDetail.fromJson(Map<String, dynamic> json) {
@@ -85,6 +93,16 @@ class ShowDetail {
           ? ShowNextUp.fromJson(json['nextUp'] as Map<String, dynamic>)
           : null,
       isFavorite: json['isFavorite'] as bool? ?? false,
+      cast: (json['cast'] as List<dynamic>?)
+              ?.map((e) => CastMember.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      trailerUrl: json['trailerUrl'] as String?,
+      similar: (json['similar'] as List<dynamic>?)
+              ?.map(
+                  (e) => RecentlyAddedItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/models/progress.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
@@ -31,6 +32,7 @@ Future<void> _pump(
   WidgetTester tester,
   Episode episode, {
   VoidCallback? onTap,
+  bool selected = false,
 }) async {
   await mockNetworkImages(() async {
     await tester.pumpWidget(
@@ -45,6 +47,7 @@ Future<void> _pump(
               showTitle: 'Test Show',
               showId: 'show-1',
               onTap: onTap,
+              selected: selected,
             ),
           ),
         ),
@@ -152,5 +155,29 @@ void main() {
     await _pump(tester, _episode(thumbnailUrl: null));
 
     expect(find.byIcon(Icons.tv_rounded), findsOneWidget);
+  });
+
+  testWidgets('selected draws a highlighted border, unselected does not',
+      (tester) async {
+    await _pump(tester, _episode(), selected: true);
+
+    final container = tester.widget<Container>(
+      find.byKey(const ValueKey('episode-card-border')),
+    );
+    final decoration = container.decoration as BoxDecoration;
+    final border = decoration.border as Border;
+    expect(border.top.color, AppColors.primary);
+    expect(border.top.width, 2);
+
+    await _pump(tester, _episode());
+
+    final unselectedContainer = tester.widget<Container>(
+      find.byKey(const ValueKey('episode-card-border')),
+    );
+    final unselectedDecoration =
+        unselectedContainer.decoration as BoxDecoration;
+    final unselectedBorder = unselectedDecoration.border as Border;
+    expect(unselectedBorder.top.color, Colors.transparent);
+    expect(unselectedBorder.top.width, 2);
   });
 }

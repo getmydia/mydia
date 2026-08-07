@@ -172,4 +172,82 @@ void main() {
       expect(movie.watchedAtDisplay, '');
     });
   });
+
+  group('MovieDetail.fromJson new hero fields', () {
+    Map<String, dynamic> baseJson() => {
+          'id': 'm-1',
+          'title': 'Meridian Drift',
+          'monitored': true,
+          'artwork': null,
+          'isFavorite': false,
+        };
+
+    test('parses cast, trailerUrl, and similar', () {
+      final json = {
+        ...baseJson(),
+        'cast': [
+          {
+            'name': 'Ana Bergström',
+            'character': 'Kira Solt',
+            'profileUrl': null
+          },
+        ],
+        'trailerUrl': 'https://www.youtube.com/watch?v=abc123',
+        'similar': [
+          {
+            'id': 's-1',
+            'type': 'movie',
+            'title': 'Low Orbit',
+            'year': 2021,
+            'artwork': null,
+            'addedAt': null,
+          },
+        ],
+      };
+
+      final movie = MovieDetail.fromJson(json);
+
+      expect(movie.cast, hasLength(1));
+      expect(movie.cast.first.name, 'Ana Bergström');
+      expect(movie.trailerUrl, 'https://www.youtube.com/watch?v=abc123');
+      expect(movie.similar, hasLength(1));
+      expect(movie.similar.first.title, 'Low Orbit');
+    });
+
+    test('defaults to empty/null when absent', () {
+      final movie = MovieDetail.fromJson(baseJson());
+
+      expect(movie.cast, isEmpty);
+      expect(movie.trailerUrl, isNull);
+      expect(movie.similar, isEmpty);
+    });
+
+    test('copyWith preserves cast, trailerUrl, and similar', () {
+      final json = {
+        ...baseJson(),
+        'cast': [
+          {'name': 'Ana Bergström', 'character': null, 'profileUrl': null},
+        ],
+        'trailerUrl': 'https://www.youtube.com/watch?v=abc123',
+        'similar': [
+          {
+            'id': 's-1',
+            'type': 'movie',
+            'title': 'Low Orbit',
+            'year': 2021,
+            'artwork': null,
+            'addedAt': null,
+          },
+        ],
+      };
+
+      final movie = MovieDetail.fromJson(json);
+      final toggled = movie.copyWith(isFavorite: true);
+
+      expect(toggled.cast, hasLength(1));
+      expect(toggled.trailerUrl, 'https://www.youtube.com/watch?v=abc123');
+      expect(toggled.similar, hasLength(1));
+      expect(toggled.similar.first.title, 'Low Orbit');
+    });
+  });
 }

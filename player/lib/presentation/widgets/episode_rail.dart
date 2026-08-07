@@ -20,6 +20,7 @@ class EpisodeRail extends StatefulWidget {
 
   /// Invoked when a playable episode card is tapped.
   final ValueChanged<Episode>? onEpisodeTap;
+  final String? selectedEpisodeId;
 
   const EpisodeRail({
     super.key,
@@ -28,6 +29,7 @@ class EpisodeRail extends StatefulWidget {
     this.showId,
     this.showPosterUrl,
     this.onEpisodeTap,
+    this.selectedEpisodeId,
   });
 
   @override
@@ -125,6 +127,7 @@ class _EpisodeRailState extends State<EpisodeRail> {
                   showTitle: widget.showTitle,
                   showId: widget.showId,
                   showPosterUrl: widget.showPosterUrl,
+                  selected: episode.id == widget.selectedEpisodeId,
                   onTap: episode.hasFile && widget.onEpisodeTap != null
                       ? () => widget.onEpisodeTap!(episode)
                       : null,

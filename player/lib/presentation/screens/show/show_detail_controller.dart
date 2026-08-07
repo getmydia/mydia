@@ -77,6 +77,23 @@ query TvShowDetail($id: ID!) {
       }
     }
     isFavorite
+    cast {
+      name
+      character
+      profileUrl
+    }
+    trailerUrl
+    similar {
+      id
+      type
+      title
+      year
+      artwork {
+        posterUrl
+        backdropUrl
+        thumbnailUrl
+      }
+    }
   }
 }
 ''';
@@ -148,6 +165,9 @@ class ShowDetailController extends _$ShowDetailController {
         nextEpisode: currentState.nextEpisode,
         nextUp: currentState.nextUp,
         isFavorite: !currentState.isFavorite,
+        cast: currentState.cast,
+        trailerUrl: currentState.trailerUrl,
+        similar: currentState.similar,
       ),
     );
 
@@ -193,5 +213,24 @@ class SelectedSeason extends _$SelectedSeason {
 
   void select(int seasonNumber) {
     state = seasonNumber;
+  }
+}
+
+// Provider for the episode the hero currently describes on the TV show
+// detail page. Deliberately starts at `null` rather than deriving a default
+// from `showDetailControllerProvider` here: doing so would need `ref.watch`,
+// which would make this provider rebuild — resetting any explicit tap the
+// user already made — every time the show query re-resolves (e.g. after an
+// unrelated favorite toggle invalidation). `ShowDetailScreen` sets the actual
+// default (next-unwatched episode) via a post-frame callback once, the same
+// self-correction idiom `_buildSeasonSelector` already uses for season
+// selection — see show_detail_screen.dart.
+@riverpod
+class SelectedEpisode extends _$SelectedEpisode {
+  @override
+  String? build(String showId) => null;
+
+  void select(String episodeId) {
+    state = episodeId;
   }
 }

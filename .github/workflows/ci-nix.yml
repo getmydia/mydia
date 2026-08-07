@@ -92,10 +92,17 @@ jobs:
       - name: Assert the Android shell resolves the pinned Flutter
         run: nix eval --raw .#packages.x86_64-linux.flutter.version
 
+  # No `needs: build`, intentionally. Nix builds are content-addressed and
+  # reproducible, so `nix build .#checks...nixos-module` below transitively
+  # rebuilds the same package on its own -- there is no correctness reason to
+  # wait for the `build` job. A `needs: build` dependency was tried so this
+  # job could reuse the build job's cache instead of rebuilding (~7 min), but
+  # the build job's own cache-upload step costs ~12 min on its own, more than
+  # the rebuild it was meant to avoid. Running in parallel instead cuts the
+  # workflow's wall-clock critical path roughly in half.
   test-sqlite-module:
     name: Test / NixOS Module (SQLite)
     runs-on: ubuntu-latest
-    needs: build
 
     steps:
       - name: Checkout
@@ -119,7 +126,6 @@ jobs:
   test-postgres-module:
     name: Test / NixOS Module (PostgreSQL)
     runs-on: ubuntu-latest
-    needs: build
 
     steps:
       - name: Checkout

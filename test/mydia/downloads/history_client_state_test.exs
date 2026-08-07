@@ -165,6 +165,69 @@ defmodule Mydia.Downloads.HistoryClientStateTest do
     end
   end
 
+  # Simulates a status-fetch task dying via `exit` (a GenServer.call or pool
+  # checkout timeout) rather than raising — `try/rescue` in
+  # `fetch_all_client_statuses/2` cannot catch an exit, so this is the only
+  # way to reach that code path from a test.
+  defmodule CrashingAdapter do
+    @behaviour Mydia.Downloads.Client
+
+    @impl true
+    def supported_protocols, do: [:torrent]
+    @impl true
+    def test_connection(_config), do: {:ok, %{version: "1.0.0", api_version: "1.0"}}
+    @impl true
+    def add_torrent(_config, _torrent, _opts), do: {:ok, "crash-id"}
+    @impl true
+    def get_status(_config, _client_id), do: {:ok, %{}}
+    @impl true
+    def list_torrents(_config, _opts), do: exit(:simulated_crash)
+    @impl true
+    def pause_torrent(_config, _client_id), do: :ok
+    @impl true
+    def resume_torrent(_config, _client_id), do: :ok
+    @impl true
+    def remove_torrent(_config, _client_id, _opts), do: :ok
+  end
+
+  describe "list_downloads_with_status/1 client status fetch crashes" do
+    test "degrades a crashed status-fetch task to :unreachable instead of vanishing" do
+      alias Mydia.Downloads.Client.Registry
+
+      original =
+        case Registry.get_adapter(:qbittorrent) do
+          {:ok, adapter} -> adapter
+          {:error, _} -> nil
+        end
+
+      Registry.register(:qbittorrent, CrashingAdapter)
+
+      on_exit(fn ->
+        case original do
+          nil -> Registry.unregister(:qbittorrent)
+          adapter -> Registry.register(:qbittorrent, adapter)
+        end
+      end)
+
+      setup_runtime_config([client_config(%{name: "flaky", enabled: true})])
+      media_item = media_item_fixture()
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        download_client: "flaky",
+        download_client_id: "hash-crash"
+      })
+
+      [enriched] = Downloads.list_downloads_with_status(filter: :all)
+
+      # Must read the same as a client that answered "down" cleanly, not as
+      # a disabled/removed one — a crash mid-poll must not flip this
+      # download to "missing" (see DownloadMonitor's missing-handler).
+      assert enriched.client_config_state == :present
+      assert enriched.status == "unknown"
+    end
+  end
+
   defp torrent_payload(hash) do
     %{
       "hash" => hash,

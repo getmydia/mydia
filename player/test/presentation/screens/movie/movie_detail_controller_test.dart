@@ -5,6 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 // The same pattern is used in season_episodes_controller_test.dart.
 // ignore: depend_on_referenced_packages
 import 'package:gql/ast.dart' show OperationDefinitionNode;
+// `DocumentNode` has no `toString()` override (it prints as `Instance of
+// 'DocumentNode'`), so getting the request's query text back out requires
+// the AST printer. Same pattern as `lib/core/graphql/p2p_link.dart` and
+// `lib/core/downloads/p2p_download_job_service.dart`.
+// ignore: depend_on_referenced_packages
+import 'package:gql/language.dart' show printNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/domain/models/artwork.dart';
@@ -258,6 +264,31 @@ void main() {
       );
 
       expect(container.read(provider).value!.isWatched, isFalse);
+    });
+  });
+
+  group('MovieDetailController new hero fields', () {
+    test('requests cast, trailerUrl, and similar', () async {
+      final link = StubLink((request, _) {
+        return {'__typename': 'Query', 'movie': _movieJson()};
+      });
+
+      final container = ProviderContainer(
+        overrides: [
+          asyncGraphqlClientProvider.overrideWith(
+            (ref) async => stubClient(link),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final provider = movieDetailControllerProvider('m-1');
+      await waitForValue(container, provider, (v) => v.id == 'm-1');
+
+      final queryText = printNode(link.requests.first.operation.document);
+      expect(queryText, contains('cast'));
+      expect(queryText, contains('trailerUrl'));
+      expect(queryText, contains('similar'));
     });
   });
 }
