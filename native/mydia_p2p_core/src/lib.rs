@@ -14,9 +14,10 @@ use iroh_relay::RelayQuicConfig;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
-use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+
+mod runtime;
 
 // Protocol identifier for mydia connections
 const ALPN: &[u8] = b"/mydia/1.0.0";
@@ -413,10 +414,12 @@ impl Host {
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(32);
         let (event_tx, event_rx) = mpsc::channel::<Event>(100);
 
-        // Spawn the event loop in a background thread with its own runtime
-        std::thread::spawn(move || {
-            let rt = Runtime::new().expect("Failed to create Tokio runtime");
-            rt.block_on(run_event_loop(secret_key, config, cmd_rx, event_tx));
+        // Spawn the event loop. On native this lands on the shared tokio
+        // runtime; in a browser it lands on the microtask queue. `Host::new`
+        // is called from a plain thread with no ambient runtime, so the
+        // spawn itself has to happen inside `block_on`'s runtime context.
+        runtime::block_on(async {
+            runtime::spawn(run_event_loop(secret_key, config, cmd_rx, event_tx));
         });
 
         (
