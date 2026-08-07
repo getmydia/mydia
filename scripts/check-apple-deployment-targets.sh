@@ -24,14 +24,29 @@ macos_found=""
 # never sees a version pattern and that word on one line.
 num='[0-9][0-9.]*[0-9]'
 
-# scan <platform> <file> <grep-pattern>
+# Every shape a deployment target takes, per platform: a Podfile `platform`
+# directive, an Xcode build setting, and a podspec `s.platform`. The build
+# setting also turns up inside Podfile post_install blocks that force pods up
+# to the app's own floor, so a Podfile can carry two literals rather than one.
 #
-# Records every version literal on lines of <file> matching <grep-pattern>.
-# A file that is missing, or that yields no literal, is an error: a check that
-# passes because it found nothing is worse than no check at all.
+# Each file is scanned with its platform's whole set rather than one pattern
+# per file, so a second literal added to any of them is caught automatically.
+ios_pattern='platform :ios,|IPHONEOS_DEPLOYMENT_TARGET|s\.platform *= *:ios,'
+macos_pattern='platform :osx,|MACOSX_DEPLOYMENT_TARGET|s\.platform *= *:osx,'
+
+# scan <platform> <file>
+#
+# Records every version literal on lines of <file> that declare a deployment
+# target. A file that is missing, or that yields no literal, is an error: a
+# check that passes because it found nothing is worse than no check at all.
 scan() {
-  local platform="$1" file="$2" pattern="$3"
-  local hits
+  local platform="$1" file="$2"
+  local pattern hits
+
+  case "$platform" in
+    ios) pattern="$ios_pattern" ;;
+    macos) pattern="$macos_pattern" ;;
+  esac
 
   if [ ! -f "$file" ]; then
     printf '::error::%s is missing, so its deployment target cannot be checked\n' "$file"
@@ -98,14 +113,14 @@ verdict() {
   fi
 }
 
-scan ios player/ios/Podfile 'platform :ios,'
-scan ios player/ios/Runner.xcodeproj/project.pbxproj 'IPHONEOS_DEPLOYMENT_TARGET'
-scan ios player/rust_builder/ios/mydia_player_p2p.podspec 's\.platform *= *:ios,'
+scan ios player/ios/Podfile
+scan ios player/ios/Runner.xcodeproj/project.pbxproj
+scan ios player/rust_builder/ios/mydia_player_p2p.podspec
 scan_app_framework_plist player/ios/Flutter/AppFrameworkInfo.plist
 
-scan macos player/macos/Podfile 'platform :osx,'
-scan macos player/macos/Runner.xcodeproj/project.pbxproj 'MACOSX_DEPLOYMENT_TARGET'
-scan macos player/rust_builder/macos/mydia_player_p2p.podspec 's\.platform *= *:osx,'
+scan macos player/macos/Podfile
+scan macos player/macos/Runner.xcodeproj/project.pbxproj
+scan macos player/rust_builder/macos/mydia_player_p2p.podspec
 
 verdict iOS "$ios_found"
 verdict macOS "$macos_found"
