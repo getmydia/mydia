@@ -43,6 +43,9 @@ fn start_host<'a>(
         relay_url,
         bind_port,
         keypair_path,
+        // The server reads its identity off disk; only a browser hands raw
+        // bytes in.
+        keypair_bytes: None,
     };
     let (host, node_id_str) = Host::new(config);
     let resource = ResourceArc::new(HostResource { host });

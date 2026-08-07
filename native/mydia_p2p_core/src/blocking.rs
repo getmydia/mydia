@@ -2,12 +2,14 @@
 //!
 //! The Rustler NIF is called from Erlang scheduler threads and cannot be
 //! async, so it drives the async `Host` through here. Native only: a browser
-//! cannot block its only thread, and nothing in the wasm build needs to.
-
-#![cfg(not(target_arch = "wasm32"))]
+//! cannot block its only thread, and nothing in the wasm build needs to. The
+//! `cfg` that enforces that lives on the `mod` in `lib.rs`, so on wasm this
+//! file is never parsed and the module genuinely does not exist.
 
 use crate::runtime::block_on;
-use crate::{HlsResponseHeader, Host, MydiaResponse, NetworkStats};
+#[cfg(feature = "host")]
+use crate::HlsResponseHeader;
+use crate::{Host, MydiaResponse, NetworkStats};
 
 pub fn dial(host: &Host, endpoint_addr_json: String) -> Result<(), String> {
     block_on(host.dial(endpoint_addr_json))
@@ -29,6 +31,7 @@ pub fn send_response(
     block_on(host.send_response(request_id, response))
 }
 
+#[cfg(feature = "host")]
 pub fn send_hls_header(
     host: &Host,
     stream_id: String,
@@ -37,14 +40,17 @@ pub fn send_hls_header(
     block_on(host.send_hls_header(stream_id, header))
 }
 
+#[cfg(feature = "host")]
 pub fn send_hls_chunk(host: &Host, stream_id: String, data: Vec<u8>) -> Result<(), String> {
     block_on(host.send_hls_chunk(stream_id, data))
 }
 
+#[cfg(feature = "host")]
 pub fn finish_hls_stream(host: &Host, stream_id: String) -> Result<(), String> {
     block_on(host.finish_hls_stream(stream_id))
 }
 
+#[cfg(feature = "host")]
 pub fn stream_file_range(
     host: &Host,
     stream_id: String,

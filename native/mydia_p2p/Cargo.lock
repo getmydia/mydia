@@ -1751,6 +1751,7 @@ dependencies = [
  "android_logger",
  "anyhow",
  "futures",
+ "getrandom 0.4.3",
  "iroh",
  "iroh-relay",
  "n0-future",

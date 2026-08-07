@@ -157,6 +157,7 @@ impl P2pHost {
             relay_url,
             bind_port: None,
             keypair_path: None,
+            keypair_bytes: None,
         };
         let (host, node_id) = Host::new(config);
         let hls_requester = host.hls_requester();

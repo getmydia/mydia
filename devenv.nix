@@ -186,6 +186,17 @@ in
     # IEx shell history.
     ERL_AFLAGS = "-kernel shell_history enabled";
 
+    # C cross-compilation for the wasm32-unknown-unknown target listed under
+    # languages.rust above. `ring`, which is rustls' crypto provider and so
+    # iroh's, compiles C sources through cc-rs, and cc-rs falls back to the
+    # ambient CC, which nix sets to a host gcc wrapper. That silently yields
+    # x86-64 objects rust-lld then refuses to link. The nix clang *wrapper* is
+    # no better: it injects host glibc include paths and hardening flags
+    # (-fzero-call-used-regs) that clang rejects for wasm. An unwrapped clang
+    # plus llvm-ar is what actually cross-compiles.
+    CC_wasm32_unknown_unknown = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
+    AR_wasm32_unknown_unknown = "${pkgs.llvmPackages.llvm}/bin/llvm-ar";
+
     # Shared, worktree-independent caches (KTD4 / R11).
     MIX_HOME = "${sharedCache}/mix";
     HEX_HOME = "${sharedCache}/hex";

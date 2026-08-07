@@ -244,6 +244,13 @@ jobs:
       - name: Core tests
         run: devenv shell -- cargo test --manifest-path native/mydia_p2p_core/Cargo.toml
 
+      # The browser build. `--no-default-features` drops the `host` feature,
+      # which is what makes the server role (inbound accept, HLS responses,
+      # file reads) compile out. wasm32-unknown-unknown comes from devenv.nix,
+      # so there is no target install step.
+      - name: wasm build
+        run: devenv shell -- cargo build --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features
+
   test-postgres:
     name: Test / PostgreSQL
     runs-on: ubuntu-latest

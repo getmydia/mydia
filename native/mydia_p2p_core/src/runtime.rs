@@ -1,4 +1,4 @@
-//! Task spawning that works on both native and wasm targets.
+//! Task spawning and timers that work on both native and wasm targets.
 //!
 //! Each `Host` used to spawn its own OS thread with its own tokio `Runtime`.
 //! A browser has neither, so the spawn point lives here instead. `n0-future`
@@ -6,6 +6,15 @@
 //! `Send` bound, which matters because iroh's browser futures are not `Send`.
 
 pub use n0_future::task::spawn;
+
+/// Timers that work on both targets.
+///
+/// `tokio::time` needs a tokio reactor to drive it and there is none in a
+/// browser, and `std::time::Instant::now` panics outright on
+/// `wasm32-unknown-unknown`. Both would compile and then fail at runtime,
+/// which is the worst shape for a portability bug. `n0_future::time` is
+/// tokio's on native and the browser's timer APIs on wasm.
+pub use n0_future::time;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
