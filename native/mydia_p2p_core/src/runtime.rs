@@ -7,22 +7,55 @@
 
 pub use n0_future::task::spawn;
 
-/// Drive a future to completion from a synchronous caller.
-///
-/// Native only. The Rustler NIF calls this from Erlang scheduler threads,
-/// which are never tokio runtime threads, so the usual "block_on inside a
-/// runtime panics" hazard does not apply. There is no wasm equivalent and
-/// there cannot be one: a browser cannot block its only thread.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn block_on<F: std::future::Future>(future: F) -> F::Output {
+mod imp {
     use std::sync::OnceLock;
-    use tokio::runtime::Runtime;
+    use tokio::runtime::{EnterGuard, Runtime};
 
     static RUNTIME: OnceLock<Runtime> = OnceLock::new();
 
-    RUNTIME
-        .get_or_init(|| {
+    fn runtime() -> &'static Runtime {
+        RUNTIME.get_or_init(|| {
             Runtime::new().expect("failed to create the mydia_p2p_core tokio runtime")
         })
-        .block_on(future)
+    }
+
+    /// Enter the runtime context so `spawn` has a reactor to attach to.
+    ///
+    /// `spawn` panics without one, and `Host::new` is called from threads
+    /// that have none: BEAM schedulers through the Rustler NIF, and the Dart
+    /// isolate thread through the Flutter bridge. Entering rather than
+    /// blocking keeps `Host::new` portable, since a browser has no reactor to
+    /// enter and no thread it may block.
+    ///
+    /// Nesting is safe: entering from inside the runtime is a no-op, unlike
+    /// `block_on`, which panics there.
+    pub fn enter() -> EnterGuard<'static> {
+        runtime().enter()
+    }
+
+    /// Drive a future to completion from a synchronous caller.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called from within a tokio runtime context. Callers must be
+    /// plain synchronous threads. Today the only caller is the Rustler NIF,
+    /// which runs on BEAM scheduler threads. Never call this from code that
+    /// also has to compile for wasm; use [`enter`] instead.
+    pub fn block_on<F: std::future::Future>(future: F) -> F::Output {
+        runtime().block_on(future)
+    }
 }
+
+#[cfg(target_arch = "wasm32")]
+mod imp {
+    /// No-op guard. A browser has a single implicit executor, so there is no
+    /// context to enter, but callers stay identical across targets.
+    pub struct EnterGuard;
+
+    pub fn enter() -> EnterGuard {
+        EnterGuard
+    }
+}
+
+pub use imp::*;

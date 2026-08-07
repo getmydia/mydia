@@ -17,7 +17,7 @@ use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
-mod runtime;
+pub mod runtime;
 
 // Protocol identifier for mydia connections
 const ALPN: &[u8] = b"/mydia/1.0.0";
@@ -415,12 +415,14 @@ impl Host {
         let (event_tx, event_rx) = mpsc::channel::<Event>(100);
 
         // Spawn the event loop. On native this lands on the shared tokio
-        // runtime; in a browser it lands on the microtask queue. `Host::new`
-        // is called from a plain thread with no ambient runtime, so the
-        // spawn itself has to happen inside `block_on`'s runtime context.
-        runtime::block_on(async {
-            runtime::spawn(run_event_loop(secret_key, config, cmd_rx, event_tx));
-        });
+        // runtime; in a browser it lands on the microtask queue.
+        //
+        // The guard is required: `Host::new` is called from threads with no
+        // ambient runtime (BEAM schedulers, the Dart isolate thread) and
+        // `spawn` panics without a reactor. Entering rather than blocking is
+        // what keeps this function compilable for wasm.
+        let _guard = runtime::enter();
+        runtime::spawn(run_event_loop(secret_key, config, cmd_rx, event_tx));
 
         (
             Host {
