@@ -124,6 +124,9 @@ app.*.map.json
 
 # Web
 /web/flutter_service_worker.js
+# wasm build output from tool/build_web.sh; flutter build web copies it into
+# build/web/pkg/, where frb_generated.dart's loader expects to find it.
+/web/pkg/
 
 # Exceptions
 !**/ios/**/default.mode1v3

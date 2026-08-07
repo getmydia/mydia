@@ -1,0 +1,14 @@
+# Cross-origin isolation, required by the p2p wasm module.
+#
+# flutter_rust_bridge runs Rust calls on web workers that share the wasm
+# module's linear memory, so the module is built with a shared memory
+# (tool/build_web.sh). A shared memory is a SharedArrayBuffer, and a browser
+# only hands one out on a cross-origin isolated page. Without these two
+# headers the module fails to instantiate and `RustLib.init()` throws.
+#
+# This is the Cloudflare Pages / Netlify `_headers` format. Flutter copies
+# web/ into build/web/ verbatim, so it also lands in the same-origin bundle a
+# Mydia instance serves at /player, where nothing reads it and it is inert.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp

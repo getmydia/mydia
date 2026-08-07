@@ -1,7 +1,8 @@
 mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
-use mydia_p2p_core::{Host, Event, MydiaRequest, MydiaResponse, PairingRequest, GraphQLRequest, HlsRequest, HlsRequester, HostConfig, PeerConnectionType};
+use mydia_p2p_core::{runtime, Host, Event, MydiaRequest, MydiaResponse, PairingRequest, GraphQLRequest, HlsRequest, HlsRequester, HostConfig, PeerConnectionType};
 use flutter_rust_bridge::frb;
 use crate::frb_generated::StreamSink;
+#[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[frb(init)]
@@ -20,8 +21,16 @@ pub fn init_app() {
             .with_tag("mydia_p2p"),
     );
 
-    // Initialize tracing for mydia_p2p_core and iroh (which use tracing:: macros)
-    // This must be done BEFORE Host::new() is called to capture iroh's startup logs
+    init_logging();
+
+    log::info!("mydia_player_p2p initialized");
+}
+
+/// Point `tracing` at the platform's log sink.
+///
+/// Must run before `Host::new`, so iroh's startup logs are captured.
+#[cfg(not(target_arch = "wasm32"))]
+fn init_logging() {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,mydia_p2p_core=debug,iroh=info,noq=warn,rustls=warn"));
 
@@ -42,8 +51,21 @@ pub fn init_app() {
             .with(tracing_subscriber::fmt::layer())
             .try_init();
     }
+}
 
-    log::info!("mydia_player_p2p initialized");
+/// A browser build deliberately installs no tracing subscriber.
+///
+/// `tracing_subscriber::fmt` cannot be used here on two counts: its default
+/// timer calls `std::time::SystemTime::now`, which panics outright on
+/// `wasm32-unknown-unknown`, and its default writer is stdout, which a browser
+/// does not have. Leaving the global dispatcher unset is what makes
+/// `tracing`'s `log` feature, enabled for this target only, forward every
+/// event to the `log` crate, and `setup_default_user_utils` above has already
+/// pointed `log` at the browser console. That call asks for `Trace`, which is
+/// unreadable at iroh's volume, so the ceiling is lowered here.
+#[cfg(target_arch = "wasm32")]
+fn init_logging() {
+    log::set_max_level(log::LevelFilter::Info);
 }
 
 pub struct P2pHost {
@@ -190,48 +212,44 @@ impl P2pHost {
         log::info!("P2pHost::event_stream() called");
         let rx = self.inner.event_rx.clone();
 
-        std::thread::spawn(move || {
-            log::info!("event_stream thread started");
-            let rt = match tokio::runtime::Runtime::new() {
-                Ok(rt) => rt,
-                Err(e) => {
-                    log::error!("Failed to create Tokio runtime for event_stream: {}", e);
-                    return;
-                }
-            };
-            rt.block_on(async move {
-                let mut rx = rx.lock().await;
-                log::info!("event_stream listening for events");
-                while let Some(event) = rx.recv().await {
-                    let msg = match event {
-                        Event::Connected { peer_id, connection_type } => format!("connected:{}:{}", peer_id, connection_type.as_str()),
-                        Event::Disconnected(peer_id) => format!("disconnected:{}", peer_id),
-                        Event::RelayConnected => "relay_connected".to_string(),
-                        Event::Ready { node_addr } => format!("ready:{}", node_addr),
-                        Event::RequestReceived { .. } => {
-                            // Client doesn't handle incoming requests
-                            continue;
-                        }
-                        Event::HlsStreamRequest { .. } => {
-                            // Client doesn't handle incoming HLS requests
-                            continue;
-                        }
-                        Event::ConnectionTypeChanged { peer_id, connection_type } => {
-                            format!("connection_type_changed:{}:{}", peer_id, connection_type.as_str())
-                        }
-                        Event::Log { .. } => {
-                            // Logs are handled separately via android_logger/tracing
-                            continue;
-                        }
-                    };
-                    log::debug!("event_stream received: {}", msg);
-                    if sink.add(msg).is_err() {
-                        log::warn!("event_stream sink closed, exiting");
-                        break;
+        // Entering the core's runtime rather than spawning a thread with a
+        // runtime of its own: this is called from the Dart isolate thread,
+        // which has no ambient reactor for `spawn` to attach to, and a browser
+        // has no thread to spawn at all. `enter` is a no-op on wasm, where the
+        // task lands on the microtask queue instead.
+        let _guard = runtime::enter();
+        runtime::spawn(async move {
+            let mut rx = rx.lock().await;
+            log::info!("event_stream listening for events");
+            while let Some(event) = rx.recv().await {
+                let msg = match event {
+                    Event::Connected { peer_id, connection_type } => format!("connected:{}:{}", peer_id, connection_type.as_str()),
+                    Event::Disconnected(peer_id) => format!("disconnected:{}", peer_id),
+                    Event::RelayConnected => "relay_connected".to_string(),
+                    Event::Ready { node_addr } => format!("ready:{}", node_addr),
+                    Event::RequestReceived { .. } => {
+                        // Client doesn't handle incoming requests
+                        continue;
                     }
+                    Event::HlsStreamRequest { .. } => {
+                        // Client doesn't handle incoming HLS requests
+                        continue;
+                    }
+                    Event::ConnectionTypeChanged { peer_id, connection_type } => {
+                        format!("connection_type_changed:{}:{}", peer_id, connection_type.as_str())
+                    }
+                    Event::Log { .. } => {
+                        // Logs are handled separately via android_logger/tracing
+                        continue;
+                    }
+                };
+                log::debug!("event_stream received: {}", msg);
+                if sink.add(msg).is_err() {
+                    log::warn!("event_stream sink closed, exiting");
+                    break;
                 }
-                log::info!("event_stream loop ended");
-            });
+            }
+            log::info!("event_stream loop ended");
         });
         Ok(())
     }
@@ -346,50 +364,42 @@ impl P2pHost {
 
         let requester = self.hls_requester.clone();
 
-        std::thread::spawn(move || {
-            let rt = match tokio::runtime::Runtime::new() {
-                Ok(rt) => rt,
-                Err(e) => {
-                    log::error!("Failed to create Tokio runtime for streaming HLS: {}", e);
-                    let _ = sink.add(FlutterHlsStreamEvent::Error(format!("Runtime error: {}", e)));
-                    return;
-                }
-            };
+        // See `event_stream` for why this enters the core's runtime instead of
+        // spawning a thread with a runtime of its own.
+        let _guard = runtime::enter();
+        runtime::spawn(async move {
+            match requester.send_hls_request(peer.clone(), core_req).await {
+                Ok(stream_response) => {
+                    // Send header event
+                    let header = FlutterHlsResponseHeader {
+                        status: stream_response.header.status,
+                        content_type: stream_response.header.content_type,
+                        content_length: stream_response.header.content_length,
+                        content_range: stream_response.header.content_range,
+                        cache_control: stream_response.header.cache_control,
+                    };
+                    if sink.add(FlutterHlsStreamEvent::Header(header)).is_err() {
+                        log::debug!("HLS stream sink closed on header");
+                        return;
+                    }
 
-            rt.block_on(async move {
-                match requester.send_hls_request(peer.clone(), core_req).await {
-                    Ok(stream_response) => {
-                        // Send header event
-                        let header = FlutterHlsResponseHeader {
-                            status: stream_response.header.status,
-                            content_type: stream_response.header.content_type,
-                            content_length: stream_response.header.content_length,
-                            content_range: stream_response.header.content_range,
-                            cache_control: stream_response.header.cache_control,
-                        };
-                        if sink.add(FlutterHlsStreamEvent::Header(header)).is_err() {
-                            log::debug!("HLS stream sink closed on header");
+                    // Stream chunks
+                    let mut chunk_rx = stream_response.chunk_rx;
+                    while let Some(chunk) = chunk_rx.recv().await {
+                        if sink.add(FlutterHlsStreamEvent::Chunk(chunk)).is_err() {
+                            log::debug!("HLS stream sink closed, stopping chunk read");
                             return;
                         }
-
-                        // Stream chunks
-                        let mut chunk_rx = stream_response.chunk_rx;
-                        while let Some(chunk) = chunk_rx.recv().await {
-                            if sink.add(FlutterHlsStreamEvent::Chunk(chunk)).is_err() {
-                                log::debug!("HLS stream sink closed, stopping chunk read");
-                                return;
-                            }
-                        }
-
-                        // Signal end
-                        let _ = sink.add(FlutterHlsStreamEvent::End);
                     }
-                    Err(e) => {
-                        log::error!("HLS streaming request failed for peer {}: {}", peer, e);
-                        let _ = sink.add(FlutterHlsStreamEvent::Error(format!("HLS request failed: {}", e)));
-                    }
+
+                    // Signal end
+                    let _ = sink.add(FlutterHlsStreamEvent::End);
                 }
-            });
+                Err(e) => {
+                    log::error!("HLS streaming request failed for peer {}: {}", peer, e);
+                    let _ = sink.add(FlutterHlsStreamEvent::Error(format!("HLS request failed: {}", e)));
+                }
+            }
         });
 
         Ok(())

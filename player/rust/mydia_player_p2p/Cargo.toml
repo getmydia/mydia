@@ -4,17 +4,32 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib", "staticlib"]
+# `rlib` is here for wasm-pack, which refuses to build a crate without it.
+# cargokit only ever asks for the other two.
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
-mydia_p2p_core = { path = "../../../native/mydia_p2p_core" }
-tokio = { version = "1.49", features = ["full"] }
 anyhow = "1.0"
 log = "0.4"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde_json = "1.0"
+
+# mydia_p2p_core is named only inside the target sections below, never here.
+# Cargo unifies features additively, so one untargeted line taking the core
+# with its defaults would switch the `host` feature back on for the browser
+# build too, and the server role does not compile for wasm.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+mydia_p2p_core = { path = "../../../native/mydia_p2p_core" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+mydia_p2p_core = { path = "../../../native/mydia_p2p_core", default-features = false }
+# No tracing subscriber in a browser (see `init_app`). `log` is what makes
+# every tracing event fall through to the `log` crate while no subscriber is
+# installed, and flutter_rust_bridge has already pointed `log` at the browser
+# console by then.
+tracing = { version = "0.1", features = ["log"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
