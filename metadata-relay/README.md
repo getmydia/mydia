@@ -360,7 +360,9 @@ secret setup, updating, and troubleshooting procedure (`kubectl apply -k .`,
 
 1. **Deployment fails during build:**
 
-   - Check Docker build locally: `docker build -f Dockerfile .`
+   - Check Docker build locally, from the repo root (the Dockerfile `COPY`s
+     from `metadata-relay/...`, so it needs the repo root as build context):
+     `docker build -f metadata-relay/Dockerfile .`
    - Verify all dependencies in `mix.exs` are available
    - Check the GitHub Actions build logs for `deploy-relay.yml`
 
