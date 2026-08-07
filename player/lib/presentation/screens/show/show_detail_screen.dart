@@ -549,7 +549,7 @@ class ShowDetailScreen extends ConsumerWidget {
               .toggleFavorite(),
           onDownload: () => _startEpisodeDownload(context, ref, show, episode),
           trailerUrl: show.trailerUrl,
-          showDownload: isDownloadSupported,
+          showDownload: isDownloadSupported && episode.files.isNotEmpty,
           // Per-episode, not per-show: the hero's Download action downloads
           // the selected episode.
           isDownloaded:

@@ -288,7 +288,7 @@ class MovieDetailScreen extends ConsumerWidget {
               .toggleFavorite(),
           onDownload: () => _startDownload(context, ref, movie),
           trailerUrl: movie.trailerUrl,
-          showDownload: isDownloadSupported,
+          showDownload: isDownloadSupported && movie.files.isNotEmpty,
           isDownloaded:
               ref.watch(isMediaDownloadedProvider(movie.id)).value ?? false,
         ),
