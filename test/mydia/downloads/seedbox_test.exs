@@ -151,6 +151,35 @@ defmodule Mydia.Downloads.SeedboxTest do
     assert {:ok, _pid} = Fetcher.whereis(download.id)
   end
 
+  test "claims a fetcher when remote_fetch.enabled arrives as a string (real UI/JSON round-trip)" do
+    # `connection_settings` is a `Mydia.Settings.JsonMapType` column with zero
+    # per-key coercion, and the admin UI's raw `<input type="checkbox">` for
+    # `remote_fetch.enabled` submits the string "true", not the boolean —
+    # every remote_fetch config saved through the UI with the box checked
+    # stores "enabled" => "true". A strict `%{"enabled" => true}` match would
+    # never recognize a real saved config, permanently disabling remote-fetch
+    # interception for it even though the operator turned it on and the
+    # changeset validation (which already accepts both forms) let it save.
+    download = insert_download!("seedbox-qbit", "torrent-1")
+
+    config =
+      client_config(%{
+        connection_settings: %{
+          "remote_fetch" =>
+            client_config().connection_settings["remote_fetch"]
+            |> Map.put("enabled", "true")
+        }
+      })
+
+    torrents = [torrent(state: :seeding)]
+
+    [result] =
+      Seedbox.maybe_apply_remote_fetch(config, torrents, %{"torrent-1" => download})
+
+    assert result.state == :queued
+    assert {:ok, _pid} = Fetcher.whereis(download.id)
+  end
+
   test "reports :downloading with local bytes_pulled progress while the fetcher runs" do
     download = insert_download!("seedbox-qbit", "torrent-1")
     {:ok, download} = Downloads.History.update_download(download, %{bytes_pulled: 250})

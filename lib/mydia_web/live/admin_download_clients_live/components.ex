@@ -676,6 +676,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                     </span>
                   </label>
 
+                  <p class="text-xs text-base-content/60">
+                    Connection trust is not verified (no host-key checking) — only connect to hosts you control.
+                  </p>
+
                   <.input
                     name="download_client_config[connection_settings][remote_fetch][host]"
                     type="text"

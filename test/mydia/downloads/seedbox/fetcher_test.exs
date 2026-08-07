@@ -204,6 +204,50 @@ defmodule Mydia.Downloads.Seedbox.FetcherTest do
     assert File.read!(Path.join(save_path, "readme.nfo")) == "nfo contents"
   end
 
+  test "a directory transfer skips a file that's already complete on disk, without redownloading it",
+       %{
+         remote_root: remote_root,
+         local_root: local_root,
+         port: port
+       } do
+    download = insert_download!("seedbox-qbit")
+    release_dir = Path.join(remote_root, "Show.S01")
+    File.mkdir_p!(Path.join(release_dir, "Season 01"))
+    File.write!(Path.join(release_dir, "Season 01/e01.mkv"), "episode one")
+    File.write!(Path.join(release_dir, "Season 01/e02.mkv"), "episode two")
+
+    # Pre-place file 1 exactly as a prior, successful attempt would have left
+    # it (correct final path, correct size) — simulating a retry after file 2
+    # failed on an earlier pass. Its mtime is forced well into the past so
+    # that, unlike byte-identical content, an unwanted rewrite is detectable:
+    # a genuine skip leaves the mtime untouched, a redownload (even one that
+    # writes identical bytes) would bump it.
+    local_dir = Path.join(local_root, download.id)
+    File.mkdir_p!(Path.join(local_dir, "Season 01"))
+    existing_path = Path.join(local_dir, "Season 01/e01.mkv")
+    File.write!(existing_path, "episode one")
+    File.touch!(existing_path, System.os_time(:second) - 3600)
+    %{mtime: mtime_before} = File.stat!(existing_path)
+
+    assert :ok =
+             Fetcher.claim(
+               download_id: download.id,
+               client_name: "seedbox-qbit",
+               remote_fetch: remote_fetch_config(port),
+               remote_path: release_dir,
+               download_directory: local_root
+             )
+
+    wait_for_fetcher_exit(download.id)
+
+    reloaded = Repo.get!(Download, download.id)
+    save_path = reloaded.metadata["save_path"]
+    assert File.read!(Path.join(save_path, "Season 01/e02.mkv")) == "episode two"
+
+    %{mtime: mtime_after} = File.stat!(existing_path)
+    assert mtime_after == mtime_before
+  end
+
   test "delete_after_transfer removes the remote copy only after a verified transfer", %{
     remote_root: remote_root,
     local_root: local_root,
@@ -294,6 +338,40 @@ defmodule Mydia.Downloads.Seedbox.FetcherTest do
     reloaded = Repo.get!(Download, download.id)
     assert reloaded.metadata["save_path"]
     refute File.exists?(release_dir)
+  end
+
+  test "delete_after_transfer as the string \"false\" does not delete the remote copy (regression)",
+       %{
+         remote_root: remote_root,
+         local_root: local_root,
+         port: port
+       } do
+    # `connection_settings` is a `Mydia.Settings.JsonMapType` column with zero
+    # per-key coercion; the checkbox markup for `delete_after_transfer`
+    # currently omits an unchecked box from form params entirely, but a
+    # future switch to `<.input type="checkbox">` (the project's documented
+    # convention) would submit the STRING "false" for an unchecked box. Only
+    # `nil`/`false` are falsy in Elixir, so a naive `if Map.get(...) do`
+    # check would treat "false" as truthy and delete the remote file after
+    # every verified transfer. This must not happen.
+    download = insert_download!("seedbox-qbit")
+    remote_file = Path.join(remote_root, "release.mkv")
+    File.write!(remote_file, "stays put even when delete_after_transfer is the string false")
+
+    assert :ok =
+             Fetcher.claim(
+               download_id: download.id,
+               client_name: "seedbox-qbit",
+               remote_fetch: remote_fetch_config(port, %{"delete_after_transfer" => "false"}),
+               remote_path: remote_file,
+               download_directory: local_root
+             )
+
+    wait_for_fetcher_exit(download.id)
+
+    reloaded = Repo.get!(Download, download.id)
+    assert reloaded.metadata["save_path"]
+    assert File.exists?(remote_file)
   end
 
   test "delete_after_transfer defaults to false, leaving the remote copy in place", %{

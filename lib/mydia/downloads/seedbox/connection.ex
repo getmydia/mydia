@@ -16,6 +16,14 @@ defmodule Mydia.Downloads.Seedbox.Connection do
 
   @conventional_key_filenames ~w(id_rsa id_ed25519 id_ecdsa id_dsa)
 
+  # OTP's `:ssh` defaults `connect_timeout` to `infinity`. Without an
+  # explicit cap, a seedbox that's reachable but silently drops packets
+  # (as opposed to actively refusing, which every other failure mode this
+  # module handles looks like) leaves the caller — the Fetcher GenServer,
+  # or the admin UI's synchronous "Test SFTP Connection" handler — blocked
+  # forever inside `:ssh_sftp.start_channel/3`.
+  @connect_timeout_ms 30_000
+
   @doc """
   Opens a channel. Returns `{:ok, channel, cleanup}` where `cleanup` is a
   0-arity function the caller MUST invoke (in an `after` block) once done —
@@ -39,7 +47,8 @@ defmodule Mydia.Downloads.Seedbox.Connection do
       user: to_charlist(Map.fetch!(rf, "username")),
       password: to_charlist(Map.fetch!(rf, "password")),
       silently_accept_hosts: true,
-      save_accepted_host: false
+      save_accepted_host: false,
+      connect_timeout: @connect_timeout_ms
     ]
   end
 
@@ -48,7 +57,8 @@ defmodule Mydia.Downloads.Seedbox.Connection do
       user: to_charlist(Map.fetch!(rf, "username")),
       user_dir: to_charlist(key_dir),
       silently_accept_hosts: true,
-      save_accepted_host: false
+      save_accepted_host: false,
+      connect_timeout: @connect_timeout_ms
     ]
   end
 

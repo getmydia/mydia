@@ -50,10 +50,23 @@ defmodule Mydia.Downloads.Seedbox do
     end
   end
 
+  # `enabled` is matched against both the real boolean and its string form:
+  # `connection_settings` is a `Mydia.Settings.JsonMapType` column with zero
+  # per-key coercion, and the admin UI's raw `<input type="checkbox">` for
+  # `remote_fetch.enabled` submits the string "true", not a real boolean —
+  # every remote_fetch config saved through the UI with the box checked
+  # stores `"enabled" => "true"`. Mirrors
+  # `DownloadClientConfig.validate_remote_fetch_config/1` and
+  # `AdminDownloadClientsLive.Components.client_remote_fetch_enabled?/1`,
+  # which already handle this the same way.
   defp remote_fetch_config(client_config) do
     case Map.get(client_config, :connection_settings) do
-      %{"remote_fetch" => %{"enabled" => true} = remote_fetch} -> remote_fetch
-      _ -> nil
+      %{"remote_fetch" => %{"enabled" => enabled} = remote_fetch}
+      when enabled in [true, "true"] ->
+        remote_fetch
+
+      _ ->
+        nil
     end
   end
 

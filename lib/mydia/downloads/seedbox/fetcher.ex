@@ -212,8 +212,18 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
     end
   end
 
+  # `delete_after_transfer` round-trips through the admin UI's form params
+  # and the `connection_settings` JSON column (`Mydia.Settings.JsonMapType`,
+  # no per-key type casting) the same way `enabled`/`port`/
+  # `max_concurrent_transfers` do elsewhere in this feature — a checkbox
+  # saved through `<.input type="checkbox">` submits the string "true", not
+  # a real boolean. A plain `if Map.get(...) do` truthy check would treat
+  # the STRING "false" as truthy (only `nil`/`false` are falsy in Elixir),
+  # which would delete the remote copy after every verified transfer once
+  # this field is ever saved as a string. Matched against both forms, same
+  # as `DownloadClientConfig.validate_remote_fetch_config/1`'s `enabled`.
   defp maybe_delete_remote(channel, state) do
-    if Map.get(state.remote_fetch, "delete_after_transfer", false) do
+    if Map.get(state.remote_fetch, "delete_after_transfer", false) in [true, "true"] do
       case delete_remote_recursive(channel, state.remote_path) do
         :ok ->
           :ok
@@ -269,13 +279,34 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
   defp to_stat({:error, _} = err), do: err
 
   defp transfer_file(channel, remote_path, local_path, expected_size, state) do
-    File.mkdir_p!(Path.dirname(local_path))
-    part_path = local_path <> ".part"
-    offset = prepare_part(part_path, state.download_id)
+    if already_complete?(local_path, expected_size) do
+      # A previous attempt already transferred and verified this exact file
+      # (same final size) — most relevant for a season pack retry after a
+      # later file in the directory failed. Skip straight to success rather
+      # than redownloading it from offset 0: `bytes_pulled` is set to what
+      # it would be had this file's transfer just finished, matching the
+      # normal completion path below.
+      update_bytes_pulled(state.download_id, expected_size)
+      :ok
+    else
+      File.mkdir_p!(Path.dirname(local_path))
+      part_path = local_path <> ".part"
+      offset = prepare_part(part_path, state.download_id)
 
-    case stream_file(channel, remote_path, part_path, offset, state.download_id) do
-      :ok -> verify_and_finalize_file(part_path, local_path, expected_size)
-      {:error, _} = err -> err
+      case stream_file(channel, remote_path, part_path, offset, state.download_id) do
+        :ok -> verify_and_finalize_file(part_path, local_path, expected_size)
+        {:error, _} = err -> err
+      end
+    end
+  end
+
+  # Whole-file resume, one level up from `.part`-file offset resume: if the
+  # FINAL (non-`.part`) local path already exists with the exact size the
+  # remote reported, this file is done and untouched — don't re-stream it.
+  defp already_complete?(local_path, expected_size) do
+    case File.stat(local_path) do
+      {:ok, %File.Stat{type: :regular, size: ^expected_size}} -> true
+      _ -> false
     end
   end
 
