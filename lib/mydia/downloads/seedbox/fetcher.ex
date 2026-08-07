@@ -122,9 +122,18 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
     case Connection.open(state.remote_fetch) do
       {:ok, channel, cleanup} ->
         try do
-          with :ok <- transfer_all(channel, state),
-               :ok <- maybe_delete_remote(channel, state) do
-            finalize(state)
+          case transfer_all(channel, state) do
+            :ok ->
+              # Best-effort: deletion never blocks or fails an otherwise
+              # successful download. The files are already safely verified
+              # on local disk at this point, so a cleanup hiccup on the
+              # remote side (permissions, transient SFTP error, path
+              # already gone) shouldn't force a from-scratch re-download.
+              maybe_delete_remote(channel, state)
+              finalize(state)
+
+            {:error, _reason} = err ->
+              err
           end
         after
           cleanup.()
@@ -205,7 +214,18 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
 
   defp maybe_delete_remote(channel, state) do
     if Map.get(state.remote_fetch, "delete_after_transfer", false) do
-      delete_remote_recursive(channel, state.remote_path)
+      case delete_remote_recursive(channel, state.remote_path) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning(
+            "Seedbox remote cleanup failed for download_id=#{state.download_id} " <>
+              "(local transfer already verified, download proceeds): #{inspect(reason)}"
+          )
+
+          :ok
+      end
     else
       :ok
     end
@@ -218,6 +238,9 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
 
       {:ok, %File.Stat{type: :regular}} ->
         :ssh_sftp.delete(channel, to_charlist(remote_path))
+
+      {:ok, _other_type} ->
+        :ok
 
       {:error, reason} ->
         {:error, reason}

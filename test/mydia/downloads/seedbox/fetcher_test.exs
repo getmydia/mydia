@@ -229,6 +229,47 @@ defmodule Mydia.Downloads.Seedbox.FetcherTest do
     refute File.exists?(remote_file)
   end
 
+  test "a failed remote delete after a successful transfer does not fail the download", %{
+    remote_root: remote_root,
+    local_root: local_root,
+    port: port
+  } do
+    download = insert_download!("seedbox-qbit")
+    locked_dir = Path.join(remote_root, "locked")
+    File.mkdir_p!(locked_dir)
+    remote_file = Path.join(locked_dir, "release.mkv")
+    File.write!(remote_file, "read-only parent blocks delete")
+
+    # Opening a named file for read only needs execute ("search") on its
+    # containing directory, but `:ssh_sftp.delete/2` unlinks the file,
+    # which needs write on that same directory (POSIX unlink semantics).
+    # `0o555` (r-x) keeps the transfer working while making the
+    # post-transfer delete fail with a real, non-mocked permission error.
+    File.chmod!(locked_dir, 0o555)
+
+    assert :ok =
+             Fetcher.claim(
+               download_id: download.id,
+               client_name: "seedbox-qbit",
+               remote_fetch: remote_fetch_config(port, %{"delete_after_transfer" => true}),
+               remote_path: remote_file,
+               download_directory: local_root
+             )
+
+    wait_for_fetcher_exit(download.id)
+
+    # Restore write access so `on_exit`'s `File.rm_rf!(remote_root)` can
+    # clean up `locked_dir`'s contents without erroring.
+    File.chmod!(locked_dir, 0o755)
+
+    reloaded = Repo.get!(Download, download.id)
+    save_path = reloaded.metadata["save_path"]
+    assert save_path
+    refute reloaded.import_failed_at
+    assert File.read!(Path.join(save_path, "release.mkv")) == "read-only parent blocks delete"
+    assert File.exists?(remote_file)
+  end
+
   test "delete_after_transfer removes a remote directory recursively", %{
     remote_root: remote_root,
     local_root: local_root,
