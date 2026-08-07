@@ -87,6 +87,7 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
       remote_fetch: Keyword.fetch!(opts, :remote_fetch),
       remote_path: Keyword.fetch!(opts, :remote_path),
       download_directory: Keyword.fetch!(opts, :download_directory),
+      max_retries: Keyword.get(opts, :max_retries, @max_retries),
       retries_left: Keyword.get(opts, :max_retries, @max_retries),
       retry_delay_base_ms: Keyword.get(opts, :retry_delay_base_ms, @retry_delay_base_ms)
     }
@@ -107,7 +108,7 @@ defmodule Mydia.Downloads.Seedbox.Fetcher do
             "(#{state.retries_left} retries left): #{inspect(reason)}"
         )
 
-        retry_ms = (@max_retries - state.retries_left + 1) * state.retry_delay_base_ms
+        retry_ms = (state.max_retries - state.retries_left + 1) * state.retry_delay_base_ms
         Process.send_after(self(), :begin, retry_ms)
         {:noreply, %{state | retries_left: state.retries_left - 1}}
 
