@@ -206,6 +206,44 @@ jobs:
           mix test --cover
           DEVENV
 
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@3ba601ff5bbb07c7220846facfa2cd81eeee15a1 # v16
+        with:
+          name: mydia
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+      - name: Install devenv
+        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
+
+      - name: Warm devenv environment
+        run: |
+          for attempt in 1 2 3; do
+            if devenv shell -- true; then exit 0; fi
+            echo "::warning::devenv shell attempt $attempt failed"
+            [ "$attempt" -lt 3 ] && sleep 15
+          done
+          echo "::error::devenv environment failed to materialize after 3 attempts"
+          exit 1
+
+      - name: Core tests
+        run: devenv shell -- cargo test --manifest-path native/mydia_p2p_core/Cargo.toml
+
   test-postgres:
     name: Test / PostgreSQL
     runs-on: ubuntu-latest
