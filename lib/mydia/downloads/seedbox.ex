@@ -17,6 +17,7 @@ defmodule Mydia.Downloads.Seedbox do
   alias Mydia.Downloads.Structs.DownloadStatus
 
   @remote_done_states [:completed, :seeding]
+  @default_max_concurrent_transfers 2
 
   @doc """
   Applies remote-fetch interception to every torrent reported by a client
@@ -92,7 +93,7 @@ defmodule Mydia.Downloads.Seedbox do
   end
 
   defp maybe_claim(download, remote_path, remote_fetch, client_name, download_directory) do
-    max_concurrent = Map.get(remote_fetch, "max_concurrent_transfers", 2)
+    max_concurrent = max_concurrent_transfers(remote_fetch)
 
     if Fetcher.count_running(client_name) < max_concurrent do
       Fetcher.claim(
@@ -106,6 +107,36 @@ defmodule Mydia.Downloads.Seedbox do
       :ok
     end
   end
+
+  # `max_concurrent_transfers` round-trips through the admin UI's
+  # `<.input type="number">` form params and the `connection_settings` JSON
+  # column (`Mydia.Settings.JsonMapType`, which stores the submitted map
+  # as-is with no per-key type casting) as a string like `"2"`, not an
+  # integer — the same class of bug `Connection.normalize_port/1` guards
+  # against for `port`. Unlike an integer, Erlang/Elixir term ordering places
+  # every number before every bitstring, so `count_running(...) < "2"` would
+  # evaluate `true` unconditionally regardless of how many fetchers are
+  # actually running, silently disabling the concurrency cap entirely once an
+  # operator has ever saved this field through the UI. An unparseable value
+  # falls back to the default rather than crashing or leaving the cap
+  # disabled — `port` has no safe universal fallback and is left for the SSH
+  # library to reject, but a missing/garbage cap here should still cap.
+  defp max_concurrent_transfers(remote_fetch) do
+    remote_fetch
+    |> Map.get("max_concurrent_transfers", @default_max_concurrent_transfers)
+    |> normalize_max_concurrent()
+  end
+
+  defp normalize_max_concurrent(value) when is_integer(value), do: value
+
+  defp normalize_max_concurrent(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> int
+      _ -> @default_max_concurrent_transfers
+    end
+  end
+
+  defp normalize_max_concurrent(_value), do: @default_max_concurrent_transfers
 
   # The torrent client's own reported save_path is on the SAME host the SFTP
   # connection targets — see the design's "Path resolution" decision.

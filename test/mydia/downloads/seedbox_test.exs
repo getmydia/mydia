@@ -231,4 +231,37 @@ defmodule Mydia.Downloads.SeedboxTest do
     assert result.state == :queued
     assert Fetcher.whereis(download_b.id) == :error
   end
+
+  test "respects max_concurrent_transfers when it arrives as a string (real UI/JSON round-trip)" do
+    # `connection_settings` is a `Mydia.Settings.JsonMapType` column with zero
+    # per-key coercion, and the admin UI's `<.input type="number">` field
+    # submits form params as strings — every remote_fetch config saved
+    # through the UI stores `max_concurrent_transfers` as `"1"`, not the
+    # integer `1` the test above uses. Erlang/Elixir term ordering places
+    # every number before every bitstring, so an uncoerced
+    # `count_running(...) < "1"` comparison would evaluate `true`
+    # unconditionally, silently disabling the cap. This is the realistic
+    # shape and must be rejected exactly like the integer version above.
+    client_name = "seedbox-qbit-#{System.unique_integer([:positive])}"
+    download_a = insert_download!(client_name, "torrent-a")
+    download_b = insert_download!(client_name, "torrent-b")
+    fake_running_fetcher!(download_a.id, client_name)
+
+    torrents = [torrent(id: "torrent-b", state: :seeding)]
+
+    config =
+      client_config(%{
+        name: client_name,
+        connection_settings: %{
+          "remote_fetch" =>
+            client_config().connection_settings["remote_fetch"]
+            |> Map.put("max_concurrent_transfers", "1")
+        }
+      })
+
+    [result] = Seedbox.maybe_apply_remote_fetch(config, torrents, %{"torrent-b" => download_b})
+
+    assert result.state == :queued
+    assert Fetcher.whereis(download_b.id) == :error
+  end
 end
