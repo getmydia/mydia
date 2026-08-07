@@ -262,7 +262,7 @@ setup and troubleshooting procedure.
 
 **Security Notes:**
 
-- Never commit API keys to version control (`secret.yaml` is gitignored)
+- Never commit API keys to version control (`secret.yaml` is git-ignored)
 - Use Kubernetes secrets for production deployments
 - API keys are loaded at runtime via `config/runtime.exs`
 - Keys are not logged or exposed in health checks

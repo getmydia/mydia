@@ -81,7 +81,16 @@ services:
     environment:
       PORT: "4001"
       SQLITE_DB_PATH: /data/relay.db
-      # No API keys needed: these tests don't exercise real TMDB/TVDB fetches.
+      # Required at boot (config/runtime.exs raises without it); the value
+      # only matters for the relay's own libp2p rendezvous namespace, so any
+      # fixed string is fine for a throwaway local instance.
+      RENDEZVOUS_MASTER_PEPPER: "test-pepper-not-for-production"
+      # Optional: the current Playwright suite's metadata-search tests are
+      # all test.skip() today, so this relay never actually calls out to
+      # TMDB/TVDB. Set these to exercise real fetches once that suite is
+      # enabled — the relay itself boots fine without them.
+      TMDB_API_KEY: "${TMDB_API_KEY:-}"
+      TVDB_API_KEY: "${TVDB_API_KEY:-}"
     volumes:
       - test_relay_data:/data
     healthcheck:
