@@ -470,8 +470,8 @@ defmodule Mydia.Metadata do
   that doesn't require an API key.
 
   The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay on Fly.io if not set. The metadata language
-  can be configured via the METADATA_LANGUAGE environment variable.
+  defaulting to the self-hosted relay at relay.mydia.dev if not set. The metadata
+  language can be configured via the METADATA_LANGUAGE environment variable.
 
   ## Examples
 
@@ -479,7 +479,7 @@ defmodule Mydia.Metadata do
       %{
         type: :metadata_relay,
         base_url: "https://relay.mydia.dev",
-        options: %{language: "en-US", include_adult: false}
+        options: %{language: "en-US", include_adult: false, timeout: 30_000}
       }
   """
   def default_relay_config do
@@ -498,16 +498,16 @@ defmodule Mydia.Metadata do
   Gets the default TVDB relay configuration.
 
   The base URL can be configured via the METADATA_RELAY_URL environment variable,
-  defaulting to the self-hosted relay on Fly.io if not set. The metadata language
-  can be configured via the METADATA_LANGUAGE environment variable.
+  defaulting to the self-hosted relay at relay.mydia.dev if not set. The metadata
+  language can be configured via the METADATA_LANGUAGE environment variable.
 
   ## Examples
 
       iex> Mydia.Metadata.default_tvdb_relay_config()
       %{
         type: :metadata_relay,
-        base_url: "https://metadata-relay.fly.dev",
-        options: %{language: "en-US"}
+        base_url: "https://relay.mydia.dev",
+        options: %{language: "en-US", timeout: 30_000}
       }
   """
   def default_tvdb_relay_config do

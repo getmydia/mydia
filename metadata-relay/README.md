@@ -254,41 +254,16 @@ The service automatically determines cache TTL based on content type:
 
 ### Production Configuration
 
-In production (Fly.io), environment variables are managed through secrets:
-
-**Without Redis:**
-
-```bash
-# Set required secrets
-fly secrets set TMDB_API_KEY=your_key_here
-fly secrets set TVDB_API_KEY=your_key_here
-```
-
-**With Redis:**
-
-```bash
-# Set required secrets
-fly secrets set TMDB_API_KEY=your_key_here
-fly secrets set TVDB_API_KEY=your_key_here
-
-# Add Redis URL (e.g., Upstash, Redis Cloud, or self-hosted)
-fly secrets set REDIS_URL=redis://username:password@your-redis-host:6379
-```
-
-**Manage secrets:**
-
-```bash
-# View configured secrets (values are hidden)
-fly secrets list
-
-# Remove a secret
-fly secrets unset SECRET_NAME
-```
+In production, environment variables are managed through the Kubernetes manifests
+in `infra/kubernetes/apps/metadata-relay/` — non-secret config in `configmap.yaml`,
+credentials in a `secret.yaml` generated from `secret.yaml.example` and applied
+with `kubectl apply -f secret.yaml`. See that directory's README for the full
+setup and troubleshooting procedure.
 
 **Security Notes:**
 
-- Never commit API keys to version control
-- Use Fly.io secrets for production deployments
+- Never commit API keys to version control (`secret.yaml` is git-ignored)
+- Use Kubernetes secrets for production deployments
 - API keys are loaded at runtime via `config/runtime.exs`
 - Keys are not logged or exposed in health checks
 
@@ -367,181 +342,44 @@ Each deployment build creates multi-platform Docker images:
 - **Platforms**: `linux/amd64`, `linux/arm64`
 - **Registry**: GitHub Container Registry (GHCR)
 - **Tags**: `latest`, `X.Y.Z`, `X.Y`, `X` (semantic versioning)
-- **Access**: `docker pull ghcr.io/yourusername/mydia/metadata-relay:latest`
+- **Access**: `docker pull ghcr.io/getmydia/mydia/metadata-relay:latest`
 
-### Manual Deployment (Fly.io)
+### Manual Kubernetes Deployment
 
-For manual deployments or initial setup, you can deploy directly using the Fly CLI.
+Production runs on Kubernetes via the manifests in
+`infra/kubernetes/apps/metadata-relay/` (namespace `metadata-relay`, deployment
+`metadata-relay`, served at `https://relay.mydia.dev`). New images published to
+GHCR are picked up automatically by [Keel](https://keel.sh/), so a manual
+deployment is only needed for initial setup or troubleshooting.
 
-#### Prerequisites
-
-- Install the Fly CLI: `curl -L https://fly.io/install.sh | sh`
-- Sign up and log in: `fly auth login`
-
-#### Initial Deployment
-
-1. **Navigate to the metadata-relay directory**:
-
-   ```bash
-   cd metadata-relay
-   ```
-
-2. **Launch the app** (first time only):
-
-   ```bash
-   fly launch --config fly.toml
-   ```
-
-   When prompted:
-
-   - Choose a unique app name (or accept the suggested name)
-   - Select a region (default: ewr - Newark, NJ)
-   - Skip database creation
-   - Skip deployment for now (we need to set secrets first)
-
-3. **Set required secrets**:
-
-   ```bash
-   fly secrets set TMDB_API_KEY=your_tmdb_key_here
-   fly secrets set TVDB_API_KEY=your_tvdb_key_here
-   ```
-
-4. **Deploy the application**:
-
-   ```bash
-   fly deploy
-   ```
-
-   Database migrations will run automatically on container startup.
-
-5. **Verify deployment**:
-
-   ```bash
-   fly open /health
-   ```
-
-   This should open your browser to the health check endpoint and show:
-
-   ```json
-   {
-     "status": "ok",
-     "service": "metadata-relay",
-     "version": "0.1.0"
-   }
-   ```
-
-#### Subsequent Deployments
-
-After the initial setup, deploy updates with:
-
-```bash
-fly deploy
-```
-
-Database migrations will run automatically on container startup.
-
-#### Monitoring
-
-- **View logs**: `fly logs`
-- **View real-time logs**: `fly logs -f`
-- **Check status**: `fly status`
-- **View metrics**: `fly dashboard`
-
-#### Scaling
-
-The default configuration runs 1 machine with 256MB RAM. To scale:
-
-- **Scale vertically** (more resources per machine):
-
-  ```bash
-  fly scale vm shared-cpu-2x --memory 512
-  ```
-
-- **Scale horizontally** (more machines):
-  ```bash
-  fly scale count 2
-  ```
-
-#### Custom Domain
-
-To use a custom domain:
-
-1. **Add certificate**:
-
-   ```bash
-   fly certs add metadata-relay.yourdomain.com
-   ```
-
-2. **Configure DNS**: Follow the instructions provided by Fly.io
-
-#### Troubleshooting Deployment
-
-**Check health status:**
-
-```bash
-curl https://metadata-relay.fly.dev/health
-```
-
-**View application logs:**
-
-```bash
-# Real-time logs
-fly logs -f
-
-# Last 100 lines
-fly logs --limit 100
-
-# Filter by log level
-fly logs -f | grep ERROR
-```
-
-**SSH into running machine:**
-
-```bash
-fly ssh console
-```
-
-**Check secrets configuration:**
-
-```bash
-fly secrets list
-```
-
-**Restart the application:**
-
-```bash
-fly apps restart metadata-relay
-```
-
-**Check machine status:**
-
-```bash
-fly status
-fly machines list
-```
+See `infra/kubernetes/apps/metadata-relay/README.md` for the full quick-start,
+secret setup, updating, and troubleshooting procedure (`kubectl apply -k .`,
+`kubectl logs`, `kubectl rollout restart`, etc.).
 
 **Common issues:**
 
 1. **Deployment fails during build:**
 
-   - Check Docker build locally: `docker build -f Dockerfile .`
+   - Check Docker build locally, from the repo root (the Dockerfile `COPY`s
+     from `metadata-relay/...`, so it needs the repo root as build context):
+     `docker build -f metadata-relay/Dockerfile .`
    - Verify all dependencies in `mix.exs` are available
-   - Check build logs: `fly logs`
+   - Check the GitHub Actions build logs for `deploy-relay.yml`
 
 2. **App crashes after deployment:**
 
-   - Check if secrets are set: `fly secrets list`
-   - View crash logs: `fly logs --limit 200`
-   - Verify runtime.exs is reading environment variables correctly
+   - Check pod status: `kubectl describe pod -n metadata-relay -l app.kubernetes.io/name=metadata-relay`
+   - View logs: `kubectl logs -n metadata-relay -l app.kubernetes.io/name=metadata-relay`
+   - Verify `runtime.exs` is reading environment variables correctly
 
 3. **Health check failing:**
 
-   - Ensure PORT environment variable matches internal_port in fly.toml
-   - Check if application is listening on correct port
-   - SSH in and test: `curl localhost:4001/health`
+   - Ensure `PORT` in `configmap.yaml` matches the container port the deployment expects
+   - Check if the application is listening on the correct port
+   - Exec in and test: `kubectl exec -n metadata-relay deploy/metadata-relay -- curl localhost:4001/health`
 
 4. **Authentication errors with TMDB/TVDB:**
-   - Verify API keys are set correctly: `fly secrets list`
+   - Verify API keys are set correctly in `secret.yaml`
    - Test keys locally first
    - Check for key expiration or quota limits
 
@@ -738,20 +576,17 @@ iex -S mix
 docker-compose logs -f relay
 ```
 
-**Production (Fly.io):**
+**Production (Kubernetes):**
 
 ```bash
 # Real-time logs
-fly logs -f
-
-# Filter by application name
-fly logs -a metadata-relay
+kubectl logs -n metadata-relay -l app.kubernetes.io/name=metadata-relay -f
 
 # Show errors only
-fly logs -f | grep ERROR
+kubectl logs -n metadata-relay -l app.kubernetes.io/name=metadata-relay -f | grep ERROR
 
 # Export logs for analysis
-fly logs --limit 1000 > relay-logs.txt
+kubectl logs -n metadata-relay -l app.kubernetes.io/name=metadata-relay --tail=1000 > relay-logs.txt
 ```
 
 ### Metrics and Telemetry
@@ -777,7 +612,7 @@ The service is instrumented with Elixir's Telemetry library for metrics collecti
 The `/health` endpoint provides basic service status:
 
 ```bash
-curl https://metadata-relay.fly.dev/health
+curl https://relay.mydia.dev/health
 ```
 
 Response:
@@ -798,12 +633,12 @@ A `200 OK` status indicates the service is running and able to respond to reques
 
 - Cache is stored in-memory using ETS
 - Default TTL: 1 hour
-- No size limit (relies on Fly.io memory constraints)
-- Cache is lost on machine restart
+- No size limit (relies on the pod's memory limit — 512Mi by default, see `deployment.yaml`)
+- Cache is lost on pod restart
 
 **Recommended Monitoring:**
 
-1. Set up Fly.io metrics monitoring for:
+1. Set up metrics monitoring for:
 
    - CPU usage
    - Memory usage
@@ -864,7 +699,7 @@ All workflows must pass before code can be merged, ensuring production stability
 - [x] Update Mydia to use self-hosted relay (task 117.7)
 - [x] Add monitoring, logging, and deployment documentation (task 117.8)
 
-**Service URL**: https://metadata-relay.fly.dev
+**Service URL**: https://relay.mydia.dev
 
 ## License
 
