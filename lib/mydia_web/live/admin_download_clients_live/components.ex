@@ -770,6 +770,17 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                       </label>
                     </div>
                   </details>
+
+                  <div class="pt-1">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline"
+                      phx-click="test_seedbox_connection"
+                      disabled={remote_fetch_value(@download_client_form, "host") in [nil, ""]}
+                    >
+                      <.icon name="hero-signal" class="w-4 h-4" /> Test SFTP Connection
+                    </button>
+                  </div>
                 </div>
               </details>
             <% end %>

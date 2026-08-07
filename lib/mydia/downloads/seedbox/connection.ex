@@ -54,7 +54,7 @@ defmodule Mydia.Downloads.Seedbox.Connection do
 
   defp connect(rf, ssh_opts, key_dir) do
     host = to_charlist(Map.fetch!(rf, "host"))
-    port = Map.get(rf, "port", 22)
+    port = normalize_port(Map.get(rf, "port", 22))
 
     case :ssh_sftp.start_channel(host, port, ssh_opts) do
       {:ok, channel, _connection_ref} -> {:ok, channel, cleanup(channel, key_dir)}
@@ -62,6 +62,24 @@ defmodule Mydia.Downloads.Seedbox.Connection do
       {:error, reason} -> cleanup_key_dir(key_dir) && {:error, reason}
     end
   end
+
+  # `port` round-trips through the admin UI's plain HTML form params and the
+  # `connection_settings` JSON column (`Mydia.Settings.JsonMapType`, which
+  # stores the submitted map as-is with no per-key type casting) as a string
+  # like `"22"`, not an integer — every remote_fetch config saved via the UI
+  # stores it that way, and `:ssh_sftp.start_channel/3` requires an integer
+  # or it fails fast with `{:error, :invalid_port}`. Normalized once here for
+  # both callers (`Fetcher` and the UI's "Test SFTP Connection" button).
+  defp normalize_port(port) when is_integer(port), do: port
+
+  defp normalize_port(port) when is_binary(port) do
+    case Integer.parse(port) do
+      {int, ""} -> int
+      _ -> port
+    end
+  end
+
+  defp normalize_port(port), do: port
 
   defp cleanup(channel, key_dir) do
     fn ->

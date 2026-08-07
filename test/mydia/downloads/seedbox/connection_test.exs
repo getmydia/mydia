@@ -28,6 +28,23 @@ defmodule Mydia.Downloads.Seedbox.ConnectionTest do
     assert :ok = cleanup.()
   end
 
+  test "opens a channel when port is a string, as stored by the admin UI form", %{root: root} do
+    {daemon_ref, port} = SftpFixture.start(root, "seeduser", "seedpass")
+    on_exit(fn -> :ssh.stop_daemon(daemon_ref) end)
+
+    remote_fetch = %{
+      "auth_method" => "password",
+      "host" => "127.0.0.1",
+      "port" => to_string(port),
+      "username" => "seeduser",
+      "password" => "seedpass"
+    }
+
+    assert {:ok, channel, cleanup} = Connection.open(remote_fetch)
+    assert {:ok, _info} = :ssh_sftp.read_file_info(channel, ~c".")
+    assert :ok = cleanup.()
+  end
+
   test "returns an error for a wrong password", %{root: root} do
     {daemon_ref, port} = SftpFixture.start(root, "seeduser", "seedpass")
     on_exit(fn -> :ssh.stop_daemon(daemon_ref) end)
