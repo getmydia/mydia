@@ -79,18 +79,22 @@ services:
     image: ${METADATA_RELAY_IMAGE:-ghcr.io/getmydia/mydia/metadata-relay:master}
     container_name: mydia_test_relay
     environment:
-      PORT: "4001"
-      SQLITE_DB_PATH: /data/relay.db
-      # Required at boot (config/runtime.exs raises without it); the value
-      # only matters for the relay's own libp2p rendezvous namespace, so any
-      # fixed string is fine for a throwaway local instance.
-      RENDEZVOUS_MASTER_PEPPER: "test-pepper-not-for-production"
-      # Optional: the current Playwright suite's metadata-search tests are
-      # all test.skip() today, so this relay never actually calls out to
-      # TMDB/TVDB. Set these to exercise real fetches once that suite is
-      # enabled — the relay itself boots fine without them.
-      TMDB_API_KEY: "${TMDB_API_KEY:-}"
-      TVDB_API_KEY: "${TVDB_API_KEY:-}"
+      - PORT=4001
+      - SQLITE_DB_PATH=/data/relay.db
+      # Required at boot: config/runtime.exs raises without it. Any fixed
+      # string is fine for a throwaway local instance.
+      - RENDEZVOUS_MASTER_PEPPER=test-pepper-not-for-production
+      # Bare (no `=value`): passed through from the host env only when set,
+      # otherwise omitted entirely — an empty string is a distinct, worse
+      # failure mode than unset (metadata-relay's client raises a clear error
+      # for a missing key; an empty one can reach TMDB/TVDB as a confusing
+      # auth failure instead). Unset by default since the current Playwright
+      # suite's metadata-search tests are all test.skip() today, so this
+      # relay never actually calls out to TMDB/TVDB. Export TMDB_API_KEY /
+      # TVDB_API_KEY before `docker compose up` to exercise real fetches once
+      # that suite is enabled.
+      - TMDB_API_KEY
+      - TVDB_API_KEY
     volumes:
       - test_relay_data:/data
     healthcheck:
