@@ -11,7 +11,9 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   # long-abandoned deployment; use the current production default (or
   # METADATA_RELAY_URL, if the caller wants to point this at a different
   # instance) so `mix test --include external` exercises a service that
-  # actually exists.
+  # actually exists. `@config` is a module attribute, resolved once at
+  # compile time — export METADATA_RELAY_URL before running `mix test`
+  # (a stale `_build` won't pick up a later env change without a recompile).
   @config Mydia.Metadata.default_relay_config()
 
   describe "test_connection/1" do

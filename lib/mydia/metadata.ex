@@ -507,7 +507,7 @@ defmodule Mydia.Metadata do
       %{
         type: :metadata_relay,
         base_url: "https://relay.mydia.dev",
-        options: %{language: "en-US"}
+        options: %{language: "en-US", timeout: 30_000}
       }
   """
   def default_tvdb_relay_config do
