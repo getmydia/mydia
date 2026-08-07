@@ -92,6 +92,27 @@ jobs:
       - name: Assert the Android shell resolves the pinned Flutter
         run: nix eval --raw .#packages.x86_64-linux.flutter.version
 
+  apple-deployment-targets:
+    name: Check / Apple Deployment Targets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The minimum OS version is duplicated across a Podfile, an Xcode project
+      # and a podspec on each Apple platform. Nothing in the toolchain keeps
+      # them in step, and when they drift the app can ship declaring a lower
+      # minimum than the Pods it links, which is what earned an ITMS-90068
+      # warning from App Store Connect in August 2026.
+      #
+      # The script asserts agreement per platform rather than equality to a
+      # fixed number, so raising a minimum stays a player-side edit and no
+      # version literal lives in CI. Needs only the checkout, so it runs
+      # alongside the other cheap checks and fails in seconds.
+      - name: Assert every Apple deployment target agrees
+        run: ./scripts/check-apple-deployment-targets.sh
+
   # No `needs: build`, intentionally. Nix builds are content-addressed and
   # reproducible, so `nix build .#checks...nixos-module` below transitively
   # rebuilds the same package on its own -- there is no correctness reason to
