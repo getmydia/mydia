@@ -8,6 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 // used throughout core/graphql/watch/*.dart.
 // ignore: depend_on_referenced_packages
 import 'package:gql/ast.dart' show OperationDefinitionNode;
+// `DocumentNode` has no `toString()` override (it prints as `Instance of
+// 'DocumentNode'`), so getting the request's query text back out requires
+// the AST printer. Same pattern as `lib/core/graphql/p2p_link.dart` and
+// `lib/core/downloads/p2p_download_job_service.dart`.
+// ignore: depend_on_referenced_packages
+import 'package:gql/language.dart' show printNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/graphql/watch/fetch_log.dart';
@@ -219,5 +225,28 @@ void main() {
     expect(log.lastFetchedAt(QueryKeys.home), isNull);
     expect(log.lastFetchedAt(QueryKeys.favorites), isNull);
     expect(log.lastFetchedAt(QueryKeys.tvShowsList), isNull);
+  });
+
+  group('ShowDetailController new hero fields', () {
+    test('requests cast, trailerUrl, and similar', () async {
+      final link = StubLink((request, _) => _show(isFavorite: false));
+
+      final container = ProviderContainer(
+        overrides: [
+          asyncGraphqlClientProvider.overrideWith(
+            (ref) async => stubClient(link),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final provider = showDetailControllerProvider('s1');
+      await waitForValue(container, provider, (v) => v.id == 's1');
+
+      final queryText = printNode(link.requests.first.operation.document);
+      expect(queryText, contains('cast'));
+      expect(queryText, contains('trailerUrl'));
+      expect(queryText, contains('similar'));
+    });
   });
 }
