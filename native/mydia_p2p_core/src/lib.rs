@@ -17,6 +17,7 @@ use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
+pub mod blocking;
 pub mod runtime;
 
 // Protocol identifier for mydia connections
@@ -435,28 +436,30 @@ impl Host {
     }
 
     /// Dial a peer using their EndpointAddr JSON
-    pub fn dial(&self, endpoint_addr_json: String) -> Result<(), String> {
+    pub async fn dial(&self, endpoint_addr_json: String) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::Dial {
+            .send(Command::Dial {
                 endpoint_addr_json,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Get this node's address as JSON for sharing
-    pub fn get_node_addr(&self) -> String {
+    pub async fn get_node_addr(&self) -> String {
         let (tx, rx) = oneshot::channel();
         if self
             .cmd_tx
-            .blocking_send(Command::GetNodeAddr { reply: tx })
+            .send(Command::GetNodeAddr { reply: tx })
+            .await
             .is_err()
         {
             return String::new();
         }
-        rx.blocking_recv().unwrap_or_default()
+        rx.await.unwrap_or_default()
     }
 
     /// Send a request to a peer and wait for a response
@@ -478,17 +481,7 @@ impl Host {
     }
 
     /// Send a response to an incoming request
-    pub fn send_response(&self, request_id: String, response: MydiaResponse) -> Result<(), String> {
-        self.cmd_tx
-            .blocking_send(Command::SendResponse {
-                request_id,
-                response,
-            })
-            .map_err(|_| "send_failed".to_string())
-    }
-
-    /// Send a response to an incoming request (async version)
-    pub async fn send_response_async(
+    pub async fn send_response(
         &self,
         request_id: String,
         response: MydiaResponse,
@@ -503,16 +496,17 @@ impl Host {
     }
 
     /// Get network statistics
-    pub fn get_network_stats(&self) -> NetworkStats {
+    pub async fn get_network_stats(&self) -> NetworkStats {
         let (tx, rx) = oneshot::channel();
         if self
             .cmd_tx
-            .blocking_send(Command::GetNetworkStats { reply: tx })
+            .send(Command::GetNetworkStats { reply: tx })
+            .await
             .is_err()
         {
             return NetworkStats::default();
         }
-        rx.blocking_recv().unwrap_or_default()
+        rx.await.unwrap_or_default()
     }
 
     /// Get this node's ID
@@ -522,53 +516,56 @@ impl Host {
 
     /// Send an HLS response header for a streaming request.
     /// Must be called before any send_hls_chunk calls.
-    pub fn send_hls_header(
+    pub async fn send_hls_header(
         &self,
         stream_id: String,
         header: HlsResponseHeader,
     ) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::SendHlsHeader {
+            .send(Command::SendHlsHeader {
                 stream_id,
                 header,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Send a chunk of HLS data.
     /// Must be called after send_hls_header and before finish_hls_stream.
-    pub fn send_hls_chunk(&self, stream_id: String, data: Vec<u8>) -> Result<(), String> {
+    pub async fn send_hls_chunk(&self, stream_id: String, data: Vec<u8>) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::SendHlsChunk {
+            .send(Command::SendHlsChunk {
                 stream_id,
                 data,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Finish an HLS stream.
     /// Must be called after all chunks have been sent.
-    pub fn finish_hls_stream(&self, stream_id: String) -> Result<(), String> {
+    pub async fn finish_hls_stream(&self, stream_id: String) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::FinishHlsStream {
+            .send(Command::FinishHlsStream {
                 stream_id,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Stream a file range directly to a QUIC stream.
     /// Reads the file in Rust and writes length-prefixed chunks, avoiding per-chunk NIF overhead.
     /// The stream is finished automatically after all data is written.
-    pub fn stream_file_range(
+    pub async fn stream_file_range(
         &self,
         stream_id: String,
         file_path: String,
@@ -577,15 +574,16 @@ impl Host {
     ) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::StreamFileRange {
+            .send(Command::StreamFileRange {
                 stream_id,
                 file_path,
                 offset,
                 length,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Send an HLS streaming request to a peer (client-side).

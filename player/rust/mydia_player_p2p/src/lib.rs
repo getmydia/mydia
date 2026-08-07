@@ -165,14 +165,14 @@ impl P2pHost {
     }
 
     /// Get this node's EndpointAddr as JSON for sharing.
-    pub fn get_node_addr(&self) -> String {
-        self.inner.get_node_addr()
+    pub async fn get_node_addr(&self) -> String {
+        self.inner.get_node_addr().await
     }
 
     /// Dial a peer using their EndpointAddr JSON.
-    pub fn dial(&self, endpoint_addr_json: String) -> anyhow::Result<()> {
+    pub async fn dial(&self, endpoint_addr_json: String) -> anyhow::Result<()> {
         log::info!("P2pHost::dial() called");
-        match self.inner.dial(endpoint_addr_json) {
+        match self.inner.dial(endpoint_addr_json).await {
             Ok(_) => {
                 log::info!("dial() succeeded");
                 Ok(())
@@ -307,8 +307,8 @@ impl P2pHost {
     }
 
     /// Get network statistics.
-    pub fn get_network_stats(&self) -> FlutterNetworkStats {
-        let stats = self.inner.get_network_stats();
+    pub async fn get_network_stats(&self) -> FlutterNetworkStats {
+        let stats = self.inner.get_network_stats().await;
         log::info!("Network stats: connected_peers={}, relay_connected={}, relay_url={:?}, peer_conn_type={:?}",
             stats.connected_peers, stats.relay_connected, stats.relay_url, stats.peer_connection_type);
         FlutterNetworkStats {
