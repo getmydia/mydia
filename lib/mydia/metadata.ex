@@ -479,7 +479,7 @@ defmodule Mydia.Metadata do
       %{
         type: :metadata_relay,
         base_url: "https://relay.mydia.dev",
-        options: %{language: "en-US", include_adult: false}
+        options: %{language: "en-US", include_adult: false, timeout: 30_000}
       }
   """
   def default_relay_config do
