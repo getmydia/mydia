@@ -5,9 +5,13 @@ edition = "2021"
 
 [features]
 default = ["host"]
-# The server role: accepting inbound connections, answering HLS requests, and
-# reading files off disk. A browser has none of these, and none of them
-# compile to wasm.
+# The server role: accepting inbound connections, answering HLS requests
+# (which means parking the send half of a stream until it is drained), and
+# reading files off disk. A browser does none of these.
+#
+# Only the file reads genuinely fail to compile for wasm. The rest is gated by
+# role rather than by target because a browser has no business doing it, not
+# because the compiler objects.
 host = []
 
 [dependencies]

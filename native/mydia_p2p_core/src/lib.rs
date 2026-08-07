@@ -4,11 +4,14 @@
 //! NAT traversal and QUIC-based connections.
 
 use futures::StreamExt;
+// Both are server role: `Incoming` is a connection being accepted, and a
+// `SendStream` is only held onto to answer an HLS request. A client opens
+// streams, it never parks one waiting to write a response.
 #[cfg(feature = "host")]
-use iroh::endpoint::Incoming;
+use iroh::endpoint::{Incoming, SendStream};
 use iroh::{
     defaults::prod as default_relays,
-    endpoint::{presets, Connection, PathEvent, SendStream},
+    endpoint::{presets, Connection, PathEvent},
     Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
 // A browser has no DNS resolver to configure: iroh resolves peers over HTTPS
@@ -681,7 +684,12 @@ impl Host {
 /// Shared state for pending responses
 struct SharedState {
     pending_responses: HashMap<String, oneshot::Sender<MydiaResponse>>,
-    /// Active HLS streaming connections - stores the send half of the stream
+    /// Active HLS streaming connections - stores the send half of the stream.
+    ///
+    /// Host role only. Every command that drains this map is behind the same
+    /// feature, so a client build that could fill it would leak a `SendStream`
+    /// per request with nothing able to remove it.
+    #[cfg(feature = "host")]
     hls_streams: HashMap<String, SendStream>,
 }
 
@@ -762,6 +770,7 @@ async fn run_event_loop(
     let mut connected_peers: HashMap<String, Connection> = HashMap::new();
     let shared_state = Arc::new(Mutex::new(SharedState {
         pending_responses: HashMap::new(),
+        #[cfg(feature = "host")]
         hls_streams: HashMap::new(),
     }));
     let mut relay_connected = false;
@@ -1400,6 +1409,9 @@ async fn handle_connection(
         match conn.accept_bi().await {
             Ok((send, mut recv)) => {
                 let request_id = uuid::Uuid::new_v4().to_string();
+                // Request-intake timings feed the `p2p_metrics_server` line
+                // below, which only a host emits.
+                #[cfg(feature = "host")]
                 let t0 = runtime::time::Instant::now();
 
                 // Read the request
@@ -1410,6 +1422,7 @@ async fn handle_connection(
                         continue;
                     }
                 };
+                #[cfg(feature = "host")]
                 let request_read_ms = t0.elapsed().as_millis() as u64;
 
                 let request: MydiaRequest = match serde_cbor::from_slice(&data) {
@@ -1419,6 +1432,7 @@ async fn handle_connection(
                         continue;
                     }
                 };
+                #[cfg(feature = "host")]
                 let decode_ms = t0.elapsed().as_millis() as u64 - request_read_ms;
 
                 tracing::debug!("Received request from {}: {:?}", peer_id, request);
@@ -1434,7 +1448,13 @@ async fn handle_connection(
                     continue;
                 }
 
-                // For HLS streaming requests, store the send stream and emit event
+                // For HLS streaming requests, store the send stream and emit
+                // event. Host role only: answering an HLS request means
+                // holding the send half open until the four HLS commands
+                // drain it, and those are behind this same feature. A client
+                // build must therefore not accept the request at all, or it
+                // would park a `SendStream` nothing can ever remove.
+                #[cfg(feature = "host")]
                 if let MydiaRequest::HlsStream(hls_request) = request {
                     let stream_id = request_id.clone();
 
