@@ -288,11 +288,25 @@ type ContinueWatchingItem {
 "An item in the recently added rail"
 type RecentlyAddedItem {
   id: ID!
+
   type: MediaType!
+
   title: String!
+
   year: Int
+
   artwork: Artwork
+
   addedAt: DateTime!
+
+  "Episodes whose first file arrived inside the recently-added window. Null for movies and for unwindowed lists."
+  newEpisodeCount: Int
+
+  "Season of the newest arrived episode. Null for movies and for unmatched files."
+  latestSeasonNumber: Int
+
+  "Number of the newest arrived episode. Null for movies and for unmatched files."
+  latestEpisodeNumber: Int
 }
 
 "An item in the up next rail (next episode to watch)"
@@ -314,6 +328,13 @@ type Collection {
   visibility: String!
   itemCount: Int!
   posterPaths: [String]
+}
+
+"A cast member (actor) on a movie or TV show"
+type CastMember {
+  name: String!
+  character: String
+  profileUrl: String
 }
 
 "A movie"
@@ -357,6 +378,15 @@ type Movie implements Node {
 
   "Content rating (e.g., PG-13, R)"
   contentRating: String
+
+  "Watch-page URL for the first available YouTube trailer"
+  trailerUrl: String
+
+  "Cast members"
+  cast: [CastMember]
+
+  "Recommended titles that are also in this library"
+  similar: [RecentlyAddedItem]
 
   "Average rating (0-10)"
   rating: Float
@@ -423,6 +453,15 @@ type TvShow implements Node {
 
   "Content rating"
   contentRating: String
+
+  "Watch-page URL for the first available YouTube trailer"
+  trailerUrl: String
+
+  "Cast members"
+  cast: [CastMember]
+
+  "Recommended titles that are also in this library"
+  similar: [RecentlyAddedItem]
 
   "Average rating (0-10)"
   rating: Float
