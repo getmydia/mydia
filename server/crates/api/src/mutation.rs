@@ -257,6 +257,12 @@ impl RootMutationType {
     }
 
     /// Revoke a device
+    ///
+    /// This only records the device as revoked; it does not yet invalidate
+    /// tokens already issued to that device. Tokens are not device-bound in
+    /// this slice, so a revoked device's existing access/refresh tokens
+    /// remain valid until they expire. Enforcing revocation on the auth path
+    /// is a later slice.
     async fn revoke_device(&self, ctx: &Context<'_>, id: ID) -> Result<Option<RevokeDeviceResult>> {
         let api = ctx.data::<ApiContext>()?;
         let user = authenticated_user(ctx).await?;

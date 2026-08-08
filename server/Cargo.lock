@@ -1360,12 +1360,15 @@ dependencies = [
 name = "mydia-config"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "figment",
  "mydia-db",
  "serde",
  "sqlx",
  "tempfile",
  "thiserror",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

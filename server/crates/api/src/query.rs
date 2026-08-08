@@ -9,7 +9,7 @@ use async_graphql::{Context, Error, Object, Result, ID};
 
 use crate::context::{authenticated_user, not_implemented, ApiContext};
 use crate::types::auth::{remote_device_from, ApiKey, RemoteDevice};
-use crate::types::common::{MediaCategory, MediaType, Node, SearchResultType, SortInput};
+use crate::types::common::{MediaCategory, MediaType, Node, PageInfo, SearchResultType, SortInput};
 use crate::types::discovery::{
     Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, UpNextItem,
 };
@@ -17,6 +17,18 @@ use crate::types::media::{
     Episode, LibraryPath, Movie, MovieConnection, RecentlyAddedItem, TvShow, TvShowConnection,
 };
 use crate::types::streaming::StreamingCandidatesResult;
+
+/// An empty page, for connection fields that back an empty library. The
+/// player relies on `edges: []` and a real `PageInfo`, not `null`, to render
+/// an empty state rather than treat the field as missing.
+fn empty_page_info() -> PageInfo {
+    PageInfo {
+        has_next_page: false,
+        has_previous_page: false,
+        start_cursor: None,
+        end_cursor: None,
+    }
+}
 
 pub struct RootQueryType;
 
@@ -56,7 +68,11 @@ impl RootQueryType {
         _sort: Option<SortInput>,
         _category: Option<MediaCategory>,
     ) -> Result<Option<MovieConnection>> {
-        Ok(None)
+        Ok(Some(MovieConnection {
+            edges: Vec::new(),
+            page_info: empty_page_info(),
+            total_count: 0,
+        }))
     }
 
     /// List all TV shows with pagination
@@ -68,7 +84,11 @@ impl RootQueryType {
         _sort: Option<SortInput>,
         _category: Option<MediaCategory>,
     ) -> Result<Option<TvShowConnection>> {
-        Ok(None)
+        Ok(Some(TvShowConnection {
+            edges: Vec::new(),
+            page_info: empty_page_info(),
+            total_count: 0,
+        }))
     }
 
     /// Get episodes for a specific season of a TV show

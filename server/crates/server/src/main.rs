@@ -23,9 +23,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_overlay(overlay)
         .load()?;
 
+    // No layer supplied a signing key. Generate one and persist it to the
+    // database overlay so every later boot reuses it; a fixed default would
+    // make every install share a key, and regenerating on every boot would
+    // invalidate every issued token on restart.
+    let had_secret_key_base = !loaded.config.secret_key_base.is_empty();
+    let secret_key_base =
+        mydia_config::db_provider::ensure_secret_key_base(&db, &loaded.config.secret_key_base)
+            .await?;
+
+    if !had_secret_key_base {
+        tracing::info!("generated a new secret_key_base and saved it to the database");
+    }
+
+    if secret_key_base.is_empty() {
+        return Err("secret_key_base could not be established; refusing to start with an empty JWT signing key".into());
+    }
+
     let ctx = mydia_api::context::ApiContext {
         db,
-        issuer: mydia_auth::tokens::Issuer::new(loaded.config.secret_key_base.as_bytes()),
+        issuer: mydia_auth::tokens::Issuer::new(secret_key_base.as_bytes()),
     };
 
     let addr: SocketAddr =

@@ -162,6 +162,20 @@ fn mark(sources: &mut HashMap<String, Source>, keys: &[String], source: Source) 
     }
 }
 
+/// Generates a fresh JWT signing key.
+///
+/// Called on first boot, when no `secret_key_base` has been configured by
+/// any layer. The caller is responsible for persisting the result to the
+/// database overlay so subsequent boots reuse it instead of invalidating
+/// every issued token.
+pub fn generate_secret_key_base() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
+}
+
 fn apply_overlay(config: &mut Config, key: &str, value: &str) -> Result<(), ConfigError> {
     match key {
         "data_dir" => config.data_dir = PathBuf::from(value),
@@ -250,5 +264,14 @@ mod tests {
             .load();
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn generated_secret_key_bases_are_long_and_not_reused() {
+        let a = super::generate_secret_key_base();
+        let b = super::generate_secret_key_base();
+
+        assert!(a.len() >= 32);
+        assert_ne!(a, b);
     }
 }

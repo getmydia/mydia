@@ -109,7 +109,29 @@ async fn logging_in_records_the_device() {
 async fn the_library_is_empty_but_the_query_succeeds() {
     let (app, _guard) = mydia_server::test_support::app_with_user("alice", "hunter2").await;
 
-    let body = post_graphql(app, "query { movies(first: 10) { totalCount } }").await;
+    let body = post_graphql(
+        app,
+        r#"query {
+             movies(first: 10) {
+               edges { cursor }
+               pageInfo { hasNextPage hasPreviousPage }
+               totalCount
+             }
+             tvShows(first: 10) {
+               edges { cursor }
+               pageInfo { hasNextPage hasPreviousPage }
+               totalCount
+             }
+           }"#,
+    )
+    .await;
 
     assert!(body["errors"].is_null(), "got errors: {}", body["errors"]);
+
+    for field in ["movies", "tvShows"] {
+        assert_eq!(body["data"][field]["edges"], serde_json::json!([]));
+        assert_eq!(body["data"][field]["totalCount"], 0);
+        assert_eq!(body["data"][field]["pageInfo"]["hasNextPage"], false);
+        assert_eq!(body["data"][field]["pageInfo"]["hasPreviousPage"], false);
+    }
 }

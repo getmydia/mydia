@@ -5,11 +5,14 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+chrono.workspace = true
 figment.workspace = true
 mydia-db = { path = "../db" }
 serde.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+tokio.workspace = true

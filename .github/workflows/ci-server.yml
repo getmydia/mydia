@@ -6,11 +6,13 @@ on:
     paths:
       - "server/**"
       - "player/lib/graphql/schema.graphql"
+      - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-server.yml"
   pull_request:
     paths:
       - "server/**"
       - "player/lib/graphql/schema.graphql"
+      - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-server.yml"
 
 concurrency:
