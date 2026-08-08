@@ -9,6 +9,7 @@ import '../../../test_utils/stub_graphql_client.dart';
 Map<String, dynamic> _moviesPage(
   List<String> ids, {
   required bool hasNextPage,
+  double? rating,
 }) {
   return {
     '__typename': 'Query',
@@ -28,7 +29,7 @@ Map<String, dynamic> _moviesPage(
               'runtime': null,
               'genres': <String>[],
               'contentRating': null,
-              'rating': null,
+              'rating': rating,
               'artwork': {
                 '__typename': 'Artwork',
                 'posterUrl': null,
@@ -206,5 +207,51 @@ void main() {
     await Future.wait([first, second]);
 
     expect(link.requests.length, before + 1);
+  });
+
+  test('carries the TMDB rating onto each movie item', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false, rating: 7.8)
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(LibraryType.movies),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.rating, 7.8);
+  });
+
+  test('leaves an unrated movie null rather than defaulting it', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false)
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(LibraryType.movies),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.rating, isNull);
   });
 }
