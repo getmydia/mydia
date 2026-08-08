@@ -28,10 +28,15 @@ flutter pub run build_runner build
 
 # Build web release
 echo "Building web release..."
+# --pwa-strategy=none: one service worker registration per scope, and
+# web/sw.js needs the app's scope to serve media over p2p. Kept identical
+# across every build path so which worker ships does not depend on which
+# script produced the bundle.
 flutter build web \
   --release \
   --base-href /player/ \
-  --tree-shake-icons
+  --tree-shake-icons \
+  --pwa-strategy=none
 
 # Copy to Phoenix static directory
 echo "Copying to Phoenix static assets..."

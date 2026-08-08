@@ -170,10 +170,22 @@ defmodule MydiaWeb.FlutterWatcher do
   defp run_flutter_build do
     Logger.info("[FlutterWatcher] Running flutter build web...")
 
-    # Run flutter build directly in the player directory
+    # Run flutter build directly in the player directory.
+    #
+    # --pwa-strategy=none: one service worker registration per scope, and
+    # player/web/sw.js needs the app's scope to serve media over p2p. Kept
+    # identical across every build path so which worker ships does not depend
+    # on which script produced the bundle.
     case System.cmd(
            "flutter",
-           ["build", "web", "--base-href", "/player/", "--release"],
+           [
+             "build",
+             "web",
+             "--base-href",
+             "/player/",
+             "--release",
+             "--pwa-strategy=none"
+           ],
            stderr_to_stdout: true,
            cd: "player"
          ) do

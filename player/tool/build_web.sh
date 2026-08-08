@@ -132,8 +132,17 @@ echo "==> Building Flutter web bundle"
 # blocked unless gstatic volunteers a Cross-Origin-Resource-Policy header, and
 # there is no CORS fallback in that path. The local copies are in the bundle
 # already, and a public page is better off not calling out to a third party.
+#
+# --pwa-strategy=none because a scope holds exactly one service worker
+# registration, and web/sw.js has to take the app's own scope: a worker
+# controls only clients whose URL is inside its scope, and the app page is at
+# the base href. Left on, Flutter's worker and the media worker would replace
+# each other's registration on every load and playback cycle. This is the
+# build that runs the p2p proxy, so it is the one that must not do that.
+# Flutter's own build output already calls its service worker deprecated.
 flutter build web --release --base-href / \
   --no-web-resources-cdn \
+  --pwa-strategy=none \
   --dart-define=MYDIA_WEB_P2P=true
 
 # The module is only useful if flutter copied it across. This is the same
