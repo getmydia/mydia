@@ -13,6 +13,7 @@ import 'package:player/core/graphql/watch/query_key.dart';
 import 'package:player/presentation/screens/library/library_controller.dart';
 import 'package:player/presentation/screens/library/library_screen.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
+import 'package:player/presentation/widgets/rating_badge.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -321,5 +322,35 @@ void main() {
 
     final poster = tester.widget<MediaPoster>(find.byType(MediaPoster).first);
     expect(poster.rating, 9.1);
+    expect(find.text('9.1'), findsOneWidget);
+  });
+
+  testWidgets(
+      'an unvoted title shows no chip, since TMDB reports 0.0 for no votes',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      itemCount: 1,
+      rating: 0,
+    );
+
+    expect(find.byType(RatingBadge), findsNothing);
+  });
+
+  testWidgets('list view omits the rating chip even when the data has one',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      itemCount: 1,
+      rating: 8.4,
+    );
+
+    // In grid mode the toggle button shows the *list* icon.
+    await tester.tap(find.byIcon(Icons.view_list_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RatingBadge), findsNothing);
   });
 }

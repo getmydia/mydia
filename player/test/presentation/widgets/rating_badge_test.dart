@@ -14,8 +14,8 @@ void main() {
   });
 
   testWidgets('keeps a trailing decimal on a whole score', (tester) async {
-    // TMDB sends whole values as JSON integers, so this is the shape a title
-    // rated exactly 8 arrives in. It must read "8.0", not "8".
+    // A whole-valued score must still show its decimal place, so the chip
+    // reads "8.0" rather than "8".
     await tester.pumpWidget(_host(const RatingBadge(rating: 8)));
 
     expect(find.text('8.0'), findsOneWidget);

@@ -24,7 +24,8 @@ import '../../core/theme/colors.dart';
 /// inflate to cover the whole poster instead of disappearing. Callers omit the
 /// overlay entirely instead.
 class RatingBadge extends StatelessWidget {
-  /// The score on TMDB's 0 to 10 scale. Rendered to one decimal place.
+  /// The score on TMDB's 0 to 10 scale. A whole score still renders with
+  /// its decimal, so 8 reads as "8.0".
   final double rating;
 
   const RatingBadge({

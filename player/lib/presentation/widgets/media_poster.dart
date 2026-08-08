@@ -79,7 +79,7 @@ class MediaPoster extends StatelessWidget {
                   // TMDB reports 0.0 for a title nobody has voted on, so 0 and
                   // null both mean "no rating" and the overlay is omitted
                   // rather than rendered empty. RatingBadge's doc explains why
-                  // the widget cannot hide itself from in here.
+                  // the widget cannot hide itself.
                   if (rating != null && rating > 0)
                     Positioned(
                       top: 8,
