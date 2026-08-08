@@ -10,6 +10,13 @@ external JSFunction? get _mediaSourceConstructor;
 @JS('MediaSource.isTypeSupported')
 external bool _mediaSourceIsTypeSupported(String type);
 
+/// JavaScript interop for ManagedMediaSource, the iOS 17.1+ equivalent of
+/// MediaSource. Apple grants MSE only to Safari's own HLS engine; every other
+/// browser on iOS (all of them WebKit under the hood) gets ManagedMediaSource
+/// instead, so hls.js has to check both.
+@JS('ManagedMediaSource')
+external JSFunction? get _managedMediaSourceConstructor;
+
 /// JavaScript interop for HTMLVideoElement.canPlayType
 @JS()
 @staticInterop
@@ -24,6 +31,18 @@ external _HTMLVideoElement _createElement(String tagName);
 
 /// Check if MediaSource API is available
 bool get _hasMediaSource => _mediaSourceConstructor != null;
+
+/// Check if ManagedMediaSource API is available
+bool get _hasManagedMediaSource => _managedMediaSourceConstructor != null;
+
+/// Whether this browser has what hls.js needs to play HLS at all.
+///
+/// hls.js is built on the Media Source Extensions API, either the standard
+/// `MediaSource` or its iOS 17.1+ counterpart `ManagedMediaSource`. Neither
+/// existing means hls.js cannot work here, full stop — this is the
+/// pre-flight check that catches that before a streaming session is even
+/// requested, rather than failing inscrutably once playback starts.
+bool get hasHlsMediaSourceSupport => _hasMediaSource || _hasManagedMediaSource;
 
 /// Check if a MIME type with codecs is supported for playback.
 ///

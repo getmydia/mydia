@@ -34,3 +34,10 @@ bool get supportsFmp4 => true;
 
 /// Check if the platform supports direct file playback.
 bool get supportsDirectPlay => true;
+
+/// Whether this browser has what hls.js needs (`MediaSource` or
+/// `ManagedMediaSource`).
+///
+/// Always true on native: media_kit talks to mpv/FFmpeg directly here, never
+/// a browser HLS player, so there is no MSE dependency to check.
+bool get hasHlsMediaSourceSupport => true;

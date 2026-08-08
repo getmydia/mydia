@@ -15,6 +15,7 @@ import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/player/codec_support.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
@@ -25,6 +26,7 @@ import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
+import '../../../core/player/web_session_limits.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
@@ -933,6 +935,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
       } else {
         // HLS path (both web and native fallback)
+
+        // Caught here, before a streaming session is even requested: a
+        // browser lacking both MediaSource and ManagedMediaSource cannot run
+        // hls.js at all (iOS Safari below 17.1 is the real-world case), and
+        // letting it start a transcode it can never play would fail
+        // inscrutably once playback was already underway.
+        if (kIsWeb && !CodecSupport.hasHlsMediaSourceSupport) {
+          if (mounted) {
+            setState(() {
+              _error = 'This browser cannot play video here. Try the Mydia '
+                  'app instead, or a browser released after 2023.';
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+
         if (mounted) {
           setState(() {
             _loadingMessage = 'Starting stream...';
@@ -971,7 +990,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         debugPrint('[PlayerScreen] HLS session started: $_hlsSessionId');
 
         // Label from what the server applied, not what was asked for: a relay
-        // connection clamps to 2000kbps and 720p regardless of the request.
+        // connection clamps to kWebMaxBitrateKbps and kWebMaxHeight (3000kbps,
+        // 720p) regardless of the request.
         //
         // Only a server that echoes at all gets to decide the label. The
         // legacy request does not select the echo fields, so reading them
@@ -1145,6 +1165,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final startPosition =
         startPositionSeconds > 0 ? startPositionSeconds : null;
 
+    // Public web (web.mydia.dev) is relay-only forever — a browser cannot
+    // hole-punch — so every byte of that session is bandwidth we pay for.
+    // The instance-hosted `/player` build reaches its own origin over plain
+    // HTTP and costs us nothing, so it stays uncapped. Whichever of the
+    // viewer's own choice or the relay ceiling is more restrictive wins: a
+    // viewer who already picked a lower rung than the cap keeps that choice
+    // instead of being pushed up to it.
+    final relayed = kIsWeb && !isInstanceHostedWeb;
+    final webLimits = webSessionLimits(relayed: relayed);
+    final maxBitrate =
+        _tighterCap(_selectedQuality.maxBitrateKbps, webLimits.maxBitrate);
+    final maxHeight = _tighterCap(_selectedQuality.height, webLimits.maxHeight);
+
     Future<QueryResult<Object?>> runLegacy() {
       return graphqlClient.mutate(
         MutationOptions(
@@ -1152,7 +1185,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           variables: Variables$Mutation$StartStreamingSessionLegacy(
             fileId: fileId,
             strategy: hlsStrategy,
-            maxBitrate: _selectedQuality.maxBitrateKbps,
+            maxBitrate: maxBitrate,
             startPosition: startPosition,
           ).toJson(),
         ),
@@ -1167,8 +1200,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         variables: Variables$Mutation$StartStreamingSession(
           fileId: fileId,
           strategy: hlsStrategy,
-          maxBitrate: _selectedQuality.maxBitrateKbps,
-          maxHeight: _selectedQuality.height,
+          maxBitrate: maxBitrate,
+          maxHeight: maxHeight,
           startPosition: startPosition,
         ).toJson(),
       ),
@@ -1184,6 +1217,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
 
     return result;
+  }
+
+  /// The more restrictive of a viewer's own request and a platform ceiling.
+  ///
+  /// Null means "no ceiling" for either side, so the result is null only when
+  /// both are: one side missing falls back to whichever is set, and two
+  /// present values take the smaller.
+  int? _tighterCap(int? requested, int? ceiling) {
+    if (requested == null) return ceiling;
+    if (ceiling == null) return requested;
+    return requested < ceiling ? requested : ceiling;
   }
 
   /// True when the failure is this server's schema not knowing about

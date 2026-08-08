@@ -39,6 +39,15 @@ class CodecSupport {
   /// Check if the platform supports direct file playback.
   static bool get supportsDirectPlay => platform.supportsDirectPlay;
 
+  /// Whether this browser has what hls.js needs (`MediaSource` or
+  /// `ManagedMediaSource`). Always true on native.
+  ///
+  /// False identifies iOS Safari below 17.1: it has neither, so hls.js
+  /// cannot work there. Callers should check this before starting a
+  /// streaming session and point the viewer at the native app instead of
+  /// letting playback fail once it is already underway.
+  static bool get hasHlsMediaSourceSupport => platform.hasHlsMediaSourceSupport;
+
   /// Check if running on web platform.
   static bool get isWeb => kIsWeb;
 
