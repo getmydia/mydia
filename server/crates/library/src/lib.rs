@@ -4,6 +4,7 @@
 //! This crate never writes inside a library path. It reads directory entries,
 //! calls stat, and opens files for reading through ffprobe. Nothing else.
 
+pub mod names;
 pub mod walk;
 
 #[derive(Debug, thiserror::Error)]
