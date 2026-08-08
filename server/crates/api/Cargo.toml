@@ -1,0 +1,10 @@
+[package]
+name = "mydia-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-graphql.workspace = true
+async-graphql-parser.workspace = true
+thiserror.workspace = true
