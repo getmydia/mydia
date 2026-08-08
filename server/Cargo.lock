@@ -64,6 +64,7 @@ dependencies = [
  "asynk-strim",
  "base64",
  "bytes",
+ "chrono",
  "fast_chemail",
  "fnv",
  "futures-util",
@@ -1298,6 +1299,7 @@ version = "0.1.0"
 dependencies = [
  "async-graphql",
  "async-graphql-parser",
+ "chrono",
  "thiserror",
 ]
 

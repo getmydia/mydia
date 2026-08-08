@@ -8,7 +8,7 @@ edition = "2021"
 license = "AGPL-3.0-or-later"
 
 [workspace.dependencies]
-async-graphql = "7"
+async-graphql = { version = "7", features = ["chrono"] }
 async-graphql-axum = "7"
 async-graphql-parser = "7"
 argon2 = "0.5"

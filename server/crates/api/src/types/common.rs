@@ -38,51 +38,23 @@ pub struct SortInput {
 
 #[derive(Interface)]
 #[graphql(
-    field(name = "id", ty = "ID"),
-    field(name = "parent", ty = "Option<Node>"),
+    field(name = "id", ty = "&ID"),
+    field(name = "parent", ty = "Option<&Node>"),
     field(
         name = "children",
-        ty = "Option<NodeConnection>",
+        ty = "Option<&NodeConnection>",
         arg(name = "first", ty = "Option<i32>"),
         arg(name = "after", ty = "Option<String>")
     ),
-    field(name = "ancestors", ty = "Option<Vec<Option<Node>>>"),
-    field(name = "is_playable", ty = "bool")
+    field(name = "ancestors", ty = "Option<&Vec<Option<Node>>>"),
+    field(name = "is_playable", ty = "&bool")
 )]
 pub enum Node {
-    LibraryPathStub(LibraryPathStub),
-}
-
-/// Temporary stand-in so the Node interface has a member before the media
-/// types land. Task 10 replaces it with the real implementors and deletes
-/// this type.
-pub struct LibraryPathStub;
-
-#[Object]
-impl LibraryPathStub {
-    async fn id(&self) -> ID {
-        ID::default()
-    }
-
-    async fn parent(&self) -> Option<Node> {
-        None
-    }
-
-    async fn children(
-        &self,
-        _first: Option<i32>,
-        _after: Option<String>,
-    ) -> Option<NodeConnection> {
-        None
-    }
-
-    async fn ancestors(&self) -> Option<Vec<Option<Node>>> {
-        None
-    }
-
-    async fn is_playable(&self) -> bool {
-        false
-    }
+    Movie(Box<crate::types::media::Movie>),
+    TvShow(Box<crate::types::media::TvShow>),
+    Season(Box<crate::types::media::Season>),
+    Episode(Box<crate::types::media::Episode>),
+    LibraryPath(Box<crate::types::media::LibraryPath>),
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
@@ -183,7 +155,7 @@ pub fn sdl_fragment() -> String {
     #[Object]
     impl FragmentQuery {
         async fn node(&self) -> Node {
-            LibraryPathStub.into()
+            std::future::pending().await
         }
 
         async fn page_info(&self) -> PageInfo {
