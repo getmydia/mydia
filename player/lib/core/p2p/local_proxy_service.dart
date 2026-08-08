@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/native/lib.dart'
     show
@@ -30,7 +31,7 @@ final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
 ///
 /// Direct stream: /direct/{file_id}/stream
 /// Download: /download/{job_id}/file
-class LocalProxyService {
+class LocalProxyService implements MediaProxy {
   final P2pService _p2p;
   HttpServer? _server;
 
@@ -49,6 +50,8 @@ class LocalProxyService {
   String? _lanAddress;
 
   int get port => _server?.port ?? 0;
+
+  @override
   bool get isRunning => _server != null;
 
   /// Whether the proxy is currently reachable from other devices on the LAN.
@@ -74,6 +77,14 @@ class LocalProxyService {
     return lanBaseUrl ?? 'http://127.0.0.1:${_server!.port}';
   }
 
+  /// Delegates to [_urlBase] rather than reimplementing it: [_urlBase] is
+  /// exactly what [_authorizeAndStripPrefix] expects callers to have used
+  /// (loopback with no prefix, or the LAN address with `/g/<token>`), and
+  /// every existing `buildXxxUrl` method is already proven against that
+  /// contract. A separate implementation here could drift from it.
+  @override
+  String get baseUrl => _urlBase;
+
   LocalProxyService(this._p2p);
 
   /// Test-only constructor: builds a service with no live P2P dependency.
@@ -84,6 +95,7 @@ class LocalProxyService {
   ///
   /// [targetPeer] - The peer ID or EndpointAddr JSON to send HLS requests to.
   /// [authToken] - Optional auth token for HLS requests.
+  @override
   Future<void> start({
     required String targetPeer,
     String? authToken,
@@ -107,6 +119,7 @@ class LocalProxyService {
     });
   }
 
+  @override
   Future<void> stop() async {
     await _server?.close();
     _server = null;
@@ -268,7 +281,8 @@ class LocalProxyService {
   ///
   /// This uses the P2P HLS protocol with a "direct:" session ID prefix
   /// to stream the raw file without HLS transcoding.
-  String buildDirectStreamUrl(String fileId) => '$_urlBase/direct/$fileId/stream';
+  String buildDirectStreamUrl(String fileId) =>
+      '$_urlBase/direct/$fileId/stream';
 
   /// Build a download URL for a completed transcode job.
   ///
@@ -326,7 +340,10 @@ class LocalProxyService {
       return (statusCode: HttpStatus.forbidden, path: rawPath);
     }
 
-    return (statusCode: HttpStatus.ok, path: rawPath.substring(expected.length));
+    return (
+      statusCode: HttpStatus.ok,
+      path: rawPath.substring(expected.length)
+    );
   }
 
   /// Test hook: returns the status code `_handleRequest` would produce for a
