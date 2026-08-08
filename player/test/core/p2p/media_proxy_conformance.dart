@@ -95,6 +95,23 @@ void mediaProxyConformanceTests(
       expect(call.rangeEnd, isNull);
     });
 
+    test('answers a failed p2p request with an error status, not a body',
+        () async {
+      await startProxy();
+
+      p2p.onSendHlsRequest =
+          (_) async => throw Exception('p2p transport failure');
+
+      final response =
+          await proxyGet('${proxy.baseUrl}/hls/$sessionId/index.m3u8');
+
+      // A failure that arrives as a 200 with a short body is the worst of
+      // both: the player treats it as media and fails much later, somewhere
+      // unrelated.
+      expect(response.status, 500);
+      expect(utf8.decode(response.body), contains('p2p transport failure'));
+    });
+
     test('serves the slice a byte range asked for', () async {
       await startProxy();
 

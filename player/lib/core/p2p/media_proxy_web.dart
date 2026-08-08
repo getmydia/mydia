@@ -197,6 +197,8 @@ class ServiceWorkerMediaProxy implements MediaProxy {
     MediaRouteMatch route,
     SwRequest request,
   ) async {
+    var headSent = false;
+
     try {
       final response = await _p2p.sendHlsRequest(
         peer: peer,
@@ -207,6 +209,7 @@ class ServiceWorkerMediaProxy implements MediaProxy {
         authToken: _authToken,
       );
 
+      headSent = true;
       _post(
         exchange,
         _head(
@@ -218,7 +221,14 @@ class ServiceWorkerMediaProxy implements MediaProxy {
       _end(exchange);
     } catch (e) {
       debugPrint('[SwProxy] HLS request failed for ${request.path}: $e');
-      _fail(exchange, 'Error: $e');
+      // 500 with the message as the body, which is what the loopback proxy
+      // answers. Once a head is out the status is already committed, so the
+      // only way left to say the body is short is to error the stream.
+      if (headSent) {
+        _fail(exchange, 'Error: $e');
+      } else {
+        _serveBody(exchange, 500, 'Error: $e');
+      }
     }
   }
 
@@ -274,10 +284,12 @@ class ServiceWorkerMediaProxy implements MediaProxy {
       },
       onError: (Object e) {
         debugPrint('[SwProxy] Stream interrupted for ${route.sessionId}: $e');
+        // 500 for a thrown error and 502 for a reported stream error, the
+        // same split the loopback proxy makes.
         if (headSent) {
           _fail(exchange, 'Error: $e');
         } else {
-          _serveBody(exchange, 502, 'Error: $e');
+          _serveBody(exchange, 500, 'Error: $e');
         }
         finish();
       },
