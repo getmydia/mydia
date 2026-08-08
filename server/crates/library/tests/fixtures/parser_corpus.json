@@ -1,0 +1,5883 @@
+[
+  {
+    "input": "(1995) Movie Name",
+    "expected": {
+      "title": "Movie Name"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "(500).Days.Of.Movie.(2009).DTS.1080p.BluRay.x264.NLsubs",
+    "expected": {
+      "title": "(500) Days Of Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "(Series of Title s03 e - \"Series of Title Season 3 Episode 10\"",
+    "expected": {
+      "title": "Series of Title",
+      "episode": 10,
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "(movieawake.com) Movie Title 2023 [720p] [English Subbed]",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "(seriesawake.com) Series Super - 57 [720p] [English Subbed]",
+    "expected": {
+      "title": "Series Super"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "/TV Drop/Series - 10x11 - Title [SDTV]/1011 - Title.avi",
+    "expected": {
+      "episode": 11,
+      "season": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "/TV Drop/Series Title - 10x12 - 24 Hours of Development [SDTV]/1012 - Hours of Development.avi",
+    "expected": {
+      "episode": 12,
+      "season": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "/TV Drop/Series Title - 10x12 - 24 Hours of Development [SDTV]/Hours of Development.avi",
+    "expected": {
+      "episode": 12,
+      "season": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "01-03\\The Series Title (2010) - 1x01-02-03 - Episode Title HDTV-720p Proper",
+    "expected": {
+      "title": "The Series Title (2010)",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "01x04 - Halloween, Part 1 - 720p WEB-DL",
+    "expected": {
+      "title": "",
+      "episode": 4,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "10.Lines.You.Know.About.Code.S02E04.Prohibition.HDTV.XviD-AFG",
+    "expected": {
+      "title": "10 Lines You Know About Code",
+      "episode": 4,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "11-02 The Series Reaction (HD).m4v",
+    "expected": {
+      "title": "",
+      "episode": 2,
+      "season": 11
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "13 Series Se.1 afl.2-3-4 [VTM]",
+    "expected": {
+      "title": "13 Series",
+      "episode": 2,
+      "season": 1,
+      "episode_end": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "1776.1979.EXTENDED.720p.BluRay.X264-AMIABLE",
+    "expected": {
+      "title": "1776"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "1x01-x03 - Episode Title.HDTV-720p",
+    "expected": {
+      "title": "",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "1x03 - 274 [1080p BluRay].mkv",
+    "expected": {
+      "title": "",
+      "episode": 3,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "1x03 - The 112th Congress [1080p BluRay].mkv",
+    "expected": {
+      "title": "",
+      "episode": 3,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "1x04",
+    "expected": {
+      "title": "",
+      "episode": 4,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "1x1",
+    "expected": {
+      "title": "",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2.Movie.in.L.A.1996.GERMAN.DL.720p.WEB.H264-SOV",
+    "expected": {
+      "title": "2 Movie in L.A.",
+      "year": 1996
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "20-1.2014.S02E01.720p.HDTV.x264-CROOKS",
+    "expected": {
+      "title": "20-1 2014",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2009x09 [SDTV].avi",
+    "expected": {
+      "title": "",
+      "episode": 9,
+      "season": 2009
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2011.01.10 - A Late Talk Show- HD TV.mkv",
+    "expected": {
+      "title": "",
+      "year": 2011
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2011.03.13 - A Late Talk Show - HD TV.mkv",
+    "expected": {
+      "title": "",
+      "year": 2011
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "20161024- Exotic Payback.21x41_720.mkv",
+    "expected": {
+      "title": "",
+      "year": 2016
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2018-11-14.1080.all.mp4",
+    "expected": {
+      "title": "",
+      "year": 2018
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2019_08_20_1080_all.mp4",
+    "expected": {
+      "title": "",
+      "year": 2019
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2020.A.Late.Talk.Show.2011.12.02.PDTV.XviD-C4TV",
+    "expected": {
+      "title": "2020 A Late Talk Show",
+      "year": 2011
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2020.A.Late.Talk.Show.2012.13.02.PDTV.XviD-C4TV",
+    "expected": {
+      "title": "2020 A Late Talk Show",
+      "year": 2012
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "2020.A.Late.Talk.Show.2012.16.02.PDTV.XviD-C4TV",
+    "expected": {
+      "title": "2020 A Late Talk Show",
+      "year": 2012
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "210810 ABC123 Series Title ep05.mp4",
+    "expected": {
+      "title": "ABC123 Series Title",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "221201 Series Title! ABC123 ep219[720p.h264].mp4",
+    "expected": {
+      "title": "Series Title! ABC123",
+      "episode": 219,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "221204 乃木坂工事中 ep389.mp4",
+    "expected": {
+      "title": "乃木坂工事中",
+      "episode": 389,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "221205 ABC123 17研究所！ #17.ts",
+    "expected": {
+      "title": "ABC123 17研究所！",
+      "episode": 17,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "221206 Series Title! ep08(Tanaka Miku).ts",
+    "expected": {
+      "title": "Series Title!",
+      "episode": 8,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "221208 ABC123 Series Title Season 39 ep11.mp4",
+    "expected": {
+      "title": "ABC123 Series Title",
+      "episode": 11,
+      "season": 39
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "221208 ABC123 Series Title ep34[1080p60 H264].mp4",
+    "expected": {
+      "title": "ABC123 Series Title",
+      "episode": 34,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "24 7 Series-Title - Road to the Sonarr Part 02 720p HDTV x264 ORENJI",
+    "expected": {
+      "title": "24 7 Series-Title - Road to the Sonarr",
+      "episode": 2,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "24 7 Series-Title - Road to the Sonarr Part01 720p HDTV x264 ORENJI",
+    "expected": {
+      "title": "24 7 Series-Title - Road to the Sonarr",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "24-7 Series - Title - Road to the Sonarr - S01E03 - Episode 3.mkv",
+    "expected": {
+      "title": "24-7 Series - Title - Road to the Sonarr",
+      "episode": 3,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "24-7 Series-Title - Road to the Sonarr - S01E01 - Part 1",
+    "expected": {
+      "title": "24-7 Series-Title - Road to the Sonarr",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "2x04x05.720p.BluRay-FUTV",
+    "expected": {
+      "title": "",
+      "episode": 4,
+      "season": 2,
+      "episode_end": 5
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "30 Series - S01E01 - Pilot.avi",
+    "expected": {
+      "title": "30 Series",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "30 Series S03 WS PDTV XviD FUtV",
+    "expected": {
+      "title": "30 Series",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "30.Series.Season.04.HDTV.XviD-DIMENSION",
+    "expected": {
+      "title": "30 Series",
+      "season": 4
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "42 S01E01",
+    "expected": {
+      "title": "42",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "5x09 - 100 [720p WEB-DL].mkv",
+    "expected": {
+      "title": "",
+      "episode": 9,
+      "season": 5
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "5x10 WS PDTV XviD FUtV",
+    "expected": {
+      "title": "",
+      "episode": 10,
+      "season": 5
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "666 Series Title - S01E01",
+    "expected": {
+      "title": "666 Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "69.S01E01",
+    "expected": {
+      "title": "69",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "6x13 - The Series Show 100th Episode Special",
+    "expected": {
+      "title": "",
+      "episode": 13,
+      "season": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "8.2019.GERMAN.720p.BluRay.x264-UNiVERSUM",
+    "expected": {
+      "title": "8",
+      "year": 2019
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "8x01_02 - Free Falling",
+    "expected": {
+      "title": "",
+      "episode": 1,
+      "season": 8,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "921.mkv",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "96.Hours.Movie.3.EXTENDED.2014.German.DL.1080p.BluRay.x264-ENCOUNTERS",
+    "expected": {
+      "title": "96 Hours Movie 3",
+      "year": 2014
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "A Late Talk Show - 2011-04-12 - Gov. Deval Patrick",
+    "expected": {
+      "title": "A Late Talk Show",
+      "year": 2011
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "A Late Talk Show - 2011-06-16 - Larry David, \"Bachelorette\" Ashley Hebert, Pitbull with Ne-Yo",
+    "expected": {
+      "title": "A Late Talk Show",
+      "year": 2011
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "A Late Talk Show 2011 04 15 1080i HDTV DD5 1 MPEG2 TrollHD",
+    "expected": {
+      "title": "A Late Talk Show",
+      "year": 2011
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "A Series: RE S2 - Episode 4 VOSTFR (1080p)",
+    "expected": {
+      "title": "A Series: RE S2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "A.I.Artificial.Movie.(2001)",
+    "expected": {
+      "title": "A.I. Artificial Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "A.Late.Talk.Show.140722.720p.HDTV.x264-YesTV",
+    "expected": {
+      "title": "A Late Talk Show",
+      "year": 2014
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "A.Late.Talk.Show.2010.10.11.Johnny.Knoxville.iTouch-MW",
+    "expected": {
+      "title": "A Late Talk Show",
+      "year": 2010
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "A.Movie.Name.(1998)",
+    "expected": {
+      "title": "A Movie Name"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "A_Late_Talk_Show_140722_720p_HDTV_x264-YesTV",
+    "expected": {
+      "title": "A Late Talk Show",
+      "year": 2014
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Abc - Abc Abc Abc - 107 VOSTFR par Fansub-Miracle Sharingan (1920x1080) - HQ_Draft",
+    "expected": {
+      "title": "Abc - Abc Abc Abc",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Abc Abc 484 VOSTFR par Abc-Abc (1280*720) - version MQ",
+    "expected": {
+      "title": "Abc Abc",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Abc Abc Abc Abc Episode 10 VOSTFR (1920x1080) Miracle Sharingan Fansub.MKV - Team - (� suivre)",
+    "expected": {
+      "title": "Abc Abc Abc Abc",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Abc x Abc (2011) - 141 - Magician [KaiDubs] [1080p]",
+    "expected": {
+      "title": "Abc x Abc (2011)",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Acropolis Series S05 EXTRAS DVDRip XviD RUNNER",
+    "expected": {
+      "title": "Acropolis Series",
+      "season": 5
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Amazing Title (2024/S01E07/DSNP/WEB-DL/1080p/ESP/EAC3 5.1/ING/EAC3 5.1 Atmos/SUBS) SPWEB",
+    "expected": {
+      "title": "Amazing Title (2024)",
+      "episode": 7,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Anime Title - S2010E994 [0994] [2010-02-28] - Episode Title [x264 720p][AAC 2ch][HS][Shion+GakiDave]",
+    "expected": {
+      "title": "Anime Title",
+      "episode": 994,
+      "season": 2010
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Anime Title - S2020E1527 [1527] [2020-10-11] - Episode Title",
+    "expected": {
+      "title": "Anime Title",
+      "episode": 1527,
+      "season": 2020
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Anime Title 100 S3 - 01 (1080p) [5A493522]",
+    "expected": {
+      "title": "Anime Title 100 S3",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Anime Title S21 1000",
+    "expected": {
+      "title": "Anime Title S21",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Anime Title S21 999",
+    "expected": {
+      "title": "Anime Title S21",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Anime Title the Final - 09 (2021) [SubsPlease] [WEBRip] [HD 1080p]",
+    "expected": {
+      "title": "Anime Title the Final",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Anime, Title? | Japanse Anime, Title? [Season 1 + EXTRA] [BD 1080p x265 HEVC OPUS] [Dual-Audio]",
+    "expected": {
+      "title": "Anime, Title | Japanse Anime, Title",
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "App.Sonarr.Made.in.Canada.Part.Two.720p.HDTV.x264-2HD",
+    "expected": {
+      "title": "App Sonarr Made in Canada",
+      "episode": 2,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Bad Format",
+    "expected": {
+      "title": "badformat"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "C:/Test/TV/Series.4x05.HDTV.XviD-LOL",
+    "expected": {
+      "episode": 5,
+      "season": 4
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 01\\01 Pilot (1080p HD).mkv",
+    "expected": {
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 01\\1 Pilot (1080p HD).mkv",
+    "expected": {
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 1\\02 Honor Thy Father (1080p HD).m4v",
+    "expected": {
+      "episode": 2,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 1\\02.04.24 - S01E01 - The Rabbit Hole",
+    "expected": {
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 1\\2 Honor Thy Developer (1080p HD).m4v",
+    "expected": {
+      "episode": 2,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 1\\8 Series Rules - S01E01 - Pilot",
+    "expected": {
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 2 - Total Series Action\\01. Total Series Action - Episode 1 - Monster Cash.mkv",
+    "expected": {
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Series\\Season 2\\01. Total Series Action - Episode 1 - Monster Cash.mkv",
+    "expected": {
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "C:\\Test\\Unsorted\\Series.Title.S01E01.720p.HDTV\\tbbt101.avi",
+    "expected": {
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "C:\\Test\\Unsorted\\Series.Title.S02E18.720p.BluRay.x264-SiNNERS-RP\\45a55debe3856da318cc35882ad07e43cd32fd15.mkv",
+    "expected": {
+      "episode": 18,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "C:\\Test\\Unsorted\\Series.Title.S02E19.720p.BluRay.x264-SiNNERS-RP\\ba27283b17c00d01193eacc02a8ba98eeb523a76.mkv",
+    "expected": {
+      "episode": 19,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Cars.2.German.DL.720p.BluRay.x264-EmpireHD",
+    "expected": {
+      "title": "Cars 2",
+      "year": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Castle (2009)",
+    "expected": {
+      "title": "castle2009"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Conan",
+    "expected": {
+      "title": "conan"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "D:\\shares\\TV Shows\\Series (2003)\\Season 2\\S02E21.avi",
+    "expected": {
+      "episode": 21,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "D:\\shares\\TV Shows\\series title\\Season 2\\S02E21 - 94 Title - 720p TV.mkv",
+    "expected": {
+      "episode": 21,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Das.A.Team.Der.Film.Extended.Cut.German.720p.BluRay.x264-ANCIENT",
+    "expected": {
+      "title": "Das A Team Der Film",
+      "year": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Der.Film.deines.Lebens.German.2011.PAL.DVDR-ETM",
+    "expected": {
+      "title": "Der Film deines Lebens",
+      "year": 2011
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Der.Movie.Eine.Unerwartete.Reise.Extended.German.720p.BluRay.x264-EXQUiSiTE",
+    "expected": {
+      "title": "Der Movie Eine Unerwartete Reise",
+      "year": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Der.Movie.German.Bluray.FuckYou.Pso.Why.cant.you.follow.scene.rules.1998",
+    "expected": {
+      "year": 1998
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Der.Movie.James.German.Bluray.FuckYou.Pso.Why.cant.you.follow.scene.rules.1998",
+    "expected": {
+      "title": "Der Movie James"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Developers & Coders S02E10 6-50 to SLC [SDTV]",
+    "expected": {
+      "title": "Developers & Coders",
+      "episode": 10,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Die Unfassbaren Movie Name EXTENDED German DTS 720p BluRay x264-RHD",
+    "expected": {
+      "title": "Die Unfassbaren Movie Name",
+      "year": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Die.Unfassbaren.Movie.Name.EXTENDED.German.DTS.720p.BluRay.x264-RHD",
+    "expected": {
+      "title": "Die Unfassbaren Movie Name",
+      "year": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Die.fantastische.Reise.des.Dr.Dolittle.2020.German.DL.LD.1080p.WEBRip.x264-PRD",
+    "expected": {
+      "title": "Die fantastische Reise des Dr. Dolittle",
+      "year": 2020
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Different show 1. Bölüm (23.10.2023) 720p WebDL AAC H.264 - TURG",
+    "expected": {
+      "title": "Different show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Don't Ever Trust The B---- in Code 23.S01E01",
+    "expected": {
+      "title": "Don't Ever Trust The B---- in Code 23",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Drop.Movie.1994.German.AC3D.DL.720p.BluRay.x264-KLASSiGERHD",
+    "expected": {
+      "title": "Drop Movie",
+      "year": 1994
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Dubbed show 79.BLM Sezon Finali(25.06.2023) 720p WEB-DL AAC2.0 H.264-TURG",
+    "expected": {
+      "title": "Dubbed show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "E.010910.HDTVx264REPACKLOL.mp4",
+    "expected": {
+      "title": "E",
+      "episode": 9,
+      "season": 1,
+      "episode_end": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "E:\\Downloads\\tv\\Series.Title.S01E01.720p.HDTV\\ajifajjjeaeaeqwer_eppj.avi",
+    "expected": {
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Exclusive BLM Documentary with no false positives EP03.1080p.AAC.x264",
+    "expected": {
+      "title": "Exclusive BLM Documentary with no false positives",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "G.I.Movie.Movie.2013.THEATRiCAL.COMPLETE.BLURAY-GLiMMER",
+    "expected": {
+      "title": "G.I. Movie Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Hell on Series S02E09 E10 HDTV x264 EVOLVE",
+    "expected": {
+      "title": "Hell on Series",
+      "episode": 9,
+      "season": 2,
+      "episode_end": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Hell.on.Series.S02E09-E10.720p.HDTV.x264-EVOLVE",
+    "expected": {
+      "title": "Hell on Series",
+      "episode": 9,
+      "season": 2,
+      "episode_end": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Initial_Series_Title - 01 DVD - Central Anime",
+    "expected": {
+      "title": "Initial Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Initial_Series_Title - 03 DVD - Central Anime",
+    "expected": {
+      "title": "Initial Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Initial_Series_Title - 14 DVD - Central Anime",
+    "expected": {
+      "title": "Initial Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Initial_Series_Title_-_01(DVD)_-_(Central_Anime)[5AF6F1E4].mkv",
+    "expected": {
+      "title": "Initial Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Initial_Series_Title_-_02(DVD)_-_(Central_Anime)[0CA65F00].mkv",
+    "expected": {
+      "title": "Initial Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Initial_Series_Title_-_03(DVD)_-_(Central_Anime)[629BD592].mkv",
+    "expected": {
+      "title": "Initial Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Initial_Series_Title_-_14(DVD)_-_(Central_Anime)[0183D922].mkv",
+    "expected": {
+      "title": "Initial Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Instant Series S03 EXTRAS DVDRip XviD OSiTV",
+    "expected": {
+      "title": "Instant Series",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "It's a Series Title.E56.190121.720p-NEXT.mp4",
+    "expected": {
+      "title": "It's a Series Title",
+      "episode": 56
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Joe.Movie.2.EXTENDED.EDITION.2015.German.DL.PAL.DVDR-ETM",
+    "expected": {
+      "title": "Joe Movie 2",
+      "year": 2015
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "John.Smith.The.Series.Title.5of9.The.Universe.Of.Development.1990.DVDRip.x264-HANDJOB",
+    "expected": {
+      "title": "John Smith The Series Title",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Judge Developer 2016 02 25 S20E142",
+    "expected": {
+      "title": "Judge Developer",
+      "episode": 142,
+      "season": 20
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Judge Developer 2016 02 25 S20E143",
+    "expected": {
+      "title": "Judge Developer",
+      "episode": 143,
+      "season": 20
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Kick.Ass.2.2013.German.DTS.DL.720p.BluRay.x264-Pate_",
+    "expected": {
+      "title": "Kick Ass 2",
+      "year": 2013
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Kick.Movie.2.2013.German.DTS.DL.720p.BluRay.x264-Pate",
+    "expected": {
+      "title": "Kick Movie 2",
+      "year": 2013
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Knights Series Title - 01 [1080p 10b DTSHD-MA eng sub].mkv",
+    "expected": {
+      "title": "Knights Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Law_and_Order_SVU",
+    "expected": {
+      "title": "lawordersvu"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Leaving Movie by Movie (1897) [DVD].mp4",
+    "expected": {
+      "title": "Leaving Movie by Movie"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Life.Movie.2014.German.DL.PAL.DVDR-ETM",
+    "expected": {
+      "title": "Life Movie",
+      "year": 2014
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "MY MOVIE (2016) [R][Action, Horror][720p.WEB-DL.AVC.8Bit.6ch.AC3].mkv",
+    "expected": {
+      "title": "MY MOVIE"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Mad Series - Season 1 [Bluray1080p]",
+    "expected": {
+      "title": "madseries"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Mad Series - Season 1 [Bluray720p]",
+    "expected": {
+      "title": "madseries"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Mini Title (Miniserie) (2024/S01E07/DSNP/WEB-DL/1080p/ESP/EAC3 5.1/ING/EAC3 5.1 Atmos/SUBS) SPWEB",
+    "expected": {
+      "title": "Mini Title (2024)",
+      "episode": 7,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Mission Movie: Rogue Movie (2015)�[XviD - Ita Ac3 - SoftSub Ita]azione, spionaggio, thriller *Prima Visione* Team mulnic Tom Cruise",
+    "expected": {
+      "title": "Mission Movie: Rogue Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie Name (1897) [DVD].mp4",
+    "expected": {
+      "year": 1897
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie Name FRENCH BluRay 720p 2016 kjhlj",
+    "expected": {
+      "year": 2016
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie.2018.1080p.AMZN.WEB-DL.DD5.1.H.264-NTG",
+    "expected": {
+      "title": "Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie.Aufbruch.nach.Pandora.Extended.2009.German.DTS.720p.BluRay.x264-SoW",
+    "expected": {
+      "title": "Movie Aufbruch nach Pandora",
+      "year": 2009
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie.EXTENDED.2011.HDRip.AC3.German.XviD-POE",
+    "expected": {
+      "title": "Movie",
+      "year": 2011
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie.German.DL.AC3.Dubbed..BluRay.x264-PsO",
+    "expected": {
+      "title": "Movie"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie.Hills.2019.German.DL.AC3.Dubbed.1080p.BluRay.x264-muhHD",
+    "expected": {
+      "title": "Movie Hills",
+      "year": 2019
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie.Klasse.von.1999.1990.German.720p.HDTV.x264-NORETAiL",
+    "expected": {
+      "title": "Movie Klasse von 1999",
+      "year": 1990
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie.Movie.2000.FRENCH..BluRay.-AiRLiNE",
+    "expected": {
+      "title": "Movie Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie.Squad.2016.EXTENDED.German.DL.AC3.BDRip.x264-hqc",
+    "expected": {
+      "title": "Movie Squad",
+      "year": 2016
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie.The.Final.Chapter.2016",
+    "expected": {
+      "title": "Movie The Final Chapter"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie.Title.Imax.2018.1080p.AMZN.WEB-DL.DD5.1.H.264-NTG",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie.War.Q.EXTENDED.CUT.2013.German.DL.1080p.BluRay.x264-HQX",
+    "expected": {
+      "title": "Movie War Q",
+      "year": 2013
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie.Weg.des.Kriegers.EXTENDED.German.720p.BluRay.x264-EXQUiSiTE",
+    "expected": {
+      "title": "Movie Weg des Kriegers",
+      "year": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Movie.and.Movie.2010.Extended.Cut.German.DTS.DL.720p.BluRay.x264-HDS",
+    "expected": {
+      "title": "Movie and Movie",
+      "year": 2010
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Movie: The Movie World 2013",
+    "expected": {
+      "title": "Movie: The Movie World"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "My Movie 1999 German Bluray",
+    "expected": {
+      "title": "My Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "My Only Series Title.E37.190120.1080p-NEXT.mp4",
+    "expected": {
+      "title": "My Only Series Title",
+      "episode": 37
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "My.Series.S2014.720p.HDTV.x264-ME",
+    "expected": {
+      "title": "My Series",
+      "season": 2014
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].Full Subtitles.eng.ass",
+    "expected": {
+      "title": "Full Subtitles"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].default.eng.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].default.fra.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].eng.default.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].eng.forced.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].forced.eng.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].forced.fra.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].fra.default.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].fra.forced.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].mytitle - 1.en.ass",
+    "expected": {
+      "title": "mytitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].mytitle 1.en.ass",
+    "expected": {
+      "title": "mytitle 1"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].mytitle.en.ass",
+    "expected": {
+      "title": "mytitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].ru-something-else.srt",
+    "expected": {
+      "title": "something-else"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].testtitle.default.eng.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].testtitle.default.fra.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].testtitle.forced.eng.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - S01E20 - [AAC 2.0].testtitle.forced.fra.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].Full Subtitles.eng.ass",
+    "expected": {
+      "title": "Full Subtitles"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].default.eng.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].default.fra.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].eng.default.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].eng.forced.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].forced.eng.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].forced.fra.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].fra.default.testtitle.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].fra.forced.testtitle.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].mytitle - 1.en.ass",
+    "expected": {
+      "title": "mytitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].mytitle 1.en.ass",
+    "expected": {
+      "title": "mytitle 1"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].mytitle.en.ass",
+    "expected": {
+      "title": "mytitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].ru-something-else.srt",
+    "expected": {
+      "title": "something-else"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].testtitle.default.eng.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].testtitle.default.fra.forced.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].testtitle.forced.eng.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Name (2020) - [AAC 2.0].testtitle.forced.fra.ass",
+    "expected": {
+      "title": "testtitle"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Never.Trust.The.B----.in.Code.23.S01E01",
+    "expected": {
+      "title": "Never Trust The B---- in Code 23",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "P:\\TV Shows\\Series\\Season 6\\S06E13 - 5 to 9 - 720p BluRay.mkv",
+    "expected": {
+      "episode": 13,
+      "season": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Parenthood.2010",
+    "expected": {
+      "title": "parenthood2010"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Passengers.German.DL.AC3.Dubbed..BluRay.x264-PsO",
+    "expected": {
+      "title": "Passengers",
+      "year": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Plus Series la title - S14E3533 FRENCH WEBRIP H.264 AAC (09.05.2018)",
+    "expected": {
+      "title": "Plus Series la title",
+      "episode": 3533,
+      "season": 14
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Punky Series S01 EXTRAS DVDRip XviD RUNNER",
+    "expected": {
+      "title": "Punky Series",
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "R.I.P.D.2013.720p.BluRay.x264-SPARKS",
+    "expected": {
+      "title": "R.I.P.D."
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Red Show - S02 - E06 - Parallel Series",
+    "expected": {
+      "title": "Red Show",
+      "episode": 6,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S01E01-E03 - Episode Title.HDTV-720p",
+    "expected": {
+      "title": "",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S01E04",
+    "expected": {
+      "title": "",
+      "episode": 4,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S02E03-04-05.720p.BluRay-FUTV",
+    "expected": {
+      "title": "",
+      "episode": 3,
+      "season": 2,
+      "episode_end": 5
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S02E04E05.720p.BluRay-FUTV",
+    "expected": {
+      "title": "",
+      "episode": 4,
+      "season": 2,
+      "episode_end": 5
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S02E10 6-50 to SLC [SDTV]",
+    "expected": {
+      "title": "",
+      "episode": 10,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S03E01.S03E02.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "",
+      "episode": 1,
+      "season": 3,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S03E09 WS PDTV XviD FUtV",
+    "expected": {
+      "title": "",
+      "episode": 9,
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S06E03-Unwrapped-(Number Ones Unwrapped) - [DarkData]",
+    "expected": {
+      "title": "",
+      "episode": 3,
+      "season": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S08E20 50-50 Carla [DVD]",
+    "expected": {
+      "title": "",
+      "episode": 20,
+      "season": 8
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S2009E09 [SDTV].avi",
+    "expected": {
+      "title": "",
+      "episode": 9,
+      "season": 2009
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S6E02-Unwrapped-(Playing With Food) - [DarkData]",
+    "expected": {
+      "title": "",
+      "episode": 2,
+      "season": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "S:\\TV Drop\\Series - 10x11 - Title [SDTV]\\1011 - Title.avi",
+    "expected": {
+      "episode": 11,
+      "season": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "S:\\TV Drop\\Series Title - 10x12 - 24 Hours of Development [SDTV]\\1012 - Hours of Development.avi",
+    "expected": {
+      "episode": 12,
+      "season": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "S:\\TV Drop\\Series Title - 10x12 - 24 Hours of Development [SDTV]\\Hours of Development.avi",
+    "expected": {
+      "episode": 12,
+      "season": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Season 2\\E05-06 - Episode Title HDTV-720p Proper",
+    "expected": {
+      "title": "",
+      "episode": 5,
+      "season": 2,
+      "episode_end": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series",
+    "expected": {
+      "title": "series"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series & Title - 4x05 - Title",
+    "expected": {
+      "title": "seriestitle"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series (2009)",
+    "expected": {
+      "title": "series2009"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series (2009) - [06x16] - Room 147.mp4",
+    "expected": {
+      "title": "Series (2009)",
+      "episode": 16,
+      "season": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series (2011)",
+    "expected": {
+      "title": "series2011"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series - 01x02 - The Rooster Prince - [itz_theo]",
+    "expected": {
+      "title": "Series",
+      "episode": 2,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series - 2016x231",
+    "expected": {
+      "title": "Series",
+      "episode": 231,
+      "season": 2016
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series - 2x12 - The Choice [HDTV-1080p].mkv",
+    "expected": {
+      "title": "Series",
+      "episode": 12,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series - 2x4 - New Car Smell [HDTV-1080p].mkv",
+    "expected": {
+      "title": "Series",
+      "episode": 4,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series - S01E09 - Debate 109",
+    "expected": {
+      "title": "Series",
+      "episode": 9,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series - S02E02 - My Maserati Does 185",
+    "expected": {
+      "title": "Series",
+      "episode": 2,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series - S2016E231",
+    "expected": {
+      "title": "Series",
+      "episode": 231,
+      "season": 2016
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series - Season 1 - Episode 01 (Resolution).avi",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series - Temporada 1 - [HDTV 1080p][Cap.101](wolfmax4k.com)",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series 104 - S01E07 The Developers [SDTV]",
+    "expected": {
+      "title": "Series 104",
+      "episode": 7,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series 13 - S01E01",
+    "expected": {
+      "title": "Series 13",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Confidential   Season 3",
+    "expected": {
+      "title": "Series Confidential",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Five 0 S01 720p WEB DL DD5 1 H 264 NT",
+    "expected": {
+      "title": "Series Five 0",
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Kings - 2x09-2x10 - Served Code [SDTV] ",
+    "expected": {
+      "title": "Series Kings",
+      "episode": 9,
+      "season": 2,
+      "episode_end": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Kings - 2x9-2x10 - Served Code [SDTV] ",
+    "expected": {
+      "title": "Series Kings",
+      "episode": 9,
+      "season": 2,
+      "episode_end": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series No More S01 2023 1080p WEB-DL AVC AC3 2.0 Dual Audio -ZR-",
+    "expected": {
+      "title": "Series No More",
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series On TitleClub E76 2024 08 08 1080p WEB H264-RnB96 [TJET]",
+    "expected": {
+      "title": "Series On TitleClub",
+      "year": 2024
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series S 01 720p WEB DL DD 5 1 h264 TjHD",
+    "expected": {
+      "title": "Series",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series S01E02 (22 October 2016) HDTV 720p [Webrip]",
+    "expected": {
+      "title": "Series",
+      "episode": 2,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series S02E09 HDTV x264-2HD [eztv]-[rarbg.com]",
+    "expected": {
+      "title": "series"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series S08E20 50-50 Carla [DVD]",
+    "expected": {
+      "title": "Series",
+      "episode": 20,
+      "season": 8
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series S1-E1-WEB-DL-1080p-NZBgeek",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series S1E1-WEB-DL-1080p-NZBgeek",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Season 1 720p WEB DL DD 5 1 h264 TjHD",
+    "expected": {
+      "title": "Series",
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Show.2016.E04.Power.720p.WEB-DL.DD5.1.H.264-MARS",
+    "expected": {
+      "title": "Series Show 2016",
+      "episode": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series T Se.3 afl.3",
+    "expected": {
+      "title": "Series T",
+      "episode": 3,
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series T Se.3 afl.3 en 4",
+    "expected": {
+      "title": "Series T",
+      "episode": 3,
+      "season": 3,
+      "episode_end": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Time S02 720p HDTV x264 CRON",
+    "expected": {
+      "title": "seriestime"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title (1955) - 1954-01-23 05 00 00 - Cottage for Sale.ts",
+    "expected": {
+      "title": "Series Title (1955)",
+      "year": 1954
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title (2010) {01} Episode Title (1).hdtv-720p",
+    "expected": {
+      "title": "Series Title (2010)",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title (2011) - S01E23-E24 - ...E i nuovi orizzonti [HDTV 360p] [ITA].mkv",
+    "expected": {
+      "title": "Series Title (2011)",
+      "episode": 23,
+      "season": 1,
+      "episode_end": 24
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title (2014) - 39 (137) [v2][720p.HDTV][Unison Fansub]",
+    "expected": {
+      "title": "Series Title (2014)",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title (S15E06-08) City Sushi",
+    "expected": {
+      "title": "Series Title",
+      "episode": 6,
+      "season": 15,
+      "episode_end": 8
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - 001 - Fairy Tail",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 010 (720p) [27AAA0A0].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 049 - The Day of Fated Meeting",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 050 - Special Request Watch Out for the Guy You Like!",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 099 - Natsu vs. Gildarts",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 100 - Mest",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 10x12 - 24 Hour Propane People [SDTV]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 12,
+      "season": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - 130 - Found You, Gohan! Harsh Training in the Kaioshin Realm! [Baaro][720p][5A1AD35B].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 131 - A Merged Super-Warrior Is Born, His Name Is Gotenks!! [Baaro][720p][32E03F96].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 2013-10-30 - Episode Title (1) [HDTV-720p]",
+    "expected": {
+      "title": "Series Title",
+      "year": 2013
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - 30-04-2024 HDTV 1080p H264 AAC",
+    "expected": {
+      "title": "Series Title",
+      "year": 2024
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - 4x05 - Title",
+    "expected": {
+      "title": "seriestitle"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S01E01 - Day 100 [SDTV]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S01E01 [AC3 5.1 Castellano][www.descargas2020.org]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S01E01-02-03 - Episode Title HDTV-720p",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S02E01 1920x910",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S02E21 - 18-5-4",
+    "expected": {
+      "title": "Series Title",
+      "episode": 21,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S02E21 - 94 Meetings - 720p TV.mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 21,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S06E13 - 5 to 9 [DVD]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 13,
+      "season": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S07E22 - S07E23 - And Lots of Security.. [HDTV-720p].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 22,
+      "season": 7,
+      "episode_end": 23
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S15 E06 - City Code",
+    "expected": {
+      "title": "Series Title",
+      "episode": 6,
+      "season": 15
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S15E06-07 - City Sushi HDTV-720p",
+    "expected": {
+      "title": "Series Title",
+      "episode": 6,
+      "season": 15,
+      "episode_end": 7
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - S1936E18 - I Love to Singa",
+    "expected": {
+      "title": "Series Title",
+      "episode": 18,
+      "season": 1936
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - S26E96-97-98-99-100 - Episode 5931 + Episode 5932 + Episode 5933 + Episode 5934 + Episode 5935",
+    "expected": {
+      "title": "Series Title",
+      "episode": 96,
+      "season": 26,
+      "episode_end": 100
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - Series 1 (1970) DivX",
+    "expected": {
+      "title": "Series Title",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - Temporada 2 [HDTV 720p][Cap.1901][AC3 5.1 Castellano][www.pctnew.com]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 19
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - Temporada 2 [HDTV 720p][Cap.201][AC3 5.1 Castellano][www.pctnew.com]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - Temporada 2 [HDTV 720p][Cap.408]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 8,
+      "season": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - [02x01-02] - Episode 1",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 2,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - [02x01-x02] - Episode 1",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 2,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title - [02x01] - Episode 1",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title - [02x01x02] - Episode 1",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 2,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title / S1E1-8 of 8 [2024, WEB-DL 1080p] + Original + RUS",
+    "expected": {
+      "title": "Series Title",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title / S2E1-16 of 16 [2022, WEB-DL] RUS",
+    "expected": {
+      "title": "Series Title",
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title 0",
+    "expected": {
+      "title": "seriestitle0"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title 0 S01E19 720p WEB DL DD5 1 H 264 NT",
+    "expected": {
+      "title": "Series Title 0",
+      "episode": 19,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title 1x1",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title 2011 04 18 Emma Roberts HDTV XviD BFF",
+    "expected": {
+      "title": "Series Title",
+      "year": 2011
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title 2018 06 720p x265 AOZ.mp4",
+    "expected": {
+      "title": "Series Title 2018",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title 2018 EP06 720p x265 AOZ.mp4",
+    "expected": {
+      "title": "Series Title 2018",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title Complete Series S01 S04 (1080p BluRay x265 HEVC 10bit AAC 5.1 Vyndros)",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title EP06 720p x265 AOZ.mp4",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title Episode 56 [VOSTFR V2][720p][AAC]-Mystic Z-Team",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title Kai Episodio 13 Audio Latino",
+    "expected": {
+      "title": "Series Title Kai",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title S01 - S07 BluRay 1080p x264 REPACK -SacReD",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title S01 04 (1080p BluRay x265 HEVC 10bit AAC 5.1 Vyndros)",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title S01 S04 (1080p BluRay x265 HEVC 10bit AAC 5.1 Vyndros)",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title S01E06 3 Beers For Batali DVDRip XviD SPRiNTER",
+    "expected": {
+      "title": "Series Title",
+      "episode": 6,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title S01E07 WS PDTV XviD FUtV",
+    "expected": {
+      "title": "Series Title",
+      "episode": 7,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title S01E11.5 [SP]-The Poppies Bloom Red on the Battlefield",
+    "expected": {
+      "title": "Series Title",
+      "episode": 11,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title S02E21 18 5 4 720p WEB DL DD5 1 h 264 EbP",
+    "expected": {
+      "title": "Series Title",
+      "episode": 21,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title S03 - EP14 VOSTFR [1080p] [HardSub] Yass'Kun",
+    "expected": {
+      "title": "Series Title S03",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title S3 -  15 VOSTFR [720p]",
+    "expected": {
+      "title": "Series Title S3",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title Season 01 - Season 07 BluRay 1080p x264 REPACK -SacReD",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title Season 01 Episode 05 720p",
+    "expected": {
+      "title": "Series Title",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title Season 01 Episode 05-06 720p",
+    "expected": {
+      "title": "Series Title",
+      "episode": 5,
+      "season": 1,
+      "episode_end": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title Season 01-07 BluRay 1080p x264 REPACK -SacReD",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title [1x05] Episode Title",
+    "expected": {
+      "title": "Series Title",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title [2022] [S25E13] [PL] [720p] [WEB-DL-CZRG] [x264] ",
+    "expected": {
+      "title": "Series Title [2022]",
+      "episode": 13,
+      "season": 25
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title [HDTV 720p][Cap.101](website.com).mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title [HDTV][Cap.104](website.com).avi",
+    "expected": {
+      "title": "Series Title",
+      "episode": 4,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title [HDTV][Cap.402](website.com).avi",
+    "expected": {
+      "title": "Series Title",
+      "episode": 2,
+      "season": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title [S01E05] Episode Title",
+    "expected": {
+      "title": "Series Title",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title! (2013) - S04E44-E45 - Il 200 spettacolare episodio da narcisisti!",
+    "expected": {
+      "title": "Series Title! (2013)",
+      "episode": 44,
+      "season": 4,
+      "episode_end": 45
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title! (2013) - S04E44-E45 - Il 200 spettacolare episodio da narcisisti! [NetflixHD 720p HEVC] [ITA+ENG].mkv",
+    "expected": {
+      "title": "Series Title! (2013)",
+      "episode": 44,
+      "season": 4,
+      "episode_end": 45
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title-0 (2010) - 1x05 - Missing Title",
+    "expected": {
+      "title": "Series Title-0 (2010)",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title-0 (2010) - 1x05 - Title",
+    "expected": {
+      "title": "Series Title-0 (2010)",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title.S6.E1-E2-E3.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title.S6.E1-E2.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title.S6.E1-S6E2.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title.S6.E1.E2.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title.S6.E1E2.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title.S6.E1E3.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Title.S6E1-E2-E3.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title.S6E1-E2.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title.S6E1-S6E2.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title.S6E1E2.Episode Name.1080p.WEB-DL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series Title? E11-E12 1080p HDTV AAC H.264-NEXT",
+    "expected": {
+      "title": "Series Title",
+      "episode": 11,
+      "season": 1,
+      "episode_end": 12
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series Week S2009E09 [SDTV].avi",
+    "expected": {
+      "title": "Series Week",
+      "episode": 9,
+      "season": 2009
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series [HDTV 1080p][Cap. 101](wolfmax4k.com).mkv",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series [HDTV 1080p][Cap.101](wolfmax4k.com)",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series and Show 2012 Part 1 REPACK 720p HDTV x264 2HD",
+    "expected": {
+      "title": "Series and Show 2012",
+      "episode": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series and Title 20201013 Ep7432 [720p WebRip (x264)] [SUBS]",
+    "expected": {
+      "title": "Series and Title",
+      "year": 2020
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series falls - Temporada 1 [HDTV][Cap.111_120]",
+    "expected": {
+      "title": "Series falls",
+      "episode": 11,
+      "season": 1,
+      "episode_end": 20
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series of the Day",
+    "expected": {
+      "title": "seriesday"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series of the Day 2",
+    "expected": {
+      "title": "seriesday2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series!.S2016E14.2016-01-20.avi",
+    "expected": {
+      "title": "Series!",
+      "episode": 14,
+      "season": 2016
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series's Sonarr - 8x01_02 - Free Falling",
+    "expected": {
+      "title": "Series's Sonarr",
+      "episode": 1,
+      "season": 8,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series-S07E12-31st_Century_Fox-[Bluray-1080p].mkv",
+    "expected": {
+      "title": "Series",
+      "episode": 12,
+      "season": 7
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.103.hdtv-lol[ettv].mp4",
+    "expected": {
+      "title": "Series",
+      "episode": 3,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.10708.hdtv-lol.mp4",
+    "expected": {
+      "title": "Series",
+      "episode": 7,
+      "season": 1,
+      "episode_end": 8
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.10910.hdtv-lol.mp4",
+    "expected": {
+      "title": "Series",
+      "episode": 9,
+      "season": 1,
+      "episode_end": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.2009.S06E03.720p.HDTV.X264-DIMENSION [PublicHD].mkv",
+    "expected": {
+      "title": "Series 2009",
+      "episode": 3,
+      "season": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.2010",
+    "expected": {
+      "title": "series2010"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.2012.S02E14.720p.HDTV.X264-DIMENSION [PublicHD].mkv",
+    "expected": {
+      "title": "Series 2012",
+      "episode": 14,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.2012.S02E18.720p.HDTV.X264-DIMENSION.mkv",
+    "expected": {
+      "title": "Series 2012",
+      "episode": 18,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.2021.S04.iNTERNAL.DVDRip.XviD-VCDVaULT",
+    "expected": {
+      "title": "Series 2021",
+      "season": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.911.S01.DVDRip.DD2.0.x264-DEEP",
+    "expected": {
+      "title": "series 911"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.E191.190121.720p-NEXT.mp4",
+    "expected": {
+      "title": "Series",
+      "episode": 191
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Hunters.Galatic.S05E607.720p.hdtv.x264",
+    "expected": {
+      "title": "Series Hunters Galatic",
+      "episode": 607,
+      "season": 5
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Kings.S02E09-E10.HDTV.x264-ASAP",
+    "expected": {
+      "title": "Series Kings",
+      "episode": 9,
+      "season": 2,
+      "episode_end": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Makes.It.Right.S02.720p.HDTV.AAC5.1.x265-NOGRP",
+    "expected": {
+      "title": "Series Makes It Right",
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S01.720p.WEBDL.DD5.1.H.264-NTb",
+    "expected": {
+      "title": "Series",
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S010E16.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series",
+      "episode": 16,
+      "season": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S01E02E03.1080p.BluRay.x264-DeBTViD",
+    "expected": {
+      "title": "Series",
+      "episode": 2,
+      "season": 1,
+      "episode_end": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S01E04.2-45.PM.[HDTV-720p].mkv",
+    "expected": {
+      "title": "Series",
+      "episode": 4,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S01E91-E100",
+    "expected": {
+      "title": "Series",
+      "episode": 91,
+      "season": 1,
+      "episode_end": 100
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S03E01-06.DUAL.BDRip.XviD.AC3.-HELLYWOOD",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 3,
+      "episode_end": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S03E01.S03E02.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 3,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S03E10.Alexandra.720p.WEB-DL.AAC2.0.H.264-CROM.mkv",
+    "expected": {
+      "title": "Series",
+      "episode": 10,
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S04E09.Swan.Song.1080p.WEB-DL.DD5.1.H.264-ECI",
+    "expected": {
+      "title": "Series",
+      "episode": 9,
+      "season": 4
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S11.SUBPACK.DVDRip.XviD-REWARD",
+    "expected": {
+      "title": "Series",
+      "season": 11
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.S29E161-E165.PDTV.x264-FQM",
+    "expected": {
+      "title": "Series",
+      "episode": 161,
+      "season": 29,
+      "episode_end": 165
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.SAISON.1.VFQ.PDTV.H264-ACC-ROLLED",
+    "expected": {
+      "title": "Series",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Saison3.VOSTFR.HDTV.XviD-NOTAG",
+    "expected": {
+      "title": "Series",
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Stagione.3.HDTV.XviD-NOTAG",
+    "expected": {
+      "title": "Series",
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Time.With.Dev1.And.Dev2.S01E20.720p.BluRay.x264-DEiMOS",
+    "expected": {
+      "title": "Series Time With Dev1 And Dev2",
+      "episode": 20,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.103.104.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series Title",
+      "episode": 3,
+      "season": 1,
+      "episode_end": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.1995.S03E20.HDTV.XviD-LOL",
+    "expected": {
+      "title": "Series Title 1995",
+      "episode": 20,
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.2009.S01E14.HDTV.XviD-LOL",
+    "expected": {
+      "title": "Series Title 2009",
+      "episode": 14,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.2010.S02E14.HDTV.XviD-LOL",
+    "expected": {
+      "title": "Series Title 2010",
+      "episode": 14,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.2015.09.07.Part.1.720p.HULU.WEBRip.AAC2.0.H.264-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "year": 2015
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.2015.09.07.Part.2.720p.HULU.WEBRip.AAC2.0.H.264-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "year": 2015
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.2015.09.07.Part1.720p.HULU.WEBRip.AAC2.0.H.264-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "year": 2015
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.2015.09.07.Part2.720p.HULU.WEBRip.AAC2.0.H.264-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "year": 2015
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.2x04.2x05.720p.BluRay-FUTV",
+    "expected": {
+      "title": "Series Title",
+      "episode": 4,
+      "season": 2,
+      "episode_end": 5
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.4x05.HDTV.XviD-LOL",
+    "expected": {
+      "title": "Series Title",
+      "episode": 5,
+      "season": 4
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.525",
+    "expected": {
+      "title": "Series Title",
+      "episode": 25,
+      "season": 5
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.E07-E08.180612.1080p-NEXT",
+    "expected": {
+      "title": "Series Title",
+      "episode": 7,
+      "season": 1,
+      "episode_end": 8
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.E195.Zurueck.auf.die.Grand.Line.UNCUT.German.Dubbed.1999.ANiME.DVDRiP.XviD-Group",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.Inc.S03E19.DVDRip.\"XviD\"-OSiTV",
+    "expected": {
+      "title": "Series Title Inc",
+      "episode": 19,
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.Of.S01E01.xyz",
+    "expected": {
+      "title": "Series Title Of",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S01-S09.1080p.AMZN.WEB-DL.DDP2.0.H.264-NTb",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S01.576p.BluRay.DD5.1.x264-HiSD",
+    "expected": {
+      "title": "Series Title",
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S01.E.01.English.AC3.DL.1080p.BluRay-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.S01.E01.English.AC3.DL.1080p.BluRay-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S01.Ep.01.English.AC3.DL.1080p.BluRay-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.S01.Ep01.English.AC3.DL.1080p.BluRay-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.S01E07.21.0.Jump.Street.720p.WEB-DL.DD5.1.h.264-KiNGS",
+    "expected": {
+      "title": "Series Title",
+      "episode": 7,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S01EP01.English.AC3.DL.1080p.BluRay-Sonarr",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.Title.S03E06.DVDRip.XviD-WiDE",
+    "expected": {
+      "title": "Series Title",
+      "episode": 6,
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S03E115.DVDRip.XviD-OSiTV",
+    "expected": {
+      "title": "Series Title",
+      "episode": 115,
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S03E19.DVDRip.XviD-OSiTV",
+    "expected": {
+      "title": "Series Title",
+      "episode": 19,
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S05E01-02.720p.5.1Ch.BluRay",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 5,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S05E01-E02.720p.5.1Ch.BluRay",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 5,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S06E01b.Fade.Out.Fade.in.Part.2.1080p.DSNP.WEB-DL.AAC2.0.H.264-FLUX",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S07E22E23.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series Title",
+      "episode": 22,
+      "season": 7,
+      "episode_end": 23
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S10E27.WS.DSR.XviD-2HD",
+    "expected": {
+      "title": "Series Title",
+      "episode": 27,
+      "season": 10
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.Title.S15.E06.City.Sushi",
+    "expected": {
+      "title": "Series Title",
+      "episode": 6,
+      "season": 15
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.With.Title.S02E15",
+    "expected": {
+      "title": "Series With Title",
+      "episode": 15,
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.and.a.Title.1013.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series and a Title",
+      "episode": 13,
+      "season": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.and.a.Title.103.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series and a Title",
+      "episode": 3,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.and.a.Title.113.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series and a Title",
+      "episode": 13,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series.of.Sonarr.S03.720p.BluRay-CLUE\\REWARD",
+    "expected": {
+      "title": "Series of Sonarr",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series.to.Me.S03.SUBPACK.DVDRip.XviD-REWARD",
+    "expected": {
+      "title": "Series to Me",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "SeriesTitle E1135 Lasst den Mond am Himmel stehen GERMAN 1080p WEBRip x264-Group",
+    "expected": {
+      "title": "SeriesTitle",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "SeriesTitle E1206 In seinen Augen 2022 GERMAN 1080p WEB h264-Group",
+    "expected": {
+      "title": "SeriesTitle",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "SeriesTitle-S16E08-10426008-0.mkv",
+    "expected": {
+      "title": "SeriesTitle",
+      "episode": 8,
+      "season": 16
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "SeriesTitle.E1135.Lasst.den.Mond.am.Himmel.stehen.GERMAN.1080p.WEBRip.x264-Group",
+    "expected": {
+      "title": "SeriesTitle",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "SeriesTitle.E1206.In.seinen.Augen.2022.GERMAN.1080p.WEB.h264-Group",
+    "expected": {
+      "title": "SeriesTitle",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "SeriesTitle.S03.540p.AMZN.WEB-DL.DD+2.0.x264-RTN",
+    "expected": {
+      "title": "SeriesTitle",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series_Title!_-_7x6_-_The_Scarlett_Getter_[SDTV]",
+    "expected": {
+      "title": "Series Title!",
+      "episode": 6,
+      "season": 7
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series_Title.19x06.720p_HDTV_x264-FoV",
+    "expected": {
+      "title": "Series Title",
+      "episode": 6,
+      "season": 19
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series_Title_-_1x1_-_Live_and_Learn_[HDTV-720p]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Series_Title_2_[01]_[AniLibria_TV]_[WEBRip_1080p]",
+    "expected": {
+      "title": "Series Title 2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Series_and_Title_Sonarr",
+    "expected": {
+      "title": "seriestitlesonarr"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Seriesless (2016/S01/WEB-DL/1080p/AC3 5.1/DUAL/SUB)",
+    "expected": {
+      "title": "Seriesless (2016)",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Short.Series.S26E022.HDTV.x264-FiHTV",
+    "expected": {
+      "title": "Short Series",
+      "episode": 22,
+      "season": 26
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Shortland.Series.S22E5363-E5366.HDTV.x264-FiHTV",
+    "expected": {
+      "title": "Shortland Series",
+      "episode": 5363,
+      "season": 22,
+      "episode_end": 5366
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Sin.Movie.2005.RECUT.EXTENDED.German.DL.1080p.BluRay.x264-DETAiLS",
+    "expected": {
+      "title": "Sin Movie",
+      "year": 2005
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Soap opera 01 BLM(01.11.2023) 1080p HDTV AC3 x264 TURG",
+    "expected": {
+      "title": "Soap opera",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Some Anime Show - 031 - The Resolution to Kill [Lunar]",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Some Anime Show - 031 - The Resolution to Kill [Lunar].avi",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Some show 69. Blm (29.10.2023) 1080p WebDL #turkseed",
+    "expected": {
+      "title": "Some show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Some_Anime_Show_e66_time_is_money_part_one_marking_time",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Sonarr.and.Series.S02.720p.x264-DIMENSION",
+    "expected": {
+      "title": "Sonarr and Series",
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "St_Series_209_Aids_And_Comfort",
+    "expected": {
+      "title": "St Series",
+      "episode": 9,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Super.Series.S01.Ep06.1080p.BluRay.DTS.x264-MiR",
+    "expected": {
+      "title": "Super Series",
+      "episode": 6,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Daily Series -",
+    "expected": {
+      "title": "thedailyseries"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Office",
+    "expected": {
+      "title": "theoffice"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series",
+    "expected": {
+      "title": "theseries"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series - S01E02 - Earth Skills HDTV-1080p AVC DTS [EN+FR+ES+PT+DA+FI+NB+SV]",
+    "expected": {
+      "title": "The Series",
+      "episode": 2,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series And The Code - S42 Ep10688 - Ep10692",
+    "expected": {
+      "title": "The Series And The Code",
+      "episode": 10688,
+      "season": 42,
+      "episode_end": 10692
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series And The Code - S42 Ep10718 - Ep10722",
+    "expected": {
+      "title": "The Series And The Code",
+      "episode": 10718,
+      "season": 42,
+      "episode_end": 10722
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series And the Show - S41 E10478 - 2014-08-15",
+    "expected": {
+      "title": "The Series And the Show",
+      "episode": 10478,
+      "season": 41
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series And the Show - S42 E10591 - 2015-01-27",
+    "expected": {
+      "title": "The Series And the Show",
+      "episode": 10591,
+      "season": 42
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series And the Show - S42 E10713 - 2015-07-20.mp4",
+    "expected": {
+      "title": "The Series And the Show",
+      "episode": 10713,
+      "season": 42
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series Bros. (2006)",
+    "expected": {
+      "title": "theseriesbros2006"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series S01-05 WS BDRip X264-REWARD-No Rars",
+    "expected": {
+      "title": "The Series"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series S01e01 e02 ShoHD On Demand 1080i DD5 1 ALANiS",
+    "expected": {
+      "title": "The Series",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series Season 4 WS PDTV XviD FUtV",
+    "expected": {
+      "title": "The Series",
+      "season": 4
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series Season4 WS PDTV XviD FUtV",
+    "expected": {
+      "title": "The Series",
+      "season": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series Show With Sonarr Dev",
+    "expected": {
+      "title": "theseriesshowwithsonarrdev"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series Title (2010) - [S01E01-02-03] - Episode Title",
+    "expected": {
+      "title": "The Series Title (2010)",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The Series Title Challenge.E932.190120.720p-NEXT.mp4",
+    "expected": {
+      "title": "The Series Title Challenge",
+      "episode": 932
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series Title S01E14 A Message Back 720p WEB DL DD5 1 H264 SURFER",
+    "expected": {
+      "title": "The Series Title",
+      "episode": 14,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series Title! - S01E01-02-03",
+    "expected": {
+      "title": "The Series Title!",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Series US S01E01-E02 720p HDTV x264",
+    "expected": {
+      "title": "The Series US",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Show Series 2015 02 09 WEBRIP s01e13",
+    "expected": {
+      "title": "The Show Series",
+      "year": 2015
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The Tonight Show With Jay Leno",
+    "expected": {
+      "title": "thetonightshowwithjayleno"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.100000.Series.Title.2016.S01E05.720p.HDTV.x264-W4F",
+    "expected": {
+      "title": "The 100000 Series Title 2016",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The.Big.Series.Leader.Part.2.DSR.XviD-SYS",
+    "expected": {
+      "title": "The Big Series Leader",
+      "episode": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The.Daily.Show",
+    "expected": {
+      "title": "thedailyshow"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.French.Movie.2013.720p.BluRay.x264 - ROUGH[PublicHD]",
+    "expected": {
+      "title": "The French Movie"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The.Good.German.2006.720p.BluRay.x264-RlsGrp",
+    "expected": {
+      "title": "The Good German"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The.Good.German.2006.GERMAN.720p.HDTV.x264-RLsGrp",
+    "expected": {
+      "title": "The Good German",
+      "year": 2006
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Movie.from.U.N.C.L.E.2015.1080p.BluRay.x264-SPARKS",
+    "expected": {
+      "title": "The Movie from U.N.C.L.E."
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Name.of.the.Series.S01E05-6.PL.1080p.WEBRip.x264-666",
+    "expected": {
+      "title": "The Name of the Series",
+      "episode": 5,
+      "season": 1,
+      "episode_end": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Series.2016.S02.Part.1.1080p.NF.WEBRip.DD5.1.x264-NTb",
+    "expected": {
+      "title": "The Series 2016",
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The.Series.S02.SUBPACK.DVDRip.XviD-REWARD",
+    "expected": {
+      "title": "The Series",
+      "season": 2
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Series.S03.Extras.01.Deleted.Scenes.720p",
+    "expected": {
+      "title": "The Series",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Series.S03.Extras.02.720p",
+    "expected": {
+      "title": "The Series",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Series.S06.P1.1080p.Blu-Ray.10-Bit.Dual-Audio.TrueHD.x265-iAHD",
+    "expected": {
+      "title": "The Series",
+      "season": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Series.S07.Vol.1.1080p.NF.WEBRip.DD5.1.x264-NTb",
+    "expected": {
+      "title": "The Series",
+      "season": 7
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Series.Show",
+    "expected": {
+      "title": "theseriesshow"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The.Series.US.S03.720p.x264-DIMENSION",
+    "expected": {
+      "title": "The Series US",
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "TheTitle-S12E13-3_Acts_of_God.mkv",
+    "expected": {
+      "title": "TheTitle",
+      "episode": 13,
+      "season": 12
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The_Big_Series_Title_-_6x12_-_The_Code_Review_Equivalency_[HDTV-720p]",
+    "expected": {
+      "title": "The Big Series Title",
+      "episode": 12,
+      "season": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "The_Series_US_04.28.2014_hdtv.x264.Poke.mp4",
+    "expected": {
+      "title": "The Series US",
+      "year": 2014
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "The_Series_US_s06e19_04.28.2014_hdtv.x264.Poke.mp4",
+    "expected": {
+      "title": "The Series US",
+      "episode": 19,
+      "season": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "This Is A Movie (1999) [IMDB #] <Genre, Genre, Genre> {ACTORS} !DIRECTOR +MORE_SILLY_STUFF_NO_ONE_NEEDS ?",
+    "expected": {
+      "title": "This Is A Movie"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Titles.s06.01.1999.BDRip.1080p.Ukr.Eng.AC3.Hurtom.TNU.Tenax555",
+    "expected": {
+      "title": "Titles",
+      "episode": 1,
+      "season": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Titles.s06e01.1999.BDRip.1080p.Ukr.Eng.AC3.Hurtom.TNU.Tenax555",
+    "expected": {
+      "title": "Titles",
+      "episode": 1,
+      "season": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "To Another Series III - Episode 5 VOSTFR (1080p)",
+    "expected": {
+      "title": "To Another Series III",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "To.Live.and.Movie.in.L.A.1985.1080p.BluRay",
+    "expected": {
+      "title": "To Live and Movie in L.A."
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Top Series - 06x11 - 2005.08.07",
+    "expected": {
+      "title": "Top Series",
+      "episode": 11,
+      "season": 6
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Top Series - 07x03 - 2005.11.70",
+    "expected": {
+      "title": "Top Series",
+      "episode": 3,
+      "season": 7
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Tree_Series_2018_06_22_Seth_Meyers_720p_HEVC_x265-MeGusta",
+    "expected": {
+      "title": "Tree Series",
+      "year": 2018
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Turkish show 60.Bolum (31.01.2023) 720p WebDL AAC H.264 - TURG",
+    "expected": {
+      "title": "Turkish show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "V.H.S.2.2013.LIMITED.720p.BluRay.x264-GECKOS",
+    "expected": {
+      "title": "V.H.S. 2"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "Valana la Movie TRUEFRENCH BluRay 720p 2016 kjhlj",
+    "expected": {
+      "title": "Valana la Movie"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Warehouse.13.S01E01",
+    "expected": {
+      "title": "Warehouse 13",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "We Are the Movie!.2013.720p.H264.mkv",
+    "expected": {
+      "title": "We Are the Movie!"
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "World Movie Z Movie [2023]",
+    "expected": {
+      "year": 2023
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "World Series of Sonarr - 2010x15 - 2010x16 - HD TV.mkv",
+    "expected": {
+      "title": "World Series of Sonarr",
+      "episode": 15,
+      "season": 2010,
+      "episode_end": 16
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "World.Movie.Z.2.EXTENDED.2013.German.DL.1080p.BluRay.AVC-XANOR",
+    "expected": {
+      "title": "World Movie Z 2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "World.Movie.Z.EXTENDED.2013.German.DL.1080p.BluRay.AVC-XANOR",
+    "expected": {
+      "title": "World Movie Z"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[ www.Torrenting.com ] - Series.2012.S02E17.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series 2012",
+      "episode": 17,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[ www.Torrenting.com ] - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[ACX]Some Anime Show 01 Role Play [Kosaka] [9C57891E].mkv",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[ANi] SERIES / SERIES 靦腆英雄 - 11 [1080P][Baha][WEB-DL][AAC AVC][CHT][MP4]",
+    "expected": {
+      "title": "SERIES"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[AgusiQ-TorrentS.pl] The.Name.of.the.Series.S01E05-E06.PL.1080i.Ralf [jans12]",
+    "expected": {
+      "title": "The Name of the Series",
+      "episode": 5,
+      "season": 1,
+      "episode_end": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Anime Chap] Anime Title! S01E09 [WEB 1080p] {OP & ED Lyrics} - Episode 9 (The Eminence in Shadow)",
+    "expected": {
+      "title": "Anime Title!",
+      "episode": 9,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Anime Chap] Anime Title! S01E12 [WEB 1080p] {OP & ED Lyrics} - Episode 12 (The Eminence in Shadow)",
+    "expected": {
+      "title": "Anime Title!",
+      "episode": 12,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Anime Time] Series no Mayo - 12.5.mkv",
+    "expected": {
+      "title": "Series no Mayo"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[AqusiQ-TorrentS.pl]The.Name.of.the.Series.S01E05-06.PL.2160p-Ralf[shogho]",
+    "expected": {
+      "title": "The Name of the Series",
+      "episode": 5,
+      "season": 1,
+      "episode_end": 6
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Arid] 5 Centimeters per Second (BDRip 1920x1080 Hi10 FLAC) [FD8B6FF2].mkv",
+    "expected": {
+      "title": "5 Centimeters per Second"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Arid] Cowboy Bebop - Knockin' on Heaven's Door v2 [00F4CDA0].mkv",
+    "expected": {
+      "title": "Cowboy Bebop - Knockin' on Heaven's Door"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[BakeSubs] 86 - 01 [1080p][D40A9E55].mkv",
+    "expected": {
+      "title": "86",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[BakedFish] Some Show [Anime] - 01 [720p][AAC].mp4",
+    "expected": {
+      "title": "Some Show [Anime]",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Baws] Evangelion 1.11 - You Are (Not) Alone v2 (1080p BD HEVC FLAC) [BF42B1C8].mkv",
+    "expected": {
+      "title": "Evangelion 1 11 - You Are (Not) Alone"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Baws] Evangelion 2.22 - You Can (Not) Advance (1080p BD HEVC FLAC) [56E7A5B8].mkv",
+    "expected": {
+      "title": "Evangelion 2 22 - You Can (Not) Advance"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[BeanSub][Anime_Series_Title][01][GB][1080P][x264_AAC]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[CBM]_Series_Title_-_11_-_511_Kinderheim_[6C70C4E4].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[CR] Series Title - 004 [480p][48CE2D0F]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[CameEsp] Another Anime 100 - Another 100 Anime - 01 [720p][ESP-ENG][mkv]",
+    "expected": {
+      "title": "Another Anime 100 - Another 100 Anime",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Cheetah-Raws] Super Long Anime - 1000 (YTV 1280x720 x264 AAC)",
+    "expected": {
+      "title": "Super Long Anime",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Chibiki] Series Title!! - 42 [360p][7A4FC77B]",
+    "expected": {
+      "title": "Series Title!!",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[ChihiroDesuYo].Series.Title.-.09.1280x720.10bit.AAC.[24CCE81D]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Chihiro] Anime Title 300-nen, With Even More Title 02 [720p Hi10P AAC][031FA533]",
+    "expected": {
+      "title": "Anime Title 300-nen, With Even More Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Chihiro]_Show!!_-_06_[848x480_H.264_AAC][859EEAFA]",
+    "expected": {
+      "title": "Show!!",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Commie] Series Title - 23 [5396CA24].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Commie] Series Title - 32 [0BA19D5B]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Commie] Series Title 2 - 05 [FCE4D070].mkv",
+    "expected": {
+      "title": "Series Title 2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Commie]_Some_Anime_Show_-_11_[65F220B4]",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Commie]_Some_Anime_Show_-_15_[E76552EA]",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Cthuyuu] Series Title - 03 [720p H264 AAC][8AD82C3A]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Cthuyuu].Series.Title.-.03.[720p.H264.AAC][8AD82C3A]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[DRONE]Series.Title.100",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Dae-P9] Anime Series - 05 - S01E05 - Marrying by Contesting (BD 1080p HEVC FLAC AAC) [Dual Audio] [5BCD56B8]",
+    "expected": {
+      "title": "Anime Series",
+      "episode": 5,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Dae-P9] Anime Series - 05.5 - S00E01 - Marrying by Contesting (BD 1080p HEVC FLAC AAC) [Dual Audio] [5BCD56B8]",
+    "expected": {
+      "title": "Anime Series",
+      "episode": 1,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[DameDesuYo] Another Anime With Special Naming (Season 2) - 33 (1280x720 10bit EAC3) [42A12A76].mkv",
+    "expected": {
+      "title": "Another Anime With Special Naming",
+      "episode": 0,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[DeadFish] Another Anime Show - 01 - OVA [BD][720p][AAC]",
+    "expected": {
+      "title": "Another Anime Show"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[DeadFish] Another Anime Show - 01 - OVD [BD][720p][AAC]",
+    "expected": {
+      "title": "Another Anime Show"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[DeadFish] Another Anime Show - 01 - Special [BD][720p][AAC]",
+    "expected": {
+      "title": "Another Anime Show"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[DeadFish] Series Title - 09v2 [720p][AAC]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Doki]Series Title - 07 (1280x720 Hi10P AAC) [80AF7DDE]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Doremi].Some.Anime.Show.8.Go!.31.[1280x720].[C65D4B1F].mkv",
+    "expected": {
+      "title": "Some Anime Show 8 Go!",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Exiled-Destiny] Series Title Ep01 (D2201EC5).mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[FFF] Series Title - 01 [1FB538B5].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[FroZen] Series Title - 23 [DVD][7F6170E6]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[GM-Team][国漫][Anime Title][2019][234 END][AVC][GB][1080P]",
+    "expected": {
+      "title": "Anime Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[GM-Team][国漫][Anime Title][2019][234 Fin][AVC][GB][1080P]",
+    "expected": {
+      "title": "Anime Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[GM-Team][国漫][Anime Title][2019][234][AVC][GB][1080P]",
+    "expected": {
+      "title": "Anime Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[GM-Team][国漫][Anime Title][Douro Mainland][2019][234][AVC][GB][1080P]",
+    "expected": {
+      "title": "Anime Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[GM-Team][国漫][斗罗大陆][Anime Title][2019][215 Fin][AVC][GB][1080P]",
+    "expected": {
+      "title": "Anime Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[GM-Team][国漫][斗罗大陆][Anime Title][Douro Mainland][2019][215 END][AVC][GB][1080P]",
+    "expected": {
+      "title": "Anime Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[GM-Team][国漫][斗罗大陆][Anime Title][Douro Mainland][2019][215][AVC][GB][1080P]",
+    "expected": {
+      "title": "Anime Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Glenn] Series! 3 - 11 (1080p AAC)[C34B2B3B].mkv",
+    "expected": {
+      "title": "Series! 3",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HatSubs] Anime Title 1004 [E63F2984].mkv",
+    "expected": {
+      "title": "Anime Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Hatsuyuki] Series Title (2014) - 017 (115) [1280x720][B2CFBC0F]",
+    "expected": {
+      "title": "Series Title (2014)",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Hatsuyuki] Series Title (2014) - 018 (116) [1280x720][C4A3B16E]",
+    "expected": {
+      "title": "Series Title (2014)",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Hatsuyuki]Series_Title-01[1280x720][122E6EF8]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleRips] Mobile Series 00 S1 [1080p]",
+    "expected": {
+      "title": "Mobile Series 00",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series 100 - 07 [1080p].mkv",
+    "expected": {
+      "title": "Series 100",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series 100 S2 - 07 [1080p].mkv",
+    "expected": {
+      "title": "Series 100 S2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series Title - 01 [1080p]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series Title - 20 [720p].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series Title - 32 [1080p]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series Title - 32 [480p]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series Title 2 - 05 [720p].mkv",
+    "expected": {
+      "title": "Series Title 2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series Title 21 - 101 [480p].mkv",
+    "expected": {
+      "title": "Series Title 21",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Series Title! S2 - 07 [720p]",
+    "expected": {
+      "title": "Series Title! S2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Show Slayer - 10.5 [1080p].mkv",
+    "expected": {
+      "title": "Show Slayer"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs] Some Anime Show - 13 [1080p].mkv",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs]_Some_Anime_Show_-_145_[720p]",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[HorribleSubs]_Some_Anime_Show_-_33_[720p]",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Impatience] Series - 0x01 [720p][34073169].mkv",
+    "expected": {
+      "title": "Series",
+      "episode": 1,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Judas] Japanse Anime, Title (Anime, Title?) (Season 1) [1080p][HEVC x265 10bit][Multi-Subs] (Batch)",
+    "expected": {
+      "title": "Japanse Anime, Title (Anime, Title)",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Judas] Series Title (2024) - S01E14",
+    "expected": {
+      "title": "Series Title (2024)",
+      "episode": 14,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Jumonji-Giri]_[F-B]_Series_Title_Ep04_(0b0e2c10).mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Jumonji-Giri]_[F-B]_Series_Title_Ep08_(8246e542).mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[K-F] Some Anime Show 10x14 214",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 14,
+      "season": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[K-F] Some Anime Show 214",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[K-F] Some Anime Show 214 10x14",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 14,
+      "season": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[K-F] Some Anime Show S10E14 214",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 14,
+      "season": 10
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Kaleido-subs] Animation - 12 (S01E12) - (WEB 1080p HEVC x265 10-bit E-AC3 2.0) [1ADD8F6D]",
+    "expected": {
+      "title": "Animation",
+      "episode": 12,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Kaleido-subs] Sky Series - 07.5 (S00E01) - (BD 1080p HEVC x265 10-bit Opus 2.0) [A548C980].mkv",
+    "expected": {
+      "title": "Sky Series",
+      "episode": 1,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Kulot] Violet Evergarden Gaiden Eien to Jidou Shuki Ningyou [Dual-Audio][BDRip 1920x804 HEVC FLACx2] [91FC62A8].mkv",
+    "expected": {
+      "title": "Violet Evergarden Gaiden Eien to Jidou Shuki Ningyou"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Lilith-Raws x WitEx.io] 盾之勇者成名录 / Anime-Series Title S02 - 03 [Baha][WEB-DL][1080p][AVC AAC][CHT][MP4] [557.3MB]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Lilith-Raws] Anime-Series Title S02 - 11 [Baha][WEB-DL][1080p][AVC AAC][CHT][MP4].mp4",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Lilith-Raws] 在地下城尋求邂逅是否搞錯了什麼 / Anime-Series Title S04 - 12 [Baha][WEB-DL][1080p][AVC AAC][CHT][MP4]",
+    "expected": {
+      "title": "Anime-Series Title S4"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Lilith-Raws] 艾梅洛閣下 II 世事件簿 -魔眼蒐集列車 Grace note- / Anime-Series Title - 04 [BiliBili][WEB-DL][1080p][AVC AAC][CHT][MKV]",
+    "expected": {
+      "title": "Anime-Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Lilith-Raws] 魔王學院的不適任者 / Anime-Series Title S02 - 01 [Baha][WEB-DL][1080p][AVC AAC][CHT][MP4]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[LoliHouse] Love Live! 虹咲学园学园偶像同好会 第二季 / Anime-Series Title S2 - 10 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[MTBB] Kimi no Na wa. (2016) v2 [97681524].mkv",
+    "expected": {
+      "title": "Kimi no Na wa",
+      "year": 2016
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Mystic Z-Team] Series Title Episode 69 [VOSTFR_Finale][1080p][AAC].mp4",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Mystic Z-Team] Series Title Super - Episode 013 VF - Non-censuré [720p].mp4",
+    "expected": {
+      "title": "Series Title Super",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[NC-Raws] ANIME-SERIES TITLE－影宅－ / Anime-Series Title - 07 [Baha][WEB-DL][1080p][AVC AAC][CHT][MP4]",
+    "expected": {
+      "title": "Anime-Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[NC-Raws] 影宅 / Anime-Series Title - 07 [B-Global][WEB-DL][1080p][AVC AAC][CHS_CHT_ENG_TH_SRT][MKV]",
+    "expected": {
+      "title": "Anime-Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[NC-Raws] 魔王学院的不适任者～史上最强的魔王始祖，转生就读子孙们的学校～第二季 / Anime-Series Title S2 - 01 (Baha 1920x1080 AVC AAC MP4)",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Naruto-Kun.Hu] Anime Triangle - 08 [1080p].mkv",
+    "expected": {
+      "title": "Anime Triangle",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Naruto-Kun.Hu] Dr Series S3 - 21 [1080p]",
+    "expected": {
+      "title": "Dr Series S3",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Naruto-Kun.Hu] Series Title - 12 [1080p].mkv",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[OPFans楓雪動漫][ANIME SERIES 海賊王][第1008話][典藏版][1080P][MKV][簡繁]",
+    "expected": {
+      "title": "ANIME SERIES"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Prout] Show;Title 0 - Episode 5 VOSTFR (BDRip 1920x1080 x264 FLAC)",
+    "expected": {
+      "title": "Show;Title 0",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Q] 全职高手 第3季 / Series S3 - 09 (1080p HBR HEVC Multi-Sub)",
+    "expected": {
+      "title": "Series S3"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Q] 全职高手 第3季 | Series S3 - 09 (1080p HBR HEVC Multi-Sub)",
+    "expected": {
+      "title": "Series S3"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[ReleaseGroup] SeriesTitle S01E1 Webdl 1080p",
+    "expected": {
+      "title": "SeriesTitle",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[RlsGrp] Series Title - S01E27 - 24-Hour",
+    "expected": {
+      "title": "Series Title",
+      "episode": 27,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[RlsGrp]Series.Title.2010.S01E01.001.HDTV-720p.x264-DTS",
+    "expected": {
+      "title": "Series Title 2010",
+      "episode": 1,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[S-T-D] Series Title! - 06 (1280x720 10bit AAC) [59B3F2EA].mkv",
+    "expected": {
+      "title": "Series Title!",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SFW-sage] Some Anime Show S3 - 12 [720p][D07C91FC]",
+    "expected": {
+      "title": "Some Anime Show S3",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Shark-Raws] Series Title #957 (NBN 1280x720 x264 AAC).mp4",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Skymoon-Raws] Anime-Series Title S02 - 01 [ViuTV][CHT][WEB-DL][1080p][AVC AAC][MP4+ASS]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Skymoon-Raws] 怕痛的我，把防御力点满就对了 第二季 / Anime-Series Title S02 - 01 [ViuTV][WEB-DL][1080p][AVC AAC][繁体外挂][MP4+ASS](正式版本) ",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Skymoon-Raws][Anime Series 海賊王][1008][ViuTV][WEB-RIP][CHT][SRTx2][1080p][MKV]",
+    "expected": {
+      "title": "Anime Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubDESU]_Show_One_07_(1280x720_x264-AAC)_[6B7FD717]",
+    "expected": {
+      "title": "Show One",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlease] Anime Title 100 S3 - 01 (1080p) [5A493522]",
+    "expected": {
+      "title": "Anime Title 100 S3",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlease] Anime Title 300-nen, With Even More Title - 01 (1080p) [8DE44442]",
+    "expected": {
+      "title": "Anime Title 300-nen, With Even More Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlease] Another Anime 100 - Another 100 Anime - 01 (1080p) [4E6B4518].mkv",
+    "expected": {
+      "title": "Another Anime 100 - Another 100 Anime",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlease] Series Title - 100 Years Quest - 01 (1080p) [1107F3A9].mkv",
+    "expected": {
+      "title": "Series Title - 100 Years Quest",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlease] Series Title - 26.5.1 (1080p) [29AF1C23].mkv",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlease] Series Title 100 Years Quest - 01 (1080p) [1107F3A9].mkv",
+    "expected": {
+      "title": "Series Title 100 Years Quest",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlease] Title de Series S2 - 03 (540p) [63501322]",
+    "expected": {
+      "title": "Title de Series S2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlus+] Series no Chill - S02E01 (NF WEB 1080p AVC AAC)",
+    "expected": {
+      "title": "Series no Chill",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SubsPlus+] Series no Chill - S02E01v2 (NF WEB 1080p AVC AAC)",
+    "expected": {
+      "title": "Series no Chill",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Subz] My Series - １５８ [h264 10-bit][1080p]",
+    "expected": {
+      "title": "My Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Suzuya Raws] 腼腆英雄 东京夺还篇 / Series 2nd Season - 01 [CR WebRip 1080p HEVC-10bit AAC][Multi-Subs]",
+    "expected": {
+      "title": "Series 2nd Season"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[SweetSub&LoliHouse] 来自深渊 烈日黄金乡 / Anime-Series Title S2 - 07 [WebRip 1080p HEVC-10bit AAC][简繁日内封字幕]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Thighs] Anime Reincarnation - 17.5 (S00E01) (BD 1080p FLAC AAC) [Dual-Audio] [A6E2110E]",
+    "expected": {
+      "title": "Anime Reincarnation",
+      "episode": 1,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[UHA-WINGS][Anime-Series Title S02][01][x264 1080p][CHT].mp4",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Underwater-FFF] No Series Title No Life - 01 (720p) [27AAA0A0].mkv",
+    "expected": {
+      "title": "No Series Title No Life",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Underwater-FFF] Series Title - 01 (720p) [27AAA0A0]",
+    "expected": {
+      "title": "Series Title",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Underwater]_Some_Anime_Show_-_12_(720p)_[5C7BC4F9]",
+    "expected": {
+      "title": "Some Anime Show",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Vivid] Some Anime Show S01 [Web][MKV][h264 10-bit][1080p][AAC 2.0]",
+    "expected": {
+      "title": "Some Anime Show",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[XKsub] Series Title S2 [05][HEVC-10bit 1080p AAC][CHS&CHT&JPN]",
+    "expected": {
+      "title": "Series Title S2",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[YMDR][慕留人 -火影忍者新時代-][Anime Series Title-][2017][88-91][1080p][AVC][JAP][BIG5][MP4-AAC][繁中]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[YMDR][輝夜姬想讓人告白～天才們的戀愛頭腦戰～][Anime Series Title][2019][02][1080p][HEVC][JAP][BIG5][MP4-AAC][繁中]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[ZERO字幕組]嫁給非人類·Anime-Series Title[11][BIG5][1080p]",
+    "expected": {
+      "title": "Anime-Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[Zoombie] Series 100: Bucket List S01 [Web][MKV][h265 10-bit][1080p][AC3 2.0][Softsubs (Zoombie)]",
+    "expected": {
+      "title": "Series 100: Bucket List",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[abc] Adventure Series: 30 [Web][MKV][h264][720p][AAC 2.0][abc]",
+    "expected": {
+      "title": "Adventure Series:",
+      "episode": 0,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[hchcsen] Mobile Series 00 S01 [BD Remux Dual Audio 1080p AVC 2xFLAC] (Kidou Senshi Gundam 00 Season 1)",
+    "expected": {
+      "title": "Mobile Series 00",
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[orion origin] Anime-Series Title S02[07][1080p][H264 AAC][CHS][ENG＆JPN stidio]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[sam] Anime - 15.5 (S00E01) [BD 1080p FLAC] [3E8D676D]",
+    "expected": {
+      "title": "Anime",
+      "episode": 1,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[sam] Goblin Slayer - Goblin's Crown [BD 1080p FLAC] [CD298D48].mkv",
+    "expected": {
+      "title": "Goblin Slayer - Goblin's Crown"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[sam] Toward the Terra (1980) [BD 1080p TrueHD].mkv",
+    "expected": {
+      "title": "Toward the Terra",
+      "year": 1980
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[scnzbefnet][509103] 2.Developers.Series.S03E18.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "2 Developers Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[test-hyphen123.co.za] - The Daily Series - 2023-05-26",
+    "expected": {
+      "title": "The Daily Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[test.co.uk] - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[test.co.uk] - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test-hyphen.ca] - Movie Title (2023)",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test-hyphen.ca] - Series (2011) S01",
+    "expected": {
+      "title": "Series (2011)"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test-hyphen.com] - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test-hyphen.com] - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test-hyphen123.co.za] - Movie Title 2023",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test-hyphen123.co.za] - Series Title S01E01",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test.com] - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test.com] - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test123.co.nz] - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test123.co.nz] - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test123.de] - Mad Movie Title 2023 [Bluray720p]",
+    "expected": {
+      "title": "Mad Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[www.test123.de] - Mad Series - Season 1 [Bluray720p]",
+    "expected": {
+      "title": "Mad Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[喵萌奶茶屋&LoliHouse]玛娜利亚魔法学院/巴哈姆特之怒Anime Series Title - 03 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]",
+    "expected": {
+      "title": "巴哈姆特之怒Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[天月搬运组] 不要欺负我，长瀞同学 2nd Attack / Anime-Series Title S02 - 01 [1080P][简繁日外挂]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[悠哈璃羽字幕社&拉斯观测组&LoliHouse] 刀剑神域: Alicization / Anime Series: Title - 17 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]",
+    "expected": {
+      "title": "Anime Series: Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[愛戀&漫貓字幕组][10月新番][關於我轉生後成爲史萊姆那件事][18][720P][BIG5][MP4]",
+    "expected": {
+      "title": "關於我轉生後成爲史萊姆那件事"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[星空字幕组] 剃须。然后捡到女高中生。 / Anime Series Title [05][1080p][简日内嵌]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[桜都字幕组][盾之勇者成名录/Anime Series Title][01][BIG5][720P]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[澄空学园&雪飘工作室&LoliHouse] 辉夜大小姐想让我告白 第三季 / Anime-Series Title S3 - 06 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]",
+    "expected": {
+      "title": "Anime-Series Title S3"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[诸神字幕组][战栗杀机][ANIME SERIES TITLE][01-24完][简日双语字幕][720P][MP4]",
+    "expected": {
+      "title": "ANIME SERIES TITLE"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[诸神字幕组][致不灭的你 第二季][Anime-Series Title S2][10][简繁日语字幕][1080P][MKV HEVC]",
+    "expected": {
+      "title": "Anime-Series Title S2"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[银光字幕组][名侦探柯南·Series Title][871][信长四五〇事件][繁日][HDrip][X264-AAC][720P][MP4]",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[风车字幕组][名侦探柯南][857][米花町反复变化之谜（前篇）][简体][MP4][1080P]",
+    "expected": {
+      "title": "名侦探柯南"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "[风车字幕组][名侦探柯南][857集][米花町反复变化之谜（前篇）][简体][MP4][1080P]",
+    "expected": {
+      "title": "名侦探柯南"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "grp-zoo-s01e11-1080p",
+    "expected": {
+      "title": "grp-zoo",
+      "episode": 11,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "grp-zoo-s01e11e12-1080p",
+    "expected": {
+      "title": "grp-zoo",
+      "episode": 11,
+      "season": 1,
+      "episode_end": 12
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "grp-zoos01e11-1080p",
+    "expected": {
+      "title": "grp-zoo",
+      "episode": 11,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "grp-zoos01e11e12-1080p",
+    "expected": {
+      "title": "grp-zoo",
+      "episode": 11,
+      "season": 1,
+      "episode_end": 12
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "kill-roy-was-here-e07-720p",
+    "expected": {
+      "title": "kill-roy-was-here",
+      "episode": 7
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "series.2009.416.hdtv-lol",
+    "expected": {
+      "title": "series 2009",
+      "episode": 16,
+      "season": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "series.s03.e05.ws.dvdrip.xvid-m00tv",
+    "expected": {
+      "title": "series",
+      "episode": 5,
+      "season": 3
+    },
+    "elixir_passes": true
+  },
+  {
+    "input": "series.six-0.2010.217.hdtv-lol",
+    "expected": {
+      "title": "series six-0 2010",
+      "episode": 17,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "test-hyphen123.org.au - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "test-hyphen123.org.au - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "test.net - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "test.net - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "test123.ca - Movie Time 2023 720p HDTV x264 CRON",
+    "expected": {
+      "title": "Movie Time"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "test123.ca - Series Time S02 720p HDTV x264 CRON",
+    "expected": {
+      "title": "Series Time"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "the.Series.101.102.hdtv-lol",
+    "expected": {
+      "title": "the Series",
+      "episode": 1,
+      "season": 1,
+      "episode_end": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "the.Series.110.hdtv-lol",
+    "expected": {
+      "title": "the Series",
+      "episode": 10,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "this.is.a.show.2015.0308-yestv",
+    "expected": {
+      "title": "this is a show 2015",
+      "episode": 8,
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "tvs-amgo-dd51-dl-7p-azhd-x264-103",
+    "expected": {
+      "title": "tvs-amgo-dd51-dl-7p-azhd",
+      "episode": 3,
+      "season": 1
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.5MovieRulz.tc - Movie (2000) Malayalam HQ HDRip - x264 - AAC - 700MB.mkv",
+    "expected": {
+      "title": "Movie"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.Torrenting.com - Movie.2008.720p.X264-DIMENSION",
+    "expected": {
+      "title": "Movie"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.Torrenting.com - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.Torrenting.org - Movie.2008.720p.X264-DIMENSION",
+    "expected": {
+      "title": "Movie"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.Torrenting.org - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test-hyphen.de - Mad Movie Title 2023 [Bluray1080p]",
+    "expected": {
+      "title": "Mad Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test-hyphen.de - Mad Series - Season 1 [Bluray1080p]",
+    "expected": {
+      "title": "Mad Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test-hyphen.net.au - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test-hyphen.net.au - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test123.co.za - The Movie Title Bros. (2023)",
+    "expected": {
+      "title": "The Movie Title Bros."
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test123.co.za - The Series Bros. (2006) - S01E01",
+    "expected": {
+      "title": "The Series Bros. (2006)"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test123.org - Movie.Title.2023.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Movie Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "www.test123.org - Series.S03E14.720p.HDTV.X264-DIMENSION",
+    "expected": {
+      "title": "Series"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "z:\\tv shows\\series title (2003)\\Season 3\\S03E05 - Title.mkv",
+    "expected": {
+      "episode": 5,
+      "season": 3
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "z:\\tv shows\\series title\\Specials\\S00E16 - Dear Title - SD TV.avi",
+    "expected": {
+      "episode": 16,
+      "season": 0
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "z:\\tv showsseries title\\Season 16\\S16E03 - The Title.mkv",
+    "expected": {
+      "episode": 3,
+      "season": 16
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Босх: Спадок (S2E1) / Series: Legacy (S2E1) (2023) WEB-DL 1080p Ukr/Eng | sub Eng",
+    "expected": {
+      "title": "Series: Legacy",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Босх: Спадок (S2E1-4) / Series: Legacy (S2E1-4) (2023) WEB-DL 1080p Ukr/Eng | sub Eng",
+    "expected": {
+      "title": "Series: Legacy",
+      "episode": 1,
+      "season": 2,
+      "episode_end": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Босх: Спадок / Series: Legacy / S2E1 of 10 (2023) WEB-DL 1080p Ukr/Eng | sub Eng",
+    "expected": {
+      "title": "Series: Legacy",
+      "episode": 1,
+      "season": 2
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "Босх: Спадок / Series: Legacy / S2E1-4 of 10 (2023) WEB-DL 1080p Ukr/Eng | sub Eng",
+    "expected": {
+      "title": "Series: Legacy",
+      "episode": 1,
+      "season": 2,
+      "episode_end": 4
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【DHR动研字幕组】[多田君不恋爱_Anime Series Title][13完][繁体][720P][MP4]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【DHR百合組】[天使降臨到我身邊！_Anime Series Title][05][繁體][1080P10][WebRip][HEVC][MP4]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【傲娇零&自由字幕组】[刀剑神域III UnderWorld/ Anime Series Title ][17][HEVC-10Bit-2160P AAC][外挂GB/BIG5][WEB-Rip][MKV+ass ]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【动漫国字幕组】★01月新番[Anime Series Title～！][01][1080P][简体][MP4]",
+    "expected": {
+      "title": "Anime Series Title～！"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【千夏字幕组】【天使降临到了我身边！_Anime Series Title】[第05话][1080p_HEVC][简繁外挂]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【咕咕茶字幕組】★1月新番[天使降臨到了我身邊! / Anime Series Title!][04][1080P][繁體][MP4]",
+    "expected": {
+      "title": "Anime Series Title!"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【喵萌奶茶屋】★10月新番★[后宫之乌/后宫の乌/Series Title][07][1080p][简日双语][招募翻译校对]",
+    "expected": {
+      "title": "Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【喵萌奶茶屋】★10月新番★[哥布林杀手/Anime Series Title][12END][720p][繁体][招募翻译校对]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【悠哈璃羽字幕社＆拉斯观测组】[刀剑神域Alicization _ Anime Series Title ][17][x264 1080p][CHS]",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  },
+  {
+    "input": "【极影字幕社】 ★04月新番 【巴哈姆特之怒 Virgin Soul】【Anime Series Title】【24】 【END】GB MP4_720P",
+    "expected": {
+      "title": "Anime Series Title"
+    },
+    "elixir_passes": false
+  }
+]
