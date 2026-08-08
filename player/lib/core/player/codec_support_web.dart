@@ -39,9 +39,9 @@ bool get _hasManagedMediaSource => _managedMediaSourceConstructor != null;
 ///
 /// hls.js is built on the Media Source Extensions API, either the standard
 /// `MediaSource` or its iOS 17.1+ counterpart `ManagedMediaSource`. Neither
-/// existing means hls.js cannot work here, full stop — this is the
-/// pre-flight check that catches that before a streaming session is even
-/// requested, rather than failing inscrutably once playback starts.
+/// existing means hls.js cannot work here, full stop. This is the pre-flight
+/// check that catches that before a streaming session is even requested,
+/// rather than failing inscrutably once playback starts.
 bool get hasHlsMediaSourceSupport => _hasMediaSource || _hasManagedMediaSource;
 
 /// Check if a MIME type with codecs is supported for playback.

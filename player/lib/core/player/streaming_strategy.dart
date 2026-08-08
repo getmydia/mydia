@@ -75,8 +75,10 @@ class StreamingStrategyService {
 
   /// Check if HLS is supported on this platform
   static bool get isHlsSupported {
-    // HLS is supported on web via hls.js, vendored at web/hls.min.js and
-    // loaded from index.html, and natively on iOS/Safari.
+    // HLS is supported on web via hls.js, which media_kit bundles as a
+    // package asset (assets/packages/media_kit/assets/web/hls1.4.10.js) and
+    // loads itself, same-origin, with no CDN and no index.html changes
+    // needed, and natively on iOS/Safari.
     return true; // media_kit handles platform-specific implementation
   }
 

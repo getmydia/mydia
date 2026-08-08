@@ -82,14 +82,6 @@
     <div class="loading-text">Loading...</div>
   </div>
 
-  <!-- HLS playback. Safari plays the Service Worker-served manifest natively;
-       every other browser needs MSE, which hls.js provides. Vendored here
-       (hls.js 1.6.17) rather than loaded from a CDN: this page runs under
-       Cross-Origin-Embedder-Policy: require-corp, and a cross-origin script
-       load would need the third party to send Cross-Origin-Resource-Policy,
-       which is not something to depend on. -->
-  <script src="hls.min.js"></script>
-
   <script src="flutter_bootstrap.js" async></script>
   <script>
     // Remove loading spinner when Flutter is ready

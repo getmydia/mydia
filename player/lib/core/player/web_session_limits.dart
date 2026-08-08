@@ -17,3 +17,16 @@ const int kWebMaxHeight = 720;
   }
   return (maxBitrate: kWebMaxBitrateKbps, maxHeight: kWebMaxHeight);
 }
+
+/// The more restrictive of a viewer's own request and a platform ceiling.
+///
+/// Null means "no ceiling" for either side, so the result is null only when
+/// both are: one side missing falls back to whichever is set, and two
+/// present values take the smaller. Used to combine a viewer's own quality
+/// pick with [webSessionLimits], so a relay session can never exceed the cap
+/// while a viewer's own, tighter choice still survives unmodified.
+int? tighterCap(int? requested, int? ceiling) {
+  if (requested == null) return ceiling;
+  if (ceiling == null) return requested;
+  return requested < ceiling ? requested : ceiling;
+}

@@ -309,6 +309,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// The rung the viewer chose, which is what gets requested.
   QualityRung get _selectedQuality => _settledQuality ?? QualityRung.original;
 
+  /// True when this session's bytes cross our relay: public web
+  /// (web.mydia.dev) only.
+  ///
+  /// Native hole-punches to a direct connection, and the instance-hosted
+  /// `/player` build talks to its own origin over plain HTTP; neither costs
+  /// the project anything, so both stay uncapped and unblocked. Shared by the
+  /// streaming-session cap and the browser-support gate below, so both agree
+  /// on exactly which sessions are relayed.
+  bool get _relayed => kIsWeb && !isInstanceHostedWeb;
+
   /// The rung the server reported actually applying, which is what gets
   /// displayed. These differ on a relay connection, where the cap is not
   /// negotiable by the client. Null until a session echoes its caps back,
@@ -941,7 +951,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // hls.js at all (iOS Safari below 17.1 is the real-world case), and
         // letting it start a transcode it can never play would fail
         // inscrutably once playback was already underway.
-        if (kIsWeb && !CodecSupport.hasHlsMediaSourceSupport) {
+        //
+        // Gated on `_relayed`, not bare `kIsWeb`: media_kit tries native HLS
+        // first (`canPlayType('application/vnd.apple.mpegurl')`), which is
+        // non-empty for every iOS browser regardless of MediaSource support,
+        // and that native path plays a plain same-origin HTTP manifest fine
+        // with no Service Worker involved. That is exactly the instance-
+        // hosted `/player` build, so old iOS Safari must be let through
+        // there. Public web is different only because its manifest is
+        // Service Worker-served, and a browser's native HLS loader does not
+        // go through the Service Worker, so the same browser genuinely
+        // cannot play it there without hls.js/MSE.
+        if (_relayed && !CodecSupport.hasHlsMediaSourceSupport) {
           if (mounted) {
             setState(() {
               _error = 'This browser cannot play video here. Try the Mydia '
@@ -1165,18 +1186,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final startPosition =
         startPositionSeconds > 0 ? startPositionSeconds : null;
 
-    // Public web (web.mydia.dev) is relay-only forever — a browser cannot
-    // hole-punch — so every byte of that session is bandwidth we pay for.
-    // The instance-hosted `/player` build reaches its own origin over plain
-    // HTTP and costs us nothing, so it stays uncapped. Whichever of the
+    // Public web (web.mydia.dev) is relay-only forever, since a browser
+    // cannot hole-punch, so every byte of that session is bandwidth we pay
+    // for. The instance-hosted `/player` build reaches its own origin over
+    // plain HTTP and costs us nothing, so it stays uncapped. Whichever of the
     // viewer's own choice or the relay ceiling is more restrictive wins: a
     // viewer who already picked a lower rung than the cap keeps that choice
     // instead of being pushed up to it.
-    final relayed = kIsWeb && !isInstanceHostedWeb;
-    final webLimits = webSessionLimits(relayed: relayed);
+    final webLimits = webSessionLimits(relayed: _relayed);
     final maxBitrate =
-        _tighterCap(_selectedQuality.maxBitrateKbps, webLimits.maxBitrate);
-    final maxHeight = _tighterCap(_selectedQuality.height, webLimits.maxHeight);
+        tighterCap(_selectedQuality.maxBitrateKbps, webLimits.maxBitrate);
+    final maxHeight = tighterCap(_selectedQuality.height, webLimits.maxHeight);
 
     Future<QueryResult<Object?>> runLegacy() {
       return graphqlClient.mutate(
@@ -1217,17 +1237,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
 
     return result;
-  }
-
-  /// The more restrictive of a viewer's own request and a platform ceiling.
-  ///
-  /// Null means "no ceiling" for either side, so the result is null only when
-  /// both are: one side missing falls back to whichever is set, and two
-  /// present values take the smaller.
-  int? _tighterCap(int? requested, int? ceiling) {
-    if (requested == null) return ceiling;
-    if (ceiling == null) return requested;
-    return requested < ceiling ? requested : ceiling;
   }
 
   /// True when the failure is this server's schema not knowing about

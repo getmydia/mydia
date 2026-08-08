@@ -17,4 +17,26 @@ void main() {
       expect(limits.maxHeight, isNull);
     });
   });
+
+  group('tighterCap', () {
+    test('both null stays uncapped', () {
+      expect(tighterCap(null, null), isNull);
+    });
+
+    test('no request falls back to the ceiling', () {
+      expect(tighterCap(null, 720), 720);
+    });
+
+    test('no ceiling falls back to the request', () {
+      expect(tighterCap(1080, null), 1080);
+    });
+
+    test('both present, request below ceiling: the request wins', () {
+      expect(tighterCap(480, 720), 480);
+    });
+
+    test('both present, ceiling below request: the ceiling wins', () {
+      expect(tighterCap(1080, 720), 720);
+    });
+  });
 }
