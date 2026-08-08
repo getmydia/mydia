@@ -172,14 +172,34 @@ pub struct FlutterHlsResponse {
 
 impl P2pHost {
     /// Initialize a new P2P host with optional custom relay URL.
+    ///
+    /// `keypair_bytes` is the node's raw 32-byte Ed25519 secret. A browser has
+    /// no filesystem, so it reads the secret out of IndexedDB and hands it in
+    /// here. Native passes None and leaves the identity to the core, which is
+    /// where it was already decided. A slice of the wrong length is dropped
+    /// rather than trusted, which costs a fresh identity but never a
+    /// malformed one.
     #[frb(sync)]
-    pub fn init(relay_url: Option<String>) -> (Self, String) {
-        log::info!("P2pHost::init() called with relay_url: {:?}", relay_url);
+    pub fn init(relay_url: Option<String>, keypair_bytes: Option<Vec<u8>>) -> (Self, String) {
+        let keypair_supplied = keypair_bytes.is_some();
+        log::info!(
+            "P2pHost::init() called with relay_url: {relay_url:?}, keypair_supplied: {keypair_supplied}"
+        );
+        let keypair_bytes = keypair_bytes.and_then(|bytes| {
+            let len = bytes.len();
+            <[u8; 32]>::try_from(bytes.as_slice())
+                .inspect_err(|_| {
+                    log::warn!(
+                        "Ignoring keypair_bytes of length {len} (expected 32); generating a new identity"
+                    );
+                })
+                .ok()
+        });
         let config = HostConfig {
             relay_url,
             bind_port: None,
             keypair_path: None,
-            keypair_bytes: None,
+            keypair_bytes,
         };
         let (host, node_id) = Host::new(config);
         let hls_requester = host.hls_requester();
