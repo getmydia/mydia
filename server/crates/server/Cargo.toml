@@ -1,0 +1,22 @@
+[package]
+name = "mydia-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "mydia_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mydia-server"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tower.workspace = true
