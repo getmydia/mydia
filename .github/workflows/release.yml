@@ -337,17 +337,23 @@ jobs:
           # hands `sort -V` a string beginning with a letter. That sorts above
           # every numeric version, which made v0.13.0 look older than
           # metadata-relay-v0.9.0 and silently skipped :latest, :0.13 and :0.
+          #
+          # The pattern requires all three numeric components so it admits only
+          # what `sort -V` can order sensibly. A trailing prerelease suffix
+          # still matches, since `test` is not anchored at the end. `[.]` is
+          # used rather than an escaped dot to keep the expression readable
+          # through the YAML, shell and jq quoting layers.
           if [ "$IS_PRERELEASE" = "true" ]; then
             CLASS="prerelease"
             NEWEST=$(gh release list --repo "$REPO" --limit 100 \
               --json tagName,isDraft,isPrerelease \
-              --jq '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test("^v[0-9]")) | ltrimstr("v")] | .[]' \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test("^v[0-9]+[.][0-9]+[.][0-9]+")) | ltrimstr("v")] | .[]' \
               | sort -V | tail -n1)
           else
             CLASS="stable"
             NEWEST=$(gh release list --repo "$REPO" --limit 100 \
               --json tagName,isDraft,isPrerelease \
-              --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | select(test("^v[0-9]")) | ltrimstr("v")] | .[]' \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | select(test("^v[0-9]+[.][0-9]+[.][0-9]+")) | ltrimstr("v")] | .[]' \
               | sort -V | tail -n1)
           fi
 
