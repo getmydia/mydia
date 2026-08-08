@@ -12,6 +12,13 @@
 // worker's scope is whichever of those it was registered under. Deriving the
 // prefix keeps this file working in both, and matches the base URL the Dart
 // side builds from the same scope.
+//
+// This file must stay beside index.html, NOT in a p2p/ subdirectory. A worker
+// controls only clients whose URL is inside its scope, and it then intercepts
+// every request those clients make, whatever the request URL. Scoped to
+// 'p2p/', it would control nothing, because the app page is one level up.
+// Measured, not assumed: moving it produced active=true, controlling=false and
+// every byte-serving test failed.
 const PREFIX = new URL('p2p/', self.registration.scope).pathname;
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -80,7 +87,10 @@ async function proxyToPage(event) {
     {
       type: 'p2p-request',
       id: crypto.randomUUID(),
-      path: url.pathname.slice(PREFIX.length - 1) + url.search,
+      // Path only. The loopback proxy reads request.uri.path and drops the
+      // query, so forwarding one here would put it inside the HLS sub-path
+      // the peer is asked for, and only on web.
+      path: url.pathname.slice(PREFIX.length - 1),
       headers,
     },
     [channel.port2],

@@ -32,6 +32,17 @@ const _controlTimeout = Duration(seconds: 10);
 
 const _pollInterval = Duration(milliseconds: 20);
 
+/// The worker script, relative to the document's base href.
+///
+/// It has to sit beside index.html, not in a subdirectory. A worker controls
+/// only clients whose URL falls inside its scope, and it then intercepts every
+/// request those clients make, whatever the request URL is. A worker under
+/// `p2p/` would have scope `p2p/`, which does not contain the app page, so it
+/// would control nothing and every media fetch would go to the network. That
+/// is measured: registering from `p2p/sw.js` leaves the page at
+/// `active=true, controlling=false` until [_controlTimeout] elapses.
+const _scriptPath = 'sw.js';
+
 /// Serves media from the page's p2p connection through a Service Worker.
 ///
 /// A browser cannot bind a socket, so the worker registered by [start] claims
@@ -89,8 +100,9 @@ class ServiceWorkerMediaProxy implements MediaProxy {
 
     // Relative, so it resolves against the document's base href: the build
     // copies web/sw.js next to index.html, wherever that is served from.
-    final registration = await container.register('sw.js'.toJS).toDart;
-    await _awaitControl(container, registration);
+    final scriptUrl = _resolvedScriptUrl();
+    final registration = await container.register(_scriptPath.toJS).toDart;
+    await _awaitControl(container, registration, scriptUrl);
 
     container.onmessage = ((web.MessageEvent event) => _onMessage(event)).toJS;
     _registration = registration;
@@ -105,8 +117,12 @@ class ServiceWorkerMediaProxy implements MediaProxy {
     _targetPeer = null;
     _authToken = null;
 
+    // Fail them rather than just closing the port. The worker is waiting on a
+    // reply for each one, and a closed port is not an answer: the fetch would
+    // hang instead of failing. Closing the socket is what the loopback proxy
+    // does, and an error is the closest equivalent here.
     for (final exchange in _inFlight.toList()) {
-      _finish(exchange);
+      _fail(exchange, 'Media proxy stopped');
     }
 
     if (registration == null) return;
@@ -119,26 +135,38 @@ class ServiceWorkerMediaProxy implements MediaProxy {
   static String _baseUrlFor(web.ServiceWorkerRegistration registration) =>
       '${Uri.parse(registration.scope).path}p2p';
 
-  /// Wait for the worker to be activated *and* controlling this page.
+  /// Absolute URL of [_scriptPath], resolved the way `register` resolves it.
+  static String _resolvedScriptUrl() =>
+      Uri.parse(web.document.baseURI).resolve(_scriptPath).toString();
+
+  /// Wait for *our* worker to be activated and controlling this page.
   ///
-  /// Both conditions matter: a worker that is active but has not claimed this
-  /// client does not see its requests at all, so media fetches would silently
-  /// bypass the proxy. Polled rather than driven off `controllerchange`
-  /// because the worker can already be in either state when start() runs, in
-  /// which case no further event is coming.
+  /// All three conditions matter. A worker that is active but has not claimed
+  /// this client does not see its requests at all, so media fetches would
+  /// silently bypass the proxy. And a scope holds exactly one registration, so
+  /// the controller during a takeover can still be the script that held the
+  /// scope before this one: without comparing script URLs, someone else's
+  /// worker being in control reads as success and every media fetch 404s with
+  /// nothing to point at the cause.
+  ///
+  /// Polled rather than driven off `controllerchange` because the worker can
+  /// already be in either state when start() runs, in which case no further
+  /// event is coming.
   Future<void> _awaitControl(
     web.ServiceWorkerContainer container,
     web.ServiceWorkerRegistration registration,
+    String scriptUrl,
   ) async {
     final deadline = DateTime.now().add(_controlTimeout);
 
-    while (registration.active == null || container.controller == null) {
+    while (registration.active?.scriptURL != scriptUrl ||
+        container.controller?.scriptURL != scriptUrl) {
       if (DateTime.now().isAfter(deadline)) {
         throw StateError(
           'The media Service Worker did not take control of this page within '
-          '${_controlTimeout.inSeconds}s '
-          '(active=${registration.active != null}, '
-          'controlling=${container.controller != null}).',
+          '${_controlTimeout.inSeconds}s. Expected $scriptUrl, but the worker '
+          'is active=${registration.active?.scriptURL} '
+          'controlling=${container.controller?.scriptURL}.',
         );
       }
       await Future<void>.delayed(_pollInterval);

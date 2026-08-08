@@ -67,10 +67,15 @@ COPY priv/graphql/schema.graphql ./lib/graphql/schema.graphql
 
 # Install dependencies, generate code, and build
 # Cache pub packages to avoid re-downloading 1656 dependencies each build
+# --pwa-strategy=none: a scope holds exactly one service worker registration,
+# and web/sw.js needs the app's own scope to intercept media requests over p2p.
+# Leaving Flutter's worker on would mean the two replacing each other on every
+# load and playback cycle. Flutter's own build prints that its service worker
+# is deprecated and slated for removal.
 RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
     flutter pub get && \
     dart run build_runner build && \
-    flutter build web --release --base-href /player/ --tree-shake-icons
+    flutter build web --release --base-href /player/ --tree-shake-icons --pwa-strategy=none
 
 # ============================================
 # Elixir Build Stage
