@@ -13,6 +13,7 @@ import 'package:player/core/graphql/watch/query_key.dart';
 import 'package:player/presentation/screens/library/library_controller.dart';
 import 'package:player/presentation/screens/library/library_screen.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
+import 'package:player/presentation/widgets/rating_badge.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -36,7 +37,7 @@ const Size kMobileSize = Size(600, 900);
 /// `__typename` selection into every selection set, and the normalized cache
 /// refuses to write data that lacks a matching one. A miss surfaces as a
 /// spurious `hasException`, not as an obvious error.
-Map<String, dynamic> moviesPage(List<String> ids) => {
+Map<String, dynamic> moviesPage(List<String> ids, {double? rating}) => {
       '__typename': 'Query',
       'movies': {
         '__typename': 'MovieConnection',
@@ -54,7 +55,7 @@ Map<String, dynamic> moviesPage(List<String> ids) => {
                 'runtime': null,
                 'genres': <String>[],
                 'contentRating': null,
-                'rating': null,
+                'rating': rating,
                 'artwork': {
                   '__typename': 'Artwork',
                   'posterUrl': null,
@@ -79,7 +80,7 @@ Map<String, dynamic> moviesPage(List<String> ids) => {
 
 /// The TV shows connection, whose node shape differs from a movie's: no
 /// `progress`, plus `status`, `seasonCount`, `episodeCount` and `nextEpisode`.
-Map<String, dynamic> tvShowsPage(List<String> ids) => {
+Map<String, dynamic> tvShowsPage(List<String> ids, {double? rating}) => {
       '__typename': 'Query',
       'tvShows': {
         '__typename': 'TvShowConnection',
@@ -97,7 +98,7 @@ Map<String, dynamic> tvShowsPage(List<String> ids) => {
                 'status': null,
                 'genres': <String>[],
                 'contentRating': null,
-                'rating': null,
+                'rating': rating,
                 'seasonCount': 1,
                 'episodeCount': 8,
                 'artwork': {
@@ -134,6 +135,7 @@ Future<void> pumpLibrary(
   required Size size,
   LibraryType libraryType = LibraryType.movies,
   int itemCount = 40,
+  double? rating,
   List<Override> extraOverrides = const [],
   bool settle = true,
 }) async {
@@ -143,8 +145,9 @@ Future<void> pumpLibrary(
   addTearDown(tester.view.reset);
 
   final ids = List.generate(itemCount, (i) => '$i');
-  final page =
-      libraryType == LibraryType.movies ? moviesPage(ids) : tvShowsPage(ids);
+  final page = libraryType == LibraryType.movies
+      ? moviesPage(ids, rating: rating)
+      : tvShowsPage(ids, rating: rating);
 
   await mockNetworkImages(() async {
     await tester.pumpWidget(
@@ -292,5 +295,62 @@ void main() {
     await tester.pump();
 
     expect(before - firstPosterTop(tester), 120);
+  });
+
+  testWidgets('the grid hands each poster its TMDB rating', (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      itemCount: 1,
+      rating: 8.4,
+    );
+
+    final poster = tester.widget<MediaPoster>(find.byType(MediaPoster).first);
+    expect(poster.rating, 8.4);
+    expect(find.text('8.4'), findsOneWidget);
+  });
+
+  testWidgets('a TV shows grid hands its posters the rating too',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      libraryType: LibraryType.tvShows,
+      itemCount: 1,
+      rating: 9.1,
+    );
+
+    final poster = tester.widget<MediaPoster>(find.byType(MediaPoster).first);
+    expect(poster.rating, 9.1);
+    expect(find.text('9.1'), findsOneWidget);
+  });
+
+  testWidgets(
+      'an unvoted title shows no chip, since TMDB reports 0.0 for no votes',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      itemCount: 1,
+      rating: 0,
+    );
+
+    expect(find.byType(RatingBadge), findsNothing);
+  });
+
+  testWidgets('list view omits the rating chip even when the data has one',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      size: kDesktopSize,
+      itemCount: 1,
+      rating: 8.4,
+    );
+
+    // In grid mode the toggle button shows the *list* icon.
+    await tester.tap(find.byIcon(Icons.view_list_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RatingBadge), findsNothing);
   });
 }

@@ -9,6 +9,7 @@ import '../../../test_utils/stub_graphql_client.dart';
 Map<String, dynamic> _moviesPage(
   List<String> ids, {
   required bool hasNextPage,
+  double? rating,
 }) {
   return {
     '__typename': 'Query',
@@ -28,7 +29,7 @@ Map<String, dynamic> _moviesPage(
               'runtime': null,
               'genres': <String>[],
               'contentRating': null,
-              'rating': null,
+              'rating': rating,
               'artwork': {
                 '__typename': 'Artwork',
                 'posterUrl': null,
@@ -48,6 +49,58 @@ Map<String, dynamic> _moviesPage(
         'endCursor': 'c-${ids.last}',
       },
       'totalCount': 4,
+    },
+  };
+}
+
+/// The TV shows connection. Its node shape differs from a movie's: no
+/// `progress` and no `runtime`, plus `status`, `seasonCount`, `episodeCount`
+/// and `nextEpisode`.
+Map<String, dynamic> _tvShowsPage(
+  List<String> ids, {
+  required bool hasNextPage,
+  double? rating,
+}) {
+  return {
+    '__typename': 'Query',
+    'tvShows': {
+      '__typename': 'TvShowConnection',
+      'edges': [
+        for (final id in ids)
+          {
+            '__typename': 'TvShowEdge',
+            'cursor': 'c-$id',
+            'node': {
+              '__typename': 'TvShow',
+              'id': id,
+              'title': 'Show $id',
+              'year': 2026,
+              'overview': null,
+              'status': null,
+              'genres': <String>[],
+              'contentRating': null,
+              'rating': rating,
+              'seasonCount': 1,
+              'episodeCount': 8,
+              'artwork': {
+                '__typename': 'Artwork',
+                'posterUrl': null,
+                'backdropUrl': null,
+                'thumbnailUrl': null,
+              },
+              'isFavorite': false,
+              'nextEpisode': null,
+            },
+          }
+      ],
+      'pageInfo': {
+        '__typename': 'PageInfo',
+        'hasNextPage': hasNextPage,
+        'hasPreviousPage': false,
+        'startCursor': 'c-${ids.first}',
+        'endCursor': 'c-${ids.last}',
+      },
+      'totalCount': ids.length,
     },
   };
 }
@@ -206,5 +259,101 @@ void main() {
     await Future.wait([first, second]);
 
     expect(link.requests.length, before + 1);
+  });
+
+  test('carries the TMDB rating onto each movie item', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false, rating: 7.8)
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(LibraryType.movies),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.rating, 7.8);
+  });
+
+  test('leaves an unrated movie null rather than defaulting it', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _moviesPage(['1'], hasNextPage: false)
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(LibraryType.movies),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.rating, isNull);
+  });
+
+  test('carries the TMDB rating onto each TV show item', () async {
+    // Its own container and its own stub, never shared with the movies tests:
+    // StubLink.responses is index-based and repeats its last entry, so a
+    // shared script silently mis-answers whichever query runs second.
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _tvShowsPage(['1'], hasNextPage: false, rating: 9.1)
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(LibraryType.tvShows),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.rating, 9.1);
+    expect(data.items.single.type, 'tv_show');
+  });
+
+  test('leaves an unrated TV show null rather than defaulting it', () async {
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider.overrideWith(
+          (ref) async => stubClient(
+            StubLink.responses([
+              _tvShowsPage(['1'], hasNextPage: false)
+            ]),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final data = await waitForValue(
+      container,
+      libraryControllerProvider(LibraryType.tvShows),
+      (value) => value.items.isNotEmpty,
+    );
+
+    expect(data.items.single.rating, isNull);
   });
 }

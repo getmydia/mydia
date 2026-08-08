@@ -23,6 +23,11 @@ class LibraryItem {
   final int? year;
   final String? posterUrl;
   final double? progressPercentage;
+
+  /// TMDB's score on a 0 to 10 scale, or null when the server sent none.
+  /// `0.0` is TMDB's value for a title nobody has voted on and is passed
+  /// through as-is; deciding what that means is the UI's job, not the model's.
+  final double? rating;
   final bool isFavorite;
   final String type;
   final String? subtitle;
@@ -35,6 +40,7 @@ class LibraryItem {
     this.year,
     this.posterUrl,
     this.progressPercentage,
+    this.rating,
     required this.isFavorite,
     required this.type,
     this.subtitle,

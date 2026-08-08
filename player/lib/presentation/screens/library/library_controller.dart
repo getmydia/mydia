@@ -117,6 +117,7 @@ LibraryData _parseMovies(Map<String, dynamic> data) {
           (node['artwork'] as Map<String, dynamic>?)?['posterUrl'] as String?,
       progressPercentage:
           (node['progress'] as Map<String, dynamic>?)?['percentage'] as double?,
+      rating: (node['rating'] as num?)?.toDouble(),
       isFavorite: node['isFavorite'] as bool,
       type: 'movie',
       subtitle: node['year']?.toString(),
@@ -136,6 +137,7 @@ LibraryData _parseTvShows(Map<String, dynamic> data) {
           (node['artwork'] as Map<String, dynamic>?)?['posterUrl'] as String?,
       // TV shows have no overall progress.
       progressPercentage: null,
+      rating: (node['rating'] as num?)?.toDouble(),
       isFavorite: node['isFavorite'] as bool,
       type: 'tv_show',
       subtitle: node['year'] != null ? '${node['year']}' : null,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'library_controller.dart';
+import '../../models/library_data.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/cast_actions.dart';
@@ -506,7 +507,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildGridView(BuildContext context, List items, double topPadding) {
+  Widget _buildGridView(
+      BuildContext context, List<LibraryItem> items, double topPadding) {
     final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
@@ -535,6 +537,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               posterUrl: item.posterUrl,
               title: item.title,
               progressPercentage: item.progressPercentage,
+              rating: item.rating,
               isFavorite: item.isFavorite,
               onTap: () => _handleItemTap(item.id, item.type),
             );
@@ -544,7 +547,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildListView(BuildContext context, List items, double topPadding) {
+  Widget _buildListView(
+      BuildContext context, List<LibraryItem> items, double topPadding) {
     final isDesktop = Breakpoints.isDesktop(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final bottomPadding = isDesktop ? 32.0 : 100.0;
@@ -617,7 +621,7 @@ class _ActionButton extends StatelessWidget {
 }
 
 class _ListItem extends StatelessWidget {
-  final dynamic item;
+  final LibraryItem item;
   final VoidCallback onTap;
 
   const _ListItem({

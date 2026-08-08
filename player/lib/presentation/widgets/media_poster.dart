@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import 'poster_frame.dart';
 import 'progress_overlay.dart';
+import 'rating_badge.dart';
 
 /// A portrait poster for the library grid and list.
 ///
@@ -14,6 +15,10 @@ class MediaPoster extends StatelessWidget {
   final String title;
   final String? subtitle;
   final double? progressPercentage;
+
+  /// TMDB's score on a 0 to 10 scale. Null, or `0.0` for a title nobody has
+  /// voted on, renders no chip at all.
+  final double? rating;
   final bool isFavorite;
   final VoidCallback? onTap;
   final bool showTitle;
@@ -24,6 +29,7 @@ class MediaPoster extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.progressPercentage,
+    this.rating,
     this.isFavorite = false,
     this.onTap,
     this.showTitle = true,
@@ -46,6 +52,7 @@ class MediaPoster extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = progressPercentage;
+    final rating = this.rating;
 
     // The cursor sits out here rather than on the PosterFrame, because the
     // GestureDetector's tap target includes the title label and the affordance
@@ -69,6 +76,16 @@ class MediaPoster extends StatelessWidget {
                 overlays: [
                   if (progress != null && progress > 0)
                     ProgressOverlay(percentage: progress),
+                  // TMDB reports 0.0 for a title nobody has voted on, so 0 and
+                  // null both mean "no rating" and the overlay is omitted
+                  // rather than rendered empty. RatingBadge's doc explains why
+                  // the widget cannot hide itself.
+                  if (rating != null && rating > 0)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: RatingBadge(rating: rating),
+                    ),
                   if (isFavorite)
                     const Positioned(
                       top: 8,
