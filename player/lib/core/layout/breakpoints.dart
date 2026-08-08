@@ -90,6 +90,17 @@ abstract class Breakpoints {
     return getEpisodeCardSize(context).height + labelStrip;
   }
 
+  /// Rail height for the downloads screen's episode cards.
+  ///
+  /// Downloads cards carry a third label line (file size) beneath the episode
+  /// code and title, so they need a taller strip than
+  /// [getEpisodeRailHeight]'s two-line allowance.
+  static double getDownloadedEpisodeRailHeight(BuildContext context) {
+    // Allowance for the code + title + size strip rendered below each card.
+    const double labelStrip = 84;
+    return getEpisodeCardSize(context).height + labelStrip;
+  }
+
   /// Get responsive horizontal padding based on screen width
   static double getHorizontalPadding(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
