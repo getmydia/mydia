@@ -3,4 +3,5 @@
 //! library rather than declaring its own copy of the modules.
 
 pub mod router;
+pub mod scanner;
 pub mod test_support;
