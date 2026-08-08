@@ -242,12 +242,13 @@ class DownloadedEpisodeCard extends ConsumerWidget {
   /// `fileId=offline` is what tells the player screen to resolve the local
   /// file instead of asking the server for a stream.
   void _play(BuildContext context) {
+    final season = media.seasonNumber;
     context.push(
       '/player/episode/${media.mediaId}'
       '?fileId=offline'
       '&title=${Uri.encodeComponent(media.title)}'
       '&showId=$showId'
-      '&seasonNumber=${media.seasonNumber}',
+      '${season != null ? '&seasonNumber=$season' : ''}',
     );
   }
 }
