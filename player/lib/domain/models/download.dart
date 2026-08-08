@@ -313,6 +313,12 @@ class DownloadTask {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
+  /// e.g. "S01E03". Renders "S??E??" when the numbers are absent, which is
+  /// what a movie or an unmatched file looks like.
+  String get episodeCode =>
+      'S${seasonNumber?.toString().padLeft(2, '0') ?? '??'}'
+      'E${episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
+
   String get fileSizeDisplay {
     if (fileSize == null) return 'Unknown size';
     return formatBytes(fileSize!);
@@ -441,6 +447,12 @@ class DownloadedMedia {
   MediaType get type {
     return mediaType == 'episode' ? MediaType.episode : MediaType.movie;
   }
+
+  /// e.g. "S01E03". Renders "S??E??" when the numbers are absent, which is
+  /// what a movie or an unmatched file looks like.
+  String get episodeCode =>
+      'S${seasonNumber?.toString().padLeft(2, '0') ?? '??'}'
+      'E${episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
 
   String get fileSizeDisplay => DownloadTask.formatBytes(fileSize);
 

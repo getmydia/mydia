@@ -7,6 +7,9 @@ import '../../../core/downloads/download_providers.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/quality_badge.dart';
+import 'widgets/download_queue_row.dart';
+import 'widgets/downloaded_episode_rail.dart';
+import 'widgets/series_downloads_dialogs.dart';
 
 class SeriesDownloadsScreen extends ConsumerWidget {
   final String showId;
@@ -63,7 +66,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
           _buildHeroSection(context, ref, showDownloads, showQueue),
           _buildStatsBar(context, showDownloads, showQueue),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 if (showQueue.isNotEmpty) ...[
@@ -75,7 +78,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 if (showQueue.isEmpty && showDownloads.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(32),
-                    child: Center(child: Text("No episodes found")),
+                    child: Center(child: Text('No episodes found')),
                   ),
               ]),
             ),
@@ -105,8 +108,18 @@ class SeriesDownloadsScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => _showDeleteAllDialog(
-                    context, ref, showDownloads, showQueue),
+                onTap: () async {
+                  final deleted = await showDeleteAllDialog(
+                    context,
+                    ref,
+                    showId: showId,
+                    showTitle: showTitle,
+                    totalCount: showDownloads.length + showQueue.length,
+                  );
+                  if (deleted && context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
                 child: const Padding(
                   padding: EdgeInsets.all(8),
                   child: Icon(Icons.delete_outline_rounded,
@@ -348,193 +361,44 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     );
   }
 
-  /// Shared compact row for queue and downloaded episode items.
-  Widget _buildEpisodeRow({
-    required BuildContext context,
-    required String episodeCode,
-    required String title,
-    required Widget trailing,
-    VoidCallback? onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Row(
-              children: [
-                // Episode code badge
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    episodeCode,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Title
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Trailing section (metrics + actions)
-                trailing,
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDownloadedRow(
-      BuildContext context, WidgetRef ref, DownloadedMedia media) {
-    final episodeCode =
-        'S${media.seasonNumber?.toString().padLeft(2, '0') ?? '??'}E${media.episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
-
-    final trailing = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (media.quality.isNotEmpty) ...[
-          QualityBadge.resolution(media.quality),
-          const SizedBox(width: 8),
-        ],
-        Text(
-          media.fileSizeDisplay,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          icon: const Icon(Icons.play_arrow_rounded, color: AppColors.primary),
-          iconSize: 22,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          onPressed: () {
-            context.push(
-              '/player/episode/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}&showId=$showId&seasonNumber=${media.seasonNumber}',
-            );
-          },
-        ),
-        IconButton(
-          icon:
-              const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-          iconSize: 20,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          onPressed: () async {
-            final confirm = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: AppColors.surface,
-                title: const Text('Delete Episode'),
-                content: Text('Delete $episodeCode?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.error),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-            );
-
-            if (confirm == true) {
-              final manager = await ref.read(downloadManagerProvider.future);
-              await manager.deleteDownload(media.mediaId);
-            }
-          },
-        ),
-      ],
-    );
-
-    return _buildEpisodeRow(
-      context: context,
-      episodeCode: episodeCode,
-      title: media.title,
-      trailing: trailing,
-      onTap: () {
-        context.push(
-          '/player/episode/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}&showId=$showId&seasonNumber=${media.seasonNumber}',
-        );
-      },
-    );
-  }
-
   // ---------------------------------------------------------------------------
   // Downloaded Section with Season Grouping
   // ---------------------------------------------------------------------------
 
   List<Widget> _buildDownloadedSection(
       BuildContext context, WidgetRef ref, List<DownloadedMedia> downloads) {
-    final widgets = <Widget>[];
+    final widgets = <Widget>[
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Text(
+          'Downloaded',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: AppColors.success,
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ),
+      const SizedBox(height: 12),
+    ];
 
     final seasonMap = _groupBySeason(downloads, (d) => d.seasonNumber ?? 0);
-    final hasMultipleSeasons = seasonMap.length > 1;
 
-    if (!hasMultipleSeasons) {
-      widgets.add(Text(
-        'Downloaded',
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.success,
-              fontWeight: FontWeight.bold,
-            ),
-      ));
-      widgets.add(const SizedBox(height: 8));
-      for (final media in downloads) {
-        widgets.add(_buildDownloadedRow(context, ref, media));
-      }
-    } else {
-      widgets.add(Text(
-        'Downloaded',
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.success,
-              fontWeight: FontWeight.bold,
-            ),
+    var first = true;
+    for (final entry in seasonMap.entries) {
+      if (!first) widgets.add(const SizedBox(height: 20));
+      first = false;
+
+      widgets.add(Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: _buildSeasonHeader(context, ref, entry.key, entry.value.length),
       ));
       widgets.add(const SizedBox(height: 12));
-
-      var first = true;
-      for (final entry in seasonMap.entries) {
-        final season = entry.key;
-        final seasonEpisodes = entry.value;
-        if (!first) widgets.add(const SizedBox(height: 16));
-        first = false;
-        widgets.add(
-            _buildSeasonHeader(context, ref, season, seasonEpisodes.length));
-        widgets.add(const SizedBox(height: 8));
-        for (final media in seasonEpisodes) {
-          widgets.add(_buildDownloadedRow(context, ref, media));
-        }
-      }
+      widgets.add(DownloadedEpisodeRail(
+        key: ValueKey('downloaded-season-${entry.key}'),
+        episodes: entry.value,
+        showId: showId,
+        seasonNumber: entry.key,
+      ));
     }
 
     return widgets;
@@ -542,7 +406,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildSeasonHeader(
       BuildContext context, WidgetRef ref, int seasonNumber, int episodeCount) {
-    final label = seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
+    final label = seasonLabel(seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
@@ -583,8 +447,14 @@ class SeriesDownloadsScreen extends ConsumerWidget {
               width: 32,
               height: 32,
               child: IconButton(
-                onPressed: () => _showDeleteSeasonDialog(
-                    context, ref, seasonNumber, episodeCount),
+                onPressed: () => showDeleteSeasonDialog(
+                  context,
+                  ref,
+                  showId: showId,
+                  showTitle: showTitle,
+                  seasonNumber: seasonNumber,
+                  episodeCount: episodeCount,
+                ),
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 color: AppColors.error,
                 padding: EdgeInsets.zero,
@@ -603,15 +473,18 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   List<Widget> _buildQueueSection(
       BuildContext context, WidgetRef ref, List<DownloadTask> queue) {
-    final widgets = <Widget>[];
-
-    widgets.add(Text(
-      'Downloading',
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: AppColors.primary,
-            fontWeight: FontWeight.bold,
-          ),
-    ));
+    final widgets = <Widget>[
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Text(
+          'Downloading',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ),
+    ];
 
     final seasonMap = _groupBySeason(queue, (t) => t.seasonNumber ?? 0);
     final hasMultipleSeasons = seasonMap.length > 1;
@@ -619,21 +492,28 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     if (!hasMultipleSeasons) {
       widgets.add(const SizedBox(height: 8));
       for (final task in queue) {
-        widgets.add(_buildQueueRow(context, ref, task));
+        widgets.add(Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DownloadQueueRow(key: ValueKey(task.id), task: task),
+        ));
       }
     } else {
       widgets.add(const SizedBox(height: 12));
       var first = true;
       for (final entry in seasonMap.entries) {
-        final season = entry.key;
-        final seasonTasks = entry.value;
         if (!first) widgets.add(const SizedBox(height: 16));
         first = false;
-        widgets
-            .add(_buildQueueSeasonHeader(context, season, seasonTasks.length));
+        widgets.add(Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child:
+              _buildQueueSeasonHeader(context, entry.key, entry.value.length),
+        ));
         widgets.add(const SizedBox(height: 8));
-        for (final task in seasonTasks) {
-          widgets.add(_buildQueueRow(context, ref, task));
+        for (final task in entry.value) {
+          widgets.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DownloadQueueRow(key: ValueKey(task.id), task: task),
+          ));
         }
       }
     }
@@ -641,76 +521,9 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     return widgets;
   }
 
-  Widget _buildQueueRow(
-      BuildContext context, WidgetRef ref, DownloadTask task) {
-    final progress = task.isProgressive ? task.combinedProgress : task.progress;
-    final episodeCode =
-        'S${task.seasonNumber?.toString().padLeft(2, '0') ?? '??'}E${task.episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
-
-    final trailing = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Consumer(
-          builder: (context, ref, _) {
-            final speedAsync = ref.watch(downloadSpeedInfoProvider);
-            return speedAsync.when(
-              data: (speedMap) {
-                final info = speedMap[task.id];
-                final parts = <String>[];
-                final bytesText =
-                    task.progressBytesDisplay ?? task.fileSizeDisplay;
-                parts.add(bytesText);
-                if (info != null && info.bytesPerSecond > 0) {
-                  parts.add(info.speedDisplay);
-                }
-                return Text(
-                  parts.join(' \u00B7 '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                  ),
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            );
-          },
-        ),
-        const SizedBox(width: 6),
-        Text(
-          '${(progress * 100).toStringAsFixed(0)}%',
-          style: const TextStyle(
-            color: AppColors.primary,
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          onPressed: () => _showCancelDialog(context, ref, task),
-          icon: const Icon(Icons.close_rounded),
-          color: AppColors.textSecondary,
-          iconSize: 18,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-        ),
-      ],
-    );
-
-    return _buildEpisodeRow(
-      context: context,
-      episodeCode: episodeCode,
-      title: task.title,
-      trailing: trailing,
-    );
-  }
-
   Widget _buildQueueSeasonHeader(
       BuildContext context, int seasonNumber, int taskCount) {
-    final label = seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
+    final label = seasonLabel(seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
@@ -758,41 +571,6 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     return DownloadTask.formatBytes(totalBytes);
   }
 
-  // ---------------------------------------------------------------------------
-  // Dialogs
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showCancelDialog(
-      BuildContext context, WidgetRef ref, DownloadTask task) async {
-    final manager = await ref.read(downloadManagerProvider.future);
-
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Cancel Download?'),
-        content: const Text('Stop downloading this episode?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Keep',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () {
-              manager.cancelDownload(task.id);
-              Navigator.pop(context);
-            },
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Cancel Download'),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Groups items by season number, returning a sorted map (Specials=0 first,
   /// then ascending).
   Map<int, List<T>> _groupBySeason<T>(List<T> items, int Function(T) seasonOf) {
@@ -805,72 +583,5 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       map.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
     );
     return sorted;
-  }
-
-  Future<void> _showDeleteAllDialog(BuildContext context, WidgetRef ref,
-      List<DownloadedMedia> showDownloads, List<DownloadTask> showQueue) async {
-    final totalCount = showDownloads.length + showQueue.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Delete All Episodes'),
-        content: Text(
-          'Delete all $totalCount episode${totalCount == 1 ? '' : 's'} of "$showTitle"?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      final manager = await ref.read(downloadManagerProvider.future);
-      await manager.deleteSeriesDownloads(showId);
-      if (context.mounted) {
-        Navigator.of(context).pop();
-      }
-    }
-  }
-
-  Future<void> _showDeleteSeasonDialog(BuildContext context, WidgetRef ref,
-      int seasonNumber, int episodeCount) async {
-    final seasonLabel = seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Text('Delete $seasonLabel?'),
-        content: Text(
-          'Delete $episodeCount episode${episodeCount == 1 ? '' : 's'} from $seasonLabel of "$showTitle"?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      final manager = await ref.read(downloadManagerProvider.future);
-      await manager.deleteSeasonDownloads(showId, seasonNumber);
-    }
   }
 }

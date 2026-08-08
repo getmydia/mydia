@@ -77,4 +77,30 @@ void main() {
       }
     });
   });
+
+  group('getDownloadedEpisodeRailHeight', () {
+    testWidgets('exceeds the episode rail height at every breakpoint',
+        (tester) async {
+      for (final width in <double>[400, 800, 1400]) {
+        late double downloadsHeight;
+        late double showHeight;
+
+        await tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(size: Size(width, 900)),
+            child: Builder(
+              builder: (context) {
+                downloadsHeight =
+                    Breakpoints.getDownloadedEpisodeRailHeight(context);
+                showHeight = Breakpoints.getEpisodeRailHeight(context);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        expect(downloadsHeight, greaterThan(showHeight));
+      }
+    });
+  });
 }
