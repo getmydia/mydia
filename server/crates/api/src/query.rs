@@ -37,8 +37,71 @@ pub struct RootQueryType;
 #[Object(name = "RootQueryType")]
 impl RootQueryType {
     /// Get any node by its global ID
-    async fn node(&self, _ctx: &Context<'_>, _id: ID) -> Result<Option<Node>> {
-        Ok(None)
+    async fn node(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Node>> {
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        let Some(reference) = crate::node_id::decode(id.as_str()) else {
+            return Ok(None);
+        };
+
+        let node = match reference {
+            crate::node_id::NodeRef::Movie(id) => match find_item(api, &id, "movie").await? {
+                Some(item) => {
+                    let files = mydia_db::media_files::list_for_item(&api.db, &item.id)
+                        .await
+                        .map_err(|e| Error::new(e.to_string()))?;
+
+                    Some(Node::Movie(Box::new(crate::mapping::movie_from(
+                        &item, &files,
+                    ))))
+                }
+                None => None,
+            },
+            crate::node_id::NodeRef::TvShow(id) => match find_item(api, &id, "tv_show").await? {
+                Some(item) => Some(Node::TvShow(Box::new(load_show(api, &item).await?))),
+                None => None,
+            },
+            crate::node_id::NodeRef::Episode(id) => {
+                match mydia_db::episodes::find(&api.db, &id)
+                    .await
+                    .map_err(|e| Error::new(e.to_string()))?
+                {
+                    Some(row) => {
+                        let files = mydia_db::media_files::list_for_episode(&api.db, &row.id)
+                            .await
+                            .map_err(|e| Error::new(e.to_string()))?;
+
+                        Some(Node::Episode(Box::new(crate::mapping::episode_from(
+                            &row, &files, None,
+                        ))))
+                    }
+                    None => None,
+                }
+            }
+            crate::node_id::NodeRef::LibraryPath(id) => mydia_db::library_paths::find(&api.db, &id)
+                .await
+                .map_err(|e| Error::new(e.to_string()))?
+                .map(|row| Node::LibraryPath(Box::new(crate::mapping::library_path_from(&row)))),
+            crate::node_id::NodeRef::Season {
+                show_id,
+                season_number,
+            } => match find_item(api, &show_id, "tv_show").await? {
+                Some(item) => load_show(api, &item)
+                    .await?
+                    .seasons
+                    .and_then(|seasons| {
+                        seasons
+                            .into_iter()
+                            .flatten()
+                            .find(|season| i64::from(season.season_number) == season_number)
+                    })
+                    .map(|season| Node::Season(Box::new(season))),
+                None => None,
+            },
+        };
+
+        Ok(node)
     }
 
     /// List all library paths
@@ -232,11 +295,32 @@ impl RootQueryType {
     /// Get episodes for a specific season of a TV show
     async fn season_episodes(
         &self,
-        _ctx: &Context<'_>,
-        _show_id: ID,
-        _season_number: i32,
+        ctx: &Context<'_>,
+        show_id: ID,
+        season_number: i32,
     ) -> Result<Option<Vec<Option<Episode>>>> {
-        Ok(None)
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        let rows = mydia_db::episodes::list_for_season(
+            &api.db,
+            show_id.as_str(),
+            i64::from(season_number),
+        )
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+
+        let mut episodes = Vec::with_capacity(rows.len());
+
+        for row in rows {
+            let files = mydia_db::media_files::list_for_episode(&api.db, &row.id)
+                .await
+                .map_err(|e| Error::new(e.to_string()))?;
+
+            episodes.push(Some(crate::mapping::episode_from(&row, &files, None)));
+        }
+
+        Ok(Some(episodes))
     }
 
     /// Get items the user is currently watching (in-progress)
@@ -363,6 +447,20 @@ impl RootQueryType {
     ) -> Result<Option<Vec<Option<RecentlyAddedItem>>>> {
         Ok(None)
     }
+}
+
+/// Finds an item and confirms it is the type the caller asked for, so
+/// `movie:<a show's id>` resolves to nothing rather than to a mislabelled node.
+async fn find_item(
+    api: &ApiContext,
+    id: &str,
+    media_type: &str,
+) -> Result<Option<mydia_db::media_items::MediaItemRow>> {
+    let found = mydia_db::media_items::find(&api.db, id)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+
+    Ok(found.filter(|item| item.media_type == media_type))
 }
 
 /// Loads a show with every episode and each episode's files.
