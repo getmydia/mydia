@@ -393,4 +393,71 @@ void main() {
     expect(pushed, hasLength(1));
     expect(pushed.single, isNot(contains('resume=')));
   });
+
+  testWidgets('hero play control sits flush against the overlay right edge',
+      (tester) async {
+    final playable = _episodeJson(2, files: [_fileJson('file-1')]);
+
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 1200),
+      showJson: _showJson(nextUpEpisode: playable),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), playable, _episodeJson(3)],
+      },
+    );
+    await tester.pumpAndSettle();
+
+    // The content overlay is inset 20 from the right of the 1000px surface.
+    // The fixture supplies a single file, so SmartPlayButton renders no
+    // quality dropdown and PlayButton is the control's last child.
+    expect(tester.getRect(find.byType(PlayButton)).right, closeTo(980, 0.5));
+  });
+
+  testWidgets('hero play control lives in the hero, not the body',
+      (tester) async {
+    final playable = _episodeJson(2, files: [_fileJson('file-1')]);
+
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 1200),
+      showJson: _showJson(nextUpEpisode: playable),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), playable, _episodeJson(3)],
+      },
+    );
+    await tester.pumpAndSettle();
+
+    // 380 is the hero SliverAppBar's expandedHeight, set in
+    // _buildHeroSection. Unscrolled, anything below that line is in the
+    // body, where _buildActionColumn lives. This is what distinguishes
+    // "moved to the title row" from "merely re-aligned in the action column".
+    final play = tester.getRect(find.byType(PlayButton));
+    final actions = tester.getRect(find.byType(DetailActionRow));
+    expect(play.bottom, lessThan(380));
+    expect(play.bottom, lessThan(actions.top));
+  });
+
+  testWidgets('hero overlay does not overflow at phone width', (tester) async {
+    // The show hero is the wider of the two detail heroes — it carries the
+    // episode context pill alongside the title and Play control — so it is
+    // the most likely to overflow a narrow viewport, and until now it was
+    // the untested one (the movie hero already has phone-width coverage at
+    // Size(400, 900)). A layout overflow surfaces as a FlutterError, which
+    // fails the test even without an explicit assertion for it.
+    final playable = _episodeJson(2, files: [_fileJson('file-1')]);
+
+    await _pumpScreen(
+      tester,
+      size: const Size(400, 1200),
+      showJson: _showJson(nextUpEpisode: playable),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), playable, _episodeJson(3)],
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Play'), findsOneWidget);
+  });
 }

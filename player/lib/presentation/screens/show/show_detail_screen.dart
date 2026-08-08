@@ -25,7 +25,7 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
-import '../../widgets/smart_play_button.dart';
+import '../../widgets/hero_play_control.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
@@ -388,36 +388,53 @@ class ShowDetailScreen extends ConsumerWidget {
               left: 20,
               right: 20,
               bottom: 20,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    show.title,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          blurRadius: 8,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          show.title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.8),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        if (show.yearDisplay.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            show.yearDisplay,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
+                        if (selectedEpisode != null) ...[
+                          const SizedBox(height: 8),
+                          _buildEpisodeContextPill(show, selectedEpisode),
+                        ],
                       ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (show.yearDisplay.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      show.yearDisplay,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                    ),
-                  ],
+                  // Gap and control are emitted together so a null episode
+                  // leaves no dangling spacer.
                   if (selectedEpisode != null) ...[
-                    const SizedBox(height: 8),
-                    _buildEpisodeContextPill(show, selectedEpisode),
+                    const SizedBox(width: 16),
+                    _buildHeroPlayControl(context, show, selectedEpisode),
                   ],
                 ],
               ),
@@ -449,6 +466,28 @@ class ShowDetailScreen extends ConsumerWidget {
           color: AppColors.textPrimary,
         ),
       ),
+    );
+  }
+
+  /// The hero's Play affordance, extracted (like the other `_buildX` helpers
+  /// in this file) for readability: the overlay `Row` it lives in is already
+  /// deeply nested inside the `SliverAppBar`'s `FlexibleSpaceBar`/`Stack`.
+  Widget _buildHeroPlayControl(
+    BuildContext context,
+    ShowDetail show,
+    Episode episode,
+  ) {
+    return HeroPlayControl(
+      files: episode.files,
+      onFileSelected: (file) {
+        final title = '${show.title} - ${episode.episodeCode}';
+        context.push(
+          '/player/episode/${episode.id}?fileId=${file.id}'
+          '&title=${Uri.encodeComponent(title)}&showId=$id'
+          '&seasonNumber=${episode.seasonNumber}'
+          '${_resumeSuffix(episode)}',
+        );
+      },
     );
   }
 
@@ -508,54 +547,29 @@ class ShowDetailScreen extends ConsumerWidget {
     ShowDetail show,
     Episode episode,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Play', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            SmartPlayButton(
-              files: episode.files,
-              onFileSelected: (file) {
-                final title = '${show.title} - ${episode.episodeCode}';
-                context.push(
-                  '/player/episode/${episode.id}?fileId=${file.id}'
-                  '&title=${Uri.encodeComponent(title)}&showId=$id&seasonNumber=${episode.seasonNumber}'
-                  '${_resumeSuffix(episode)}',
-                );
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        DetailActionRow(
-          watched: episode.progress?.watched ?? false,
-          onToggleWatched: () => episode.progress?.watched ?? false
-              ? ref
-                  .read(seasonEpisodesControllerProvider(
-                          showId: id, seasonNumber: episode.seasonNumber)
-                      .notifier)
-                  .markEpisodeUnwatched(episode)
-              : ref
-                  .read(seasonEpisodesControllerProvider(
-                          showId: id, seasonNumber: episode.seasonNumber)
-                      .notifier)
-                  .markEpisodeWatched(episode),
-          isFavorite: show.isFavorite,
-          onToggleFavorite: () => ref
-              .read(showDetailControllerProvider(id).notifier)
-              .toggleFavorite(),
-          onDownload: () => _startEpisodeDownload(context, ref, show, episode),
-          trailerUrl: show.trailerUrl,
-          showDownload: isDownloadSupported && episode.files.isNotEmpty,
-          // Per-episode, not per-show: the hero's Download action downloads
-          // the selected episode.
-          isDownloaded:
-              ref.watch(isMediaDownloadedProvider(episode.id)).value ?? false,
-        ),
-      ],
+    return DetailActionRow(
+      watched: episode.progress?.watched ?? false,
+      onToggleWatched: () => episode.progress?.watched ?? false
+          ? ref
+              .read(seasonEpisodesControllerProvider(
+                      showId: id, seasonNumber: episode.seasonNumber)
+                  .notifier)
+              .markEpisodeUnwatched(episode)
+          : ref
+              .read(seasonEpisodesControllerProvider(
+                      showId: id, seasonNumber: episode.seasonNumber)
+                  .notifier)
+              .markEpisodeWatched(episode),
+      isFavorite: show.isFavorite,
+      onToggleFavorite: () =>
+          ref.read(showDetailControllerProvider(id).notifier).toggleFavorite(),
+      onDownload: () => _startEpisodeDownload(context, ref, show, episode),
+      trailerUrl: show.trailerUrl,
+      showDownload: isDownloadSupported && episode.files.isNotEmpty,
+      // Per-episode, not per-show: the hero's Download action downloads
+      // the selected episode.
+      isDownloaded:
+          ref.watch(isMediaDownloadedProvider(episode.id)).value ?? false,
     );
   }
 
