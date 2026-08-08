@@ -4,6 +4,7 @@
 //! This crate never writes inside a library path. It reads directory entries,
 //! calls stat, and opens files for reading through ffprobe. Nothing else.
 
+pub mod ffprobe;
 pub mod names;
 pub mod parser;
 pub mod walk;
@@ -16,4 +17,10 @@ pub enum LibraryError {
         #[source]
         source: std::io::Error,
     },
+
+    #[error("could not run ffprobe on `{path}`: {detail}")]
+    Ffprobe { path: String, detail: String },
+
+    #[error("ffprobe returned output that could not be read for `{path}`: {detail}")]
+    FfprobeOutput { path: String, detail: String },
 }
