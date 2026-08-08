@@ -266,6 +266,9 @@ defmodule Mydia.MixProject do
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
+      "schema.export": [
+        "run --no-start -e 'File.write!(\"player/lib/graphql/schema.graphql\", Absinthe.Schema.to_sdl(MydiaWeb.Schema))'"
+      ],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind mydia", "esbuild mydia"],
