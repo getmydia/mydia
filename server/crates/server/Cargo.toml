@@ -16,13 +16,18 @@ path = "src/main.rs"
 async-graphql.workspace = true
 async-graphql-axum.workspace = true
 axum.workspace = true
+futures-util.workspace = true
 mydia-api = { path = "../api" }
 mydia-auth = { path = "../auth" }
 mydia-config = { path = "../config" }
 mydia-db = { path = "../db" }
+mydia-library = { path = "../library" }
 serde_json.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 tower.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+sqlx.workspace = true

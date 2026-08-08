@@ -45,6 +45,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         issuer: mydia_auth::tokens::Issuer::new(secret_key_base.as_bytes()),
     };
 
+    // Configured paths are the only source of library paths in this slice.
+    // A path removed from the configuration is removed from the database,
+    // along with the items it owned. Nothing on disk is touched.
+    let configured: Vec<(String, String)> = loaded
+        .config
+        .library
+        .paths
+        .iter()
+        .map(|p| (p.path.display().to_string(), p.library_type.clone()))
+        .collect();
+
+    mydia_db::library_paths::sync_from_config(&ctx.db, &configured).await?;
+
+    // A run left in `running` belongs to a process that died. Close it out
+    // before starting anything, so the admin UI never shows a stale scan as
+    // still in progress.
+    mydia_db::scan_runs::abandon_running(&ctx.db).await?;
+
+    let _scanner = mydia_server::scanner::spawn(ctx.db.clone(), loaded.config.library.clone());
+
     let addr: SocketAddr =
         format!("{}:{}", loaded.config.bind_address, loaded.config.port).parse()?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
