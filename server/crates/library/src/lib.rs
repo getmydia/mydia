@@ -7,6 +7,7 @@
 pub mod ffprobe;
 pub mod names;
 pub mod parser;
+pub mod scan;
 pub mod walk;
 
 #[derive(Debug, thiserror::Error)]
@@ -23,4 +24,10 @@ pub enum LibraryError {
 
     #[error("ffprobe returned output that could not be read for `{path}`: {detail}")]
     FfprobeOutput { path: String, detail: String },
+
+    #[error("the library path `{path}` has an unknown type `{library_type}`")]
+    UnknownLibraryType { path: String, library_type: String },
+
+    #[error("the scan could not record its progress: {0}")]
+    Store(#[from] mydia_db::DbError),
 }
