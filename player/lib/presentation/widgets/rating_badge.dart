@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 /// The TMDB rating pill drawn over poster artwork.
 ///
-/// Mirrors the treatment `movie_detail_screen.dart`'s `_buildStatBadge` uses
-/// for ratings, so a rating reads the same wherever the app shows one. The
-/// black scrim is deliberate rather than a palette surface: this chip sits
-/// directly on artwork and has to stay legible over a bright poster.
+/// Structurally this is the same chip as `_buildStatBadge` in
+/// `series_downloads_screen.dart`: the same padding, scrim, radius and row
+/// layout. The black scrim is deliberate rather than a palette surface,
+/// because this chip sits directly on artwork and has to stay legible over a
+/// bright poster. Note that the movie detail screen renders ratings
+/// differently, as a plain unscrimmed row (`_buildRatingLine`), since it has a
+/// solid background to sit on.
 ///
 /// Takes a non-nullable [rating] on purpose. TMDB reports `0.0` for a title
 /// nobody has voted on and the server passes `vote_average` through unchanged,

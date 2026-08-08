@@ -20,8 +20,7 @@ void main() {
     expect(find.text('8.0'), findsOneWidget);
   });
 
-  testWidgets('carries an amber star, matching the detail screen',
-      (tester) async {
+  testWidgets('carries an amber star', (tester) async {
     await tester.pumpWidget(_host(const RatingBadge(rating: 6.1)));
 
     final icon = tester.widget<Icon>(find.byIcon(Icons.star_rounded));
