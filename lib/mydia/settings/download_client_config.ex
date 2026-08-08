@@ -70,6 +70,9 @@ defmodule Mydia.Settings.DownloadClientConfig do
   @debrid_providers ~w(real_debrid all_debrid premiumize tor_box)
   @debrid_default_grace_minutes 1440
 
+  @remote_fetch_types [:qbittorrent, :transmission, :rqbit, :rtorrent]
+  @remote_fetch_auth_methods ~w(password ssh_key)
+
   schema "download_client_configs" do
     field :name, :string
     field :type, Ecto.Enum, values: @client_types
@@ -125,6 +128,7 @@ defmodule Mydia.Settings.DownloadClientConfig do
     |> validate_inclusion(:type, @client_types)
     |> apply_debrid_grace_default(attrs)
     |> validate_by_type()
+    |> validate_remote_fetch_config()
     |> validate_number(:priority, greater_than: 0)
     |> validate_number(:incomplete_grace_minutes, greater_than: 0)
     |> validate_priority_profile()
@@ -247,9 +251,92 @@ defmodule Mydia.Settings.DownloadClientConfig do
     end
   end
 
+  # `enabled` is matched against both the real boolean and its string form:
+  # HTML checkboxes submit form params as strings ("true"/"false"), while
+  # callers that build the map programmatically (tests, seed scripts) tend to
+  # use real booleans. A missing key is treated as disabled rather than an
+  # error, because the admin UI always renders the other remote_fetch inputs
+  # (host, username, ...) for qBittorrent/Transmission/rqbit/rTorrent clients
+  # regardless of whether the operator ever opens that section — an untouched
+  # section round-trips its (irrelevant) empty field values with no
+  # "enabled" key at all, since an unchecked checkbox is omitted from form
+  # params entirely.
+  defp validate_remote_fetch_config(changeset) do
+    case get_field(changeset, :connection_settings) do
+      %{"remote_fetch" => remote_fetch} when is_map(remote_fetch) ->
+        case Map.get(remote_fetch, "enabled", false) do
+          enabled when enabled in [true, "true"] ->
+            validate_remote_fetch_enabled(changeset, remote_fetch)
+
+          enabled when enabled in [false, "false", nil] ->
+            changeset
+
+          _other ->
+            add_error(changeset, :connection_settings, "remote_fetch.enabled must be a boolean")
+        end
+
+      %{"remote_fetch" => _other} ->
+        add_error(changeset, :connection_settings, "remote_fetch.enabled must be a boolean")
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp validate_remote_fetch_enabled(changeset, remote_fetch) do
+    type = get_field(changeset, :type)
+
+    if type in @remote_fetch_types do
+      changeset
+      |> validate_remote_fetch_required(remote_fetch, "host")
+      |> validate_remote_fetch_required(remote_fetch, "username")
+      |> validate_remote_fetch_auth(remote_fetch)
+    else
+      add_error(
+        changeset,
+        :connection_settings,
+        "remote_fetch is only supported for #{Enum.join(@remote_fetch_types, ", ")} clients"
+      )
+    end
+  end
+
+  defp validate_remote_fetch_required(changeset, remote_fetch, key) do
+    case Map.get(remote_fetch, key) do
+      value when is_binary(value) and value != "" ->
+        changeset
+
+      _ ->
+        add_error(changeset, :connection_settings, "remote_fetch.#{key} can't be blank")
+    end
+  end
+
+  defp validate_remote_fetch_auth(changeset, remote_fetch) do
+    case Map.get(remote_fetch, "auth_method") do
+      "password" ->
+        validate_remote_fetch_required(changeset, remote_fetch, "password")
+
+      "ssh_key" ->
+        validate_remote_fetch_required(changeset, remote_fetch, "private_key")
+
+      other ->
+        add_error(
+          changeset,
+          :connection_settings,
+          "remote_fetch.auth_method must be one of: " <>
+            "#{Enum.join(@remote_fetch_auth_methods, ", ")} (got #{inspect(other)})"
+        )
+    end
+  end
+
   @doc """
   Returns the supported debrid provider names (as strings).
   """
   @spec debrid_providers() :: [String.t()]
   def debrid_providers, do: @debrid_providers
+
+  @doc """
+  Returns the supported remote_fetch auth method names (as strings).
+  """
+  @spec remote_fetch_auth_methods() :: [String.t()]
+  def remote_fetch_auth_methods, do: @remote_fetch_auth_methods
 end

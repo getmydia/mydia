@@ -342,6 +342,38 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
     end
   end
 
+  # Tests the remote seedbox's SFTP reachability using the form's CURRENT
+  # (possibly unsaved) `remote_fetch` values, mirroring
+  # `test_download_client_connection` above: read straight off the live
+  # changeset via `apply_changes/1` rather than requiring a save first, so
+  # the operator can validate connectivity before committing the config.
+  # `connection_settings` guards against `nil` the same way
+  # `test_download_client_connection` does for a brand-new form.
+  @impl true
+  def handle_event("test_seedbox_connection", _params, socket) do
+    remote_fetch =
+      socket.assigns.download_client_form.source
+      |> Ecto.Changeset.apply_changes()
+      |> Map.get(:connection_settings)
+      |> Kernel.||(%{})
+      |> Map.get("remote_fetch", %{})
+
+    case Mydia.Downloads.Seedbox.Connection.open(remote_fetch) do
+      {:ok, _channel, cleanup} ->
+        cleanup.()
+        {:noreply, put_flash(socket, :info, "SFTP connection successful")}
+
+      {:error, reason} ->
+        MydiaLogger.log_warning(:liveview, "Seedbox SFTP connection test failed",
+          operation: :test_seedbox_connection,
+          error: reason,
+          user_id: socket.assigns.current_user.id
+        )
+
+        {:noreply, put_flash(socket, :error, "SFTP connection failed: #{inspect(reason)}")}
+    end
+  end
+
   ## Private Helpers
 
   defp load_data(socket) do

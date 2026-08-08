@@ -15,6 +15,7 @@ defmodule Mydia.Downloads.History do
   alias Mydia.Downloads.ClientAdoption
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.Seedbox
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Downloads.Structs.EnrichedDownload
   alias Mydia.Settings
@@ -353,6 +354,9 @@ defmodule Mydia.Downloads.History do
         try do
           case Client.list_torrents(adapter, config, downloads: client_downloads) do
             {:ok, torrents} ->
+              torrents =
+                Seedbox.maybe_apply_remote_fetch(client_config, torrents, client_downloads)
+
               torrents_map =
                 torrents
                 |> Enum.map(fn torrent -> {torrent.id, torrent} end)

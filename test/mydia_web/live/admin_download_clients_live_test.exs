@@ -534,6 +534,121 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
     end
   end
 
+  describe "Wave-2 Form: Remote seedbox (Test SFTP Connection)" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      %{conn: conn, view: view}
+    end
+
+    test "the button stays disabled until an SFTP host is entered", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_download_client"]})
+      |> render_click()
+
+      view
+      |> form("#download-client-form", %{
+        "download_client_config" => %{"type" => "qbittorrent"}
+      })
+      |> render_change()
+
+      assert has_element?(view, ~s{button[phx-click="test_seedbox_connection"][disabled]})
+
+      view
+      |> form("#download-client-form", %{
+        "download_client_config" => %{
+          "type" => "qbittorrent",
+          "connection_settings" => %{
+            "remote_fetch" => %{"host" => "seedbox.example.com"}
+          }
+        }
+      })
+      |> render_change()
+
+      refute has_element?(view, ~s{button[phx-click="test_seedbox_connection"][disabled]})
+    end
+
+    test "reports a connection failure via flash for an unreachable host", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_download_client"]})
+      |> render_click()
+
+      view
+      |> form("#download-client-form", %{
+        "download_client_config" => %{
+          "type" => "qbittorrent",
+          "connection_settings" => %{
+            "remote_fetch" => %{
+              "enabled" => "true",
+              "host" => "127.0.0.1",
+              "port" => "1",
+              "username" => "u",
+              "auth_method" => "password",
+              "password" => "p"
+            }
+          }
+        }
+      })
+      |> render_change()
+
+      html =
+        view
+        |> element(~s{button[phx-click="test_seedbox_connection"]})
+        |> render_click()
+
+      assert html =~ "SFTP connection failed"
+    end
+
+    test "reports success via flash for a reachable SFTP host", %{view: view} do
+      root =
+        Path.join(System.tmp_dir!(), "seedbox_ui_test_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(root)
+      on_exit(fn -> File.rm_rf!(root) end)
+
+      {daemon_ref, port} = Mydia.SftpFixture.start(root, "seeduser", "seedpass")
+      on_exit(fn -> :ssh.stop_daemon(daemon_ref) end)
+
+      view
+      |> element(~s{button[phx-click="new_download_client"]})
+      |> render_click()
+
+      view
+      |> form("#download-client-form", %{
+        "download_client_config" => %{
+          "type" => "qbittorrent",
+          "connection_settings" => %{
+            "remote_fetch" => %{
+              "enabled" => "true",
+              "host" => "127.0.0.1",
+              # Submitted as a string, same as a real HTML number input —
+              # exercises Connection.open/1's string-port normalization.
+              "port" => to_string(port),
+              "username" => "seeduser",
+              "auth_method" => "password",
+              "password" => "seedpass"
+            }
+          }
+        }
+      })
+      |> render_change()
+
+      html =
+        view
+        |> element(~s{button[phx-click="test_seedbox_connection"]})
+        |> render_click()
+
+      assert html =~ "SFTP connection successful"
+    end
+  end
+
   describe "Runtime Config Protection" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)

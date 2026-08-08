@@ -14,6 +14,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
   # abstract priority to a native value is listed here.
   @priority_profile_types ~w(qbittorrent transmission rtorrent sabnzbd nzbget)
 
+  # Client types that can point at a remote host reachable over SFTP, so they
+  # surface the remote seedbox (pull-over-SFTP) section. Blackhole and debrid
+  # don't run on a remote host in this sense, and sabnzbd/nzbget (Usenet) have
+  # no seedbox concept.
+  @remote_fetch_types ~w(qbittorrent transmission rqbit rtorrent)
+
   # Placeholder hints shown in the per-tier priority profile inputs. Each
   # adapter has its own native priority value domain; the placeholder mirrors
   # the hardcoded default mapping so users see what value they'd get if they
@@ -140,6 +146,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                 <div class="flex flex-wrap items-center gap-2">
                   <%!-- Status Badges --%>
                   <span class="badge badge-sm badge-outline">{client.type}</span>
+                  <span
+                    :if={client_remote_fetch_enabled?(client)}
+                    class="badge badge-sm badge-outline gap-1"
+                    title="Pulls completed torrents from a remote seedbox over SFTP"
+                  >
+                    <.icon name="hero-cloud-arrow-down" class="w-3 h-3" /> Seedbox
+                  </span>
                   <span class={[
                     "badge badge-sm",
                     if(client.enabled, do: "badge-success", else: "badge-ghost")
@@ -266,6 +279,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
 
     show_categories? = selected_type in @category_aware_types
     show_priority_profile? = selected_type in @priority_profile_types
+    show_remote_fetch? = selected_type in @remote_fetch_types
 
     priority_placeholders = Map.get(@priority_profile_placeholders, selected_type, %{})
 
@@ -278,6 +292,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
       |> assign(:priority_profile_value, priority_profile_value)
       |> assign(:show_categories?, show_categories?)
       |> assign(:show_priority_profile?, show_priority_profile?)
+      |> assign(:show_remote_fetch?, show_remote_fetch?)
       |> assign(:priority_placeholders, priority_placeholders)
       |> assign(:priority_tiers, @priority_tiers)
       |> assign(:content_types, @content_types)
@@ -640,6 +655,140 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
               </details>
             <% end %>
 
+            <%!-- Remote seedbox (SFTP pull). Visible only for network torrent-client
+                 types that can point at a remote host. --%>
+            <%= if @show_remote_fetch? do %>
+              <details class="collapse collapse-arrow bg-base-200" id="download-client-remote-fetch">
+                <summary class="collapse-title text-sm font-medium">
+                  Remote seedbox (pull over SFTP)
+                </summary>
+                <div class="collapse-content space-y-3">
+                  <label class="label cursor-pointer justify-start gap-3">
+                    <input
+                      type="checkbox"
+                      name="download_client_config[connection_settings][remote_fetch][enabled]"
+                      value="true"
+                      checked={remote_fetch_value(@download_client_form, "enabled") in [true, "true"]}
+                      class="checkbox checkbox-sm"
+                    />
+                    <span class="label-text">
+                      Pull completed torrents from this client's host over SFTP
+                    </span>
+                  </label>
+
+                  <p class="text-xs text-base-content/60">
+                    Connection trust is not verified (no host-key checking) — only connect to hosts you control.
+                  </p>
+
+                  <.input
+                    name="download_client_config[connection_settings][remote_fetch][host]"
+                    type="text"
+                    label="SFTP Host"
+                    placeholder="seedbox.example.com"
+                    value={remote_fetch_value(@download_client_form, "host")}
+                  />
+
+                  <.input
+                    name="download_client_config[connection_settings][remote_fetch][port]"
+                    type="number"
+                    label="SFTP Port"
+                    value={remote_fetch_value(@download_client_form, "port") || 22}
+                  />
+
+                  <.input
+                    name="download_client_config[connection_settings][remote_fetch][username]"
+                    type="text"
+                    label="SFTP Username"
+                    value={remote_fetch_value(@download_client_form, "username")}
+                  />
+
+                  <.input
+                    name="download_client_config[connection_settings][remote_fetch][auth_method]"
+                    type="select"
+                    label="Authentication"
+                    options={
+                      Enum.map(
+                        Mydia.Settings.DownloadClientConfig.remote_fetch_auth_methods(),
+                        &{auth_method_label(&1), &1}
+                      )
+                    }
+                    value={remote_fetch_value(@download_client_form, "auth_method") || "password"}
+                  />
+
+                  <%= if remote_fetch_value(@download_client_form, "auth_method") == "ssh_key" do %>
+                    <.input
+                      name="download_client_config[connection_settings][remote_fetch][private_key]"
+                      type="textarea"
+                      label="Private Key (PEM)"
+                      value={remote_fetch_value(@download_client_form, "private_key")}
+                    />
+                    <.input
+                      name="download_client_config[connection_settings][remote_fetch][passphrase]"
+                      type="password"
+                      label="Passphrase (optional)"
+                      value={remote_fetch_value(@download_client_form, "passphrase")}
+                    />
+                  <% else %>
+                    <.input
+                      name="download_client_config[connection_settings][remote_fetch][password]"
+                      type="password"
+                      label="SFTP Password"
+                      value={remote_fetch_value(@download_client_form, "password")}
+                    />
+                  <% end %>
+
+                  <details class="collapse collapse-arrow bg-base-100">
+                    <summary class="collapse-title text-xs font-medium">Advanced</summary>
+                    <div class="collapse-content space-y-3">
+                      <.input
+                        name="download_client_config[connection_settings][remote_fetch][remote_path_prefix]"
+                        type="text"
+                        label="Remote Path Prefix Override"
+                        placeholder="Leave blank unless SFTP is chrooted differently from the torrent client"
+                        value={remote_fetch_value(@download_client_form, "remote_path_prefix")}
+                      />
+
+                      <.input
+                        name="download_client_config[connection_settings][remote_fetch][max_concurrent_transfers]"
+                        type="number"
+                        label="Max Concurrent Transfers"
+                        value={
+                          remote_fetch_value(@download_client_form, "max_concurrent_transfers") || 2
+                        }
+                      />
+
+                      <label class="label cursor-pointer justify-start gap-3">
+                        <input
+                          type="checkbox"
+                          name="download_client_config[connection_settings][remote_fetch][delete_after_transfer]"
+                          value="true"
+                          checked={
+                            remote_fetch_value(@download_client_form, "delete_after_transfer") in [
+                              true,
+                              "true"
+                            ]
+                          }
+                          class="checkbox checkbox-sm"
+                        />
+                        <span class="label-text">Delete the remote copy after a verified transfer</span>
+                      </label>
+                    </div>
+                  </details>
+
+                  <div class="pt-1">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline"
+                      phx-click="test_seedbox_connection"
+                      disabled={remote_fetch_value(@download_client_form, "host") in [nil, ""]}
+                    >
+                      <.icon name="hero-signal" class="w-4 h-4" /> Test SFTP Connection
+                    </button>
+                  </div>
+                </div>
+              </details>
+            <% end %>
+
             <div class="divider my-1"></div>
 
             <%!-- Options Section --%>
@@ -785,6 +934,32 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
 
       _ ->
         "No provider"
+    end
+  end
+
+  # Reads a key out of the nested `connection_settings.remote_fetch` map for
+  # the form's current (possibly unsaved) state, mirroring the
+  # `get_in(Phoenix.HTML.Form.input_value(...), [...])` pattern used above for
+  # blackhole's `watch_folder`.
+  defp remote_fetch_value(form, key) do
+    get_in(
+      Phoenix.HTML.Form.input_value(form, :connection_settings) || %{},
+      ["remote_fetch", key]
+    )
+  end
+
+  defp auth_method_label("password"), do: "Password"
+  defp auth_method_label("ssh_key"), do: "SSH key"
+
+  # Whether a client's saved connection_settings has remote_fetch enabled,
+  # for the row-level "Seedbox" badge in the list. `enabled` is stored as
+  # whatever the form submitted — HTML checkboxes send the string "true",
+  # not the boolean — so both forms are accepted here, mirroring
+  # `DownloadClientConfig.validate_remote_fetch_config/1`.
+  defp client_remote_fetch_enabled?(client) do
+    case get_in(client.connection_settings || %{}, ["remote_fetch", "enabled"]) do
+      enabled when enabled in [true, "true"] -> true
+      _ -> false
     end
   end
 end

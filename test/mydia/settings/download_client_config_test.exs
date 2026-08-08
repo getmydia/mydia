@@ -232,4 +232,247 @@ defmodule Mydia.Settings.DownloadClientConfigTest do
              ]
     end
   end
+
+  describe "remote_fetch validation" do
+    @qbittorrent_attrs %{
+      name: "seedbox-qbit",
+      type: :qbittorrent,
+      host: "seedbox.example.com",
+      port: 8080
+    }
+
+    defp put_remote_fetch(attrs, remote_fetch) do
+      Map.put(attrs, :connection_settings, %{"remote_fetch" => remote_fetch})
+    end
+
+    test "remote_fetch absent does not require any fields" do
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, @qbittorrent_attrs)
+      assert changeset.valid?
+    end
+
+    test "remote_fetch disabled does not require any fields" do
+      attrs = put_remote_fetch(@qbittorrent_attrs, %{"enabled" => false})
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      assert changeset.valid?
+    end
+
+    # HTML checkboxes submit form params as strings, not real booleans: a
+    # checked checkbox sends "true", not true. This mirrors what the admin
+    # LiveView form (components.ex) actually posts.
+    test "remote_fetch disabled as the string \"false\" does not require any fields" do
+      attrs = put_remote_fetch(@qbittorrent_attrs, %{"enabled" => "false"})
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "remote_fetch enabled as the string \"true\" is validated like the boolean" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => "true",
+          "host" => "seedbox.example.com",
+          "username" => "seeduser",
+          "auth_method" => "password",
+          "password" => "hunter2"
+        })
+
+      assert {:ok, config} = Settings.create_download_client_config(attrs)
+      assert config.connection_settings["remote_fetch"]["host"] == "seedbox.example.com"
+    end
+
+    test "remote_fetch enabled as the string \"true\" without required fields still errors" do
+      attrs = put_remote_fetch(@qbittorrent_attrs, %{"enabled" => "true"})
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+      assert Enum.any?(errors_on(changeset).connection_settings, &(&1 =~ "host can't be blank"))
+    end
+
+    # The admin form always renders the remote_fetch host/username/etc.
+    # inputs for these client types once the section exists in the DOM,
+    # regardless of whether the operator ever checks "enabled" — an
+    # unchecked checkbox is simply omitted from the submitted params. A
+    # save of an untouched section must not fail validation just because
+    # "enabled" is absent while its sibling (irrelevant, blank) fields are
+    # present.
+    test "remote_fetch present without an enabled key does not require any fields" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "host" => "",
+          "username" => "",
+          "auth_method" => "password",
+          "password" => ""
+        })
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "valid password-auth remote_fetch config round-trips through the DB" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => true,
+          "host" => "seedbox.example.com",
+          "port" => 22,
+          "username" => "seeduser",
+          "auth_method" => "password",
+          "password" => "hunter2"
+        })
+
+      assert {:ok, config} = Settings.create_download_client_config(attrs)
+      assert config.connection_settings["remote_fetch"]["host"] == "seedbox.example.com"
+      assert config.connection_settings["remote_fetch"]["auth_method"] == "password"
+    end
+
+    test "valid ssh_key-auth remote_fetch config round-trips through the DB" do
+      attrs =
+        @qbittorrent_attrs
+        |> Map.put(:name, "seedbox-qbit-key")
+        |> put_remote_fetch(%{
+          "enabled" => true,
+          "host" => "seedbox.example.com",
+          "username" => "seeduser",
+          "auth_method" => "ssh_key",
+          "private_key" =>
+            "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+        })
+
+      assert {:ok, config} = Settings.create_download_client_config(attrs)
+      assert config.connection_settings["remote_fetch"]["auth_method"] == "ssh_key"
+    end
+
+    test "remote_fetch enabled on a blackhole client is rejected" do
+      attrs = %{
+        name: "blackhole-seedbox",
+        type: :blackhole,
+        connection_settings: %{
+          "watch_folder" => "/watch",
+          "completed_folder" => "/complete",
+          "remote_fetch" => %{
+            "enabled" => true,
+            "host" => "x",
+            "username" => "u",
+            "auth_method" => "password",
+            "password" => "p"
+          }
+        }
+      }
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+      assert [msg] = errors_on(changeset).connection_settings
+      assert msg =~ "only supported for"
+    end
+
+    test "remote_fetch enabled on a debrid client is rejected" do
+      attrs = %{
+        name: "debrid-seedbox",
+        type: :debrid,
+        api_key: "key",
+        connection_settings: %{
+          "provider" => "real_debrid",
+          "remote_fetch" => %{
+            "enabled" => true,
+            "host" => "x",
+            "username" => "u",
+            "auth_method" => "password",
+            "password" => "p"
+          }
+        }
+      }
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+      assert [msg] = errors_on(changeset).connection_settings
+      assert msg =~ "only supported for"
+    end
+
+    test "missing remote_fetch.host produces an error" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => true,
+          "username" => "seeduser",
+          "auth_method" => "password",
+          "password" => "hunter2"
+        })
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+      assert Enum.any?(errors_on(changeset).connection_settings, &(&1 =~ "host can't be blank"))
+    end
+
+    test "missing remote_fetch.username produces an error" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => true,
+          "host" => "seedbox.example.com",
+          "auth_method" => "password",
+          "password" => "hunter2"
+        })
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+
+      assert Enum.any?(
+               errors_on(changeset).connection_settings,
+               &(&1 =~ "username can't be blank")
+             )
+    end
+
+    test "password auth_method without a password produces an error" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => true,
+          "host" => "seedbox.example.com",
+          "username" => "seeduser",
+          "auth_method" => "password"
+        })
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+
+      assert Enum.any?(
+               errors_on(changeset).connection_settings,
+               &(&1 =~ "password can't be blank")
+             )
+    end
+
+    test "ssh_key auth_method without a private_key produces an error" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => true,
+          "host" => "seedbox.example.com",
+          "username" => "seeduser",
+          "auth_method" => "ssh_key"
+        })
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+
+      assert Enum.any?(
+               errors_on(changeset).connection_settings,
+               &(&1 =~ "private_key can't be blank")
+             )
+    end
+
+    test "unknown auth_method value is rejected" do
+      attrs =
+        put_remote_fetch(@qbittorrent_attrs, %{
+          "enabled" => true,
+          "host" => "seedbox.example.com",
+          "username" => "seeduser",
+          "auth_method" => "carrier_pigeon"
+        })
+
+      changeset = DownloadClientConfig.changeset(%DownloadClientConfig{}, attrs)
+      refute changeset.valid?
+
+      assert Enum.any?(
+               errors_on(changeset).connection_settings,
+               &(&1 =~ "auth_method must be one of")
+             )
+    end
+
+    test "remote_fetch_auth_methods/0 returns the two supported auth methods" do
+      assert DownloadClientConfig.remote_fetch_auth_methods() == ["password", "ssh_key"]
+    end
+  end
 end
