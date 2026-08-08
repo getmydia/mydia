@@ -257,6 +257,33 @@ async fn an_unreadable_library_path_fails_the_run() {
     let run = scan_runs::latest(&db, &row.id).await.unwrap().unwrap();
     assert_eq!(run.state, "failed");
     assert!(run.error.is_some());
+    // Any error after scan_runs::start (walk, persist, prune, progress, finish)
+    // marks the run failed via the outer handler — not only walk failures.
+}
+
+#[tokio::test]
+async fn a_persist_failure_marks_the_run_failed() {
+    let (db, _g) = connect_temp().await.unwrap();
+    let media = tempfile::tempdir().unwrap();
+
+    if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
+        eprintln!("ffmpeg is not on PATH, skipping");
+        return;
+    }
+
+    let row = library(&db, media.path(), "movies").await;
+
+    sqlx::query("DROP TABLE media_items")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    let result = scan_library_path(&db, &row).await;
+    assert!(result.is_err());
+
+    let run = scan_runs::latest(&db, &row.id).await.unwrap().unwrap();
+    assert_eq!(run.state, "failed");
+    assert!(run.error.is_some());
 }
 
 #[tokio::test]

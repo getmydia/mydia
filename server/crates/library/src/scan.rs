@@ -4,7 +4,7 @@
 //! file. Every failure is recorded against the run with a reason, and the scan
 //! completes. Only a failure of the library path itself fails the run.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use mydia_db::library_paths::LibraryPathRow;
 use mydia_db::{episodes, library_paths, media_files, media_items, scan_runs, Db};
@@ -59,13 +59,27 @@ pub async fn scan_library_path(db: &Db, row: &LibraryPathRow) -> Result<ScanOutc
     let run = scan_runs::start(db, &row.id).await?;
     let root = PathBuf::from(&row.path);
 
-    let files = match walk::walk(&root) {
-        Ok(files) => files,
+    match scan_library_path_inner(db, row, kind, &run, &root).await {
+        Ok(outcome) => Ok(outcome),
         Err(error) => {
-            scan_runs::fail(db, &run.id, &error.to_string()).await?;
-            return Err(error);
+            fail_run_best_effort(db, &run.id, &error).await;
+            Err(error)
         }
-    };
+    }
+}
+
+async fn fail_run_best_effort(db: &Db, run_id: &str, error: &LibraryError) {
+    let _ = scan_runs::fail(db, run_id, &error.to_string()).await;
+}
+
+async fn scan_library_path_inner(
+    db: &Db,
+    row: &LibraryPathRow,
+    kind: LibraryKind,
+    run: &scan_runs::ScanRunRow,
+    root: &Path,
+) -> Result<ScanOutcome, LibraryError> {
+    let files = walk::walk(root)?;
 
     let mut outcome = ScanOutcome {
         files_seen: files.len() as i64,
@@ -77,7 +91,7 @@ pub async fn scan_library_path(db: &Db, row: &LibraryPathRow) -> Result<ScanOutc
     for file in &files {
         let display = file.path.display().to_string();
 
-        let Some(parsed) = parser::parse(&file.path, &root, kind) else {
+        let Some(parsed) = parser::parse(&file.path, root, kind) else {
             outcome.files_failed += 1;
             scan_runs::record_issue(
                 db,
