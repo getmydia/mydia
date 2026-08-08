@@ -5,6 +5,7 @@
 //! cosmetic grounds, so both sides are reduced to a sorted, description-free
 //! rendering before comparison.
 
+use async_graphql::Value;
 use async_graphql_parser::types::{
     ConstDirective, DirectiveDefinition, DirectiveLocation, FieldDefinition, InputValueDefinition,
     SchemaDefinition, ServiceDocument, TypeDefinition, TypeKind, TypeSystemDefinition,
@@ -190,7 +191,7 @@ fn render_input_value(value: &InputValueDefinition) -> String {
     let default = value
         .default_value
         .as_ref()
-        .map(|d| format!("={}", d.node))
+        .map(|d| format!("={}", render_value(&d.node)))
         .unwrap_or_default();
 
     format!(
@@ -222,11 +223,30 @@ fn render_directive(directive: &ConstDirective) -> String {
     let mut args: Vec<String> = directive
         .arguments
         .iter()
-        .map(|(name, value)| format!("{}:{}", name.node, value.node))
+        .map(|(name, value)| format!("{}:{}", name.node, render_value(&value.node)))
         .collect();
     args.sort();
 
     format!(" @{}({})", directive.name.node, args.join(","))
+}
+
+fn render_value(value: &Value) -> String {
+    match value {
+        Value::Object(map) => {
+            let mut fields: Vec<(String, String)> = map
+                .iter()
+                .map(|(name, value)| (name.to_string(), render_value(value)))
+                .collect();
+            fields.sort_by(|(a, _), (b, _)| a.cmp(b));
+            let body: Vec<String> = fields.iter().map(|(n, v)| format!("{n}: {v}")).collect();
+            format!("{{{}}}", body.join(", "))
+        }
+        Value::List(items) => {
+            let body: Vec<String> = items.iter().map(render_value).collect();
+            format!("[{}]", body.join(", "))
+        }
+        _ => value.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -388,6 +408,36 @@ mod tests {
             type Sub { ok: Boolean! }
             type Mutation { ok: Boolean! }
             type Query { ok: Boolean! }
+        "#;
+
+        assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
+    }
+
+    #[test]
+    fn nested_object_value_field_ordering_is_erased() {
+        let a = r#"
+            input Page { filter: FilterInput = { a: 1, b: 2 } }
+            input FilterInput { x: Int }
+        "#;
+        let b = r#"
+            input Page { filter: FilterInput = { b: 2, a: 1 } }
+            input FilterInput { x: Int }
+        "#;
+
+        assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
+    }
+
+    #[test]
+    fn nested_object_value_in_directive_args_ordering_is_erased() {
+        let a = r#"
+            directive @config(value: ConfigInput!) on FIELD_DEFINITION
+            input ConfigInput { a: Int b: Int }
+            type Query { f: Int @config(value: { a: 1, b: 2 }) }
+        "#;
+        let b = r#"
+            directive @config(value: ConfigInput!) on FIELD_DEFINITION
+            input ConfigInput { a: Int b: Int }
+            type Query { f: Int @config(value: { b: 2, a: 1 }) }
         "#;
 
         assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
