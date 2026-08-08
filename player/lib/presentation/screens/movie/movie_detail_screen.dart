@@ -19,7 +19,7 @@ import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/movie_watched_controls.dart';
-import '../../widgets/smart_play_button.dart';
+import '../../widgets/hero_play_control.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the wide-layout mockup's tablet/desktop
@@ -262,37 +262,17 @@ class MovieDetailScreen extends ConsumerWidget {
 
   Widget _buildActionColumn(
       BuildContext context, WidgetRef ref, MovieDetail movie) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Play', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            SmartPlayButton(
-              files: movie.files,
-              onFileSelected: (file) => context.push(
-                '/player/movie/${movie.id}?fileId=${file.id}&title=${Uri.encodeComponent(movie.title)}',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        DetailActionRow(
-          watched: movie.isWatched,
-          onToggleWatched: () => _toggleWatched(context, ref, movie.isWatched),
-          isFavorite: movie.isFavorite,
-          onToggleFavorite: () => ref
-              .read(movieDetailControllerProvider(id).notifier)
-              .toggleFavorite(),
-          onDownload: () => _startDownload(context, ref, movie),
-          trailerUrl: movie.trailerUrl,
-          showDownload: isDownloadSupported && movie.files.isNotEmpty,
-          isDownloaded:
-              ref.watch(isMediaDownloadedProvider(movie.id)).value ?? false,
-        ),
-      ],
+    return DetailActionRow(
+      watched: movie.isWatched,
+      onToggleWatched: () => _toggleWatched(context, ref, movie.isWatched),
+      isFavorite: movie.isFavorite,
+      onToggleFavorite: () =>
+          ref.read(movieDetailControllerProvider(id).notifier).toggleFavorite(),
+      onDownload: () => _startDownload(context, ref, movie),
+      trailerUrl: movie.trailerUrl,
+      showDownload: isDownloadSupported && movie.files.isNotEmpty,
+      isDownloaded:
+          ref.watch(isMediaDownloadedProvider(movie.id)).value ?? false,
     );
   }
 
@@ -500,33 +480,52 @@ class MovieDetailScreen extends ConsumerWidget {
               left: 20,
               right: 20,
               bottom: 20,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    movie.title,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          blurRadius: 8,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          movie.title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.8),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        if (movie.yearDisplay.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            movie.yearDisplay,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
                       ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (movie.yearDisplay.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      movie.yearDisplay,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
+                  const SizedBox(width: 16),
+                  HeroPlayControl(
+                    files: movie.files,
+                    onFileSelected: (file) => context.push(
+                      '/player/movie/${movie.id}?fileId=${file.id}'
+                      '&title=${Uri.encodeComponent(movie.title)}',
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

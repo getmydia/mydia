@@ -6,6 +6,7 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
+import 'package:player/presentation/widgets/play_button.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -160,5 +161,30 @@ void main() {
     );
 
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('hero play control sits flush against the overlay right edge',
+      (tester) async {
+    await _pumpScreen(tester, const Size(1000, 900));
+    await tester.pumpAndSettle();
+
+    // The content overlay is inset 20 from the right of the 1000px surface.
+    // The fixture supplies no files, so SmartPlayButton renders neither a
+    // resolution label nor a dropdown and PlayButton is its only child.
+    expect(tester.getRect(find.byType(PlayButton)).right, closeTo(980, 0.5));
+  });
+
+  testWidgets('hero play control lives in the hero, not the body',
+      (tester) async {
+    await _pumpScreen(tester, const Size(1000, 900));
+    await tester.pumpAndSettle();
+
+    // 380 is the hero SliverAppBar's expandedHeight
+    // (movie_detail_screen.dart:448). Unscrolled, anything below that line is
+    // in the body, where _buildActionColumn lives.
+    final play = tester.getRect(find.byType(PlayButton));
+    final actions = tester.getRect(find.byType(DetailActionRow));
+    expect(play.bottom, lessThan(380));
+    expect(play.bottom, lessThan(actions.top));
   });
 }
