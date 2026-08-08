@@ -99,9 +99,12 @@ pub async fn app_over_library(
     .unwrap();
 
     // Scanning inline rather than through the spawned task keeps the test
-    // deterministic: there is nothing to wait for.
+    // deterministic: there is nothing to wait for. Propagate failures so a
+    // broken scan cannot leave the suite asserting against an empty library.
     for row in &rows {
-        let _ = mydia_library::scan::scan_library_path(&db, row).await;
+        mydia_library::scan::scan_library_path(&db, row)
+            .await
+            .unwrap_or_else(|error| panic!("scan_library_path failed for {}: {error}", row.path));
     }
 
     let issuer = Issuer::new(TEST_SECRET);

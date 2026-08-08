@@ -5,6 +5,8 @@ use mydia_server::test_support::{
     app_over_library, post_graphql_authed, post_graphql_with_variables,
 };
 
+/// Writes a one-second real video. Returns false when ffmpeg cannot be run
+/// or the encode fails (missing binary, codec, permissions, etc.).
 fn synthesize(root: &Path, relative: &str) -> bool {
     let path = root.join(relative);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -27,6 +29,18 @@ fn synthesize(root: &Path, relative: &str) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+/// Synthesizes every relative path, or skips the calling test when any encode
+/// fails. Returns true when the fixtures are ready.
+fn synthesize_all(root: &Path, relatives: &[&str]) -> bool {
+    for relative in relatives {
+        if !synthesize(root, relative) {
+            eprintln!("ffmpeg unavailable or failed to encode a fixture, skipping");
+            return false;
+        }
+    }
+    true
 }
 
 /// MoviesList from player/lib/graphql/queries/movies_list.graphql, with its
@@ -107,11 +121,15 @@ query MovieDetail($id: ID!) {
 async fn the_player_can_list_a_scanned_movie_library() {
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+    if !synthesize_all(
+        media.path(),
+        &[
+            "The Matrix (1999)/The Matrix (1999).mkv",
+            "Arrival (2016)/Arrival (2016).mkv",
+        ],
+    ) {
         return;
     }
-    synthesize(media.path(), "Arrival (2016)/Arrival (2016).mkv");
 
     let (app, _guard, token) = app_over_library("alice", "hunter2", media.path(), "movies").await;
 
@@ -139,14 +157,14 @@ async fn the_player_can_list_a_scanned_movie_library() {
 async fn a_movie_detail_query_returns_its_file_facts() {
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+    if !synthesize_all(media.path(), &["The Matrix (1999)/The Matrix (1999).mkv"]) {
         return;
     }
 
     let (app, _guard, token) = app_over_library("alice", "hunter2", media.path(), "movies").await;
 
     let list = post_graphql_authed(app.clone(), MOVIES_LIST, &token).await;
+    assert_eq!(list.get("errors"), None, "unexpected errors: {list}");
     let id = list["data"]["movies"]["edges"][0]["node"]["id"]
         .as_str()
         .expect("the list returned a movie")
@@ -177,21 +195,16 @@ async fn a_movie_detail_query_returns_its_file_facts() {
 async fn the_player_can_list_shows_and_drill_into_a_season() {
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(
+    if !synthesize_all(
         media.path(),
-        "Show Name (2015)/Season 01/Show Name - S01E01.mkv",
+        &[
+            "Show Name (2015)/Season 01/Show Name - S01E01.mkv",
+            "Show Name (2015)/Season 01/Show Name - S01E02.mkv",
+            "Show Name (2015)/Season 02/Show Name - S02E01.mkv",
+        ],
     ) {
-        eprintln!("ffmpeg is not on PATH, skipping");
         return;
     }
-    synthesize(
-        media.path(),
-        "Show Name (2015)/Season 01/Show Name - S01E02.mkv",
-    );
-    synthesize(
-        media.path(),
-        "Show Name (2015)/Season 02/Show Name - S02E01.mkv",
-    );
 
     let (app, _guard, token) = app_over_library("alice", "hunter2", media.path(), "series").await;
 

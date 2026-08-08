@@ -123,9 +123,14 @@ async fn the_library_is_empty_but_the_query_succeeds() {
     )
     .await;
 
+    assert!(
+        login["errors"].is_null(),
+        "login failed before the library query: {}",
+        login["errors"]
+    );
     let token = login["data"]["login"]["token"]
         .as_str()
-        .unwrap()
+        .expect("login returned a token")
         .to_string();
 
     let body = mydia_server::test_support::post_graphql_authed(

@@ -145,6 +145,9 @@ pub async fn list_for_episode(db: &Db, episode_id: &str) -> Result<Vec<MediaFile
 
 /// Removes rows for files this library no longer contains. Rows only: nothing
 /// on disk is touched, because Mydia Server has no delete capability.
+///
+/// Keep-lists are staged through a temp table so libraries larger than
+/// SQLite's bound-parameter limit (commonly 999) still prune correctly.
 pub async fn prune_outside(
     db: &Db,
     library_path_id: &str,
@@ -157,22 +160,62 @@ pub async fn prune_outside(
                                     JOIN media_items i ON i.id = e.show_id
                                     WHERE i.library_path_id = ?))";
 
-    let sql = if keep.is_empty() {
-        format!("DELETE FROM media_files WHERE {scope}")
-    } else {
-        let placeholders = vec!["?"; keep.len()].join(", ");
-        format!("DELETE FROM media_files WHERE {scope} AND path NOT IN ({placeholders})")
-    };
-
-    let mut query = sqlx::query(&sql)
-        .bind(library_path_id)
-        .bind(library_path_id);
-
-    for path in keep {
-        query = query.bind(path);
+    if keep.is_empty() {
+        let removed = sqlx::query(&format!("DELETE FROM media_files WHERE {scope}"))
+            .bind(library_path_id)
+            .bind(library_path_id)
+            .execute(db.pool())
+            .await?
+            .rows_affected();
+        return Ok(removed);
     }
 
-    Ok(query.execute(db.pool()).await?.rows_affected())
+    // TEMP tables are connection-local, so the whole prune must share one
+    // connection via a transaction.
+    let mut tx = db.pool().begin().await?;
+
+    sqlx::query(
+        "CREATE TEMP TABLE IF NOT EXISTS media_files_prune_keep (
+            path TEXT PRIMARY KEY NOT NULL
+        )",
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query("DELETE FROM media_files_prune_keep")
+        .execute(&mut *tx)
+        .await?;
+
+    // Stay well under SQLite's default bind-parameter limit per statement.
+    const CHUNK: usize = 400;
+    for chunk in keep.chunks(CHUNK) {
+        let placeholders = vec!["(?)"; chunk.len()].join(", ");
+        let sql =
+            format!("INSERT OR IGNORE INTO media_files_prune_keep (path) VALUES {placeholders}");
+        let mut query = sqlx::query(&sql);
+        for path in chunk {
+            query = query.bind(path);
+        }
+        query.execute(&mut *tx).await?;
+    }
+
+    let removed = sqlx::query(&format!(
+        "DELETE FROM media_files
+         WHERE {scope}
+           AND path NOT IN (SELECT path FROM media_files_prune_keep)"
+    ))
+    .bind(library_path_id)
+    .bind(library_path_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    sqlx::query("DELETE FROM media_files_prune_keep")
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(removed)
 }
 
 /// Removes items and episodes that no longer have any file.
@@ -387,6 +430,40 @@ mod tests {
         assert_eq!(removed, 1);
         assert!(find_by_path(&db, "/media/b.mkv").await.unwrap().is_none());
         assert!(find_by_path(&db, "/media/a.mkv").await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn pruning_survives_keep_lists_larger_than_sqlite_bind_limit() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+        let item = movie(&db, &lp, "The Movie").await;
+
+        // One more than SQLite's common 999 bind-parameter limit, plus an
+        // orphan that must still be removed.
+        let mut keep = Vec::with_capacity(1_000);
+        for i in 0..1_000 {
+            let path = format!("/media/keep-{i}.mkv");
+            upsert(&db, file(Owner::Item(item.clone()), &path))
+                .await
+                .unwrap();
+            keep.push(path);
+        }
+        upsert(&db, file(Owner::Item(item.clone()), "/media/orphan.mkv"))
+            .await
+            .unwrap();
+
+        let removed = prune_outside(&db, &lp, &keep).await.unwrap();
+
+        assert_eq!(removed, 1);
+        assert!(find_by_path(&db, "/media/orphan.mkv")
+            .await
+            .unwrap()
+            .is_none());
+        assert!(find_by_path(&db, &keep[0]).await.unwrap().is_some());
+        assert!(find_by_path(&db, keep.last().unwrap())
+            .await
+            .unwrap()
+            .is_some());
     }
 
     #[tokio::test]

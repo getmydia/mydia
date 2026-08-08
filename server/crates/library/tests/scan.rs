@@ -5,7 +5,8 @@ use mydia_db::pool::connect_temp;
 use mydia_db::{episodes, library_paths, media_files, media_items, scan_runs, Db};
 use mydia_library::scan::scan_library_path;
 
-/// Writes a one-second real video. Returns false when ffmpeg is missing.
+/// Writes a one-second real video. Returns false when ffmpeg cannot be run
+/// or the encode fails (missing binary, codec, permissions, etc.).
 fn synthesize(root: &Path, relative: &str) -> bool {
     let path = root.join(relative);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -30,6 +31,18 @@ fn synthesize(root: &Path, relative: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Synthesizes every relative path, or skips the calling test when any encode
+/// fails. Returns true when the fixtures are ready.
+fn synthesize_all(root: &Path, relatives: &[&str]) -> bool {
+    for relative in relatives {
+        if !synthesize(root, relative) {
+            eprintln!("ffmpeg unavailable or failed to encode a fixture, skipping");
+            return false;
+        }
+    }
+    true
+}
+
 async fn library(db: &Db, path: &Path, kind: &str) -> library_paths::LibraryPathRow {
     library_paths::sync_from_config(db, &[(path.display().to_string(), kind.to_string())])
         .await
@@ -44,11 +57,15 @@ async fn a_movie_library_produces_items_and_files() {
     let (db, _g) = connect_temp().await.unwrap();
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+    if !synthesize_all(
+        media.path(),
+        &[
+            "The Matrix (1999)/The Matrix (1999).mkv",
+            "Arrival (2016)/Arrival (2016).mkv",
+        ],
+    ) {
         return;
     }
-    synthesize(media.path(), "Arrival (2016)/Arrival (2016).mkv");
 
     let row = library(&db, media.path(), "movies").await;
     let outcome = scan_library_path(&db, &row).await.unwrap();
@@ -66,17 +83,15 @@ async fn two_files_of_one_movie_become_one_item() {
     let (db, _g) = connect_temp().await.unwrap();
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(
+    if !synthesize_all(
         media.path(),
-        "The Matrix (1999)/The Matrix (1999) - 1080p.mkv",
+        &[
+            "The Matrix (1999)/The Matrix (1999) - 1080p.mkv",
+            "The Matrix (1999)/The Matrix (1999) - 2160p.mkv",
+        ],
     ) {
-        eprintln!("ffmpeg is not on PATH, skipping");
         return;
     }
-    synthesize(
-        media.path(),
-        "The Matrix (1999)/The Matrix (1999) - 2160p.mkv",
-    );
 
     let row = library(&db, media.path(), "movies").await;
     scan_library_path(&db, &row).await.unwrap();
@@ -99,12 +114,16 @@ async fn a_series_library_produces_a_show_with_episodes() {
     let (db, _g) = connect_temp().await.unwrap();
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(media.path(), "Show Name/Season 01/Show Name - S01E01.mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+    if !synthesize_all(
+        media.path(),
+        &[
+            "Show Name/Season 01/Show Name - S01E01.mkv",
+            "Show Name/Season 01/Show Name - S01E02.mkv",
+            "Show Name/Season 02/Show Name - S02E01.mkv",
+        ],
+    ) {
         return;
     }
-    synthesize(media.path(), "Show Name/Season 01/Show Name - S01E02.mkv");
-    synthesize(media.path(), "Show Name/Season 02/Show Name - S02E01.mkv");
 
     let row = library(&db, media.path(), "series").await;
     scan_library_path(&db, &row).await.unwrap();
@@ -132,7 +151,7 @@ async fn rescanning_changes_nothing() {
     let media = tempfile::tempdir().unwrap();
 
     if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+        eprintln!("ffmpeg unavailable or failed to encode a fixture, skipping");
         return;
     }
 
@@ -157,11 +176,15 @@ async fn a_deleted_file_is_pruned_along_with_its_item() {
     let (db, _g) = connect_temp().await.unwrap();
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+    if !synthesize_all(
+        media.path(),
+        &[
+            "The Matrix (1999)/The Matrix (1999).mkv",
+            "Arrival (2016)/Arrival (2016).mkv",
+        ],
+    ) {
         return;
     }
-    synthesize(media.path(), "Arrival (2016)/Arrival (2016).mkv");
 
     let row = library(&db, media.path(), "movies").await;
     scan_library_path(&db, &row).await.unwrap();
@@ -182,12 +205,16 @@ async fn a_file_that_cannot_be_parsed_is_recorded_and_the_scan_completes() {
     let (db, _g) = connect_temp().await.unwrap();
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(media.path(), "Show Name/Season 01/Show Name - S01E01.mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+    if !synthesize_all(
+        media.path(),
+        &[
+            "Show Name/Season 01/Show Name - S01E01.mkv",
+            // No episode marker anywhere, in a series library.
+            "Show Name/loose recording.mkv",
+        ],
+    ) {
         return;
     }
-    // No episode marker anywhere, in a series library.
-    synthesize(media.path(), "Show Name/loose recording.mkv");
 
     let row = library(&db, media.path(), "series").await;
     let outcome = scan_library_path(&db, &row).await.unwrap();
@@ -212,8 +239,7 @@ async fn a_file_ffprobe_cannot_read_is_recorded_and_skipped() {
     let (db, _g) = connect_temp().await.unwrap();
     let media = tempfile::tempdir().unwrap();
 
-    if !synthesize(media.path(), "Good Movie (2020)/Good Movie (2020).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+    if !synthesize_all(media.path(), &["Good Movie (2020)/Good Movie (2020).mkv"]) {
         return;
     }
 
@@ -267,7 +293,7 @@ async fn a_persist_failure_marks_the_run_failed() {
     let media = tempfile::tempdir().unwrap();
 
     if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+        eprintln!("ffmpeg unavailable or failed to encode a fixture, skipping");
         return;
     }
 
@@ -292,7 +318,7 @@ async fn the_media_file_carries_probed_facts() {
     let media = tempfile::tempdir().unwrap();
 
     if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+        eprintln!("ffmpeg unavailable or failed to encode a fixture, skipping");
         return;
     }
 
@@ -318,7 +344,7 @@ async fn the_library_path_records_when_it_was_scanned() {
     let media = tempfile::tempdir().unwrap();
 
     if !synthesize(media.path(), "The Matrix (1999)/The Matrix (1999).mkv") {
-        eprintln!("ffmpeg is not on PATH, skipping");
+        eprintln!("ffmpeg unavailable or failed to encode a fixture, skipping");
         return;
     }
 
