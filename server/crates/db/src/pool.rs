@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::str::FromStr;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
@@ -9,10 +8,10 @@ use crate::{Db, DbError};
 /// Opens the database at `path`, creating it if absent, and runs every
 /// pending migration.
 pub async fn connect(path: &Path) -> Result<Db, DbError> {
-    let url = format!("sqlite://{}", path.display());
-
-    let options = SqliteConnectOptions::from_str(&url)
-        .map_err(DbError::Connect)?
+    // Prefer filename over a sqlite:// URL so absolute and relative paths
+    // both resolve unambiguously (URL forms disagree on slash count).
+    let options = SqliteConnectOptions::new()
+        .filename(path)
         .create_if_missing(true)
         .foreign_keys(true)
         // WAL lets the scan write while the player reads.

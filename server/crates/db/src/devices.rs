@@ -95,9 +95,38 @@ pub async fn revoke(db: &Db, id: &str) -> Result<Option<Device>, DbError> {
     Ok(device)
 }
 
+/// Revokes a device only when it belongs to `user_id`. Returns `None` when
+/// no matching row exists (unknown id or wrong owner).
+pub async fn revoke_for_user(db: &Db, user_id: &str, id: &str) -> Result<Option<Device>, DbError> {
+    let now = Utc::now().to_rfc3339();
+
+    let result = sqlx::query("UPDATE devices SET revoked_at = ? WHERE id = ? AND user_id = ?")
+        .bind(&now)
+        .bind(id)
+        .bind(user_id)
+        .execute(db.pool())
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Ok(None);
+    }
+
+    let device = sqlx::query_as::<_, Device>(
+        "SELECT id, user_id, device_id, device_name, platform, revoked_at,
+                last_seen_at, inserted_at
+         FROM devices WHERE id = ? AND user_id = ?",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(db.pool())
+    .await?;
+
+    Ok(device)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{list_for_user, revoke, upsert, NewDevice};
+    use super::{list_for_user, revoke, revoke_for_user, upsert, NewDevice};
     use crate::pool::connect_temp;
     use crate::users::{create as create_user, NewUser};
     use crate::Db;
@@ -172,5 +201,36 @@ mod tests {
         let (db, _g) = connect_temp().await.unwrap();
 
         assert!(revoke(&db, "no-such-device").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn revoke_for_user_refuses_another_users_device() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let owner = a_user(&db).await;
+        let other = create_user(
+            &db,
+            NewUser {
+                username: "bob".to_string(),
+                email: None,
+                display_name: None,
+                password_hash: "$argon2id$fake".to_string(),
+                is_admin: false,
+            },
+        )
+        .await
+        .unwrap()
+        .id;
+        let device = upsert(&db, new_device(&owner)).await.unwrap();
+
+        assert!(revoke_for_user(&db, &other, &device.id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(revoke_for_user(&db, &owner, &device.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_at
+            .is_some());
     }
 }

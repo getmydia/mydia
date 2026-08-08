@@ -267,25 +267,17 @@ impl RootMutationType {
         let api = ctx.data::<ApiContext>()?;
         let user = authenticated_user(ctx).await?;
 
-        let owns_device = mydia_db::devices::list_for_user(&api.db, &user.id)
-            .await
-            .map_err(|e| Error::new(e.to_string()))?
-            .iter()
-            .any(|d| d.id == id.as_str());
-
-        if !owns_device {
-            return Err(forbidden());
-        }
-
-        let device = mydia_db::devices::revoke(&api.db, &id)
+        let device = mydia_db::devices::revoke_for_user(&api.db, &user.id, &id)
             .await
             .map_err(|e| Error::new(e.to_string()))?;
 
-        let device = device.map(remote_device_from).transpose()?;
+        let Some(device) = device else {
+            return Err(forbidden());
+        };
 
         Ok(Some(RevokeDeviceResult {
-            success: device.is_some(),
-            device,
+            success: true,
+            device: Some(remote_device_from(device)?),
         }))
     }
 
