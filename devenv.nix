@@ -161,6 +161,22 @@ in
 
     # Inspect/validate WASM components (WIT plugin guests)
     wasm-tools
+
+    # player/tool/build_web.sh builds mydia_p2p_core for wasm through
+    # `flutter pub run flutter_rust_bridge build-web`, which shells out to
+    # `wasm-pack` directly (not the cargo-installed flutter_rust_bridge_codegen
+    # binary). Without wasm-pack on PATH, that Dart code falls back to `cargo
+    # install wasm-pack`, which compiles the crate from source and costs
+    # minutes on every CI run instead of resolving a Cachix-cached derivation.
+    # Verified this pair closes the gap rather than just shrinking it: with
+    # both present, wasm-pack finds this wasm-opt on PATH directly
+    # ("found wasm-opt at .../binaryen-.../bin/wasm-opt") and never downloads
+    # one. It still downloads wasm-bindgen from a GitHub release regardless,
+    # since that one must match the exact wasm-bindgen crate version pinned in
+    # Cargo.lock and wasm-pack does not trust a PATH copy for that — fine on a
+    # normal internet-connected runner, just not eliminated by this package.
+    wasm-pack
+    binaryen
   ]
   # ── Linux-only packages (KTD7) ────────────────────────────────────────────
   # These have meta.platforms = linux, so listing them unconditionally made the
