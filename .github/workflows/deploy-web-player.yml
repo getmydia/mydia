@@ -81,9 +81,10 @@ jobs:
       - name: Run code generation
         run: devenv shell -- bash -c "cd player && flutter pub run build_runner build"
 
-      # build_web.sh asserts flutter_rust_bridge_codegen is 2.12.0 at
-      # $CARGO_INSTALL_ROOT/bin before it does anything else, but nothing
-      # installs that binary inside this shell: devenv.nix does not carry it
+      # build_web.sh asserts the codegen tool matches the crate's pinned
+      # version at $CARGO_INSTALL_ROOT/bin before it does anything else, but
+      # nothing installs that binary inside this shell: devenv.nix does not
+      # carry it
       # (only the .#android dev shell's shellHook does, for a different
       # workflow entirely), and $CARGO_INSTALL_ROOT is `.devenv/state/`, which
       # is per-checkout and empty on every fresh runner. The version is read
