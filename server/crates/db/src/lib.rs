@@ -3,7 +3,9 @@
 //! This crate is the only one that writes application SQL. Background job
 //! queue tables are managed by apalis in a later slice.
 
+pub mod devices;
 pub mod pool;
+pub mod users;
 
 /// A connection pool plus the invariant that migrations have been run.
 #[derive(Clone, Debug)]
