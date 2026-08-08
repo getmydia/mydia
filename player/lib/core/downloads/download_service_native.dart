@@ -20,6 +20,7 @@ import 'download_notification_service.dart';
 import 'download_service.dart';
 import 'download_job_service.dart';
 import 'download_speed_tracker.dart';
+import 'thumbnail_cache_warmer.dart';
 
 /// Downloads are fully supported on native platforms.
 const bool isDownloadSupported = true;
@@ -1011,6 +1012,10 @@ class _NativeDownloadService implements DownloadService {
       final media = DownloadedMedia.fromTask(updatedTask);
       await _database!.saveMedia(media);
 
+      // Best-effort, and deliberately not awaited: the download is already on
+      // disk and must not be delayed or failed by an image fetch.
+      unawaited(warmThumbnailCache(updatedTask));
+
       _progressController.add(updatedTask);
       _cancelTokens.remove(task.id);
       _pausedTasks.remove(task.id);
@@ -1113,6 +1118,10 @@ class _NativeDownloadService implements DownloadService {
       // Save to downloaded media
       final media = DownloadedMedia.fromTask(updatedTask);
       await _database!.saveMedia(media);
+
+      // Best-effort, and deliberately not awaited: the download is already on
+      // disk and must not be delayed or failed by an image fetch.
+      unawaited(warmThumbnailCache(updatedTask));
 
       _progressController.add(updatedTask);
       _cancelTokens.remove(task.id);
