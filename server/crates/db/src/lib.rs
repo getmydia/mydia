@@ -4,6 +4,7 @@
 //! queue tables are managed by apalis in a later slice.
 
 pub mod devices;
+pub mod library_paths;
 pub mod pool;
 pub mod users;
 
@@ -26,4 +27,7 @@ pub enum DbError {
 
     #[error("could not create a temporary directory: {0}")]
     TempDir(#[source] std::io::Error),
+
+    #[error("`{value}` is not a library type; use movies, series or mixed")]
+    InvalidLibraryType { value: String },
 }
