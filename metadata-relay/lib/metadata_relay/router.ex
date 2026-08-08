@@ -365,6 +365,7 @@ defmodule MetadataRelay.Router do
 
   # Delete claim code after successful pairing
   delete "/pairing/claim/:code" do
+    conn = allow_web_player(conn)
     handle_pairing_delete(conn, fn -> PairingHandler.delete_claim(code) end)
   end
 
