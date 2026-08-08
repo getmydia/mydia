@@ -7,6 +7,7 @@ import '../../../core/downloads/download_providers.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/quality_badge.dart';
+import 'widgets/series_downloads_dialogs.dart';
 
 class SeriesDownloadsScreen extends ConsumerWidget {
   final String showId;
@@ -105,8 +106,18 @@ class SeriesDownloadsScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => _showDeleteAllDialog(
-                    context, ref, showDownloads, showQueue),
+                onTap: () async {
+                  final deleted = await showDeleteAllDialog(
+                    context,
+                    ref,
+                    showId: showId,
+                    showTitle: showTitle,
+                    totalCount: showDownloads.length + showQueue.length,
+                  );
+                  if (deleted && context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
                 child: const Padding(
                   padding: EdgeInsets.all(8),
                   child: Icon(Icons.delete_outline_rounded,
@@ -410,8 +421,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildDownloadedRow(
       BuildContext context, WidgetRef ref, DownloadedMedia media) {
-    final episodeCode =
-        'S${media.seasonNumber?.toString().padLeft(2, '0') ?? '??'}E${media.episodeNumber?.toString().padLeft(2, '0') ?? '??'}';
+    final episodeCode = media.episodeCode;
 
     final trailing = Row(
       mainAxisSize: MainAxisSize.min,
@@ -445,33 +455,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
           iconSize: 20,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed: () async {
-            final confirm = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: AppColors.surface,
-                title: const Text('Delete Episode'),
-                content: Text('Delete $episodeCode?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.error),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-            );
-
-            if (confirm == true) {
-              final manager = await ref.read(downloadManagerProvider.future);
-              await manager.deleteDownload(media.mediaId);
-            }
-          },
+          onPressed: () => showDeleteEpisodeDialog(context, ref, media),
         ),
       ],
     );
@@ -542,7 +526,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildSeasonHeader(
       BuildContext context, WidgetRef ref, int seasonNumber, int episodeCount) {
-    final label = seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
+    final label = seasonLabel(seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
@@ -583,8 +567,14 @@ class SeriesDownloadsScreen extends ConsumerWidget {
               width: 32,
               height: 32,
               child: IconButton(
-                onPressed: () => _showDeleteSeasonDialog(
-                    context, ref, seasonNumber, episodeCount),
+                onPressed: () => showDeleteSeasonDialog(
+                  context,
+                  ref,
+                  showId: showId,
+                  showTitle: showTitle,
+                  seasonNumber: seasonNumber,
+                  episodeCount: episodeCount,
+                ),
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 color: AppColors.error,
                 padding: EdgeInsets.zero,
@@ -690,7 +680,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
         ),
         const SizedBox(width: 4),
         IconButton(
-          onPressed: () => _showCancelDialog(context, ref, task),
+          onPressed: () => showCancelDownloadDialog(context, ref, task),
           icon: const Icon(Icons.close_rounded),
           color: AppColors.textSecondary,
           iconSize: 18,
@@ -710,7 +700,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildQueueSeasonHeader(
       BuildContext context, int seasonNumber, int taskCount) {
-    final label = seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
+    final label = seasonLabel(seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
@@ -758,41 +748,6 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     return DownloadTask.formatBytes(totalBytes);
   }
 
-  // ---------------------------------------------------------------------------
-  // Dialogs
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showCancelDialog(
-      BuildContext context, WidgetRef ref, DownloadTask task) async {
-    final manager = await ref.read(downloadManagerProvider.future);
-
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Cancel Download?'),
-        content: const Text('Stop downloading this episode?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Keep',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () {
-              manager.cancelDownload(task.id);
-              Navigator.pop(context);
-            },
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Cancel Download'),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Groups items by season number, returning a sorted map (Specials=0 first,
   /// then ascending).
   Map<int, List<T>> _groupBySeason<T>(List<T> items, int Function(T) seasonOf) {
@@ -805,72 +760,5 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       map.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
     );
     return sorted;
-  }
-
-  Future<void> _showDeleteAllDialog(BuildContext context, WidgetRef ref,
-      List<DownloadedMedia> showDownloads, List<DownloadTask> showQueue) async {
-    final totalCount = showDownloads.length + showQueue.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Delete All Episodes'),
-        content: Text(
-          'Delete all $totalCount episode${totalCount == 1 ? '' : 's'} of "$showTitle"?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      final manager = await ref.read(downloadManagerProvider.future);
-      await manager.deleteSeriesDownloads(showId);
-      if (context.mounted) {
-        Navigator.of(context).pop();
-      }
-    }
-  }
-
-  Future<void> _showDeleteSeasonDialog(BuildContext context, WidgetRef ref,
-      int seasonNumber, int episodeCount) async {
-    final seasonLabel = seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Text('Delete $seasonLabel?'),
-        content: Text(
-          'Delete $episodeCount episode${episodeCount == 1 ? '' : 's'} from $seasonLabel of "$showTitle"?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      final manager = await ref.read(downloadManagerProvider.future);
-      await manager.deleteSeasonDownloads(showId, seasonNumber);
-    }
   }
 }
