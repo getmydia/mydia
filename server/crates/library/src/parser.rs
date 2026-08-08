@@ -199,16 +199,7 @@ fn enclosing_folder(path: &Path, root: &Path) -> Option<String> {
     Some(parent.file_name()?.to_str()?.to_string())
 }
 
-mod episode {
-    use super::ParsedFile;
-    use std::path::Path;
-
-    /// Filled in by Task 6. Until then a series library parses nothing, which
-    /// is why this task's tests only exercise movie libraries.
-    pub fn parse(_path: &Path, _root: &Path, _stem: &str) -> Option<ParsedFile> {
-        None
-    }
-}
+mod episode;
 
 #[cfg(test)]
 mod tests {
