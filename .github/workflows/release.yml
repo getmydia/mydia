@@ -330,17 +330,30 @@ jobs:
           # patching an older line (v0.11.2 after v0.12.0) cannot drag
           # :latest, :0 and :0.11 backwards onto the older build. The same
           # applies to :beta against other prereleases.
+          #
+          # Only Mydia's own `vX.Y.Z` tags count. This repository also
+          # publishes the metadata-relay under `metadata-relay-vX.Y.Z`, and
+          # `ltrimstr("v")` leaves that prefix intact, so an unfiltered list
+          # hands `sort -V` a string beginning with a letter. That sorts above
+          # every numeric version, which made v0.13.0 look older than
+          # metadata-relay-v0.9.0 and silently skipped :latest, :0.13 and :0.
+          #
+          # The pattern requires all three numeric components so it admits only
+          # what `sort -V` can order sensibly. A trailing prerelease suffix
+          # still matches, since `test` is not anchored at the end. `[.]` is
+          # used rather than an escaped dot to keep the expression readable
+          # through the YAML, shell and jq quoting layers.
           if [ "$IS_PRERELEASE" = "true" ]; then
             CLASS="prerelease"
             NEWEST=$(gh release list --repo "$REPO" --limit 100 \
               --json tagName,isDraft,isPrerelease \
-              --jq '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | ltrimstr("v")] | .[]' \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test("^v[0-9]+[.][0-9]+[.][0-9]+")) | ltrimstr("v")] | .[]' \
               | sort -V | tail -n1)
           else
             CLASS="stable"
             NEWEST=$(gh release list --repo "$REPO" --limit 100 \
               --json tagName,isDraft,isPrerelease \
-              --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | ltrimstr("v")] | .[]' \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | select(test("^v[0-9]+[.][0-9]+[.][0-9]+")) | ltrimstr("v")] | .[]' \
               | sort -V | tail -n1)
           fi
 
@@ -478,6 +491,16 @@ jobs:
     name: Player / iOS
     needs: prepare
     runs-on: macos-26
+    # `upload_to_testflight` uses `distribute_external: true`, which cannot skip
+    # waiting for Apple to finish processing the build, so a slow processing
+    # queue parks this job in a poll loop with no upper bound of its own. On
+    # v0.13.0 that ran 5h49m before the 6h default killed it, on a runner billed
+    # at 10x. The job normally finishes in 17-20 minutes; this bounds the wait
+    # while leaving generous headroom. Hitting it fails the publish gate, which
+    # is the correct outcome: re-dispatch with `allow_missing=ios` to ship
+    # without it, since the IPA reaches TestFlight whenever Apple is done
+    # regardless of what this job reports.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
