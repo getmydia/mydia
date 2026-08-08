@@ -60,6 +60,8 @@ import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/p2p/media_proxy.dart';
+import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
@@ -167,12 +169,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// stays valid to call after disposal.
   late final Invalidator _invalidator;
 
-  /// `localProxyServiceProvider` is a plain (non-autoDispose) provider, so it
+  /// `mediaProxyProvider` is a plain (non-autoDispose) provider, so it
   /// is effectively keep-alive for this container's lifetime — the same
   /// instance `ref.read` would return at any later point. Safe to capture
   /// once here, exactly like [_invalidator], and used by
   /// [_terminateHlsSession] instead of a `dispose()`-time `ref.read`.
-  late final LocalProxyService _localProxyService;
+  late final MediaProxy _mediaProxy;
 
   /// The current P2P connection mode, kept in sync via `ref.listenManual`
   /// (set up in [initState]) rather than read in `dispose()`:
@@ -405,7 +407,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void initState() {
     super.initState();
     _invalidator = ref.read(invalidatorProvider);
-    _localProxyService = ref.read(localProxyServiceProvider);
+    _mediaProxy = ref.read(mediaProxyProvider);
 
     // Seeded here rather than read at each branch: an entry-point that already
     // said "Continue" has answered the resume question, and all three
@@ -769,12 +771,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           });
         }
 
-        final proxy = ref.read(localProxyServiceProvider);
+        final proxy = ref.read(mediaProxyProvider);
         await proxy.start(
           targetPeer: serverNodeAddr,
           authToken: token,
         );
-        debugPrint('[PlayerScreen] Local proxy started on port ${proxy.port}');
+        debugPrint('[PlayerScreen] Media proxy serving at ${proxy.baseUrl}');
       }
 
       // Initialize progress service
@@ -912,9 +914,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         debugPrint('[PlayerScreen] Direct play for file_id=$playFileId');
 
         if (isP2PMode) {
-          mediaSource = ref
-              .read(localProxyServiceProvider)
-              .buildDirectStreamUrl(playFileId);
+          mediaSource =
+              ref.read(mediaProxyProvider).buildDirectStreamUrl(playFileId);
         } else {
           // Get media token for URL (if available)
           final mediaTokenService =
@@ -1006,7 +1007,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // Build HLS URL based on mode
         if (isP2PMode) {
           mediaSource =
-              ref.read(localProxyServiceProvider).buildHlsUrl(_hlsSessionId!);
+              ref.read(mediaProxyProvider).buildHlsUrl(_hlsSessionId!);
         } else {
           mediaSource = '$serverUrl/api/v1/hls/$_hlsSessionId/index.m3u8';
         }
@@ -2414,7 +2415,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// This stops FFmpeg and cleans up server-side resources.
   ///
   /// Reads only the fields captured in [initState] ([_isP2PMode],
-  /// [_localProxyService], [_graphqlClient]) — never `ref` directly. This
+  /// [_mediaProxy], [_graphqlClient]) — never `ref` directly. This
   /// runs from `dispose()` (as well as the web beforeunload handler), and
   /// `ref.read`/`ref.watch` unconditionally throw once `dispose()` has
   /// started: `BuildContext.mounted` is already `false` throughout it, a
@@ -2424,8 +2425,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Stop local proxy if P2P mode
     if (_isP2PMode) {
       try {
-        await _localProxyService.stop();
-        debugPrint('[PlayerScreen] Local proxy stopped');
+        await _mediaProxy.stop();
+        debugPrint('[PlayerScreen] Media proxy stopped');
       } catch (e) {
         debugPrint('[PlayerScreen] Error stopping local proxy: $e');
       }

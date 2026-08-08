@@ -17,4 +17,15 @@ abstract class MediaProxy {
   /// Native: `http://127.0.0.1:52341`, or `http://192.168.1.5:52341/g/<token>`
   /// while LAN-exposed. Web: `/p2p`.
   String get baseUrl;
+
+  /// URL of a session's HLS manifest.
+  ///
+  /// Declared here, rather than left to each implementation's own API, so a
+  /// playback call site can hold a [MediaProxy] and not know which one it has.
+  /// Both implementations build it with `MediaRoutes`, which is also what
+  /// takes the path apart again on the serving side.
+  String buildHlsUrl(String sessionId);
+
+  /// URL that streams a media file's own bytes, with no transcoding.
+  String buildDirectStreamUrl(String fileId);
 }

@@ -1,64 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
-import 'package:player/core/p2p/p2p_service.dart';
-import 'package:player/native/lib.dart';
 
 import 'media_proxy_conformance.dart';
-
-class P2pRequestCall {
-  final String peer;
-  final String sessionId;
-  final String path;
-  final int? rangeStart;
-  final int? rangeEnd;
-  final String? authToken;
-
-  const P2pRequestCall({
-    required this.peer,
-    required this.sessionId,
-    required this.path,
-    required this.rangeStart,
-    required this.rangeEnd,
-    required this.authToken,
-  });
-}
-
-class TestP2pService extends P2pService {
-  final List<P2pRequestCall> calls = [];
-  Future<FlutterHlsResponse> Function(P2pRequestCall call)? onSendHlsRequest;
-
-  @override
-  Future<FlutterHlsResponse> sendHlsRequest({
-    required String peer,
-    required String sessionId,
-    required String path,
-    int? rangeStart,
-    int? rangeEnd,
-    String? authToken,
-  }) async {
-    final call = P2pRequestCall(
-      peer: peer,
-      sessionId: sessionId,
-      path: path,
-      rangeStart: rangeStart,
-      rangeEnd: rangeEnd,
-      authToken: authToken,
-    );
-
-    calls.add(call);
-
-    final handler = onSendHlsRequest;
-    if (handler == null) {
-      throw Exception('P2P handler not configured');
-    }
-
-    return handler(call);
-  }
-}
+import 'test_p2p_service.dart';
 
 class HttpResult {
   final int statusCode;
@@ -75,10 +22,7 @@ class HttpResult {
 }
 
 void main() {
-  mediaProxyConformanceTests(
-    'LocalProxyService',
-    () => LocalProxyService(TestP2pService()),
-  );
+  mediaProxyConformanceTests('LocalProxyService', LocalProxyService.new);
 
   group('LocalProxyService', () {
     late LocalProxyService proxy;
@@ -117,26 +61,6 @@ void main() {
       } finally {
         client.close(force: true);
       }
-    }
-
-    FlutterHlsResponse hlsResponse({
-      required int status,
-      required String contentType,
-      required List<int> data,
-      String? contentRange,
-      String? cacheControl,
-      int? declaredLength,
-    }) {
-      return FlutterHlsResponse(
-        header: FlutterHlsResponseHeader(
-          status: status,
-          contentType: contentType,
-          contentLength: BigInt.from(declaredLength ?? data.length),
-          contentRange: contentRange,
-          cacheControl: cacheControl,
-        ),
-        data: Uint8List.fromList(data),
-      );
     }
 
     group('initialization', () {
@@ -206,7 +130,7 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => hlsResponse(
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
               status: HttpStatus.ok,
               contentType: 'application/vnd.apple.mpegurl',
               data: utf8.encode('#EXTM3U\n#EXTINF:10,\nsegment_001.ts\n'),
@@ -240,7 +164,7 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => hlsResponse(
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
               status: HttpStatus.partialContent,
               contentType: 'video/mp2t',
               data: [1, 2, 3, 4],
@@ -262,7 +186,7 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => hlsResponse(
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
               status: HttpStatus.partialContent,
               contentType: 'video/mp2t',
               data: [1, 2, 3, 4],
@@ -303,7 +227,7 @@ void main() {
 
         p2p.onSendHlsRequest = (call) async {
           if (call.path == 'segment_001.ts') {
-            return hlsResponse(
+            return testHlsResponse(
               status: HttpStatus.ok,
               contentType: 'video/mp2t',
               data: [1, 2, 3, 4],
@@ -311,7 +235,7 @@ void main() {
             );
           }
 
-          return hlsResponse(
+          return testHlsResponse(
             status: HttpStatus.ok,
             contentType: 'application/vnd.apple.mpegurl',
             data: utf8.encode('#EXTM3U\n'),

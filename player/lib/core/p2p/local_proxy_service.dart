@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/p2p/media_proxy.dart';
+import 'package:player/core/p2p/media_route.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/native/lib.dart'
     show
@@ -271,24 +272,28 @@ class LocalProxyService implements MediaProxy {
   ///
   /// Returns the local proxy URL for the HLS playlist.
   /// The video player should use this URL to start playback.
-  String buildHlsUrl(String sessionId) => '$_urlBase/hls/$sessionId/index.m3u8';
+  @override
+  String buildHlsUrl(String sessionId) => MediaRoutes.hls(_urlBase, sessionId);
 
   /// Build the base URL for HLS content. Manifests use relative segment URLs,
   /// which resolve against this base — including the LAN token prefix.
-  String buildBaseUrl(String sessionId) => '$_urlBase/hls/$sessionId/';
+  String buildBaseUrl(String sessionId) =>
+      MediaRoutes.hlsBase(_urlBase, sessionId);
 
   /// Build a direct stream URL for a media file.
   ///
   /// This uses the P2P HLS protocol with a "direct:" session ID prefix
   /// to stream the raw file without HLS transcoding.
+  @override
   String buildDirectStreamUrl(String fileId) =>
-      '$_urlBase/direct/$fileId/stream';
+      MediaRoutes.directStream(_urlBase, fileId);
 
   /// Build a download URL for a completed transcode job.
   ///
   /// Uses the P2P HLS protocol with a "download:" session ID prefix
   /// to proxy the transcoded file download.
-  String buildDownloadUrl(String jobId) => '$_urlBase/download/$jobId/file';
+  String buildDownloadUrl(String jobId) =>
+      MediaRoutes.download(_urlBase, jobId);
 
   // Handle incoming HTTP requests
   Future<void> _handleRequest(HttpRequest request) async {
@@ -307,17 +312,20 @@ class LocalProxyService implements MediaProxy {
     final path = status.path;
     debugPrint('[LocalProxy] ${request.method} $path');
 
-    if (path.startsWith('/hls/')) {
-      await _handleHlsRequest(request, path);
-    } else if (path.startsWith('/direct/')) {
-      await _handleDirectRequest(request, path);
-    } else if (path.startsWith('/download/')) {
-      await _handleDownloadRequest(request, path);
-    } else {
-      request.response.statusCode = HttpStatus.notFound;
-      _setCorsHeaders(request.response);
-      request.response.write('Not Found');
-      await request.response.close();
+    // The routing table is shared with the browser's Service Worker rather
+    // than repeated here: both have to take apart the same URLs the same way.
+    switch (MediaRoutes.resolve(path)) {
+      case MediaRouteFailure(:final statusCode, :final message):
+        request.response.statusCode = statusCode;
+        _setCorsHeaders(request.response);
+        request.response.write(message);
+        await request.response.close();
+
+      case final MediaRouteMatch route when route.kind == MediaRouteKind.hls:
+        await _handleHlsRequest(request, route);
+
+      case final MediaRouteMatch route:
+        await _forwardRangeRequest(request: request, route: route);
     }
   }
 
@@ -351,30 +359,12 @@ class LocalProxyService implements MediaProxy {
   Future<int> debugHandlePath(String path) async =>
       _authorizeAndStripPrefix(path).statusCode;
 
-  Future<void> _handleHlsRequest(HttpRequest request, String path) async {
+  Future<void> _handleHlsRequest(
+      HttpRequest request, MediaRouteMatch route) async {
     final sw = Stopwatch()..start();
     try {
-      // Parse path: /hls/{session_id}/{path...}
-      final pathParts = path.substring('/hls/'.length).split('/');
-      if (pathParts.length < 2) {
-        request.response.statusCode = HttpStatus.badRequest;
-        _setCorsHeaders(request.response);
-        request.response.write(
-            'Invalid HLS path format. Expected: /hls/{session_id}/{path}');
-        await request.response.close();
-        return;
-      }
-
-      final sessionId = pathParts[0];
-      final hlsPath = pathParts.sublist(1).join('/');
-
-      if (sessionId.isEmpty || hlsPath.isEmpty) {
-        request.response.statusCode = HttpStatus.badRequest;
-        _setCorsHeaders(request.response);
-        request.response.write('Session ID and path are required');
-        await request.response.close();
-        return;
-      }
+      final sessionId = route.sessionId;
+      final hlsPath = route.path;
 
       if (_targetPeer == null) {
         request.response.statusCode = HttpStatus.serviceUnavailable;
@@ -456,96 +446,6 @@ class LocalProxyService implements MediaProxy {
     }
   }
 
-  Future<void> _handleDirectRequest(HttpRequest request, String path) async {
-    try {
-      // Parse path: /direct/{file_id}/stream
-      final pathParts = path.substring('/direct/'.length).split('/');
-      if (pathParts.length < 2) {
-        request.response.statusCode = HttpStatus.badRequest;
-        _setCorsHeaders(request.response);
-        request.response.write(
-            'Invalid direct path format. Expected: /direct/{file_id}/stream');
-        await request.response.close();
-        return;
-      }
-
-      final fileId = pathParts[0];
-
-      if (fileId.isEmpty) {
-        request.response.statusCode = HttpStatus.badRequest;
-        _setCorsHeaders(request.response);
-        request.response.write('File ID is required');
-        await request.response.close();
-        return;
-      }
-
-      await _forwardRangeRequest(
-        request: request,
-        sessionId: 'direct:$fileId',
-        path: 'stream',
-        logLabel: 'direct:$fileId',
-      );
-    } catch (e, stack) {
-      debugPrint('[LocalProxy] Error handling direct request: $e');
-      debugPrint('[LocalProxy] Stack: $stack');
-
-      try {
-        request.response.statusCode = HttpStatus.internalServerError;
-        _setCorsHeaders(request.response);
-        request.response.write('Error: $e');
-      } catch (_) {
-        // Response may already be started or closed, best-effort cleanup below.
-      } finally {
-        await request.response.close();
-      }
-    }
-  }
-
-  Future<void> _handleDownloadRequest(HttpRequest request, String path) async {
-    try {
-      // Parse path: /download/{job_id}/file
-      final pathParts = path.substring('/download/'.length).split('/');
-      if (pathParts.length < 2) {
-        request.response.statusCode = HttpStatus.badRequest;
-        _setCorsHeaders(request.response);
-        request.response.write(
-            'Invalid download path format. Expected: /download/{job_id}/file');
-        await request.response.close();
-        return;
-      }
-
-      final jobId = pathParts[0];
-
-      if (jobId.isEmpty) {
-        request.response.statusCode = HttpStatus.badRequest;
-        _setCorsHeaders(request.response);
-        request.response.write('Job ID is required');
-        await request.response.close();
-        return;
-      }
-
-      await _forwardRangeRequest(
-        request: request,
-        sessionId: 'download:$jobId',
-        path: 'file',
-        logLabel: 'download:$jobId',
-      );
-    } catch (e, stack) {
-      debugPrint('[LocalProxy] Error handling download request: $e');
-      debugPrint('[LocalProxy] Stack: $stack');
-
-      try {
-        request.response.statusCode = HttpStatus.internalServerError;
-        _setCorsHeaders(request.response);
-        request.response.write('Error: $e');
-      } catch (_) {
-        // Response may already be started or closed, best-effort cleanup below.
-      } finally {
-        await request.response.close();
-      }
-    }
-  }
-
   /// Shared logic for streaming range requests via P2P.
   ///
   /// Sends a single P2P streaming request for the entire range and pipes
@@ -554,39 +454,46 @@ class LocalProxyService implements MediaProxy {
   /// file stat) and lets QUIC congestion control ramp up within one stream.
   Future<void> _forwardRangeRequest({
     required HttpRequest request,
-    required String sessionId,
-    required String path,
-    required String logLabel,
+    required MediaRouteMatch route,
   }) async {
+    final sessionId = route.sessionId;
+    final path = route.path;
+    // The session id already carries the route kind ("direct:" / "download:"),
+    // so it is the log label too.
+    final logLabel = sessionId;
     final sw = Stopwatch()..start();
 
-    if (_targetPeer == null) {
-      request.response.statusCode = HttpStatus.serviceUnavailable;
-      _setCorsHeaders(request.response);
-      request.response.write('No target peer configured');
-      await request.response.close();
-      return;
-    }
-
-    // Parse the client's Range header.
     int? rangeStart;
     int? rangeEnd;
-    final rangeHeader = request.headers.value('Range');
-    if (rangeHeader != null) {
-      final range = _parseRangeHeader(rangeHeader);
-      rangeStart = range.$1;
-      rangeEnd = range.$2;
-    }
-
-    debugPrint('[LocalProxy] P2P stream $logLabel range=$rangeStart-$rangeEnd');
-
     var bytesServed = 0;
     var chunkCount = 0;
     var headersSent = false;
     int? firstHeaderMs;
     int? firstChunkMs;
 
+    // Everything is inside the try, including the checks before the stream is
+    // opened. The dispatcher does not await this, so anything that escapes
+    // here surfaces as an unhandled async error rather than a response.
     try {
+      if (_targetPeer == null) {
+        request.response.statusCode = HttpStatus.serviceUnavailable;
+        _setCorsHeaders(request.response);
+        request.response.write('No target peer configured');
+        await request.response.close();
+        return;
+      }
+
+      // Parse the client's Range header.
+      final rangeHeader = request.headers.value('Range');
+      if (rangeHeader != null) {
+        final range = _parseRangeHeader(rangeHeader);
+        rangeStart = range.$1;
+        rangeEnd = range.$2;
+      }
+
+      debugPrint(
+          '[LocalProxy] P2P stream $logLabel range=$rangeStart-$rangeEnd');
+
       final stream = _p2p.sendHlsRequestStreaming(
         peer: _targetPeer!,
         sessionId: sessionId,
