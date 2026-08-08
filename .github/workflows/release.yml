@@ -330,17 +330,24 @@ jobs:
           # patching an older line (v0.11.2 after v0.12.0) cannot drag
           # :latest, :0 and :0.11 backwards onto the older build. The same
           # applies to :beta against other prereleases.
+          #
+          # Only Mydia's own `vX.Y.Z` tags count. This repository also
+          # publishes the metadata-relay under `metadata-relay-vX.Y.Z`, and
+          # `ltrimstr("v")` leaves that prefix intact, so an unfiltered list
+          # hands `sort -V` a string beginning with a letter. That sorts above
+          # every numeric version, which made v0.13.0 look older than
+          # metadata-relay-v0.9.0 and silently skipped :latest, :0.13 and :0.
           if [ "$IS_PRERELEASE" = "true" ]; then
             CLASS="prerelease"
             NEWEST=$(gh release list --repo "$REPO" --limit 100 \
               --json tagName,isDraft,isPrerelease \
-              --jq '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | ltrimstr("v")] | .[]' \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == true) | .tagName | select(test("^v[0-9]")) | ltrimstr("v")] | .[]' \
               | sort -V | tail -n1)
           else
             CLASS="stable"
             NEWEST=$(gh release list --repo "$REPO" --limit 100 \
               --json tagName,isDraft,isPrerelease \
-              --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | ltrimstr("v")] | .[]' \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | select(test("^v[0-9]")) | ltrimstr("v")] | .[]' \
               | sort -V | tail -n1)
           fi
 
