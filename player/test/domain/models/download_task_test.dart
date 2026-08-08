@@ -138,7 +138,8 @@ void main() {
           expect(task.statusDisplay, equals('Preparing & Downloading'));
         });
 
-        test('shows "Starting Download..." when transcode complete but download at 0',
+        test(
+            'shows "Starting Download..." when transcode complete but download at 0',
             () {
           final task = _createTask(
             status: 'downloading',
@@ -394,6 +395,34 @@ void main() {
 
         expect(updated.transcodeProgress, equals(0.5));
         expect(updated.downloadProgress, equals(0.8));
+      });
+    });
+
+    group('episodeCode', () {
+      test('pads season and episode to two digits', () {
+        final task = DownloadTask(
+          id: 't1',
+          mediaId: 'm1',
+          title: 'Pilot',
+          quality: '1080p',
+          createdAt: DateTime(2026, 1, 1),
+          seasonNumber: 1,
+          episodeNumber: 3,
+        );
+
+        expect(task.episodeCode, 'S01E03');
+      });
+
+      test('renders question marks when the numbers are missing', () {
+        final task = DownloadTask(
+          id: 't1',
+          mediaId: 'm1',
+          title: 'A Movie',
+          quality: '1080p',
+          createdAt: DateTime(2026, 1, 1),
+        );
+
+        expect(task.episodeCode, 'S??E??');
       });
     });
   });
