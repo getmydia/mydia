@@ -152,4 +152,15 @@ flutter build web --release --base-href / \
   exit 1
 }
 
+# _headers is the file that makes the whole bundle work: without the COOP/COEP
+# lines it carries, the page never becomes cross-origin isolated, there is no
+# SharedArrayBuffer, and RustLib.init() throws in every browser that loads it.
+# A host that silently drops dotfiles, or a future change to what web/
+# contains, would ship a page that looks deployed and is not.
+[ -f build/web/_headers ] || {
+  echo "ERROR: _headers did not make it into build/web. The page will not be" >&2
+  echo "       cross-origin isolated and RustLib.init() will fail in every browser." >&2
+  exit 1
+}
+
 echo "==> Done: build/web"

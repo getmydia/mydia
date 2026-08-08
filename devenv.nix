@@ -173,7 +173,7 @@ in
     # ("found wasm-opt at .../binaryen-.../bin/wasm-opt") and never downloads
     # one. It still downloads wasm-bindgen from a GitHub release regardless,
     # since that one must match the exact wasm-bindgen crate version pinned in
-    # Cargo.lock and wasm-pack does not trust a PATH copy for that — fine on a
+    # Cargo.lock and wasm-pack does not trust a PATH copy for that. Fine on a
     # normal internet-connected runner, just not eliminated by this package.
     wasm-pack
     binaryen

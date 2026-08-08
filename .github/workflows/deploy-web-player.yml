@@ -27,7 +27,7 @@ jobs:
       # ci.yml, which already builds native/mydia_p2p_core for
       # wasm32-unknown-unknown in CI. This build needs the same pinned Rust
       # toolchain, the same wasm32 target, and the same Flutter SDK devenv.nix
-      # resolves from player/.fvmrc — none of which ci-player.yml provides,
+      # resolves from player/.fvmrc, none of which ci-player.yml provides,
       # since that workflow installs Flutter directly via subosito/flutter-action
       # and never enters a devenv shell.
       - name: Install Nix
@@ -98,7 +98,22 @@ jobs:
       - name: Build
         run: devenv shell -- ./player/tool/build_web.sh
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # --branch pins what wrangler reports as the deploy's branch, instead of
+      # relying on it auto-detecting the checkout (which actions/checkout only
+      # gives a real local branch for on a branch push; workflow_dispatch has
+      # no branch of its own to detect). This deploy is only ever "production"
+      # if that value matches the Pages project's configured production
+      # branch, which does NOT default to master on a new project (see the
+      # human setup steps below), and a mismatch there still deploys
+      # successfully to a preview URL with no failure anywhere in this job,
+      # so getting the project setting right is what actually matters; this
+      # flag only removes the auto-detection half of the risk.
       - name: Deploy
-        run: npx wrangler pages deploy player/build/web --project-name=mydia-web
+        run: npx wrangler pages deploy player/build/web --project-name=mydia-web --branch=master
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
