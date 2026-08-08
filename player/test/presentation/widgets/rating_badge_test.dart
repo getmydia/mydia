@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/rating_badge.dart';
 
 Widget _host(Widget child) =>
@@ -20,11 +21,12 @@ void main() {
     expect(find.text('8.0'), findsOneWidget);
   });
 
-  testWidgets('carries an amber star', (tester) async {
+  testWidgets('carries a star in the app accent, matching the detail screen',
+      (tester) async {
     await tester.pumpWidget(_host(const RatingBadge(rating: 6.1)));
 
     final icon = tester.widget<Icon>(find.byIcon(Icons.star_rounded));
-    expect(icon.color, Colors.amber);
+    expect(icon.color, AppColors.primary);
   });
 
   testWidgets('sits on a dark scrim rather than a palette surface',
