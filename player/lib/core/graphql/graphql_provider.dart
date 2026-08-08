@@ -10,25 +10,32 @@ import '../p2p/p2p_service.dart';
 import 'client.dart';
 import 'p2p_link.dart';
 
+/// True only when the player is served by a Mydia instance at `/player`.
+///
+/// That build talks to its own origin over plain HTTP. The public build at
+/// web.mydia.dev is served by Cloudflare, has no instance behind it, and must
+/// use the same p2p link the desktop app uses. The instance is the only thing
+/// that injects `window.mydiaConfig`, so its presence is the signal.
+bool get isInstanceHostedWeb => kIsWeb && getWebConfig() != null;
+
 /// Provider for the server URL.
 ///
-/// On web platform, always uses window.location.origin to ensure correct
-/// browser-accessible URL (not internal Docker hostnames like 'storage:4000').
-/// On native platforms, uses the stored server URL from secure storage.
+/// On the instance-hosted web build, always uses window.location.origin to
+/// ensure correct browser-accessible URL (not internal Docker hostnames like
+/// 'storage:4000'). On native platforms, and on the public web build (which
+/// has no origin to fall back to), uses the stored server URL from secure
+/// storage instead.
 final serverUrlProvider = FutureProvider<String?>((ref) async {
-  // On web, always use the current origin to avoid CORS issues
-  // and ensure we use the browser-accessible URL (not Docker internal names)
-  if (kIsWeb) {
+  if (isInstanceHostedWeb) {
     final origin = getOriginUrl();
-    debugPrint('[serverUrlProvider] kIsWeb=true, origin=$origin');
+    debugPrint('[serverUrlProvider] instance-hosted web, origin=$origin');
     if (origin != null) {
       return origin;
     }
-  } else {
-    debugPrint('[serverUrlProvider] kIsWeb=false, using stored URL');
   }
 
-  // Fall back to stored URL (for native platforms or if origin detection fails)
+  // Fall back to stored URL (native platforms, public web, or if origin
+  // detection fails on the instance-hosted build)
   final authService = ref.watch(authServiceProvider);
   final storedUrl = await authService.getServerUrl();
   debugPrint('[serverUrlProvider] storedUrl=$storedUrl');
