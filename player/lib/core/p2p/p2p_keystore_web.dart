@@ -36,12 +36,26 @@ class _WebKeystore implements P2pKeystore {
     final db = await _openDb();
     try {
       final transaction = db.transaction(_storeName.toJS, 'readwrite');
-      final store = transaction.objectStore(_storeName);
-      await _await(store.put(secret.toJS, _keyName.toJS));
+
+      // Attach the commit handlers before issuing the put, never after
+      // awaiting it. Attaching them afterwards would work only as long as the
+      // microtask resuming this function drains before the browser dispatches
+      // `complete`, and the price of that assumption ever failing is a
+      // write() that never returns.
+      final committed = _awaitTransaction(transaction);
+
       // A successful put request is not yet a durable write: the transaction
-      // can still abort on commit, and reporting success there would cost the
+      // can still abort at commit, and reporting success there would cost the
       // identity on the next load.
-      await _awaitTransaction(transaction);
+      final stored = _await(
+        transaction.objectStore(_storeName).put(secret.toJS, _keyName.toJS),
+      );
+
+      // Both, not just the commit: a failed put aborts the transaction, so
+      // `committed` reports it too, but leaving `stored` unawaited would raise
+      // that same failure a second time as an unhandled async error.
+      // Future.wait lets the transaction settle before the close() below.
+      await Future.wait<void>([stored.then((_) {}), committed]);
     } finally {
       db.close();
     }
@@ -73,6 +87,23 @@ class _WebKeystore implements P2pKeystore {
         completer.completeError(
           StateError('Failed to open IndexedDB "$_dbName": '
               '${_describe(request.error)}'),
+        );
+      }
+    }.toJS;
+
+    // Unreachable while _dbVersion stays at 1, because an upgrade can only run
+    // on a database no other connection has yet opened. It stops being
+    // unreachable the moment someone bumps the version, and the failure without
+    // this handler is an open that never settles. Failing loudly points at the
+    // cause; whoever bumps the version should replace this with closing the
+    // other connection, since `success` still follows once the block clears.
+    request.onblocked = (web.Event _) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          StateError(
+            'Opening IndexedDB "$_dbName" at version $_dbVersion is blocked by '
+            'another connection holding an older version open.',
+          ),
         );
       }
     }.toJS;

@@ -10,7 +10,8 @@ import 'package:player/core/p2p/p2p_keystore.dart';
 
 void main() {
   group('P2pKeystore', () {
-    test('stub returns null so native keeps using the file path', () async {
+    test('stub returns null so native identity stays with the Rust core',
+        () async {
       final keystore = createKeystore();
       expect(await keystore.read(), isNull);
     });

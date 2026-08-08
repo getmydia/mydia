@@ -132,6 +132,20 @@ class P2pStatus {
   }
 }
 
+/// Bound on each keystore operation.
+///
+/// Reading or writing a 32-byte record is sub-millisecond work in practice,
+/// and even a cold `open` on an empty database is milliseconds, so ten seconds
+/// is orders of magnitude clear of any real latency and will not fire on a
+/// merely slow machine. It is here because initialize() joins concurrent
+/// callers onto one attempt: without a bound, a wedged IndexedDB would not
+/// stall one caller, it would leave every later caller awaiting an attempt
+/// that never settles, for the life of the process. Timing out throws instead
+/// of inventing an identity, so the attempt fails, the guard clears, and the
+/// next call retries. That also means erring long is the safe direction: a
+/// bound that is too generous costs a slow startup, never a lost pairing.
+const _keystoreTimeout = Duration(seconds: 10);
+
 /// A node identity is 32 random bytes: every value is a valid Ed25519 seed,
 /// so there is nothing to reject or retry here.
 Uint8List _generateNodeSecret() {
@@ -300,12 +314,12 @@ class P2pService {
   /// and stores them here.
   Future<Uint8List?> _loadOrCreateKeypairBytes() async {
     final keystore = createKeystore();
-    final stored = await keystore.read();
+    final stored = await keystore.read().timeout(_keystoreTimeout);
     if (stored != null) return stored;
     if (!kIsWeb) return null;
 
     final secret = _generateNodeSecret();
-    await keystore.write(secret);
+    await keystore.write(secret).timeout(_keystoreTimeout);
     debugPrint('[P2P] Stored a new browser node identity');
     return secret;
   }

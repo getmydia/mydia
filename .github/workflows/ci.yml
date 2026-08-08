@@ -375,6 +375,28 @@ jobs:
         # files while still exiting 0, so this is load-bearing, not cosmetic.
         run: flutter test --concurrency=1
 
+      - name: Run browser tests
+        # The run above is a VM run, which skips every @TestOn('browser') file.
+        # Without this step the IndexedDB keystore has no coverage in CI at all.
+        #
+        # The files are enumerated rather than passing a bare `--platform
+        # chrome`, because that would try to run the whole suite in a browser
+        # and most of it needs dart:io. Empty means the naming convention broke,
+        # which must fail rather than silently cover nothing.
+        #
+        # No --concurrency here, unlike the VM run above: flutter parses it and
+        # then ignores it for web runs, printing a warning that reads like a
+        # mistake.
+        run: |
+          set -euo pipefail
+          files=$(git ls-files 'test/**/*_web_test.dart')
+          if [ -z "$files" ]; then
+            echo "No test/**/*_web_test.dart files matched; expected at least one." >&2
+            exit 1
+          fi
+          echo "Browser tests: $files"
+          flutter test --platform chrome $files
+
   test-e2e:
     name: Test / E2E Browser
     runs-on: ubuntu-latest

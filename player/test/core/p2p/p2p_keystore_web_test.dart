@@ -10,6 +10,13 @@ import 'package:player/core/p2p/p2p_keystore.dart';
 
 void main() {
   group('P2pKeystore on web', () {
+    // Must stay first, and nothing before it may write. This is the branch
+    // every fresh browser takes, and the runner gives each run a new profile,
+    // so an empty database is only observable before the writes below.
+    test('reads null on a database nothing has written to', () async {
+      expect(await createKeystore().read(), isNull);
+    });
+
     test('reads back the secret a separate instance wrote', () async {
       final secret = Uint8List.fromList(List.generate(32, (i) => i * 7 % 256));
 
