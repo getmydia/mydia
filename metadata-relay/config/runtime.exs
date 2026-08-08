@@ -35,6 +35,23 @@ if config_env() != :test do
   config :metadata_relay,
     dashboard_auth: [username: dashboard_username, password: dashboard_password]
 
+  # Bearer tokens accepted on POST /p2p/access, presented by the iroh relay.
+  # Comma-separated so a token can be rotated by deploying both values before
+  # removing the old one. Unset means an empty list, which denies everything.
+  p2p_access_bearer_tokens =
+    case normalize_env.("P2P_ACCESS_BEARER_TOKENS") do
+      nil ->
+        []
+
+      value ->
+        value
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+    end
+
+  config :metadata_relay, p2p_access_bearer_tokens: p2p_access_bearer_tokens
+
   # Database configuration (all environments except test)
   db_path = System.get_env("SQLITE_DB_PATH") || "./metadata_relay.db"
 

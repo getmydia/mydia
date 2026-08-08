@@ -13,6 +13,17 @@ defmodule MetadataRelay.Router do
   alias MetadataRelay.OpenSubtitles.Handler, as: SubtitlesHandler
   alias MetadataRelay.Pairing.Handler, as: PairingHandler
   alias MetadataRelay.Trakt.Handler, as: TraktHandler
+  alias MetadataRelay.P2pAccess
+
+  # The header the relay actually sends the endpoint ID in is `X-Iroh-NodeId`.
+  # Upstream names the constant `X_IROH_ENDPOINT_ID` and its doc comment
+  # advertises `X-Iroh-Endpoint-Id`, but the value it puts on the wire is
+  # `X-Iroh-NodeId` (iroh-relay v1.0.0, src/main.rs:36 and src/main.rs:319).
+  # The code is authoritative; upstream's own docs contradict it. The
+  # `x-iroh-endpoint-id` fallback is deliberate forward-compatibility for the
+  # day upstream corrects the constant to match its documentation — do not
+  # remove it as dead code. Plug downcases header names, so both are lowercase.
+  @endpoint_id_headers ["x-iroh-nodeid", "x-iroh-endpoint-id"]
 
   @feedback_param_atoms %{
     "type" => :type,
@@ -358,6 +369,27 @@ defmodule MetadataRelay.Router do
   end
 
   # ============================================================================
+  # P2P Relay Access Control
+  # ============================================================================
+
+  # Called by the self-hosted iroh relay before it accepts an endpoint.
+  # The relay grants access only on a 200 response whose body is "true"; every
+  # other outcome, including an error or timeout, denies. Keep this handler
+  # ETS-only so it can never become the slow path for relay connections.
+  post "/p2p/access" do
+    with :ok <- authorize_relay_caller(conn),
+         {:ok, endpoint_id} <- read_endpoint_id(conn) do
+      case P2pAccess.authorize(endpoint_id) do
+        :allow -> send_access_response(conn, 200, "true")
+        :deny -> send_access_response(conn, 403, "false")
+      end
+    else
+      {:error, :unauthorized} -> send_access_response(conn, 403, "false")
+      {:error, :invalid_endpoint_id} -> send_access_response(conn, 400, "false")
+    end
+  end
+
+  # ============================================================================
   # Trakt.tv API Proxy
   # ============================================================================
 
@@ -628,6 +660,48 @@ defmodule MetadataRelay.Router do
         |> :inet.ntoa()
         |> to_string()
     end
+  end
+
+  defp authorize_relay_caller(conn) do
+    token =
+      case get_req_header(conn, "authorization") do
+        ["Bearer " <> token | _] -> token
+        _ -> nil
+      end
+
+    if P2pAccess.valid_bearer?(token) do
+      :ok
+    else
+      MetadataRelay.Metrics.inc("metadata_relay_p2p_access_total", result: "unauthorized")
+      {:error, :unauthorized}
+    end
+  end
+
+  defp read_endpoint_id(conn) do
+    raw =
+      Enum.find_value(@endpoint_id_headers, fn header ->
+        case get_req_header(conn, header) do
+          [value | _] -> value
+          [] -> nil
+        end
+      end)
+
+    case P2pAccess.normalize_endpoint_id(raw) do
+      {:ok, endpoint_id} ->
+        {:ok, endpoint_id}
+
+      :error ->
+        MetadataRelay.Metrics.inc("metadata_relay_p2p_access_total", result: "malformed")
+        {:error, :invalid_endpoint_id}
+    end
+  end
+
+  # The relay parses the body as text and requires exactly "true" to allow.
+  # Do not switch this to JSON.
+  defp send_access_response(conn, status, body) do
+    conn
+    |> put_resp_content_type("text/plain")
+    |> send_resp(status, body)
   end
 
   defp process_crash_report(conn) do

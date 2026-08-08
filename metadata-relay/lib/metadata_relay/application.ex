@@ -25,6 +25,8 @@ defmodule MetadataRelay.Application do
         {cache_adapter, cache_opts},
         # Long-lived ETS owner for pairing fallback storage
         MetadataRelay.PairingStore,
+        # Long-lived ETS owner for p2p relay access control
+        MetadataRelay.P2pAccess.Store,
         # Rate limiter for crash reports and pairing
         MetadataRelay.RateLimiter,
         # Metrics collector
