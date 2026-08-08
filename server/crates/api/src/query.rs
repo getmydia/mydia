@@ -14,9 +14,11 @@ use crate::types::discovery::{
     Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, UpNextItem,
 };
 use crate::types::media::{
-    Episode, LibraryPath, Movie, MovieConnection, RecentlyAddedItem, TvShow, TvShowConnection,
+    Episode, LibraryPath, Movie, MovieConnection, MovieEdge, RecentlyAddedItem, TvShow,
+    TvShowConnection, TvShowEdge,
 };
 use crate::types::streaming::StreamingCandidatesResult;
+use mydia_db::media_items::{BrowseField, BrowseSort};
 
 /// An empty page, for connection fields that back an empty library. The
 /// player relies on `edges: []` and a real `PageInfo`, not `null`, to render
@@ -119,32 +121,111 @@ impl RootQueryType {
     /// List all movies with pagination
     async fn movies(
         &self,
-        _ctx: &Context<'_>,
-        _first: Option<i32>,
-        _after: Option<String>,
-        _sort: Option<SortInput>,
-        _category: Option<MediaCategory>,
+        ctx: &Context<'_>,
+        first: Option<i32>,
+        after: Option<String>,
+        sort: Option<SortInput>,
+        category: Option<MediaCategory>,
     ) -> Result<Option<MovieConnection>> {
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        // Slice 2a knows only Movie and TvShow. The finer categories need
+        // genres, which arrive with the metadata in Slice 2b, so asking for
+        // one returns nothing rather than everything.
+        if !matches!(category, None | Some(MediaCategory::Movie)) {
+            return Ok(Some(MovieConnection {
+                edges: Vec::new(),
+                page_info: empty_page_info(),
+                total_count: 0,
+            }));
+        }
+
+        let page = Page::new(first, after);
+        let total = mydia_db::media_items::count(&api.db, "movie")
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        let items = mydia_db::media_items::browse(
+            &api.db,
+            "movie",
+            browse_sort(sort.as_ref()),
+            page.first,
+            page.offset,
+        )
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+
+        let mut edges = Vec::with_capacity(items.len());
+
+        for (index, item) in items.iter().enumerate() {
+            let files = mydia_db::media_files::list_for_item(&api.db, &item.id)
+                .await
+                .map_err(|e| Error::new(e.to_string()))?;
+
+            edges.push(MovieEdge {
+                node: crate::mapping::movie_from(item, &files),
+                // Page-local, mirroring browse_resolver.ex:93-97. See the
+                // note in this task's description before "fixing" it.
+                cursor: crate::cursor::encode(index as i64),
+            });
+        }
+
         Ok(Some(MovieConnection {
-            edges: Vec::new(),
-            page_info: empty_page_info(),
-            total_count: 0,
+            page_info: page.info(total, edges.len() as i64),
+            edges,
+            total_count: i32::try_from(total).unwrap_or(i32::MAX),
         }))
     }
 
     /// List all TV shows with pagination
     async fn tv_shows(
         &self,
-        _ctx: &Context<'_>,
-        _first: Option<i32>,
-        _after: Option<String>,
-        _sort: Option<SortInput>,
-        _category: Option<MediaCategory>,
+        ctx: &Context<'_>,
+        first: Option<i32>,
+        after: Option<String>,
+        sort: Option<SortInput>,
+        category: Option<MediaCategory>,
     ) -> Result<Option<TvShowConnection>> {
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        if !matches!(category, None | Some(MediaCategory::TvShow)) {
+            return Ok(Some(TvShowConnection {
+                edges: Vec::new(),
+                page_info: empty_page_info(),
+                total_count: 0,
+            }));
+        }
+
+        let page = Page::new(first, after);
+        let total = mydia_db::media_items::count(&api.db, "tv_show")
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        let items = mydia_db::media_items::browse(
+            &api.db,
+            "tv_show",
+            browse_sort(sort.as_ref()),
+            page.first,
+            page.offset,
+        )
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+
+        let mut edges = Vec::with_capacity(items.len());
+
+        for (index, item) in items.iter().enumerate() {
+            edges.push(TvShowEdge {
+                node: load_show(api, item).await?,
+                cursor: crate::cursor::encode(index as i64),
+            });
+        }
+
         Ok(Some(TvShowConnection {
-            edges: Vec::new(),
-            page_info: empty_page_info(),
-            total_count: 0,
+            page_info: page.info(total, edges.len() as i64),
+            edges,
+            total_count: i32::try_from(total).unwrap_or(i32::MAX),
         }))
     }
 
@@ -308,4 +389,61 @@ pub(crate) async fn load_show(
     }
 
     Ok(crate::mapping::tv_show_from(item, &episodes))
+}
+
+/// One page's worth of arguments, with the Elixir server's defaults
+/// (browse_resolver.ex:66-68).
+struct Page {
+    first: i64,
+    offset: i64,
+}
+
+impl Page {
+    fn new(first: Option<i32>, after: Option<String>) -> Self {
+        Self {
+            first: first.map(i64::from).unwrap_or(20).max(0),
+            offset: after
+                .as_deref()
+                .map(|cursor| crate::cursor::decode(cursor) + 1)
+                .unwrap_or(0)
+                .max(0),
+        }
+    }
+
+    /// pageInfo cursors use the real offset, unlike the edge cursors above.
+    fn info(&self, total: i64, returned: i64) -> PageInfo {
+        if returned == 0 {
+            return PageInfo {
+                has_next_page: total > self.offset,
+                has_previous_page: self.offset > 0,
+                start_cursor: None,
+                end_cursor: None,
+            };
+        }
+
+        PageInfo {
+            has_next_page: total > self.offset + returned,
+            has_previous_page: self.offset > 0,
+            start_cursor: Some(crate::cursor::encode(self.offset)),
+            end_cursor: Some(crate::cursor::encode(self.offset + returned - 1)),
+        }
+    }
+}
+
+fn browse_sort(sort: Option<&SortInput>) -> BrowseSort {
+    use crate::types::common::{SortDirection, SortField};
+
+    let field = match sort.and_then(|s| s.field) {
+        Some(SortField::Year) => BrowseField::Year,
+        Some(SortField::AddedAt) => BrowseField::AddedAt,
+        Some(SortField::Rating) => BrowseField::Rating,
+        // Title is the default and the fallback, matching sort_items/2's
+        // catch-all clause.
+        _ => BrowseField::Title,
+    };
+
+    BrowseSort {
+        field,
+        descending: matches!(sort.and_then(|s| s.direction), Some(SortDirection::Desc)),
+    }
 }

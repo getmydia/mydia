@@ -96,6 +96,81 @@ pub async fn find(db: &Db, id: &str) -> Result<Option<MediaItemRow>, DbError> {
         .await?)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowseField {
+    Title,
+    Year,
+    AddedAt,
+    Rating,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BrowseSort {
+    pub field: BrowseField,
+    /// The Elixir server reverses the ascending sort rather than sorting
+    /// descending (browse_resolver.ex:172-176), which moves nulls to the
+    /// front. The ORDER BY clauses below reproduce that.
+    pub descending: bool,
+}
+
+/// A movie has files directly. A show has them through its episodes. Both are
+/// what `has_files: true` means in browse_resolver.ex:71,120.
+const HAS_FILES: &str = "(
+    EXISTS (SELECT 1 FROM media_files f WHERE f.media_item_id = media_items.id)
+ OR EXISTS (SELECT 1 FROM media_files f
+            JOIN episodes e ON e.id = f.episode_id
+            WHERE e.show_id = media_items.id)
+)";
+
+fn order_by(sort: BrowseSort) -> &'static str {
+    match (sort.field, sort.descending) {
+        (BrowseField::Title, false) => "title ASC, id ASC",
+        (BrowseField::Title, true) => "title DESC, id DESC",
+        // NULL years sort last ascending, because Erlang orders atoms after
+        // numbers. Reversing sends them to the front.
+        (BrowseField::Year, false) => "(year IS NULL) ASC, year ASC, id ASC",
+        (BrowseField::Year, true) => "(year IS NULL) DESC, year DESC, id DESC",
+        (BrowseField::AddedAt, false) => "added_at ASC, id ASC",
+        (BrowseField::AddedAt, true) => "added_at DESC, id DESC",
+        // get_rating/1 answers 0 for a missing rating, so there are no nulls
+        // to order around.
+        (BrowseField::Rating, false) => "COALESCE(rating, 0) ASC, id ASC",
+        (BrowseField::Rating, true) => "COALESCE(rating, 0) DESC, id DESC",
+    }
+}
+
+pub async fn browse(
+    db: &Db,
+    media_type: &str,
+    sort: BrowseSort,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<MediaItemRow>, DbError> {
+    let sql = format!(
+        "{SELECT} WHERE media_type = ? AND {HAS_FILES}
+         ORDER BY {} LIMIT ? OFFSET ?",
+        order_by(sort)
+    );
+
+    Ok(sqlx::query_as::<_, MediaItemRow>(&sql)
+        .bind(media_type)
+        .bind(limit.max(0))
+        .bind(offset.max(0))
+        .fetch_all(db.pool())
+        .await?)
+}
+
+/// Counts everything that matches, not just the page, matching
+/// browse_resolver.ex:104,147.
+pub async fn count(db: &Db, media_type: &str) -> Result<i64, DbError> {
+    let sql = format!("SELECT count(*) FROM media_items WHERE media_type = ? AND {HAS_FILES}");
+
+    Ok(sqlx::query_scalar::<_, i64>(&sql)
+        .bind(media_type)
+        .fetch_one(db.pool())
+        .await?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{find, upsert, NewMediaItem};
@@ -203,5 +278,236 @@ mod tests {
         let (db, _g) = connect_temp().await.unwrap();
 
         assert!(find(&db, "no-such-item").await.unwrap().is_none());
+    }
+
+    use super::{browse, count, BrowseField, BrowseSort};
+    use crate::media_files::{upsert as upsert_file, NewMediaFile, Owner};
+
+    async fn with_file(db: &Db, lp: &str, title: &str, year: Option<i64>) -> String {
+        let item = upsert(db, new_movie(lp, title, year)).await.unwrap();
+
+        upsert_file(
+            db,
+            NewMediaFile {
+                owner: Owner::Item(item.id.clone()),
+                path: format!("/media/{title}.mkv"),
+                size: None,
+                resolution: None,
+                codec: None,
+                audio_codec: None,
+                hdr_format: None,
+                bitrate: None,
+                duration_seconds: None,
+                container: None,
+                width: None,
+                height: None,
+                subtitle_tracks: None,
+                mtime: "2026-01-01T00:00:00Z".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        item.id
+    }
+
+    fn by_title() -> BrowseSort {
+        BrowseSort {
+            field: BrowseField::Title,
+            descending: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn browsing_returns_only_items_with_files() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+
+        with_file(&db, &lp, "Has Files", Some(2020)).await;
+        upsert(&db, new_movie(&lp, "No Files", Some(2020)))
+            .await
+            .unwrap();
+
+        let listed = browse(&db, "movie", by_title(), 20, 0).await.unwrap();
+
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].title, "Has Files");
+        assert_eq!(count(&db, "movie").await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn browsing_sorts_by_title_ascending_by_default() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+
+        with_file(&db, &lp, "Charlie", Some(2020)).await;
+        with_file(&db, &lp, "Alpha", Some(2020)).await;
+        with_file(&db, &lp, "Bravo", Some(2020)).await;
+
+        let titles: Vec<String> = browse(&db, "movie", by_title(), 20, 0)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|i| i.title)
+            .collect();
+
+        assert_eq!(titles, vec!["Alpha", "Bravo", "Charlie"]);
+    }
+
+    #[tokio::test]
+    async fn a_null_year_sorts_last_ascending_and_first_descending() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+
+        with_file(&db, &lp, "Undated", None).await;
+        with_file(&db, &lp, "Older", Some(1980)).await;
+        with_file(&db, &lp, "Newer", Some(2020)).await;
+
+        let ascending: Vec<String> = browse(
+            &db,
+            "movie",
+            BrowseSort {
+                field: BrowseField::Year,
+                descending: false,
+            },
+            20,
+            0,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|i| i.title)
+        .collect();
+
+        // Erlang term order puts atoms after numbers, so nil years land last.
+        assert_eq!(ascending, vec!["Older", "Newer", "Undated"]);
+
+        let descending: Vec<String> = browse(
+            &db,
+            "movie",
+            BrowseSort {
+                field: BrowseField::Year,
+                descending: true,
+            },
+            20,
+            0,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|i| i.title)
+        .collect();
+
+        // Descending is the reverse of ascending, so the nulls move to the top.
+        assert_eq!(descending, vec!["Undated", "Newer", "Older"]);
+    }
+
+    #[tokio::test]
+    async fn a_missing_rating_sorts_as_zero() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+
+        let rated = with_file(&db, &lp, "Rated", Some(2020)).await;
+        with_file(&db, &lp, "Unrated", Some(2020)).await;
+
+        sqlx::query("UPDATE media_items SET rating = 8.5 WHERE id = ?")
+            .bind(&rated)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        let titles: Vec<String> = browse(
+            &db,
+            "movie",
+            BrowseSort {
+                field: BrowseField::Rating,
+                descending: true,
+            },
+            20,
+            0,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|i| i.title)
+        .collect();
+
+        assert_eq!(titles, vec!["Rated", "Unrated"]);
+    }
+
+    #[tokio::test]
+    async fn limit_and_offset_page_through() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+
+        for title in ["A", "B", "C", "D"] {
+            with_file(&db, &lp, title, Some(2020)).await;
+        }
+
+        let page = browse(&db, "movie", by_title(), 2, 2).await.unwrap();
+        let titles: Vec<String> = page.into_iter().map(|i| i.title).collect();
+
+        assert_eq!(titles, vec!["C", "D"]);
+    }
+
+    #[tokio::test]
+    async fn a_show_counts_as_having_files_through_its_episodes() {
+        let (db, _g) = connect_temp().await.unwrap();
+        let lp = library(&db).await;
+
+        let show = upsert(
+            &db,
+            NewMediaItem {
+                library_path_id: lp,
+                media_type: "tv_show".to_string(),
+                title: "Show".to_string(),
+                identity_key: "show".to_string(),
+                year: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let episode = crate::episodes::upsert(
+            &db,
+            crate::episodes::NewEpisode {
+                show_id: show.id,
+                season_number: 1,
+                episode_number: 1,
+            },
+        )
+        .await
+        .unwrap();
+
+        upsert_file(
+            &db,
+            NewMediaFile {
+                owner: Owner::Episode(episode.id),
+                path: "/media/e.mkv".to_string(),
+                size: None,
+                resolution: None,
+                codec: None,
+                audio_codec: None,
+                hdr_format: None,
+                bitrate: None,
+                duration_seconds: None,
+                container: None,
+                width: None,
+                height: None,
+                subtitle_tracks: None,
+                mtime: "2026-01-01T00:00:00Z".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(count(&db, "tv_show").await.unwrap(), 1);
+        assert_eq!(
+            browse(&db, "tv_show", by_title(), 20, 0)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }
