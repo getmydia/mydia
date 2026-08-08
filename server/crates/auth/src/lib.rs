@@ -4,6 +4,7 @@
 //! without depending on GraphQL.
 
 pub mod password;
+pub mod tokens;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
