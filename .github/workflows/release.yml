@@ -485,6 +485,16 @@ jobs:
     name: Player / iOS
     needs: prepare
     runs-on: macos-26
+    # `upload_to_testflight` uses `distribute_external: true`, which cannot skip
+    # waiting for Apple to finish processing the build, so a slow processing
+    # queue parks this job in a poll loop with no upper bound of its own. On
+    # v0.13.0 that ran 5h49m before the 6h default killed it, on a runner billed
+    # at 10x. The job normally finishes in 17-20 minutes; this bounds the wait
+    # while leaving generous headroom. Hitting it fails the publish gate, which
+    # is the correct outcome: re-dispatch with `allow_missing=ios` to ship
+    # without it, since the IPA reaches TestFlight whenever Apple is done
+    # regardless of what this job reports.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
