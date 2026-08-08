@@ -27,13 +27,28 @@ echo "==> Building mydia_p2p_core for wasm"
 # `flutter pub run`, which can.
 #
 # RUSTC_BOOTSTRAP is the awkward part. build-web hardcodes
-# `-Z build-std=std,panic_abort` and exports RUSTUP_TOOLCHAIN=nightly for
-# wasm-pack, but cargo inside devenv is a plain pinned 1.96.0 binary rather
-# than a rustup shim, so RUSTUP_TOOLCHAIN is ignored and `-Z` is rejected on
-# the stable channel. The alternative is a second Rust toolchain, and the Rust
-# version is meant to live in rust-toolchain.toml and nowhere else. `rust-src`,
-# which build-std needs, already comes from devenv.nix.
+# `-Z build-std=std,panic_abort`, which stable cargo rejects. The alternative
+# is a second Rust toolchain, and the Rust version is meant to live in
+# rust-toolchain.toml and nowhere else. `rust-src`, which build-std needs,
+# already comes from devenv.nix.
 export RUSTC_BOOTSTRAP=1
+
+# build-web also exports RUSTUP_TOOLCHAIN=nightly into wasm-pack's environment
+# unless it is told otherwise, so the toolchain is named here, read from the
+# single source of truth rather than restated.
+#
+# It is not enough that devenv's cargo is a plain binary that ignores
+# RUSTUP_TOOLCHAIN. That is a property of one machine: ~/.cargo/bin is on PATH
+# inside the devenv shell (it is how wasm-pack itself resolves), and anywhere a
+# rustup-shimmed cargo wins that PATH, the wasm shipped to browsers would be
+# built by whatever nightly happens to be installed. RUSTC_BOOTSTRAP above
+# would then make that divergence silent instead of an error, and the CI
+# toolchain guard cannot see it because rust-toolchain.toml stays untouched.
+RUST_CHANNEL="$(sed -n 's/^channel = "\(.*\)"$/\1/p' ../rust-toolchain.toml)"
+[ -n "$RUST_CHANNEL" ] || {
+  echo "ERROR: could not read [toolchain] channel from rust-toolchain.toml" >&2
+  exit 1
+}
 
 # The first line is flutter_rust_bridge's own default; restating it keeps its
 # "your override drops the default" warning quiet. The link args are the
@@ -74,7 +89,34 @@ flutter pub run flutter_rust_bridge build-web \
   --rust-root rust/mydia_player_p2p \
   --output "$PWD/web" \
   --wasm-pack-rustflags "$WASM_RUSTFLAGS" \
+  --wasm-pack-rustup-toolchain "$RUST_CHANNEL" \
   --release
+
+echo "==> Checking the wasm module"
+
+# Everything above fails loudly except the one thing that matters most. Drop
+# --shared-memory and the module still builds, wasm-bindgen simply skips its
+# threading pass, wasm-pack reports success, and nothing goes wrong until a
+# browser refuses to postMessage the memory to a worker. So the shape of the
+# artifact is asserted rather than inferred from the flags that produced it.
+WASM_GLUE="web/pkg/mydia_player_p2p.js"
+WASM_MODULE="web/pkg/mydia_player_p2p_bg.wasm"
+
+for f in "$WASM_GLUE" "$WASM_MODULE"; do
+  [ -f "$f" ] || {
+    echo "ERROR: build-web reported success but $f is missing." >&2
+    exit 1
+  }
+done
+
+grep -qE 'new WebAssembly\.Memory\(\{[^}]*shared:[[:space:]]*true' "$WASM_GLUE" || {
+  echo "ERROR: $WASM_GLUE does not construct a shared WebAssembly.Memory." >&2
+  echo "       The module was built without shared memory, so flutter_rust_bridge" >&2
+  echo "       cannot hand it to a web worker and RustLib.init() dies in the" >&2
+  echo "       browser with a DataCloneError. Check the --shared-memory and" >&2
+  echo "       --export=__wasm_init_tls link args above." >&2
+  exit 1
+}
 
 echo "==> Building Flutter web bundle"
 # MYDIA_WEB_P2P is what tells main.dart the module above is there. Without it
@@ -82,6 +124,23 @@ echo "==> Building Flutter web bundle"
 # bundle at /player wants: flutter_rust_bridge's loader awaits a <script> load
 # event with no error path, so a missing module hangs startup rather than
 # failing it.
-flutter build web --release --base-href / --dart-define=MYDIA_WEB_P2P=true
+#
+# --no-web-resources-cdn keeps CanvasKit local. The default resolves it to
+# https://www.gstatic.com/flutter-canvaskit/<rev> and flutter.js injects that
+# script with no `crossorigin` attribute, making it a no-cors cross-origin
+# load. Under the COEP require-corp this page ships (web/_headers) that is
+# blocked unless gstatic volunteers a Cross-Origin-Resource-Policy header, and
+# there is no CORS fallback in that path. The local copies are in the bundle
+# already, and a public page is better off not calling out to a third party.
+flutter build web --release --base-href / \
+  --no-web-resources-cdn \
+  --dart-define=MYDIA_WEB_P2P=true
+
+# The module is only useful if flutter copied it across. This is the same
+# failure as a partial upload, caught here rather than in a browser.
+[ -f build/web/pkg/mydia_player_p2p.js ] || {
+  echo "ERROR: web/pkg did not make it into build/web." >&2
+  exit 1
+}
 
 echo "==> Done: build/web"

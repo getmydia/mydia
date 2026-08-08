@@ -28,6 +28,24 @@ import 'package:player/native/frb_generated.dart';
 /// does not throw. It hangs, and `_startApp` would never reach `runApp`.
 const kWebP2pEnabled = bool.fromEnvironment('MYDIA_WEB_P2P');
 
+/// Ceiling on `RustLib.init()`, so `_startApp` cannot stall forever.
+///
+/// [kWebP2pEnabled] keeps a build that never had the module from reaching the
+/// loader at all. This covers the other half: a build that expects the module
+/// and does not find it at runtime, through deploy skew, a wrong base href, a
+/// partial upload or a bad cache. The loader has no error path, so a 404 there
+/// is an await that never returns, and `_startApp`'s promise to call `runApp`
+/// exactly once on every path would be broken on precisely the public build
+/// this exists to enable.
+///
+/// A minute is a ceiling, not a latency budget. The failure it guards resolves
+/// in milliseconds, so nothing correct is ever waiting on it. What has to fit
+/// underneath is a cold fetch and instantiation of a ~5 MB module on a poor
+/// connection, and the bundle's own `main.dart.js` is comparable in size and
+/// has already loaded by the time this runs, so the connection has proved
+/// itself. Timing out is not fatal on web: the catch below logs and continues.
+const _rustInitTimeout = Duration(seconds: 60);
+
 void main() async {
   // Add error logging for debugging
   FlutterError.onError = (details) {
@@ -88,7 +106,7 @@ Future<void> _startApp() async {
   // plays over HTTP, and pairing is where its absence becomes visible.
   if (!kIsWeb || kWebP2pEnabled) {
     try {
-      await RustLib.init();
+      await RustLib.init().timeout(_rustInitTimeout);
       debugPrint('[RustLib] Rust bridge initialized successfully');
     } catch (e, st) {
       debugPrint('[RustLib] Failed to initialize Rust bridge: $e');
