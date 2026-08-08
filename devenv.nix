@@ -368,6 +368,20 @@ in
       files = "^native/.*\\.rs$";
       pass_filenames = false;
     };
+    server-fmt = {
+      enable = true;
+      name = "cargo fmt (server)";
+      entry = "cargo fmt --manifest-path server/Cargo.toml --all -- --check";
+      files = "^server/.*\\.rs$";
+      pass_filenames = false;
+    };
+    server-clippy = {
+      enable = true;
+      name = "cargo clippy (server)";
+      entry = "cargo clippy --manifest-path server/Cargo.toml --all-targets -- -D warnings";
+      files = "^server/.*\\.rs$";
+      pass_filenames = false;
+    };
     plugins-check = {
       enable = true;
       name = "cargo fmt + clippy (wasm plugins)";

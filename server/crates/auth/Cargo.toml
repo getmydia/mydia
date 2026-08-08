@@ -1,0 +1,13 @@
+[package]
+name = "mydia-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+argon2 = { workspace = true, features = ["std"] }
+chrono.workspace = true
+jsonwebtoken.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
