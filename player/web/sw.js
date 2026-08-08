@@ -21,6 +21,26 @@
 // every byte-serving test failed.
 const PREFIX = new URL('p2p/', self.registration.scope).pathname;
 
+// How long to wait for the page to answer with a response head before giving
+// up on it.
+//
+// Without a deadline, respondWith() never settles and the fetch hangs with no
+// error anywhere: no status, no console entry, nothing for a viewer or a log
+// to point at. Two windows make that reachable rather than theoretical. The
+// page assigns its message handler only after its worker takes control, so a
+// media fetch landing in that gap has nobody to answer it; and stop() clears
+// the handler while this worker keeps controlling the page, because
+// unregister() does not stop a worker already in control.
+//
+// 30s is chosen against what the page does before it replies with a head: one
+// p2p round trip to the instance, which for the first segment of a fresh
+// session waits on the instance's HLS session becoming ready (its own 30s
+// budget, in lib/mydia/p2p/server.ex). Anything under that would abort real,
+// working cold starts over a relay. Nothing legitimate waits on this: the
+// failures it catches are handler-is-missing states that would otherwise wait
+// forever.
+const REPLY_TIMEOUT_MS = 30_000;
+
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
@@ -96,11 +116,31 @@ async function proxyToPage(event) {
     [channel.port2],
   );
 
+  // Resolves null, which no head ever is, so the race below can tell the two
+  // apart without a sentinel object.
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), REPLY_TIMEOUT_MS);
+  });
+
   try {
-    const { status, headers: responseHeaders, stream } = await head;
+    const settled = await Promise.race([head, deadline]);
+    if (settled === null) {
+      // Same 503 the no-controlled-client path answers with, for the same
+      // reason: the page that owns the p2p connection is not answering, and a
+      // status the browser can surface beats a fetch that never returns.
+      channel.port1.postMessage({ type: 'cancel' });
+      channel.port1.close();
+      return new Response('The p2p client did not answer', { status: 503 });
+    }
+    const { status, headers: responseHeaders, stream } = settled;
     return new Response(stream, { status, headers: responseHeaders });
   } catch (error) {
     return new Response(String(error), { status: 502 });
+  } finally {
+    // Only the head is on a deadline. Once it has arrived the body streams for
+    // as long as it takes, which for a media file is unbounded by design.
+    clearTimeout(timer);
   }
 }
 

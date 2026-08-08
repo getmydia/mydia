@@ -43,7 +43,8 @@ const kWebP2pEnabled = bool.fromEnvironment('MYDIA_WEB_P2P');
 /// underneath is a cold fetch and instantiation of a ~5 MB module on a poor
 /// connection, and the bundle's own `main.dart.js` is comparable in size and
 /// has already loaded by the time this runs, so the connection has proved
-/// itself. Timing out is not fatal on web: the catch below logs and continues.
+/// itself. Timing out lands in the same catch as any other init failure, and
+/// on a build that ships the module that is fatal: see `_startApp`.
 const _rustInitTimeout = Duration(seconds: 60);
 
 void main() async {
@@ -100,10 +101,18 @@ Future<void> _startApp() async {
   // On native there is no reasonable degraded mode without it, so a failure
   // goes straight to the last-resort error screen rather than continuing.
   //
-  // On web there is one, and a web build without the module skips this
-  // entirely rather than failing in it (see [kWebP2pEnabled]). Where the
-  // module is present a failure is survivable: the app still browses and
-  // plays over HTTP, and pairing is where its absence becomes visible.
+  // On web it depends on which web build this is, and [kWebP2pEnabled] is
+  // exactly that distinction. A build without the module skips this block
+  // entirely; that is the bundle an instance serves at `/player`, which
+  // reaches its own origin over plain HTTP and never needed p2p.
+  //
+  // A build that ships the module is the public player at web.mydia.dev,
+  // where p2p is the only transport there is. Continuing after a failed init
+  // there boots the app into a pairing screen that cannot ever work, and the
+  // causes are all real deploy states: a missing COEP header, skew between
+  // main.dart.js and pkg/*.wasm, a truncated upload, a wrong base href. Each
+  // one presents as "pairing does nothing", or a 60s stall and then pairing
+  // does nothing. So it fails visibly instead, with the error on screen.
   if (!kIsWeb || kWebP2pEnabled) {
     try {
       await RustLib.init().timeout(_rustInitTimeout);
@@ -111,10 +120,8 @@ Future<void> _startApp() async {
     } catch (e, st) {
       debugPrint('[RustLib] Failed to initialize Rust bridge: $e');
       debugPrint('Stack trace: $st');
-      if (!kIsWeb) {
-        runApp(StartupErrorApp.generic(e));
-        return;
-      }
+      runApp(StartupErrorApp.generic(e));
+      return;
     }
   } else {
     debugPrint('[RustLib] Web build without the p2p wasm module; skipping');

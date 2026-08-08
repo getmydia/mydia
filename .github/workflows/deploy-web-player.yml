@@ -1,14 +1,25 @@
 name: Deploy Web Player
 
+# Manual dispatch only, on purpose. There is no `push` trigger yet.
+#
+# Nothing in this stack has been exercised end to end even once: every browser
+# test covering it uses a fake P2pService, so the wasm iroh transport, dialing
+# over the relay, pairing, and GraphQL over p2p have never run anywhere. An
+# automatic deploy would publish that straight to web.mydia.dev, and merging
+# the branch that adds the workflow would be enough to do it.
+#
+# Restoring it is one deliberate block, to be added back under `on:` once the
+# manual browser matrix has been run and relay capacity has been reviewed:
+#
+#   push:
+#     branches: [master]
+#     paths:
+#       - "player/**"
+#       # player/rust/mydia_player_p2p depends on ../../native/mydia_p2p_core
+#       # by relative path. A core change alters the wasm bundle even when no
+#       # Flutter file moves, so it must trigger a redeploy on its own.
+#       - "native/mydia_p2p_core/**"
 on:
-  push:
-    branches: [master]
-    paths:
-      - "player/**"
-      # player/rust/mydia_player_p2p depends on ../../native/mydia_p2p_core by
-      # relative path. A core change alters the wasm bundle even when no
-      # Flutter file moves, so it must trigger a redeploy on its own.
-      - "native/mydia_p2p_core/**"
   workflow_dispatch:
 
 concurrency:
@@ -113,7 +124,19 @@ jobs:
       # successfully to a preview URL with no failure anywhere in this job,
       # so getting the project setting right is what actually matters; this
       # flag only removes the auto-detection half of the risk.
+      #
+      # github.ref_name rather than a literal `master`: the dispatch UI lets a
+      # human pick any ref, and a hardcoded master would let a run from a
+      # feature branch claim to be production and overwrite web.mydia.dev with
+      # unreviewed code. A dispatch from a branch now deploys to that branch's
+      # preview URL, which is what a human picking it meant.
+      #
+      # Passed through the environment rather than interpolated into the
+      # command: a ref name is attacker-influencable text and git permits `$`,
+      # backticks and `;` in one, which the runner would otherwise expand as
+      # shell.
       - name: Deploy
-        run: npx wrangler pages deploy player/build/web --project-name=mydia-web --branch=master
+        run: npx wrangler pages deploy player/build/web --project-name=mydia-web --branch="$DEPLOY_BRANCH"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}

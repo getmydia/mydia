@@ -41,3 +41,10 @@ bool get supportsDirectPlay => true;
 /// Always true on native: media_kit talks to mpv/FFmpeg directly here, never
 /// a browser HLS player, so there is no MSE dependency to check.
 bool get hasHlsMediaSourceSupport => true;
+
+/// Whether media_kit will hand this browser's own HLS engine the manifest
+/// instead of running it through hls.js.
+///
+/// Always false on native: there is no browser here, and media_kit plays HLS
+/// through mpv/FFmpeg, which has no such fork.
+bool get prefersNativeHls => false;

@@ -29,6 +29,9 @@ extension _HTMLVideoElementExtension on _HTMLVideoElement {
 @JS('document.createElement')
 external _HTMLVideoElement _createElement(String tagName);
 
+@JS('navigator.userAgent')
+external String get _userAgent;
+
 /// Check if MediaSource API is available
 bool get _hasMediaSource => _mediaSourceConstructor != null;
 
@@ -43,6 +46,38 @@ bool get _hasManagedMediaSource => _managedMediaSourceConstructor != null;
 /// check that catches that before a streaming session is even requested,
 /// rather than failing inscrutably once playback starts.
 bool get hasHlsMediaSourceSupport => _hasMediaSource || _hasManagedMediaSource;
+
+/// Whether media_kit will hand this browser's own HLS engine the manifest
+/// instead of running it through hls.js.
+///
+/// This mirrors, deliberately verbatim, the branch media_kit takes in
+/// `media_kit/lib/src/player/web/player/real.dart` (`_isHLS`): a browser that
+/// claims `application/vnd.apple.mpegurl` gets `element.src = <manifest>` and
+/// hls.js is never loaded, unless it is Chrome on Android, which claims the
+/// type but is better served by hls.js.
+///
+/// Every WebKit browser answers that `canPlayType` non-empty (macOS Safari,
+/// iOS Safari, and iOS Chrome/Firefox/Edge, all WebKit underneath) and so does
+/// desktop Chromium, measured at `maybe` on 149. So this is true far more
+/// widely than "Safari", and true does not imply broken: a `<video>` pointed
+/// at a Service Worker-served manifest in that Chromium fetched both the
+/// manifest and its segment through the worker.
+///
+/// See `CodecSupport.prefersNativeHls` for what may and may not be concluded
+/// from it. There is no media_kit knob to force hls.js either way.
+bool get prefersNativeHls {
+  // Order matters: Android Chrome short-circuits before canPlayType, exactly
+  // as media_kit does, so a change in Chrome's answer cannot flip this.
+  final agent = _userAgent;
+  if (agent.contains('Android') && agent.contains('Chrome')) return false;
+
+  try {
+    final video = _createElement('video');
+    return video.canPlayType('application/vnd.apple.mpegurl') != '';
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Check if a MIME type with codecs is supported for playback.
 ///

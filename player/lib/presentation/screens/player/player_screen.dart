@@ -61,7 +61,6 @@ import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
-import '../../../core/p2p/local_proxy_service.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/window/desktop_window.dart';
@@ -318,6 +317,41 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// streaming-session cap and the browser-support gate below, so both agree
   /// on exactly which sessions are relayed.
   bool get _relayed => kIsWeb && !isInstanceHostedWeb;
+
+  /// Why this browser cannot play a relayed HLS stream, or null when it can.
+  ///
+  /// Only ever consulted for [_relayed] sessions, and that distinction is the
+  /// whole point. On public web the manifest and every segment are served by a
+  /// Service Worker out of the page's p2p connection. The instance-hosted
+  /// `/player` build serves a plain same-origin HTTP manifest with no worker
+  /// in the path, where everything below plays, so nothing may be blocked
+  /// there.
+  ///
+  /// The caller must consult this before `startStreamingSession`: past that
+  /// point an FFmpeg transcode is running on the instance and relay bytes are
+  /// being spent on a session that can only end in a spinner.
+  ///
+  /// [CodecSupport.prefersNativeHls] is deliberately *not* consulted here.
+  /// media_kit skips hls.js for any browser answering `canPlayType(
+  /// 'application/vnd.apple.mpegurl')` non-empty, and Chromium 149 answers
+  /// `maybe`, so that predicate is true on desktop Chrome. There the media
+  /// element's own loader was measured fetching both the manifest and its
+  /// segment through the Service Worker, so it works. Blocking on it would
+  /// turn away most of this site's viewers. Whether WebKit's loader does the
+  /// same is the open question, and it needs the manual browser matrix to
+  /// answer, not a guess. See that getter's doc.
+  String? _relayedPlaybackBlocker() {
+    if (!_relayed) return null;
+
+    // Neither MediaSource nor ManagedMediaSource, so hls.js cannot run at all.
+    // iOS Safari below 17.1 is the real-world case.
+    if (!CodecSupport.hasHlsMediaSourceSupport) {
+      return 'This browser cannot play video here. Try the Mydia '
+          'app instead, or a browser released after 2023.';
+    }
+
+    return null;
+  }
 
   /// The rung the server reported actually applying, which is what gets
   /// displayed. These differ on a relay connection, where the cap is not
@@ -946,27 +980,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       } else {
         // HLS path (both web and native fallback)
 
-        // Caught here, before a streaming session is even requested: a
-        // browser lacking both MediaSource and ManagedMediaSource cannot run
-        // hls.js at all (iOS Safari below 17.1 is the real-world case), and
-        // letting it start a transcode it can never play would fail
-        // inscrutably once playback was already underway.
-        //
-        // Gated on `_relayed`, not bare `kIsWeb`: media_kit tries native HLS
-        // first (`canPlayType('application/vnd.apple.mpegurl')`), which is
-        // non-empty for every iOS browser regardless of MediaSource support,
-        // and that native path plays a plain same-origin HTTP manifest fine
-        // with no Service Worker involved. That is exactly the instance-
-        // hosted `/player` build, so old iOS Safari must be let through
-        // there. Public web is different only because its manifest is
-        // Service Worker-served, and a browser's native HLS loader does not
-        // go through the Service Worker, so the same browser genuinely
-        // cannot play it there without hls.js/MSE.
-        if (_relayed && !CodecSupport.hasHlsMediaSourceSupport) {
+        // Caught here, before a streaming session is even requested. Anything
+        // past this point starts an FFmpeg transcode on the instance and pulls
+        // relay bytes we pay for, so a browser that cannot play the result has
+        // to be turned away first, not after.
+        final blocker = _relayedPlaybackBlocker();
+        if (blocker != null) {
           if (mounted) {
             setState(() {
-              _error = 'This browser cannot play video here. Try the Mydia '
-                  'app instead, or a browser released after 2023.';
+              _error = blocker;
               _isLoading = false;
             });
           }
@@ -1814,8 +1836,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Check if using P2P proxy
     final connectionState = ref.read(conn.connectionProvider);
     if (connectionState.isP2PMode) {
-      final proxy = ref.read(localProxyServiceProvider);
-      return 'http://127.0.0.1:${proxy.port}$relativeUrl';
+      // Built from the proxy's own base, like every other media URL. The
+      // hand-rolled `http://127.0.0.1:<port>` this replaced was wrong twice
+      // over: it dropped the `/g/<token>` prefix a LAN-exposed proxy demands,
+      // and in the browser there is no loopback server at all, so it produced
+      // `http://127.0.0.1:0/...`, an insecure URL fetched from an HTTPS page,
+      // which the browser blocks as mixed content.
+      //
+      // This still 404s, on both platforms, and that is not something this
+      // call site can fix: there is no subtitle route in the p2p protocol.
+      // `lib/mydia/p2p/server.ex` dispatches on the session id alone (an HLS
+      // session, `direct:`, or `download:`), and the subtitle URL GraphQL
+      // hands us is a plain Phoenix route with a load-bearing `?format=`
+      // query, which both proxies deliberately strip before matching. Adding
+      // one means a new session prefix, a server-side handler, and moving the
+      // format out of the query, none of which belongs at a URL builder.
+      // Until then this is an ordinary 404 with a body saying so, which is
+      // what native has always done here.
+      if (!_mediaProxy.isRunning) return relativeUrl;
+      return '${_mediaProxy.baseUrl}$relativeUrl';
     }
 
     // Direct server mode

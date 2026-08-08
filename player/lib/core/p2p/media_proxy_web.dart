@@ -10,14 +10,7 @@ import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/p2p/media_route.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/p2p/sw_protocol.dart';
-import 'package:player/native/lib.dart'
-    show
-        FlutterHlsResponseHeader,
-        FlutterHlsStreamEvent,
-        FlutterHlsStreamEvent_Header,
-        FlutterHlsStreamEvent_Chunk,
-        FlutterHlsStreamEvent_End,
-        FlutterHlsStreamEvent_Error;
+import 'package:player/native/lib.dart' show FlutterHlsResponseHeader;
 import 'package:web/web.dart' as web;
 
 /// How long [ServiceWorkerMediaProxy.start] waits for the worker to activate
@@ -210,8 +203,23 @@ class ServiceWorkerMediaProxy implements MediaProxy {
       case final MediaRouteMatch route when route.kind == MediaRouteKind.hls:
         await _serveHls(exchange, peer, route, request);
 
-      case final MediaRouteMatch route:
-        await _serveStream(exchange, peer, route, request);
+      case MediaRouteMatch():
+        // `/direct/` and `/download/`, both of which are native-only today:
+        // direct play is gated on `!kIsWeb` and downloads are stubbed out in
+        // the browser, so nothing here can build one of these URLs.
+        //
+        // Answered rather than implemented on purpose. A streaming version
+        // shipped here would be dead code no test covers, and the one that was
+        // written had a leak in it: cancelling the p2p subscription means
+        // `onDone` never fires, so the completer it awaited never completed
+        // and the exchange hung for the life of the page. A future change that
+        // flips either gate should have to add the implementation and its
+        // tests deliberately, not silently revive an untested path.
+        _serveBody(
+          exchange,
+          501,
+          'Byte-range streaming is native only; the browser proxy serves HLS.',
+        );
     }
   }
 
@@ -258,76 +266,6 @@ class ServiceWorkerMediaProxy implements MediaProxy {
         _serveBody(exchange, 500, 'Error: $e');
       }
     }
-  }
-
-  /// A file's bytes, streamed. Mirrors
-  /// `LocalProxyService._forwardRangeRequest`: one p2p stream for the whole
-  /// range, piped through as chunks arrive.
-  Future<void> _serveStream(
-    _Exchange exchange,
-    String peer,
-    MediaRouteMatch route,
-    SwRequest request,
-  ) async {
-    final done = Completer<void>();
-    var headSent = false;
-
-    void finish() {
-      if (!done.isCompleted) done.complete();
-    }
-
-    exchange.subscription = _p2p
-        .sendHlsRequestStreaming(
-      peer: peer,
-      sessionId: route.sessionId,
-      path: route.path,
-      rangeStart: request.rangeStart,
-      rangeEnd: request.rangeEnd,
-      authToken: _authToken,
-    )
-        .listen(
-      (event) {
-        switch (event) {
-          case FlutterHlsStreamEvent_Header(:final field0):
-            headSent = true;
-            _post(exchange, _head(field0.status, _headersFor(field0)));
-
-          case FlutterHlsStreamEvent_Chunk(:final field0):
-            _postChunk(exchange, field0);
-
-          case FlutterHlsStreamEvent_End():
-            // The `end` message is posted when the stream closes, below.
-            break;
-
-          case FlutterHlsStreamEvent_Error(:final field0):
-            debugPrint('[SwProxy] P2P stream error for ${route.sessionId}: '
-                '$field0');
-            if (headSent) {
-              _fail(exchange, 'P2P error: $field0');
-            } else {
-              _serveBody(exchange, 502, 'P2P error: $field0');
-            }
-            finish();
-        }
-      },
-      onError: (Object e) {
-        debugPrint('[SwProxy] Stream interrupted for ${route.sessionId}: $e');
-        // 500 for a thrown error and 502 for a reported stream error, the
-        // same split the loopback proxy makes.
-        if (headSent) {
-          _fail(exchange, 'Error: $e');
-        } else {
-          _serveBody(exchange, 500, 'Error: $e');
-        }
-        finish();
-      },
-      onDone: () {
-        _end(exchange);
-        finish();
-      },
-    );
-
-    await done.future;
   }
 
   /// Serve a short body under [status]: the routing table's own errors, and
@@ -401,13 +339,11 @@ class _Exchange {
   _Exchange(this.port);
 
   final web.MessagePort port;
-  StreamSubscription<FlutterHlsStreamEvent>? subscription;
   bool closed = false;
 
   void close() {
     if (closed) return;
     closed = true;
-    unawaited(subscription?.cancel());
     port.close();
   }
 }
