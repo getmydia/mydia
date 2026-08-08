@@ -80,6 +80,63 @@ defmodule Mydia.Downloads.Seedbox.ConnectionTest do
     assert :ok = cleanup.()
   end
 
+  describe "missing required fields" do
+    test "returns an error instead of raising when username is missing" do
+      remote_fetch = %{
+        "auth_method" => "password",
+        "host" => "127.0.0.1",
+        "port" => 22,
+        "password" => "seedpass"
+      }
+
+      assert {:error, {:missing_field, "username"}} = Connection.open(remote_fetch)
+    end
+
+    test "returns an error instead of raising when password is missing (auth_method: password)" do
+      remote_fetch = %{
+        "auth_method" => "password",
+        "host" => "127.0.0.1",
+        "port" => 22,
+        "username" => "seeduser"
+      }
+
+      assert {:error, {:missing_field, "password"}} = Connection.open(remote_fetch)
+    end
+
+    test "returns an error instead of raising when private_key is missing (auth_method: ssh_key)" do
+      remote_fetch = %{
+        "auth_method" => "ssh_key",
+        "host" => "127.0.0.1",
+        "port" => 22,
+        "username" => "seeduser"
+      }
+
+      assert {:error, {:missing_field, "private_key"}} = Connection.open(remote_fetch)
+    end
+
+    test "returns an error instead of raising when host is missing" do
+      remote_fetch = %{
+        "auth_method" => "password",
+        "port" => 22,
+        "username" => "seeduser",
+        "password" => "seedpass"
+      }
+
+      assert {:error, {:missing_field, "host"}} = Connection.open(remote_fetch)
+    end
+
+    test "returns an error instead of raising when auth_method is missing entirely" do
+      remote_fetch = %{
+        "host" => "127.0.0.1",
+        "port" => 22,
+        "username" => "seeduser",
+        "password" => "seedpass"
+      }
+
+      assert {:error, {:missing_field, "auth_method"}} = Connection.open(remote_fetch)
+    end
+  end
+
   defp generate_test_private_key_pem do
     key = :public_key.generate_key({:rsa, 2048, 65_537})
     entry = :public_key.pem_entry_encode(:RSAPrivateKey, key)

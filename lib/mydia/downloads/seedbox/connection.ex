@@ -31,15 +31,42 @@ defmodule Mydia.Downloads.Seedbox.Connection do
   disk for SSH-key auth. `silently_accept_hosts: true` is used deliberately:
   the host is explicitly operator-configured (this isn't discovering an
   unknown host), matching the trust posture of most seedbox sync tools.
+
+  Returns `{:error, {:missing_field, field}}` if a field required for the
+  given `auth_method` is absent or blank. `Fetcher` only ever calls this
+  with configs that already passed `DownloadClientConfig`'s changeset
+  validation, so this path shouldn't trigger there — but the admin UI's
+  "Test SFTP Connection" action builds `rf` from live, unsaved form state
+  (via `Ecto.Changeset.apply_changes/1`), which carries no such guarantee.
   """
   @spec open(map()) :: {:ok, pid(), (-> :ok)} | {:error, term()}
   def open(%{"auth_method" => "password"} = rf) do
-    connect(rf, password_opts(rf), nil)
+    with :ok <- require_fields(rf, ~w(host username password)) do
+      connect(rf, password_opts(rf), nil)
+    end
   end
 
   def open(%{"auth_method" => "ssh_key"} = rf) do
-    key_dir = materialize_key_dir!(rf)
-    connect(rf, key_opts(rf, key_dir), key_dir)
+    with :ok <- require_fields(rf, ~w(host username private_key)) do
+      key_dir = materialize_key_dir!(rf)
+      connect(rf, key_opts(rf, key_dir), key_dir)
+    end
+  end
+
+  def open(rf) when is_map(rf) do
+    {:error, {:missing_field, "auth_method"}}
+  end
+
+  # Validated upfront so the `Map.fetch!/2` calls below (in `password_opts/1`,
+  # `key_opts/2`, `connect/3`, and `materialize_key_dir!/1`) can assume
+  # presence and stay simple, instead of each needing its own rescue.
+  defp require_fields(rf, fields) do
+    Enum.find_value(fields, :ok, fn field ->
+      case Map.get(rf, field) do
+        value when value in [nil, ""] -> {:error, {:missing_field, field}}
+        _ -> nil
+      end
+    end)
   end
 
   defp password_opts(rf) do
