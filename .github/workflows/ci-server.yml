@@ -28,6 +28,10 @@ jobs:
       - name: Install toolchain
         run: rustup show
 
+      # minimal profile omits fmt/clippy; add them for the steps below.
+      - name: Install fmt and clippy
+        run: rustup component add rustfmt clippy
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: server
