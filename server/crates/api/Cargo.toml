@@ -8,4 +8,7 @@ license.workspace = true
 async-graphql.workspace = true
 async-graphql-parser.workspace = true
 chrono.workspace = true
+futures-util.workspace = true
+mydia-auth = { path = "../auth" }
+mydia-db = { path = "../db" }
 thiserror.workspace = true

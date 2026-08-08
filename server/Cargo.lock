@@ -1300,6 +1300,9 @@ dependencies = [
  "async-graphql",
  "async-graphql-parser",
  "chrono",
+ "futures-util",
+ "mydia-auth",
+ "mydia-db",
  "thiserror",
 ]
 

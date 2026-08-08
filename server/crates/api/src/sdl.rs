@@ -18,6 +18,14 @@ pub enum SdlError {
     Parse(String),
 }
 
+/// Directives every conformant GraphQL implementation carries implicitly.
+/// async-graphql always writes `@skip`/`@include` into its SDL export and
+/// writes `@specifiedBy` whenever a scalar sets a spec URL (the chrono
+/// `DateTime` scalar does); Absinthe's printer omits all of these. Neither
+/// omission nor inclusion says anything about *this application's* schema,
+/// so both sides are compared as if these definitions were absent.
+const BUILTIN_DIRECTIVES: &[&str] = &["skip", "include", "deprecated", "specifiedBy", "oneOf"];
+
 /// Reduces SDL to a canonical string: definitions and their members sorted by
 /// name, descriptions removed, whitespace normalized.
 pub fn canonicalize(sdl: &str) -> Result<String, SdlError> {
@@ -32,6 +40,9 @@ pub fn canonicalize(sdl: &str) -> Result<String, SdlError> {
                 rendered.push(render_type(&ty.node));
             }
             TypeSystemDefinition::Directive(d) => {
+                if BUILTIN_DIRECTIVES.contains(&d.node.name.node.as_str()) {
+                    continue;
+                }
                 rendered.push(render_directive_definition(&d.node));
             }
             TypeSystemDefinition::Schema(schema) => {
@@ -294,6 +305,36 @@ mod tests {
     #[test]
     fn invalid_sdl_is_an_error() {
         assert!(canonicalize("type { }").is_err());
+    }
+
+    #[test]
+    fn builtin_directive_definitions_do_not_survive_canonicalization() {
+        let with_builtins = r#"
+            directive @skip(if: Boolean!) on FIELD
+            directive @include(if: Boolean!) on FIELD
+            directive @specifiedBy(url: String!) on SCALAR
+            type Movie { id: ID! }
+        "#;
+        let without_builtins = r#"type Movie { id: ID! }"#;
+
+        assert_eq!(
+            canonicalize(with_builtins).unwrap(),
+            canonicalize(without_builtins).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_custom_directive_definition_still_survives_canonicalization() {
+        let with_custom = r#"
+            directive @auth on FIELD_DEFINITION
+            type Movie { id: ID! }
+        "#;
+        let without_custom = r#"type Movie { id: ID! }"#;
+
+        assert_ne!(
+            canonicalize(with_custom).unwrap(),
+            canonicalize(without_custom).unwrap()
+        );
     }
 
     #[test]
