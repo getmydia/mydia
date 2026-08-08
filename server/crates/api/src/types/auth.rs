@@ -109,6 +109,28 @@ pub struct ToggleFavoriteResult {
     pub media_item_id: ID,
 }
 
+/// Converts a stored device row into its GraphQL representation. Dates are
+/// stored as RFC 3339 strings; a row that fails to parse is a storage bug,
+/// not a caller error, so it surfaces as a plain error rather than a panic.
+pub fn remote_device_from(
+    device: mydia_db::devices::Device,
+) -> async_graphql::Result<RemoteDevice> {
+    Ok(RemoteDevice {
+        id: device.id.into(),
+        device_name: device.device_name,
+        platform: device.platform,
+        last_seen_at: Some(parse_timestamp(&device.last_seen_at)?),
+        is_revoked: device.revoked_at.is_some(),
+        created_at: parse_timestamp(&device.inserted_at)?,
+    })
+}
+
+fn parse_timestamp(value: &str) -> async_graphql::Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|e| async_graphql::Error::new(e.to_string()))
+}
+
 /// Renders just this group's types as SDL.
 pub fn sdl_fragment() -> String {
     use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};

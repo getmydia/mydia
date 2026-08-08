@@ -4,7 +4,7 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_returns_ok() {
-    let app = mydia_server::router::build_router();
+    let (app, _guard) = mydia_server::test_support::app_with_user("alice", "hunter2").await;
 
     let response = app
         .oneshot(

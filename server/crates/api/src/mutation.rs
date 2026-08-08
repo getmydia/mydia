@@ -4,13 +4,14 @@
 //! silent absence would confuse a caller more than an explicit error,
 //! `not_implemented`. None of them panic.
 
-use async_graphql::{Context, Object, Result, ID};
+use async_graphql::{Context, Error, ErrorExtensions, Object, Result, ID};
 use chrono::{DateTime, Utc};
+use mydia_auth::tokens::TokenKind;
 
-use crate::context::not_implemented;
+use crate::context::{authenticated_user, not_implemented, ApiContext};
 use crate::types::auth::{
-    AccessToken, ApiKey, ClaimCode, CreateApiKeyResult, LoginInput, LoginResult, MediaToken,
-    RevokeDeviceResult, ToggleFavoriteResult,
+    remote_device_from, AccessToken, ApiKey, ClaimCode, CreateApiKeyResult, LoginInput,
+    LoginResult, MediaToken, RevokeDeviceResult, ToggleFavoriteResult, User,
 };
 use crate::types::common::StreamingStrategy;
 use crate::types::media::{Episode, Movie, Progress, TvShow};
@@ -18,6 +19,25 @@ use crate::types::streaming::{
     CancelDownloadResult, DownloadJobStatus, DownloadOption, PrepareDownloadResult,
     StreamingSessionResult,
 };
+
+/// A wrong username and a wrong password produce the same message, so the
+/// response does not reveal which usernames exist.
+fn invalid_credentials() -> Error {
+    Error::new("The username or password is not correct")
+        .extend_with(|_, e| e.set("code", "INVALID_CREDENTIALS"))
+}
+
+/// A malformed or expired token, wherever it is presented.
+fn invalid_token() -> Error {
+    Error::new("The token is invalid or has expired")
+        .extend_with(|_, e| e.set("code", "INVALID_TOKEN"))
+}
+
+/// The caller tried to act on a device that is not theirs.
+fn forbidden() -> Error {
+    Error::new("You do not have access to this device")
+        .extend_with(|_, e| e.set("code", "FORBIDDEN"))
+}
 
 pub struct RootMutationType;
 
@@ -118,19 +138,52 @@ impl RootMutationType {
     /// Refresh a media access token before it expires
     async fn refresh_media_token(
         &self,
-        _ctx: &Context<'_>,
-        _token: String,
+        ctx: &Context<'_>,
+        token: String,
     ) -> Result<Option<MediaToken>> {
-        Ok(None)
+        let api = ctx.data::<ApiContext>()?;
+
+        let claims = api
+            .issuer
+            .verify(&token, TokenKind::Media)
+            .map_err(|_| invalid_token())?;
+
+        let (new_token, expires_at) = api
+            .issuer
+            .issue(&claims.sub, TokenKind::Media, claims.permissions.clone())
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        Ok(Some(MediaToken {
+            token: new_token,
+            expires_at,
+            permissions: claims.permissions,
+        }))
     }
 
     /// Exchange a pairing device token for a fresh access token
     async fn refresh_access_token(
         &self,
-        _ctx: &Context<'_>,
-        _device_token: String,
+        ctx: &Context<'_>,
+        device_token: String,
     ) -> Result<Option<AccessToken>> {
-        Ok(None)
+        let api = ctx.data::<ApiContext>()?;
+
+        let claims = api
+            .issuer
+            .verify(&device_token, TokenKind::Refresh)
+            .map_err(|_| invalid_token())?;
+
+        let user = mydia_db::users::find_by_id(&api.db, &claims.sub)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(invalid_token)?;
+
+        let (token, expires_at) = api
+            .issuer
+            .issue(&user.id, TokenKind::Access, vec![])
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        Ok(Some(AccessToken { token, expires_at }))
     }
 
     /// Generate a pairing claim code for device pairing (requires authentication)
@@ -160,17 +213,74 @@ impl RootMutationType {
     }
 
     /// Login with username/password and device information
-    async fn login(&self, _ctx: &Context<'_>, _input: LoginInput) -> Result<Option<LoginResult>> {
-        Ok(None)
+    async fn login(&self, ctx: &Context<'_>, input: LoginInput) -> Result<Option<LoginResult>> {
+        let api = ctx.data::<ApiContext>()?;
+
+        let user = mydia_db::users::find_by_username(&api.db, &input.username)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(invalid_credentials)?;
+
+        if !mydia_auth::password::verify(&input.password, &user.password_hash) {
+            return Err(invalid_credentials());
+        }
+
+        mydia_db::devices::upsert(
+            &api.db,
+            mydia_db::devices::NewDevice {
+                user_id: user.id.clone(),
+                device_id: input.device_id,
+                device_name: input.device_name,
+                platform: input.platform,
+            },
+        )
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+
+        let (token, expires_at) = api
+            .issuer
+            .issue(&user.id, TokenKind::Access, vec![])
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        let expires_in = (expires_at - Utc::now()).num_seconds() as i32;
+
+        Ok(Some(LoginResult {
+            token,
+            user: User {
+                id: user.id.into(),
+                username: Some(user.username),
+                email: user.email,
+                display_name: user.display_name,
+            },
+            expires_in,
+        }))
     }
 
     /// Revoke a device
-    async fn revoke_device(
-        &self,
-        _ctx: &Context<'_>,
-        _id: ID,
-    ) -> Result<Option<RevokeDeviceResult>> {
-        Ok(None)
+    async fn revoke_device(&self, ctx: &Context<'_>, id: ID) -> Result<Option<RevokeDeviceResult>> {
+        let api = ctx.data::<ApiContext>()?;
+        let user = authenticated_user(ctx).await?;
+
+        let owns_device = mydia_db::devices::list_for_user(&api.db, &user.id)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?
+            .iter()
+            .any(|d| d.id == id.as_str());
+
+        if !owns_device {
+            return Err(forbidden());
+        }
+
+        let device = mydia_db::devices::revoke(&api.db, &id)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        let device = device.map(remote_device_from).transpose()?;
+
+        Ok(Some(RevokeDeviceResult {
+            success: device.is_some(),
+            device,
+        }))
     }
 
     /// Start an HLS streaming session for a media file

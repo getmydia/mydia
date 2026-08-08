@@ -5,10 +5,10 @@
 //! `mydia_db`. None of them panic, because a panicking resolver would take
 //! down a request the player made in good faith.
 
-use async_graphql::{Context, Object, Result, ID};
+use async_graphql::{Context, Error, Object, Result, ID};
 
-use crate::context::not_implemented;
-use crate::types::auth::{ApiKey, RemoteDevice};
+use crate::context::{authenticated_user, not_implemented, ApiContext};
+use crate::types::auth::{remote_device_from, ApiKey, RemoteDevice};
 use crate::types::common::{MediaCategory, MediaType, Node, SearchResultType, SortInput};
 use crate::types::discovery::{
     Collection, ContinueWatchingItem, RemoteAccessStatus, SearchResults, UpNextItem,
@@ -151,8 +151,20 @@ impl RootQueryType {
     }
 
     /// List all devices for the current user
-    async fn devices(&self, _ctx: &Context<'_>) -> Result<Option<Vec<Option<RemoteDevice>>>> {
-        Ok(None)
+    async fn devices(&self, ctx: &Context<'_>) -> Result<Option<Vec<Option<RemoteDevice>>>> {
+        let api = ctx.data::<ApiContext>()?;
+        let user = authenticated_user(ctx).await?;
+
+        let devices = mydia_db::devices::list_for_user(&api.db, &user.id)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        let devices = devices
+            .into_iter()
+            .map(|d| remote_device_from(d).map(Some))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(Some(devices))
     }
 
     /// Get remote access / P2P connection status
