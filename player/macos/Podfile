@@ -42,8 +42,10 @@ post_install do |installer|
 
     # Pods carry their own (older) deployment floors — Sparkle declares 10.13 —
     # and Xcode 27 hard-rejects anything below 12.0, failing the build before it
-    # compiles a line. Force every pod up to the app's own minimum; keep this in
-    # sync with MACOSX_DEPLOYMENT_TARGET in Runner.xcodeproj and `platform :osx`.
+    # compiles a line. Force every pod up to the app's own minimum. This literal
+    # must match MACOSX_DEPLOYMENT_TARGET in Runner.xcodeproj and the
+    # `platform :osx` above; scripts/check-apple-deployment-targets.sh enforces
+    # that in CI, so it is no longer on you to remember.
     target.build_configurations.each do |config|
       config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '14.0'
     end
