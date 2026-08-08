@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
 
-/// Four-button action row under the hero's big Play button: mark
+/// Four-button action row in the detail body, below the hero: mark
 /// watched/unwatched, favorite, download, and (when a trailer exists) open it
-/// on YouTube in a new tab. Shared between the movie and TV show hero, since
-/// both need the identical row.
+/// on YouTube in a new tab. Shared between the movie and TV show detail
+/// screens, since both need the identical row.
 class DetailActionRow extends StatelessWidget {
   final bool watched;
   final VoidCallback onToggleWatched;

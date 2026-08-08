@@ -469,10 +469,9 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  /// The hero's Play affordance, built here rather than inline so the
-  /// `onFileSelected` closure captures a non-nullable [episode] instead of
-  /// relying on flow promotion of the nullable `selectedEpisode` parameter
-  /// across a closure boundary.
+  /// The hero's Play affordance, extracted (like the other `_buildX` helpers
+  /// in this file) for readability: the overlay `Row` it lives in is already
+  /// deeply nested inside the `SliverAppBar`'s `FlexibleSpaceBar`/`Stack`.
   Widget _buildHeroPlayControl(
     BuildContext context,
     ShowDetail show,

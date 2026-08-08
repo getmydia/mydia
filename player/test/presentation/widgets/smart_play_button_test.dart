@@ -165,14 +165,17 @@ void main() {
         'collapses to the icon form without overflow inside a real Row '
         'embedding (Expanded metadata sibling + Flexible-wrapped button)',
         (tester) async {
-      // Reproduces how the show detail hero actually embeds this widget: a
-      // Row whose other child is Expanded (the title/metadata column) and
-      // whose SmartPlayButton is wrapped in Flexible. A bare (non-flex)
-      // trailing Row child gets UNBOUNDED main-axis constraints from Flutter,
-      // so SmartPlayButton's internal LayoutBuilder would see an effectively
-      // infinite maxWidth, "compact" would never trigger, and the full-width
-      // pill would overflow the narrow box below. Flexible is what gives the
-      // LayoutBuilder a bounded, real maxWidth to collapse against.
+      // Verifies the actual invariant under test: a bounded maxWidth is what
+      // makes the pill collapse to the icon form. Wrapping SmartPlayButton in
+      // Flexible here gives its internal LayoutBuilder a real, finite width
+      // to measure instead of the unbounded width a bare non-flex Row child
+      // would receive, in which case "compact" would never trigger and the
+      // full-width pill would overflow the narrow box below.
+      //
+      // This does not mirror how either detail hero actually embeds the
+      // widget: neither wraps it in Flexible (see HeroPlayControl's doc
+      // comment for the hazard that creates if `state:` is ever threaded
+      // through without first bounding the control's width).
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(

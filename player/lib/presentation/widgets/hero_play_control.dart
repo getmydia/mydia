@@ -10,6 +10,14 @@ import 'smart_play_button.dart';
 /// heroes, as the Row's non-flex trailing child. That is what pins it to the
 /// hero's right edge: the sibling title column is [Expanded] and absorbs all
 /// leftover width, while this control takes only its intrinsic size.
+///
+/// That non-flex position gives [SmartPlayButton] unbounded main-axis
+/// constraints, which is only safe because `state:` is never passed through
+/// here. If a future caller threads `state:` to this widget to restore the
+/// labelled pill form, it must first give this control a bounded width —
+/// otherwise `SmartPlayButton`'s `kPillCollapseWidth` check sees an infinite
+/// `constraints.maxWidth`, the pill never collapses, and it overflows narrow
+/// heroes.
 class HeroPlayControl extends StatelessWidget {
   final List<MediaFile> files;
   final void Function(MediaFile) onFileSelected;

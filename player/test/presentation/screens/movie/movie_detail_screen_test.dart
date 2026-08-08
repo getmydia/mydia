@@ -179,9 +179,9 @@ void main() {
     await _pumpScreen(tester, const Size(1000, 900));
     await tester.pumpAndSettle();
 
-    // 380 is the hero SliverAppBar's expandedHeight
-    // (movie_detail_screen.dart:448). Unscrolled, anything below that line is
-    // in the body, where _buildActionColumn lives.
+    // 380 is the hero SliverAppBar's expandedHeight, set in
+    // _buildHeroSection. Unscrolled, anything below that line is in the
+    // body, where _buildActionColumn lives.
     final play = tester.getRect(find.byType(PlayButton));
     final actions = tester.getRect(find.byType(DetailActionRow));
     expect(play.bottom, lessThan(380));

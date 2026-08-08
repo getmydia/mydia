@@ -428,13 +428,36 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 380 is the hero SliverAppBar's expandedHeight
-    // (show_detail_screen.dart:333). Unscrolled, anything below that line is
-    // in the body, where _buildActionColumn lives. This is what distinguishes
+    // 380 is the hero SliverAppBar's expandedHeight, set in
+    // _buildHeroSection. Unscrolled, anything below that line is in the
+    // body, where _buildActionColumn lives. This is what distinguishes
     // "moved to the title row" from "merely re-aligned in the action column".
     final play = tester.getRect(find.byType(PlayButton));
     final actions = tester.getRect(find.byType(DetailActionRow));
     expect(play.bottom, lessThan(380));
     expect(play.bottom, lessThan(actions.top));
+  });
+
+  testWidgets('hero overlay does not overflow at phone width', (tester) async {
+    // The show hero is the wider of the two detail heroes — it carries the
+    // episode context pill alongside the title and Play control — so it is
+    // the most likely to overflow a narrow viewport, and until now it was
+    // the untested one (the movie hero already has phone-width coverage at
+    // Size(400, 900)). A layout overflow surfaces as a FlutterError, which
+    // fails the test even without an explicit assertion for it.
+    final playable = _episodeJson(2, files: [_fileJson('file-1')]);
+
+    await _pumpScreen(
+      tester,
+      size: const Size(400, 1200),
+      showJson: _showJson(nextUpEpisode: playable),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), playable, _episodeJson(3)],
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Play'), findsOneWidget);
   });
 }

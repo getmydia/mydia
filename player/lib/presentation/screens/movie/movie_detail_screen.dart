@@ -519,18 +519,25 @@ class MovieDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  HeroPlayControl(
-                    files: movie.files,
-                    onFileSelected: (file) => context.push(
-                      '/player/movie/${movie.id}?fileId=${file.id}'
-                      '&title=${Uri.encodeComponent(movie.title)}',
-                    ),
-                  ),
+                  _buildHeroPlayControl(context, movie),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// The hero's Play affordance, extracted (like the other `_buildX` helpers
+  /// in this file) for readability: the overlay `Row` it lives in is already
+  /// deeply nested inside the `SliverAppBar`'s `FlexibleSpaceBar`/`Stack`.
+  Widget _buildHeroPlayControl(BuildContext context, MovieDetail movie) {
+    return HeroPlayControl(
+      files: movie.files,
+      onFileSelected: (file) => context.push(
+        '/player/movie/${movie.id}?fileId=${file.id}'
+        '&title=${Uri.encodeComponent(movie.title)}',
       ),
     );
   }
