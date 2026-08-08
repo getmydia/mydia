@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
+import 'package:player/presentation/widgets/rating_badge.dart';
 
 import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/poster_contract.dart';
@@ -86,6 +87,60 @@ void main() {
       await tester.tap(find.byType(MediaPoster));
 
       expect(tapped, isTrue);
+    });
+
+    testWidgets('renders the rating chip when a title has one', (tester) async {
+      await tester.pumpWidget(
+        posterHost(
+          const MediaPoster(title: 'Show', rating: 7.8),
+          size: _posterHost,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RatingBadge), findsOneWidget);
+      expect(find.text('7.8'), findsOneWidget);
+    });
+
+    testWidgets('renders no chip when a title has no rating', (tester) async {
+      await tester.pumpWidget(
+        posterHost(const MediaPoster(title: 'Show'), size: _posterHost),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RatingBadge), findsNothing);
+    });
+
+    testWidgets('renders no chip for 0.0, which TMDB uses for "no votes yet"',
+        (tester) async {
+      // The server passes vote_average through unchanged, so an unvoted title
+      // is indistinguishable from an unrated one and both must show nothing.
+      await tester.pumpWidget(
+        posterHost(
+          const MediaPoster(title: 'Show', rating: 0),
+          size: _posterHost,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RatingBadge), findsNothing);
+    });
+
+    testWidgets('the chip clears the favorite heart', (tester) async {
+      // The heart holds top-right and the chip holds top-left, so a favorite
+      // with a rating shows both without either covering the other.
+      await tester.pumpWidget(
+        posterHost(
+          const MediaPoster(title: 'Show', rating: 7.8, isFavorite: true),
+          size: _posterHost,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final chip = tester.getRect(find.byType(RatingBadge));
+      final heart = tester.getRect(find.byIcon(Icons.favorite));
+
+      expect(chip.right, lessThan(heart.left));
     });
   });
 }
