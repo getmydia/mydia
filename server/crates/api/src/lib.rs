@@ -5,6 +5,7 @@
 //! player queries rather than individual fields.
 
 pub mod context;
+pub mod mapping;
 pub mod mutation;
 pub mod query;
 pub mod sdl;

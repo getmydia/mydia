@@ -85,7 +85,11 @@ pub struct MediaFile {
     pub codec: Option<String>,
     pub audio_codec: Option<String>,
     pub hdr_format: Option<String>,
-    pub size: Option<i32>,
+    /// Bytes. i64 rather than i32: a 4 GB film overflows 32 bits, and the
+    /// contract's `Int` is Absinthe's non-spec-compliant 2^53 Int, so the
+    /// Elixir server already emits real byte counts. async-graphql renders
+    /// i64 under the same `Int` scalar, so the SDL is unchanged.
+    pub size: Option<i64>,
     pub bitrate: Option<i32>,
     pub direct_play_supported: Option<bool>,
     pub stream_url: Option<String>,

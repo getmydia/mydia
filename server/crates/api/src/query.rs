@@ -40,23 +40,80 @@ impl RootQueryType {
     }
 
     /// List all library paths
-    async fn libraries(&self, _ctx: &Context<'_>) -> Result<Option<Vec<Option<LibraryPath>>>> {
-        Ok(None)
+    async fn libraries(&self, ctx: &Context<'_>) -> Result<Option<Vec<Option<LibraryPath>>>> {
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        let rows = mydia_db::library_paths::list(&api.db)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        Ok(Some(
+            rows.iter()
+                .map(|row| Some(crate::mapping::library_path_from(row)))
+                .collect(),
+        ))
     }
 
     /// Get a movie by ID
-    async fn movie(&self, _ctx: &Context<'_>, _id: ID) -> Result<Option<Movie>> {
-        Ok(None)
+    async fn movie(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Movie>> {
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        let Some(item) = mydia_db::media_items::find(&api.db, id.as_str())
+            .await
+            .map_err(|e| Error::new(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+
+        if item.media_type != "movie" {
+            return Ok(None);
+        }
+
+        let files = mydia_db::media_files::list_for_item(&api.db, &item.id)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        Ok(Some(crate::mapping::movie_from(&item, &files)))
     }
 
     /// Get a TV show by ID
-    async fn tv_show(&self, _ctx: &Context<'_>, _id: ID) -> Result<Option<TvShow>> {
-        Ok(None)
+    async fn tv_show(&self, ctx: &Context<'_>, id: ID) -> Result<Option<TvShow>> {
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        let Some(item) = mydia_db::media_items::find(&api.db, id.as_str())
+            .await
+            .map_err(|e| Error::new(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+
+        if item.media_type != "tv_show" {
+            return Ok(None);
+        }
+
+        Ok(Some(load_show(api, &item).await?))
     }
 
     /// Get an episode by ID
-    async fn episode(&self, _ctx: &Context<'_>, _id: ID) -> Result<Option<Episode>> {
-        Ok(None)
+    async fn episode(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Episode>> {
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        let Some(row) = mydia_db::episodes::find(&api.db, id.as_str())
+            .await
+            .map_err(|e| Error::new(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+
+        let files = mydia_db::media_files::list_for_episode(&api.db, &row.id)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        Ok(Some(crate::mapping::episode_from(&row, &files, None)))
     }
 
     /// List all movies with pagination
@@ -225,4 +282,30 @@ impl RootQueryType {
     ) -> Result<Option<Vec<Option<RecentlyAddedItem>>>> {
         Ok(None)
     }
+}
+
+/// Loads a show with every episode and each episode's files.
+///
+/// One query per episode. A season of 24 is 24 queries, which is acceptable at
+/// this scale and is the honest simple version; batching belongs with the
+/// dataloader Slice 4 will need anyway for progress.
+pub(crate) async fn load_show(
+    api: &ApiContext,
+    item: &mydia_db::media_items::MediaItemRow,
+) -> Result<TvShow> {
+    let rows = mydia_db::episodes::list_for_show(&api.db, &item.id)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+
+    let mut episodes = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        let files = mydia_db::media_files::list_for_episode(&api.db, &row.id)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+
+        episodes.push((row, files));
+    }
+
+    Ok(crate::mapping::tv_show_from(item, &episodes))
 }
