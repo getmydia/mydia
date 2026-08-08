@@ -9,6 +9,7 @@ pub mod library_paths;
 pub mod media_files;
 pub mod media_items;
 pub mod pool;
+pub mod scan_runs;
 pub mod users;
 
 /// A connection pool plus the invariant that migrations have been run.
