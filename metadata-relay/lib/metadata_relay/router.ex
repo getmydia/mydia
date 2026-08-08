@@ -345,11 +345,22 @@ defmodule MetadataRelay.Router do
 
   # Get node_addr for claim code
   get "/pairing/claim/:code" do
+    conn = allow_web_player(conn)
+
     with :ok <- check_pairing_rate_limit(conn, limit: 30, window_ms: 60_000) do
       handle_pairing_request(conn, fn -> PairingHandler.get_claim(code) end)
     else
       {:error, :rate_limited} -> send_rate_limited(conn, 60)
     end
+  end
+
+  # Preflight for the claim lookup, in case a future client adds a custom
+  # header that turns the request into a non-simple one requiring a preflight.
+  options "/pairing/claim/:code" do
+    conn
+    |> allow_web_player()
+    |> put_resp_header("access-control-allow-methods", "GET, DELETE")
+    |> send_resp(204, "")
   end
 
   # Delete claim code after successful pairing
@@ -489,6 +500,14 @@ defmodule MetadataRelay.Router do
   end
 
   # Private helpers
+
+  # The web player is served from a different origin than this service, so the
+  # claim lookup needs CORS. Scoped to the pairing routes rather than applied
+  # as a global plug: the metadata proxy endpoints are called server-to-server
+  # by Mydia instances and have no reason to be browser-reachable.
+  defp allow_web_player(conn) do
+    put_resp_header(conn, "access-control-allow-origin", "*")
+  end
 
   defp handle_tmdb_request(conn, handler_fn) do
     case handler_fn.() do
