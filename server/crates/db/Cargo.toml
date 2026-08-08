@@ -1,0 +1,17 @@
+[package]
+name = "mydia-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+sqlx.workspace = true
+# tempfile is a regular dependency, not a dev-dependency: connect_temp is
+# part of the public API, used by other crates' integration tests.
+tempfile.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
