@@ -2,7 +2,7 @@
 
 use mydia_api::sdl::canonicalize;
 
-/// The 15 types owned by this group. Keep in sync with the comment in
+/// The 17 types owned by this group. Keep in sync with the comment in
 /// src/types/media.rs.
 const OWNED: &[&str] = &[
     "Movie",
@@ -15,10 +15,12 @@ const OWNED: &[&str] = &[
     "TvShowEdge",
     "TvShowConnection",
     "Artwork",
+    "CastMember",
     "MediaFile",
     "MediaSegment",
     "Progress",
     "LibraryPath",
+    "RecentlyAddedItem",
     "SubtitleTrack",
 ];
 

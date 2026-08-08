@@ -1,9 +1,10 @@
 //! Media-shaped types.
 //!
-//! The 15 types owned by this module (keep in sync with
+//! The 17 types owned by this module (keep in sync with
 //! tests/types_media.rs): Movie, TvShow, Season, Episode, ShowNextUp,
 //! MovieEdge, MovieConnection, TvShowEdge, TvShowConnection, Artwork,
-//! MediaFile, MediaSegment, Progress, LibraryPath, SubtitleTrack.
+//! CastMember, MediaFile, MediaSegment, Progress, LibraryPath,
+//! RecentlyAddedItem, SubtitleTrack.
 
 use async_graphql::{
     ComplexObject, InputValueError, InputValueResult, Scalar, ScalarType, SimpleObject, Value, ID,
@@ -11,7 +12,8 @@ use async_graphql::{
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::types::common::{
-    LibraryType, MediaCategory, Node, NodeConnection, PageInfo, SegmentType, SubtitleFormat,
+    LibraryType, MediaCategory, MediaType, Node, NodeConnection, PageInfo, SegmentType,
+    SubtitleFormat,
 };
 
 #[derive(Clone)]
@@ -96,12 +98,23 @@ pub struct MediaFile {
 #[graphql(name = "CastMember")]
 pub struct CastMember {
     pub name: String,
+    pub character: Option<String>,
+    pub profile_url: Option<String>,
 }
 
 #[derive(SimpleObject)]
 #[graphql(name = "RecentlyAddedItem")]
 pub struct RecentlyAddedItem {
     pub id: ID,
+    #[graphql(name = "type")]
+    pub media_type: MediaType,
+    pub title: String,
+    pub year: Option<i32>,
+    pub artwork: Option<Artwork>,
+    pub added_at: DateTime<Utc>,
+    pub new_episode_count: Option<i32>,
+    pub latest_season_number: Option<i32>,
+    pub latest_episode_number: Option<i32>,
 }
 
 #[derive(SimpleObject)]
