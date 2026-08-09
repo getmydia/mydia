@@ -34,7 +34,7 @@ void main() {
     testWidgets('a null onTap dims the row', (tester) async {
       await _pump(
         tester,
-        SettingsRow.navigation(
+        const SettingsRow.navigation(
           icon: Icons.hd,
           title: 'Default quality',
           onTap: null,
