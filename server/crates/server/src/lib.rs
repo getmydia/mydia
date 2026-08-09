@@ -6,3 +6,5 @@ pub mod media;
 pub mod router;
 pub mod scanner;
 pub mod test_support;
+
+pub use router::AppState;

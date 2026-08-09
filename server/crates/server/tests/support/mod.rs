@@ -1,4 +1,5 @@
 //! Shared fixtures for the media tests.
+#![allow(dead_code)]
 
 use axum::Router;
 use mydia_server::test_support::post_graphql_authed;
@@ -57,5 +58,15 @@ pub async fn first_movie_id(app: Router, token: &str) -> String {
     body["data"]["movies"]["edges"][0]["node"]["id"]
         .as_str()
         .expect("the scan should have produced a movie")
+        .to_string()
+}
+
+pub async fn first_file_id(app: Router, token: &str) -> String {
+    let body =
+        post_graphql_authed(app, "{ movies { edges { node { files { id } } } } }", token).await;
+
+    body["data"]["movies"]["edges"][0]["node"]["files"][0]["id"]
+        .as_str()
+        .expect("the scanned movie should have a file")
         .to_string()
 }

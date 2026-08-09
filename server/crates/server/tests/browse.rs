@@ -186,9 +186,16 @@ async fn a_movie_detail_query_returns_its_file_facts() {
     assert_eq!(file["codec"], "H.264 (High)");
     assert!(file["size"].as_i64().unwrap() > 0);
 
-    // Playback lands in Slice 3.
-    assert!(file["streamUrl"].is_null());
-    assert!(file["directPlaySupported"].is_null());
+    let file_id = file["id"].as_str().unwrap();
+    assert_eq!(file["directPlaySupported"], serde_json::json!(true));
+    assert_eq!(
+        file["streamUrl"].as_str().unwrap(),
+        format!("/api/v1/stream/file/{file_id}")
+    );
+    assert_eq!(
+        file["directPlayUrl"].as_str().unwrap(),
+        format!("/api/v1/stream/file/{file_id}?strategy=DIRECT_PLAY")
+    );
 }
 
 #[tokio::test]
