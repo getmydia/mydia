@@ -2706,12 +2706,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
-    // Exit fullscreen if active, then tear down listeners. Order matters:
-    // exiting after disposal would write to a disposed notifier.
+    // Order matters twice over. Stop listening *first*: in `systemUi` mode
+    // `exit()` reports the transition synchronously, and the resulting
+    // `setState` would assert — by the time `State.dispose` runs, the element
+    // is already defunct (`StatefulElement.unmount` calls `super.unmount()`
+    // before `state.dispose()`), and `markNeedsBuild` asserts on exactly that.
+    // The `mounted` check in `_onFullscreenChanged` is not a guard here:
+    // `_element` is nulled only after dispose returns, so it still reads true.
+    // Then exit before `dispose()`, which disposes the notifier underneath it.
+    _fullscreen.isFullscreen.removeListener(_onFullscreenChanged);
     if (_fullscreen.isFullscreen.value) {
       _fullscreen.exit();
     }
-    _fullscreen.isFullscreen.removeListener(_onFullscreenChanged);
     _fullscreen.dispose();
 
     // Un-pin the window if it was pinned — never let always-on-top leak
