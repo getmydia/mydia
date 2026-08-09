@@ -23,6 +23,29 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
     assert has_element?(view, "#custom-format-form")
   end
 
+  test "saves an override for a built-in format without submitting the disabled name", %{
+    conn: conn
+  } do
+    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+
+    view |> element("#custom-format-edit-lang-vff") |> render_click()
+
+    view
+    |> form("#custom-format-form",
+      custom_format: %{
+        description: "French true dub",
+        patterns_text: "\\bVFF\\b\n\\bONLYVFF\\b"
+      }
+    )
+    |> render_submit()
+
+    format = Mydia.Settings.CustomFormats.get("lang-vff")
+    assert format.overridden?
+    assert format.name == "VFF"
+    assert "\\bONLYVFF\\b" in format.patterns
+    assert has_element?(view, "#custom-format-row-lang-vff .badge-warning", "Edited")
+  end
+
   test "creates a user format", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
 
@@ -48,6 +71,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
       |> render_submit()
 
     assert html =~ "parenthesis"
+    assert html =~ "(unclosed"
     refute has_element?(view, "#custom-format-row-bad")
   end
 

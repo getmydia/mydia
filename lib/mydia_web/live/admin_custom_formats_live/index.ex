@@ -74,7 +74,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
 
   def handle_event("save", %{"custom_format" => params}, socket) do
     attrs = %{
-      name: Map.get(params, "name", ""),
+      name: save_name(socket.assigns.editing, params),
       description: Map.get(params, "description"),
       patterns: split_patterns(Map.get(params, "patterns_text", ""))
     }
@@ -97,7 +97,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply,
          socket
-         |> assign(:form, to_form(changeset, as: :custom_format))
+         |> assign(:form, save_error_form(changeset, params, socket.assigns.editing))
          |> put_flash(:error, changeset_message(changeset))}
     end
   end
@@ -154,5 +154,29 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
     changeset
     |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
     |> Enum.map_join("; ", fn {field, messages} -> "#{field}: #{Enum.join(messages, ", ")}" end)
+  end
+
+  defp save_name(%{builtin?: true, name: name}, _params), do: name
+  defp save_name(_editing, params), do: Map.get(params, "name", "")
+
+  defp save_error_form(changeset, params, editing) do
+    patterns_text =
+      Map.get(params, "patterns_text") ||
+        changeset |> Ecto.Changeset.get_field(:patterns, []) |> Enum.join("\n")
+
+    form_params = %{
+      "name" => save_name(editing, params),
+      "description" =>
+        Map.get(params, "description", Ecto.Changeset.get_field(changeset, :description) || ""),
+      "patterns_text" => patterns_text
+    }
+
+    errors =
+      Enum.flat_map(changeset.errors, fn
+        {:patterns, error} -> [{:patterns_text, error}]
+        other -> [other]
+      end)
+
+    to_form(form_params, as: :custom_format, errors: errors, action: :insert)
   end
 end

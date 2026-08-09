@@ -113,13 +113,25 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
 
     case result do
       {:ok, profile} ->
-        save_custom_formats(profile, all_params)
+        case save_custom_formats(profile, all_params) do
+          :ok ->
+            {:noreply,
+             socket
+             |> assign(:show_quality_profile_modal, false)
+             |> put_flash(:info, "Quality profile saved successfully")
+             |> load_data()}
 
-        {:noreply,
-         socket
-         |> assign(:show_quality_profile_modal, false)
-         |> put_flash(:info, "Quality profile saved successfully")
-         |> load_data()}
+          {:error, %Ecto.Changeset{} = assignment_changeset} ->
+            {:noreply,
+             socket
+             |> assign(:show_quality_profile_modal, false)
+             |> put_flash(
+               :error,
+               "Quality profile saved, but custom format settings could not be saved: " <>
+                 assignment_error_message(assignment_changeset)
+             )
+             |> load_data()}
+        end
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :quality_profile_form, to_form(changeset))}
@@ -399,6 +411,12 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       {n, _} -> n
       :error -> 0
     end
+  end
+
+  defp assignment_error_message(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+    |> Enum.map_join("; ", fn {field, messages} -> "#{field}: #{Enum.join(messages, ", ")}" end)
   end
 
   defp load_data(socket) do
