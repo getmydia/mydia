@@ -3,6 +3,7 @@
 //! Knows nothing about GraphQL or HTTP. Callers hand it facts and it hands
 //! back decisions and bytes.
 
+pub mod candidates;
 pub mod codec_string;
 pub mod compatibility;
 
