@@ -80,4 +80,22 @@ defmodule Mydia.SettingsFixtures do
     {:ok, library_path} = Settings.create_library_path(attrs)
     library_path
   end
+
+  @doc """
+  Generate a user-created custom format.
+  """
+  def custom_format_fixture(attrs \\ %{}) do
+    n = System.unique_integer([:positive])
+
+    default_attrs = %{
+      name: "Format #{n}",
+      slug: "format-#{n}",
+      patterns: ["\\bTAG#{n}\\b"]
+    }
+
+    attrs = Map.merge(default_attrs, attrs)
+
+    {:ok, format} = Mydia.Settings.CustomFormats.create_format(attrs)
+    format
+  end
 end
