@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/recently_added_item.dart';
-import 'package:player/presentation/widgets/app_shell.dart';
+import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
 import 'package:player/presentation/widgets/content_rail.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -46,7 +46,8 @@ Widget _scene() => ProviderScope(
 
 void main() {
   group('blur budget split (R8/AE3)', () {
-    testWidgets('rail subtree has no BackdropFilter; fixed chrome carries the '
+    testWidgets(
+        'rail subtree has no BackdropFilter; fixed chrome carries the '
         'only blur passes', (tester) async {
       await tester.pumpWidget(_scene());
       await tester.pump();

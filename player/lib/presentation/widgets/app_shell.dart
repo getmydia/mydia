@@ -12,13 +12,15 @@ import '../../core/playback/playback_progress_providers.dart';
 import '../screens/collections/collection_detail_controller.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
-import '../../core/theme/depth_tokens.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
 import 'cast_actions.dart';
-import 'connection_status_dot.dart';
-import 'glass_surface.dart';
 import 'mydia_logo.dart';
+import 'nav/bottom_nav.dart';
+import 'nav/desktop_sidebar.dart';
+import 'nav/mobile_drawer.dart';
+import 'nav/nav_badges.dart';
+import 'nav/sidebar_row.dart';
 import 'offline_banner.dart';
 
 /// Modern app shell with adaptive navigation.
@@ -333,7 +335,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             Positioned.fill(child: backdrop),
             Row(
               children: [
-                _DesktopSidebar(
+                DesktopSidebar(
                   location: location,
                   onNavigate: _navigateTo,
                   homeExpanded: _homeExpanded,
@@ -367,7 +369,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       key: AppShell.scaffoldKey,
       backgroundColor: Colors.transparent,
       extendBody: true,
-      drawer: _MobileDrawer(
+      drawer: MobileDrawer(
         location: location,
         onNavigate: (route) {
           Navigator.of(context).pop();
@@ -395,7 +397,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           if (showCastOverlay) AppShell.castOverlay(isDesktop: false),
         ],
       ),
-      bottomNavigationBar: _ModernBottomNav(
+      bottomNavigationBar: BottomNav(
         location: location,
         onNavigate: _navigateTo,
         isOffline: isOffline,
@@ -485,7 +487,7 @@ class SidebarContent extends StatelessWidget {
                   onNavigate: onNavigate,
                   location: location,
                   children: [
-                    _SidebarItem(
+                    SidebarRow(
                       icon: Icons.fiber_new_outlined,
                       selectedIcon: Icons.fiber_new_rounded,
                       label: 'Recently Added',
@@ -494,7 +496,7 @@ class SidebarContent extends StatelessWidget {
                       onTap: () => onNavigate('/recently-added'),
                     ),
                     const SizedBox(height: 2),
-                    _SidebarItem(
+                    SidebarRow(
                       icon: Icons.visibility_off_outlined,
                       selectedIcon: Icons.visibility_off_rounded,
                       label: 'Unwatched',
@@ -503,7 +505,7 @@ class SidebarContent extends StatelessWidget {
                       onTap: () => onNavigate('/unwatched'),
                     ),
                     const SizedBox(height: 2),
-                    _SidebarItem(
+                    SidebarRow(
                       icon: Icons.favorite_outline_rounded,
                       selectedIcon: Icons.favorite_rounded,
                       label: 'Favorites',
@@ -512,7 +514,7 @@ class SidebarContent extends StatelessWidget {
                       onTap: () => onNavigate('/favorites'),
                     ),
                     const SizedBox(height: 2),
-                    _SidebarItem(
+                    SidebarRow(
                       icon: Icons.collections_bookmark_outlined,
                       selectedIcon: Icons.collections_bookmark_rounded,
                       label: 'Collections',
@@ -536,7 +538,7 @@ class SidebarContent extends StatelessWidget {
                   onNavigate: onNavigate,
                   location: location,
                   children: [
-                    _SidebarItem(
+                    SidebarRow(
                       icon: Icons.movie_outlined,
                       selectedIcon: Icons.movie_rounded,
                       label: 'Movies',
@@ -545,7 +547,7 @@ class SidebarContent extends StatelessWidget {
                       onTap: () => onNavigate('/movies'),
                     ),
                     const SizedBox(height: 2),
-                    _SidebarItem(
+                    SidebarRow(
                       icon: Icons.tv_outlined,
                       selectedIcon: Icons.tv_rounded,
                       label: 'TV Shows',
@@ -556,7 +558,7 @@ class SidebarContent extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                _SidebarItem(
+                SidebarRow(
                   icon: Icons.search_outlined,
                   selectedIcon: Icons.search_rounded,
                   label: 'Search',
@@ -566,7 +568,7 @@ class SidebarContent extends StatelessWidget {
                 ),
                 if (isDownloadSupported) ...[
                   const SizedBox(height: 8),
-                  _SidebarItem(
+                  SidebarRow(
                     icon: Icons.download_outlined,
                     selectedIcon: Icons.download_rounded,
                     label: 'Downloads',
@@ -584,7 +586,7 @@ class SidebarContent extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _SettingsSidebarItem(
+                SettingsSidebarRow(
                   isSelected: location.startsWith('/settings'),
                   isDisabled: isOffline,
                   onTap: () => onNavigate('/settings'),
@@ -595,89 +597,6 @@ class SidebarContent extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Desktop sidebar navigation with collapsible sections
-class _DesktopSidebar extends StatelessWidget {
-  final String location;
-  final ValueChanged<String> onNavigate;
-  final bool homeExpanded;
-  final bool libraryExpanded;
-  final VoidCallback onToggleHome;
-  final VoidCallback onToggleLibrary;
-  final bool showBackToMydia;
-  final bool isOffline;
-
-  const _DesktopSidebar({
-    required this.location,
-    required this.onNavigate,
-    required this.homeExpanded,
-    required this.libraryExpanded,
-    required this.onToggleHome,
-    required this.onToggleLibrary,
-    this.showBackToMydia = false,
-    this.isOffline = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassSidebarPanel(
-      child: SafeArea(
-        top: true,
-        child: SidebarContent(
-          location: location,
-          onNavigate: onNavigate,
-          homeExpanded: homeExpanded,
-          libraryExpanded: libraryExpanded,
-          onToggleHome: onToggleHome,
-          onToggleLibrary: onToggleLibrary,
-          isOffline: isOffline,
-          backToMydiaWidget:
-              showBackToMydia ? const _BackToMydiaButton() : null,
-        ),
-      ),
-    );
-  }
-}
-
-/// The desktop sidebar's glass chrome panel (R4/R6/R10).
-///
-/// A fixed-width, real-blur [GlassSurface] that sits over the shell ambient
-/// backdrop and is therefore tinted by the artwork behind it (R5, verified in
-/// U8). The light rim defines the right edge and the chrome shadow gives it
-/// layered depth — replacing the prior flat `Container(color: background)` +
-/// faint 1px border (R6). The chrome fill clears the R10 legibility floor so
-/// nav labels stay readable over any backdrop.
-///
-/// Extracted as a public widget so the glass composition is unit-testable
-/// without mounting the full shell's provider graph.
-class GlassSidebarPanel extends StatelessWidget {
-  final Widget child;
-
-  const GlassSidebarPanel({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: Breakpoints.sidebarWidth,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(boxShadow: DepthTokens.chrome),
-        child: GlassSurface(
-          blurSigma: DepthTokens.blurChrome,
-          fillColor: AppColors.surface.withValues(
-            alpha: DepthTokens.chromeFillOpacity,
-          ),
-          border: const Border(
-            right: BorderSide(
-              color: DepthTokens.rimColor,
-              width: DepthTokens.rimWidth,
-            ),
-          ),
-          child: child,
-        ),
-      ),
     );
   }
 }
@@ -831,511 +750,6 @@ class _SidebarSectionState extends State<_SidebarSection> {
               : const SizedBox.shrink(),
         ),
       ],
-    );
-  }
-}
-
-/// Individual sidebar navigation item
-class _SidebarItem extends StatefulWidget {
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-  final bool isSelected;
-  final bool isDisabled;
-  final VoidCallback onTap;
-  final Widget? badge;
-
-  const _SidebarItem({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    this.isDisabled = false,
-    this.badge,
-  });
-
-  @override
-  State<_SidebarItem> createState() => _SidebarItemState();
-}
-
-class _SidebarItemState extends State<_SidebarItem> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = widget.isSelected && !widget.isDisabled;
-    final iconColor = widget.isDisabled
-        ? AppColors.textDisabled
-        : isSelected
-            ? AppColors.primary
-            : _isHovered
-                ? AppColors.textPrimary
-                : AppColors.textSecondary;
-    final textColor = widget.isDisabled
-        ? AppColors.textDisabled
-        : isSelected
-            ? AppColors.textPrimary
-            : _isHovered
-                ? AppColors.textPrimary
-                : AppColors.textSecondary;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: widget.isDisabled
-          ? SystemMouseCursors.forbidden
-          : SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: widget.isDisabled
-                ? Colors.transparent
-                : isSelected
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : _isHovered
-                        ? AppColors.surfaceVariant.withValues(alpha: 0.3)
-                        : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    isSelected ? widget.selectedIcon : widget.icon,
-                    size: 22,
-                    color: iconColor,
-                  ),
-                  if (widget.badge != null)
-                    Positioned(
-                      top: -3,
-                      right: -3,
-                      child: widget.badge!,
-                    ),
-                ],
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  widget.label,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: textColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Mobile bottom navigation bar
-class _ModernBottomNav extends StatelessWidget {
-  final String location;
-  final ValueChanged<String> onNavigate;
-  final bool isOffline;
-  final bool showBackToMydia;
-
-  const _ModernBottomNav({
-    required this.location,
-    required this.onNavigate,
-    this.isOffline = false,
-    this.showBackToMydia = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: DecoratedBox(
-          // Drop shadow lives on an outer box; GlassSurface clips its own
-          // blurred fill so the pill now reads as true frosted glass over the
-          // ambient backdrop instead of a near-opaque surface.
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 16,
-                spreadRadius: 2,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: GlassSurface(
-            blurSigma: 10,
-            fillColor: AppColors.surface.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: AppColors.border.withValues(alpha: 0.2),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  if (showBackToMydia)
-                    _NavItem(
-                      icon: Icons.arrow_back_rounded,
-                      selectedIcon: Icons.arrow_back_rounded,
-                      label: 'Mydia',
-                      isSelected: false,
-                      onTap: navigateToMydiaApp,
-                    ),
-                  _NavItem(
-                    icon: Icons.home_outlined,
-                    selectedIcon: Icons.home_rounded,
-                    label: 'Home',
-                    isSelected: _AppShellState._isHomeSection(location),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/'),
-                  ),
-                  _NavItem(
-                    icon: Icons.movie_outlined,
-                    selectedIcon: Icons.movie_rounded,
-                    label: 'Movies',
-                    isSelected: location.startsWith('/movies'),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/movies'),
-                  ),
-                  _NavItem(
-                    icon: Icons.tv_outlined,
-                    selectedIcon: Icons.tv_rounded,
-                    label: 'Shows',
-                    isSelected: location.startsWith('/shows'),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/shows'),
-                  ),
-                  if (isDownloadSupported)
-                    _NavItem(
-                      icon: Icons.download_outlined,
-                      selectedIcon: Icons.download_rounded,
-                      label: 'Downloads',
-                      isSelected: location.startsWith('/downloads'),
-                      onTap: () => onNavigate('/downloads'),
-                    )
-                  else
-                    _NavItem(
-                      icon: Icons.favorite_outline_rounded,
-                      selectedIcon: Icons.favorite_rounded,
-                      label: 'Favorites',
-                      isSelected: location.startsWith('/favorites'),
-                      isDisabled: isOffline,
-                      onTap: () => onNavigate('/favorites'),
-                    ),
-                  _SettingsNavItem(
-                    isSelected: location.startsWith('/settings'),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/settings'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Full-screen drawer for mobile navigation, mirrors the desktop sidebar.
-class _MobileDrawer extends StatelessWidget {
-  final String location;
-  final ValueChanged<String> onNavigate;
-  final bool homeExpanded;
-  final bool libraryExpanded;
-  final VoidCallback onToggleHome;
-  final VoidCallback onToggleLibrary;
-  final bool showBackToMydia;
-  final bool isOffline;
-
-  const _MobileDrawer({
-    required this.location,
-    required this.onNavigate,
-    required this.homeExpanded,
-    required this.libraryExpanded,
-    required this.onToggleHome,
-    required this.onToggleLibrary,
-    this.showBackToMydia = false,
-    this.isOffline = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Drawer(
-      backgroundColor: AppColors.background,
-      child: SafeArea(
-        child: SidebarContent(
-          location: location,
-          onNavigate: onNavigate,
-          homeExpanded: homeExpanded,
-          libraryExpanded: libraryExpanded,
-          onToggleHome: onToggleHome,
-          onToggleLibrary: onToggleLibrary,
-          isOffline: isOffline,
-          backToMydiaWidget: showBackToMydia
-              ? _SidebarItem(
-                  icon: Icons.arrow_back_rounded,
-                  selectedIcon: Icons.arrow_back_rounded,
-                  label: 'Back to Mydia',
-                  isSelected: false,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    navigateToMydiaApp();
-                  },
-                )
-              : null,
-        ),
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatefulWidget {
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-  final bool isSelected;
-  final bool isDisabled;
-  final VoidCallback onTap;
-  final Widget? badge;
-
-  const _NavItem({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    this.isDisabled = false,
-    this.badge,
-  });
-
-  @override
-  State<_NavItem> createState() => _NavItemState();
-}
-
-class _NavItemState extends State<_NavItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _handleTapDown(TapDownDetails details) {
-    _controller.forward();
-  }
-
-  void _handleTapUp(TapUpDetails details) {
-    _controller.reverse();
-    widget.onTap();
-  }
-
-  void _handleTapCancel() {
-    _controller.reverse();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveColor = widget.isDisabled
-        ? AppColors.textDisabled
-        : widget.isSelected
-            ? AppColors.primary
-            : AppColors.textSecondary;
-
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTapUp: _handleTapUp,
-      onTapCancel: _handleTapCancel,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: widget.isSelected && !widget.isDisabled
-                ? AppColors.primary.withValues(alpha: 0.12)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      widget.isSelected && !widget.isDisabled
-                          ? widget.selectedIcon
-                          : widget.icon,
-                      key:
-                          ValueKey('${widget.isSelected}_${widget.isDisabled}'),
-                      color: effectiveColor,
-                      size: 24,
-                    ),
-                  ),
-                  if (widget.badge != null)
-                    Positioned(
-                      top: -3,
-                      right: -3,
-                      child: widget.badge!,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: widget.isSelected && !widget.isDisabled
-                      ? FontWeight.w600
-                      : FontWeight.w500,
-                  color: effectiveColor,
-                ),
-                child: Text(widget.label),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Settings sidebar item with connection status badge.
-class _SettingsSidebarItem extends ConsumerWidget {
-  final bool isSelected;
-  final bool isDisabled;
-  final VoidCallback onTap;
-
-  const _SettingsSidebarItem({
-    required this.isSelected,
-    required this.isDisabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _SidebarItem(
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings_rounded,
-      label: 'Settings',
-      isSelected: isSelected,
-      isDisabled: isDisabled,
-      onTap: onTap,
-      badge: const ConnectionStatusDot(),
-    );
-  }
-}
-
-/// Settings nav item with connection status badge.
-class _SettingsNavItem extends ConsumerWidget {
-  final bool isSelected;
-  final bool isDisabled;
-  final VoidCallback onTap;
-
-  const _SettingsNavItem({
-    required this.isSelected,
-    required this.isDisabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _NavItem(
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings_rounded,
-      label: 'Settings',
-      isSelected: isSelected,
-      isDisabled: isDisabled,
-      onTap: onTap,
-      badge: const ConnectionStatusDot(),
-    );
-  }
-}
-
-/// Button to navigate back to the main Mydia app.
-/// Shown when the player is running in embed mode.
-class _BackToMydiaButton extends StatefulWidget {
-  const _BackToMydiaButton();
-
-  @override
-  State<_BackToMydiaButton> createState() => _BackToMydiaButtonState();
-}
-
-class _BackToMydiaButtonState extends State<_BackToMydiaButton> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: navigateToMydiaApp,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? AppColors.surfaceVariant.withValues(alpha: 0.5)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.arrow_back_rounded,
-                size: 20,
-                color: _isHovered ? AppColors.primary : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Back to Mydia',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: _isHovered
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
