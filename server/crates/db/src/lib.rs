@@ -5,6 +5,7 @@
 
 pub mod devices;
 pub mod episodes;
+pub mod external_subtitles;
 pub mod library_paths;
 pub mod media_files;
 pub mod media_items;

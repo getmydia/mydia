@@ -209,7 +209,7 @@ async fn persist(
 
     let subtitle_tracks = serde_json::to_string(&facts.subtitle_tracks).ok();
 
-    media_files::upsert(
+    let stored = media_files::upsert(
         db,
         media_files::NewMediaFile {
             owner,
@@ -229,6 +229,28 @@ async fn persist(
         },
     )
     .await?;
+
+    // Sidecar subtitles are cheap: the directory is already in the page
+    // cache from the walk, and nothing is probed. `seen` is the keep list for
+    // prune_for_file; an empty list deletes every row for this file, which is
+    // correct only when no sidecars remain on disk.
+    let sidecars = crate::sidecar::discover(std::path::Path::new(&stored.path));
+    let seen: Vec<String> = sidecars.iter().map(|s| s.path.clone()).collect();
+
+    for sidecar in sidecars {
+        mydia_db::external_subtitles::upsert(
+            db,
+            mydia_db::external_subtitles::NewExternalSubtitle {
+                media_file_id: stored.id.clone(),
+                path: sidecar.path,
+                language: sidecar.language,
+                format: sidecar.format,
+            },
+        )
+        .await?;
+    }
+
+    mydia_db::external_subtitles::prune_for_file(db, &stored.id, &seen).await?;
 
     Ok(())
 }
