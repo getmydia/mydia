@@ -67,7 +67,11 @@ class _Dot extends StatelessWidget {
   }
 }
 
-/// An amber pulsing dot indicating reconnection in progress.
+/// A pulsing dot indicating reconnection in progress.
+///
+/// The colour is whatever the caller passes, which today is the pending tone.
+/// It is deliberately not named here: the tone-to-colour mapping lives in
+/// [connectionToneColor] and this comment would go stale the moment it moved.
 ///
 /// Animation values and shape preserved from the former private shell widget
 /// (`AnimatedBuilder` + `Opacity`, 1200ms) rather than the plan's

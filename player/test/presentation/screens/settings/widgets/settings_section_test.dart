@@ -36,7 +36,7 @@ void main() {
     expect(labelY, lessThan(cardY));
   });
 
-  testWidgets('SettingsSection uppercases its label for the eyebrow style',
+  testWidgets('SettingsSection tracks out its label for the eyebrow style',
       (tester) async {
     await _pump(
       tester,

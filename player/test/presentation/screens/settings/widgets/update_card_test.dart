@@ -98,6 +98,33 @@ void main() {
     );
 
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.text('Downloading 42%'), findsOneWidget);
     expect(find.text('Update Now'), findsNothing);
+  });
+
+  testWidgets('at zero progress the label drops the misleading percentage',
+      (tester) async {
+    // The bar is indeterminate at zero, so a "0%" label would claim a
+    // precision the bar itself is not showing.
+    await _pump(
+      tester,
+      state: UpdateState(
+        currentVersion: '0.14.2',
+        availableUpdate: _update(),
+        isApplying: true,
+      ),
+      supportedOverride: true,
+    );
+
+    expect(find.text('Downloading'), findsOneWidget);
+    expect(find.text('Downloading 0%'), findsNothing);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(
+            find.byType(LinearProgressIndicator),
+          )
+          .value,
+      isNull,
+    );
   });
 }

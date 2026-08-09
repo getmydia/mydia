@@ -205,4 +205,37 @@ void main() {
       expect(find.text('Retry'), findsOneWidget);
     });
   });
+
+  group('updateCheckSubtitle', () {
+    test('macOS says Sparkle owns it rather than claiming a clean check', () {
+      // Sparkle owns checking on macOS, so UpdateNotifier never runs one and
+      // availableUpdate stays null. Reusing the generic wording here would
+      // report "up to date" off the back of a check that never happened.
+      expect(
+        updateCheckSubtitle(isMacOS: true, availableVersion: null),
+        'Opens the Sparkle update dialog',
+      );
+    });
+
+    test('macOS wording wins even when a version is somehow known', () {
+      expect(
+        updateCheckSubtitle(isMacOS: true, availableVersion: '0.15.0'),
+        'Opens the Sparkle update dialog',
+      );
+    });
+
+    test('elsewhere an available version is named', () {
+      expect(
+        updateCheckSubtitle(isMacOS: false, availableVersion: '0.15.0'),
+        'v0.15.0 available',
+      );
+    });
+
+    test('elsewhere no available version reads as up to date', () {
+      expect(
+        updateCheckSubtitle(isMacOS: false, availableVersion: null),
+        "You're up to date",
+      );
+    });
+  });
 }

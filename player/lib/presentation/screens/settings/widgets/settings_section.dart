@@ -54,7 +54,12 @@ class SettingsCard extends StatelessWidget {
   }
 }
 
-/// An uppercase eyebrow label above a [SettingsCard].
+/// An eyebrow label above a [SettingsCard].
+///
+/// The label is styled as an eyebrow with tracking, weight, and a muted tone,
+/// but the string itself is rendered as given. Transforming it to upper case
+/// would make screen readers spell or shout it, and would break `find.text`
+/// against the label a caller actually passed.
 class SettingsSection extends StatelessWidget {
   final String label;
   final List<Widget> children;

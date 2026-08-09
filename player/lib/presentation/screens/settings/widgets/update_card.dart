@@ -74,8 +74,12 @@ class UpdateCard extends ConsumerWidget {
                           : null,
                     ),
                     const SizedBox(height: 6),
+                    // At zero the bar is indeterminate, so a "0%" label would
+                    // claim a precision the bar itself is not showing.
                     Text(
-                      'Downloading ${(updateState.downloadProgress * 100).toInt()}%',
+                      updateState.downloadProgress > 0
+                          ? 'Downloading ${(updateState.downloadProgress * 100).toInt()}%'
+                          : 'Downloading',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,

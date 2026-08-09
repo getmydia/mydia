@@ -237,9 +237,10 @@ class _ManageSection extends ConsumerWidget {
             key: const Key('check-for-updates-row'),
             icon: Icons.refresh,
             title: 'Check for updates',
-            subtitle: updateState.availableUpdate != null
-                ? 'v${updateState.availableUpdate!.version} available'
-                : "You're up to date",
+            subtitle: updateCheckSubtitle(
+              isMacOS: PlatformFeatures.isMacOS,
+              availableVersion: updateState.availableUpdate?.version,
+            ),
             trailing: updateState.isChecking
                 ? const SizedBox(
                     width: 20,
@@ -261,4 +262,24 @@ class _ManageSection extends ConsumerWidget {
     }
     ref.read(updateProvider.notifier).checkForUpdate();
   }
+}
+
+/// Subtitle for the check-for-updates row.
+///
+/// macOS needs its own string. `UpdateNotifier._initAndCheck` returns early
+/// there because Sparkle owns update checking, so `availableUpdate` stays null
+/// and the generic wording would claim a clean bill of health from a check that
+/// never ran. The old `_CheckForUpdatesTile` said "Opens Sparkle update dialog"
+/// for exactly this reason.
+///
+/// Pure, and takes the platform as an argument, so every branch is reachable
+/// from a test host that is none of these platforms.
+@visibleForTesting
+String updateCheckSubtitle({
+  required bool isMacOS,
+  required String? availableVersion,
+}) {
+  if (isMacOS) return 'Opens the Sparkle update dialog';
+  if (availableVersion != null) return 'v$availableVersion available';
+  return "You're up to date";
 }
