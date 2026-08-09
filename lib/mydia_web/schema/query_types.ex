@@ -155,6 +155,8 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:first, :integer, default_value: 50)
       arg(:after, :string)
       arg(:types, list_of(:media_type))
+      arg(:category, :media_category)
+      arg(:sort, :sort_input)
       resolve(&DiscoveryResolver.favorites/3)
     end
 
@@ -163,6 +165,8 @@ defmodule MydiaWeb.Schema.QueryTypes do
       arg(:first, :integer, default_value: 50)
       arg(:after, :string)
       arg(:types, list_of(:media_type))
+      arg(:category, :media_category)
+      arg(:sort, :sort_input)
       resolve(&DiscoveryResolver.unwatched/3)
     end
   end

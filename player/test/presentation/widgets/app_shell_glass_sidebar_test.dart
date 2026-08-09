@@ -10,7 +10,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
-import 'package:player/presentation/widgets/app_shell.dart';
+import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
 
 Widget _host(Widget child) => MaterialApp(
       home: Scaffold(
@@ -68,7 +68,8 @@ void main() {
       expect(border.left, BorderSide.none);
     });
 
-    testWidgets('glass fill clears the legibility floor and is translucent '
+    testWidgets(
+        'glass fill clears the legibility floor and is translucent '
         '(R6/R10)', (tester) async {
       await tester.pumpWidget(
         _host(const GlassSidebarPanel(child: SizedBox.expand())),
@@ -87,7 +88,8 @@ void main() {
         _host(const GlassSidebarPanel(child: SizedBox.expand())),
       );
 
-      final shadowed = tester.widgetList<DecoratedBox>(find.byType(DecoratedBox));
+      final shadowed =
+          tester.widgetList<DecoratedBox>(find.byType(DecoratedBox));
       final hasChromeShadow = shadowed.any((d) {
         final deco = d.decoration;
         return deco is BoxDecoration &&

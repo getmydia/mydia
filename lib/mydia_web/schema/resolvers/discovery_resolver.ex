@@ -9,6 +9,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
   alias MydiaWeb.Schema.Resolvers.ItemBuilder
+  alias MydiaWeb.Schema.Resolvers.MediaSort
 
   @spec continue_watching(map(), map(), Absinthe.Resolution.t()) ::
           {:ok, term()} | {:error, term()}
@@ -115,17 +116,24 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   end
 
   @spec favorites(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def favorites(_parent, args, %{context: context}) do
+  def favorites(_parent, args, resolution) do
     first = Map.get(args, :first, 50)
     after_cursor = Map.get(args, :after)
     types = Map.get(args, :types)
+    category = Map.get(args, :category)
+    sort = Map.get(args, :sort)
 
-    case context[:current_user] do
+    case resolution.context[:current_user] do
       nil ->
         {:ok, []}
 
       user ->
-        favorites = Media.list_user_favorites(user.id) |> maybe_filter_by_type(types)
+        favorites =
+          Media.list_user_favorites(user.id)
+          |> maybe_filter_by_type(types)
+          |> maybe_filter_by_category(category)
+          |> sort_items(sort, resolution)
+
         added_at = RecentlyAdded.added_at_map(ids: Enum.map(favorites, & &1.id))
 
         all_items =
@@ -139,20 +147,22 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   end
 
   @spec unwatched(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def unwatched(_parent, args, %{context: context}) do
+  def unwatched(_parent, args, resolution) do
     first = Map.get(args, :first, 50)
     after_cursor = Map.get(args, :after)
     types = Map.get(args, :types)
+    category = Map.get(args, :category)
+    sort = Map.get(args, :sort)
 
-    case context[:current_user] do
+    case resolution.context[:current_user] do
       nil ->
         {:ok, []}
 
       user ->
-        # Get all media items with files
-        media_items = Media.list_media_items(has_files: true)
+        opts = [has_files: true]
+        opts = if category, do: Keyword.put(opts, :category, to_string(category)), else: opts
+        media_items = Media.list_media_items(opts)
 
-        # Get IDs of fully watched items
         watched_ids =
           Playback.list_user_progress(user.id, watched: true)
           |> Enum.map(& &1.media_item_id)
@@ -164,12 +174,16 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
           |> Enum.reject(&MapSet.member?(watched_ids, &1.id))
           |> maybe_filter_by_type(types)
 
+        # Built before ordering, because the default order is keyed on it.
         added_at = RecentlyAdded.added_at_map(ids: Enum.map(unwatched, & &1.id))
 
+        ordered =
+          if sort,
+            do: sort_items(unwatched, sort, resolution),
+            else: sort_by_arrival(unwatched, added_at)
+
         all_items =
-          unwatched
-          |> Enum.sort_by(&(Map.get(added_at, &1.id) || &1.inserted_at), {:desc, DateTime})
-          |> Enum.map(fn item ->
+          Enum.map(ordered, fn item ->
             ItemBuilder.recently_added_item(item, added_at: Map.get(added_at, item.id))
           end)
 
@@ -187,6 +201,54 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
     type_strings = Enum.map(types, &to_string/1)
     Enum.filter(items, &(&1.type in type_strings))
   end
+
+  defp maybe_filter_by_category(items, nil), do: items
+
+  defp maybe_filter_by_category(items, category),
+    do: Enum.filter(items, &(&1.category == to_string(category)))
+
+  # Sorting must run over the whole list before `paginate_simple/3`, whose
+  # cursor is a positional offset. `MediaSort` is stable with nil keys last and
+  # seeds random with phash2, so page boundaries hold across requests.
+  # An explicit sort always wins. Without one, each surface keeps the default
+  # ordering it has always had, and both of those are total orders, which is
+  # what `paginate_simple/3`'s positional cursor requires:
+  #
+  #   * `unwatched` orders by content arrival via `sort_by_arrival/2`.
+  #   * `favorites` keeps `list_collection_items/2`'s `asc: position`, which is
+  #     the order the user dragged items into and is already deterministic.
+  #
+  # Handing back an unordered repo result here instead would let page
+  # boundaries shift between the page-1 and page-2 requests on Postgres, which
+  # surfaces as duplicated and skipped items mid-scroll rather than as anything
+  # resembling a sort bug.
+  defp sort_items(items, nil, _resolution), do: items
+
+  defp sort_items(items, sort, resolution) do
+    user = current_user(resolution)
+    effective = MediaSort.effective_sort(sort, user)
+    progress = MediaSort.progress_map(user, sort_field(effective))
+    MediaSort.sort(items, effective, progress)
+  end
+
+  defp sort_field(nil), do: nil
+  defp sort_field(sort), do: Map.get(sort, :field)
+
+  # `unwatched`'s default ordering: newest content first, by when the file
+  # actually arrived rather than when the record happened to be written.
+  # `MydiaWeb.SchemaTest` pins this distinction, and it only fails on Postgres,
+  # where an unordered `list_media_items/1` returns rows in whatever order the
+  # scan produced. SQLite hands back rowid order, which masks the bug.
+  defp sort_by_arrival(items, added_at) do
+    Enum.sort_by(
+      items,
+      &(Map.get(added_at, &1.id) || &1.inserted_at),
+      {:desc, DateTime}
+    )
+  end
+
+  defp current_user(%{context: context}), do: context[:current_user]
+  defp current_user(_resolution), do: nil
 
   # Simple pagination for lists (not connection-style)
   defp paginate_simple(items, first, nil) do

@@ -1,11 +1,28 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/presentation/screens/library/library_controller.dart';
 import 'package:player/presentation/screens/library/library_sort.dart';
 
 import '../../../test_utils/riverpod_helpers.dart';
 import '../../../test_utils/stub_graphql_client.dart';
+
+MediaFilter _moviesFilter([LibrarySort sort = LibrarySort.defaultSort]) =>
+    MediaFilter(
+      kind: MediaKind.movies,
+      category: null,
+      watch: WatchScope.all,
+      sort: sort,
+    );
+
+MediaFilter _tvShowsFilter([LibrarySort sort = LibrarySort.defaultSort]) =>
+    MediaFilter(
+      kind: MediaKind.shows,
+      category: null,
+      watch: WatchScope.all,
+      sort: sort,
+    );
 
 Map<String, dynamic> _moviesPage(
   List<String> ids, {
@@ -123,7 +140,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort),
+      libraryControllerProvider(_moviesFilter()),
       (value) => value.items.isNotEmpty,
     );
 
@@ -149,8 +166,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider =
-        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
+    final provider = libraryControllerProvider(_moviesFilter());
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
 
     await container.read(provider.notifier).loadMore();
@@ -192,8 +208,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider =
-        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
+    final provider = libraryControllerProvider(_moviesFilter());
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
 
     await container.read(provider.notifier).loadMore();
@@ -223,8 +238,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider =
-        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
+    final provider = libraryControllerProvider(_moviesFilter());
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
     final before = link.requests.length;
 
@@ -249,8 +263,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final provider =
-        libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort);
+    final provider = libraryControllerProvider(_moviesFilter());
     await waitForValue(container, provider, (value) => value.items.isNotEmpty);
     final before = link.requests.length;
 
@@ -282,7 +295,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort),
+      libraryControllerProvider(_moviesFilter()),
       (value) => value.items.isNotEmpty,
     );
 
@@ -305,7 +318,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.movies, LibrarySort.defaultSort),
+      libraryControllerProvider(_moviesFilter()),
       (value) => value.items.isNotEmpty,
     );
 
@@ -331,7 +344,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.tvShows, LibrarySort.defaultSort),
+      libraryControllerProvider(_tvShowsFilter()),
       (value) => value.items.isNotEmpty,
     );
 
@@ -355,7 +368,7 @@ void main() {
 
     final data = await waitForValue(
       container,
-      libraryControllerProvider(LibraryType.tvShows, LibrarySort.defaultSort),
+      libraryControllerProvider(_tvShowsFilter()),
       (value) => value.items.isNotEmpty,
     );
 
@@ -377,10 +390,11 @@ void main() {
     await waitForValue(
       container,
       libraryControllerProvider(
-        LibraryType.movies,
-        const LibrarySort(
-          field: SortField.rating,
-          direction: SortDirection.desc,
+        _moviesFilter(
+          const LibrarySort(
+            field: SortField.rating,
+            direction: SortDirection.desc,
+          ),
         ),
       ),
       (value) => value.items.isNotEmpty,
@@ -408,11 +422,12 @@ void main() {
     await waitForValue(
       container,
       libraryControllerProvider(
-        LibraryType.movies,
-        const LibrarySort(
-          field: SortField.random,
-          direction: SortDirection.asc,
-          randomSeed: 777,
+        _moviesFilter(
+          const LibrarySort(
+            field: SortField.random,
+            direction: SortDirection.asc,
+            randomSeed: 777,
+          ),
         ),
       ),
       (value) => value.items.isNotEmpty,

@@ -367,23 +367,36 @@ impl RootQueryType {
     }
 
     /// Get the user's favorite items
+    ///
+    /// `category` and `sort` exist here for contract parity with the Elixir
+    /// schema, which grew them so the player can pin saved filters like
+    /// "Favorite Anime Movies". This server answers favorites in Slice 4, so
+    /// they are accepted and ignored until then rather than omitted, which
+    /// would fail the whole query document for any player that sends them.
     async fn favorites(
         &self,
         _ctx: &Context<'_>,
         _first: Option<i32>,
         _after: Option<String>,
         _types: Option<Vec<Option<MediaType>>>,
+        _category: Option<MediaCategory>,
+        _sort: Option<SortInput>,
     ) -> Result<Option<Vec<Option<RecentlyAddedItem>>>> {
         Ok(None)
     }
 
     /// Get unwatched items with files
+    ///
+    /// See [`Self::favorites`] for why `category` and `sort` are accepted and
+    /// ignored rather than left out.
     async fn unwatched(
         &self,
         _ctx: &Context<'_>,
         _first: Option<i32>,
         _after: Option<String>,
         _types: Option<Vec<Option<MediaType>>>,
+        _category: Option<MediaCategory>,
+        _sort: Option<SortInput>,
     ) -> Result<Option<Vec<Option<RecentlyAddedItem>>>> {
         Ok(None)
     }

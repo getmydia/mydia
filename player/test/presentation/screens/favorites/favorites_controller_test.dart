@@ -27,6 +27,30 @@ Map<String, dynamic> _favorites(String title) => {
     };
 
 void main() {
+  test('sends default added-at descending sort as a GraphQL variable',
+      () async {
+    final link = StubLink.responses([_favorites('Alpha')]);
+    final container = ProviderContainer(
+      overrides: [
+        asyncGraphqlClientProvider
+            .overrideWith((ref) async => stubClient(link)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await waitForValue(
+      container,
+      favoritesControllerProvider,
+      (value) => value.isNotEmpty,
+    );
+
+    expect(link.requests, isNotEmpty);
+    expect(
+      link.requests.first.variables['sort'],
+      {'field': 'ADDED_AT', 'direction': 'DESC'},
+    );
+  });
+
   test('emits the favorites returned by the server', () async {
     final container = ProviderContainer(
       overrides: [

@@ -8,6 +8,7 @@ import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
 import '../../presentation/screens/show/show_detail_screen.dart';
 import '../../presentation/screens/episode/episode_detail_screen.dart';
+import '../../presentation/screens/filter/filter_screen.dart';
 import '../../presentation/screens/library/library_screen.dart';
 import '../../presentation/screens/library/library_controller.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
@@ -19,6 +20,7 @@ import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../presentation/screens/favorites/favorites_screen.dart';
 import '../../presentation/screens/recently_added/recently_added_screen.dart';
 import '../../presentation/screens/unwatched/unwatched_screen.dart';
+import '../../presentation/screens/continue_watching/continue_watching_screen.dart';
 import '../../presentation/screens/collections/collections_screen.dart';
 import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
@@ -153,6 +155,12 @@ GoRouter appRouter(Ref ref) {
             ),
           ),
           GoRoute(
+            path: '/filter/:id',
+            name: 'filter',
+            builder: (context, state) =>
+                FilterScreen(filterId: state.pathParameters['id']!),
+          ),
+          GoRoute(
             path: '/favorites',
             name: 'favorites',
             builder: (context, state) => const FavoritesScreen(),
@@ -161,6 +169,11 @@ GoRouter appRouter(Ref ref) {
             path: '/recently-added',
             name: 'recently_added',
             builder: (context, state) => const RecentlyAddedScreen(),
+          ),
+          GoRoute(
+            path: '/continue-watching',
+            name: 'continue_watching',
+            builder: (context, state) => const ContinueWatchingScreen(),
           ),
           GoRoute(
             path: '/unwatched',
