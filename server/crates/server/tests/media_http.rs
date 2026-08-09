@@ -184,3 +184,73 @@ async fn the_remux_strategy_serves_fragmented_mp4() {
     // a real container rather than an error message.
     assert_eq!(&body[4..8], b"ftyp");
 }
+
+#[tokio::test]
+async fn an_external_subtitle_is_converted_to_the_requested_format() {
+    let media = support::library_with_sidecar().await;
+    let (app, _guard, token) =
+        app_over_library("admin", "adminadmin", media.path(), "movies").await;
+
+    let (file_id, track_id) = support::first_external_track(app.clone(), &token).await;
+
+    let response = get(
+        app,
+        &format!("/api/player/v1/subtitles/file/{file_id}/{track_id}?format=vtt"),
+        &token,
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["content-type"],
+        "text/vtt; charset=utf-8"
+    );
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    // Every WebVTT file opens with this signature. Serving the .srt unchanged
+    // would pass a status check and fail in the player.
+    assert!(String::from_utf8_lossy(&body).starts_with("WEBVTT"));
+}
+
+#[tokio::test]
+async fn a_track_belonging_to_another_file_is_refused() {
+    // extractor.ex:97-105 answers :unauthorized; the Elixir controller maps
+    // that to HTTP 403. This endpoint answers 404 instead.
+    let media = support::library_with_sidecar().await;
+    let (app, _guard, token) =
+        app_over_library("admin", "adminadmin", media.path(), "movies").await;
+
+    let (_file_id, track_id) = support::first_external_track(app.clone(), &token).await;
+
+    let response = get(
+        app,
+        &format!("/api/player/v1/subtitles/file/not-that-file/{track_id}?format=vtt"),
+        &token,
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn an_unknown_track_is_a_404() {
+    let media = support::library_with_sidecar().await;
+    let (app, _guard, token) =
+        app_over_library("admin", "adminadmin", media.path(), "movies").await;
+
+    let file_id = support::first_file_id(app.clone(), &token).await;
+
+    let response = get(
+        app,
+        &format!("/api/player/v1/subtitles/file/{file_id}/9999?format=vtt"),
+        &token,
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

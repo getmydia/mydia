@@ -41,6 +41,10 @@ pub fn build_router(ctx: ApiContext) -> Router {
             "/api/v1/stream/{id}",
             get(crate::media::stream::stream_file),
         )
+        .route(
+            "/api/player/v1/subtitles/file/{file_id}/{track_id}",
+            get(crate::media::subtitles::serve),
+        )
         .with_state(AppState { schema, db, issuer })
 }
 

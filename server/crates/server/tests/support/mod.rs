@@ -97,3 +97,25 @@ pub async fn library_with_sidecar() -> tempfile::TempDir {
 
     dir
 }
+
+pub async fn first_external_track(app: Router, token: &str) -> (String, String) {
+    let body = post_graphql_authed(
+        app,
+        "{ movies { edges { node { files { id subtitles { trackId embedded } } } } } }",
+        token,
+    )
+    .await;
+
+    let file = &body["data"]["movies"]["edges"][0]["node"]["files"][0];
+    let track = file["subtitles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["embedded"] == serde_json::json!(false))
+        .expect("expected an external track");
+
+    (
+        file["id"].as_str().unwrap().to_string(),
+        track["trackId"].as_str().unwrap().to_string(),
+    )
+}
