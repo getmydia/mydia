@@ -1342,6 +1342,8 @@ dependencies = [
  "futures-util",
  "mydia-auth",
  "mydia-db",
+ "mydia-library",
+ "mydia-streaming",
  "serde",
  "serde_json",
  "thiserror",

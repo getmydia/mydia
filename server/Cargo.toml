@@ -17,6 +17,7 @@ base64 = "0.22"
 figment = { version = "0.10", features = ["yaml", "env"] }
 futures-util = "0.3"
 jsonwebtoken = "9"
+mydia-library = { path = "crates/library" }
 mydia-streaming = { path = "crates/streaming" }
 regex = "1"
 serde = { version = "1", features = ["derive"] }

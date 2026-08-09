@@ -115,10 +115,16 @@ pub fn media_file_from(row: &MediaFileRow) -> MediaFile {
         hdr_format: row.hdr_format.clone(),
         size: row.size,
         bitrate: row.bitrate.and_then(|v| i32::try_from(v).ok()),
-        // Playback lands in Slice 3.
-        direct_play_supported: None,
-        stream_url: None,
-        direct_play_url: None,
+        // Elixir hardcodes true behind a "TODO: Implement based on client
+        // capabilities" (common_types.ex:25-31). Mirrored deliberately: a
+        // computed answer would diverge on a field the conformance suite
+        // compares, and would risk the player refusing files it handles fine.
+        direct_play_supported: Some(true),
+        stream_url: Some(format!("/api/v1/stream/file/{}", row.id)),
+        direct_play_url: Some(format!(
+            "/api/v1/stream/file/{}?strategy=DIRECT_PLAY",
+            row.id
+        )),
         subtitles,
         segments: Vec::new(),
     }

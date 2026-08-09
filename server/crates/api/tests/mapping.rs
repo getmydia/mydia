@@ -100,12 +100,18 @@ fn malformed_subtitle_json_becomes_an_empty_list_not_a_panic() {
 }
 
 #[test]
-fn playback_fields_stay_absent_until_slice_three() {
+fn playback_fields_are_relative_urls_keyed_on_the_file_id() {
     let mapped = media_file_from(&file(1));
 
-    assert_eq!(mapped.stream_url, None);
-    assert_eq!(mapped.direct_play_url, None);
-    assert_eq!(mapped.direct_play_supported, None);
+    assert_eq!(mapped.direct_play_supported, Some(true));
+    assert_eq!(
+        mapped.stream_url.as_deref(),
+        Some("/api/v1/stream/file/file-1")
+    );
+    assert_eq!(
+        mapped.direct_play_url.as_deref(),
+        Some("/api/v1/stream/file/file-1?strategy=DIRECT_PLAY")
+    );
 }
 
 #[test]

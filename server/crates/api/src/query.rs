@@ -7,7 +7,7 @@
 
 use async_graphql::{Context, Error, Object, Result, ID};
 
-use crate::context::{authenticated_user, not_implemented, ApiContext};
+use crate::context::{authenticated_user, ApiContext};
 use crate::types::auth::{remote_device_from, ApiKey, RemoteDevice};
 use crate::types::common::{MediaCategory, MediaType, Node, PageInfo, SearchResultType, SortInput};
 use crate::types::discovery::{
@@ -417,11 +417,16 @@ impl RootQueryType {
     /// Get streaming candidates for a media item
     async fn streaming_candidates(
         &self,
-        _ctx: &Context<'_>,
-        _content_type: String,
-        _id: ID,
+        ctx: &Context<'_>,
+        content_type: String,
+        id: ID,
     ) -> Result<Option<StreamingCandidatesResult>> {
-        Err(not_implemented("streamingCandidates"))
+        let api = ctx.data::<ApiContext>()?;
+        authenticated_user(ctx).await?;
+
+        let row = crate::streaming::resolve_file(&api.db, &content_type, id.as_str()).await?;
+
+        Ok(Some(crate::streaming::candidates_for(&row)))
     }
 
     /// List user's collections (excluding system collections)

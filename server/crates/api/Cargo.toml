@@ -12,6 +12,8 @@ chrono.workspace = true
 futures-util.workspace = true
 mydia-auth = { path = "../auth" }
 mydia-db = { path = "../db" }
+mydia-library = { workspace = true }
+mydia-streaming = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

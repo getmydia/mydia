@@ -125,6 +125,15 @@ pub async fn find_by_path(db: &Db, path: &str) -> Result<Option<MediaFileRow>, D
         .await?)
 }
 
+pub async fn find(db: &Db, id: &str) -> Result<Option<MediaFileRow>, DbError> {
+    let row = sqlx::query_as::<_, MediaFileRow>(&format!("{SELECT} WHERE id = ?1"))
+        .bind(id)
+        .fetch_optional(db.pool())
+        .await?;
+
+    Ok(row)
+}
+
 pub async fn list_for_item(db: &Db, media_item_id: &str) -> Result<Vec<MediaFileRow>, DbError> {
     let sql = format!("{SELECT} WHERE media_item_id = ? ORDER BY path");
 
