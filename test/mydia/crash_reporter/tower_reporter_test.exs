@@ -1,5 +1,5 @@
 defmodule Mydia.CrashReporter.TowerReporterTest do
-  use ExUnit.Case, async: false
+  use Mydia.DataCase, async: false
 
   alias Mydia.CrashReporter.{Queue, Throttle, TowerReporter}
 
@@ -10,10 +10,11 @@ defmodule Mydia.CrashReporter.TowerReporterTest do
     start_supervised!({Throttle, name: name, max: 1000, window_ms: 60_000})
     Application.put_env(:mydia, :crash_reporter_throttle, name)
 
-    # Opt-in must be visible to the async reporting Task (a separate process),
-    # so it has to come from the env var, not a sandboxed DB setting. Point the
-    # relay at an unreachable address so the background queue processor can never
-    # POST to the real relay during the test.
+    # Opt-in must be visible to the async reporting Task (a separate process).
+    # DataCase (shared sandbox) lets that Task query config_settings safely;
+    # the env var remains the source of truth when no UI setting row exists.
+    # Point the relay at an unreachable address so the background queue
+    # processor can never POST to the real relay during the test.
     original_enabled = System.get_env("CRASH_REPORTING_ENABLED")
     System.put_env("CRASH_REPORTING_ENABLED", "true")
     original_relay = System.get_env("METADATA_RELAY_URL")
