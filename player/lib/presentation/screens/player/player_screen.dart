@@ -15,6 +15,7 @@ import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/player/codec_support.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
@@ -25,6 +26,7 @@ import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
+import '../../../core/player/web_session_limits.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
@@ -59,7 +61,8 @@ import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/schema.graphql.dart';
-import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/p2p/media_proxy.dart';
+import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
@@ -167,12 +170,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// stays valid to call after disposal.
   late final Invalidator _invalidator;
 
-  /// `localProxyServiceProvider` is a plain (non-autoDispose) provider, so it
+  /// `mediaProxyProvider` is a plain (non-autoDispose) provider, so it
   /// is effectively keep-alive for this container's lifetime — the same
   /// instance `ref.read` would return at any later point. Safe to capture
   /// once here, exactly like [_invalidator], and used by
   /// [_terminateHlsSession] instead of a `dispose()`-time `ref.read`.
-  late final LocalProxyService _localProxyService;
+  late final MediaProxy _mediaProxy;
 
   /// The current P2P connection mode, kept in sync via `ref.listenManual`
   /// (set up in [initState]) rather than read in `dispose()`:
@@ -305,6 +308,51 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// The rung the viewer chose, which is what gets requested.
   QualityRung get _selectedQuality => _settledQuality ?? QualityRung.original;
 
+  /// True when this session's bytes cross our relay: public web
+  /// (web.mydia.dev) only.
+  ///
+  /// Native hole-punches to a direct connection, and the instance-hosted
+  /// `/player` build talks to its own origin over plain HTTP; neither costs
+  /// the project anything, so both stay uncapped and unblocked. Shared by the
+  /// streaming-session cap and the browser-support gate below, so both agree
+  /// on exactly which sessions are relayed.
+  bool get _relayed => kIsWeb && !isInstanceHostedWeb;
+
+  /// Why this browser cannot play a relayed HLS stream, or null when it can.
+  ///
+  /// Only ever consulted for [_relayed] sessions, and that distinction is the
+  /// whole point. On public web the manifest and every segment are served by a
+  /// Service Worker out of the page's p2p connection. The instance-hosted
+  /// `/player` build serves a plain same-origin HTTP manifest with no worker
+  /// in the path, where everything below plays, so nothing may be blocked
+  /// there.
+  ///
+  /// The caller must consult this before `startStreamingSession`: past that
+  /// point an FFmpeg transcode is running on the instance and relay bytes are
+  /// being spent on a session that can only end in a spinner.
+  ///
+  /// [CodecSupport.prefersNativeHls] is deliberately *not* consulted here.
+  /// media_kit skips hls.js for any browser answering `canPlayType(
+  /// 'application/vnd.apple.mpegurl')` non-empty, and Chromium 149 answers
+  /// `maybe`, so that predicate is true on desktop Chrome. There the media
+  /// element's own loader was measured fetching both the manifest and its
+  /// segment through the Service Worker, so it works. Blocking on it would
+  /// turn away most of this site's viewers. Whether WebKit's loader does the
+  /// same is the open question, and it needs the manual browser matrix to
+  /// answer, not a guess. See that getter's doc.
+  String? _relayedPlaybackBlocker() {
+    if (!_relayed) return null;
+
+    // Neither MediaSource nor ManagedMediaSource, so hls.js cannot run at all.
+    // iOS Safari below 17.1 is the real-world case.
+    if (!CodecSupport.hasHlsMediaSourceSupport) {
+      return 'This browser cannot play video here. Try the Mydia '
+          'app instead, or a browser released after 2023.';
+    }
+
+    return null;
+  }
+
   /// The rung the server reported actually applying, which is what gets
   /// displayed. These differ on a relay connection, where the cap is not
   /// negotiable by the client. Null until a session echoes its caps back,
@@ -405,7 +453,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void initState() {
     super.initState();
     _invalidator = ref.read(invalidatorProvider);
-    _localProxyService = ref.read(localProxyServiceProvider);
+    _mediaProxy = ref.read(mediaProxyProvider);
 
     // Seeded here rather than read at each branch: an entry-point that already
     // said "Continue" has answered the resume question, and all three
@@ -769,12 +817,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           });
         }
 
-        final proxy = ref.read(localProxyServiceProvider);
+        final proxy = ref.read(mediaProxyProvider);
         await proxy.start(
           targetPeer: serverNodeAddr,
           authToken: token,
         );
-        debugPrint('[PlayerScreen] Local proxy started on port ${proxy.port}');
+        debugPrint('[PlayerScreen] Media proxy serving at ${proxy.baseUrl}');
       }
 
       // Initialize progress service
@@ -912,9 +960,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         debugPrint('[PlayerScreen] Direct play for file_id=$playFileId');
 
         if (isP2PMode) {
-          mediaSource = ref
-              .read(localProxyServiceProvider)
-              .buildDirectStreamUrl(playFileId);
+          mediaSource =
+              ref.read(mediaProxyProvider).buildDirectStreamUrl(playFileId);
         } else {
           // Get media token for URL (if available)
           final mediaTokenService =
@@ -932,6 +979,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
       } else {
         // HLS path (both web and native fallback)
+
+        // Caught here, before a streaming session is even requested. Anything
+        // past this point starts an FFmpeg transcode on the instance and pulls
+        // relay bytes we pay for, so a browser that cannot play the result has
+        // to be turned away first, not after.
+        final blocker = _relayedPlaybackBlocker();
+        if (blocker != null) {
+          if (mounted) {
+            setState(() {
+              _error = blocker;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+
         if (mounted) {
           setState(() {
             _loadingMessage = 'Starting stream...';
@@ -970,7 +1033,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         debugPrint('[PlayerScreen] HLS session started: $_hlsSessionId');
 
         // Label from what the server applied, not what was asked for: a relay
-        // connection clamps to 2000kbps and 720p regardless of the request.
+        // connection clamps to kWebMaxBitrateKbps and kWebMaxHeight (3000kbps,
+        // 720p) regardless of the request.
         //
         // Only a server that echoes at all gets to decide the label. The
         // legacy request does not select the echo fields, so reading them
@@ -1006,7 +1070,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // Build HLS URL based on mode
         if (isP2PMode) {
           mediaSource =
-              ref.read(localProxyServiceProvider).buildHlsUrl(_hlsSessionId!);
+              ref.read(mediaProxyProvider).buildHlsUrl(_hlsSessionId!);
         } else {
           mediaSource = '$serverUrl/api/v1/hls/$_hlsSessionId/index.m3u8';
         }
@@ -1144,6 +1208,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final startPosition =
         startPositionSeconds > 0 ? startPositionSeconds : null;
 
+    // Public web (web.mydia.dev) is relay-only forever, since a browser
+    // cannot hole-punch, so every byte of that session is bandwidth we pay
+    // for. The instance-hosted `/player` build reaches its own origin over
+    // plain HTTP and costs us nothing, so it stays uncapped. Whichever of the
+    // viewer's own choice or the relay ceiling is more restrictive wins: a
+    // viewer who already picked a lower rung than the cap keeps that choice
+    // instead of being pushed up to it.
+    final webLimits = webSessionLimits(relayed: _relayed);
+    final maxBitrate =
+        tighterCap(_selectedQuality.maxBitrateKbps, webLimits.maxBitrate);
+    final maxHeight = tighterCap(_selectedQuality.height, webLimits.maxHeight);
+
     Future<QueryResult<Object?>> runLegacy() {
       return graphqlClient.mutate(
         MutationOptions(
@@ -1151,7 +1227,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           variables: Variables$Mutation$StartStreamingSessionLegacy(
             fileId: fileId,
             strategy: hlsStrategy,
-            maxBitrate: _selectedQuality.maxBitrateKbps,
+            maxBitrate: maxBitrate,
             startPosition: startPosition,
           ).toJson(),
         ),
@@ -1166,8 +1242,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         variables: Variables$Mutation$StartStreamingSession(
           fileId: fileId,
           strategy: hlsStrategy,
-          maxBitrate: _selectedQuality.maxBitrateKbps,
-          maxHeight: _selectedQuality.height,
+          maxBitrate: maxBitrate,
+          maxHeight: maxHeight,
           startPosition: startPosition,
         ).toJson(),
       ),
@@ -1760,8 +1836,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Check if using P2P proxy
     final connectionState = ref.read(conn.connectionProvider);
     if (connectionState.isP2PMode) {
-      final proxy = ref.read(localProxyServiceProvider);
-      return 'http://127.0.0.1:${proxy.port}$relativeUrl';
+      // Built from the proxy's own base, like every other media URL. The
+      // hand-rolled `http://127.0.0.1:<port>` this replaced was wrong twice
+      // over: it dropped the `/g/<token>` prefix a LAN-exposed proxy demands,
+      // and in the browser there is no loopback server at all, so it produced
+      // `http://127.0.0.1:0/...`, an insecure URL fetched from an HTTPS page,
+      // which the browser blocks as mixed content.
+      //
+      // This still 404s, on both platforms, and that is not something this
+      // call site can fix: there is no subtitle route in the p2p protocol.
+      // `lib/mydia/p2p/server.ex` dispatches on the session id alone (an HLS
+      // session, `direct:`, or `download:`), and the subtitle URL GraphQL
+      // hands us is a plain Phoenix route with a load-bearing `?format=`
+      // query, which both proxies deliberately strip before matching. Adding
+      // one means a new session prefix, a server-side handler, and moving the
+      // format out of the query, none of which belongs at a URL builder.
+      // Until then this is an ordinary 404 with a body saying so, which is
+      // what native has always done here.
+      if (!_mediaProxy.isRunning) return relativeUrl;
+      return '${_mediaProxy.baseUrl}$relativeUrl';
     }
 
     // Direct server mode
@@ -2414,7 +2507,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// This stops FFmpeg and cleans up server-side resources.
   ///
   /// Reads only the fields captured in [initState] ([_isP2PMode],
-  /// [_localProxyService], [_graphqlClient]) — never `ref` directly. This
+  /// [_mediaProxy], [_graphqlClient]) — never `ref` directly. This
   /// runs from `dispose()` (as well as the web beforeunload handler), and
   /// `ref.read`/`ref.watch` unconditionally throw once `dispose()` has
   /// started: `BuildContext.mounted` is already `false` throughout it, a
@@ -2424,8 +2517,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Stop local proxy if P2P mode
     if (_isP2PMode) {
       try {
-        await _localProxyService.stop();
-        debugPrint('[PlayerScreen] Local proxy stopped');
+        await _mediaProxy.stop();
+        debugPrint('[PlayerScreen] Media proxy stopped');
       } catch (e) {
         debugPrint('[PlayerScreen] Error stopping local proxy: $e');
       }

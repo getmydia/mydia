@@ -39,6 +39,41 @@ class CodecSupport {
   /// Check if the platform supports direct file playback.
   static bool get supportsDirectPlay => platform.supportsDirectPlay;
 
+  /// Whether this browser has what hls.js needs (`MediaSource` or
+  /// `ManagedMediaSource`). Always true on native.
+  ///
+  /// False identifies iOS Safari below 17.1: it has neither, so hls.js
+  /// cannot work there. Callers should check this before starting a
+  /// streaming session and point the viewer at the native app instead of
+  /// letting playback fail once it is already underway.
+  static bool get hasHlsMediaSourceSupport => platform.hasHlsMediaSourceSupport;
+
+  /// Whether media_kit will play HLS with the browser's own engine rather than
+  /// hls.js. Always false on native.
+  ///
+  /// **This is a capability probe, not a support check.** True does not mean
+  /// unplayable, and it must not be used to refuse playback. Measured, not
+  /// assumed:
+  ///
+  /// - Chromium 149 answers `canPlayType('application/vnd.apple.mpegurl')`
+  ///   with `maybe`. This is therefore true on ordinary desktop Chrome, where
+  ///   media_kit plays with `element.src` and no hls.js at all.
+  /// - A `<video>` element pointed at a Service Worker-served manifest in that
+  ///   same Chromium fetched both the manifest and its segment through the
+  ///   worker. The native loader is not bypassing it.
+  ///
+  /// It is true on every WebKit browser too (macOS Safari, iOS Safari, and iOS
+  /// Chrome/Firefox/Edge, which are WebKit underneath), and whether WebKit's
+  /// loader also fetches through a Service Worker is the open question this
+  /// probe exists to help answer. Answer it with the manual browser matrix
+  /// before gating anything on it, and gate on the browser that actually
+  /// fails rather than on this, which desktop Chrome shares.
+  ///
+  /// [hasHlsMediaSourceSupport] is the check that may be used to refuse: a
+  /// browser with neither `MediaSource` nor `ManagedMediaSource` cannot run
+  /// hls.js under any circumstances.
+  static bool get prefersNativeHls => platform.prefersNativeHls;
+
   /// Check if running on web platform.
   static bool get isWeb => kIsWeb;
 

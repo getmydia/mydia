@@ -3,13 +3,35 @@ name = "mydia_p2p_core"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-# Iroh for p2p networking (QUIC-based, simpler than libp2p)
-iroh = "1.0.0"
-iroh-relay = "1.0.0"
+[features]
+default = ["host"]
+# The server role: accepting inbound connections, answering HLS requests
+# (which means parking the send half of a stream until it is drained), and
+# reading files off disk. A browser does none of these.
+#
+# Only the file reads genuinely fail to compile for wasm. The rest is gated by
+# role rather than by target because a browser has no business doing it, not
+# because the compiler objects.
+host = []
 
-# Async runtime
-tokio = { version = "1.49", features = ["rt-multi-thread", "sync", "macros", "time", "io-util"] }
+[dependencies]
+# Iroh for p2p networking (QUIC-based, simpler than libp2p).
+#
+# Defaults are off so a browser carries only what it can use. `tls-ring` is
+# named explicitly rather than left to the default set because it is not
+# optional anywhere: `Endpoint::builder` requires a rustls crypto provider on
+# every target, and `presets::N0` only exists when a tls-* feature is on. The
+# rest of iroh's defaults (metrics, portmapper, fast-apple-datapath) are
+# server-side concerns and are restored for native below.
+iroh = { version = "1.0.0", default-features = false, features = ["tls-ring"] }
+iroh-relay = { version = "1.0.0", default-features = false, features = [
+  "tls-ring",
+] }
+
+# Task spawning and timers. n0-future is iroh's own native/browser split, so
+# the same code runs on a tokio runtime natively and on the browser event loop
+# in wasm.
+n0-future = "0.3.2"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -22,6 +44,36 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 futures = "0.3"
 uuid = { version = "1.20", features = ["v4"] }
+
+# tokio supplies the channels and `select!` on both targets, but only native
+# gets a runtime: `rt-multi-thread` is what `runtime::block_on` and
+# `spawn_blocking` need, and neither exists in a browser.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.49", features = [
+  "rt-multi-thread",
+  "sync",
+  "macros",
+  "time",
+  "io-util",
+] }
+# Restores the rest of iroh's own defaults for the native build only, so the
+# server keeps its UPnP/NAT-PMP port mapping, metrics and the Apple datapath.
+# Keep this list in step with iroh's `default` on a version bump.
+iroh = { version = "1.0.0", features = [
+  "metrics",
+  "fast-apple-datapath",
+  "portmapper",
+] }
+iroh-relay = { version = "1.0.0", features = ["metrics"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1.49", features = ["sync", "macros"] }
+# v4 UUIDs need a source of randomness, and on wasm that is the browser's
+# crypto API rather than the OS.
+uuid = { version = "1.20", features = ["js"] }
+# Ed25519 key generation is this crate's own requirement, so it names its own
+# randomness backend rather than inheriting iroh's transitive choice.
+getrandom = { version = "0.4", features = ["wasm_js"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"

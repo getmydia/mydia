@@ -1,7 +1,6 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/native/frb_generated.dart'
-    if (dart.library.js_interop) 'package:player/native/frb_stub.dart';
+import 'package:player/native/frb_generated.dart';
 
 /// One-time initialization shared by every integration test file.
 ///

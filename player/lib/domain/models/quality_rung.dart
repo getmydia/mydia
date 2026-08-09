@@ -95,9 +95,10 @@ List<QualityRung> deriveQualityLadder({int? sourceHeight}) {
 /// Names what the server actually applied, for labelling the control.
 ///
 /// The server may clamp below what was requested, and a relay clamps to a
-/// pair that is not on the ladder at all (2000kbps with 720p). Height is the
-/// more meaningful half of that pair to a viewer, so it decides the label and
-/// the bitrate is only a tiebreak.
+/// pair that is not on the ladder at all (3000kbps with 720p, see
+/// `web_session_limits.dart`). Height is the more meaningful half of that
+/// pair to a viewer, so it decides the label and the bitrate is only a
+/// tiebreak.
 ///
 /// A height that matches no rung is still named, from the height itself. The
 /// caller displays `effective ?? selected`, so returning null for an

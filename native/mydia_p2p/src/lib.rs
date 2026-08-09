@@ -3,7 +3,7 @@
 //! Provides Erlang/Elixir interop for the p2p networking functionality.
 
 use mydia_p2p_core::{
-    Event, GraphQLResponse, HlsResponseHeader, Host, HostConfig, LogLevel, MydiaRequest,
+    blocking, Event, GraphQLResponse, HlsResponseHeader, Host, HostConfig, LogLevel, MydiaRequest,
     MydiaResponse, PairingResponse,
 };
 use rustler::{
@@ -43,6 +43,9 @@ fn start_host<'a>(
         relay_url,
         bind_port,
         keypair_path,
+        // The server reads its identity off disk; only a browser hands raw
+        // bytes in.
+        keypair_bytes: None,
     };
     let (host, node_id_str) = Host::new(config);
     let resource = ResourceArc::new(HostResource { host });
@@ -55,7 +58,7 @@ fn dial(
     resource: ResourceArc<HostResource>,
     endpoint_addr_json: String,
 ) -> Result<String, rustler::Error> {
-    match resource.host.dial(endpoint_addr_json) {
+    match blocking::dial(&resource.host, endpoint_addr_json) {
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
@@ -64,13 +67,13 @@ fn dial(
 /// Get this node's EndpointAddr as JSON for sharing.
 #[rustler::nif(schedule = "DirtyIo")]
 fn get_node_addr(resource: ResourceArc<HostResource>) -> String {
-    resource.host.get_node_addr()
+    blocking::get_node_addr(&resource.host)
 }
 
 /// Get network statistics.
 #[rustler::nif(schedule = "DirtyIo")]
 fn get_network_stats(resource: ResourceArc<HostResource>) -> ElixirNetworkStats {
-    let stats = resource.host.get_network_stats();
+    let stats = blocking::get_network_stats(&resource.host);
     ElixirNetworkStats {
         connected_peers: stats.connected_peers,
         relay_connected: stats.relay_connected,
@@ -185,7 +188,7 @@ fn send_response(
         ElixirResponse::Error(e) => MydiaResponse::Error(e),
     };
 
-    match resource.host.send_response(request_id, core_response) {
+    match blocking::send_response(&resource.host, request_id, core_response) {
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
@@ -222,7 +225,7 @@ fn respond_with_file_chunk(
             Err(e) => MydiaResponse::Error(format!("File open error: {}", e)),
         };
 
-        let _ = resource_clone.host.send_response(request_id, response);
+        let _ = blocking::send_response(&resource_clone.host, request_id, response);
     });
 
     Ok("ok".to_string())
@@ -230,7 +233,8 @@ fn respond_with_file_chunk(
 
 /// Send an HLS response header for a streaming request.
 /// Must be called before any send_hls_chunk calls.
-/// Uses DirtyIo scheduler because blocking_send/blocking_recv block the thread.
+/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// async Host call completes.
 #[rustler::nif(schedule = "DirtyIo")]
 fn send_hls_header(
     resource: ResourceArc<HostResource>,
@@ -245,7 +249,7 @@ fn send_hls_header(
         cache_control: header.cache_control,
     };
 
-    match resource.host.send_hls_header(stream_id, core_header) {
+    match blocking::send_hls_header(&resource.host, stream_id, core_header) {
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
@@ -253,17 +257,15 @@ fn send_hls_header(
 
 /// Send a chunk of HLS data.
 /// Must be called after send_hls_header and before finish_hls_stream.
-/// Uses DirtyIo scheduler because blocking_send/blocking_recv block the thread.
+/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// async Host call completes.
 #[rustler::nif(schedule = "DirtyIo")]
 fn send_hls_chunk(
     resource: ResourceArc<HostResource>,
     stream_id: String,
     data: Binary,
 ) -> Result<String, rustler::Error> {
-    match resource
-        .host
-        .send_hls_chunk(stream_id, data.as_slice().to_vec())
-    {
+    match blocking::send_hls_chunk(&resource.host, stream_id, data.as_slice().to_vec()) {
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
@@ -271,13 +273,14 @@ fn send_hls_chunk(
 
 /// Finish an HLS stream.
 /// Must be called after all chunks have been sent.
-/// Uses DirtyIo scheduler because blocking_send/blocking_recv block the thread.
+/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// async Host call completes.
 #[rustler::nif(schedule = "DirtyIo")]
 fn finish_hls_stream(
     resource: ResourceArc<HostResource>,
     stream_id: String,
 ) -> Result<String, rustler::Error> {
-    match resource.host.finish_hls_stream(stream_id) {
+    match blocking::finish_hls_stream(&resource.host, stream_id) {
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
@@ -286,7 +289,8 @@ fn finish_hls_stream(
 /// Stream a file range directly to a QUIC stream.
 /// Reads the file in Rust and writes length-prefixed chunks, avoiding per-chunk NIF overhead.
 /// The stream is finished automatically after all data is written.
-/// Uses DirtyIo scheduler because blocking_send/blocking_recv block the thread.
+/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// async Host call completes.
 #[rustler::nif(schedule = "DirtyIo")]
 fn stream_file_range(
     resource: ResourceArc<HostResource>,
@@ -295,10 +299,7 @@ fn stream_file_range(
     offset: u64,
     length: u64,
 ) -> Result<String, rustler::Error> {
-    match resource
-        .host
-        .stream_file_range(stream_id, file_path, offset, length)
-    {
+    match blocking::stream_file_range(&resource.host, stream_id, file_path, offset, length) {
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }

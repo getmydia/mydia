@@ -13,10 +13,39 @@ import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
 
-// Only import FRB on native platforms (not web)
-// ignore: unused_import
-import 'package:player/native/frb_generated.dart'
-    if (dart.library.js_interop) 'package:player/native/frb_stub.dart';
+import 'package:player/native/frb_generated.dart';
+
+/// Whether this web build ships the p2p wasm module under `web/pkg/`.
+///
+/// Only `tool/build_web.sh` produces that module, and only the public player
+/// at web.mydia.dev is built through it. The bundle a Mydia instance serves at
+/// `/player` is same-origin with its own server and talks to it over plain
+/// HTTP, so it has never carried the module and does not need to.
+///
+/// This has to be decided at build time rather than probed at runtime.
+/// flutter_rust_bridge's web loader appends a `<script>` for the module and
+/// awaits its `load` event with no error path, so a module that is not there
+/// does not throw. It hangs, and `_startApp` would never reach `runApp`.
+const kWebP2pEnabled = bool.fromEnvironment('MYDIA_WEB_P2P');
+
+/// Ceiling on `RustLib.init()`, so `_startApp` cannot stall forever.
+///
+/// [kWebP2pEnabled] keeps a build that never had the module from reaching the
+/// loader at all. This covers the other half: a build that expects the module
+/// and does not find it at runtime, through deploy skew, a wrong base href, a
+/// partial upload or a bad cache. The loader has no error path, so a 404 there
+/// is an await that never returns, and `_startApp`'s promise to call `runApp`
+/// exactly once on every path would be broken on precisely the public build
+/// this exists to enable.
+///
+/// A minute is a ceiling, not a latency budget. The failure it guards resolves
+/// in milliseconds, so nothing correct is ever waiting on it. What has to fit
+/// underneath is a cold fetch and instantiation of a ~5 MB module on a poor
+/// connection, and the bundle's own `main.dart.js` is comparable in size and
+/// has already loaded by the time this runs, so the connection has proved
+/// itself. Timing out lands in the same catch as any other init failure, and
+/// on a build that ships the module that is fatal: see `_startApp`.
+const _rustInitTimeout = Duration(seconds: 60);
 
 void main() async {
   // Add error logging for debugging
@@ -67,13 +96,26 @@ void main() async {
 /// window completely black forever with no indication why (the bug this
 /// function exists to fix).
 Future<void> _startApp() async {
-  // Initialize Rust Bridge (native platforms only - not available on web).
-  // This MUST complete before any P2P/Libp2p code runs. Unlike the steps
-  // below, there's no reasonable degraded mode without it, so a failure here
+  // Initialize the Rust bridge. This MUST complete before any p2p code runs.
+  //
+  // On native there is no reasonable degraded mode without it, so a failure
   // goes straight to the last-resort error screen rather than continuing.
-  if (!kIsWeb) {
+  //
+  // On web it depends on which web build this is, and [kWebP2pEnabled] is
+  // exactly that distinction. A build without the module skips this block
+  // entirely; that is the bundle an instance serves at `/player`, which
+  // reaches its own origin over plain HTTP and never needed p2p.
+  //
+  // A build that ships the module is the public player at web.mydia.dev,
+  // where p2p is the only transport there is. Continuing after a failed init
+  // there boots the app into a pairing screen that cannot ever work, and the
+  // causes are all real deploy states: a missing COEP header, skew between
+  // main.dart.js and pkg/*.wasm, a truncated upload, a wrong base href. Each
+  // one presents as "pairing does nothing", or a 60s stall and then pairing
+  // does nothing. So it fails visibly instead, with the error on screen.
+  if (!kIsWeb || kWebP2pEnabled) {
     try {
-      await RustLib.init();
+      await RustLib.init().timeout(_rustInitTimeout);
       debugPrint('[RustLib] Rust bridge initialized successfully');
     } catch (e, st) {
       debugPrint('[RustLib] Failed to initialize Rust bridge: $e');
@@ -82,7 +124,7 @@ Future<void> _startApp() async {
       return;
     }
   } else {
-    debugPrint('[RustLib] Skipping Rust bridge initialization on web platform');
+    debugPrint('[RustLib] Web build without the p2p wasm module; skipping');
   }
 
   // Initialize media_kit for video playback. Best-effort: the rest of the

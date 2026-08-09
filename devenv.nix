@@ -161,6 +161,22 @@ in
 
     # Inspect/validate WASM components (WIT plugin guests)
     wasm-tools
+
+    # player/tool/build_web.sh builds mydia_p2p_core for wasm through
+    # `flutter pub run flutter_rust_bridge build-web`, which shells out to
+    # `wasm-pack` directly (not the cargo-installed flutter_rust_bridge_codegen
+    # binary). Without wasm-pack on PATH, that Dart code falls back to `cargo
+    # install wasm-pack`, which compiles the crate from source and costs
+    # minutes on every CI run instead of resolving a Cachix-cached derivation.
+    # Verified this pair closes the gap rather than just shrinking it: with
+    # both present, wasm-pack finds this wasm-opt on PATH directly
+    # ("found wasm-opt at .../binaryen-.../bin/wasm-opt") and never downloads
+    # one. It still downloads wasm-bindgen from a GitHub release regardless,
+    # since that one must match the exact wasm-bindgen crate version pinned in
+    # Cargo.lock and wasm-pack does not trust a PATH copy for that. Fine on a
+    # normal internet-connected runner, just not eliminated by this package.
+    wasm-pack
+    binaryen
   ]
   # ── Linux-only packages (KTD7) ────────────────────────────────────────────
   # These have meta.platforms = linux, so listing them unconditionally made the
@@ -185,6 +201,17 @@ in
 
     # IEx shell history.
     ERL_AFLAGS = "-kernel shell_history enabled";
+
+    # C cross-compilation for the wasm32-unknown-unknown target listed under
+    # languages.rust above. `ring`, which is rustls' crypto provider and so
+    # iroh's, compiles C sources through cc-rs, and cc-rs falls back to the
+    # ambient CC, which nix sets to a host gcc wrapper. That silently yields
+    # x86-64 objects rust-lld then refuses to link. The nix clang *wrapper* is
+    # no better: it injects host glibc include paths and hardening flags
+    # (-fzero-call-used-regs) that clang rejects for wasm. An unwrapped clang
+    # plus llvm-ar is what actually cross-compiles.
+    CC_wasm32_unknown_unknown = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
+    AR_wasm32_unknown_unknown = "${pkgs.llvmPackages.llvm}/bin/llvm-ar";
 
     # Shared, worktree-independent caches (KTD4 / R11).
     MIX_HOME = "${sharedCache}/mix";

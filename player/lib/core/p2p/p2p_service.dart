@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:player/core/p2p/p2p_keystore.dart';
 import 'package:player/native/lib.dart';
 
 /// Default iroh relay URL (our own relay).
@@ -130,6 +132,31 @@ class P2pStatus {
   }
 }
 
+/// Bound on each keystore operation.
+///
+/// Reading or writing a 32-byte record is sub-millisecond work in practice,
+/// and even a cold `open` on an empty database is milliseconds, so ten seconds
+/// is orders of magnitude clear of any real latency and will not fire on a
+/// merely slow machine. It is here because initialize() joins concurrent
+/// callers onto one attempt: without a bound, a wedged IndexedDB would not
+/// stall one caller, it would leave every later caller awaiting an attempt
+/// that never settles, for the life of the process. Timing out throws instead
+/// of inventing an identity, so the attempt fails, the guard clears, and the
+/// next call retries. That also means erring long is the safe direction: a
+/// bound that is too generous costs a slow startup, never a lost pairing.
+const _keystoreTimeout = Duration(seconds: 10);
+
+/// A node identity is 32 random bytes: every value is a valid Ed25519 seed,
+/// so there is nothing to reject or retry here.
+Uint8List _generateNodeSecret() {
+  final random = Random.secure();
+  final secret = Uint8List(32);
+  for (var i = 0; i < secret.length; i++) {
+    secret[i] = random.nextInt(256);
+  }
+  return secret;
+}
+
 /// Max auto-reconnect attempts before giving up (reset on successful connect).
 const _maxAutoReconnectAttempts = 3;
 
@@ -140,6 +167,10 @@ const _autoReconnectDelay = Duration(seconds: 2);
 class P2pService {
   P2PHost? _host;
   bool _isInitialized = false;
+
+  /// The initialize() attempt currently running, if any. See initialize().
+  Future<void>? _initializeFuture;
+
   bool _isRelayConnected = false;
   String? _nodeAddr;
   String? _nodeId;
@@ -247,9 +278,53 @@ class P2pService {
   ///
   /// [relayUrl] - Optional custom iroh relay URL. If not provided, uses
   /// the build-time IROH_RELAY_URL or falls back to [_defaultRelayUrl].
+  ///
+  /// Concurrent callers join the attempt already in flight instead of each
+  /// building a host of their own. That guard is needed because reading the
+  /// keypair is asynchronous, so the `_isInitialized` check and the assignment
+  /// that satisfies it no longer happen in one synchronous run.
   Future<void> initialize({String? relayUrl}) async {
     if (_isInitialized) return;
 
+    final inFlight = _initializeFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    final attempt = _initialize(relayUrl: relayUrl);
+    _initializeFuture = attempt;
+    try {
+      await attempt;
+    } finally {
+      // Only clear our own attempt: a reset() partway through starts a new one
+      // and this attempt must not drop that.
+      if (identical(_initializeFuture, attempt)) {
+        _initializeFuture = null;
+      }
+    }
+  }
+
+  /// The node's persisted secret key, or null to let the Rust core decide.
+  ///
+  /// Native returns null. The stub keystore stores nothing there, so
+  /// `keypair_bytes` goes unset and the core picks the identity exactly as it
+  /// did before any of this existed. A browser has no filesystem, so the raw
+  /// 32 bytes come out of IndexedDB instead, and the first ever load generates
+  /// and stores them here.
+  Future<Uint8List?> _loadOrCreateKeypairBytes() async {
+    final keystore = createKeystore();
+    final stored = await keystore.read().timeout(_keystoreTimeout);
+    if (stored != null) return stored;
+    if (!kIsWeb) return null;
+
+    final secret = _generateNodeSecret();
+    await keystore.write(secret).timeout(_keystoreTimeout);
+    debugPrint('[P2P] Stored a new browser node identity');
+    return secret;
+  }
+
+  Future<void> _initialize({String? relayUrl}) async {
     // Use provided URL, or custom from env, or our default relay
     final effectiveRelayUrl = relayUrl ??
         (_customIrohRelayUrl.isNotEmpty
@@ -261,8 +336,13 @@ class P2pService {
       debugPrint(
           '[P2P] Initializing iroh-based P2P Host with relay: $effectiveRelayUrl');
 
+      final keypairBytes = await _loadOrCreateKeypairBytes();
+
       // Initialize Host via FRB - returns (P2PHost, String)
-      final (host, nodeId) = P2PHost.init(relayUrl: effectiveRelayUrl);
+      final (host, nodeId) = P2PHost.init(
+        relayUrl: effectiveRelayUrl,
+        keypairBytes: keypairBytes,
+      );
       _host = host;
       _nodeId = nodeId;
 
@@ -640,6 +720,7 @@ class P2pService {
     }));
     _host = null;
     _isInitialized = false;
+    _initializeFuture = null;
     _isRelayConnected = false;
     _nodeAddr = null;
     _nodeId = null;

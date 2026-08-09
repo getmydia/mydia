@@ -8,6 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
+// These functions are ignored because they are not marked as `pub`: `init_logging`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>>
@@ -25,8 +26,16 @@ abstract class P2PHost implements RustOpaqueInterface {
   Future<String> getNodeAddr();
 
   /// Initialize a new P2P host with optional custom relay URL.
-  static (P2PHost, String) init({String? relayUrl}) =>
-      RustLib.instance.api.crateP2PHostInit(relayUrl: relayUrl);
+  ///
+  /// `keypair_bytes` is the node's raw 32-byte Ed25519 secret. A browser has
+  /// no filesystem, so it reads the secret out of IndexedDB and hands it in
+  /// here. Native passes None and leaves the identity to the core, which is
+  /// where it was already decided. A slice of the wrong length is dropped
+  /// rather than trusted, which costs a fresh identity but never a
+  /// malformed one.
+  static (P2PHost, String) init({String? relayUrl, Uint8List? keypairBytes}) =>
+      RustLib.instance.api
+          .crateP2PHostInit(relayUrl: relayUrl, keypairBytes: keypairBytes);
 
   /// Send a GraphQL request to a specific peer.
   Future<FlutterGraphQLResponse> sendGraphqlRequest(

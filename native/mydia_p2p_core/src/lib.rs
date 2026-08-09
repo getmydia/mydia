@@ -4,19 +4,33 @@
 //! NAT traversal and QUIC-based connections.
 
 use futures::StreamExt;
+// Both are server role: `Incoming` is a connection being accepted, and a
+// `SendStream` is only held onto to answer an HLS request. A client opens
+// streams, it never parks one waiting to write a response.
+#[cfg(feature = "host")]
+use iroh::endpoint::{Incoming, SendStream};
 use iroh::{
     defaults::prod as default_relays,
-    dns::DnsResolver,
-    endpoint::{presets, Connection, PathEvent, SendStream},
+    endpoint::{presets, Connection, PathEvent},
     Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
+// A browser has no DNS resolver to configure: iroh resolves peers over HTTPS
+// pkarr there and gates the whole type out. Not a role split, a platform one.
+#[cfg(not(target_arch = "wasm32"))]
+use iroh::dns::DnsResolver;
 use iroh_relay::RelayQuicConfig;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
-use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+
+// Gated at the declaration site rather than inside the file: on wasm a
+// mistaken caller should be told the module does not exist, not that it is
+// empty.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod blocking;
+pub mod runtime;
 
 // Protocol identifier for mydia connections
 const ALPN: &[u8] = b"/mydia/1.0.0";
@@ -126,20 +140,24 @@ enum Command {
         request_id: String,
         response: MydiaResponse,
     },
+    #[cfg(feature = "host")]
     SendHlsHeader {
         stream_id: String,
         header: HlsResponseHeader,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    #[cfg(feature = "host")]
     SendHlsChunk {
         stream_id: String,
         data: Vec<u8>,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    #[cfg(feature = "host")]
     FinishHlsStream {
         stream_id: String,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    #[cfg(feature = "host")]
     StreamFileRange {
         stream_id: String,
         file_path: String,
@@ -357,11 +375,24 @@ pub struct HostConfig {
     pub bind_port: Option<u16>,
     /// Path to store/load keypair (optional). If not set, a new random keypair is generated.
     pub keypair_path: Option<String>,
+    /// Raw 32-byte secret key. Wins over `keypair_path` when set. The browser
+    /// uses this because wasm has no filesystem.
+    pub keypair_bytes: Option<[u8; 32]>,
 }
 
-/// Load or generate an Ed25519 keypair for the node identity
-fn load_or_generate_keypair(path: Option<&str>) -> SecretKey {
-    if let Some(path) = path {
+/// Load or generate an Ed25519 keypair for the node identity.
+///
+/// `keypair_bytes` wins when set. That is the browser's path: wasm has no
+/// filesystem, so the caller reads the secret out of IndexedDB and hands it
+/// in. `keypair_path` is the native path and is compiled out without the
+/// `host` feature.
+fn load_or_generate_keypair(config: &HostConfig) -> SecretKey {
+    if let Some(bytes) = config.keypair_bytes {
+        return SecretKey::from_bytes(&bytes);
+    }
+
+    #[cfg(feature = "host")]
+    if let Some(path) = config.keypair_path.as_deref() {
         if let Ok(bytes) = std::fs::read(path) {
             if bytes.len() == 32 {
                 let mut arr = [0u8; 32];
@@ -372,11 +403,10 @@ fn load_or_generate_keypair(path: Option<&str>) -> SecretKey {
         }
     }
 
-    // Generate new
     let secret_key = SecretKey::generate();
 
-    // Save if path provided
-    if let Some(path) = path {
+    #[cfg(feature = "host")]
+    if let Some(path) = config.keypair_path.as_deref() {
         if let Err(e) = std::fs::write(path, secret_key.to_bytes()) {
             tracing::warn!("Failed to save keypair to {}: {}", path, e);
         } else {
@@ -406,18 +436,22 @@ pub struct Host {
 
 impl Host {
     pub fn new(config: HostConfig) -> (Self, String) {
-        let secret_key = load_or_generate_keypair(config.keypair_path.as_deref());
+        let secret_key = load_or_generate_keypair(&config);
         let node_id = secret_key.public().to_string();
         let node_id_str = node_id.clone();
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(32);
         let (event_tx, event_rx) = mpsc::channel::<Event>(100);
 
-        // Spawn the event loop in a background thread with its own runtime
-        std::thread::spawn(move || {
-            let rt = Runtime::new().expect("Failed to create Tokio runtime");
-            rt.block_on(run_event_loop(secret_key, config, cmd_rx, event_tx));
-        });
+        // Spawn the event loop. On native this lands on the shared tokio
+        // runtime; in a browser it lands on the microtask queue.
+        //
+        // The guard is required: `Host::new` is called from threads with no
+        // ambient runtime (BEAM schedulers, the Dart isolate thread) and
+        // `spawn` panics without a reactor. Entering rather than blocking is
+        // what keeps this function compilable for wasm.
+        let _guard = runtime::enter();
+        runtime::spawn(run_event_loop(secret_key, config, cmd_rx, event_tx));
 
         (
             Host {
@@ -430,28 +464,30 @@ impl Host {
     }
 
     /// Dial a peer using their EndpointAddr JSON
-    pub fn dial(&self, endpoint_addr_json: String) -> Result<(), String> {
+    pub async fn dial(&self, endpoint_addr_json: String) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::Dial {
+            .send(Command::Dial {
                 endpoint_addr_json,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Get this node's address as JSON for sharing
-    pub fn get_node_addr(&self) -> String {
+    pub async fn get_node_addr(&self) -> String {
         let (tx, rx) = oneshot::channel();
         if self
             .cmd_tx
-            .blocking_send(Command::GetNodeAddr { reply: tx })
+            .send(Command::GetNodeAddr { reply: tx })
+            .await
             .is_err()
         {
             return String::new();
         }
-        rx.blocking_recv().unwrap_or_default()
+        rx.await.unwrap_or_default()
     }
 
     /// Send a request to a peer and wait for a response
@@ -473,17 +509,7 @@ impl Host {
     }
 
     /// Send a response to an incoming request
-    pub fn send_response(&self, request_id: String, response: MydiaResponse) -> Result<(), String> {
-        self.cmd_tx
-            .blocking_send(Command::SendResponse {
-                request_id,
-                response,
-            })
-            .map_err(|_| "send_failed".to_string())
-    }
-
-    /// Send a response to an incoming request (async version)
-    pub async fn send_response_async(
+    pub async fn send_response(
         &self,
         request_id: String,
         response: MydiaResponse,
@@ -498,16 +524,17 @@ impl Host {
     }
 
     /// Get network statistics
-    pub fn get_network_stats(&self) -> NetworkStats {
+    pub async fn get_network_stats(&self) -> NetworkStats {
         let (tx, rx) = oneshot::channel();
         if self
             .cmd_tx
-            .blocking_send(Command::GetNetworkStats { reply: tx })
+            .send(Command::GetNetworkStats { reply: tx })
+            .await
             .is_err()
         {
             return NetworkStats::default();
         }
-        rx.blocking_recv().unwrap_or_default()
+        rx.await.unwrap_or_default()
     }
 
     /// Get this node's ID
@@ -517,53 +544,60 @@ impl Host {
 
     /// Send an HLS response header for a streaming request.
     /// Must be called before any send_hls_chunk calls.
-    pub fn send_hls_header(
+    #[cfg(feature = "host")]
+    pub async fn send_hls_header(
         &self,
         stream_id: String,
         header: HlsResponseHeader,
     ) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::SendHlsHeader {
+            .send(Command::SendHlsHeader {
                 stream_id,
                 header,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Send a chunk of HLS data.
     /// Must be called after send_hls_header and before finish_hls_stream.
-    pub fn send_hls_chunk(&self, stream_id: String, data: Vec<u8>) -> Result<(), String> {
+    #[cfg(feature = "host")]
+    pub async fn send_hls_chunk(&self, stream_id: String, data: Vec<u8>) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::SendHlsChunk {
+            .send(Command::SendHlsChunk {
                 stream_id,
                 data,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Finish an HLS stream.
     /// Must be called after all chunks have been sent.
-    pub fn finish_hls_stream(&self, stream_id: String) -> Result<(), String> {
+    #[cfg(feature = "host")]
+    pub async fn finish_hls_stream(&self, stream_id: String) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::FinishHlsStream {
+            .send(Command::FinishHlsStream {
                 stream_id,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Stream a file range directly to a QUIC stream.
     /// Reads the file in Rust and writes length-prefixed chunks, avoiding per-chunk NIF overhead.
     /// The stream is finished automatically after all data is written.
-    pub fn stream_file_range(
+    #[cfg(feature = "host")]
+    pub async fn stream_file_range(
         &self,
         stream_id: String,
         file_path: String,
@@ -572,15 +606,16 @@ impl Host {
     ) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .blocking_send(Command::StreamFileRange {
+            .send(Command::StreamFileRange {
                 stream_id,
                 file_path,
                 offset,
                 length,
                 reply: tx,
             })
+            .await
             .map_err(|_| "send_failed".to_string())?;
-        rx.blocking_recv().map_err(|_| "recv_failed".to_string())?
+        rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
     /// Send an HLS streaming request to a peer (client-side).
@@ -649,11 +684,17 @@ impl Host {
 /// Shared state for pending responses
 struct SharedState {
     pending_responses: HashMap<String, oneshot::Sender<MydiaResponse>>,
-    /// Active HLS streaming connections - stores the send half of the stream
+    /// Active HLS streaming connections - stores the send half of the stream.
+    ///
+    /// Host role only. Every command that drains this map is behind the same
+    /// feature, so a client build that could fill it would leak a `SendStream`
+    /// per request with nothing able to remove it.
+    #[cfg(feature = "host")]
     hls_streams: HashMap<String, SendStream>,
 }
 
 /// Create a DNS resolver using the system default.
+#[cfg(not(target_arch = "wasm32"))]
 fn create_dns_resolver() -> DnsResolver {
     DnsResolver::default()
 }
@@ -672,8 +713,12 @@ async fn run_event_loop(
     // When a custom relay is configured below, RelayMode::Custom overrides the preset's relays.
     let mut builder = Endpoint::builder(presets::N0)
         .secret_key(secret_key)
-        .alpns(vec![ALPN.to_vec()])
-        .dns_resolver(create_dns_resolver());
+        .alpns(vec![ALPN.to_vec()]);
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        builder = builder.dns_resolver(create_dns_resolver());
+    }
 
     // Configure relay
     if let Some(relay_url) = &config.relay_url {
@@ -691,7 +736,10 @@ async fn run_event_loop(
         }
     }
 
-    // Configure bind port
+    // Configure bind port. A browser owns no UDP socket, so iroh compiles the
+    // knob out there. Platform-specific rather than role-specific: a native
+    // client still binds one.
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(port) = config.bind_port {
         if port > 0 {
             match builder.bind_addr(std::net::SocketAddrV4::new(
@@ -722,6 +770,7 @@ async fn run_event_loop(
     let mut connected_peers: HashMap<String, Connection> = HashMap::new();
     let shared_state = Arc::new(Mutex::new(SharedState {
         pending_responses: HashMap::new(),
+        #[cfg(feature = "host")]
         hls_streams: HashMap::new(),
     }));
     let mut relay_connected = false;
@@ -729,7 +778,7 @@ async fn run_event_loop(
     // Wait for endpoint to be online (relay connected + local IP available)
     // Use a timeout to avoid blocking indefinitely if relay is unreachable
     tracing::info!("Waiting for relay connection...");
-    match tokio::time::timeout(std::time::Duration::from_secs(30), endpoint.online()).await {
+    match runtime::time::timeout(std::time::Duration::from_secs(30), endpoint.online()).await {
         Ok(()) => {
             relay_connected = true;
             tracing::info!("Relay connection established");
@@ -750,211 +799,52 @@ async fn run_event_loop(
         .await;
 
     loop {
-        tokio::select! {
-            // Handle incoming connections
+        // A host both accepts inbound connections and serves commands; a
+        // client only serves commands. `tokio::select!` takes no `#[cfg]` on
+        // a branch, so the two loop bodies are spelled out separately. Both
+        // call the same handlers, so only the set of arms differs.
+        #[cfg(feature = "host")]
+        let running = tokio::select! {
             Some(incoming) = endpoint.accept() => {
-                // Accept the connection
-                let accepting = match incoming.accept() {
-                    Ok(accepting) => accepting,
-                    Err(e) => {
-                        tracing::warn!("Failed to accept connection: {}", e);
-                        continue;
-                    }
-                };
-
-                // Check ALPN
-                let mut accepting = accepting;
-                let alpn = match accepting.alpn().await {
-                    Ok(alpn) => alpn,
-                    Err(e) => {
-                        tracing::warn!("Failed to get ALPN: {}", e);
-                        continue;
-                    }
-                };
-
-                if alpn.as_slice() != ALPN {
-                    tracing::warn!("Unknown ALPN: {:?}", alpn);
-                    continue;
-                }
-
-                // Complete the connection
-                let conn = match accepting.await {
-                    Ok(conn) => conn,
-                    Err(e) => {
-                        tracing::warn!("Connection failed: {}", e);
-                        continue;
-                    }
-                };
-
-                let peer_id = conn.remote_id().to_string();
-                let connection_type = PeerConnectionType::from_connection(&conn);
-                tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
-
-                connected_peers.insert(peer_id.clone(), conn.clone());
-                let _ = event_tx.send(Event::Connected {
-                    peer_id: peer_id.clone(),
-                    connection_type,
-                }).await;
-
-                // Spawn a task to handle incoming streams from this peer
-                let event_tx_clone = event_tx.clone();
-                let peer_id_clone = peer_id.clone();
-                let shared_state_clone = shared_state.clone();
-                let conn_clone = conn.clone();
-                tokio::spawn(async move {
-                    handle_connection(conn_clone, peer_id_clone, event_tx_clone, shared_state_clone).await;
-                });
-
-                // Monitor connection type changes (relay -> direct)
-                let monitor_tx = event_tx.clone();
-                tokio::spawn(async move {
-                    monitor_connection_type(conn, peer_id, monitor_tx).await;
-                });
+                accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state).await;
+                true
             }
 
-            // Handle commands
             Some(cmd) = cmd_rx.recv() => {
-                match cmd {
-                    Command::Dial { endpoint_addr_json, reply } => {
-                        let result = handle_dial(&endpoint, &endpoint_addr_json, &mut connected_peers, &event_tx, &shared_state).await;
-                        let _ = reply.send(result);
-                    }
-                    Command::SendRequest { node_id, request, reply } => {
-                        let result = handle_send_request(&connected_peers, &node_id, request).await;
-                        let _ = reply.send(result);
-                    }
-                    Command::SendResponse { request_id, response } => {
-                        let mut state = shared_state.lock().await;
-                        if let Some(tx) = state.pending_responses.remove(&request_id) {
-                            let _ = tx.send(response);
-                        }
-                    }
-                    Command::GetNodeAddr { reply } => {
-                        let addr = endpoint.addr();
-                        let addr_json = endpoint_addr_to_json(&addr);
-                        let _ = reply.send(addr_json);
-                    }
-                    Command::GetNetworkStats { reply } => {
-                        // Get the actual relay URL from the endpoint address
-                        let addr = endpoint.addr();
-                        let relay_url = addr.relay_urls().next().map(|u| u.to_string());
-
-                        // Get connection type for the first connected peer
-                        let peer_connection_type = if let Some((peer_key, conn)) = connected_peers.iter().next() {
-                            let peer_id = conn.remote_id();
-                            tracing::info!("GetNetworkStats: checking paths for peer {} (key={})", peer_id, peer_key);
-                            let ct = PeerConnectionType::from_connection(conn);
-                            tracing::info!("GetNetworkStats: connection type for {} = {:?}", peer_id, ct);
-                            ct
-                        } else {
-                            tracing::info!("GetNetworkStats: no connected peers (map len={})", connected_peers.len());
-                            PeerConnectionType::None
-                        };
-
-                        tracing::info!("GetNetworkStats: peers={}, relay_url={:?}, peer_conn_type={:?}",
-                            connected_peers.len(), relay_url, peer_connection_type);
-                        let stats = NetworkStats {
-                            connected_peers: connected_peers.len(),
-                            relay_connected,
-                            relay_url,
-                            peer_connection_type,
-                        };
-                        let _ = reply.send(stats);
-                    }
-                    Command::SendHlsHeader { stream_id, header, reply } => {
-                        let result = {
-                            let mut state = shared_state.lock().await;
-                            if let Some(send) = state.hls_streams.get_mut(&stream_id) {
-                                // First write the HlsHeader response
-                                let header_response = MydiaResponse::HlsHeader(header);
-                                match serde_cbor::to_vec(&header_response) {
-                                    Ok(header_data) => {
-                                        // Write length prefix (4 bytes) then header
-                                        let len = header_data.len() as u32;
-                                        let len_bytes = len.to_be_bytes();
-                                        if let Err(e) = send.write_all(&len_bytes).await {
-                                            Err(format!("Failed to write header length: {}", e))
-                                        } else if let Err(e) = send.write_all(&header_data).await {
-                                            Err(format!("Failed to write header: {}", e))
-                                        } else {
-                                            Ok(())
-                                        }
-                                    }
-                                    Err(e) => Err(format!("Failed to encode header: {}", e)),
-                                }
-                            } else {
-                                Err(format!("HLS stream not found: {}", stream_id))
-                            }
-                        };
-                        let _ = reply.send(result);
-                    }
-                    Command::SendHlsChunk { stream_id, data, reply } => {
-                        let result = {
-                            let mut state = shared_state.lock().await;
-                            if let Some(send) = state.hls_streams.get_mut(&stream_id) {
-                                // Write chunk length (4 bytes) then data
-                                let len = data.len() as u32;
-                                let len_bytes = len.to_be_bytes();
-                                if let Err(e) = send.write_all(&len_bytes).await {
-                                    Err(format!("Failed to write chunk length: {}", e))
-                                } else if let Err(e) = send.write_all(&data).await {
-                                    Err(format!("Failed to write chunk: {}", e))
-                                } else {
-                                    Ok(())
-                                }
-                            } else {
-                                Err(format!("HLS stream not found: {}", stream_id))
-                            }
-                        };
-                        let _ = reply.send(result);
-                    }
-                    Command::FinishHlsStream { stream_id, reply } => {
-                        let result = {
-                            let mut state = shared_state.lock().await;
-                            if let Some(mut send) = state.hls_streams.remove(&stream_id) {
-                                // Write zero-length terminator
-                                let zero_bytes = [0u8; 4];
-                                if let Err(e) = send.write_all(&zero_bytes).await {
-                                    Err(format!("Failed to write terminator: {}", e))
-                                } else if let Err(e) = send.finish() {
-                                    Err(format!("Failed to finish stream: {}", e))
-                                } else {
-                                    tracing::debug!("HLS stream {} finished", stream_id);
-                                    Ok(())
-                                }
-                            } else {
-                                Err(format!("HLS stream not found: {}", stream_id))
-                            }
-                        };
-                        let _ = reply.send(result);
-                    }
-                    Command::StreamFileRange { stream_id, file_path, offset, length, reply } => {
-                        // Remove the SendStream from hls_streams so we own it exclusively
-                        let send_stream = {
-                            let mut state = shared_state.lock().await;
-                            state.hls_streams.remove(&stream_id)
-                        };
-                        match send_stream {
-                            Some(send) => {
-                                // Spawn a task to stream the file data
-                                tokio::spawn(async move {
-                                    let result = stream_file_to_quic(send, &file_path, offset, length).await;
-                                    let _ = reply.send(result);
-                                });
-                            }
-                            None => {
-                                let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
-                            }
-                        }
-                    }
-                    Command::SendHlsRequest { node_id, request, reply } => {
-                        let result = handle_send_hls_request(&connected_peers, &node_id, request).await;
-                        let _ = reply.send(result);
-                    }
-                }
+                handle_command(
+                    cmd,
+                    &endpoint,
+                    &mut connected_peers,
+                    &event_tx,
+                    &shared_state,
+                    relay_connected,
+                )
+                .await;
+                true
             }
 
-            else => break,
+            else => false,
+        };
+
+        #[cfg(not(feature = "host"))]
+        let running = match cmd_rx.recv().await {
+            Some(cmd) => {
+                handle_command(
+                    cmd,
+                    &endpoint,
+                    &mut connected_peers,
+                    &event_tx,
+                    &shared_state,
+                    relay_connected,
+                )
+                .await;
+                true
+            }
+            None => false,
+        };
+
+        if !running {
+            break;
         }
     }
 
@@ -962,6 +852,286 @@ async fn run_event_loop(
     tracing::info!("Event loop terminated, closing endpoint gracefully");
     endpoint.close().await;
     tracing::info!("Endpoint closed");
+}
+
+/// Accept one inbound connection and start serving it.
+///
+/// Host role only. A browser endpoint has nothing listening, so a client build
+/// has no accept arm at all rather than one that never fires.
+#[cfg(feature = "host")]
+async fn accept_inbound(
+    incoming: Incoming,
+    connected_peers: &mut HashMap<String, Connection>,
+    event_tx: &mpsc::Sender<Event>,
+    shared_state: &Arc<Mutex<SharedState>>,
+) {
+    let mut accepting = match incoming.accept() {
+        Ok(accepting) => accepting,
+        Err(e) => {
+            tracing::warn!("Failed to accept connection: {}", e);
+            return;
+        }
+    };
+
+    // Check ALPN
+    let alpn = match accepting.alpn().await {
+        Ok(alpn) => alpn,
+        Err(e) => {
+            tracing::warn!("Failed to get ALPN: {}", e);
+            return;
+        }
+    };
+
+    if alpn.as_slice() != ALPN {
+        tracing::warn!("Unknown ALPN: {:?}", alpn);
+        return;
+    }
+
+    // Complete the connection
+    let conn = match accepting.await {
+        Ok(conn) => conn,
+        Err(e) => {
+            tracing::warn!("Connection failed: {}", e);
+            return;
+        }
+    };
+
+    let peer_id = conn.remote_id().to_string();
+    let connection_type = PeerConnectionType::from_connection(&conn);
+    tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
+
+    connected_peers.insert(peer_id.clone(), conn.clone());
+    let _ = event_tx
+        .send(Event::Connected {
+            peer_id: peer_id.clone(),
+            connection_type,
+        })
+        .await;
+
+    // Spawn a task to handle incoming streams from this peer
+    let event_tx_clone = event_tx.clone();
+    let peer_id_clone = peer_id.clone();
+    let shared_state_clone = shared_state.clone();
+    let conn_clone = conn.clone();
+    runtime::spawn(async move {
+        handle_connection(
+            conn_clone,
+            peer_id_clone,
+            event_tx_clone,
+            shared_state_clone,
+        )
+        .await;
+    });
+
+    // Monitor connection type changes (relay -> direct)
+    let monitor_tx = event_tx.clone();
+    runtime::spawn(async move {
+        monitor_connection_type(conn, peer_id, monitor_tx).await;
+    });
+}
+
+/// Dispatch a single command from a `Host` handle.
+async fn handle_command(
+    cmd: Command,
+    endpoint: &Endpoint,
+    connected_peers: &mut HashMap<String, Connection>,
+    event_tx: &mpsc::Sender<Event>,
+    shared_state: &Arc<Mutex<SharedState>>,
+    relay_connected: bool,
+) {
+    match cmd {
+        Command::Dial {
+            endpoint_addr_json,
+            reply,
+        } => {
+            let result = handle_dial(
+                endpoint,
+                &endpoint_addr_json,
+                connected_peers,
+                event_tx,
+                shared_state,
+            )
+            .await;
+            let _ = reply.send(result);
+        }
+        Command::SendRequest {
+            node_id,
+            request,
+            reply,
+        } => {
+            let result = handle_send_request(connected_peers, &node_id, request).await;
+            let _ = reply.send(result);
+        }
+        Command::SendResponse {
+            request_id,
+            response,
+        } => {
+            let mut state = shared_state.lock().await;
+            if let Some(tx) = state.pending_responses.remove(&request_id) {
+                let _ = tx.send(response);
+            }
+        }
+        Command::GetNodeAddr { reply } => {
+            let addr = endpoint.addr();
+            let addr_json = endpoint_addr_to_json(&addr);
+            let _ = reply.send(addr_json);
+        }
+        Command::GetNetworkStats { reply } => {
+            // Get the actual relay URL from the endpoint address
+            let addr = endpoint.addr();
+            let relay_url = addr.relay_urls().next().map(|u| u.to_string());
+
+            // Get connection type for the first connected peer
+            let peer_connection_type = if let Some((peer_key, conn)) = connected_peers.iter().next()
+            {
+                let peer_id = conn.remote_id();
+                tracing::info!(
+                    "GetNetworkStats: checking paths for peer {} (key={})",
+                    peer_id,
+                    peer_key
+                );
+                let ct = PeerConnectionType::from_connection(conn);
+                tracing::info!(
+                    "GetNetworkStats: connection type for {} = {:?}",
+                    peer_id,
+                    ct
+                );
+                ct
+            } else {
+                tracing::info!(
+                    "GetNetworkStats: no connected peers (map len={})",
+                    connected_peers.len()
+                );
+                PeerConnectionType::None
+            };
+
+            tracing::info!(
+                "GetNetworkStats: peers={}, relay_url={:?}, peer_conn_type={:?}",
+                connected_peers.len(),
+                relay_url,
+                peer_connection_type
+            );
+            let stats = NetworkStats {
+                connected_peers: connected_peers.len(),
+                relay_connected,
+                relay_url,
+                peer_connection_type,
+            };
+            let _ = reply.send(stats);
+        }
+        #[cfg(feature = "host")]
+        Command::SendHlsHeader {
+            stream_id,
+            header,
+            reply,
+        } => {
+            let result = {
+                let mut state = shared_state.lock().await;
+                if let Some(send) = state.hls_streams.get_mut(&stream_id) {
+                    // First write the HlsHeader response
+                    let header_response = MydiaResponse::HlsHeader(header);
+                    match serde_cbor::to_vec(&header_response) {
+                        Ok(header_data) => {
+                            // Write length prefix (4 bytes) then header
+                            let len = header_data.len() as u32;
+                            let len_bytes = len.to_be_bytes();
+                            if let Err(e) = send.write_all(&len_bytes).await {
+                                Err(format!("Failed to write header length: {}", e))
+                            } else if let Err(e) = send.write_all(&header_data).await {
+                                Err(format!("Failed to write header: {}", e))
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        Err(e) => Err(format!("Failed to encode header: {}", e)),
+                    }
+                } else {
+                    Err(format!("HLS stream not found: {}", stream_id))
+                }
+            };
+            let _ = reply.send(result);
+        }
+        #[cfg(feature = "host")]
+        Command::SendHlsChunk {
+            stream_id,
+            data,
+            reply,
+        } => {
+            let result = {
+                let mut state = shared_state.lock().await;
+                if let Some(send) = state.hls_streams.get_mut(&stream_id) {
+                    // Write chunk length (4 bytes) then data
+                    let len = data.len() as u32;
+                    let len_bytes = len.to_be_bytes();
+                    if let Err(e) = send.write_all(&len_bytes).await {
+                        Err(format!("Failed to write chunk length: {}", e))
+                    } else if let Err(e) = send.write_all(&data).await {
+                        Err(format!("Failed to write chunk: {}", e))
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(format!("HLS stream not found: {}", stream_id))
+                }
+            };
+            let _ = reply.send(result);
+        }
+        #[cfg(feature = "host")]
+        Command::FinishHlsStream { stream_id, reply } => {
+            let result = {
+                let mut state = shared_state.lock().await;
+                if let Some(mut send) = state.hls_streams.remove(&stream_id) {
+                    // Write zero-length terminator
+                    let zero_bytes = [0u8; 4];
+                    if let Err(e) = send.write_all(&zero_bytes).await {
+                        Err(format!("Failed to write terminator: {}", e))
+                    } else if let Err(e) = send.finish() {
+                        Err(format!("Failed to finish stream: {}", e))
+                    } else {
+                        tracing::debug!("HLS stream {} finished", stream_id);
+                        Ok(())
+                    }
+                } else {
+                    Err(format!("HLS stream not found: {}", stream_id))
+                }
+            };
+            let _ = reply.send(result);
+        }
+        #[cfg(feature = "host")]
+        Command::StreamFileRange {
+            stream_id,
+            file_path,
+            offset,
+            length,
+            reply,
+        } => {
+            // Remove the SendStream from hls_streams so we own it exclusively
+            let send_stream = {
+                let mut state = shared_state.lock().await;
+                state.hls_streams.remove(&stream_id)
+            };
+            match send_stream {
+                Some(send) => {
+                    // Spawn a task to stream the file data
+                    runtime::spawn(async move {
+                        let result = stream_file_to_quic(send, &file_path, offset, length).await;
+                        let _ = reply.send(result);
+                    });
+                }
+                None => {
+                    let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
+                }
+            }
+        }
+        Command::SendHlsRequest {
+            node_id,
+            request,
+            reply,
+        } => {
+            let result = handle_send_hls_request(connected_peers, &node_id, request).await;
+            let _ = reply.send(result);
+        }
+    }
 }
 
 /// Handle dialing a peer
@@ -987,23 +1157,31 @@ async fn handle_dial(
     tracing::info!("Connected to peer: {} ({:?})", node_id, connection_type);
 
     connected_peers.insert(node_id.clone(), conn.clone());
-    let _ = event_tx.send(Event::Connected {
-        peer_id: node_id.clone(),
-        connection_type,
-    }).await;
+    let _ = event_tx
+        .send(Event::Connected {
+            peer_id: node_id.clone(),
+            connection_type,
+        })
+        .await;
 
     // Spawn a task to handle incoming streams from this peer
     let event_tx_clone = event_tx.clone();
     let shared_state_clone = shared_state.clone();
     let conn_clone = conn.clone();
     let node_id_clone = node_id.clone();
-    tokio::spawn(async move {
-        handle_connection(conn_clone, node_id_clone, event_tx_clone, shared_state_clone).await;
+    runtime::spawn(async move {
+        handle_connection(
+            conn_clone,
+            node_id_clone,
+            event_tx_clone,
+            shared_state_clone,
+        )
+        .await;
     });
 
     // Monitor connection type changes (relay -> direct)
     let monitor_tx = event_tx.clone();
-    tokio::spawn(async move {
+    runtime::spawn(async move {
         monitor_connection_type(conn, node_id, monitor_tx).await;
     });
 
@@ -1013,11 +1191,7 @@ async fn handle_dial(
 /// Monitor a peer connection for type changes (e.g. relay -> direct after hole-punching).
 /// Awaits PathEvent notifications from iroh and emits ConnectionTypeChanged on transitions.
 /// Stops after 2 minutes (hole-punching window) or when Direct is reached.
-async fn monitor_connection_type(
-    conn: Connection,
-    peer_id: String,
-    event_tx: mpsc::Sender<Event>,
-) {
+async fn monitor_connection_type(conn: Connection, peer_id: String, event_tx: mpsc::Sender<Event>) {
     let mut current_type = PeerConnectionType::from_connection(&conn);
     let mut events = conn.path_events();
 
@@ -1070,7 +1244,7 @@ async fn monitor_connection_type(
     };
 
     // Cap the watcher at 2 minutes so it doesn't leak for long-lived connections.
-    if tokio::time::timeout(std::time::Duration::from_secs(120), monitor)
+    if runtime::time::timeout(std::time::Duration::from_secs(120), monitor)
         .await
         .is_err()
     {
@@ -1085,6 +1259,10 @@ async fn monitor_connection_type(
 /// Stream a file range to a QUIC SendStream with length-prefixed chunks.
 /// Uses a bounded channel pipeline: blocking reader → async QUIC writer.
 /// Memory usage is bounded at ~4MB regardless of file size.
+///
+/// Host role only: the blocking reader needs `spawn_blocking` and `std::fs`,
+/// neither of which a browser has.
+#[cfg(feature = "host")]
 async fn stream_file_to_quic(
     mut send: SendStream,
     file_path: &str,
@@ -1129,7 +1307,11 @@ async fn stream_file_to_quic(
                 Ok(_) => {}
                 Err(e) => {
                     tracing::error!("Read error: {}", e);
-                    return (io_nanos / 1_000_000, backpressure_nanos / 1_000_000, chunk_count);
+                    return (
+                        io_nanos / 1_000_000,
+                        backpressure_nanos / 1_000_000,
+                        chunk_count,
+                    );
                 }
             }
             io_nanos += io_start.elapsed().as_nanos() as u64;
@@ -1142,12 +1324,20 @@ async fn stream_file_to_quic(
             if chunk_tx.blocking_send(buf).is_err() {
                 // Receiver dropped (QUIC write failed or stream cancelled)
                 tracing::debug!("stream_file_to_quic: receiver dropped, stopping read");
-                return (io_nanos / 1_000_000, backpressure_nanos / 1_000_000, chunk_count);
+                return (
+                    io_nanos / 1_000_000,
+                    backpressure_nanos / 1_000_000,
+                    chunk_count,
+                );
             }
             backpressure_nanos += bp_start.elapsed().as_nanos() as u64;
         }
         // chunk_tx is dropped here, signalling end of data
-        (io_nanos / 1_000_000, backpressure_nanos / 1_000_000, chunk_count)
+        (
+            io_nanos / 1_000_000,
+            backpressure_nanos / 1_000_000,
+            chunk_count,
+        )
     });
 
     // Async QUIC writer: receives chunks and writes length-prefixed data
@@ -1219,7 +1409,10 @@ async fn handle_connection(
         match conn.accept_bi().await {
             Ok((send, mut recv)) => {
                 let request_id = uuid::Uuid::new_v4().to_string();
-                let t0 = std::time::Instant::now();
+                // Request-intake timings feed the `p2p_metrics_server` line
+                // below, which only a host emits.
+                #[cfg(feature = "host")]
+                let t0 = runtime::time::Instant::now();
 
                 // Read the request
                 let data = match recv.read_to_end(64 * 1024).await {
@@ -1229,6 +1422,7 @@ async fn handle_connection(
                         continue;
                     }
                 };
+                #[cfg(feature = "host")]
                 let request_read_ms = t0.elapsed().as_millis() as u64;
 
                 let request: MydiaRequest = match serde_cbor::from_slice(&data) {
@@ -1238,6 +1432,7 @@ async fn handle_connection(
                         continue;
                     }
                 };
+                #[cfg(feature = "host")]
                 let decode_ms = t0.elapsed().as_millis() as u64 - request_read_ms;
 
                 tracing::debug!("Received request from {}: {:?}", peer_id, request);
@@ -1253,7 +1448,13 @@ async fn handle_connection(
                     continue;
                 }
 
-                // For HLS streaming requests, store the send stream and emit event
+                // For HLS streaming requests, store the send stream and emit
+                // event. Host role only: answering an HLS request means
+                // holding the send half open until the four HLS commands
+                // drain it, and those are behind this same feature. A client
+                // build must therefore not accept the request at all, or it
+                // would park a `SendStream` nothing can ever remove.
+                #[cfg(feature = "host")]
                 if let MydiaRequest::HlsStream(hls_request) = request {
                     let stream_id = request_id.clone();
 
@@ -1308,8 +1509,9 @@ async fn handle_connection(
 
                 // Wait for the response and send it
                 let request_id_clone = request_id.clone();
-                tokio::spawn(async move {
-                    match tokio::time::timeout(std::time::Duration::from_secs(30), resp_rx).await {
+                runtime::spawn(async move {
+                    match runtime::time::timeout(std::time::Duration::from_secs(30), resp_rx).await
+                    {
                         Ok(Ok(response)) => {
                             if let Ok(response_data) = serde_cbor::to_vec(&response) {
                                 let _ = send.write_all(&response_data).await;
@@ -1403,7 +1605,7 @@ async fn handle_send_hls_request(
     node_id: &str,
     request: HlsRequest,
 ) -> Result<HlsStreamResponse, String> {
-    use std::time::Instant;
+    use crate::runtime::time::Instant;
     let t0 = Instant::now();
 
     let session_id = request.session_id.clone();
@@ -1488,7 +1690,7 @@ async fn handle_send_hls_request(
     let content_length = header.content_length;
 
     // Spawn a task to read chunks and send them through the channel
-    tokio::spawn(async move {
+    runtime::spawn(async move {
         let mut total_bytes: u64 = 0;
         let mut chunk_count: u32 = 0;
         let transfer_start = Instant::now();
@@ -1679,5 +1881,4 @@ mod tests {
         let decoded: MydiaResponse = serde_cbor::from_slice(&data).unwrap();
         assert_eq!(response, decoded);
     }
-
 }

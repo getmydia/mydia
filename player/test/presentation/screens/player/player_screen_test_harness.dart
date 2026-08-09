@@ -186,6 +186,16 @@ class TrackingLocalProxyService extends Fake implements LocalProxyService {
   @override
   int get port => 12345;
 
+  /// The screen logs this when it starts the proxy, and `Fake` throws on any
+  /// member it is not given.
+  @override
+  String get baseUrl => 'http://127.0.0.1:$port';
+
+  /// The screen asks this before building a URL against [baseUrl], and `Fake`
+  /// throws on any member it is not given.
+  @override
+  bool get isRunning => true;
+
   @override
   Future<void> start({required String targetPeer, String? authToken}) async {
     startCalled = true;

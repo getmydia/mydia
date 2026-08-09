@@ -154,10 +154,25 @@
           # Delete stale local.properties that may have wrong SDK paths
           rm -f player/android/local.properties 2>/dev/null || true
 
-          # Ensure flutter_rust_bridge_codegen is installed
-          if ! command -v flutter_rust_bridge_codegen &> /dev/null; then
-            echo "Installing flutter_rust_bridge_codegen..."
-            cargo install flutter_rust_bridge_codegen --quiet
+          # flutter_rust_bridge_codegen must match the flutter_rust_bridge
+          # version pinned in player/rust/mydia_player_p2p/Cargo.toml. A
+          # mismatch regenerates every binding at the wrong version without
+          # failing, so the version is read from the crate, never restated
+          # here, and a wrong existing install is corrected rather than kept.
+          #
+          # CARGO_INSTALL_ROOT/bin goes ahead of $HOME/.cargo/bin, which the
+          # line above appends: a stale global copy there would otherwise
+          # shadow the pinned one and silently regenerate at its own version.
+          if [ -n "''${CARGO_INSTALL_ROOT:-}" ]; then
+            export PATH="$CARGO_INSTALL_ROOT/bin:$PATH"
+          fi
+          frbVersion="$(sed -n 's/^flutter_rust_bridge = "=\(.*\)"$/\1/p' \
+            player/rust/mydia_player_p2p/Cargo.toml)"
+          if [ -z "$frbVersion" ]; then
+            echo "ERROR: could not read the flutter_rust_bridge pin from player/rust/mydia_player_p2p/Cargo.toml" >&2
+          elif ! flutter_rust_bridge_codegen --version 2>/dev/null | grep -qF "$frbVersion"; then
+            echo "Installing flutter_rust_bridge_codegen $frbVersion..."
+            cargo install flutter_rust_bridge_codegen --version "$frbVersion" --locked --force --quiet
           fi
 
           echo ""

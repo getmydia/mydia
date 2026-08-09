@@ -1,62 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
-import 'package:player/core/p2p/p2p_service.dart';
-import 'package:player/native/lib.dart';
 
-class P2pRequestCall {
-  final String peer;
-  final String sessionId;
-  final String path;
-  final int? rangeStart;
-  final int? rangeEnd;
-  final String? authToken;
-
-  const P2pRequestCall({
-    required this.peer,
-    required this.sessionId,
-    required this.path,
-    required this.rangeStart,
-    required this.rangeEnd,
-    required this.authToken,
-  });
-}
-
-class TestP2pService extends P2pService {
-  final List<P2pRequestCall> calls = [];
-  Future<FlutterHlsResponse> Function(P2pRequestCall call)? onSendHlsRequest;
-
-  @override
-  Future<FlutterHlsResponse> sendHlsRequest({
-    required String peer,
-    required String sessionId,
-    required String path,
-    int? rangeStart,
-    int? rangeEnd,
-    String? authToken,
-  }) async {
-    final call = P2pRequestCall(
-      peer: peer,
-      sessionId: sessionId,
-      path: path,
-      rangeStart: rangeStart,
-      rangeEnd: rangeEnd,
-      authToken: authToken,
-    );
-
-    calls.add(call);
-
-    final handler = onSendHlsRequest;
-    if (handler == null) {
-      throw Exception('P2P handler not configured');
-    }
-
-    return handler(call);
-  }
-}
+import 'media_proxy_conformance.dart';
+import 'test_p2p_service.dart';
 
 class HttpResult {
   final int statusCode;
@@ -73,6 +22,8 @@ class HttpResult {
 }
 
 void main() {
+  mediaProxyConformanceTests('LocalProxyService', LocalProxyService.new);
+
   group('LocalProxyService', () {
     late LocalProxyService proxy;
     late TestP2pService p2p;
@@ -90,8 +41,8 @@ void main() {
       final client = HttpClient();
 
       try {
-        final request =
-            await client.getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$path'));
+        final request = await client
+            .getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$path'));
         if (rangeHeader != null) {
           request.headers.set(HttpHeaders.rangeHeader, rangeHeader);
         }
@@ -112,26 +63,6 @@ void main() {
       }
     }
 
-    FlutterHlsResponse hlsResponse({
-      required int status,
-      required String contentType,
-      required List<int> data,
-      String? contentRange,
-      String? cacheControl,
-      int? declaredLength,
-    }) {
-      return FlutterHlsResponse(
-        header: FlutterHlsResponseHeader(
-          status: status,
-          contentType: contentType,
-          contentLength: BigInt.from(declaredLength ?? data.length),
-          contentRange: contentRange,
-          cacheControl: cacheControl,
-        ),
-        data: Uint8List.fromList(data),
-      );
-    }
-
     group('initialization', () {
       test('starts on loopback address', () async {
         await proxy.start(targetPeer: 'test-peer-id', authToken: 'test-token');
@@ -142,11 +73,13 @@ void main() {
       });
 
       test('throws when not started and buildHlsUrl called', () {
-        expect(() => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
+        expect(
+            () => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
       });
 
       test('throws when not started and buildBaseUrl called', () {
-        expect(() => proxy.buildBaseUrl('session123'), throwsA(isA<StateError>()));
+        expect(
+            () => proxy.buildBaseUrl('session123'), throwsA(isA<StateError>()));
       });
 
       test('can update target peer when already running', () async {
@@ -176,7 +109,8 @@ void main() {
 
         expect(response.statusCode, equals(HttpStatus.notFound));
         expect(response.body, contains('Not Found'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
       test('returns 400 for invalid HLS path format with CORS', () async {
@@ -186,7 +120,8 @@ void main() {
 
         expect(response.statusCode, equals(HttpStatus.badRequest));
         expect(response.body, contains('Invalid HLS path format'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
       test('forwards HLS request to P2P and serves payload', () async {
@@ -195,7 +130,7 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => hlsResponse(
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
               status: HttpStatus.ok,
               contentType: 'application/vnd.apple.mpegurl',
               data: utf8.encode('#EXTM3U\n#EXTINF:10,\nsegment_001.ts\n'),
@@ -208,8 +143,10 @@ void main() {
         expect(response.body, contains('#EXTM3U'));
         expect(response.headers.contentType?.mimeType,
             equals('application/vnd.apple.mpegurl'));
-        expect(response.headers.value(HttpHeaders.cacheControlHeader), equals('no-cache'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(response.headers.value(HttpHeaders.cacheControlHeader),
+            equals('no-cache'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
 
         expect(p2p.calls, hasLength(1));
         final call = p2p.calls.single;
@@ -227,7 +164,7 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => hlsResponse(
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
               status: HttpStatus.partialContent,
               contentType: 'video/mp2t',
               data: [1, 2, 3, 4],
@@ -249,7 +186,7 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => hlsResponse(
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
               status: HttpStatus.partialContent,
               contentType: 'video/mp2t',
               data: [1, 2, 3, 4],
@@ -270,16 +207,19 @@ void main() {
           authToken: 'test-auth-token',
         );
 
-        p2p.onSendHlsRequest = (_) async => throw Exception('p2p transport failure');
+        p2p.onSendHlsRequest =
+            (_) async => throw Exception('p2p transport failure');
 
         final response = await makeRequest('/hls/session123/index.m3u8');
 
         expect(response.statusCode, equals(HttpStatus.internalServerError));
         expect(response.body, contains('p2p transport failure'));
-        expect(response.headers.value('access-control-allow-origin'), equals('*'));
+        expect(
+            response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
-      test('recovers after write error and serves subsequent requests', () async {
+      test('recovers after write error and serves subsequent requests',
+          () async {
         await proxy.start(
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
@@ -287,7 +227,7 @@ void main() {
 
         p2p.onSendHlsRequest = (call) async {
           if (call.path == 'segment_001.ts') {
-            return hlsResponse(
+            return testHlsResponse(
               status: HttpStatus.ok,
               contentType: 'video/mp2t',
               data: [1, 2, 3, 4],
@@ -295,7 +235,7 @@ void main() {
             );
           }
 
-          return hlsResponse(
+          return testHlsResponse(
             status: HttpStatus.ok,
             contentType: 'application/vnd.apple.mpegurl',
             data: utf8.encode('#EXTM3U\n'),
