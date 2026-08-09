@@ -44,6 +44,7 @@ import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/up_next_overlay.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
+import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
@@ -318,6 +319,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// session to restart and nothing to switch between.
   List<QualityRung> _qualityLadder = const [QualityRung.original];
 
+  /// What the Original rung would do for this file's candidates.
+  ///
+  /// Cached because the candidate list is not retained after
+  /// [_initializePlayer]. Defaults to re-encoding required until candidates
+  /// resolve (honest worst case; matches the spec fallback).
+  String _originalDeliverySubtitle = kOriginalTranscodeSubtitle;
+
   /// Set when this server rejected the maxHeight argument, meaning it
   /// predates height support. Rungs still work through maxBitrate alone;
   /// they just land at whatever resolution the old server picks. Sticky for
@@ -552,6 +560,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // for them and hides the control.
     _qualityLadder = const [QualityRung.original];
     _effectiveQuality = null;
+    _originalDeliverySubtitle = kOriginalTranscodeSubtitle;
 
     try {
       setState(() {
@@ -845,6 +854,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           : widget.fileId;
 
       await _resolveQualityForFile(candidatesResult);
+      _rememberOriginalDeliverySubtitle(candidatesResult?.candidates);
 
       // Determine if direct play is possible.
       //
@@ -1362,6 +1372,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return first.strategy == Enum$StreamingCandidateStrategy.DIRECT_PLAY ||
         first.strategy == Enum$StreamingCandidateStrategy.REMUX ||
         first.strategy == Enum$StreamingCandidateStrategy.HLS_COPY;
+  }
+
+  /// Cache the Original-rung delivery subtitle from resolved candidates.
+  ///
+  /// Labels only — does not change the [_canDirectPlay] playback gate.
+  void _rememberOriginalDeliverySubtitle(
+    List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
+  ) {
+    final values = candidates?.map((c) => c.strategy.toJson()).toList() ??
+        const <String>[];
+
+    final canDirect = !kIsWeb && firstStrategyAllowsDirectPlay(values);
+    final lossless = strategiesAllowLosslessDelivery(values);
+    _originalDeliverySubtitle = originalDeliverySubtitle(
+      canDirectPlay: canDirect,
+      hasLosslessDelivery: lossless,
+    );
   }
 
   /// Fetch streaming candidates from the server via GraphQL.
@@ -2524,6 +2551,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       context,
       _qualityLadder,
       _selectedQuality,
+      originalSubtitle: _originalDeliverySubtitle,
       clampNote: _clampNote(),
     );
 
