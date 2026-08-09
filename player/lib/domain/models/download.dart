@@ -15,6 +15,13 @@ enum DownloadStatus {
 
   /// Queued waiting for download slot
   queued,
+
+  /// Was active, but its driving loop is gone (app suspended or killed).
+  /// The partial file is intact and the task can be resumed.
+  interrupted,
+
+  /// Has a driving loop, but no bytes have moved for the stall window.
+  stalled,
 }
 
 enum MediaType {
@@ -125,6 +132,16 @@ class DownloadTask {
   @HiveField(32)
   final String? airDate;
 
+  /// When `downloadedBytes` or `transcodeProgress` last changed. Persisted so
+  /// stall detection survives an app restart.
+  @HiveField(33)
+  final DateTime? lastProgressAt;
+
+  /// Consecutive automatic recovery attempts. Reset to zero whenever real
+  /// progress is observed.
+  @HiveField(34)
+  final int recoveryAttempts;
+
   const DownloadTask({
     required this.id,
     required this.mediaId,
@@ -161,6 +178,8 @@ class DownloadTask {
     this.showPosterUrl,
     this.thumbnailUrl,
     this.airDate,
+    this.lastProgressAt,
+    this.recoveryAttempts = 0,
   });
 
   DownloadStatus get downloadStatus {
@@ -181,6 +200,10 @@ class DownloadTask {
         return DownloadStatus.transcoding;
       case 'queued':
         return DownloadStatus.queued;
+      case 'interrupted':
+        return DownloadStatus.interrupted;
+      case 'stalled':
+        return DownloadStatus.stalled;
       default:
         return DownloadStatus.pending;
     }
@@ -225,6 +248,10 @@ class DownloadTask {
         return 'Pending';
       case DownloadStatus.queued:
         return 'Queued';
+      case DownloadStatus.interrupted:
+        return 'Interrupted';
+      case DownloadStatus.stalled:
+        return 'Stalled';
     }
   }
 
@@ -266,6 +293,8 @@ class DownloadTask {
     String? showPosterUrl,
     String? thumbnailUrl,
     String? airDate,
+    DateTime? lastProgressAt,
+    int? recoveryAttempts,
   }) {
     return DownloadTask(
       id: id ?? this.id,
@@ -301,6 +330,8 @@ class DownloadTask {
       showPosterUrl: showPosterUrl ?? this.showPosterUrl,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       airDate: airDate ?? this.airDate,
+      lastProgressAt: lastProgressAt ?? this.lastProgressAt,
+      recoveryAttempts: recoveryAttempts ?? this.recoveryAttempts,
     );
   }
 
