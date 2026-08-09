@@ -2,6 +2,8 @@ import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart';
+import 'package:player/core/downloads/download_service.dart'
+    show isDownloadSupported;
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
@@ -129,5 +131,78 @@ void main() {
       find.widgetWithText(SidebarRow, 'Downloads'),
     );
     expect(downloads.isDisabled, isFalse);
+  });
+
+  test('reorder preserves hidden middle ids in stored order', () async {
+    final store = InMemorySidebarLayoutStore();
+    await store.save(SidebarLayout.defaults.withHidden('collections'));
+
+    final container = ProviderContainer(
+      overrides: [sidebarLayoutStoreProvider.overrideWithValue(store)],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(sidebarLayoutProvider.future);
+
+    final layoutBefore = store.get()!;
+    final middleBefore = layoutBefore.order
+        .where(
+          (id) => id != 'search' && id != 'downloads' && id != 'settings',
+        )
+        .toList();
+    final collectionsIndexBefore = middleBefore.indexOf('collections');
+    expect(collectionsIndexBefore, greaterThan(0));
+    final neighborBefore = middleBefore[collectionsIndexBefore - 1];
+
+    final visibleMiddle =
+        (await container.read(sidebarDestinationsProvider.future))
+            .where((d) => !d.isAnchored)
+            .map((d) => d.id)
+            .toList();
+    final moviesIndex = visibleMiddle.indexOf('movies');
+
+    final newOrder = SidebarContent.orderAfterMiddleReorder(
+      layout: layoutBefore,
+      visibleMiddleIds: visibleMiddle,
+      oldIndex: moviesIndex,
+      newIndex: 0,
+      downloadSupported: isDownloadSupported,
+    );
+
+    await container.read(sidebarLayoutControllerProvider).reorder(newOrder);
+
+    final layoutAfterReorder = store.get()!;
+    expect(layoutAfterReorder.order, contains('collections'));
+    expect(layoutAfterReorder.hidden, contains('collections'));
+
+    final middleAfterReorder = layoutAfterReorder.order
+        .where(
+          (id) => id != 'search' && id != 'downloads' && id != 'settings',
+        )
+        .toList();
+    expect(
+      middleAfterReorder.indexOf('collections'),
+      collectionsIndexBefore,
+    );
+    expect(middleAfterReorder[collectionsIndexBefore - 1], neighborBefore);
+
+    await container.read(sidebarLayoutControllerProvider).unhide('collections');
+
+    final destinations =
+        await container.read(sidebarDestinationsProvider.future);
+    expect(destinations.map((d) => d.id), contains('collections'));
+
+    final middleAfterUnhide = store
+        .get()!
+        .order
+        .where(
+          (id) => id != 'search' && id != 'downloads' && id != 'settings',
+        )
+        .toList();
+    expect(
+      middleAfterUnhide.indexOf('collections'),
+      collectionsIndexBefore,
+    );
+    expect(middleAfterUnhide[collectionsIndexBefore - 1], neighborBefore);
   });
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,6 +47,70 @@ class SidebarContent extends ConsumerWidget {
       }
     }
     return best;
+  }
+
+  /// Builds the full stored order after a middle-section reorder.
+  ///
+  /// Visible middle rows are reordered among themselves; hidden middle ids
+  /// stay at their relative slots in the stored middle list.
+  @visibleForTesting
+  static List<String> orderAfterMiddleReorder({
+    required SidebarLayout layout,
+    required List<String> visibleMiddleIds,
+    required int oldIndex,
+    required int newIndex,
+    required bool downloadSupported,
+  }) {
+    var adjustedNewIndex = newIndex;
+    if (adjustedNewIndex > oldIndex) adjustedNewIndex -= 1;
+
+    final reorderedVisible = List<String>.from(visibleMiddleIds);
+    final moved = reorderedVisible.removeAt(oldIndex);
+    reorderedVisible.insert(adjustedNewIndex, moved);
+
+    final reconciled =
+        layout.reconcileLayout(downloadSupported: downloadSupported);
+    final storedOrder = reconciled.order;
+
+    final leadingIds =
+        storedOrder.where((id) => _isLeadingAnchorId(id)).toList();
+    final trailingIds =
+        storedOrder.where((id) => _isTrailingAnchorId(id)).toList();
+    final storedMiddleIds = storedOrder
+        .where((id) => !_isLeadingAnchorId(id) && !_isTrailingAnchorId(id))
+        .toList();
+
+    final newMiddleIds = _mergeMiddleOrder(
+      storedMiddleIds: storedMiddleIds,
+      hiddenIds: reconciled.hidden,
+      reorderedVisibleIds: reorderedVisible,
+    );
+
+    return [...leadingIds, ...newMiddleIds, ...trailingIds];
+  }
+
+  static bool _isLeadingAnchorId(String id) => id == 'search';
+
+  static bool _isTrailingAnchorId(String id) =>
+      id == 'downloads' || id == 'settings';
+
+  static List<String> _mergeMiddleOrder({
+    required List<String> storedMiddleIds,
+    required Set<String> hiddenIds,
+    required List<String> reorderedVisibleIds,
+  }) {
+    final result = <String>[];
+    var visibleIndex = 0;
+
+    for (final id in storedMiddleIds) {
+      if (hiddenIds.contains(id)) {
+        result.add(id);
+      } else {
+        result.add(reorderedVisibleIds[visibleIndex++]);
+      }
+    }
+
+    return result;
   }
 
   @override
@@ -116,9 +181,7 @@ class SidebarContent extends ConsumerWidget {
                     itemCount: middle.length,
                     onReorder: (oldIndex, newIndex) => _onReorder(
                       ref: ref,
-                      leading: leading,
                       middle: middle,
-                      trailing: trailing,
                       oldIndex: oldIndex,
                       newIndex: newIndex,
                     ),
@@ -173,24 +236,21 @@ class SidebarContent extends ConsumerWidget {
 
   void _onReorder({
     required WidgetRef ref,
-    required List<NavDestination> leading,
     required List<NavDestination> middle,
-    required List<NavDestination> trailing,
     required int oldIndex,
     required int newIndex,
   }) {
-    var adjustedNewIndex = newIndex;
-    if (adjustedNewIndex > oldIndex) adjustedNewIndex -= 1;
+    final layout =
+        ref.read(sidebarLayoutStoreProvider).get() ?? SidebarLayout.defaults;
+    final visibleMiddleIds = middle.map((d) => d.id).toList();
 
-    final middleIds = middle.map((d) => d.id).toList();
-    final moved = middleIds.removeAt(oldIndex);
-    middleIds.insert(adjustedNewIndex, moved);
-
-    final newOrder = [
-      ...leading.map((d) => d.id),
-      ...middleIds,
-      ...trailing.map((d) => d.id),
-    ];
+    final newOrder = orderAfterMiddleReorder(
+      layout: layout,
+      visibleMiddleIds: visibleMiddleIds,
+      oldIndex: oldIndex,
+      newIndex: newIndex,
+      downloadSupported: isDownloadSupported,
+    );
 
     ref.read(sidebarLayoutControllerProvider).reorder(newOrder);
   }
