@@ -113,7 +113,6 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       tvdb_id = System.unique_integer([:positive])
 
       stub_tmdb_show(bypass, id, "TMDB Lib Show", 2019)
-      stub_tmdb_season(bypass, id, 1, [1])
       stub_tvdb_search(bypass, tvdb_id, "TMDB Lib Show", 2019)
 
       assert {:ok, item, _map} =
@@ -242,30 +241,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       "overview" => "x",
       "credits" => %{"cast" => [], "crew" => []},
       "genres" => [],
-      "seasons" => [%{"season_number" => 1, "name" => "Season 1"}]
+      # Empty on purpose: these tests assert provenance stamping, not episode
+      # import. A non-empty seasons list would drive refresh_episodes_for_tv_show
+      # into per-season Bypass calls that the stubs do not cover.
+      "seasons" => []
     }
 
     Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, Jason.encode!(body))
-    end)
-  end
-
-  defp stub_tmdb_season(bypass, id, season_number, episode_numbers) do
-    episodes =
-      Enum.map(episode_numbers, fn n ->
-        %{
-          "season_number" => season_number,
-          "episode_number" => n,
-          "name" => "Episode #{n}",
-          "air_date" => "2019-01-0#{n}"
-        }
-      end)
-
-    body = %{"season_number" => season_number, "episodes" => episodes}
-
-    Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}/#{season_number}", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(body))

@@ -242,7 +242,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       {:ok, tmdb_metadata} ->
         tmdb_metadata
         |> build_tv_show_attrs(provider_id_int, derived, fetch_provider, config)
-        |> create_media_item_result()
+        |> create_media_item_result(config)
 
       {:error, reason} ->
         {:error, {:metadata, reason}}
@@ -280,8 +280,8 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     end
   end
 
-  defp create_media_item_result(attrs) do
-    case Media.create_media_item(attrs) do
+  defp create_media_item_result(attrs, config) do
+    case Media.create_media_item(attrs, config: config) do
       {:ok, media_item} -> {:ok, media_item}
       {:error, changeset} -> {:error, {:changeset, changeset}}
     end
