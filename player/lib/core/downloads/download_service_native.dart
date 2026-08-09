@@ -26,7 +26,22 @@ import 'thumbnail_cache_warmer.dart';
 const bool isDownloadSupported = true;
 
 /// Get the native download service implementation.
-DownloadService getDownloadService() => _NativeDownloadService();
+DownloadService getDownloadService() => createNativeDownloadService();
+
+/// Build the native service with optional collaborators.
+///
+/// Production passes nothing. Tests inject an adapter, a directory, and a clock
+/// so the service can be driven without a device, a network, or the wall clock.
+DownloadService createNativeDownloadService({
+  HttpClientAdapter? httpAdapter,
+  Future<String> Function()? downloadDirectory,
+  DateTime Function()? clock,
+}) =>
+    _NativeDownloadService(
+      httpAdapter: httpAdapter,
+      downloadDirectory: downloadDirectory,
+      clock: clock,
+    );
 
 /// Get the native download database implementation.
 DownloadDatabase getDownloadDatabase() => _NativeDownloadDatabase();
@@ -188,6 +203,20 @@ class _NativeDownloadService implements DownloadService {
     receiveTimeout: const Duration(minutes: 30),
     sendTimeout: const Duration(minutes: 30),
   ));
+  final Future<String> Function()? _downloadDirectoryOverride;
+  final DateTime Function() _clock;
+
+  _NativeDownloadService({
+    HttpClientAdapter? httpAdapter,
+    Future<String> Function()? downloadDirectory,
+    DateTime Function()? clock,
+  })  : _downloadDirectoryOverride = downloadDirectory,
+        _clock = clock ?? DateTime.now {
+    if (httpAdapter != null) {
+      _dio.httpClientAdapter = httpAdapter;
+    }
+  }
+
   final _speedTracker = DownloadSpeedTracker.instance;
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, bool> _pausedTasks = {};
@@ -491,6 +520,9 @@ class _NativeDownloadService implements DownloadService {
   }
 
   Future<String> _getDownloadDirectory() async {
+    final override = _downloadDirectoryOverride;
+    if (override != null) return override();
+
     final directory = await getApplicationDocumentsDirectory();
     final downloadDir = Directory('${directory.path}/downloads');
     if (!await downloadDir.exists()) {
@@ -620,6 +652,9 @@ class _NativeDownloadService implements DownloadService {
       mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
       posterUrl: posterUrl,
       createdAt: DateTime.now(),
+      // A task that has just been created has not stalled. Stamping this here
+      // gives the watchdog a baseline from the first moment the task exists.
+      lastProgressAt: _clock(),
       isProgressive: false,
       status: shouldQueue ? 'queued' : 'downloading',
       fileSize: fileSize,
