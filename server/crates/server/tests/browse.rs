@@ -183,7 +183,7 @@ async fn a_movie_detail_query_returns_its_file_facts() {
 
     let file = &movie["files"][0];
     assert_eq!(file["resolution"], "720p");
-    assert_eq!(file["codec"], "H.264");
+    assert_eq!(file["codec"], "H.264 (High)");
     assert!(file["size"].as_i64().unwrap() > 0);
 
     // Playback lands in Slice 3.

@@ -333,7 +333,7 @@ async fn the_media_file_carries_probed_facts() {
     let files = media_files::list_for_item(&db, &item).await.unwrap();
 
     assert_eq!(files[0].resolution.as_deref(), Some("360p"));
-    assert_eq!(files[0].codec.as_deref(), Some("H.264"));
+    assert_eq!(files[0].codec.as_deref(), Some("H.264 (High)"));
     assert!(files[0].size.unwrap_or(0) > 0);
     assert!(files[0].duration_seconds.unwrap_or(0.0) > 0.0);
 }
