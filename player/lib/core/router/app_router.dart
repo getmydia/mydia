@@ -12,6 +12,7 @@ import '../../presentation/screens/library/library_screen.dart';
 import '../../presentation/screens/library/library_controller.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/devices_screen.dart';
+import '../../presentation/screens/settings/diagnostics_screen.dart';
 import '../../presentation/screens/player/player_screen.dart';
 import '../../presentation/screens/player/queue_player_screen.dart';
 import '../../presentation/screens/downloads/downloads_screen.dart';
@@ -200,6 +201,12 @@ GoRouter appRouter(Ref ref) {
         name: 'devices',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const DevicesScreen(),
+      ),
+      GoRoute(
+        path: '/settings/diagnostics',
+        name: 'diagnostics',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const DiagnosticsScreen(),
       ),
       GoRoute(
         path: '/collection/:id',
