@@ -7,6 +7,7 @@
 pub mod ffprobe;
 pub mod names;
 pub mod parser;
+pub mod ranking;
 pub mod scan;
 pub mod walk;
 
