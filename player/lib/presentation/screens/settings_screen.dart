@@ -9,6 +9,7 @@ import '../../core/graphql/graphql_provider.dart';
 import '../../core/update/platform_updater.dart';
 import '../../core/update/update_provider.dart';
 import '../../core/update/updaters/macos_updater.dart';
+import '../../domain/models/quality_delivery_subtitle.dart';
 import '../../domain/models/quality_rung.dart';
 import '../widgets/ambient_backdrop_provider.dart';
 import '../widgets/cast_actions.dart';
@@ -148,6 +149,8 @@ class SettingsScreen extends ConsumerWidget {
                   context,
                   deriveQualityLadder(sourceHeight: 2160),
                   current,
+                  // Temporary placeholder; settings has no delivery context yet.
+                  originalSubtitle: kOriginalTranscodeSubtitle,
                 );
                 if (picked != null && context.mounted) {
                   await ref

@@ -44,6 +44,7 @@ import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/up_next_overlay.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
+import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
@@ -2524,6 +2525,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       context,
       _qualityLadder,
       _selectedQuality,
+      // Temporary until Task 3 wires the cached delivery subtitle.
+      originalSubtitle: kOriginalTranscodeSubtitle,
       clampNote: _clampNote(),
     );
 
