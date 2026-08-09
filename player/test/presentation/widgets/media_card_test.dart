@@ -144,4 +144,43 @@ void main() {
       expect(tapped, isTrue);
     });
   });
+
+  group('MediaCard secondary gestures', () {
+    testWidgets('long press hands back a context inside the card',
+        (tester) async {
+      BuildContext? received;
+
+      await tester.pumpWidget(
+        posterHost(
+          MediaCard(
+            title: 'Movie',
+            action: MediaCardAction.play,
+            onContextMenu: (context) => received = context,
+          ),
+          size: _cardHost,
+        ),
+      );
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pump();
+
+      expect(received, isNotNull);
+      // The menu anchors to the card's own render box, so the context handed
+      // back has to resolve to one.
+      expect(received?.findRenderObject(), isA<RenderBox>());
+    });
+
+    testWidgets('a card with no menu ignores a long press', (tester) async {
+      await tester.pumpWidget(
+        posterHost(
+          const MediaCard(title: 'Movie', action: MediaCardAction.open),
+          size: _cardHost,
+        ),
+      );
+
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

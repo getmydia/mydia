@@ -15,6 +15,7 @@ import 'package:player/domain/models/recently_added_item.dart';
 import 'package:player/domain/models/up_next_item.dart';
 import 'package:player/presentation/widgets/content_rail.dart';
 import 'package:player/presentation/widgets/media_card.dart';
+import 'package:player/presentation/widgets/media_context_menu.dart';
 
 List<RecentlyAddedItem> _items(int n) => List.generate(
       n,
@@ -180,6 +181,73 @@ void main() {
       await tester.pump();
 
       expect(actionOf(tester), MediaCardAction.open);
+    });
+
+    // A rail card with nothing playable behind it must not promise playback:
+    // home_screen.dart:128 falls back to the detail screen for exactly this
+    // case, so the badge would be advertising a tap that navigates.
+    testWidgets('an unplayable Continue Watching card promises navigation',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Continue Watching',
+          items: const [
+            ContinueWatchingItem(id: 'cw-2', type: 'movie', title: 'No Files'),
+          ],
+          onItemActivate: (_) {},
+        )),
+      );
+      await tester.pump();
+
+      expect(actionOf(tester), MediaCardAction.open);
+    });
+  });
+
+  group('ContentRail context menu', () {
+    testWidgets('long-pressing an Up Next card offers its show and details',
+        (tester) async {
+      const upNext = UpNextItem(
+        progressState: 'next_up',
+        episode: UpNextEpisode(
+          id: 'ep-1',
+          seasonNumber: 1,
+          episodeNumber: 2,
+          title: 'Pilot',
+          hasFile: true,
+        ),
+        show: UpNextShow(id: 'show-1', title: 'The Bear'),
+      );
+
+      await tester.pumpWidget(
+        _host(ContentRail(
+          title: 'Up Next',
+          items: const [upNext],
+          onItemActivate: (_) {},
+        )),
+      );
+      await tester.pump();
+
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Play'), findsOneWidget);
+      expect(find.text('Go to show'), findsOneWidget);
+      expect(find.text('Episode details'), findsOneWidget);
+    });
+
+    // The rails that already open the title on tap earn nothing from a menu
+    // offering to open the title, so they get none.
+    testWidgets('long-pressing a Recently Added card opens no menu',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(ContentRail(title: 'Recently Added', items: _items(1))),
+      );
+      await tester.pump();
+
+      await tester.longPress(find.byType(MediaCard));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PopupMenuItem<MediaContextAction>), findsNothing);
     });
   });
 }

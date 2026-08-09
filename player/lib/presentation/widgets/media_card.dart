@@ -36,6 +36,10 @@ class MediaCard extends StatelessWidget {
   /// What tapping this card does. Drives the affordance, so it is required.
   final MediaCardAction action;
 
+  /// Called on long press and on secondary tap, with a context inside this
+  /// card so the menu can anchor to it. Null means the card has no menu.
+  final void Function(BuildContext cardContext)? onContextMenu;
+
   /// If true, uses responsive sizing based on screen width.
   final bool responsive;
 
@@ -50,6 +54,7 @@ class MediaCard extends StatelessWidget {
     this.height,
     this.files,
     required this.action,
+    this.onContextMenu,
     this.responsive = false,
   });
 
@@ -102,6 +107,8 @@ class MediaCard extends StatelessWidget {
 
     final progress = progressPercentage;
 
+    final contextMenu = onContextMenu;
+
     // The tap target wraps the whole card, title and subtitle included. What
     // the tap promises comes from `action`: an opening card offers a click
     // cursor and no glyph, a playing card also carries the badge below.
@@ -109,6 +116,11 @@ class MediaCard extends StatelessWidget {
       cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
       child: GestureDetector(
         onTap: onTap,
+        // Long press for touch, secondary tap for a desktop right-click. Both
+        // reach the same menu, the way Infuse exposes the same actions on iOS
+        // and on the Mac.
+        onLongPress: contextMenu == null ? null : () => contextMenu(context),
+        onSecondaryTap: contextMenu == null ? null : () => contextMenu(context),
         child: SizedBox(
           width: cardWidth,
           child: Column(
