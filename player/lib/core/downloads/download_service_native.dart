@@ -362,8 +362,10 @@ class _NativeDownloadService implements DownloadService {
   void setDatabase(DownloadDatabase database) {
     _database = database;
 
-    // Run cleanup asynchronously on initialization
     Future.microtask(() async {
+      // The sweep runs first so files belonging to tasks it has just claimed
+      // are protected by the time cleanup enumerates the directory.
+      await recoverStuckDownloads();
       await cleanupOrphanedFiles();
       await cleanupOldTaskRecords();
     });
@@ -380,24 +382,118 @@ class _NativeDownloadService implements DownloadService {
   void setJobService(dynamic jobService) {
     if (jobService is DownloadJobService) {
       _jobService = jobService;
-      _resumeTranscodingTasks();
+      // Progressive tasks could not be recovered before a job service existed.
+      unawaited(recoverStuckDownloads());
     }
   }
 
-  /// Resume tasks that were interrupted during transcoding.
-  Future<void> _resumeTranscodingTasks() async {
-    if (_database == null || _jobService == null) return;
+  bool _sweepInFlight = false;
+  Timer? _stallTimer;
 
-    final transcodingTasks = _database!
-        .getAllTasks()
-        .where((t) => t.status == 'transcoding' && t.transcodeJobId != null);
+  /// Tick interval for the stall watchdog. Short relative to the shortest
+  /// stall window so a stall is noticed within a tick or two of crossing it.
+  static const _stallTick = Duration(seconds: 30);
 
-    for (final task in transcodingTasks) {
-      // Check if already being tracked (e.g. paused/resumed manually)
-      if (_cancelTokens.containsKey(task.id)) continue;
+  @override
+  Future<void> recoverStuckDownloads() async {
+    if (_database == null || _sweepInFlight) return;
+    _sweepInFlight = true;
+    try {
+      final plan = planRecovery(
+        tasks: _database!.getAllTasks(),
+        liveTaskIds: _cancelTokens.keys.toSet(),
+        maxConcurrent: _maxConcurrentDownloads,
+        autoStart: _autoStartQueued,
+      );
 
-      _driveProgressiveTask(task);
+      for (final decision in plan) {
+        final task = _database!.getTask(decision.taskId);
+        if (task == null) continue;
+        await _applyRecovery(task, decision.action);
+      }
+    } finally {
+      _sweepInFlight = false;
     }
+  }
+
+  Future<void> _applyRecovery(DownloadTask task, RecoveryAction action) async {
+    switch (action) {
+      case RecoveryAction.fail:
+        final failed = task.copyWith(
+          status: 'failed',
+          error: 'Download stopped responding after '
+              '$maxRecoveryAttempts recovery attempts.',
+        );
+        await _database!.saveTask(failed);
+        _progressController.add(failed);
+
+      case RecoveryAction.requeue:
+        final queued = task.copyWith(status: 'queued');
+        await _database!.saveTask(queued);
+        _progressController.add(queued);
+
+      case RecoveryAction.reprepare:
+        // No usable transcode job, so the partial file is meaningless.
+        await restartDownload(task.id);
+
+      case RecoveryAction.resume:
+        final claimed = task.copyWith(
+          status: 'interrupted',
+          recoveryAttempts: task.recoveryAttempts + 1,
+          lastProgressAt: _clock(),
+        );
+        await _database!.saveTask(claimed);
+        _progressController.add(claimed);
+
+        if (claimed.isProgressive && claimed.transcodeJobId != null) {
+          _driveProgressiveTask(claimed);
+        } else if (claimed.downloadUrl != null) {
+          await _startDownloadTask(claimed);
+        } else {
+          await restartDownload(claimed.id);
+        }
+    }
+  }
+
+  void _ensureStallTimer() {
+    final anyActive = _database
+            ?.getAllTasks()
+            .any((t) => DownloadStatusSets.running.contains(t.status)) ??
+        false;
+
+    if (anyActive) {
+      _stallTimer ??= Timer.periodic(_stallTick, (_) => checkForStalls());
+    } else {
+      _stallTimer?.cancel();
+      _stallTimer = null;
+    }
+  }
+
+  @override
+  Future<void> checkForStalls() async {
+    if (_database == null) return;
+
+    final now = _clock();
+    var found = false;
+
+    for (final task in _database!.getAllTasks()) {
+      if (assessStall(task, now) != StallVerdict.stalled) continue;
+      found = true;
+
+      // Tear the loop down so the sweep sees it as an orphan and applies the
+      // usual rules, including the attempts ceiling.
+      final token = _cancelTokens.remove(task.id);
+      if (token != null && !token.isCancelled) {
+        token.cancel('Stalled');
+      }
+      _speedTracker.clearTask(task.id);
+
+      final stalled = task.copyWith(status: 'stalled');
+      await _database!.saveTask(stalled);
+      _progressController.add(stalled);
+    }
+
+    if (found) await recoverStuckDownloads();
   }
 
   /// Start the progressive loop for [task] using the injected job service.
@@ -428,7 +524,13 @@ class _NativeDownloadService implements DownloadService {
   /// Starts the service when the first download becomes active, updates
   /// the notification with progress info, and stops it when no downloads remain.
   Future<void> _updateForegroundService() async {
-    if (!Platform.isAndroid || _database == null) return;
+    if (_database == null) return;
+
+    // Stall watchdog lifecycle follows activity on every platform; the
+    // notification below stays Android-only.
+    _ensureStallTimer();
+
+    if (!Platform.isAndroid) return;
 
     final activeTasks = _database!
         .getAllTasks()
@@ -860,6 +962,8 @@ class _NativeDownloadService implements DownloadService {
           transcodeProgress: status.progress,
           fileSize: status.fileSize ?? updatedTask.fileSize,
           status: status.status == 'ready' ? 'downloading' : 'transcoding',
+          lastProgressAt: _clock(),
+          recoveryAttempts: 0,
         );
         await _database!.saveTask(updatedTask);
         _progressController.add(updatedTask);
@@ -927,6 +1031,8 @@ class _NativeDownloadService implements DownloadService {
           updatedTask = updatedTask.copyWith(
             transcodeProgress: status.progress,
             fileSize: status.fileSize ?? updatedTask.fileSize,
+            lastProgressAt: _clock(),
+            recoveryAttempts: 0,
           );
           transcodeComplete = status.status == 'ready';
           lastKnownFileSize = status.fileSize ?? lastKnownFileSize;
@@ -965,6 +1071,8 @@ class _NativeDownloadService implements DownloadService {
                           (downloadProgress * 0.7)
                       : downloadProgress,
                   downloadedBytes: actualReceived,
+                  lastProgressAt: _clock(),
+                  recoveryAttempts: 0,
                 );
                 _speedTracker.recordProgress(task.id, actualReceived);
                 await _database!.saveTask(updatedTask);
@@ -1121,6 +1229,8 @@ class _NativeDownloadService implements DownloadService {
               progress: actualReceived / estimatedTotal,
               fileSize: estimatedTotal,
               downloadedBytes: actualReceived,
+              lastProgressAt: _clock(),
+              recoveryAttempts: 0,
             );
             _speedTracker.recordProgress(task.id, actualReceived);
             await _database!.saveTask(updatedTask);
@@ -1605,6 +1715,8 @@ class _NativeDownloadService implements DownloadService {
       token.cancel();
     }
     _cancelTokens.clear();
+    _stallTimer?.cancel();
+    _stallTimer = null;
     _notificationProgressSub?.cancel();
     _notificationService.stopService();
     _progressController.close();

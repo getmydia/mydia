@@ -70,6 +70,15 @@ abstract class DownloadService {
     required bool autoStartQueued,
   });
 
+  /// Find tasks that claim to be active but have no loop driving them, and
+  /// recover them. Safe to call repeatedly; overlapping calls collapse.
+  Future<void> recoverStuckDownloads();
+
+  /// Mark tasks that have stopped making progress and re-drive them. Called on
+  /// a timer while downloads are active; exposed so tests can drive it with a
+  /// controlled clock.
+  Future<void> checkForStalls();
+
   Stream<DownloadTask> get progressStream;
 
   Future<DownloadTask> startDownload({

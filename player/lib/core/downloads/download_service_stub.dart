@@ -98,6 +98,12 @@ class _StubDownloadService implements DownloadService {
   }) {}
 
   @override
+  Future<void> recoverStuckDownloads() async {}
+
+  @override
+  Future<void> checkForStalls() async {}
+
+  @override
   Stream<DownloadTask> get progressStream => _progressController.stream;
 
   @override

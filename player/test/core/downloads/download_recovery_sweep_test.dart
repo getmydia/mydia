@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/downloads/download_recovery.dart';
 import 'package:player/domain/models/download.dart';
 
 import 'download_test_harness.dart';
@@ -191,5 +192,194 @@ void main() {
     await harness.service.pauseDownload('orphan');
 
     expect(harness.database.getTask('orphan')!.status, 'paused');
+  });
+
+  group('recoverStuckDownloads', () {
+    test('resumes an orphaned downloading task from its partial file',
+        () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        attachJobService: false,
+      );
+
+      final partialPath = '${harness.downloadDir.path}/orphan.mp4';
+      await File(partialPath).writeAsBytes(Uint8List.fromList([7, 7, 7, 7]));
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'orphan',
+        mediaId: 'm1',
+        title: 'Orphan',
+        quality: '1080p',
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/file.mp4',
+        filePath: partialPath,
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      await harness.service.recoverStuckDownloads();
+      await harness.waitForStatus('orphan', 'completed');
+
+      expect(harness.adapter.lastRange, 'bytes=4-');
+      expect(await File(partialPath).length(), 10);
+    });
+
+    // The concurrency limit itself is proven deterministically by the planner
+    // tests in Task 2. Asserting it here would race: a ten-byte body finishes
+    // fast enough that the queue drains before the assertion reads it.
+    test('parks every orphan as queued when autoStart is off', () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        attachJobService: false,
+      );
+      harness.service.applySettings(
+        maxConcurrentDownloads: 1,
+        autoStartQueued: false,
+      );
+
+      for (var i = 0; i < 3; i++) {
+        await harness.database.saveTask(DownloadTask(
+          id: 'orphan$i',
+          mediaId: 'm$i',
+          title: 'Orphan $i',
+          quality: '1080p',
+          status: 'downloading',
+          downloadUrl: 'https://test.invalid/file.mp4',
+          createdAt: DateTime(2026, 1, 1).add(Duration(minutes: i)),
+        ));
+      }
+
+      await harness.service.recoverStuckDownloads();
+
+      final statuses = [0, 1, 2]
+          .map((i) => harness.database.getTask('orphan$i')!.status)
+          .toList();
+      expect(statuses, everyElement('queued'),
+          reason: 'autoStart off means nothing starts');
+    });
+
+    test('fails a task that has exhausted its recovery attempts', () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        attachJobService: false,
+      );
+      await harness.database.saveTask(DownloadTask(
+        id: 'giveup',
+        mediaId: 'm1',
+        title: 'Give Up',
+        quality: '1080p',
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/file.mp4',
+        recoveryAttempts: 3,
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      await harness.service.recoverStuckDownloads();
+
+      final stored = harness.database.getTask('giveup')!;
+      expect(stored.status, 'failed');
+      expect(stored.error, isNotNull);
+    });
+
+    test('is idempotent when called twice in a row', () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        attachJobService: false,
+      );
+      await harness.database.saveTask(DownloadTask(
+        id: 'orphan',
+        mediaId: 'm1',
+        title: 'Orphan',
+        quality: '1080p',
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/file.mp4',
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      await Future.wait([
+        harness.service.recoverStuckDownloads(),
+        harness.service.recoverStuckDownloads(),
+      ]);
+      await harness.waitForStatus('orphan', 'completed');
+
+      expect(harness.adapter.requests.length, 1);
+    });
+  });
+
+  group('stall watchdog', () {
+    test('escalates to failed after the attempt ceiling', () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        attachJobService: false,
+      );
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'stuck',
+        mediaId: 'm1',
+        title: 'Stuck',
+        quality: '1080p',
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/file.mp4',
+        recoveryAttempts: maxRecoveryAttempts,
+        lastProgressAt: harness.clock.now,
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      harness.clock.advance(const Duration(minutes: 5));
+      await harness.service.checkForStalls();
+
+      final stored = harness.database.getTask('stuck')!;
+      expect(stored.status, 'failed');
+    });
+
+    test('marks a task stalled once its window elapses', () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        attachJobService: false,
+      );
+      harness.service.applySettings(
+        maxConcurrentDownloads: 2,
+        autoStartQueued: false,
+      );
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'stuck',
+        mediaId: 'm1',
+        title: 'Stuck',
+        quality: '1080p',
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/file.mp4',
+        lastProgressAt: harness.clock.now,
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      harness.clock.advance(const Duration(seconds: 91));
+      await harness.service.checkForStalls();
+
+      // autoStart is off, so the sweep parks it rather than restarting it.
+      expect(harness.database.getTask('stuck')!.status, 'queued');
+    });
+
+    test('leaves a task inside its window alone', () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        attachJobService: false,
+      );
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'fine',
+        mediaId: 'm1',
+        title: 'Fine',
+        quality: '1080p',
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/file.mp4',
+        lastProgressAt: harness.clock.now,
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      harness.clock.advance(const Duration(seconds: 30));
+      await harness.service.checkForStalls();
+
+      expect(harness.database.getTask('fine')!.status, 'downloading');
+    });
   });
 }
