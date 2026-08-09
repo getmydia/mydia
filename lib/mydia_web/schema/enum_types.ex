@@ -36,6 +36,10 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:added_at, description: "Sort by date added")
     value(:year, description: "Sort by year")
     value(:rating, description: "Sort by rating")
+    value(:runtime, description: "Sort by duration")
+    value(:popularity, description: "Sort by popularity")
+    value(:content_rating, description: "Sort by content rating")
+    value(:release_date, description: "Sort by release date")
   end
 
   @desc "Sort direction"

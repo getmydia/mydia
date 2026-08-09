@@ -6,19 +6,38 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSortTest do
   alias MydiaWeb.Schema.Resolvers.MediaSort
 
   defp item(id, attrs) do
-    {meta_attrs, item_attrs} = Map.split(attrs, [:vote_average])
+    {meta_attrs, item_attrs} =
+      Map.split(attrs, [
+        :vote_average,
+        :popularity,
+        :content_rating,
+        :runtime,
+        :release_date,
+        :episode_run_time,
+        :first_air_date
+      ])
+
+    type = Map.get(item_attrs, :type, "movie")
 
     metadata =
       if map_size(meta_attrs) == 0 do
         nil
       else
         struct(
-          %MediaMetadata{provider_id: "x", provider: :tmdb, media_type: :movie},
+          %MediaMetadata{
+            provider_id: "x",
+            provider: :tmdb,
+            media_type: if(type == "tv_show", do: :tv_show, else: :movie)
+          },
           meta_attrs
         )
       end
 
-    struct(%MediaItem{id: id, type: "movie", metadata: metadata}, item_attrs)
+    struct(%MediaItem{id: id, metadata: metadata}, Map.put(item_attrs, :type, type))
+  end
+
+  defp many(count) do
+    for n <- 1..count, do: item("#{n}", %{title: "Title #{n}"})
   end
 
   defp ids(items), do: Enum.map(items, & &1.id)
@@ -104,6 +123,94 @@ defmodule MydiaWeb.Schema.Resolvers.MediaSortTest do
 
       assert ids(MediaSort.sort(items, %{field: :nonsense, direction: :asc})) == ["2", "1"]
       assert ids(MediaSort.sort(items, %{field: :nonsense, direction: :desc})) == ["1", "2"]
+    end
+  end
+
+  describe "runtime" do
+    test "sorts movies by runtime" do
+      items = [
+        item("long", %{title: "A", runtime: 180}),
+        item("short", %{title: "B", runtime: 90})
+      ]
+
+      assert ids(MediaSort.sort(items, %{field: :runtime, direction: :asc})) == ["short", "long"]
+      assert ids(MediaSort.sort(items, %{field: :runtime, direction: :desc})) == ["long", "short"]
+    end
+
+    test "falls back to the first episode_run_time for shows" do
+      items = [
+        item("hour", %{type: "tv_show", title: "A", episode_run_time: [60]}),
+        item("half", %{type: "tv_show", title: "B", episode_run_time: [30]})
+      ]
+
+      assert ids(MediaSort.sort(items, %{field: :runtime, direction: :asc})) == ["half", "hour"]
+    end
+
+    test "a show with an empty episode_run_time sorts last" do
+      items = [
+        item("none", %{type: "tv_show", title: "A", episode_run_time: []}),
+        item("half", %{type: "tv_show", title: "B", episode_run_time: [30]})
+      ]
+
+      assert ids(MediaSort.sort(items, %{field: :runtime, direction: :desc})) == ["half", "none"]
+    end
+  end
+
+  describe "popularity" do
+    test "sorts by popularity" do
+      items = [
+        item("hot", %{title: "A", popularity: 900.5}),
+        item("cold", %{title: "B", popularity: 1.2})
+      ]
+
+      assert ids(MediaSort.sort(items, %{field: :popularity, direction: :desc})) == [
+               "hot",
+               "cold"
+             ]
+    end
+  end
+
+  describe "content_rating" do
+    test "sorts by content rating and keeps ties in input order" do
+      items = [
+        item("pg1", %{title: "A", content_rating: "PG"}),
+        item("g", %{title: "B", content_rating: "G"}),
+        item("pg2", %{title: "C", content_rating: "PG"})
+      ]
+
+      assert ids(MediaSort.sort(items, %{field: :content_rating, direction: :asc})) ==
+               ["g", "pg1", "pg2"]
+
+      # The tie group keeps its order even reversed. This is the defect that
+      # Enum.reverse/1 used to introduce.
+      assert ids(MediaSort.sort(items, %{field: :content_rating, direction: :desc})) ==
+               ["pg1", "pg2", "g"]
+    end
+  end
+
+  describe "release_date" do
+    test "sorts movies by release date chronologically" do
+      items = [
+        item("new", %{title: "A", release_date: ~D[2026-01-01]}),
+        item("old", %{title: "B", release_date: ~D[1999-12-31]})
+      ]
+
+      assert ids(MediaSort.sort(items, %{field: :release_date, direction: :asc})) == [
+               "old",
+               "new"
+             ]
+    end
+
+    test "falls back to first_air_date for shows" do
+      items = [
+        item("new", %{type: "tv_show", title: "A", first_air_date: ~D[2026-01-01]}),
+        item("old", %{type: "tv_show", title: "B", first_air_date: ~D[1999-12-31]})
+      ]
+
+      assert ids(MediaSort.sort(items, %{field: :release_date, direction: :desc})) == [
+               "new",
+               "old"
+             ]
     end
   end
 end
