@@ -9,6 +9,7 @@ import 'core/downloads/download_service.dart';
 import 'package:flutter/services.dart';
 
 import 'core/graphql/watch/fetch_log.dart';
+import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
@@ -161,9 +162,17 @@ Future<void> _startApp() async {
     }
   }
 
+  final startupContainer = ProviderContainer();
+  final sidebarLayoutStore =
+      await startupContainer.read(sidebarLayoutStoreAsyncProvider.future);
+  startupContainer.dispose();
+
   runApp(
     ProviderScope(
-      overrides: [fetchLogProvider.overrideWithValue(fetchLog)],
+      overrides: [
+        fetchLogProvider.overrideWithValue(fetchLog),
+        sidebarLayoutStoreProvider.overrideWithValue(sidebarLayoutStore),
+      ],
       child: const MyApp(),
     ),
   );
