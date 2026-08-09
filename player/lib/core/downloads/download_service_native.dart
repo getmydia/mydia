@@ -1333,16 +1333,29 @@ class _NativeDownloadService implements DownloadService {
       // Process queue to start next download
       _processQueue();
     } on DioException catch (e) {
-      String errorMessage;
       if (e.type == DioExceptionType.cancel) {
-        errorMessage = 'Download cancelled';
-        updatedTask = task.copyWith(status: 'cancelled', error: errorMessage);
+        // The token was cancelled, but this loop does not get to decide what
+        // that meant. pauseDownload cancels it and writes 'paused';
+        // restartDownload cancels it and writes 'pending'. Claiming
+        // 'cancelled' unconditionally here would clobber either of those, so
+        // only claim it if nobody else has already moved the task on.
+        final current = _database!.getTask(task.id);
+        if (current == null || current.status == 'downloading') {
+          updatedTask = task.copyWith(
+            status: 'cancelled',
+            error: 'Download cancelled',
+          );
+          await _database!.saveTask(updatedTask);
+          _progressController.add(updatedTask);
+        }
       } else {
-        errorMessage = e.message ?? 'Download failed';
-        updatedTask = task.copyWith(status: 'failed', error: errorMessage);
+        updatedTask = task.copyWith(
+          status: 'failed',
+          error: e.message ?? 'Download failed',
+        );
+        await _database!.saveTask(updatedTask);
+        _progressController.add(updatedTask);
       }
-      await _database!.saveTask(updatedTask);
-      _progressController.add(updatedTask);
       _cancelTokens.remove(task.id);
       _speedTracker.clearTask(task.id);
 
@@ -1379,18 +1392,22 @@ class _NativeDownloadService implements DownloadService {
       return;
     }
 
-    // For regular downloads, cancel the token if one is live. An orphan has no
-    // token because the map is rebuilt empty on every launch, and it still has
-    // to become paused rather than silently staying "downloading".
-    final cancelToken = _cancelTokens[taskId];
-    if (cancelToken != null) {
-      cancelToken.cancel();
-      _cancelTokens.remove(taskId);
-    }
-
+    // Claim the status BEFORE cancelling the token. The download loop's cancel
+    // handler checks for a task still marked 'downloading' before writing
+    // 'cancelled', so writing 'paused' first means the loop sees the claim and
+    // leaves it alone. Doing it the other way round still ends at 'paused', but
+    // emits a spurious 'cancelled' on the progress stream on the way.
     final pausedTask = task.copyWith(status: 'paused');
     await _database!.saveTask(pausedTask);
     _progressController.add(pausedTask);
+
+    // Cancel the token if one is live. An orphan has none, because the map is
+    // rebuilt empty on every launch, and it still has to become paused rather
+    // than silently staying "downloading".
+    final cancelToken = _cancelTokens.remove(taskId);
+    if (cancelToken != null && !cancelToken.isCancelled) {
+      cancelToken.cancel();
+    }
   }
 
   @override
