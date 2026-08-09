@@ -76,6 +76,7 @@ abstract final class QueryKeys {
   static final QueryKey tvShowsList = QueryKey('TvShowsList');
   static final QueryKey unwatchedList = QueryKey('UnwatchedList');
   static final QueryKey favoritesList = QueryKey('FavoritesList');
+  static final QueryKey continueWatchingList = QueryKey('ContinueWatchingList');
 
   static QueryKey collectionItems(String collectionId) =>
       QueryKey('CollectionItems', {'collectionId': collectionId});
