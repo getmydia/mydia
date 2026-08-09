@@ -1,5 +1,3 @@
-import 'dart:ui' show FontFeature;
-
 import 'package:flutter/material.dart';
 
 import '../../../../core/connection/connection_summary.dart';
@@ -164,7 +162,8 @@ class _StatStrip extends StatelessWidget {
                 dotColor: connectionToneColor(connection.tone),
               ),
             ),
-            VerticalDivider(width: 1, thickness: 1, color: AppColors.divider),
+            const VerticalDivider(
+                width: 1, thickness: 1, color: AppColors.divider),
             Expanded(
               child: _Stat(label: 'Version', value: version ?? _unknown),
             ),

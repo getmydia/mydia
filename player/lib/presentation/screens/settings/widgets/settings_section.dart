@@ -45,7 +45,7 @@ class SettingsCard extends StatelessWidget {
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
         result.add(
-          Divider(height: 1, thickness: 1, color: AppColors.divider),
+          const Divider(height: 1, thickness: 1, color: AppColors.divider),
         );
       }
       result.add(children[i]);
