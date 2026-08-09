@@ -146,7 +146,7 @@ flatpak install mydia dev.mydia.player`,
                   {platform.options.map(option => (
                     <a
                       href={option.href}
-                      class={['btn btn-sm', option.primary ? 'btn-primary' : 'btn-outline']}
+                      class:list={['btn', 'btn-sm', option.primary ? 'btn-primary' : 'btn-outline']}
                     >
                       {option.label}
                     </a>
