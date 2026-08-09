@@ -203,6 +203,7 @@ class _ContentRailState extends State<ContentRail> {
         progressPercentage: item.progress?.percentage,
         width: cardSize.width,
         height: cardSize.height,
+        action: MediaCardAction.play,
         onTap: () => widget.onItemActivate != null
             ? widget.onItemActivate!(item)
             : widget.onItemTap?.call(item.id, item.type),
@@ -214,6 +215,7 @@ class _ContentRailState extends State<ContentRail> {
         subtitle: item.newContentLabel ?? item.year?.toString(),
         width: cardSize.width,
         height: cardSize.height,
+        action: MediaCardAction.open,
         onTap: () => widget.onItemTap?.call(item.id, item.type),
       );
     } else if (item is UpNextItem) {
@@ -223,6 +225,7 @@ class _ContentRailState extends State<ContentRail> {
         subtitle: item.episode.episodeCode,
         width: cardSize.width,
         height: cardSize.height,
+        action: MediaCardAction.play,
         onTap: () => widget.onItemActivate != null
             ? widget.onItemActivate!(item)
             : widget.onItemTap?.call(item.episode.id, 'episode'),
