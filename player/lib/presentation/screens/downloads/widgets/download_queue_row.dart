@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/downloads/download_providers.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../domain/models/download.dart';
+import 'download_recovery_banner.dart';
 import 'series_downloads_dialogs.dart';
 
 /// One in-progress download, as three legible lines: title, progress bar, and
@@ -20,6 +21,7 @@ class DownloadQueueRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final progress = task.isProgressive ? task.combinedProgress : task.progress;
+    final recovering = downloadStateLabel(task).isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -69,6 +71,16 @@ class DownloadQueueRow extends ConsumerWidget {
               ),
             ],
           ),
+          if (recovering) ...[
+            const SizedBox(height: 8),
+            DownloadRecoveryBanner(
+              task: task,
+              onResume: () async {
+                final manager = await ref.read(downloadManagerProvider.future);
+                await manager.resumeDownload(task.id);
+              },
+            ),
+          ],
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(2),

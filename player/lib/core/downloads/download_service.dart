@@ -64,6 +64,21 @@ abstract class DownloadService {
   void setJobService(
       dynamic jobService); // Dynamic to avoid circular imports in interface
 
+  /// Apply the user's download settings. Called whenever settings change.
+  void applySettings({
+    required int maxConcurrentDownloads,
+    required bool autoStartQueued,
+  });
+
+  /// Find tasks that claim to be active but have no loop driving them, and
+  /// recover them. Safe to call repeatedly; overlapping calls collapse.
+  Future<void> recoverStuckDownloads();
+
+  /// Mark tasks that have stopped making progress and re-drive them. Called on
+  /// a timer while downloads are active; exposed so tests can drive it with a
+  /// controlled clock.
+  Future<void> checkForStalls();
+
   Stream<DownloadTask> get progressStream;
 
   Future<DownloadTask> startDownload({
@@ -143,6 +158,15 @@ abstract class DownloadService {
   Future<void> pauseDownload(String taskId);
   Future<void> resumeDownload(String taskId);
   Future<void> cancelDownload(String taskId);
+
+  /// Discard all progress and start the download again.
+  ///
+  /// Accepts a task in any status except `completed`: it cancels a live loop,
+  /// deletes the partial file, re-prepares the transcode job when the task is
+  /// progressive, and starts fresh.
+  Future<void> restartDownload(String taskId);
+
+  /// Retry a `failed` or `cancelled` task. Delegates to [restartDownload].
   Future<void> retryDownload(String taskId);
   Future<void> deleteDownload(String mediaId);
 

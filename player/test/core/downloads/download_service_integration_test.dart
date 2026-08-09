@@ -1,118 +1,69 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:path/path.dart' as path;
+import 'package:player/core/downloads/download_service_native.dart';
 import 'package:player/domain/models/download.dart';
-import 'package:player/domain/models/download_settings.dart';
-import 'package:player/domain/models/storage_settings.dart';
+
+import 'download_test_harness.dart';
 
 void main() {
-  late Directory tempDir;
-  late Box<DownloadTask> tasksBox;
-  late Box<DownloadedMedia> mediaBox;
-  late TestDownloadDatabase database;
-  late TestDownloadService service;
-  var boxCounter = 0;
-
-  setUpAll(() async {
-    // Initialize Hive with a temporary directory
-    tempDir = await Directory.systemTemp.createTemp('download_test_');
-    Hive.init(tempDir.path);
-
-    // Register adapters if not already registered
-    if (!Hive.isAdapterRegistered(0)) {
-      Hive.registerAdapter(DownloadTaskAdapter());
-    }
-    if (!Hive.isAdapterRegistered(1)) {
-      Hive.registerAdapter(DownloadedMediaAdapter());
-    }
-    if (!Hive.isAdapterRegistered(2)) {
-      Hive.registerAdapter(StorageSettingsAdapter());
-    }
-    if (!Hive.isAdapterRegistered(3)) {
-      Hive.registerAdapter(DownloadSettingsAdapter());
-    }
-  });
+  late DownloadHarness harness;
 
   setUp(() async {
-    // Open fresh boxes for each test with unique names
-    boxCounter++;
-    tasksBox = await Hive.openBox<DownloadTask>('download_tasks_test_$boxCounter');
-    mediaBox = await Hive.openBox<DownloadedMedia>('downloaded_media_test_$boxCounter');
-
-    database = TestDownloadDatabase(tasksBox: tasksBox, mediaBox: mediaBox);
-    service = TestDownloadService(database: database, downloadDir: tempDir.path);
+    harness = await makeHarness(
+      body: Uint8List.fromList(List.generate(1024, (i) => i % 256)),
+    );
   });
 
-  tearDown(() async {
-    // Wait for any pending operations to complete
-    await service.dispose();
-    await Future.delayed(const Duration(milliseconds: 50));
-
-    // Close and delete boxes
-    if (tasksBox.isOpen) {
-      await tasksBox.deleteFromDisk();
-    }
-    if (mediaBox.isOpen) {
-      await mediaBox.deleteFromDisk();
-    }
-  });
-
-  tearDownAll(() async {
-    await Hive.close();
-    try {
-      await tempDir.delete(recursive: true);
-    } catch (_) {
-      // Ignore cleanup errors
-    }
-  });
+  tearDown(() async => harness.dispose());
 
   group('Complete Download Flow', () {
     test('initiates download and tracks progress to completion', () async {
-      // Arrange
       const mediaId = 'movie_123';
       const title = 'Test Movie';
       const quality = '720p';
 
       final progressUpdates = <DownloadTask>[];
-      final subscription = service.progressStream.listen(progressUpdates.add);
+      final subscription =
+          harness.service.progressStream.listen(progressUpdates.add);
 
-      // Act - Start download
-      final task = await service.startDownload(
+      final task = await harness.service.startDownload(
         mediaId: mediaId,
         title: title,
-        downloadUrl: 'https://example.com/movie.mp4',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: quality,
         mediaType: MediaType.movie,
-        posterUrl: 'https://example.com/poster.jpg',
-        fileSize: 1024 * 1024, // 1MB
+        posterUrl: 'https://test.invalid/poster.jpg',
+        fileSize: 1024,
       );
 
-      // Wait for download to complete (simulated)
-      await service.waitForDownloadComplete(task.id);
-      await subscription.cancel();
-
-      // Assert - Initial task creation
+      // Real service returns 'downloading' (or 'queued'); the old fake
+      // returned 'pending'. Assert the post-completion state instead.
       expect(task.mediaId, equals(mediaId));
       expect(task.title, equals(title));
       expect(task.quality, equals(quality));
-      expect(task.downloadStatus, equals(DownloadStatus.pending));
+      expect(
+        task.downloadStatus,
+        anyOf(DownloadStatus.downloading, DownloadStatus.queued),
+      );
 
-      // Assert - Progress was tracked
+      await harness.waitForStatus(task.id, 'completed');
+      await subscription.cancel();
+
       expect(progressUpdates, isNotEmpty);
 
-      // Assert - Download completed
-      final completedTask = database.getTask(task.id);
+      final completedTask = harness.database.getTask(task.id);
       expect(completedTask, isNotNull);
       expect(completedTask!.downloadStatus, equals(DownloadStatus.completed));
       expect(completedTask.progress, equals(1.0));
       expect(completedTask.filePath, isNotNull);
       expect(completedTask.completedAt, isNotNull);
 
-      // Assert - Media was saved to downloaded media
-      final downloadedMedia = database.getMediaByMediaId(mediaId);
+      final downloadedMedia = harness.database.getMediaByMediaId(mediaId);
       expect(downloadedMedia, isNotNull);
       expect(downloadedMedia!.title, equals(title));
       expect(downloadedMedia.quality, equals(quality));
@@ -120,290 +71,322 @@ void main() {
     });
 
     test('tracks progress updates from 0% to 100%', () async {
-      // Arrange
       const mediaId = 'movie_progress';
       final progressUpdates = <double>[];
 
-      final subscription = service.progressStream.listen((task) {
+      final subscription = harness.service.progressStream.listen((task) {
         if (task.mediaId == mediaId) {
           progressUpdates.add(task.progress);
         }
       });
 
-      // Act
-      final task = await service.startDownload(
+      final task = await harness.service.startDownload(
         mediaId: mediaId,
         title: 'Progress Test Movie',
-        downloadUrl: 'https://example.com/movie.mp4',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
-        fileSize: 1024 * 100, // 100KB - will generate 10 progress updates
+        fileSize: 1024,
       );
 
-      await service.waitForDownloadComplete(task.id);
+      await harness.waitForStatus(task.id, 'completed');
       await subscription.cancel();
 
-      // Assert - Progress went from low to high
-      expect(progressUpdates.first, lessThan(0.5));
+      expect(progressUpdates, isNotEmpty);
       expect(progressUpdates.last, equals(1.0));
 
-      // Verify progress increased monotonically
+      // The fake simulated many incremental ticks; the real dio adapter delivers
+      // the body in one shot, so we may only see a single 1.0 update. Assert
+      // monotonicity when there is more than one sample.
       for (var i = 1; i < progressUpdates.length; i++) {
-        expect(progressUpdates[i], greaterThanOrEqualTo(progressUpdates[i - 1]));
+        expect(
+          progressUpdates[i],
+          greaterThanOrEqualTo(progressUpdates[i - 1]),
+        );
       }
     });
 
     test('file is created at expected path', () async {
-      // Arrange
-      const mediaId = 'movie_file_test';
-
-      // Act
-      final task = await service.startDownload(
-        mediaId: mediaId,
+      final task = await harness.service.startDownload(
+        mediaId: 'movie_file_test',
         title: 'File Path Test',
-        downloadUrl: 'https://example.com/movie.mp4',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: '1080p',
         mediaType: MediaType.movie,
       );
 
-      await service.waitForDownloadComplete(task.id);
+      await harness.waitForStatus(task.id, 'completed');
 
-      // Assert
-      final completedTask = database.getTask(task.id);
-      expect(completedTask!.filePath, isNotNull);
-
-      final file = File(completedTask.filePath!);
-      expect(await file.exists(), isTrue);
+      final stored = harness.database.getTask(task.id)!;
+      expect(stored.filePath, startsWith(harness.downloadDir.path));
+      expect(await File(stored.filePath!).exists(), isTrue);
     });
   });
 
   group('Pause and Resume', () {
     test('pauses an active download', () async {
-      // Arrange - Use slow download mode for reliable pause testing
-      final task = await service.startSlowDownload(
+      // Occupy a live slot without racing the adapter: seed a downloading
+      // orphan (no cancel token). pauseDownload is explicitly written to
+      // handle this case after app suspension.
+      await harness.database.saveTask(DownloadTask(
+        id: 'pause_test',
         mediaId: 'pause_test',
         title: 'Pause Test Movie',
-        downloadUrl: 'https://example.com/movie.mp4',
         quality: '720p',
-        mediaType: MediaType.movie,
-      );
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/movie.mp4',
+        createdAt: DateTime(2026, 1, 1),
+      ));
 
-      // Wait for download to start and make some progress
-      await service.waitForDownloadStarted(task.id);
-      await Future.delayed(const Duration(milliseconds: 100));
+      await harness.service.pauseDownload('pause_test');
 
-      // Act
-      await service.pauseDownload(task.id);
-
-      // Assert
-      final pausedTask = database.getTask(task.id);
+      final pausedTask = harness.database.getTask('pause_test');
       expect(pausedTask, isNotNull);
       expect(pausedTask!.downloadStatus, equals(DownloadStatus.paused));
     });
 
     test('resumes a paused download to completion', () async {
-      // Arrange - Use slow download mode
-      final task = await service.startSlowDownload(
+      final partialPath = '${harness.downloadDir.path}/resume_test.mp4';
+      await File(partialPath).writeAsBytes(Uint8List.fromList([1, 2, 3, 4]));
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'resume_test',
         mediaId: 'resume_test',
         title: 'Resume Test Movie',
-        downloadUrl: 'https://example.com/movie.mp4',
         quality: '720p',
-        mediaType: MediaType.movie,
-      );
+        status: 'paused',
+        downloadUrl: 'https://test.invalid/movie.mp4',
+        filePath: partialPath,
+        downloadedBytes: 4,
+        progress: 4 / 1024,
+        createdAt: DateTime(2026, 1, 1),
+      ));
 
-      await service.waitForDownloadStarted(task.id);
-      await Future.delayed(const Duration(milliseconds: 100));
-      await service.pauseDownload(task.id);
+      await harness.service.resumeDownload('resume_test');
+      await harness.waitForStatus('resume_test', 'completed');
 
-      // Verify paused
-      var currentTask = database.getTask(task.id);
-      expect(currentTask!.downloadStatus, equals(DownloadStatus.paused));
-
-      // Act - Resume with faster speed for quick completion
-      service.setDownloadSpeed(task.id, fast: true);
-      await service.resumeDownload(task.id);
-      await service.waitForDownloadComplete(task.id);
-
-      // Assert
-      currentTask = database.getTask(task.id);
+      final currentTask = harness.database.getTask('resume_test');
       expect(currentTask!.downloadStatus, equals(DownloadStatus.completed));
       expect(currentTask.progress, equals(1.0));
     });
 
     test('preserves progress when pausing and resuming', () async {
-      // Arrange - Use slow download mode
-      final task = await service.startSlowDownload(
+      final partialPath = '${harness.downloadDir.path}/preserve_progress.mp4';
+      // Half the harness body so resume appends the rest.
+      final half = Uint8List.fromList(
+        List.generate(512, (i) => i % 256),
+      );
+      await File(partialPath).writeAsBytes(half);
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'preserve_progress',
         mediaId: 'preserve_progress',
         title: 'Progress Preserve Test',
-        downloadUrl: 'https://example.com/movie.mp4',
+        quality: '720p',
+        status: 'paused',
+        downloadUrl: 'https://test.invalid/movie.mp4',
+        filePath: partialPath,
+        downloadedBytes: 512,
+        progress: 0.5,
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      const progressAtPause = 0.5;
+
+      await harness.service.resumeDownload('preserve_progress');
+      await harness.waitForStatus('preserve_progress', 'completed');
+
+      final completedTask = harness.database.getTask('preserve_progress');
+      expect(completedTask!.progress, greaterThanOrEqualTo(progressAtPause));
+      expect(completedTask.downloadStatus, equals(DownloadStatus.completed));
+      expect(await File(partialPath).length(), 1024);
+    });
+
+    // Regression test for a real bug this conversion exposed, which the old
+    // hand-written fake service had hidden: pauseDownload wrote status
+    // 'paused', then _startDownloadTask's DioException.cancel handler
+    // unconditionally overwrote it with 'cancelled', so pausing a live
+    // download silently cancelled it. The cancel handler now only claims
+    // 'cancelled' for a task still marked 'downloading'.
+    test('mid-flight pause of a live download stays paused', () async {
+      final hiveDir = await Directory.systemTemp.createTemp('mydia_hive_');
+      final downloadDir = await Directory.systemTemp.createTemp('mydia_dl_');
+      Hive.init(hiveDir.path);
+      if (!Hive.isAdapterRegistered(0)) {
+        Hive.registerAdapter(DownloadTaskAdapter());
+      }
+      if (!Hive.isAdapterRegistered(1)) {
+        Hive.registerAdapter(DownloadedMediaAdapter());
+      }
+      final suffix = DateTime.now().microsecondsSinceEpoch;
+      final tasksBox =
+          await Hive.openBox<DownloadTask>('live_pause_tasks_$suffix');
+      final mediaBox =
+          await Hive.openBox<DownloadedMedia>('live_pause_media_$suffix');
+      final database =
+          HiveDownloadDatabase(tasksBox: tasksBox, mediaBox: mediaBox);
+      final gated = _GatedHttpAdapter(
+        Uint8List.fromList(List.filled(1024, 1)),
+      );
+      final service = createNativeDownloadService(
+        httpAdapter: gated,
+        downloadDirectory: () async => downloadDir.path,
+      );
+      service.setDatabase(database);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final task = await service.startDownload(
+        mediaId: 'live_pause',
+        title: 'Live Pause',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      // Wait for some progress
-      await service.waitForDownloadStarted(task.id);
-      await Future.delayed(const Duration(milliseconds: 200));
+      final deadline = DateTime.now().add(const Duration(seconds: 2));
+      while (gated.requests.isEmpty && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(gated.requests, isNotEmpty);
+
       await service.pauseDownload(task.id);
+      if (!gated.gate.isCompleted) gated.gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
 
-      // Get progress at pause
-      final pausedTask = database.getTask(task.id);
-      final progressAtPause = pausedTask!.progress;
+      expect(database.getTask(task.id)!.status, 'paused');
 
-      // Act - Resume with fast speed
-      service.setDownloadSpeed(task.id, fast: true);
-      await service.resumeDownload(task.id);
-      await service.waitForDownloadComplete(task.id);
-
-      // Assert - Progress should be at least what it was
-      final completedTask = database.getTask(task.id);
-      expect(completedTask!.progress, greaterThanOrEqualTo(progressAtPause));
-      expect(completedTask.downloadStatus, equals(DownloadStatus.completed));
+      service.dispose();
+      await database.close();
+      await hiveDir.delete(recursive: true);
+      await downloadDir.delete(recursive: true);
     });
   });
 
   group('Cancel and Cleanup', () {
     test('cancels an active download', () async {
-      // Arrange - Use slow download for reliable cancel
-      final task = await service.startSlowDownload(
+      await harness.database.saveTask(DownloadTask(
+        id: 'cancel_test',
         mediaId: 'cancel_test',
         title: 'Cancel Test Movie',
-        downloadUrl: 'https://example.com/movie.mp4',
         quality: '720p',
-        mediaType: MediaType.movie,
-      );
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/movie.mp4',
+        createdAt: DateTime(2026, 1, 1),
+      ));
 
-      await service.waitForDownloadStarted(task.id);
-      await Future.delayed(const Duration(milliseconds: 100));
+      await harness.service.cancelDownload('cancel_test');
 
-      // Act
-      await service.cancelDownload(task.id);
-
-      // Assert
-      final cancelledTask = database.getTask(task.id);
+      final cancelledTask = harness.database.getTask('cancel_test');
       expect(cancelledTask, isNotNull);
       expect(cancelledTask!.downloadStatus, equals(DownloadStatus.cancelled));
       expect(cancelledTask.error, isNotNull);
     });
 
     test('removes partial file on cancel', () async {
-      // Arrange - Use slow download
-      final task = await service.startSlowDownload(
+      final filePath = '${harness.downloadDir.path}/cleanup_partial.mp4';
+      await File(filePath).writeAsBytes(Uint8List.fromList([1, 2, 3, 4]));
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'cleanup_file_test',
         mediaId: 'cleanup_file_test',
         title: 'Cleanup Test Movie',
-        downloadUrl: 'https://example.com/movie.mp4',
         quality: '720p',
-        mediaType: MediaType.movie,
-      );
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/movie.mp4',
+        filePath: filePath,
+        createdAt: DateTime(2026, 1, 1),
+      ));
 
-      await service.waitForDownloadStarted(task.id);
-      await Future.delayed(const Duration(milliseconds: 100));
-      final taskBeforeCancel = database.getTask(task.id);
-      final filePath = taskBeforeCancel?.filePath;
+      await harness.service.cancelDownload('cleanup_file_test');
 
-      // Act
-      await service.cancelDownload(task.id);
-
-      // Assert - Partial file should be deleted
-      if (filePath != null) {
-        final file = File(filePath);
-        expect(await file.exists(), isFalse);
-      }
+      expect(await File(filePath).exists(), isFalse);
     });
 
     test('deleteDownload removes file and database entries', () async {
-      // Arrange - Complete a download first
       const mediaId = 'delete_test';
-      final task = await service.startDownload(
+      final task = await harness.service.startDownload(
         mediaId: mediaId,
         title: 'Delete Test Movie',
-        downloadUrl: 'https://example.com/movie.mp4',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await service.waitForDownloadComplete(task.id);
+      await harness.waitForStatus(task.id, 'completed');
 
-      final completedTask = database.getTask(task.id);
+      final completedTask = harness.database.getTask(task.id);
       final filePath = completedTask!.filePath!;
       expect(await File(filePath).exists(), isTrue);
 
-      // Act
-      await service.deleteDownload(mediaId);
+      await harness.service.deleteDownload(mediaId);
 
-      // Assert
       expect(await File(filePath).exists(), isFalse);
-      expect(database.getMediaByMediaId(mediaId), isNull);
-      expect(database.isMediaDownloaded(mediaId), isFalse);
+      expect(harness.database.getMediaByMediaId(mediaId), isNull);
+      expect(harness.database.isMediaDownloaded(mediaId), isFalse);
     });
   });
 
   group('Offline Playback Verification', () {
     test('completed download is marked as downloaded', () async {
-      // Arrange
       const mediaId = 'offline_playback_test';
 
-      // Act
-      final task = await service.startDownload(
+      final task = await harness.service.startDownload(
         mediaId: mediaId,
         title: 'Offline Test Movie',
-        downloadUrl: 'https://example.com/movie.mp4',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await service.waitForDownloadComplete(task.id);
+      await harness.waitForStatus(task.id, 'completed');
 
-      // Assert
-      expect(service.isMediaDownloaded(mediaId), isTrue);
-      expect(database.isMediaDownloaded(mediaId), isTrue);
+      expect(harness.service.isMediaDownloaded(mediaId), isTrue);
+      expect(harness.database.isMediaDownloaded(mediaId), isTrue);
     });
 
     test('downloaded media can be retrieved by mediaId', () async {
-      // Arrange
       const mediaId = 'retrieve_media_test';
       const title = 'Retrievable Movie';
       const quality = '1080p';
 
-      final task = await service.startDownload(
+      final task = await harness.service.startDownload(
         mediaId: mediaId,
         title: title,
-        downloadUrl: 'https://example.com/movie.mp4',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: quality,
         mediaType: MediaType.movie,
-        posterUrl: 'https://example.com/poster.jpg',
+        posterUrl: 'https://test.invalid/poster.jpg',
       );
 
-      await service.waitForDownloadComplete(task.id);
+      await harness.waitForStatus(task.id, 'completed');
 
-      // Act
-      final downloadedMedia = service.getDownloadedMediaById(mediaId);
+      final downloadedMedia = harness.service.getDownloadedMediaById(mediaId);
 
-      // Assert
       expect(downloadedMedia, isNotNull);
       expect(downloadedMedia!.mediaId, equals(mediaId));
       expect(downloadedMedia.title, equals(title));
       expect(downloadedMedia.quality, equals(quality));
-      expect(downloadedMedia.posterUrl, equals('https://example.com/poster.jpg'));
+      expect(
+        downloadedMedia.posterUrl,
+        equals('https://test.invalid/poster.jpg'),
+      );
     });
 
     test('downloaded file exists and is accessible', () async {
-      // Arrange
       const mediaId = 'file_access_test';
 
-      final task = await service.startDownload(
+      final task = await harness.service.startDownload(
         mediaId: mediaId,
         title: 'Accessible File Test',
-        downloadUrl: 'https://example.com/movie.mp4',
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await service.waitForDownloadComplete(task.id);
+      await harness.waitForStatus(task.id, 'completed');
 
-      // Act
-      final downloadedMedia = service.getDownloadedMediaById(mediaId);
+      final downloadedMedia = harness.service.getDownloadedMediaById(mediaId);
 
-      // Assert
       expect(downloadedMedia, isNotNull);
       final file = File(downloadedMedia!.filePath);
       expect(await file.exists(), isTrue);
@@ -411,949 +394,309 @@ void main() {
     });
 
     test('getAllMedia returns all downloaded content', () async {
-      // Arrange - Download multiple items
-      final task1 = await service.startDownload(
+      final task1 = await harness.service.startDownload(
         mediaId: 'multi_1',
         title: 'Movie One',
-        downloadUrl: 'https://example.com/movie1.mp4',
+        downloadUrl: 'https://test.invalid/movie1.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      final task2 = await service.startDownload(
+      final task2 = await harness.service.startDownload(
         mediaId: 'multi_2',
         title: 'Movie Two',
-        downloadUrl: 'https://example.com/movie2.mp4',
+        downloadUrl: 'https://test.invalid/movie2.mp4',
         quality: '1080p',
         mediaType: MediaType.movie,
       );
 
-      await service.waitForDownloadComplete(task1.id);
-      await service.waitForDownloadComplete(task2.id);
+      await harness.waitForStatus(task1.id, 'completed');
+      await harness.waitForStatus(task2.id, 'completed');
 
-      // Act
-      final allMedia = service.getDownloadedMedia();
+      final allMedia = harness.service.getDownloadedMedia();
 
-      // Assert
       expect(allMedia.length, equals(2));
-      expect(allMedia.map((m) => m.mediaId), containsAll(['multi_1', 'multi_2']));
+      expect(
+        allMedia.map((m) => m.mediaId),
+        containsAll(['multi_1', 'multi_2']),
+      );
     });
   });
 
   group('Error Recovery', () {
     test('handles download URL failure gracefully', () async {
-      // Arrange & Act
-      final task = await service.startDownloadWithError(
+      harness.adapter.failWith = DioException.connectionError(
+        requestOptions: RequestOptions(path: '/'),
+        reason: 'unreachable host',
+      );
+
+      final task = await harness.service.startDownload(
         mediaId: 'error_url_test',
         title: 'Error URL Test',
-        downloadUrl: '', // Empty URL will fail
+        downloadUrl: 'https://test.invalid/missing.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await Future.delayed(const Duration(milliseconds: 200));
+      await harness.waitForStatus(task.id, 'failed');
 
-      // Assert
-      final failedTask = database.getTask(task.id);
+      final failedTask = harness.database.getTask(task.id);
       expect(failedTask, isNotNull);
       expect(failedTask!.downloadStatus, equals(DownloadStatus.failed));
       expect(failedTask.error, isNotNull);
     });
 
     test('retries a failed download', () async {
-      // Arrange - Create a failed task
-      final task = await service.startDownloadWithError(
+      harness.adapter.failWith = DioException.connectionError(
+        requestOptions: RequestOptions(path: '/'),
+        reason: 'unreachable host',
+      );
+
+      final task = await harness.service.startDownload(
         mediaId: 'retry_test',
         title: 'Retry Test Movie',
-        downloadUrl: '', // Will fail
+        downloadUrl: 'https://test.invalid/movie.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await Future.delayed(const Duration(milliseconds: 200));
-      expect(database.getTask(task.id)!.downloadStatus, equals(DownloadStatus.failed));
+      await harness.waitForStatus(task.id, 'failed');
+      expect(
+        harness.database.getTask(task.id)!.downloadStatus,
+        equals(DownloadStatus.failed),
+      );
 
-      // Update with valid URL for retry
-      final failedTask = database.getTask(task.id)!;
-      await database.saveTask(failedTask.copyWith(
-        downloadUrl: 'https://example.com/movie.mp4',
-      ));
+      // Clear the failure so the retry can succeed.
+      harness.adapter.failWith = null;
 
-      // Act
-      await service.retryDownload(task.id);
-      await service.waitForDownloadComplete(task.id);
+      await harness.service.retryDownload(task.id);
+      await harness.waitForStatus(task.id, 'completed');
 
-      // Assert
-      final completedTask = database.getTask(task.id);
+      final completedTask = harness.database.getTask(task.id);
       expect(completedTask!.downloadStatus, equals(DownloadStatus.completed));
     });
 
     test('handles network timeout gracefully', () async {
-      // Arrange & Act
-      final task = await service.startDownloadWithTimeout(
+      harness.adapter.failWith = DioException(
+        requestOptions: RequestOptions(path: '/'),
+        type: DioExceptionType.receiveTimeout,
+        message: 'Receive timeout',
+      );
+
+      final task = await harness.service.startDownload(
         mediaId: 'timeout_test',
         title: 'Timeout Test Movie',
-        downloadUrl: 'https://example.com/slow.mp4',
+        downloadUrl: 'https://test.invalid/slow.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await Future.delayed(const Duration(milliseconds: 300));
+      await harness.waitForStatus(task.id, 'failed');
 
-      // Assert
-      final failedTask = database.getTask(task.id);
+      final failedTask = harness.database.getTask(task.id);
       expect(failedTask, isNotNull);
       expect(failedTask!.downloadStatus, equals(DownloadStatus.failed));
     });
 
     test('recovers from temporary network failure', () async {
-      // Arrange - Start download that will succeed after initial failure
-      var attemptCount = 0;
-
-      final task = await service.startDownloadWithRetryLogic(
-        mediaId: 'network_recovery_test',
-        title: 'Network Recovery Test',
-        downloadUrl: 'https://example.com/movie.mp4',
-        quality: '720p',
-        mediaType: MediaType.movie,
-        shouldFail: () {
-          attemptCount++;
-          return attemptCount < 2; // Fail first attempt, succeed second
-        },
+      // The fake auto-retried inside its simulator. The real non-progressive
+      // path marks the task failed on the first Dio error; recovery is via
+      // retryDownload (or the progressive transient-retry path, covered
+      // elsewhere). Assert that manual retry after a cleared failure works.
+      harness.adapter.failWith = DioException.connectionError(
+        requestOptions: RequestOptions(path: '/'),
+        reason: 'temporary outage',
       );
 
-      await service.waitForDownloadComplete(task.id, timeout: const Duration(seconds: 5));
+      final task = await harness.service.startDownload(
+        mediaId: 'network_recovery_test',
+        title: 'Network Recovery Test',
+        downloadUrl: 'https://test.invalid/movie.mp4',
+        quality: '720p',
+        mediaType: MediaType.movie,
+      );
 
-      // Assert
-      final completedTask = database.getTask(task.id);
+      await harness.waitForStatus(task.id, 'failed');
+      harness.adapter.failWith = null;
+
+      await harness.service.retryDownload(task.id);
+      await harness.waitForStatus(task.id, 'completed');
+
+      final completedTask = harness.database.getTask(task.id);
       expect(completedTask!.downloadStatus, equals(DownloadStatus.completed));
     });
 
     test('failed download does not corrupt database', () async {
-      // Arrange - Create successful download first
-      final successTask = await service.startDownload(
+      final successTask = await harness.service.startDownload(
         mediaId: 'success_before_fail',
         title: 'Success Movie',
-        downloadUrl: 'https://example.com/success.mp4',
+        downloadUrl: 'https://test.invalid/success.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
-      await service.waitForDownloadComplete(successTask.id);
+      await harness.waitForStatus(successTask.id, 'completed');
 
-      // Create failed download
-      final failTask = await service.startDownloadWithError(
+      harness.adapter.failWith = DioException.connectionError(
+        requestOptions: RequestOptions(path: '/'),
+        reason: 'unreachable host',
+      );
+
+      final failTask = await harness.service.startDownload(
         mediaId: 'fail_after_success',
         title: 'Fail Movie',
-        downloadUrl: '',
+        downloadUrl: 'https://test.invalid/fail.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
-      await Future.delayed(const Duration(milliseconds: 200));
+      await harness.waitForStatus(failTask.id, 'failed');
 
-      // Assert - Previous successful download should still be intact
-      expect(database.isMediaDownloaded('success_before_fail'), isTrue);
-      expect(database.getTask(successTask.id)!.downloadStatus, equals(DownloadStatus.completed));
-      expect(database.getTask(failTask.id)!.downloadStatus, equals(DownloadStatus.failed));
+      expect(harness.database.isMediaDownloaded('success_before_fail'), isTrue);
+      expect(
+        harness.database.getTask(successTask.id)!.downloadStatus,
+        equals(DownloadStatus.completed),
+      );
+      expect(
+        harness.database.getTask(failTask.id)!.downloadStatus,
+        equals(DownloadStatus.failed),
+      );
     });
   });
 
   group('Queue Management', () {
     test('queues downloads when max concurrent limit reached', () async {
-      // Arrange
-      service.setMaxConcurrentDownloads(1);
+      harness.service.applySettings(
+        maxConcurrentDownloads: 1,
+        autoStartQueued: true,
+      );
 
-      // Act - Start two slow downloads
-      final task1 = await service.startSlowDownload(
+      // Hold the single slot with a downloading orphan so the next start
+      // must queue. Instant adapter responses make a live hold unreliable.
+      await harness.database.saveTask(DownloadTask(
+        id: 'queue_holder',
         mediaId: 'queue_test_1',
         title: 'Queue Test 1',
-        downloadUrl: 'https://example.com/movie1.mp4',
         quality: '720p',
-        mediaType: MediaType.movie,
-      );
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/movie1.mp4',
+        createdAt: DateTime(2026, 1, 1),
+      ));
 
-      final task2 = await service.startDownload(
+      final task2 = await harness.service.startDownload(
         mediaId: 'queue_test_2',
         title: 'Queue Test 2',
-        downloadUrl: 'https://example.com/movie2.mp4',
+        downloadUrl: 'https://test.invalid/movie2.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await service.waitForDownloadStarted(task1.id);
+      final holder = harness.database.getTask('queue_holder');
+      final task2Status = harness.database.getTask(task2.id);
 
-      // Assert - First should be downloading, second should be queued
-      final task1Status = database.getTask(task1.id);
-      final task2Status = database.getTask(task2.id);
-
-      expect(
-        task1Status!.downloadStatus,
-        anyOf(equals(DownloadStatus.downloading), equals(DownloadStatus.pending)),
-      );
+      expect(holder!.downloadStatus, equals(DownloadStatus.downloading));
       expect(task2Status!.downloadStatus, equals(DownloadStatus.queued));
 
-      // Cleanup
-      await service.cancelDownload(task1.id);
-      await service.cancelDownload(task2.id);
+      // Cancel the queued task before freeing the holder so it never starts.
+      await harness.service.cancelDownload(task2.id);
+      await harness.waitForStatus(task2.id, 'cancelled');
+      await harness.service.cancelDownload('queue_holder');
     });
 
     test('auto-starts queued downloads when slot becomes available', () async {
-      // Arrange
-      service.setMaxConcurrentDownloads(1);
+      harness.service.applySettings(
+        maxConcurrentDownloads: 1,
+        autoStartQueued: true,
+      );
 
-      // Start first download (fast to complete quickly)
-      final task1 = await service.startDownload(
+      await harness.database.saveTask(DownloadTask(
+        id: 'auto_start_holder',
         mediaId: 'auto_start_1',
         title: 'Auto Start 1',
-        downloadUrl: 'https://example.com/movie1.mp4',
         quality: '720p',
-        mediaType: MediaType.movie,
-        fileSize: 1024, // Small file
-      );
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/movie1.mp4',
+        createdAt: DateTime(2026, 1, 1),
+      ));
 
-      // Start second download (should be queued)
-      final task2 = await service.startDownload(
+      final task2 = await harness.service.startDownload(
         mediaId: 'auto_start_2',
         title: 'Auto Start 2',
-        downloadUrl: 'https://example.com/movie2.mp4',
+        downloadUrl: 'https://test.invalid/movie2.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
-        fileSize: 1024,
       );
 
-      // Verify task2 is queued initially
-      expect(database.getTask(task2.id)!.downloadStatus, equals(DownloadStatus.queued));
+      expect(
+        harness.database.getTask(task2.id)!.downloadStatus,
+        equals(DownloadStatus.queued),
+      );
 
-      // Wait for first to complete
-      await service.waitForDownloadComplete(task1.id);
+      // Free the slot; _processQueue should start the queued task.
+      await harness.service.cancelDownload('auto_start_holder');
+      await harness.waitForStatus(task2.id, 'completed');
 
-      // Wait for second to complete (should auto-start after first completes)
-      await service.waitForDownloadComplete(task2.id);
-
-      // Assert - Second download should have completed
-      final task2Status = database.getTask(task2.id);
+      final task2Status = harness.database.getTask(task2.id);
       expect(task2Status!.downloadStatus, equals(DownloadStatus.completed));
     });
   });
 
   group('Storage Tracking', () {
     test('tracks total storage used', () async {
-      // Arrange - Download some content
-      final task1 = await service.startDownload(
+      final task1 = await harness.service.startDownload(
         mediaId: 'storage_1',
         title: 'Storage Test 1',
-        downloadUrl: 'https://example.com/movie1.mp4',
+        downloadUrl: 'https://test.invalid/movie1.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      final task2 = await service.startDownload(
+      final task2 = await harness.service.startDownload(
         mediaId: 'storage_2',
         title: 'Storage Test 2',
-        downloadUrl: 'https://example.com/movie2.mp4',
+        downloadUrl: 'https://test.invalid/movie2.mp4',
         quality: '720p',
         mediaType: MediaType.movie,
       );
 
-      await service.waitForDownloadComplete(task1.id);
-      await service.waitForDownloadComplete(task2.id);
+      await harness.waitForStatus(task1.id, 'completed');
+      await harness.waitForStatus(task2.id, 'completed');
 
-      // Act
-      final totalStorage = service.getTotalStorageUsed();
+      final totalStorage = harness.service.getTotalStorageUsed();
 
-      // Assert
       expect(totalStorage, greaterThan(0));
+      expect(totalStorage, equals(2048));
     });
   });
 }
 
-/// Test implementation of DownloadDatabase using Hive boxes
-class TestDownloadDatabase {
-  final Box<DownloadTask> tasksBox;
-  final Box<DownloadedMedia> mediaBox;
+/// Holds the HTTP response open so a live download can be paused mid-flight.
+/// Used only by the skipped mid-flight pause regression.
+class _GatedHttpAdapter implements HttpClientAdapter {
+  final Uint8List body;
+  final Completer<void> gate = Completer<void>();
+  final List<RequestOptions> requests = [];
 
-  TestDownloadDatabase({required this.tasksBox, required this.mediaBox});
+  _GatedHttpAdapter(this.body);
 
-  bool get isOpen => tasksBox.isOpen && mediaBox.isOpen;
-
-  Future<void> saveTask(DownloadTask task) async {
-    if (!isOpen) return;
-    await tasksBox.put(task.id, task);
-  }
-
-  Future<void> deleteTask(String id) async {
-    if (!isOpen) return;
-    await tasksBox.delete(id);
-  }
-
-  DownloadTask? getTask(String id) => isOpen ? tasksBox.get(id) : null;
-
-  List<DownloadTask> getAllTasks() => isOpen ? tasksBox.values.toList() : [];
-
-  List<DownloadTask> getActiveTasks() {
-    if (!isOpen) return [];
-    return tasksBox.values
-        .where((task) =>
-            task.status == 'pending' ||
-            task.status == 'downloading' ||
-            task.status == 'paused')
-        .toList();
-  }
-
-  Future<void> saveMedia(DownloadedMedia media) async {
-    if (!isOpen) return;
-    await mediaBox.put(media.id, media);
-  }
-
-  Future<void> deleteMedia(String id) async {
-    if (!isOpen) return;
-    await mediaBox.delete(id);
-  }
-
-  DownloadedMedia? getMediaByMediaId(String mediaId) {
-    if (!isOpen) return null;
-    try {
-      return mediaBox.values.firstWhere((media) => media.mediaId == mediaId);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  bool isMediaDownloaded(String mediaId) {
-    if (!isOpen) return false;
-    try {
-      mediaBox.values.firstWhere((media) => media.mediaId == mediaId);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  List<DownloadedMedia> getAllMedia() => isOpen ? mediaBox.values.toList() : [];
-
-  int getTotalStorageUsed() {
-    if (!isOpen) return 0;
-    return mediaBox.values.fold<int>(0, (total, media) => total + media.fileSize);
-  }
-}
-
-/// Test implementation of DownloadService for integration testing
-class TestDownloadService {
-  final TestDownloadDatabase database;
-  final String downloadDir;
-  final StreamController<DownloadTask> _progressController =
-      StreamController<DownloadTask>.broadcast();
-  final Map<String, Completer<void>> _completers = {};
-  final Map<String, Completer<void>> _startedCompleters = {};
-  final Map<String, bool> _pausedTasks = {};
-  final Map<String, bool> _slowDownloads = {};
-  final Map<String, bool> _fastSpeed = {};
-
-  int _maxConcurrentDownloads = 2;
-  bool _autoStartQueued = true;
-  bool _disposed = false;
-
-  TestDownloadService({required this.database, required this.downloadDir});
-
-  Stream<DownloadTask> get progressStream => _progressController.stream;
-
-  void setMaxConcurrentDownloads(int max) {
-    _maxConcurrentDownloads = max;
-  }
-
-  void setDownloadSpeed(String taskId, {required bool fast}) {
-    _fastSpeed[taskId] = fast;
-  }
-
-  int _getActiveDownloadCount() {
-    if (!database.isOpen) return 0;
-    return database.getAllTasks()
-        .where((t) => t.status == 'downloading' || t.status == 'pending')
-        .length;
-  }
-
-  bool _hasAvailableSlots() {
-    return _getActiveDownloadCount() < _maxConcurrentDownloads;
-  }
-
-  Future<void> _processQueue() async {
-    if (!_autoStartQueued || _disposed || !database.isOpen) return;
-
-    while (_hasAvailableSlots()) {
-      if (_disposed || !database.isOpen) return;
-
-      final queuedTasks = database.getAllTasks()
-          .where((t) => t.status == 'queued')
-          .toList()
-        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-
-      if (queuedTasks.isEmpty) break;
-
-      final task = queuedTasks.first;
-      final pendingTask = task.copyWith(status: 'pending');
-      await database.saveTask(pendingTask);
-      if (!_disposed && !_progressController.isClosed) {
-        _progressController.add(pendingTask);
-      }
-
-      // Start the download
-      _simulateDownload(pendingTask, slow: _slowDownloads[task.id] ?? false);
-    }
-  }
-
-  Future<DownloadTask> startDownload({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-    String? posterUrl,
-    int? fileSize,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    final taskId = '${mediaId}_${DateTime.now().millisecondsSinceEpoch}';
-    final shouldQueue = !_hasAvailableSlots();
-
-    final task = DownloadTask(
-      id: taskId,
-      mediaId: mediaId,
-      title: title,
-      quality: quality,
-      downloadUrl: downloadUrl,
-      mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-      posterUrl: posterUrl,
-      fileSize: fileSize ?? 1024 * 10, // Default 10KB
-      createdAt: DateTime.now(),
-      status: shouldQueue ? 'queued' : 'pending',
-      overview: overview,
-      runtime: runtime,
-      genres: genres,
-      rating: rating,
-      backdropUrl: backdropUrl,
-      year: year,
-      contentRating: contentRating,
-      seasonNumber: seasonNumber,
-      episodeNumber: episodeNumber,
-      showId: showId,
-      showTitle: showTitle,
-      showPosterUrl: showPosterUrl,
-      thumbnailUrl: thumbnailUrl,
-      airDate: airDate,
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    await Future.any([
+      gate.future,
+      if (cancelFuture != null) cancelFuture.then((_) {}, onError: (_, __) {}),
+    ]);
+    return ResponseBody.fromBytes(
+      body,
+      200,
+      headers: {
+        Headers.contentLengthHeader: [body.length.toString()],
+      },
     );
-
-    await database.saveTask(task);
-    if (!_progressController.isClosed) {
-      _progressController.add(task);
-    }
-
-    if (!shouldQueue) {
-      _simulateDownload(task, slow: false);
-    }
-
-    return task;
   }
 
-  /// Start a slow download that takes longer, allowing for pause/cancel testing.
-  Future<DownloadTask> startSlowDownload({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-    String? posterUrl,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    final taskId = '${mediaId}_${DateTime.now().millisecondsSinceEpoch}';
-    final shouldQueue = !_hasAvailableSlots();
-
-    final task = DownloadTask(
-      id: taskId,
-      mediaId: mediaId,
-      title: title,
-      quality: quality,
-      downloadUrl: downloadUrl,
-      mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-      posterUrl: posterUrl,
-      fileSize: 1024 * 100, // 100KB
-      createdAt: DateTime.now(),
-      status: shouldQueue ? 'queued' : 'pending',
-      overview: overview,
-      runtime: runtime,
-      genres: genres,
-      rating: rating,
-      backdropUrl: backdropUrl,
-      year: year,
-      contentRating: contentRating,
-      seasonNumber: seasonNumber,
-      episodeNumber: episodeNumber,
-      showId: showId,
-      showTitle: showTitle,
-      showPosterUrl: showPosterUrl,
-      thumbnailUrl: thumbnailUrl,
-      airDate: airDate,
-    );
-
-    _slowDownloads[taskId] = true;
-    await database.saveTask(task);
-    if (!_progressController.isClosed) {
-      _progressController.add(task);
-    }
-
-    if (!shouldQueue) {
-      _simulateDownload(task, slow: true);
-    }
-
-    return task;
-  }
-
-  /// Wait for a download to transition to the 'downloading' status.
-  Future<void> waitForDownloadStarted(String taskId, {Duration timeout = const Duration(seconds: 5)}) async {
-    final startedCompleter = _startedCompleters[taskId];
-    if (startedCompleter != null && !startedCompleter.isCompleted) {
-      await startedCompleter.future.timeout(timeout, onTimeout: () {});
-      return;
-    }
-
-    // Fallback: poll for status change
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      if (!database.isOpen) return;
-      final task = database.getTask(taskId);
-      if (task?.status == 'downloading') {
-        return;
-      }
-      await Future.delayed(const Duration(milliseconds: 20));
-    }
-  }
-
-  Future<DownloadTask> startDownloadWithError({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-  }) async {
-    final taskId = '${mediaId}_${DateTime.now().millisecondsSinceEpoch}';
-
-    final task = DownloadTask(
-      id: taskId,
-      mediaId: mediaId,
-      title: title,
-      quality: quality,
-      downloadUrl: downloadUrl,
-      mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-      createdAt: DateTime.now(),
-      status: 'pending',
-    );
-
-    await database.saveTask(task);
-    _progressController.add(task);
-
-    // Simulate failure
-    _simulateFailure(task, 'Download URL is not available');
-
-    return task;
-  }
-
-  Future<DownloadTask> startDownloadWithTimeout({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-  }) async {
-    final taskId = '${mediaId}_${DateTime.now().millisecondsSinceEpoch}';
-
-    final task = DownloadTask(
-      id: taskId,
-      mediaId: mediaId,
-      title: title,
-      quality: quality,
-      downloadUrl: downloadUrl,
-      mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-      createdAt: DateTime.now(),
-      status: 'pending',
-    );
-
-    await database.saveTask(task);
-    _progressController.add(task);
-
-    // Simulate timeout failure
-    _simulateFailure(task, 'Connection timeout');
-
-    return task;
-  }
-
-  Future<DownloadTask> startDownloadWithRetryLogic({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-    required bool Function() shouldFail,
-  }) async {
-    final taskId = '${mediaId}_${DateTime.now().millisecondsSinceEpoch}';
-
-    final task = DownloadTask(
-      id: taskId,
-      mediaId: mediaId,
-      title: title,
-      quality: quality,
-      downloadUrl: downloadUrl,
-      mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-      fileSize: 1024 * 10,
-      createdAt: DateTime.now(),
-      status: 'pending',
-    );
-
-    await database.saveTask(task);
-    _progressController.add(task);
-
-    _simulateDownloadWithRetry(task, shouldFail);
-
-    return task;
-  }
-
-  void _simulateDownload(DownloadTask task, {bool slow = false}) async {
-    if (_disposed || !database.isOpen) return;
-
-    final completer = Completer<void>();
-    final startedCompleter = Completer<void>();
-    _completers[task.id] = completer;
-    _startedCompleters[task.id] = startedCompleter;
-    _pausedTasks[task.id] = false;
-
-    final filePath = path.join(downloadDir, '${task.id}.mp4');
-    var updatedTask = task.copyWith(
-      status: 'downloading',
-      filePath: filePath,
-    );
-
-    if (!database.isOpen) return;
-    await database.saveTask(updatedTask);
-    if (!_progressController.isClosed) {
-      _progressController.add(updatedTask);
-    }
-
-    // Signal that download has started
-    if (!startedCompleter.isCompleted) {
-      startedCompleter.complete();
-    }
-
-    // Simulate download progress
-    final totalSize = task.fileSize ?? 1024 * 10;
-    final chunkSize = totalSize ~/ 10;
-    var downloaded = 0;
-
-    while (downloaded < totalSize) {
-      if (_disposed || !database.isOpen) return;
-
-      // Check if paused
-      while (_pausedTasks[task.id] == true) {
-        await Future.delayed(const Duration(milliseconds: 50));
-        if (_disposed || !database.isOpen) return;
-        if (_completers[task.id]?.isCompleted ?? true) return;
-      }
-
-      if (_completers[task.id]?.isCompleted ?? true) return;
-
-      // Use different delay based on slow/fast mode
-      final isFast = _fastSpeed[task.id] ?? false;
-      final delay = isFast ? 5 : (slow ? 50 : 10);
-      await Future.delayed(Duration(milliseconds: delay));
-
-      // Check again after delay
-      if (_completers[task.id]?.isCompleted ?? true) return;
-
-      downloaded += chunkSize;
-      if (downloaded > totalSize) downloaded = totalSize;
-
-      final progress = downloaded / totalSize;
-      updatedTask = updatedTask.copyWith(progress: progress);
-
-      if (!database.isOpen) return;
-
-      // Don't save progress if paused - pauseDownload already saved the correct status
-      if (_pausedTasks[task.id] != true) {
-        await database.saveTask(updatedTask);
-        if (!_progressController.isClosed) {
-          _progressController.add(updatedTask);
-        }
-      }
-    }
-
-    if (_disposed || !database.isOpen) return;
-
-    // Complete the download
-    final file = File(filePath);
-    await file.writeAsBytes(List.filled(totalSize, 0));
-
-    updatedTask = updatedTask.copyWith(
-      status: 'completed',
-      progress: 1.0,
-      fileSize: totalSize,
-      completedAt: DateTime.now(),
-    );
-
-    if (!database.isOpen) return;
-    await database.saveTask(updatedTask);
-
-    // Save to downloaded media
-    final media = DownloadedMedia.fromTask(updatedTask);
-    await database.saveMedia(media);
-
-    if (!_progressController.isClosed) {
-      _progressController.add(updatedTask);
-    }
-
-    if (!completer.isCompleted) {
-      completer.complete();
-    }
-    _completers.remove(task.id);
-    _startedCompleters.remove(task.id);
-    _pausedTasks.remove(task.id);
-    _slowDownloads.remove(task.id);
-    _fastSpeed.remove(task.id);
-
-    // Process queue
-    _processQueue();
-  }
-
-  void _simulateDownloadWithRetry(DownloadTask task, bool Function() shouldFail) async {
-    if (_disposed || !database.isOpen) return;
-
-    final completer = Completer<void>();
-    _completers[task.id] = completer;
-
-    if (shouldFail()) {
-      // First attempt fails, then retry
-      var failedTask = task.copyWith(
-        status: 'failed',
-        error: 'Network error',
-      );
-      if (!database.isOpen) return;
-      await database.saveTask(failedTask);
-      if (!_progressController.isClosed) {
-        _progressController.add(failedTask);
-      }
-
-      // Auto-retry after short delay
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (_disposed || !database.isOpen) return;
-
-      failedTask = failedTask.copyWith(
-        status: 'pending',
-        error: null,
-      );
-      await database.saveTask(failedTask);
-      if (!_progressController.isClosed) {
-        _progressController.add(failedTask);
-      }
-
-      _simulateDownload(failedTask, slow: false);
-    } else {
-      _simulateDownload(task, slow: false);
-    }
-  }
-
-  void _simulateFailure(DownloadTask task, String error) async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (_disposed || !database.isOpen) return;
-
-    final failedTask = task.copyWith(
-      status: 'failed',
-      error: error,
-    );
-    await database.saveTask(failedTask);
-    if (!_progressController.isClosed) {
-      _progressController.add(failedTask);
-    }
-
-    // Process queue even on failure
-    _processQueue();
-  }
-
-  Future<void> pauseDownload(String taskId) async {
-    if (!database.isOpen) return;
-    final task = database.getTask(taskId);
-    if (task == null) return;
-
-    _pausedTasks[taskId] = true;
-
-    final pausedTask = task.copyWith(status: 'paused');
-    await database.saveTask(pausedTask);
-    if (!_progressController.isClosed) {
-      _progressController.add(pausedTask);
-    }
-  }
-
-  Future<void> resumeDownload(String taskId) async {
-    if (!database.isOpen) return;
-    final task = database.getTask(taskId);
-    if (task == null || task.status != 'paused') return;
-
-    _pausedTasks[taskId] = false;
-
-    final resumedTask = task.copyWith(status: 'downloading');
-    await database.saveTask(resumedTask);
-    if (!_progressController.isClosed) {
-      _progressController.add(resumedTask);
-    }
-  }
-
-  Future<void> cancelDownload(String taskId) async {
-    // Complete the completer to stop the simulation
-    final completer = _completers[taskId];
-    if (completer != null && !completer.isCompleted) {
-      completer.complete();
-    }
-    _completers.remove(taskId);
-    _startedCompleters.remove(taskId);
-    _pausedTasks.remove(taskId);
-    _slowDownloads.remove(taskId);
-    _fastSpeed.remove(taskId);
-
-    if (!database.isOpen) return;
-    final task = database.getTask(taskId);
-    if (task != null) {
-      final cancelledTask = task.copyWith(
-        status: 'cancelled',
-        error: 'Cancelled by user',
-      );
-      await database.saveTask(cancelledTask);
-      if (!_progressController.isClosed) {
-        _progressController.add(cancelledTask);
-      }
-
-      // Delete partial file if exists
-      if (task.filePath != null) {
-        final file = File(task.filePath!);
-        if (await file.exists()) {
-          await file.delete();
-        }
-      }
-    }
-
-    // Process queue
-    _processQueue();
-  }
-
-  Future<void> retryDownload(String taskId) async {
-    if (!database.isOpen) return;
-    final task = database.getTask(taskId);
-    if (task != null && (task.status == 'failed' || task.status == 'cancelled')) {
-      final retryTask = task.copyWith(
-        status: 'pending',
-        progress: 0.0,
-        error: null,
-      );
-      await database.saveTask(retryTask);
-      _simulateDownload(retryTask, slow: false);
-    }
-  }
-
-  Future<void> deleteDownload(String mediaId) async {
-    if (!database.isOpen) return;
-    final media = database.getMediaByMediaId(mediaId);
-    if (media == null) {
-      throw StateError('Media not found');
-    }
-
-    // Delete the file
-    final file = File(media.filePath);
-    if (await file.exists()) {
-      await file.delete();
-    }
-
-    // Remove from database
-    await database.deleteMedia(media.id);
-
-    // Also remove any associated tasks
-    final tasks = database.getAllTasks().where((t) => t.mediaId == mediaId);
-    for (final task in tasks) {
-      await database.deleteTask(task.id);
-    }
-  }
-
-  Future<void> waitForDownloadComplete(String taskId, {Duration timeout = const Duration(seconds: 10)}) async {
-    final completer = _completers[taskId];
-    if (completer != null && !completer.isCompleted) {
-      await completer.future.timeout(timeout, onTimeout: () {
-        // Timeout - just continue
-      });
-    }
-
-    // Also wait for status to be completed
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      if (!database.isOpen) return;
-      final task = database.getTask(taskId);
-      if (task?.status == 'completed' || task?.status == 'failed' || task?.status == 'cancelled') {
-        return;
-      }
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-  }
-
-  bool isMediaDownloaded(String mediaId) => database.isOpen && database.isMediaDownloaded(mediaId);
-
-  DownloadedMedia? getDownloadedMediaById(String mediaId) =>
-      database.isOpen ? database.getMediaByMediaId(mediaId) : null;
-
-  List<DownloadedMedia> getDownloadedMedia() => database.isOpen ? database.getAllMedia() : [];
-
-  int getTotalStorageUsed() => database.isOpen ? database.getTotalStorageUsed() : 0;
-
-  Future<void> dispose() async {
-    _disposed = true;
-
-    // Complete all pending completers
-    for (final completer in _completers.values) {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    }
-    for (final completer in _startedCompleters.values) {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    }
-    _completers.clear();
-    _startedCompleters.clear();
-    _pausedTasks.clear();
-    _slowDownloads.clear();
-    _fastSpeed.clear();
-
-    // Wait a bit for any in-flight operations to settle
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    if (!_progressController.isClosed) {
-      await _progressController.close();
-    }
-  }
+  @override
+  void close({bool force = false}) {}
 }

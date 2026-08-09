@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/models/quality_delivery_subtitle.dart';
 import '../../domain/models/quality_rung.dart';
 
 /// Shows the playback quality picker and returns the chosen rung, or null if
@@ -9,10 +10,14 @@ import '../../domain/models/quality_rung.dart';
 /// that would upscale the source. [clampNote], when present, explains that
 /// the server is limiting the stream below what was chosen, which happens on
 /// a relay connection where the cap is not negotiable by the client.
+///
+/// [originalSubtitle] is the delivery-mode line for the Original rung
+/// (Direct Play / lossless / re-encoding), computed by the caller.
 Future<QualityRung?> showQualityPicker(
   BuildContext context,
   List<QualityRung> ladder,
   QualityRung current, {
+  required String originalSubtitle,
   String? clampNote,
 }) {
   return showDialog<QualityRung>(
@@ -38,7 +43,8 @@ Future<QualityRung?> showQualityPicker(
                   style: TextStyle(color: Colors.amber[300], fontSize: 12),
                 ),
               ),
-            for (final rung in ladder) _rungTile(context, rung, current),
+            for (final rung in ladder)
+              _rungTile(context, rung, current, originalSubtitle),
           ],
         ),
       ),
@@ -52,8 +58,16 @@ Future<QualityRung?> showQualityPicker(
   );
 }
 
-Widget _rungTile(BuildContext context, QualityRung rung, QualityRung current) {
+Widget _rungTile(
+  BuildContext context,
+  QualityRung rung,
+  QualityRung current,
+  String originalSubtitle,
+) {
   final isSelected = rung == current;
+  final subtitle = rung.isOriginal
+      ? originalSubtitle
+      : cappedRungDeliverySubtitle(rung.maxBitrateKbps);
   return ListTile(
     key: isSelected
         ? Key('quality-rung-selected-${rung.label}')
@@ -70,9 +84,7 @@ Widget _rungTile(BuildContext context, QualityRung rung, QualityRung current) {
       ),
     ),
     subtitle: Text(
-      rung.isOriginal
-          ? 'Source quality, no re-encoding'
-          : 'Up to ${rung.maxBitrateKbps} kbps',
+      subtitle,
       style: const TextStyle(color: Colors.grey, fontSize: 12),
     ),
     onTap: () => Navigator.of(context).pop(rung),

@@ -10,6 +10,7 @@ import '../../../core/player/platform_features.dart';
 import '../../../core/update/platform_updater.dart';
 import '../../../core/update/update_provider.dart';
 import '../../../core/update/updaters/macos_updater.dart';
+import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/user_settings.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
@@ -201,6 +202,9 @@ class _PlaybackSection extends ConsumerWidget {
       context,
       deriveQualityLadder(sourceHeight: 2160),
       current,
+      // The preference picker has no streaming candidates to derive delivery
+      // from, so keep a neutral Original subtitle rather than asserting one.
+      originalSubtitle: kOriginalPreferenceSubtitle,
     );
 
     if (picked == null || !context.mounted) return;

@@ -92,6 +92,18 @@ class _StubDownloadService implements DownloadService {
   }
 
   @override
+  void applySettings({
+    required int maxConcurrentDownloads,
+    required bool autoStartQueued,
+  }) {}
+
+  @override
+  Future<void> recoverStuckDownloads() async {}
+
+  @override
+  Future<void> checkForStalls() async {}
+
+  @override
   Stream<DownloadTask> get progressStream => _progressController.stream;
 
   @override
@@ -170,6 +182,9 @@ class _StubDownloadService implements DownloadService {
 
   @override
   Future<void> cancelDownload(String taskId) async {}
+
+  @override
+  Future<void> restartDownload(String taskId) async {}
 
   @override
   Future<void> retryDownload(String taskId) async {}

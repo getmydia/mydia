@@ -425,6 +425,54 @@ void main() {
         expect(task.episodeCode, 'S??E??');
       });
     });
+
+    group('recovery state', () {
+      DownloadTask base() => DownloadTask(
+            id: 't1',
+            mediaId: 'm1',
+            title: 'Test Movie',
+            quality: '1080p',
+            createdAt: DateTime(2026, 1, 1),
+          );
+
+      test('defaults recoveryAttempts to 0 and lastProgressAt to null', () {
+        final task = base();
+        expect(task.recoveryAttempts, 0);
+        expect(task.lastProgressAt, isNull);
+      });
+
+      test('copyWith carries the recovery fields', () {
+        final at = DateTime(2026, 1, 1, 12, 30);
+        final task = base().copyWith(lastProgressAt: at, recoveryAttempts: 2);
+        expect(task.lastProgressAt, at);
+        expect(task.recoveryAttempts, 2);
+      });
+
+      test('copyWith preserves recovery fields when they are not passed', () {
+        final at = DateTime(2026, 1, 1, 12, 30);
+        final task =
+            base().copyWith(lastProgressAt: at, recoveryAttempts: 2).copyWith(
+                  status: 'downloading',
+                );
+        expect(task.lastProgressAt, at);
+        expect(task.recoveryAttempts, 2);
+      });
+
+      test('maps the interrupted and stalled status strings', () {
+        expect(base().copyWith(status: 'interrupted').downloadStatus,
+            DownloadStatus.interrupted);
+        expect(base().copyWith(status: 'stalled').downloadStatus,
+            DownloadStatus.stalled);
+      });
+
+      test('progressive statusDisplay labels interrupted and stalled', () {
+        final interrupted =
+            base().copyWith(isProgressive: true, status: 'interrupted');
+        final stalled = base().copyWith(isProgressive: true, status: 'stalled');
+        expect(interrupted.statusDisplay, 'Interrupted');
+        expect(stalled.statusDisplay, 'Stalled');
+      });
+    });
   });
 }
 

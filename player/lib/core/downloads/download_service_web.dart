@@ -102,6 +102,18 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
+  void applySettings({
+    required int maxConcurrentDownloads,
+    required bool autoStartQueued,
+  }) {}
+
+  @override
+  Future<void> recoverStuckDownloads() async {}
+
+  @override
+  Future<void> checkForStalls() async {}
+
+  @override
   Stream<DownloadTask> get progressStream => _progressController.stream;
 
   @override
@@ -184,6 +196,11 @@ class _WebDownloadService implements DownloadService {
 
   @override
   Future<void> cancelDownload(String taskId) async {
+    throw UnsupportedError('Downloads are not supported on web');
+  }
+
+  @override
+  Future<void> restartDownload(String taskId) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
 

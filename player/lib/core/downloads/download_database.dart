@@ -1,5 +1,6 @@
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../../domain/models/download.dart';
+import 'download_recovery.dart';
 
 class DownloadDatabase {
   static const String _tasksBoxName = 'download_tasks';
@@ -42,10 +43,7 @@ class DownloadDatabase {
 
   List<DownloadTask> getActiveTasks() {
     return _tasksBox.values
-        .where((task) =>
-            task.status == 'pending' ||
-            task.status == 'downloading' ||
-            task.status == 'paused')
+        .where((task) => DownloadStatusSets.active.contains(task.status))
         .toList();
   }
 
