@@ -149,8 +149,9 @@ class SettingsScreen extends ConsumerWidget {
                   context,
                   deriveQualityLadder(sourceHeight: 2160),
                   current,
-                  // Temporary placeholder; settings has no delivery context yet.
-                  originalSubtitle: kOriginalTranscodeSubtitle,
+                  // Preference picker has no streaming candidates — keep a
+                  // neutral Original subtitle rather than asserting delivery.
+                  originalSubtitle: kOriginalPreferenceSubtitle,
                 );
                 if (picked != null && context.mounted) {
                   await ref

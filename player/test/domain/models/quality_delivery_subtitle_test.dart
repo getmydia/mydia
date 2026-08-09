@@ -16,7 +16,7 @@ void main() {
           canDirectPlay: true,
           hasLosslessDelivery: false,
         ),
-        'Direct Play',
+        kOriginalDirectPlaySubtitle,
       );
     });
 
@@ -48,27 +48,31 @@ void main() {
         'Transcodes · up to 4000 kbps',
       );
     });
+
+    test('falls back when bitrate is null', () {
+      expect(cappedRungDeliverySubtitle(null), 'Transcodes');
+    });
   });
 
-  group('strategiesAllowNativeDirectPlay', () {
+  group('firstStrategyAllowsDirectPlay', () {
     test('true when first is DIRECT_PLAY, REMUX, or HLS_COPY', () {
       expect(
-        strategiesAllowNativeDirectPlay(['DIRECT_PLAY', 'TRANSCODE']),
+        firstStrategyAllowsDirectPlay(['DIRECT_PLAY', 'TRANSCODE']),
         isTrue,
       );
       expect(
-        strategiesAllowNativeDirectPlay(['REMUX', 'HLS_COPY', 'TRANSCODE']),
+        firstStrategyAllowsDirectPlay(['REMUX', 'HLS_COPY', 'TRANSCODE']),
         isTrue,
       );
       expect(
-        strategiesAllowNativeDirectPlay(['HLS_COPY', 'TRANSCODE']),
+        firstStrategyAllowsDirectPlay(['HLS_COPY', 'TRANSCODE']),
         isTrue,
       );
     });
 
     test('false when empty or first is TRANSCODE', () {
-      expect(strategiesAllowNativeDirectPlay([]), isFalse);
-      expect(strategiesAllowNativeDirectPlay(['TRANSCODE']), isFalse);
+      expect(firstStrategyAllowsDirectPlay([]), isFalse);
+      expect(firstStrategyAllowsDirectPlay(['TRANSCODE']), isFalse);
     });
   });
 

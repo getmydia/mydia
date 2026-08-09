@@ -1383,7 +1383,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final values = candidates?.map((c) => c.strategy.toJson()).toList() ??
         const <String>[];
 
-    final canDirect = !kIsWeb && strategiesAllowNativeDirectPlay(values);
+    final canDirect = !kIsWeb && firstStrategyAllowsDirectPlay(values);
     final lossless = strategiesAllowLosslessDelivery(values);
     _originalDeliverySubtitle = originalDeliverySubtitle(
       canDirectPlay: canDirect,

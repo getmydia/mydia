@@ -6,6 +6,9 @@ const kOriginalDirectPlaySubtitle = 'Direct Play';
 const kOriginalLosslessSubtitle = 'Original · no re-encoding';
 const kOriginalTranscodeSubtitle = 'Original · re-encoding required';
 
+/// Neutral Original subtitle when there is no delivery context (e.g. Settings).
+const kOriginalPreferenceSubtitle = 'Source quality';
+
 /// Subtitle for the Original rung given what the player could do.
 ///
 /// [canDirectPlay] means native and the same candidate gate as
@@ -22,14 +25,20 @@ String originalDeliverySubtitle({
 }
 
 /// Subtitle for a capped ladder rung (always re-encodes today).
-String cappedRungDeliverySubtitle(int maxBitrateKbps) =>
-    'Transcodes · up to $maxBitrateKbps kbps';
-
-/// Whether native direct play is offered for this ordered candidate list.
 ///
-/// Mirrors `PlayerScreen._canDirectPlay`: first strategy must be DIRECT_PLAY,
-/// REMUX, or HLS_COPY.
-bool strategiesAllowNativeDirectPlay(Iterable<String> strategyValues) {
+/// When [maxBitrateKbps] is null, returns a bitrate-free label rather than
+/// crashing — off-ladder synthesised rungs can omit a cap.
+String cappedRungDeliverySubtitle(int? maxBitrateKbps) {
+  if (maxBitrateKbps == null) return 'Transcodes';
+  return 'Transcodes · up to $maxBitrateKbps kbps';
+}
+
+/// Whether the first candidate strategy is one `PlayerScreen._canDirectPlay`
+/// would accept (DIRECT_PLAY, REMUX, or HLS_COPY).
+///
+/// Platform gating (`!kIsWeb`) is intentionally left to the caller — this
+/// only inspects strategy ordering.
+bool firstStrategyAllowsDirectPlay(Iterable<String> strategyValues) {
   final iterator = strategyValues.iterator;
   if (!iterator.moveNext()) return false;
   final first = iterator.current;

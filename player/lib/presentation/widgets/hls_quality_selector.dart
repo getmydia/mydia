@@ -67,7 +67,7 @@ Widget _rungTile(
   final isSelected = rung == current;
   final subtitle = rung.isOriginal
       ? originalSubtitle
-      : cappedRungDeliverySubtitle(rung.maxBitrateKbps!);
+      : cappedRungDeliverySubtitle(rung.maxBitrateKbps);
   return ListTile(
     key: isSelected
         ? Key('quality-rung-selected-${rung.label}')
