@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/downloads/download_job_service.dart';
 import 'package:player/core/downloads/download_recovery.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/domain/models/download_option.dart';
 
 import 'download_test_harness.dart';
 
@@ -381,5 +384,99 @@ void main() {
 
       expect(harness.database.getTask('fine')!.status, 'downloading');
     });
+  });
+
+  group('error handling', () {
+    test('a 404 from the job service fails the task instead of looping',
+        () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        jobStatus: const DownloadJobStatus(
+          jobId: 'job-1',
+          status: DownloadJobStatusType.transcoding,
+          progress: 0.2,
+          currentFileSize: 4,
+        ),
+      );
+      harness.jobService.statusError =
+          DownloadServiceException('Job not found', statusCode: 404);
+
+      // Seeded as interrupted, not transcoding: resumeDownload only accepts
+      // paused, interrupted, and stalled, and this is exactly the state an
+      // orphaned progressive task lands in after the sweep claims it.
+      await harness.database.saveTask(DownloadTask(
+        id: 'gone',
+        mediaId: 'm1',
+        title: 'Gone',
+        quality: '1080p',
+        status: 'interrupted',
+        isProgressive: true,
+        transcodeJobId: 'job-1',
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      await harness.service.resumeDownload('gone');
+      await harness.waitForStatus('gone', 'failed');
+
+      expect(harness.database.getTask('gone')!.error,
+          contains('no longer has this download'));
+    });
+
+    test('gives up after the retry ceiling and leaves the task interrupted',
+        () async {
+      harness = await makeHarness(
+        body: Uint8List.fromList(List.filled(10, 7)),
+        jobStatus: const DownloadJobStatus(
+          jobId: 'job-1',
+          status: DownloadJobStatusType.transcoding,
+          progress: 0.2,
+          currentFileSize: 4,
+        ),
+      );
+      harness.adapter.failWith = DioException.connectionError(
+        requestOptions: RequestOptions(path: '/'),
+        reason: 'network down',
+      );
+
+      await harness.database.saveTask(DownloadTask(
+        id: 'flaky',
+        mediaId: 'm1',
+        title: 'Flaky',
+        quality: '1080p',
+        status: 'interrupted',
+        isProgressive: true,
+        transcodeJobId: 'job-1',
+        createdAt: DateTime(2026, 1, 1),
+      ));
+
+      await harness.service.resumeDownload('flaky');
+      await harness.waitForStatus('flaky', 'interrupted',
+          timeout: const Duration(seconds: 30));
+
+      expect(harness.adapter.requests.length, lessThanOrEqualTo(3));
+    });
+  });
+
+  test('a second sweep recovers a task orphaned since the first', () async {
+    harness = await makeHarness(
+      body: Uint8List.fromList(List.filled(10, 7)),
+      attachJobService: false,
+    );
+
+    await harness.service.recoverStuckDownloads();
+
+    // Simulate a suspension: a row that looks active with nothing driving it.
+    await harness.database.saveTask(DownloadTask(
+      id: 'late',
+      mediaId: 'm1',
+      title: 'Late Orphan',
+      quality: '1080p',
+      status: 'downloading',
+      downloadUrl: 'https://test.invalid/file.mp4',
+      createdAt: DateTime(2026, 1, 1),
+    ));
+
+    await harness.service.recoverStuckDownloads();
+    await harness.waitForStatus('late', 'completed');
   });
 }

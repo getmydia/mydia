@@ -952,7 +952,7 @@ class _NativeDownloadService implements DownloadService {
           continue;
         }
 
-        final status = await getJobStatus(jobId);
+        final status = await _pollJobStatus(jobId, getJobStatus);
 
         if (status.error != null) {
           throw Exception('Transcode failed: ${status.error}');
@@ -1004,6 +1004,11 @@ class _NativeDownloadService implements DownloadService {
       int downloadedBytes = await file.exists() ? await file.length() : 0;
 
       bool downloadComplete = false;
+      // Transient network failures while the transcode is still running used to
+      // retry forever. Three attempts with backoff, then hand the task to the
+      // recovery sweep.
+      const maxTransientRetries = 3;
+      var transientRetries = 0;
 
       while (!downloadComplete) {
         // Check if cancelled - cleanup is handled by cancelDownload
@@ -1024,7 +1029,7 @@ class _NativeDownloadService implements DownloadService {
 
         // Check current transcode status
         if (!transcodeComplete) {
-          final status = await getJobStatus(jobId);
+          final status = await _pollJobStatus(jobId, getJobStatus);
           if (status.error != null) {
             throw Exception('Transcode failed: ${status.error}');
           }
@@ -1107,9 +1112,30 @@ class _NativeDownloadService implements DownloadService {
             // Cancelled - cleanup is handled by cancelDownload
             return;
           }
-          // For other errors during progressive download, retry after delay
+          // Cap at maxTransientRetries download attempts. Delay after each
+          // failure (2s, 4s, 8s) including the last, then park as interrupted
+          // so the recovery sweep can decide what to do.
           if (!transcodeComplete) {
-            await Future.delayed(const Duration(seconds: 2));
+            transientRetries++;
+            await Future.delayed(Duration(seconds: 1 << transientRetries));
+            if (transientRetries >= maxTransientRetries) {
+              final interrupted = updatedTask.copyWith(
+                status: 'interrupted',
+                error: 'Network error after $maxTransientRetries attempts: '
+                    '${e.message ?? e.type.name}',
+              );
+              await _database!.saveTask(interrupted);
+              // saveTask is what waitForStatus observes; tearDown may close the
+              // progress stream before we reach add. Skip if already disposed.
+              if (!_progressController.isClosed) {
+                _progressController.add(interrupted);
+              }
+              _cancelTokens.remove(task.id);
+              _pausedTasks.remove(task.id);
+              _speedTracker.clearTask(task.id);
+              _processQueue();
+              return;
+            }
             continue;
           }
           rethrow;
@@ -1149,6 +1175,21 @@ class _NativeDownloadService implements DownloadService {
 
       // Process queue to start next download
       _processQueue();
+    } on _DeadJobException catch (e) {
+      final failed = updatedTask.copyWith(
+        status: 'failed',
+        error: e.message,
+        recoveryAttempts: maxRecoveryAttempts,
+      );
+      await _database!.saveTask(failed);
+      if (!_progressController.isClosed) {
+        _progressController.add(failed);
+      }
+      _cancelTokens.remove(task.id);
+      _pausedTasks.remove(task.id);
+      _cancelJobCallbacks.remove(task.id);
+      _speedTracker.clearTask(task.id);
+      _processQueue();
     } on DioException catch (e) {
       // If cancelled, cleanup is handled by cancelDownload
       if (e.type == DioExceptionType.cancel) {
@@ -1158,7 +1199,9 @@ class _NativeDownloadService implements DownloadService {
       final errorMessage = e.message ?? 'Download failed';
       updatedTask = updatedTask.copyWith(status: 'failed', error: errorMessage);
       await _database!.saveTask(updatedTask);
-      _progressController.add(updatedTask);
+      if (!_progressController.isClosed) {
+        _progressController.add(updatedTask);
+      }
       _cancelTokens.remove(task.id);
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
@@ -1170,12 +1213,37 @@ class _NativeDownloadService implements DownloadService {
         error: e.toString(),
       );
       await _database!.saveTask(errorTask);
-      _progressController.add(errorTask);
+      if (!_progressController.isClosed) {
+        _progressController.add(errorTask);
+      }
       _cancelTokens.remove(task.id);
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
       _speedTracker.clearTask(task.id);
       _processQueue();
+    }
+  }
+
+  /// Fetch job status, converting a missing job into a terminal failure.
+  ///
+  /// A 404 means the server has dropped the transcode job, so the partial file
+  /// on disk can never be completed and retrying is pointless.
+  Future<({String status, double progress, int? fileSize, String? error})>
+      _pollJobStatus(
+    String jobId,
+    Future<({String status, double progress, int? fileSize, String? error})>
+            Function(String)
+        getJobStatus,
+  ) async {
+    try {
+      return await getJobStatus(jobId);
+    } on DownloadServiceException catch (e) {
+      if (e.statusCode == 404) {
+        throw _DeadJobException(
+          'The server no longer has this download job. Restart to try again.',
+        );
+      }
+      rethrow;
     }
   }
 
@@ -1721,4 +1789,13 @@ class _NativeDownloadService implements DownloadService {
     _notificationService.stopService();
     _progressController.close();
   }
+}
+
+/// Thrown when the server has dropped a transcode job. Not recoverable by
+/// resuming, only by restarting, which prepares a new job.
+class _DeadJobException implements Exception {
+  final String message;
+  _DeadJobException(this.message);
+  @override
+  String toString() => message;
 }
