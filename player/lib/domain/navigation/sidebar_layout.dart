@@ -63,12 +63,13 @@ class SidebarLayout {
         .where((d) => d.isAnchored && !_anchorsToTop(d))
         .toList()
       ..sort((a, b) => anchorRank(a).compareTo(anchorRank(b)));
+    // Saved filters are ordinary unanchored rows and belong in `middle`,
+    // above the bottom anchors. Never special-case FilterDestination into a
+    // group after `trailing`: that renders custom filters below Settings,
+    // which contradicts the approved layout.
     final middle = resolved.where((d) => !d.isAnchored).toList();
-    final middleBuiltins =
-        middle.where((d) => d is! FilterDestination).toList();
-    final trailingFilters = middle.whereType<FilterDestination>().toList();
 
-    return [...leading, ...middleBuiltins, ...trailing, ...trailingFilters];
+    return [...leading, ...middle, ...trailing];
   }
 
   /// Search anchors to the top; every other anchor sits at the bottom.

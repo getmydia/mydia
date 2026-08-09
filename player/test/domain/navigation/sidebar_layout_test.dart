@@ -70,7 +70,7 @@ void main() {
       );
     });
 
-    test('rule 3: appends a stored filter missing from order', () {
+    test('rule 3: a stored filter missing from order lands in the middle', () {
       const layout = SidebarLayout(
         order: ['home'],
         hidden: {},
@@ -79,7 +79,17 @@ void main() {
 
       final ids =
           layout.reconcile(downloadSupported: true).map((d) => d.id).toList();
-      expect(ids.last, 'f_1');
+
+      // Rule 3 appends to `order`, but anchors are pinned to the edges
+      // afterwards, so the filter is last in the *reorderable* region rather
+      // than last overall. It must sit above Downloads and Settings: the
+      // approved layout puts saved filters in the middle, never below the
+      // bottom anchors.
+      expect(ids, contains('f_1'));
+      expect(ids.indexOf('f_1'), greaterThan(ids.indexOf('home')));
+      expect(ids.indexOf('f_1'), lessThan(ids.indexOf('downloads')));
+      expect(ids.indexOf('f_1'), lessThan(ids.indexOf('settings')));
+      expect(ids.last, 'settings');
     });
 
     test('rule 4: a stale hidden id cannot hide a later destination', () {
