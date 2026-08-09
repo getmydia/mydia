@@ -4,12 +4,13 @@ import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/recently_added_item.dart';
+import '../library/library_sort.dart';
 
 part 'favorites_controller.g.dart';
 
 const String favoritesQuery = r'''
-query Favorites($first: Int) {
-  favorites(first: $first) {
+query Favorites($first: Int, $sort: SortInput) {
+  favorites(first: $first, sort: $sort) {
     id
     type
     title
@@ -41,7 +42,10 @@ class FavoritesController extends _$FavoritesController {
       ref,
       key: QueryKeys.favorites,
       document: gql(favoritesQuery),
-      variables: const {'first': 50},
+      variables: {
+        'first': 50,
+        'sort': LibrarySort.defaultSort.toVariables(),
+      },
       parse: (data) => _parseItems(data, 'favorites'),
     );
     return _watcher.stream;
