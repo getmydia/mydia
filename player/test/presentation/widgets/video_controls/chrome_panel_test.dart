@@ -109,6 +109,45 @@ void main() {
       expect(PanelMetrics.forWidth(600).showAlwaysOnTop, isFalse);
       expect(PanelMetrics.forWidth(400).showAlwaysOnTop, isFalse);
     });
+
+    group('touchPrimary', () {
+      test(
+          'a landscape phone browser gets the enlarged seek target, which it '
+          'previously missed: it sits around 800px and so landed in the '
+          'tablet tier with a 32px-high scrubber', () {
+        final metrics = PanelMetrics.resolve(width: 800, touchPrimary: true);
+
+        expect(metrics.touchTargets, isTrue);
+      });
+
+      test('a fine pointer at the same width does not', () {
+        final metrics = PanelMetrics.resolve(width: 800, touchPrimary: false);
+
+        expect(metrics.touchTargets, isFalse);
+      });
+
+      test('below the mobile breakpoint touch targets stay on regardless', () {
+        expect(
+          PanelMetrics.resolve(width: 400, touchPrimary: false).touchTargets,
+          isTrue,
+        );
+      });
+
+      test(
+          'touch does NOT collapse the transport, so a landscape phone keeps '
+          'its episode-nav buttons — the regression the compactTransport '
+          'split exists to prevent', () {
+        final metrics = PanelMetrics.resolve(width: 800, touchPrimary: true);
+
+        expect(metrics.compactTransport, isFalse);
+      });
+
+      test('touch does not remove the volume slider', () {
+        final metrics = PanelMetrics.resolve(width: 800, touchPrimary: true);
+
+        expect(metrics.showVolume, isTrue);
+      });
+    });
   });
 
   group('ChromePanel', () {

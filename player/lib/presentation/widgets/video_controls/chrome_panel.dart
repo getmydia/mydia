@@ -26,6 +26,17 @@ class PanelMetrics {
   /// Whether controls should use enlarged touch hit areas.
   final bool touchTargets;
 
+  /// Whether the in-bar transport collapses to play/pause only, dropping ±10s
+  /// and episode navigation.
+  ///
+  /// Split out of [touchTargets], which used to drive both this and the
+  /// enlarged seek hit area. They answer different questions: this one is
+  /// about horizontal room, [touchTargets] is about finger size. Keeping them
+  /// fused meant that making [touchTargets] follow input capability would have
+  /// silently taken episode navigation away from a landscape phone browser,
+  /// which sits around 800px and clears this breakpoint comfortably.
+  final bool compactTransport;
+
   /// Whether `SecondaryCluster`'s quality button renders.
   ///
   /// True at every tier. It was previously true only on desktop, for two
@@ -83,22 +94,36 @@ class PanelMetrics {
     required this.bottomOffset,
     required this.showVolume,
     required this.touchTargets,
+    required this.compactTransport,
     required this.showQuality,
     required this.showAlwaysOnTop,
     required this.secondaryGap,
     required this.horizontalPadding,
   });
 
-  /// Resolve metrics for a viewport [width], using the breakpoints in
-  /// `core/layout/breakpoints.dart` (mobile < 600, tablet 600–899,
-  /// desktop >= 900).
-  factory PanelMetrics.forWidth(double width) {
+  /// Resolve metrics for a viewport [width] and the viewer's input type,
+  /// using the breakpoints in `core/layout/breakpoints.dart`
+  /// (mobile < 600, tablet 600-899, desktop >= 900).
+  ///
+  /// [touchPrimary] governs finger-sized affordances only; [width] governs how
+  /// much fits. See [compactTransport] for why these are separate.
+  factory PanelMetrics.resolve({
+    required double width,
+    required bool touchPrimary,
+  }) {
+    final compactTransport = width < Breakpoints.mobile;
+
+    // Finger size, not window size. A landscape phone is around 800px and
+    // would otherwise take the tablet tier's 32px scrubber.
+    final touchTargets = touchPrimary || width < Breakpoints.mobile;
+
     if (width >= Breakpoints.tablet) {
       return PanelMetrics(
         maxWidth: math.min(720.0, width * 0.70),
         bottomOffset: 48,
         showVolume: true,
-        touchTargets: false,
+        touchTargets: touchTargets,
+        compactTransport: compactTransport,
         showQuality: true,
         showAlwaysOnTop: true,
         secondaryGap: 8,
@@ -110,7 +135,8 @@ class PanelMetrics {
         maxWidth: math.min(640.0, width * 0.90),
         bottomOffset: 32,
         showVolume: true,
-        touchTargets: false,
+        touchTargets: touchTargets,
+        compactTransport: compactTransport,
         showQuality: true,
         // false, not true: measured against `chrome_panel_overflow_test.dart`
         // (per `showAlwaysOnTop`'s dartdoc), the tablet tier's tightest width
@@ -128,13 +154,24 @@ class PanelMetrics {
       maxWidth: math.max(0.0, width - 20),
       bottomOffset: 24,
       showVolume: false,
-      touchTargets: true,
+      touchTargets: touchTargets,
+      compactTransport: compactTransport,
       showQuality: true,
       showAlwaysOnTop: false,
       secondaryGap: 0,
       horizontalPadding: 8,
     );
   }
+
+  /// Fine-pointer shorthand for [resolve], for the many assertions that are
+  /// about width alone.
+  ///
+  /// Annotated so production code cannot quietly take the fine-pointer default
+  /// on a touch device: `playback_chrome.dart` passes the real
+  /// `InputCapabilities.touchPrimary` through [resolve] instead.
+  @visibleForTesting
+  factory PanelMetrics.forWidth(double width) =>
+      PanelMetrics.resolve(width: width, touchPrimary: false);
 }
 
 /// The playback control panel.

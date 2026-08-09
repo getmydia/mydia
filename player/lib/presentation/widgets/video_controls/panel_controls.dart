@@ -186,6 +186,9 @@ class SecondaryCluster extends StatelessWidget {
   /// Not a platform signal: it was web-only while `player_screen.dart` gated
   /// the callback on `PlatformFeatures.isWeb`, and that gate is gone.
   final VoidCallback? onQualityTap;
+
+  /// When null the fullscreen button is omitted entirely, which is how the
+  /// player screen hides it on a browser with no fullscreen route.
   final VoidCallback? onFullscreenTap;
   final VoidCallback? onAlwaysOnTopTap;
 
@@ -281,17 +284,23 @@ class SecondaryCluster extends StatelessWidget {
             onTap: onQualityTap,
           ),
         ],
-        SizedBox(width: gap),
-        ControlButton(
-          key: fullscreenKey,
-          icon: isFullscreen
-              ? Icons.fullscreen_exit_rounded
-              : Icons.fullscreen_rounded,
-          iconSize: 18,
-          size: 32,
-          tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
-          onTap: onFullscreenTap,
-        ),
+        // Omitted entirely when null, matching `onQualityTap` above: null
+        // means the browser has no fullscreen route at all
+        // (`FullscreenMode.unsupported`), not that fullscreen is momentarily
+        // unavailable. A dead button would be worse than none.
+        if (onFullscreenTap != null) ...[
+          SizedBox(width: gap),
+          ControlButton(
+            key: fullscreenKey,
+            icon: isFullscreen
+                ? Icons.fullscreen_exit_rounded
+                : Icons.fullscreen_rounded,
+            iconSize: 18,
+            size: 32,
+            tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
+            onTap: onFullscreenTap,
+          ),
+        ],
         if (onAlwaysOnTopTap != null) ...[
           SizedBox(width: gap),
           SizedBox(
