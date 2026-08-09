@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/download_settings.dart';
 import 'download_providers.dart';
+import 'download_recovery.dart';
 import 'download_service.dart';
 
 part 'download_queue_providers.g.dart';
@@ -89,16 +90,21 @@ Future<DownloadQueueStatus> downloadQueueStatus(Ref ref) async {
   final settings = await ref.watch(downloadSettingsProvider.future);
   final allTasks = await ref.watch(downloadQueueProvider.future);
 
-  // Categorize tasks: active (downloading/transcoding) vs queued (pending)
+  // Categorize tasks: active (running or recovering) vs waiting for a slot
   final activeDownloads = allTasks
-      .where((t) => t.status == 'downloading' || t.status == 'transcoding')
+      .where((t) =>
+          DownloadStatusSets.running.contains(t.status) ||
+          t.status == 'interrupted' ||
+          t.status == 'stalled')
       .toList();
 
+  // Deliberately excludes 'transcoding'. It is already counted as active
+  // above, because it holds a concurrency slot, and listing it here too
+  // double-counted it in totalPending. It also made the "Cancel N queued
+  // downloads" button overstate itself, since cancelAllQueued only acts on
+  // 'queued' and 'pending'.
   final queuedDownloads = allTasks
-      .where((t) =>
-          t.status == 'pending' ||
-          t.status == 'queued' ||
-          t.status == 'transcoding')
+      .where((t) => t.status == 'pending' || t.status == 'queued')
       .toList()
     // Sort by creation date (FIFO)
     ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -116,9 +122,8 @@ Future<DownloadQueueStatus> downloadQueueStatus(Ref ref) async {
 /// Download queue manager that handles starting queued downloads.
 class DownloadQueueManager {
   final DownloadDatabase _database;
-  final DownloadService _downloadService;
 
-  DownloadQueueManager(this._database, this._downloadService);
+  DownloadQueueManager(this._database);
 
   /// Get the queue position for a task (1-based, 0 = active).
   int getQueuePosition(String taskId) {
@@ -211,45 +216,13 @@ class DownloadQueueManager {
       await _database.saveTask(updatedTask);
     }
   }
-
-  /// Process the queue and start downloads if slots are available.
-  Future<void> processQueue(int maxConcurrent) async {
-    final allTasks = _database.getAllTasks();
-
-    // Count active downloads
-    final activeCount = allTasks
-        .where((t) => t.status == 'downloading' || t.status == 'transcoding')
-        .length;
-
-    if (activeCount >= maxConcurrent) return;
-
-    // Get queued tasks sorted by creation date (FIFO)
-    final queuedTasks = allTasks.where((t) => t.status == 'queued').toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-
-    // Start as many queued downloads as we have slots
-    final slotsAvailable = maxConcurrent - activeCount;
-    final toStart = queuedTasks.take(slotsAvailable);
-
-    for (final task in toStart) {
-      // Mark as pending so the download service picks it up
-      final pendingTask = task.copyWith(status: 'pending');
-      await _database.saveTask(pendingTask);
-
-      // Start the download
-      // Note: The download service handles the actual download logic
-      // We just need to trigger a retry which restarts the download
-      await _downloadService.retryDownload(task.id);
-    }
-  }
 }
 
 /// Provider for download queue manager.
 @riverpod
 Future<DownloadQueueManager> downloadQueueManager(Ref ref) async {
   final database = await ref.watch(downloadDatabaseProvider.future);
-  final downloadService = await ref.watch(downloadManagerProvider.future);
-  return DownloadQueueManager(database, downloadService);
+  return DownloadQueueManager(database);
 }
 
 /// Get queue position for a specific task.

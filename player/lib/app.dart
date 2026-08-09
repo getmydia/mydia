@@ -11,6 +11,8 @@ import 'core/graphql/graphql_provider.dart';
 import 'core/graphql/watch/resume_gate.dart';
 import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
+import 'core/downloads/download_providers.dart';
+import 'core/downloads/download_service.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 
@@ -102,6 +104,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       await ref.read(invalidatorProvider).invalidateAll();
     } catch (e) {
       debugPrint('[MyApp] Resume invalidation failed: $e');
+    }
+
+    // iOS suspends the app, which kills the download loops while their database
+    // rows still read as active. Coming back to the foreground is the moment to
+    // pick those up.
+    if (!isDownloadSupported) return;
+    try {
+      final downloads = await ref.read(downloadManagerProvider.future);
+      await downloads.recoverStuckDownloads();
+    } catch (e) {
+      debugPrint('[MyApp] Download recovery on resume failed: $e');
     }
   }
 
