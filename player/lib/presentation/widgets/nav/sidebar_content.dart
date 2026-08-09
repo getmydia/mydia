@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/theme/colors.dart';
+import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
+import '../../screens/filter/filter_editor_sheet.dart';
 import '../mydia_logo.dart';
 import 'nav_badges.dart';
 import 'sidebar_row.dart';
@@ -168,6 +171,7 @@ class SidebarContent extends ConsumerWidget {
                 for (final destination in leading) ...[
                   _buildRow(
                     ref: ref,
+                    context: context,
                     destination: destination,
                     selected: selected,
                   ),
@@ -194,6 +198,7 @@ class SidebarContent extends ConsumerWidget {
                           padding: const EdgeInsets.only(bottom: 2),
                           child: _buildRow(
                             ref: ref,
+                            context: context,
                             destination: destination,
                             selected: selected,
                           ),
@@ -206,7 +211,11 @@ class SidebarContent extends ConsumerWidget {
                   selectedIcon: Icons.add_rounded,
                   label: '+ New filter',
                   isSelected: false,
-                  onTap: () {},
+                  onTap: () => showFilterEditor(
+                    context: context,
+                    ref: ref,
+                    initialFilter: MediaFilter.allMovies,
+                  ),
                 ),
                 const Spacer(),
                 Padding(
@@ -220,6 +229,7 @@ class SidebarContent extends ConsumerWidget {
                 for (final destination in trailing) ...[
                   _buildRow(
                     ref: ref,
+                    context: context,
                     destination: destination,
                     selected: selected,
                   ),
@@ -257,6 +267,7 @@ class SidebarContent extends ConsumerWidget {
 
   Widget _buildRow({
     required WidgetRef ref,
+    required BuildContext context,
     required NavDestination destination,
     required NavDestination? selected,
   }) {
@@ -272,7 +283,37 @@ class SidebarContent extends ConsumerWidget {
       );
     }
 
-    final isFilter = destination is FilterDestination;
+    if (destination is FilterDestination) {
+      return SidebarRow(
+        icon: destination.icon,
+        selectedIcon: destination.selectedIcon,
+        label: destination.label,
+        isSelected: isSelected,
+        isDisabled: isDisabled,
+        onTap: () => onNavigate(destination.route),
+        canCustomise: canCustomise,
+        onHide: canCustomise
+            ? () =>
+                ref.read(sidebarLayoutControllerProvider).hide(destination.id)
+            : null,
+        onEdit: () => showFilterEditor(
+          context: context,
+          ref: ref,
+          initialFilter: destination.filter,
+          editing: destination,
+        ),
+        onDelete: () async {
+          final route = destination.route;
+          await ref
+              .read(sidebarLayoutControllerProvider)
+              .deleteFilter(destination.id);
+          if (context.mounted &&
+              (location == route || location.startsWith('$route/'))) {
+            context.go('/');
+          }
+        },
+      );
+    }
 
     return SidebarRow(
       icon: destination.icon,
@@ -284,12 +325,6 @@ class SidebarContent extends ConsumerWidget {
       canCustomise: canCustomise,
       onHide: canCustomise
           ? () => ref.read(sidebarLayoutControllerProvider).hide(destination.id)
-          : null,
-      onEdit: isFilter ? () {} : null,
-      onDelete: isFilter
-          ? () => ref
-              .read(sidebarLayoutControllerProvider)
-              .deleteFilter(destination.id)
           : null,
     );
   }

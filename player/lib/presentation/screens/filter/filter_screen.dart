@@ -6,7 +6,9 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/navigation/media_filter.dart';
+import '../../../domain/navigation/nav_destination.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../filter/filter_editor_sheet.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
@@ -81,7 +83,7 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
           extendBodyBehindAppBar: true,
           appBar: _buildAppBar(
             context,
-            destination.label,
+            destination,
             isDesktop,
           ),
           body: LibraryMediaBody(
@@ -101,9 +103,10 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
 
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
-    String title,
+    FilterDestination destination,
     bool isDesktop,
   ) {
+    final title = destination.label;
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
 
     return PreferredSize(
@@ -157,6 +160,38 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
                         : Icons.grid_view_rounded,
                     onPressed: _toggleViewMode,
                     tooltip: 'Toggle view',
+                  ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    icon: const Icon(
+                      Icons.more_vert_rounded,
+                      color: AppColors.textSecondary,
+                      size: 22,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    color: AppColors.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onSelected: (value) {
+                      if (value == 'save_filter') {
+                        showFilterEditor(
+                          context: context,
+                          ref: ref,
+                          initialFilter: destination.filter,
+                        );
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'save_filter',
+                        child: Text('Save this view as a filter'),
+                      ),
+                    ],
                   ),
                   const SizedBox(width: 4),
                   CastButton(

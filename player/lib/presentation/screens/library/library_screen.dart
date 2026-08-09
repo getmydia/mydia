@@ -5,6 +5,7 @@ import 'library_controller.dart';
 import 'library_grid_body.dart';
 import 'library_sort.dart';
 import 'library_sort_provider.dart';
+import 'library_sort_sheet.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/cast_actions.dart';
@@ -13,6 +14,7 @@ import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
+import '../filter/filter_editor_sheet.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
   final LibraryType libraryType;
@@ -82,10 +84,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         ref.read(librarySortControllerProvider(widget.libraryType)).value ??
             LibrarySort.defaultSort;
 
-    final selected = await showModalBottomSheet<_SortSelection>(
+    final selected = await showModalBottomSheet<LibrarySortSelection>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => _SortBottomSheet(currentSort: sort),
+      builder: (context) => LibrarySortSheet(currentSort: sort),
     );
 
     if (selected == null || !mounted) return;
@@ -99,6 +101,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     } else if (selected.field != null) {
       await controller.select(selected.field!);
     }
+  }
+
+  Future<void> _saveAsFilter(MediaFilter filter) {
+    return showFilterEditor(
+      context: context,
+      ref: ref,
+      initialFilter: filter,
+    );
   }
 
   @override
@@ -143,7 +153,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(
-          title, icon, isDesktop, effectiveShowSearch, barHeight, sort),
+        title,
+        icon,
+        isDesktop,
+        effectiveShowSearch,
+        barHeight,
+        sort,
+        filter,
+      ),
       // A `Stack`, not a `Column`: `FreshnessHeader` carries a top inset that
       // exists purely to clear an app bar this body already extends behind. As
       // a `Column` sibling that inset was charged as layout height too, so
@@ -172,8 +189,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(String title, IconData icon, bool isDesktop,
-      bool showSearch, double barHeight, LibrarySort sort) {
+  PreferredSizeWidget _buildAppBar(
+    String title,
+    IconData icon,
+    bool isDesktop,
+    bool showSearch,
+    double barHeight,
+    LibrarySort sort,
+    MediaFilter filter,
+  ) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
 
     return PreferredSize(
@@ -248,6 +272,34 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             : Icons.grid_view_rounded,
                         onPressed: _toggleViewMode,
                         tooltip: 'Toggle view',
+                      ),
+                      const SizedBox(width: 4),
+                      PopupMenuButton<String>(
+                        icon: const Icon(
+                          Icons.more_vert_rounded,
+                          color: AppColors.textSecondary,
+                          size: 22,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        color: AppColors.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        onSelected: (value) {
+                          if (value == 'save_filter') {
+                            _saveAsFilter(filter);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'save_filter',
+                            child: Text('Save this view as a filter'),
+                          ),
+                        ],
                       ),
                       const SizedBox(width: 4),
                       // LibraryScreen keeps a real app bar on every platform
@@ -354,109 +406,4 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SortBottomSheet extends StatelessWidget {
-  final LibrarySort currentSort;
-
-  const _SortBottomSheet({required this.currentSort});
-
-  @override
-  Widget build(BuildContext context) {
-    final directionEnabled = currentSort.field.supportsDirection;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.textSecondary.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
-          // Title and direction toggle
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                const Icon(Icons.sort_rounded, size: 24),
-                const SizedBox(width: 12),
-                Text(
-                  'Sort by',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  key: const Key('sort-direction-toggle'),
-                  onPressed: directionEnabled
-                      ? () => Navigator.of(context).pop(
-                            const _SortSelection.toggleDirection(),
-                          )
-                      : null,
-                  icon: Icon(
-                    currentSort.direction == SortDirection.asc
-                        ? Icons.arrow_upward_rounded
-                        : Icons.arrow_downward_rounded,
-                    size: 18,
-                  ),
-                  label: Text(
-                    currentSort.direction == SortDirection.asc ? 'Asc' : 'Desc',
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(height: 1),
-
-          // Fields
-          ...SortField.values.map((field) {
-            final isSelected = field == currentSort.field;
-            return ListTile(
-              key: Key('sort-field-${field.wireName}'),
-              leading: Icon(
-                isSelected ? Icons.check_circle_rounded : Icons.circle_outlined,
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              ),
-              title: Text(
-                field.displayName,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                ),
-              ),
-              onTap: () =>
-                  Navigator.of(context).pop(_SortSelection.field(field)),
-            );
-          }),
-
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-}
-
-/// What the sort sheet returns: either a chosen field, or a request to flip
-/// direction without changing field.
-class _SortSelection {
-  const _SortSelection.field(this.field) : toggleOnly = false;
-  const _SortSelection.toggleDirection()
-      : field = null,
-        toggleOnly = true;
-
-  final SortField? field;
-  final bool toggleOnly;
 }
