@@ -6,10 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
-import 'package:player/presentation/screens/settings/widgets/settings_hero.dart';
+import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
 
 class _FakeConnectionNotifier extends ConnectionNotifier {
   _FakeConnectionNotifier(this._state);
@@ -27,6 +28,15 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
 
   @override
   P2pStatus build() => _status;
+}
+
+class _FakeUpdateNotifier extends UpdateNotifier {
+  _FakeUpdateNotifier(this._state);
+
+  final UpdateState _state;
+
+  @override
+  UpdateState build() => _state;
 }
 
 /// Serves a fixed settings value, or fails, without touching secure storage.
@@ -67,6 +77,7 @@ Future<void> _pump(
   WidgetTester tester, {
   UserSettings? settings = _settings,
   bool fail = false,
+  String version = '',
   Size size = const Size(1000, 1400),
 }) async {
   await tester.binding.setSurfaceSize(size);
@@ -85,6 +96,9 @@ Future<void> _pump(
         ),
         p2pStatusNotifierProvider.overrideWith(
           () => _FakeP2pStatusNotifier(_status),
+        ),
+        updateProvider.overrideWith(
+          () => _FakeUpdateNotifier(UpdateState(currentVersion: version)),
         ),
       ],
       child: MaterialApp.router(
@@ -117,13 +131,49 @@ Future<void> _pump(
 void main() {
   setUp(_FakeSettingsController.skipCalls.clear);
 
-  testWidgets('renders the hero with identity and connection', (tester) async {
+  testWidgets('renders the identity band with the account and server',
+      (tester) async {
     await _pump(tester);
 
-    expect(find.byType(SettingsHero), findsOneWidget);
+    expect(find.byType(SettingsIdentity), findsOneWidget);
     expect(find.text('admin'), findsOneWidget);
     expect(find.text('mydia.local:4000'), findsOneWidget);
+  });
+
+  testWidgets('connection state reads as the subtitle of the details row',
+      (tester) async {
+    await _pump(tester);
+
     expect(find.text('Connected to server'), findsOneWidget);
+    expect(find.text('Relay, peers, and node identity'), findsNothing);
+    expect(find.byKey(const Key('settings-row-status-dot')), findsOneWidget);
+  });
+
+  testWidgets('sign out is a danger row in an account section', (tester) async {
+    await _pump(tester);
+
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.byKey(const Key('settings-sign-out')), findsOneWidget);
+
+    final context = tester.element(find.text('Sign out'));
+    final title = tester.widget<Text>(find.text('Sign out'));
+
+    expect(title.style?.color, Theme.of(context).colorScheme.error);
+  });
+
+  testWidgets('the footer names the running version', (tester) async {
+    await _pump(tester, version: '0.14.2');
+
+    expect(find.text('Mydia Player 0.14.2'), findsOneWidget);
+  });
+
+  testWidgets('an unknown version renders no footer rather than a placeholder',
+      (tester) async {
+    // The hero showed an en dash here. A footer stating an unknown version is
+    // worth less than no footer.
+    await _pump(tester);
+
+    expect(find.textContaining('Mydia Player'), findsNothing);
   });
 
   testWidgets('shows the current quality rung label', (tester) async {

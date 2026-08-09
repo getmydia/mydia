@@ -7,6 +7,7 @@ import '../../../core/connection/connection_summary.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/platform_features.dart';
+import '../../../core/theme/colors.dart';
 import '../../../core/update/platform_updater.dart';
 import '../../../core/update/update_provider.dart';
 import '../../../core/update/updaters/macos_updater.dart';
@@ -16,9 +17,10 @@ import '../../../domain/models/user_settings.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
+import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
 import 'settings_controller.dart';
-import 'widgets/settings_hero.dart';
+import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
 import 'widgets/update_card.dart';
@@ -79,21 +81,22 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SettingsHero(
+                  SettingsIdentity(
                     username: settings?.username ?? '',
                     serverUrl: settings?.serverUrl ?? '',
-                    connection: summary,
-                    version: currentVersion.isEmpty ? null : currentVersion,
-                    onSignOut: () => _handleSignOut(context, ref),
                   ),
-                  const SizedBox(height: 18),
                   const UpdateCard(),
                   _PlaybackSection(
                     settings: settings,
                     failed: settingsAsync.hasError,
                   ),
                   const SizedBox(height: 18),
-                  const _ManageSection(),
+                  _ManageSection(connection: summary),
+                  const SizedBox(height: 18),
+                  _AccountSection(
+                    onSignOut: () => _handleSignOut(context, ref),
+                  ),
+                  _VersionFooter(version: currentVersion),
                 ],
               ),
             ),
@@ -215,7 +218,9 @@ class _PlaybackSection extends ConsumerWidget {
 }
 
 class _ManageSection extends ConsumerWidget {
-  const _ManageSection();
+  const _ManageSection({required this.connection});
+
+  final ConnectionSummary connection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -233,7 +238,8 @@ class _ManageSection extends ConsumerWidget {
         SettingsRow.navigation(
           icon: Icons.lan_outlined,
           title: 'Connection details',
-          subtitle: 'Relay, peers, and node identity',
+          subtitle: connection.label,
+          subtitleDotColor: connectionToneColor(connection.tone),
           onTap: () => context.push('/settings/diagnostics'),
         ),
         if (PlatformUpdater.supportedOnCurrentPlatform)
@@ -286,4 +292,60 @@ String updateCheckSubtitle({
   if (isMacOS) return 'Opens the Sparkle update dialog';
   if (availableVersion != null) return 'v$availableVersion available';
   return "You're up to date";
+}
+
+/// Sign out, kept away from the read-only facts above it.
+///
+/// `SettingsRow.action` already tints a danger row's title and icon tile with
+/// the scheme's error colour, so this needs no styling of its own. The
+/// `settings-sign-out` key moves here from the hero's outlined button.
+class _AccountSection extends StatelessWidget {
+  const _AccountSection({required this.onSignOut});
+
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsSection(
+      label: 'Account',
+      children: [
+        SettingsRow.action(
+          key: const Key('settings-sign-out'),
+          icon: Icons.logout,
+          title: 'Sign out',
+          subtitle: 'Signs out of this server on this device',
+          danger: true,
+          onTap: onSignOut,
+        ),
+      ],
+    );
+  }
+}
+
+/// The running version, stated once, quietly, at the bottom.
+///
+/// An empty version renders nothing at all. The hero showed an en dash here,
+/// but a footer stating an unknown version is worth less than no footer.
+class _VersionFooter extends StatelessWidget {
+  const _VersionFooter({required this.version});
+
+  final String version;
+
+  @override
+  Widget build(BuildContext context) {
+    if (version.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 22, 0, 4),
+      child: Text(
+        'Mydia Player $version',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 11.5,
+          color: AppColors.textDisabled,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+  }
 }
