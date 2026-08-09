@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
@@ -275,7 +276,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
       ],
     );
 
-    if (!PlatformFeatures.isMobile) {
+    // Hover-to-reveal and cursor hiding need a pointer that can hover. This
+    // read `PlatformFeatures.isMobile`, which is false on web, so a phone
+    // browser installed a MouseRegion whose callbacks never fire.
+    if (!InputCapabilities.touchPrimary) {
       stack = MouseRegion(
         // Cursor disappears with the chrome.
         cursor: _visible ? MouseCursor.defer : SystemMouseCursors.none,
@@ -464,7 +468,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
   Widget build(BuildContext context) {
     final metrics = PanelMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
-      touchPrimary: false,
+      touchPrimary: InputCapabilities.touchPrimary,
     );
 
     return StreamBuilder<bool>(
@@ -508,7 +512,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                 // a 48px in-bar button is worse than a centre target. No skip
                 // buttons here — `gesture_controls.dart` already does
                 // double-tap-left/right for ±10s.
-                if (PlatformFeatures.isMobile)
+                if (InputCapabilities.touchPrimary)
                   Center(
                     child: CenterPlayButton(player: widget.player),
                   ),

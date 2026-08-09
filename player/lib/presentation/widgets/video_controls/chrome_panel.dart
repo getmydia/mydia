@@ -113,12 +113,16 @@ class PanelMetrics {
   }) {
     final compactTransport = width < Breakpoints.mobile;
 
+    // Finger size, not window size. A landscape phone is around 800px and
+    // would otherwise take the tablet tier's 32px scrubber.
+    final touchTargets = touchPrimary || width < Breakpoints.mobile;
+
     if (width >= Breakpoints.tablet) {
       return PanelMetrics(
         maxWidth: math.min(720.0, width * 0.70),
         bottomOffset: 48,
         showVolume: true,
-        touchTargets: false,
+        touchTargets: touchTargets,
         compactTransport: compactTransport,
         showQuality: true,
         showAlwaysOnTop: true,
@@ -131,7 +135,7 @@ class PanelMetrics {
         maxWidth: math.min(640.0, width * 0.90),
         bottomOffset: 32,
         showVolume: true,
-        touchTargets: false,
+        touchTargets: touchTargets,
         compactTransport: compactTransport,
         showQuality: true,
         // false, not true: measured against `chrome_panel_overflow_test.dart`
@@ -150,7 +154,7 @@ class PanelMetrics {
       maxWidth: math.max(0.0, width - 20),
       bottomOffset: 24,
       showVolume: false,
-      touchTargets: true,
+      touchTargets: touchTargets,
       compactTransport: compactTransport,
       showQuality: true,
       showAlwaysOnTop: false,
