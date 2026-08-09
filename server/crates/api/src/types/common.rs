@@ -34,6 +34,9 @@ pub struct NodeConnection {
 pub struct SortInput {
     pub field: Option<SortField>,
     pub direction: Option<SortDirection>,
+    /// Seed for the random sort, held so the permutation stays stable across
+    /// pages. Unused here until this server implements `SortField::Random`.
+    pub seed: Option<i32>,
 }
 
 #[derive(Interface)]
@@ -90,12 +93,26 @@ pub enum LibraryType {
     Adult,
 }
 
+/// Every value the contract carries.
+///
+/// This server serves only the first four today; the rest are accepted and
+/// fall back to title in `browse_sort`. That is deliberate. The player talks to
+/// both servers and GraphQL rejects an entire document containing an unknown
+/// enum value, so omitting one here would fail every library query rather than
+/// degrade one sort.
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum SortField {
     Title,
     AddedAt,
     Year,
     Rating,
+    Runtime,
+    Popularity,
+    ContentRating,
+    ReleaseDate,
+    LastPlayed,
+    WatchState,
+    Random,
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]

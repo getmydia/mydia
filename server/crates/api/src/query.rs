@@ -535,9 +535,25 @@ fn browse_sort(sort: Option<&SortInput>) -> BrowseSort {
         Some(SortField::Year) => BrowseField::Year,
         Some(SortField::AddedAt) => BrowseField::AddedAt,
         Some(SortField::Rating) => BrowseField::Rating,
-        // Title is the default and the fallback, matching sort_items/2's
+        // The contract carries seven more fields that this server cannot
+        // answer yet: runtime, popularity, content rating and release date
+        // need the metadata JSON, last played and watch state need the
+        // progress join, and random needs seeded ordering. Listing them
+        // explicitly rather than letting them vanish into the wildcard, so
+        // adding one here is a compile-time prompt rather than a silent
+        // fallback nobody notices.
+        Some(
+            SortField::Runtime
+            | SortField::Popularity
+            | SortField::ContentRating
+            | SortField::ReleaseDate
+            | SortField::LastPlayed
+            | SortField::WatchState
+            | SortField::Random,
+        ) => BrowseField::Title,
+        // Title is the default and the fallback, matching MediaSort's
         // catch-all clause.
-        _ => BrowseField::Title,
+        Some(SortField::Title) | None => BrowseField::Title,
     };
 
     BrowseSort {

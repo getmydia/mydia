@@ -36,6 +36,13 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:added_at, description: "Sort by date added")
     value(:year, description: "Sort by year")
     value(:rating, description: "Sort by rating")
+    value(:runtime, description: "Sort by duration")
+    value(:popularity, description: "Sort by popularity")
+    value(:content_rating, description: "Sort by content rating")
+    value(:release_date, description: "Sort by release date")
+    value(:random, description: "Shuffle, stable for a given seed")
+    value(:last_played, description: "Sort by when the viewer last watched it")
+    value(:watch_state, description: "Sort by watched state; ascending puts unwatched first")
   end
 
   @desc "Sort direction"
