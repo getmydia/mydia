@@ -20,6 +20,7 @@ import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
+import '../../../core/player/fullscreen/fullscreen_controller.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
@@ -342,8 +343,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Desktop feature state
   final FocusNode _focusNode = FocusNode();
 
-  // Fullscreen state
-  bool _isFullscreen = false;
+  /// Fullscreen state, owned by the controller and sourced from platform
+  /// events. Deliberately not a local bool: the previous field was flipped
+  /// optimistically and never learned that the platform had refused, which is
+  /// why the button reported "exit fullscreen" over an inline video on
+  /// iPhone Safari.
+  final FullscreenController _fullscreen = FullscreenController();
 
   // Always-on-top state. Not persisted — starts false for every playback
   // session and is force-disabled in dispose() if still true, so it never
@@ -422,6 +427,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     unawaited(windowSizer.attach());
 
     _loadAutoSkipPreference();
+    _fullscreen.isFullscreen.addListener(_onFullscreenChanged);
     _initializePlayer();
 
     // Force landscape orientation on mobile devices
@@ -1215,6 +1221,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = Player();
     _player = player;
     _videoController = VideoController(player);
+    // Hands the backend the media_kit player so the web backend can reach the
+    // underlying HTMLVideoElement. A no-op on native.
+    _fullscreen.attach(player);
 
     // Bound before `open` deliberately: a source that fails to resolve at all
     // (a deleted file id, a dead HLS session) errors during the open itself,
@@ -2626,7 +2635,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.keyF:
-        _toggleFullscreen();
+        _fullscreen.toggle();
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.keyT:
@@ -2644,8 +2653,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.escape:
-        if (_isFullscreen) {
-          _toggleFullscreen();
+        if (_fullscreen.isFullscreen.value) {
+          _fullscreen.exit();
         }
         return KeyEventResult.handled;
 
@@ -2676,14 +2685,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  /// Toggle fullscreen mode across all platforms.
-  void _toggleFullscreen() {
-    setState(() => _isFullscreen = !_isFullscreen);
-    if (_isFullscreen) {
-      defaultEnterNativeFullscreen();
-    } else {
-      defaultExitNativeFullscreen();
-    }
+  /// Rebuilds so the chrome's fullscreen icon follows observed state. Cheap:
+  /// the notifier only fires on a real transition.
+  void _onFullscreenChanged() {
+    if (mounted) setState(() {});
   }
 
   /// Toggle always-on-top across desktop platforms.
@@ -2701,10 +2706,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
-    // Exit fullscreen if active
-    if (_isFullscreen) {
-      defaultExitNativeFullscreen();
+    // Exit fullscreen if active, then tear down listeners. Order matters:
+    // exiting after disposal would write to a disposed notifier.
+    if (_fullscreen.isFullscreen.value) {
+      _fullscreen.exit();
     }
+    _fullscreen.isFullscreen.removeListener(_onFullscreenChanged);
+    _fullscreen.dispose();
 
     // Un-pin the window if it was pinned — never let always-on-top leak
     // into the browse/library window behind this one.
@@ -2929,11 +2937,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           // never reported — matching how subtitles and audio disable
           // themselves at zero tracks rather than opening a one-item menu.
           onQualityTap: _qualityLadder.length > 1 ? _showQualitySelector : null,
-          onFullscreenTap: _toggleFullscreen,
+          // Null where no fullscreen route exists, which hides the button
+          // rather than leaving a dead one — matching how `onQualityTap`
+          // above hides itself at a single quality rung.
+          onFullscreenTap: _fullscreen.available ? _fullscreen.toggle : null,
           onAlwaysOnTopTap: _toggleAlwaysOnTop,
           onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
           onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
-          isFullscreen: _isFullscreen,
+          isFullscreen: _fullscreen.isFullscreen.value,
           isAlwaysOnTop: _isAlwaysOnTop,
           audioTrackCount: _audioTracks.length,
           subtitleTrackCount: _subtitleTracks.length,
