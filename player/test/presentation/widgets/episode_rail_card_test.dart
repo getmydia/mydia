@@ -7,7 +7,9 @@ import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/models/progress.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 
+import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/mock_network_images.dart';
+import '../../test_utils/poster_contract.dart';
 
 Episode _episode({
   bool hasFile = true,
@@ -179,5 +181,47 @@ void main() {
     final unselectedBorder = unselectedDecoration.border as Border;
     expect(unselectedBorder.top.color, Colors.transparent);
     expect(unselectedBorder.top.width, 2);
+  });
+
+  testWidgets(
+      'offers no play glyph at rest or on hover, because tapping a rail card '
+      'selects the episode into the hero rather than playing it',
+      (tester) async {
+    await _pump(tester, _episode());
+    await tester.pumpAndSettle();
+
+    expect(findPlayGlyph(), findsNothing);
+
+    await hoverOver(tester, find.byType(EpisodeRailCard));
+
+    expect(findPlayGlyph(), findsNothing);
+  });
+
+  testWidgets('hover previews the selection ring on an unselected card',
+      (tester) async {
+    await _pump(tester, _episode());
+    await tester.pumpAndSettle();
+
+    // Keyed rather than found by type: MaterialApp's own route machinery
+    // contributes AnimatedOpacity widgets, so a bare byType finder would be
+    // reading whichever one happened to come first in tree order.
+    final ring = find.byKey(EpisodeRailCard.selectionPreviewKey);
+
+    expect(tester.widget<AnimatedOpacity>(ring).opacity, 0.0);
+
+    await hoverOver(tester, find.byType(EpisodeRailCard));
+
+    expect(tester.widget<AnimatedOpacity>(ring).opacity, 1.0);
+  });
+
+  testWidgets('an already-selected card previews nothing on hover',
+      (tester) async {
+    await _pump(tester, _episode(), selected: true);
+    await tester.pumpAndSettle();
+
+    await hoverOver(tester, find.byType(EpisodeRailCard));
+
+    // The card already draws its real ring; a preview of it would be noise.
+    expect(find.byKey(EpisodeRailCard.selectionPreviewKey), findsNothing);
   });
 }

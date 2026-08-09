@@ -30,6 +30,9 @@ class EpisodeRailCard extends ConsumerStatefulWidget {
   /// episode has no file.
   final VoidCallback? onTap;
 
+  /// Finder handle for the hover preview of the selection ring.
+  static const selectionPreviewKey = ValueKey('episode-card-selection-preview');
+
   const EpisodeRailCard({
     super.key,
     required this.episode,
@@ -136,37 +139,23 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
                     : _buildPlaceholder(),
               ),
 
-              // Hover overlay with play button (solid scrim — no live blur, to
-              // keep the scrolling rail cheap). Only when the episode is playable.
-              if (_episode.hasFile)
+              // Hover preview of the selection ring. The tap selects this
+              // episode into the hero rather than playing it, so a play glyph
+              // here would promise something the tap does not do. The ring
+              // previews what the tap will actually leave behind.
+              if (!widget.selected)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: AnimatedOpacity(
+                      key: EpisodeRailCard.selectionPreviewKey,
                       opacity: _isHovered ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        child: Center(
-                          child: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.4),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              size: 26,
-                              color: Colors.white,
-                            ),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.6),
+                            width: 2,
                           ),
                         ),
                       ),

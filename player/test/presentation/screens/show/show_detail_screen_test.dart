@@ -9,6 +9,7 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
+import 'package:player/presentation/widgets/episode_rail_card.dart';
 import 'package:player/presentation/widgets/play_button.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -459,5 +460,33 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Play'), findsOneWidget);
+  });
+
+  testWidgets(
+      'tapping a rail card selects the episode without starting playback',
+      (tester) async {
+    final pushed = <String>[];
+    final playable = _episodeJson(3, files: [_fileJson('file-3')]);
+
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      episodesBySeason: {
+        1: [_episodeJson(1, watched: true), _episodeJson(2), playable],
+      },
+      pushedRoutes: pushed,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byType(EpisodeRailCard).last,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    // The rail picks; the hero plays. Nothing here reaches the player.
+    expect(pushed, isEmpty);
+    // And the pick landed: the hero now describes the episode that was tapped.
+    expect(find.textContaining('E3'), findsWidgets);
   });
 }
