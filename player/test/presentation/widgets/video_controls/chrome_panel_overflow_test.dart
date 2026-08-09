@@ -96,6 +96,12 @@ Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
             audioTrackCount: 2,
             gap: metrics.secondaryGap,
             onQualityTap: quality ? () {} : null,
+            // Unconditional, because this helper measures the worst case and
+            // the fullscreen button is present on every platform that has a
+            // fullscreen route at all. Passing null would omit it (see
+            // `SecondaryCluster.onFullscreenTap`), quietly shrinking the very
+            // budget these widths exist to measure.
+            onFullscreenTap: () {},
             onAlwaysOnTopTap: alwaysOnTop ? () {} : null,
           ),
           scrubber: ProgressBarSurface(
